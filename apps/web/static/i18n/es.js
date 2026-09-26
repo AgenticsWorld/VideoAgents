@@ -1990,7 +1990,7 @@ window.I18N_DICT = {
 "{width} × {depth} m · 高 {height} m · 网格 1 m · 画幅 {aspect}": "{width} × {depth} m · Alto {height} m · Cuadrícula 1 m · Relación {aspect}",
 "推断尺寸": "Dimensiones estimadas",
 "已标定尺寸": "Dimensiones calibradas",
-"切换旋转视角后可拖动旋转、滚轮缩放": "Cambia a vista orbital; arrastra para girar y usa la rueda para ampliar",
+"切换旋转视角后可拖动旋转、滚轮缩放；点画面后 W/S 前后 · A/D 左右 · Q/E 升降 · Shift 加速": "Cambia a vista orbital; arrastra para girar y usa la rueda para ampliar; haz clic en la vista y luego W/S adelante/atrás · A/D lateral · Q/E subir/bajar · Shift rápido",
 "场景白模": "Modelo de bloques de la escena",
 "摄像机白模": "Modelo de bloques desde la cámara",
 "空间与摄像机位置": "Espacio y posición de cámara",

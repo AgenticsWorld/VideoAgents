@@ -1988,7 +1988,7 @@ window.I18N_DICT = {
 "{width} × {depth} m · 高 {height} m · 网格 1 m · 画幅 {aspect}": "{width} × {depth} m · Tinggi {height} m · Kisi 1 m · Rasio {aspect}",
 "推断尺寸": "Dimensi perkiraan",
 "已标定尺寸": "Dimensi terkalibrasi",
-"切换旋转视角后可拖动旋转、滚轮缩放": "Beralih ke tampilan putar, lalu seret untuk memutar dan gulir untuk zoom",
+"切换旋转视角后可拖动旋转、滚轮缩放；点画面后 W/S 前后 · A/D 左右 · Q/E 升降 · Shift 加速": "Beralih ke tampilan putar, lalu seret untuk memutar dan gulir untuk zoom; klik tampilan lalu W/S maju/mundur · A/D kiri/kanan · Q/E naik/turun · Shift cepat",
 "场景白模": "Model blok adegan",
 "摄像机白模": "Model blok dari kamera",
 "空间与摄像机位置": "Ruang dan posisi kamera",

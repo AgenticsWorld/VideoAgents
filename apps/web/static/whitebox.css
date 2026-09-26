@@ -14,6 +14,9 @@
 .wb-views figcaption{color:#99a8bb;margin:5px 0}
 .wb-panel canvas{display:block;width:100%;height:auto;aspect-ratio:var(--wb-aspect);border-radius:7px;touch-action:none}
 .wb-scene canvas{height:460px;object-fit:contain;background:#e9ede9}
+/* 旋转视角键盘漫游(2026-09-26):画面点一下即聚焦收键,聚焦时描一圈蓝边提示 W/S/A/D/Q/E 已生效 */
+.wb-scene canvas.wb-space{cursor:grab;outline:none}
+.wb-scene canvas.wb-space:focus{box-shadow:0 0 0 2px #6c9ef8 inset}
 .wb-transport{display:flex;align-items:center;gap:12px;margin-top:10px}
 .wb-transport input{flex:1;min-width:40px}
 .wb-cast{display:flex;flex-wrap:wrap;gap:12px;margin:10px 0}
