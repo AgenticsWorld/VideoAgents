@@ -5,7 +5,10 @@
   assets/clips/ 两级内的 mp4(archive_* 等三级目录天然排除);
 - 完成判定:文件新出现或 mtime/size 变化,且最近 STABLE_S 秒无改动
   (genmedia 一次性 write_bytes 落盘,近似原子);重生成/超分覆盖同名会再推;
-- 防洪:首次运行与新见项目(项目复制/导入)只记基线不推,仅推此后新增;
+- 防洪:首次运行只记基线不推;新见项目(新建/复制/导入)进入「基线期」,
+  期间陆续落盘的文件(复制/解压尚未结束)只记基线不推,直到该项目连续
+  NEW_PROJECT_QUIET_S 秒无任何文件变化才转正常推送;基线期随状态持久化,
+  中途重启接着算;项目目录消失即忘记,同名重建再走一遍基线期;
 - 已推清单持久化 RUNTIME_DIR/media_push.json,重启不重推;单文件推送失败
   重试 MAX_PUSH_FAILS 轮后放弃(错误落 feishu.RELAY,显示在设置页);
 - 未绑定飞书或联系人未就绪时静默跳过并记为已推(与确认卡片同口径),
@@ -26,6 +29,7 @@ SCAN_INTERVAL_S = 20
 STABLE_S = 10                 # 最近无改动秒数,视为写完
 MAX_PUSH_FAILS = 3
 PUSH_GAP_S = 1.0              # 批量完成时的发送间隔,避免触发频控
+NEW_PROJECT_QUIET_S = 90      # 新项目连续无文件变化多久后结束基线期
 
 IMG_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
 VID_EXTS = {".mp4"}
@@ -66,20 +70,22 @@ def _collect(base: Path, exts: set[str], out: dict, root: Path):
             out[str(f.relative_to(root))] = [st.st_mtime, st.st_size]
 
 
-def _scan() -> dict[str, list]:
-    """全项目扫描 → {相对 PROJECTS_DIR 的路径: [mtime, size]}。"""
+def _scan() -> tuple[dict[str, list], set[str]]:
+    """全项目扫描 → ({相对 PROJECTS_DIR 的路径: [mtime, size]}, 现存项目名集合)。
+    项目名集合按目录取(而非按有素材的项目取),新建的空项目也能立刻进入
+    并很快结束基线期,其第一张真正生成的图才不会被当作存量吞掉。"""
     out: dict[str, list] = {}
     try:
         projects = [p for p in core.PROJECTS_DIR.iterdir()
                     if p.is_dir() and not p.name.startswith(".")]
     except OSError:
-        return out
+        return out, set()
     for proj in projects:
         assets = proj / "assets"
         for cat in _KIND_LABELS:
             _collect(assets / "concepts" / cat, IMG_EXTS, out, core.PROJECTS_DIR)
         _collect(assets / "clips", VID_EXTS, out, core.PROJECTS_DIR)
-    return out
+    return out, {p.name for p in projects}
 
 
 def _caption(key: str) -> tuple[str, str]:
@@ -98,26 +104,49 @@ async def relay_loop():
     baseline = not state                  # 首次运行:只记基线不推,防存量刷屏
     seen: dict = dict(state.get("seen") or {})
     known_projects = set(state.get("projects") or [])
+    settling: dict[str, float] = {        # 基线期项目 → 最近一次文件变化时刻
+        k: float(v) for k, v in (state.get("settling") or {}).items()}
     fails: dict[str, int] = {}
     while True:
         try:
-            cur = await asyncio.to_thread(_scan)
+            cur, cur_projects = await asyncio.to_thread(_scan)
             now = time.time()
-            cur_projects = {Path(k).parts[0] for k in cur}
-            new_projects = cur_projects - known_projects
-            dirty = baseline or bool(new_projects)
+            dirty = baseline
+            for proj in cur_projects - known_projects:
+                if not baseline:
+                    settling[proj] = now  # 新见项目:进入基线期
+                dirty = True
+            gone_projects = known_projects - cur_projects
+            for proj in [p for p in settling if p not in cur_projects]:
+                settling.pop(proj)        # 项目目录已删:忘记,重建再走基线期
+                dirty = True
+            known_projects = set(cur_projects)
+            if gone_projects:
+                dirty = True
             for k in [k for k in seen if k not in cur]:
+                proj = Path(k).parts[0]
+                if proj in settling:
+                    settling[proj] = now  # 基线期内的删改也算变化
                 seen.pop(k)               # 文件已删:清条目,重生成后会再推
                 dirty = True
             pending = []
             for k, meta in cur.items():
                 if seen.get(k) == meta:
                     continue
-                if baseline or Path(k).parts[0] in new_projects:
-                    seen[k] = meta        # 存量/整项目复制导入:静默记基线
+                proj = Path(k).parts[0]
+                if baseline:
+                    seen[k] = meta        # 存量:静默记基线
+                    dirty = True
+                elif proj in settling:
+                    seen[k] = meta        # 基线期(复制/解压尚未结束):静默记基线
+                    settling[proj] = now
                     dirty = True
                 elif now - meta[0] >= STABLE_S:
                     pending.append((k, meta))
+            for proj in [p for p, t in settling.items()
+                         if now - t >= NEW_PROJECT_QUIET_S]:
+                settling.pop(proj)        # 连续安静够久:结束基线期,此后新增才推
+                dirty = True
             for k, meta in sorted(pending, key=lambda kv: kv[1][0]):
                 kind, caption = _caption(k)
                 push = feishu.push_image if kind == "image" else feishu.push_video
@@ -134,11 +163,11 @@ async def relay_loop():
                 dirty = True
                 if sent:
                     await asyncio.sleep(PUSH_GAP_S)
-            known_projects |= cur_projects
             baseline = False
             if dirty:
                 core.atomic_write_json(
-                    STATE_PATH, {"seen": seen, "projects": sorted(known_projects)})
+                    STATE_PATH, {"seen": seen, "projects": sorted(known_projects),
+                                 "settling": settling})
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001
