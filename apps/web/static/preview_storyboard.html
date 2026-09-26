@@ -472,7 +472,7 @@ document.addEventListener('click',e=>{
   const proj=$('#project').value.trim()||'demo';
   const subject=b.dataset.loc
     ||decodeURIComponent(b.dataset.url.split('?')[0].replace(/^\/api\/v1\/projects\/([^/]+)\/artifacts\//,'data/projects/$1/').replace(/^\/projects\//,'data/projects/'));
-  const target={kind:b.dataset.kind||'group_media',id:b.dataset.id||'',ep:b.dataset.ep||(typeof EP!=='undefined'?EP:'')||((subject.match(/\bep\d{2,}\b/)||[''])[0]),files:b.dataset.url?[subject]:[],label:subject};   // 结构化定位→修改师(服务端拼修改单头、附代行工位 SOUL)
+  const target={kind:b.dataset.kind||'group_media',id:b.dataset.id||'',ep:b.dataset.ep||(typeof EP!=='undefined'?EP:'')||((subject.match(/\bep\d{2,}\b/)||[''])[0]),files:b.dataset.url?[subject]:(b.dataset.file?[b.dataset.file]:[]),label:subject};   // 结构化定位→修改师(服务端拼修改单头、附代行工位 SOUL)
   EditPopup.open({project:proj,compose:t('修改 ')+subject+'\n'+t('修改意见:'),agent:b.dataset.agent||'',target});   // data-agent=直发指定 Agent(默认修改师)
 });
 
@@ -1023,7 +1023,7 @@ async function openPlateSwap(shot,role,key){
     if(!list.length){$('#pw-imgs').innerHTML='<div class="ph">'+t('(本场景背景图库为空)')+'</div>';return}
     $('#pw-imgs').innerHTML=list.map(p=>{
       const cam=p.camera||{};
-      const src=!p.pano_ref?t('旧法(非全景制)'):p.pano_ref.kind==='world'?(p.pano_ref.anchor_id?I18N.f('世界模型(全景 {a})',{a:p.pano_ref.anchor_id}):t('世界模型')):I18N.f('全景 {a}',{a:p.pano_ref.anchor_id});
+      const src=!p.pano_ref?t('旧法(非全景制)'):p.pano_ref.kind==='revision'?I18N.f('按修改意见重出(基于 {k})',{k:p.pano_ref.source_key||'-'}):p.pano_ref.kind==='grid9'?t('九宫格'):p.pano_ref.kind==='grid9_fallback'?t('九宫格补图'):p.pano_ref.kind==='pano_manual'?I18N.f('手工截取(全景 {a})',{a:p.pano_ref.anchor_id||'-'}):p.pano_ref.kind==='world_manual'?t('手工截取(世界模型)'):p.pano_ref.kind==='world'?(p.pano_ref.anchor_id?I18N.f('世界模型(全景 {a})',{a:p.pano_ref.anchor_id}):t('世界模型')):I18N.f('全景 {a}',{a:p.pano_ref.anchor_id});
       const cap=[cam.facing?I18N.f('朝向 {d}',{d:cam.facing}):'',cam.height_m!=null?I18N.f('机高 {h} m',{h:cam.height_m}):'',cam.lens_mm_equiv?`${cam.lens_mm_equiv}mm`:'',p.time_of_day||'',src].filter(Boolean).join(' · ');
       const used=(p.used_by||[]).join(', ');
       const isCur=p.key===PW_KEY;
@@ -1323,16 +1323,17 @@ function shotCard(s,grp){
       return `<div title="${esc(v)}"><img src="${esc(bust(p.url))}" loading="lazy" onclick="zoom(this.src)" alt="${esc(v)}"><div class="pl">${esc(v)}${esc(pv)}</div></div>`;
     }
     const role=p.role==='end'?t('终点'):t('起点');
-    const how=p.reuse==='crop'?t('裁自宽景'):p.reuse==='library'?t('复用库图'):p.reuse==='manual'?t('手动换图'):t('本镜新出');
+    const how=p.reuse==='crop'?t('裁自宽景'):p.reuse==='library'?t('复用库图'):p.reuse==='manual'?t('手动换图'):p.reuse==='revised'?t('按修改意见重出'):t('本镜新出');
     const tip=[role,how,p.key||''].filter(Boolean).join(' · ');
-    // ✏️ 修改:带上镜号/起止/文件/库 key 与重出命令,发给修改师处理这张背景图的问题
-    const loc=I18N.f('分镜背景图 {ep}/{sid}({role};文件 {file};库 key {key};重出命令 python code/render_shot_plates.py --project {proj} --ep {ep} {sid} --force)',
-      {ep:EP,sid:s.shot_id,role,file:p.file||'',key:p.key||'',proj:$('#project').value.trim()||'demo'});
+    // ✏️ 修改:带上镜号/起止/文件/库 key 与修订命令,发给修改师处理这张背景图的问题(2026-09-26:以当前图为参考按意见新出一张替换本镜,原图不动;
+    // 不再给 render_shot_plates --force——那是按机位重新决策,用户的意见进不去)
+    const loc=I18N.f('分镜背景图 {ep}/{sid}({role};文件 {file};库 key {key};修订命令 python code/revise_shot_plate.py --project {proj} --ep {ep} --shot {sid} --role {r} --change "<英文修改要求>":以当前图为参考按意见新出一张并替换本镜该背景图,原图不动)',
+      {ep:EP,sid:s.shot_id,role,r:p.role||'start',file:p.file||'',key:p.key||'',proj:$('#project').value.trim()||'demo'});
     // 文字「起点 · 复用库图」链到场景预览页该库图(2026-09-15):?id=<场景>#plate=<库 key>,目标页选中场景并高亮那张图;scene_id 缺时从库文件路径推
     const sid=p.scene_id||((p.file||'').match(/assets\/concepts\/scenes\/([^/]+)\/plates\//)||[])[1]||'';
     const label=`${esc(role)} · ${esc(how)}`;
     const lab=sid&&p.key?`<a class="pl-link" href="/preview/scenes?project=${encodeURIComponent($('#project').value.trim()||'demo')}&id=${encodeURIComponent(sid)}#plate=${encodeURIComponent(p.key)}" title="${esc(t('在场景预览中查看这张背景图'))} · ${esc(sid)} · ${esc(p.key)}">${label}</a>`:label;
-    return `<div title="${esc(tip)}"><img src="${esc(bust(p.url))}" loading="lazy" onclick="zoom(this.src)" alt="${esc(tip)}"><div class="pl">${lab}</div><div class="pl"><button class="editbtn plswap" data-shot="${esc(s.shot_id)}" data-role="${esc(p.role||'start')}" data-key="${esc(p.key||'')}" title="${esc(t('从本场景的背景图库里另选一张,替换这张分镜背景图(改集索引并同步本组 prompt 参考图)'))}">🔁 ${esc(t('换图'))}</button> <button class="editbtn" data-kind="shot_plate" data-id="${esc(s.shot_id)}" data-loc="${esc(loc)}" title="${esc(t('对这张分镜背景图提修改意见,发给修改师处理'))}">✏️ ${esc(t('修改'))}</button></div></div>`;
+    return `<div title="${esc(tip)}"><img src="${esc(bust(p.url))}" loading="lazy" onclick="zoom(this.src)" alt="${esc(tip)}"><div class="pl">${lab}</div><div class="pl"><button class="editbtn plswap" data-shot="${esc(s.shot_id)}" data-role="${esc(p.role||'start')}" data-key="${esc(p.key||'')}" title="${esc(t('从本场景的背景图库里另选一张,替换这张分镜背景图(改集索引并同步本组 prompt 参考图)'))}">🔁 ${esc(t('换图'))}</button> <button class="editbtn" data-kind="shot_plate" data-id="${esc(s.shot_id)}" data-file="${esc(p.file||'')}" data-loc="${esc(loc)}" title="${esc(t('对这张分镜背景图提修改意见,发给修改师处理:以这张图为参考按意见新出一张替换本镜背景图,原图不动'))}">✏️ ${esc(t('修改'))}</button></div></div>`;
   });
   return `<div class="shot" id="a-s-${aid(s.shot_id)}">
     ${imgs.length?`<div class="media">${imgs.join('')}</div>`:''}

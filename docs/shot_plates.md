@@ -76,6 +76,20 @@ Agent 把出图脚本丢到后台就结单，进程随任务结束被杀，9 组
 - 服务端 `_scene_plate_manual`(services/runtime/core.py):校验宽高比与项目画幅一致(不一致 400)、按 `camera_facts` 算机位事实(朝向/机高/俯仰/视场/罗盘/standing),存 `plates/<plate_key>_hand<时间戳>.png`(JPEG 内容)+ 同名 `.json`,库条目 `master: true`、`manual: true`、`pano_ref = {kind: pano_manual | world_manual, anchor_id, scheme, view, source_file}`、`plate_mode: manual`。`is_legacy` 为否;分镜预览页「换图」候选列表自动包含,母图制 `find_master` 也能复用。场景预览页 caption 显示「手工截取(全景 A3)」/「手工截取(世界模型)」。
 - 保存后页面原位重载(`reloadKeep`)以刷新「分镜背景图」板块;世界模型视窗重挂后状态行保留保存提示 60 s。隔离实例(8730/8740)无头实测:全景 A1/A3、世界模型各保存成功,候选列表可见。
 
+## 按修改意见重出一张(2026-09-26:分镜预览「✏️ 修改」→ 修改师)
+
+分镜预览页每张背景图的「✏️ 修改」发给修改师(`kind=shot_plate`,代行 `08-video-gen/shot-plates`;修改单头 `files:` 带当前图路径,定位文本带镜号/起点或终点/库 key 与修订命令)。修改师**不跑** `render_shot_plates.py --force`(那是按机位重新决策、从全景/九宫格/世界模型再出一张,用户的意见进不去),而是跑宿主 CLI:
+
+```sh
+python code/revise_shot_plate.py --project <slug> --ep <ep> --shot <shNNN> [--role start|end] --change "<英文修改要求>" [--note "<用户原话>"] [--dry-run] [--seed N]
+```
+
+- **原图不动**:不管这张图来自九宫格拆格(`grid9`)、九宫格补图(`grid9_fallback`)、全景截图 / 世界模型截图(`pano_manual` / `world_manual`)、母图(`pano` / `world`)还是旧法图,库里原条目与文件原样保留,引用同一张原图的其它镜不受影响;「🔁 换图」随时能换回。
+- **以当前图为参考新出**:`[Image 1]` = 本镜当前这张背景图(`modules/shot_plates.py#build_revision_prompt`:机位/构图/地平线/布局/陈设/材质/天气/光向/调色的权威参考,只改「Requested change」点名的内容,不移机位、不扩/缩视场、不增删未提及的东西),再附本镜机位句(集索引 `camera`)、光照方案片段、组 `time_of_day`、禁人/禁字/禁宫格、风格串;`--note` 的用户原话逐字附在末尾。尺寸随原图(面积超母图上限时落到母图规格),渠道同母图/补图(场景预览页「🎨 图像模型」,空则全局)。
+- **入库**:`plates/<原 key 去掉已有 _revN>_rev<N>.png`(+ 同名 `.json`),条目 `revised: true`、`master: false`、`pano_ref = {kind: 'revision', source_key, source_file, source_kind, change, note}`、`plate_mode: revision`;链式修改 `X_rev1 → X_rev2`(N 取库里同根最大修订号 + 1)。`is_legacy` 对 revised 条目为否(`--status` 不报 legacy WARN);不参与 `find_master` 派生(它只服务这一镜)。
+- **只替换本镜该角色**:集索引 `plates[]` 该条目改为 `key/file` 指向新图、`reuse: revised`、`view/crop: null`、`revised_from = {key, file, reuse}`、`revised_at`、`revision = {change, note}`;机位指纹 `camera` 不动,非 `--force` 的 `render_shot_plates` 按「记录仍新鲜」保留(同换图)。随后 `sync_group(write=True)` 把新图接进本组 prompt refs / `Shot plates:` 段与逐镜激活句。
+- 预览:分镜页显示「起点 · 按修改意见重出」;场景页与换图弹窗 caption「按修改意见重出(基于 <原 key>)」。`--dry-run` 只打印提示词与参考图。一条修改意见出一张,不赛马;用户不满意再发一条修改单(头里带上次修改记录)再出一张。
+
 ## 提示词的几条防偏规则（2026-09-09，dzg6 grp003 反例）
 
 grp003 的 sh005 背景图（机位在路上、朝南南西横看绿化带，54 mm）被画成了朝西沿马路望向夕阳的纵深街景，视频模型因此把 sh006 的图当成整组唯一背景，两镜同景。原因是提示词里「画左/画右」引用了布局图 orientation 的四边文字（「马路向路口延伸、夕阳压在这一端」），加上路端方向地标出现在画幅边缘时仍写成「马路向远处延伸」。现在：

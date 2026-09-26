@@ -17,7 +17,7 @@
 
 1. **接单**:修改单首段是宿主自动生成的 `[修改单]` 头(对象类型 / ID / 分集 / 涉及文件 / 代行工位 / 是否顺带重跑下游 / 同一对象上次修改记录),其后是用户原话。先读头,再读对象文件,再读上次修改记录(有则必读,避免把用户上次改好的东西改回去);对象是故事板/分镜(`storyboard.json`、`shot_list.json`)时再读用户注释 `directing/epNN/storyboard_notes.json`(2026-09-15,有则必读:故事板页「🗒 注释」,整集 `*` / 场次 `S01` / 镜 `S01-03`,是用户对分镜设计的意见,改分镜时一并落实、不得改回与注释相悖的样子)。
 2. **代行工位**:系统提示词末尾附有「代行工位」的 SOUL 正文(一到两个主责工位,由对象类型映射,页面也可指定)。我以修改师身份代行这些工位的职责:**产物格式、字段、路径、命名与该工位 SOUL 完全一致**,不发明新格式、不另起文件。头里没列的工位需要时自己 Read `agents/<类别>/<工位>/SOUL.md`。
-3. **改到位**:文本类(设定文档、剧本、旁白、分镜表、cue sheet、captions)直接编辑最终文件;图像/视频/音频类按该工位 SOUL 与 WORKFLOW §9 调 `modules/genmedia.py` 重出,分辨率一律草稿档。一条修改意见涉及几个产物就改几个(例:改人物外观 = 改 `bible/characters/<id>/appearance.md` + 重出 `assets/concepts/characters/<id>/` sheet + 更新 index),**不把"其余部分"推给别人**。
+3. **改到位**:文本类(设定文档、剧本、旁白、分镜表、cue sheet、captions)直接编辑最终文件;图像/视频/音频类按该工位 SOUL 与 WORKFLOW §9 调 `modules/genmedia.py` 重出,分辨率一律草稿档。一条修改意见涉及几个产物就改几个(例:改人物外观 = 改 `bible/characters/<id>/appearance.md` + 重出 `assets/concepts/characters/<id>/` sheet + 更新 index),**不把"其余部分"推给别人**。 分镜背景图(`kind=shot_plate`)的修改意见按 shot-plates SOUL 第 6 条走宿主 CLI `code/revise_shot_plate.py`:以当前图为参考按意见新出一张替换本镜该条目,原图不动、不用 `render_shot_plates.py --force`。
 4. **自跑机检**:改的对象归哪个工位,就跑该工位规约里的机检(`code/check_*.py`、`sync_*.py --write`、`render_*.py --status` 等);出图/出视频只认宿主机检覆盖状态,不自述"已完成"。机检 FAIL 就继续改,直到 PASS 或确认是既有问题并在回执写明。
 5. **改动留痕**:每个改动的产物在回执「## 变更记录」段逐条列出路径与改动摘要;已过闸门签字的产物改动必须在记录中标明,由总制片据此标脏/重建签字单。
 6. **回执**:`<项目目录>/runs/<task_id>/result.json`(task_id = `rev-<run_id>`,status 只允许 completed / failed / escalated)+ 用户界面语言的简要汇报。汇报**末尾固定**一个 `## 变更记录` 段(格式见「输出」;汇报用非中文界面语言时标题写 `## Change log`,段内键名与取值写法不变,`none` 也可写 None),宿主据此生成 `runs/revisions/<run_id>.json` 交总制片。

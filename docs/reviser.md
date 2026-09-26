@@ -37,6 +37,8 @@
 
 未映射的 kind:修改师按 WORKFLOW §2 自行定位归属工位并 Read 其 SOUL。
 
+`shot_plate`(分镜预览页每张背景图的「✏️ 修改」,2026-09-26):修改师跑 `code/revise_shot_plate.py --shot <镜> --role <start|end> --change "<英文修改要求>" --note "<用户原话>"`,以本镜当前这张图为参考按意见新出一张入库(`<原 key>_rev<N>`)并只替换本镜该条目、自动 sync 本组 prompt;原图不动,引用同一原图的其它镜不受影响(`docs/shot_plates.md`「按修改意见重出一张」)。修改单头 `files:` 带当前图路径,定位文本带镜号/起点或终点/库 key 与该命令。
+
 ## 修改记录文件
 
 `data/projects/<slug>/runs/revisions/<run_id>.json`:

@@ -7362,7 +7362,7 @@ def _preview_scenes(project: str):
                            "camera": {k: cam.get(k) for k in ("facing", "height_m", "lens_mm_equiv", "bearing_deg")},
                            # 全景制(2026-09-10):来源锚点/空洞比;无 pano_ref = legacy 旧法出图
                            # 2026-09-22 kind = pano|world(世界模型截图作参考出的母图)
-                           "pano_ref": {k: pr.get(k) for k in ("kind", "anchor_id", "scheme", "hole_fraction")} if pr else None,
+                           "pano_ref": {k: pr.get(k) for k in ("kind", "anchor_id", "scheme", "hole_fraction", "source_key")} if pr else None,
                            "created_by": p.get("created_by"), "used_by": used_by.get(p.get("key"), [])})
         # 场景全景锚点(2026-09-10):assets/concepts/scenes/<sid>/panos/index.json,预览页「全景图」板块(3D 白模之下)
         panos = None
@@ -7746,7 +7746,7 @@ def _shot_plate_candidates(project: str, ep: str, shot_id: str) -> dict:
                      "lighting_scheme_id": e.get("lighting_scheme_id"), "time_of_day": e.get("time_of_day"),
                      "master": bool(e.get("master")), "legacy": shot_plates.is_legacy(e), "size": e.get("size"),
                      "camera": {k: cam.get(k) for k in ("facing", "height_m", "lens_mm_equiv", "bearing_deg", "fov_v_deg")},
-                     "pano_ref": {k: pr.get(k) for k in ("kind", "anchor_id", "scheme")} if pr else None,
+                     "pano_ref": {k: pr.get(k) for k in ("kind", "anchor_id", "scheme", "source_key")} if pr else None,
                      "used_by": used_by.get(e["key"], []),
                      "current_roles": [r for r, k in current.items() if k == e["key"]]})
     return {"ok": True, "ep": ep, "shot_id": shot_id, "scene_id": sid, "group_id": rec.get("group_id"),
