@@ -451,7 +451,7 @@ function mountWorldSection(whitebox,s){
     +`<pre class="ws-log" data-no-i18n${running?'':' hidden'}>${esc((job&&job.log||[]).join('\n'))}</pre>`
     +`<div class="ws-viewer"></div>`;
   if(world&&world.previews){
-    const caps=[['pano','输入全景'],['whitebox_pano','白模全景'],['depth_pano','深度全景']].filter(([k])=>world.previews[k]);
+    const caps=[['whitebox_pano','白模全景'],['depth_pano','深度全景']].filter(([k])=>world.previews[k]);   // 输入全景不在此展示(全景图板块已有)
     if(caps.length)h+=`<div class="gallery plates" style="margin-top:8px">${caps.map(([k,cap])=>`<figure><img src="${esc(world.previews[k])}" alt="${esc(t(cap))}" loading="lazy" onclick="zoomPano(this.src)"><figcaption><span class="fn">${esc(t(cap))}</span></figcaption></figure>`).join('')}</div>`;
   }
   sec.innerHTML=h;
