@@ -260,6 +260,20 @@ except ValueError:
 NET_ERROR_MSG = ("🔌 网络中断:API 连接被重置/超时(Connection dropped,未收到任何 HTTP 响应),"
                  "已按快速失败策略终止进程、不等待 CLI 自动重试;非程序错误、不计 attempt,"
                  "请检查代理/VPN 节点后由总制片重新派单或人工介入")
+# 同一文案的英文版:界面语言非中文时用(服务端文案随界面语言,非中文一律英文);「🔌」前缀两版
+# 都保留,调度层/对话记录靠它与 net_error 字段识别,不靠正文字面
+NET_ERROR_MSG_EN = ("🔌 Network interruption: the API connection was reset / timed out "
+                    "(connection dropped, no HTTP response received). The process was killed "
+                    "under the fail-fast policy instead of waiting for the CLI's automatic retries; "
+                    "this is not a program error and does not count as an attempt. Check your "
+                    "proxy/VPN node, then have the orchestrator re-dispatch or intervene manually")
+
+
+def net_error_text(n: int, err: str | None) -> str:
+    """网络快速失败的完整错误文案(按界面语言出中/英),附 CLI 报的 api_retry 次数与原始错误。"""
+    if (ui_lang_code() or "zh") == "zh":
+        return f"{NET_ERROR_MSG}(CLI 报 api_retry 第 {n} 次,错误 {err or 'unknown'})"
+    return f"{NET_ERROR_MSG_EN} (CLI api_retry #{n}, error: {err or 'unknown'})"
 ORCHESTRATOR_AGENT = "00-orchestration/workflow-orchestrator"
 IDLE_CHECK_INTERVAL = 300                # 空转看门狗巡检间隔缺省值(秒);
                                          # 实际间隔由 STATE.watchdog_idle_minutes 控制(设置弹窗可调)
@@ -4477,8 +4491,13 @@ async def execute_run(run: dict, message: str, model: str | None):
             elif run.get("net_error"):
                 partial = run.get("result") or run.get("text") or ""
                 dur = int(run["ended"] - run["started"]) if run.get("started") else 0
-                reply = (f"{run['error']}(运行 {dur}s 后网络中断快速失败)"
-                         + (f"\n\n--- 中断前的部分输出 ---\n{partial}" if partial else ""))
+                if (ui_lang_code() or "zh") == "zh":
+                    reply = (f"{run['error']}(运行 {dur}s 后网络中断快速失败)"
+                             + (f"\n\n--- 中断前的部分输出 ---\n{partial}" if partial else ""))
+                else:
+                    reply = (f"{run['error']} (network fail-fast after {dur}s of running)"
+                             + (f"\n\n--- partial output before the interruption ---\n{partial}"
+                                if partial else ""))
                 chat_entry.update(text=reply, net_error=True)
             elif run["status"] == "error" and run.get("error") and reply != run["error"]:
                 # 有半截输出的失败运行:把错误原因一并落进对话,避免只见输出不见错误
@@ -4986,8 +5005,7 @@ def handle_claude_event(run: dict, obj: dict):
             n = run["net_retries"] = run.get("net_retries", 0) + 1
             if n > NET_RETRY_LIMIT and not run.get("net_error"):
                 run["net_error"] = True
-                run["error"] = (f"{NET_ERROR_MSG}(CLI 报 api_retry 第 {n} 次,"
-                                f"错误 {obj.get('error') or 'unknown'})")[:500]
+                run["error"] = net_error_text(n, obj.get("error"))[:500]
                 HUB.publish({"type": "text", "run_id": run["id"],
                              "agent": run["agent"], "text": "\n" + run["error"]})
     elif t == "assistant":
