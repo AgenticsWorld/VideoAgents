@@ -43,6 +43,10 @@ header select{cursor:pointer;max-width:260px}
 #eps select#epsel{border-color:var(--accent);font-weight:600;cursor:pointer;max-width:320px;padding:4px 8px}
 #eps .stat{color:var(--dim);font-size:12px;margin-left:6px}
 #eps .sp{flex:1}
+/* 「提交本集」橙色高亮(同站内橙 --link);无待提交内容时禁用变淡 */
+#eps #ep-submit{background:var(--link);border-color:var(--link);color:#1a1005;font-weight:600;margin-left:auto}
+#eps #ep-submit:hover:not(:disabled){background:#fdba74;border-color:#fdba74}
+#eps #ep-submit:disabled{opacity:.45}
 .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;border:1px solid var(--border2);border-radius:14px;padding:2px 10px;color:var(--dim)}
 .pill.run{color:var(--yellow);border-color:#5f4a17}
 .pill.ok{color:var(--green);border-color:#2b5a3c}
