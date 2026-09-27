@@ -475,13 +475,14 @@ const marksOf=()=>{const g=grpById(SEL);return g?(((DD||{}).marks||{})[g.scene_i
 const OV=()=>((DD||{}).overrides||{})[SEL]||{};
 const ovHas=(kind,id)=>{const o=OV(),k=KIND_KEY[kind];return !!(k&&o[k]&&o[k][id])};
 const ovCount=()=>{const o=OV();return Object.values(KIND_KEY).reduce((n,k)=>n+Object.keys(o[k]||{}).length,0)};
-// 本集待提交总数(与右栏「全集」及后端 /submit 空 body 口径一致):待提交注释 + 有注释/直改的组的已裁决待决项 + 3D 直改项
+// 本集待提交总数(与右栏「全集」及后端 /submit 空 body 口径一致):待提交注释 + 全集各组已裁决待决项 + 3D 直改项
 const ovItemsOf=o=>Object.values(KIND_KEY).reduce((m,k)=>m+Object.keys((o||{})[k]||{}).length,0);
 function episodePendingCount(){
   if(!DD)return 0;
   const draftsAll=((DD.ledger||{}).notes||[]).filter(n=>n.status==='draft'),ov=DD.overrides||{};
-  const gs=new Set([...draftsAll.map(n=>n.group_id),...Object.keys(ov).filter(k=>ovItemsOf(ov[k]))]);
-  return draftsAll.length+[...gs].reduce((n,k)=>n+groupIssues(k).filter(i=>i.status==='decided').length+ovItemsOf(ov[k]),0);
+  // 只回答了 Agent 提问的组(没注释、没直改)也计入:各组的回答进「提交本组」的同时都进「提交本集」
+  const decidedAll=((WB||{}).groups||[]).reduce((n,g)=>n+(g.issues||[]).filter(i=>i.status==='decided').length,0);
+  return draftsAll.length+decidedAll+Object.keys(ov).reduce((n,k)=>n+ovItemsOf(ov[k]),0);
 }
 // 顶部集行「提交本集 (N)」:一键提交本集所有待提交内容;计数随右栏重渲同步刷新
 function renderEpSubmit(){
@@ -1403,7 +1404,7 @@ function renderRight(){
   // 2. 我的修改
   const ovAll=Object.keys((DD.overrides||{})).filter(k=>NOTE_SCOPE==='all'||k===gid);
   const ovRow=ovAll.map(k=>{const o=(DD.overrides||{})[k]||{};const list=Object.values(KIND_KEY).flatMap(kk=>Object.keys(o[kk]||{}).map(id=>kk+'/'+id));return list.length?`<div class="note ${k!==gid?'other':''}"><div class="r1"><span class="tg"><i style="background:var(--yellow)"></i>${esc(t('覆盖层'))}</span>${k!==gid?`<button class="xs" data-gsel="${esc(k)}">${esc(k)}</button>`:''}<span class="sp"></span><span class="st submitted">${esc(t('未固化'))}</span></div><div class="txt" data-no-i18n>${esc(I18N.f('{n} 个对象已在 3D 里直接改定:{list}',{n:list.length,list:list.join(', ')}))}</div><div class="r2"><span>${esc(t('提交时随批次一起固化进 Agent 计划;编辑栏可丢弃'))}</span></div></div>`:''}).join('');
-  // 提交按钮只有一个,范围跟随顶部「本组 / 全集」:计数 = 待提交注释 + 已裁决待决项 + 3D 直改项(全集口径同后端:只带有注释或直改的组的待决项)
+  // 提交按钮只有一个,范围跟随顶部「本组 / 全集」:计数 = 待提交注释 + 已裁决待决项 + 3D 直改项(全集口径同后端:全集各组的已裁决待决项都带)
   const subN=NOTE_SCOPE==='all'?episodePendingCount():draftsG.length+decided.length+ovCount();
   const draftBody=`${ovRow}${notes.length?notes.slice().reverse().map(noteHtml).join(''):ovRow?'':`<div class="bat">${esc(t('还没有注释:点 3D 里的对象或下方对象卡,写下修改要求'))}</div>`}
     <div class="nform" id="nform"${draftOnly?' style="display:none"':''}>

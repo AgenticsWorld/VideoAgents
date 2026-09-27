@@ -292,6 +292,10 @@ def prepare_batch(base: Path, ep: str, doc: dict, episode: dict, *, group_ids=No
         notes = [n for n in notes if n.get("group_id") in gs]
     groups_in = sorted({n["group_id"] for n in notes} | (set(group_ids or []) if not note_ids else set()))
     compiled = {g["group_id"]: g for g in episode.get("groups", [])}
+    if not note_ids and not group_ids:
+        # 提交本集/全集:只回答了 Agent 提问、没写注释也没直改的组同样要带上(2026-09-27,原先整组漏掉)
+        groups_in = sorted(set(groups_in) | {gid for gid, g in compiled.items()
+                                             if any(i.get("status") == "decided" for i in g.get("issues", []))})
     issues = {}
     for gid in groups_in:
         g = compiled.get(gid)
