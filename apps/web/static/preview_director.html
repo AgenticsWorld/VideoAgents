@@ -384,8 +384,11 @@ function renderEps(){
   h+=`<span id="gatebox">${gateHtml()}</span>`;
   if(!DD.whitebox_enabled)h+=`<span class="pill" style="color:var(--yellow)">${esc(t('项目未开启「人物精确空间位置」,白模链未启用'))}</span>`;
   if(WB.errors&&WB.errors.length)h+=`<span class="pill" style="color:var(--red)" title="${esc(WB.errors.map(e=>e.group_id+': '+e.error).join('\n'))}">${esc(I18N.f('{n} 组编译报错',{n:WB.errors.length}))}</span>`;
+  h+=`<button class="sm pri" id="ep-submit" disabled title="${esc(t('一次性提交本集所有待提交内容(待提交注释 + 已裁决待决项 + 3D 直改),按工位拆批派单;同组有批次运行中会被拒'))}"></button>`;
   box.innerHTML=h;
   $('#epsel').onchange=()=>{EP=$('#epsel').value;SEL='';DD=null;disposeRenderers();load()};
+  renderEpSubmit();
+  $('#ep-submit').onclick=()=>{const b=$('#ep-submit');b.dataset.busy='1';submitBatch({},b)};
 }
 
 function gateHtml(){
@@ -472,6 +475,20 @@ const marksOf=()=>{const g=grpById(SEL);return g?(((DD||{}).marks||{})[g.scene_i
 const OV=()=>((DD||{}).overrides||{})[SEL]||{};
 const ovHas=(kind,id)=>{const o=OV(),k=KIND_KEY[kind];return !!(k&&o[k]&&o[k][id])};
 const ovCount=()=>{const o=OV();return Object.values(KIND_KEY).reduce((n,k)=>n+Object.keys(o[k]||{}).length,0)};
+// 本集待提交总数(与右栏「全集」及后端 /submit 空 body 口径一致):待提交注释 + 有注释/直改的组的已裁决待决项 + 3D 直改项
+const ovItemsOf=o=>Object.values(KIND_KEY).reduce((m,k)=>m+Object.keys((o||{})[k]||{}).length,0);
+function episodePendingCount(){
+  if(!DD)return 0;
+  const draftsAll=((DD.ledger||{}).notes||[]).filter(n=>n.status==='draft'),ov=DD.overrides||{};
+  const gs=new Set([...draftsAll.map(n=>n.group_id),...Object.keys(ov).filter(k=>ovItemsOf(ov[k]))]);
+  return draftsAll.length+[...gs].reduce((n,k)=>n+groupIssues(k).filter(i=>i.status==='decided').length+ovItemsOf(ov[k]),0);
+}
+// 顶部集行「提交本集 (N)」:一键提交本集所有待提交内容;计数随右栏重渲同步刷新
+function renderEpSubmit(){
+  const b=$('#ep-submit');if(!b||!DD)return;
+  const n=episodePendingCount();
+  b.textContent=I18N.f('提交本集 ({n})',{n});b.disabled=!n||b.dataset.busy==='1';
+}
 const ovList=()=>{const o=OV();return Object.values(KIND_KEY).flatMap(k=>Object.keys(o[k]||{}).map(id=>k+'/'+id))};
 const lockKey=(k,id)=>k+'|'+id;
 const locked=p=>!p||LOCKS.has(lockKey(p.kind,p.id));
@@ -1387,11 +1404,7 @@ function renderRight(){
   const ovAll=Object.keys((DD.overrides||{})).filter(k=>NOTE_SCOPE==='all'||k===gid);
   const ovRow=ovAll.map(k=>{const o=(DD.overrides||{})[k]||{};const list=Object.values(KIND_KEY).flatMap(kk=>Object.keys(o[kk]||{}).map(id=>kk+'/'+id));return list.length?`<div class="note ${k!==gid?'other':''}"><div class="r1"><span class="tg"><i style="background:var(--yellow)"></i>${esc(t('覆盖层'))}</span>${k!==gid?`<button class="xs" data-gsel="${esc(k)}">${esc(k)}</button>`:''}<span class="sp"></span><span class="st submitted">${esc(t('未固化'))}</span></div><div class="txt" data-no-i18n>${esc(I18N.f('{n} 个对象已在 3D 里直接改定:{list}',{n:list.length,list:list.join(', ')}))}</div><div class="r2"><span>${esc(t('提交时随批次一起固化进 Agent 计划;编辑栏可丢弃'))}</span></div></div>`:''}).join('');
   // 提交按钮只有一个,范围跟随顶部「本组 / 全集」:计数 = 待提交注释 + 已裁决待决项 + 3D 直改项(全集口径同后端:只带有注释或直改的组的待决项)
-  const ovItems=o=>Object.values(KIND_KEY).reduce((m,k)=>m+Object.keys((o||{})[k]||{}).length,0);
-  const subGroups=new Set([...draftsAll.map(n=>n.group_id),...Object.keys(DD.overrides||{}).filter(k=>ovItems(DD.overrides[k]))]);
-  const subN=NOTE_SCOPE==='all'
-    ?draftsAll.length+[...subGroups].reduce((n,k)=>n+groupIssues(k).filter(i=>i.status==='decided').length+ovItems((DD.overrides||{})[k]),0)
-    :draftsG.length+decided.length+ovCount();
+  const subN=NOTE_SCOPE==='all'?episodePendingCount():draftsG.length+decided.length+ovCount();
   const draftBody=`${ovRow}${notes.length?notes.slice().reverse().map(noteHtml).join(''):ovRow?'':`<div class="bat">${esc(t('还没有注释:点 3D 里的对象或下方对象卡,写下修改要求'))}</div>`}
     <div class="nform" id="nform"${draftOnly?' style="display:none"':''}>
       <div class="row"><label>${esc(t('对象'))}</label><select id="nf-target"></select></div>
@@ -1416,6 +1429,7 @@ function renderRight(){
   // 整块重渲会把滚动位置归零(答 Agent 提问、折叠、轮询都会重渲):同组重渲保留滚动位置,切组才回顶
   const rs0=$('#rscroll'),keepTop=rs0&&FORM_GID===SEL?rs0.scrollTop:0;
   $('#right').innerHTML=h;
+  renderEpSubmit();
   $$('#right .acc-h').forEach(el=>el.onclick=()=>{const id=el.parentElement.dataset.acc;CLOSED_ACC.has(id)?CLOSED_ACC.delete(id):CLOSED_ACC.add(id);renderRight()});
   $$('#nscope span').forEach(s=>s.onclick=()=>{NOTE_SCOPE=s.dataset.s;renderRight()});
   $$('#right [data-jump]').forEach(b=>b.onclick=()=>{seek(Number(b.dataset.jump));PLAYING=false;updPlayBtn()});
@@ -1537,13 +1551,14 @@ async function decideIssue(issueId,choice,btn){
   }catch(e){toast(t('保存失败:')+e.message);btn.disabled=false}
 }
 async function submitBatch(body,btn){
-  btn.disabled=true;$('#sub-msg').textContent=t('派单中…');
+  btn.disabled=true;const sm=$('#sub-msg');if(sm)sm.textContent=t('派单中…');
+  const eb=$('#ep-submit');if(eb){eb.dataset.busy='1';eb.disabled=true}
   try{
     const r=await J(api('/submit'),'POST',body);
     toast(I18N.f('已派单 {n} 个批次:{list};白模批次完成后自动加载新版本',{n:(r.batches||[]).length,list:(r.batches||[]).map(b=>((DD.routes||{})[b.agent]||b.agent)+' '+b.batch.id).join(', ')}),7000);
     if((r.skipped||[]).length)console.log('skipped',r.skipped);
     await load(true);
-  }catch(e){$('#sub-msg').textContent=t('派单失败:')+e.message;btn.disabled=false}
+  }catch(e){const msg=t('派单失败:')+e.message;if(sm)sm.textContent=msg;toast(msg,7000);btn.disabled=false;if(eb){eb.dataset.busy='';renderEpSubmit()}}
 }
 
 /* ---------- 底栏:整集时间线 ---------- */

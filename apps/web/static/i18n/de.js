@@ -2843,6 +2843,8 @@ window.I18N_DICT = {
 "镜头名单隐藏": "Durch Einstellungsliste ausgeblendet",
 "📺 导演台": "📺 Regiepult",
 "提交全集 ({n})": "Alle ausstehenden einreichen ({n})",
+"提交本集 ({n})": "Episode einreichen ({n})",
+"一次性提交本集所有待提交内容(待提交注释 + 已裁决待决项 + 3D 直改),按工位拆批派单;同组有批次运行中会被拒": "Reicht alles Ausstehende dieser Episode auf einmal ein (Notiz-Entwürfe + entschiedene offene Punkte + direkte 3D-Änderungen), nach Station in Batches aufgeteilt; abgelehnt, wenn für dieselbe Gruppe bereits ein Batch läuft",
 "提交全集所有待提交内容;切到「本组」只提交当前组": "Reicht alles Ausstehende der Folge ein; zu „Diese Gruppe“ wechseln, um nur die aktuelle Gruppe einzureichen",
 "只提交当前组;切到「全集」一次提交所有组的待提交内容": "Reicht nur die aktuelle Gruppe ein; zu „Folge“ wechseln, um Ausstehendes aller Gruppen auf einmal einzureichen",
 "提交本组 ({n})": "Diese Gruppe einreichen ({n})",

@@ -2843,6 +2843,8 @@ window.I18N_DICT = {
 "镜头名单隐藏": "Disembunyikan oleh daftar shot",
 "📺 导演台": "📺 Konsol Sutradara",
 "提交全集 ({n})": "Kirim semua yang menunggu ({n})",
+"提交本集 ({n})": "Kirim episode ini ({n})",
+"一次性提交本集所有待提交内容(待提交注释 + 已裁决待决项 + 3D 直改),按工位拆批派单;同组有批次运行中会被拒": "Mengirim sekaligus semua yang menunggu di episode ini (catatan draf + item terbuka yang sudah diputuskan + suntingan 3D langsung), dibagi per batch menurut stasiun; ditolak jika grup yang sama sudah punya batch berjalan",
 "提交全集所有待提交内容;切到「本组」只提交当前组": "Mengirim semua yang menunggu di episode; beralih ke \"Grup ini\" untuk mengirim grup saat ini saja",
 "只提交当前组;切到「全集」一次提交所有组的待提交内容": "Hanya mengirim grup saat ini; beralih ke \"Episode\" untuk mengirim semua yang menunggu di seluruh grup sekaligus",
 "提交本组 ({n})": "Kirim grup ini ({n})",

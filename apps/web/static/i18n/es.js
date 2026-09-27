@@ -2845,6 +2845,8 @@ window.I18N_DICT = {
 "镜头名单隐藏": "Oculto por la lista de planos",
 "📺 导演台": "📺 Consola del director",
 "提交全集 ({n})": "Enviar todo lo pendiente ({n})",
+"提交本集 ({n})": "Enviar episodio ({n})",
+"一次性提交本集所有待提交内容(待提交注释 + 已裁决待决项 + 3D 直改),按工位拆批派单;同组有批次运行中会被拒": "Envía de una vez todo lo pendiente de este episodio (notas en borrador + pendientes decididos + ediciones 3D directas), repartido en lotes por estación; se rechaza si ya hay un lote en ejecución para el mismo grupo",
 "提交全集所有待提交内容;切到「本组」只提交当前组": "Envía todo lo pendiente del episodio; cambia a «Este grupo» para enviar solo el grupo actual",
 "只提交当前组;切到「全集」一次提交所有组的待提交内容": "Envía solo el grupo actual; cambia a «Episodio» para enviar de una vez lo pendiente de todos los grupos",
 "提交本组 ({n})": "Enviar este grupo ({n})",

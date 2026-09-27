@@ -2843,6 +2843,8 @@ window.I18N_DICT = {
 "镜头名单隐藏": "Bị ẩn theo danh sách cảnh quay",
 "📺 导演台": "📺 Bàn đạo diễn",
 "提交全集 ({n})": "Gửi tất cả mục chờ gửi ({n})",
+"提交本集 ({n})": "Gửi tập này ({n})",
+"一次性提交本集所有待提交内容(待提交注释 + 已裁决待决项 + 3D 直改),按工位拆批派单;同组有批次运行中会被拒": "Gửi một lần tất cả mục chờ gửi của tập này (ghi chú nháp + mục chờ quyết đã chọn + chỉnh sửa 3D trực tiếp), chia lô theo trạm; bị từ chối nếu cùng nhóm đang có lô chạy",
 "提交全集所有待提交内容;切到「本组」只提交当前组": "Gửi mọi mục chờ gửi của cả tập; chuyển sang «Nhóm này» để chỉ gửi nhóm hiện tại",
 "只提交当前组;切到「全集」一次提交所有组的待提交内容": "Chỉ gửi nhóm hiện tại; chuyển sang «Cả tập» để gửi một lần mọi mục chờ gửi của tất cả nhóm",
 "提交本组 ({n})": "Gửi nhóm này ({n})",

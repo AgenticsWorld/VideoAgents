@@ -2845,6 +2845,8 @@ window.I18N_DICT = {
 "镜头名单隐藏": "Masqué par la liste des plans",
 "📺 导演台": "📺 Console du réalisateur",
 "提交全集 ({n})": "Soumettre tout ce qui est en attente ({n})",
+"提交本集 ({n})": "Soumettre l'épisode ({n})",
+"一次性提交本集所有待提交内容(待提交注释 + 已裁决待决项 + 3D 直改),按工位拆批派单;同组有批次运行中会被拒": "Soumet en une fois tout ce qui est en attente dans cet épisode (notes brouillon + points tranchés + modifications 3D directes), réparti en lots par poste ; refusé si un lot est déjà en cours pour le même groupe",
 "提交全集所有待提交内容;切到「本组」只提交当前组": "Soumet tout ce qui est en attente dans l'épisode ; passez à « Ce groupe » pour ne soumettre que le groupe courant",
 "只提交当前组;切到「全集」一次提交所有组的待提交内容": "Soumet uniquement le groupe courant ; passez à « Épisode » pour soumettre d'un coup les éléments en attente de tous les groupes",
 "提交本组 ({n})": "Soumettre ce groupe ({n})",
