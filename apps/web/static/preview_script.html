@@ -307,7 +307,7 @@ const clip=(s,n)=>{s=String(s||'').replace(/\s+/g,' ');return s.length>n?s.slice
 
 function render(d){
   LAST=d;NOTES=d.notes||{};
-  renderEps(d.episodes||[]);$('#eps').appendChild(notesSubmitBtn());
+  renderEps(d.episodes||[]);
   const box=$('#content');
   const bd=d.breakdown,ep=d.ep,A=d.agents||{};
   renderNav(bd);
@@ -451,6 +451,7 @@ function renderEps(episodes){
   EpPicker.render($('#eps'),episodes,EP,ep=>{EP=ep;load()},{
     btnTag:e=>`<span class="st" title="${esc(e.has_breakdown?t('已有正式拆解表'):e.has_screenplay?t('仅剧本,尚未拆解'):t('无剧本'))}">${glyph(e)}</span>`,
     optTag:glyph});
+  $('#eps').appendChild(notesSubmitBtn());   // EpPicker.render 会清空整行,📨 提交注释 在这里补回(同故事板页,2026-09-27)
 }
 
 /* 重新分析:派单给拆解表产出工位(owner_agent,当前 01-story/timeline-story)产出正式拆解表,轮询结束后刷新 */

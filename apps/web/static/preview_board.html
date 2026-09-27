@@ -335,7 +335,7 @@ document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if($('#lb').s
 function render(d){
   LAST=d;SK=d.sketches||{};JOBS=d.jobs||{};REDRAW=mergeRedraw(d.redraw_runs||{});ANIM=d.animatic||{};GATE=d.gate||{};NOTES=d.notes||{};
   PORTRAIT=aspectPortrait(d.aspect);
-  renderEps(d.episodes||[]);$('#eps').appendChild(notesSubmitBtn());
+  renderEps(d.episodes||[]);
   const box=$('#content'),ep=d.ep;
   renderNav(null);
   if(!ep){box.innerHTML=`<div class="empty">${esc(t('该项目还没有分集数据(story/episodes 与 directing 为空)'))}</div>`;return}
@@ -656,6 +656,7 @@ function renderEps(episodes){
   EpPicker.render($('#eps'),episodes,EP,ep=>{EP=ep;load()},{
     btnTag:e=>`<span class="st" title="${esc(e.has_storyboard?t('已有分镜草案'):e.has_plan?t('仅导演计划,尚无分镜'):t('无分镜'))}">${glyph(e)}</span>`,
     optTag:glyph});
+  $('#eps').appendChild(notesSubmitBtn());   // EpPicker.render 会清空整行,📨 提交注释 必须在这里补回(refreshSketches 轮询/SSE 也走本函数,2026-09-27 修)
 }
 /* 📨 提交注释(2026-09-26):分集行靠右;本集全部注释(整集/场次/镜,含对象定位信息)由服务端拼成一张修改单发修改师,
    派单成功后 storyboard_notes.json 清空;无注释时禁用 */
