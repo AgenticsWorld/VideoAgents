@@ -194,7 +194,7 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .grp>.ghead .tag{font-size:11px;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:0 5px}
 .grp>.ghead .link{font-size:11px;color:var(--dim)}
 .grp>.ghead .trchip,.grp>.ghead .nbchip{color:var(--accent,#1d6f7a);font-weight:600}
-/* 组媒体区(2026-09-12 改版):左栏参考图(锚点/流水线 refs/用户 refs/线稿),右栏输出的组视频(+花字版/切变边界),
+/* 组媒体区(2026-09-12 改版):左栏参考图(锚点/流水线 refs/用户 refs/线稿),右栏输出的组视频(有花字版则只显示花字版;+切变边界),
    与下方 .gshots「分镜内容 | 白模」同一左右两栏排版;只有一侧有内容时单栏铺满;窄屏上下堆叠 */
 .grp>.gmedia{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;padding:10px 12px;background:var(--panel2);border-top:1px solid var(--border)}
 .grp>.gmedia.norefs,.grp>.gmedia.novids{grid-template-columns:1fr}
@@ -1787,12 +1787,16 @@ function groupCard(g,inner){
     `<div><img src="${esc(bust(k.url))}" loading="lazy" onclick="zoom(this.src)"><div class="cap" title="${esc(k.name)}"><span class="fn">${esc(k.name)}</span><button class="editbtn" data-url="${esc(k.url)}" title="对这张锚点图提修改意见,发给修改师处理">✏️ 修改</button></div></div>`);
   const vids=(g.clips||[]).map(c=>
     `<div><video controls preload="metadata" src="${esc(bust(c.url))}"></video><div class="cap" title="${esc(c.name)}"><span class="fn">▶ ${esc(c.name)}</span><button class="editbtn" data-url="${esc(c.url)}" title="对这段组视频提修改意见,发给修改师处理">✏️ 修改</button></div></div>`);
-  const capvids=(g.caption_clips||[]).map(c=>
-    `<div><video controls preload="metadata" src="${esc(bust(c.url))}"></video><div class="cap" title="${esc(c.name)}"><span class="fn">✨ ${t('花字版')} ${esc(c.name)}</span></div></div>`);
+  // 花字版(2026-09-27):本组有花字版视频时只显示花字版、原版隐藏(花字版=原版叠花字,同屏双显只会重复);
+  // 「✏️ 修改」仍指向同名原版组视频,修改意见落到源片而非叠字产物
+  const stem=n=>String(n||'').split('/').pop().replace(/\.[^.]+$/,'');
+  const capvids=(g.caption_clips||[]).map(c=>{
+    const src=(g.clips||[]).find(v=>stem(v.name)===stem(c.name))||(g.clips||[])[0];
+    return `<div><video controls preload="metadata" src="${esc(bust(c.url))}"></video><div class="cap" title="${esc(c.name)}"><span class="fn">✨ ${t('花字版')} ${esc(c.name)}</span>${src?`<button class="editbtn" data-url="${esc(src.url)}" title="对这段组视频提修改意见,发给修改师处理">✏️ 修改</button>`:''}</div></div>`;});
   const bounds=(g.boundaries_s||[]).length?`<div class="blabel">${t('✂ 切变边界:')}${g.boundaries_s.map(x=>(+x).toFixed(1)+'s').join(' / ')}</div>`:'';
-  // 左栏参考图(锚点 → 流水线 refs → 用户 refs → 线稿)| 右栏输出的组视频(+花字版 + 切变边界),同 .gshots 左右排版
+  // 左栏参考图(锚点 → 流水线 refs → 用户 refs → 线稿)| 右栏输出的组视频(有花字版则只显示花字版 + 切变边界),同 .gshots 左右排版
   const refsHtml=[anchors,prefs,urefs,sketches].filter(a=>a.length).map(a=>`<div class="anchors">${a.join('')}</div>`).join('');
-  const vidsHtml=vids.join('')+capvids.join('')+bounds;
+  const vidsHtml=(capvids.length?capvids:vids).join('')+bounds;
   const media=(refsHtml||vidsHtml)?
     `<div class="gmedia${refsHtml?'':' norefs'}${vidsHtml?'':' novids'}">${refsHtml?`<div class="grefs"><div class="mlabel">🖼 参考图</div>${refsHtml}</div>`:''}${vidsHtml?`<div class="gvids"><div class="mlabel">🎬 组视频</div>${vidsHtml}</div>`:''}</div>`:'';
   // 头部「🖼 图片」按钮计数:已加入本组 refs 的参考图张数(用户添加+流水线写入,与导航徽标同口径),0 不显示
