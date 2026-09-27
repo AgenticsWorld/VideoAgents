@@ -4061,13 +4061,17 @@ async def execute_run(run: dict, message: str, model: str | None):
     idle_timeout = 0 if is_dispatcher else idle_timeout_setting()
     is_stateless = is_stateless_agent(agent_id)
     async with AsyncExitStack() as stack:
+        # 无状态服务型 agent 每次全新会话,同 agent 并发受「并发数量」额度约束;
+        # 其余额度恒为 1(串行保护会话)。调度器不占槽但同样串行(同一总制片会话)。
+        # 先拿同 agent 串行锁、再拿全局工人槽(2026-09-27 对调):有状态工位(如白模调度)
+        # 一次派出十几单时只有一单真正在跑,其余在等串行锁;若先占全局槽再等锁,这些
+        # 「排队中」的 run 会把全局并发额度全部占满,别的 agent(记忆圣经管理者等)明明有
+        # 空闲工人槽也只能跟在后面排队
+        limit = agent_run_limit(agent_id, is_stateless)
+        await stack.enter_async_context(agent_sem(agent_id, limit))
         # 调度器大部分时间在等子任务(--wait-all),不占工人槽;否则 N 个槽实际只剩 N-1 个干活
         if not is_dispatcher:
             await stack.enter_async_context(global_sem())
-        # 无状态服务型 agent 每次全新会话,同 agent 并发受「并发数量」额度约束;
-        # 其余额度恒为 1(串行保护会话)。调度器不占槽但同样串行(同一总制片会话)
-        limit = agent_run_limit(agent_id, is_stateless)
-        await stack.enter_async_context(agent_sem(agent_id, limit))
         run["status"] = "running"
         run["started"] = time.time()
         publish_run(run)
