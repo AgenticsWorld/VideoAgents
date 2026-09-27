@@ -48,7 +48,7 @@ header select:hover{border-color:var(--accent)}
 #eps .notes-submit{margin-left:auto}
 #eps .notes-submit.has{color:var(--yellow);border-color:rgba(251,191,36,.55)}
 #eps .notes-submit:disabled{opacity:.45;cursor:default}
-/* 🗒 注释按钮(2026-09-27):在每个 ✏️ 反馈后;有注释时按钮与正文都用黄色 */
+/* 🗒 注释按钮(2026-09-27):在每个 ✏️ 修改后;有注释时按钮与正文都用黄色 */
 .editbtn.notebtn{margin-left:2px}
 .editbtn.notebtn.has{color:var(--yellow);border-color:rgba(251,191,36,.55);opacity:1}
 .un{color:var(--yellow);font-size:12px;white-space:pre-wrap;text-align:left}
@@ -222,13 +222,13 @@ function chip(id,_i,_a,forceKind){
   return `<span class="chip ${rec&&rec.url?'pic':''} ${kind==='creatures'?'cre':''}" title="${esc(id)}${rec&&!rec.url?' · '+esc(t('尚无概念图')):''}">${head}${esc(cname(id))}${cname(id)!==id?`<span class="cid">${esc(id)}</span>`:''}</span>`;
 }
 
-/* ✏️ 反馈:直发负责 Agent */
+/* ✏️ 修改:直发负责 Agent */
 const AGENT_NAMES={'01-story/timeline-story':'剧情时间轴','01-story/screenplay':'剧本改编','01-story/dialogue-rewrite':'对白润色','01-story/narration':'旁白撰写','01-story/hook':'钩子设计','01-story/pacing':'节奏审定','01-story/episode-planner':'分集规划','01-story/event':'事件提取','01-story/story-structure':'故事结构'};
 const agentName=id=>t(AGENT_NAMES[id]||id);
 function editBtn(agent,loc,cls,label,nkey){
-  return `<button class="editbtn ${cls||''}" data-agent="${esc(agent)}" data-ep="${esc(EP)}" data-loc="${esc(loc)}" title="${esc(I18N.f('对这一块提修改意见,直接发给 {agent}',{agent:agentName(agent)}))}">✏️ ${esc(label||t('反馈'))}</button>`+(nkey?noteBtn(nkey,loc,cls):'');
+  return `<button class="editbtn ${cls||''}" data-agent="${esc(agent)}" data-ep="${esc(EP)}" data-loc="${esc(loc)}" title="${esc(I18N.f('对这一块提修改意见,直接发给 {agent}',{agent:agentName(agent)}))}">✏️ ${esc(label||t('修改'))}</button>`+(nkey?noteBtn(nkey,loc,cls):'');
 }
-/* 🗒 注释(2026-09-27,同故事板页):每个 ✏️ 反馈后一个;键 = 对象稳定标识(* / S01 / S01/b3 / nar:ID / hook:ID / event:ID / pacing:S01 / trim:S01/n / plan),
+/* 🗒 注释(2026-09-27,同故事板页):每个 ✏️ 修改后一个;键 = 对象稳定标识(* / S01 / S01/b3 / nar:ID / hook:ID / event:ID / pacing:S01 / trim:S01/n / plan),
    存 story/episodes/<ep>/script_notes.json,随存反馈按钮的定位文本 label;分集行右侧「📨 提交注释」整集一次性发修改师并清空 */
 function noteBtn(key,label,cls){
   const n=NOTES[key];

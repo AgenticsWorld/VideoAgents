@@ -2403,7 +2403,7 @@ window.I18N_DICT = {
 "对这个场景的设定提修改意见,发给修改师处理": "Gửi ý kiến chỉnh sửa cho thiết lập bối cảnh này; gửi tin nhắn cho Người sửa",
 "对这个道具的设定提修改意见,发给修改师处理": "Gửi ý kiến chỉnh sửa cho thiết lập đạo cụ này; gửi tin nhắn cho Người sửa",
 "对该文档提修改意见,发给修改师处理": "Góp ý sửa đổi cho tài liệu này; gửi tin nhắn tới Người sửa",
-"花字 Agent 的设计产物(只读;点每条右上角 ✏️ 编辑 可把修改意见发给修改师)": "Sản phẩm thiết kế của Caption agent (chỉ đọc; bấm ✏️ Sửa ở góc trên phải mỗi mục để gửi ý kiến sửa cho Người sửa)",
+"花字 Agent 的设计产物(只读;点每条右上角 ✏️ 修改 可把修改意见发给修改师)": "Sản phẩm thiết kế của Caption agent (chỉ đọc; bấm ✏️ Sửa ở góc trên phải mỗi mục để gửi ý kiến sửa cho Người sửa)",
 "对这条花字提修改意见,发给修改师处理": "Góp ý sửa cho chữ nghệ thuật này; gửi tin nhắn cho Người sửa",
 "对这套服装的设定或 sheet 提修改意见,发给修改师处理": "Đề xuất chỉnh sửa thiết lập hoặc bảng trang phục này và nhắn cho người sửa",
 "对这张分镜背景图提修改意见,发给修改师处理": "Gửi góp ý chỉnh sửa nền này cho Người sửa",

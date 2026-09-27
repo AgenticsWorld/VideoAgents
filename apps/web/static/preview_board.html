@@ -156,7 +156,7 @@ td.e .jumps{margin-right:6px;vertical-align:middle}
 .editbtn:hover{color:var(--accent);border-color:var(--accent)}
 .editbtn.pri{color:var(--text)}
 .editbtn.sm{font-size:10.5px;padding:0 5px;opacity:.75}
-/* 用户注释(2026-09-15):🗒 按钮在 ✏️ 反馈/修改 后(2026-09-27 调换);有注释时按钮与正文都用黄色 */
+/* 用户注释(2026-09-15):🗒 按钮在 ✏️ 修改 后(2026-09-27 调换);有注释时按钮与正文都用黄色 */
 .editbtn.notebtn{margin-left:4px}
 .editbtn.notebtn.has{color:var(--yellow);border-color:rgba(251,191,36,.55);opacity:1}
 td.c .ln.un .v{color:var(--yellow);white-space:pre-wrap}
@@ -253,7 +253,7 @@ function editBtn(loc,cls,label,agent){
   return `<button class="editbtn ${cls||''}" data-ep="${esc(EP)}" data-loc="${esc(loc)}"${agent?` data-agent="${esc(agent)}"`:''} title="${esc(agent?t('对这张草图提修改意见,由分镜草图工位重绘'):t('对这一块提修改意见,发给修改师处理(牵涉上下游时由总制片按变更记录标脏)'))}">✏️ ${esc(label||t('修改'))}</button>`;
 }
 /* 🗒 注释(2026-09-15):用户对整集(*)/场次(S01)/镜(S01-03)写的设计意见,存 directing/<ep>/storyboard_notes.json,
-   分镜师 / 镜头表工位 / 修改师重做分镜时必读;按钮放在 ✏️ 反馈/修改 后面 */
+   分镜师 / 镜头表工位 / 修改师重做分镜时必读;按钮放在 ✏️ 修改 后面 */
 function noteBtn(key,cls){
   const n=NOTES[key];
   return `<button class="editbtn notebtn ${cls||''} ${n?'has':''}" data-note="${esc(key)}" title="${esc(n?t('注释:')+n.text:t('对这一块加注释:存到 directing/<ep>/storyboard_notes.json,分镜师 / 镜头表工位 / 修改师重做本集分镜时作为设计参考'))}">🗒 ${esc(t('注释'))}</button>`;
@@ -513,7 +513,7 @@ function shotRow(sc,sh,ep){
   // 镜行右侧:每个定稿镜号一个 🎦(拆镜时一行草案对多镜,tooltip 带镜号区分)
   const proj0=$('#project').value.trim()||'demo';
   const jumps=JumpAnchor.group((sh.final||[]).map(f=>f.shot_id?JumpAnchor.link('storyboard',proj0,ep,'shot',f.shot_id):''));
-  return `<tr data-stick-shot="${esc(JSON.stringify([...new Set([sh.shot_id||sh.key,...(sh.final||[]).map(f=>f.shot_id)].filter(Boolean))]))}" data-row="${esc(sh.key)}" id="sh-${esc(sh.key)}"><td class="no">${no}</td><td class="c" data-no-i18n>${c}</td><td class="s ${PORTRAIT?'portrait':''}" data-cell="${esc(sh.key)}">${sketchCell(sc,sh,ep)}</td><td class="e">${jumps}${editBtn(loc,'sm',t('反馈'))}${noteBtn(sh.key,'sm')}</td></tr>`;
+  return `<tr data-stick-shot="${esc(JSON.stringify([...new Set([sh.shot_id||sh.key,...(sh.final||[]).map(f=>f.shot_id)].filter(Boolean))]))}" data-row="${esc(sh.key)}" id="sh-${esc(sh.key)}"><td class="no">${no}</td><td class="c" data-no-i18n>${c}</td><td class="s ${PORTRAIT?'portrait':''}" data-cell="${esc(sh.key)}">${sketchCell(sc,sh,ep)}</td><td class="e">${jumps}${editBtn(loc,'sm')}${noteBtn(sh.key,'sm')}</td></tr>`;
 }
 
 const POSE_ZH={stand:'站',sit:'坐',lie:'躺',kneel:'跪',crouch:'蹲',prone:'趴'};   // 与 modules/storyboard_board.POSE_ZH 一致

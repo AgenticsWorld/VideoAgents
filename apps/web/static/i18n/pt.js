@@ -2405,7 +2405,7 @@ window.I18N_DICT = {
 "对这个场景的设定提修改意见,发给修改师处理": "Dar notas de revisão sobre esta cena; envia uma mensagem ao Revisor",
 "对这个道具的设定提修改意见,发给修改师处理": "Dar notas de revisão sobre este adereço; envia uma mensagem ao Revisor",
 "对该文档提修改意见,发给修改师处理": "Deixe notas de revisão sobre este documento; envia uma mensagem ao Revisor",
-"花字 Agent 的设计产物(只读;点每条右上角 ✏️ 编辑 可把修改意见发给修改师)": "Resultado do agente de texto decorativo (somente leitura; clique ✏️ Editar no canto superior direito de cada item para enviar comentários ao Revisor)",
+"花字 Agent 的设计产物(只读;点每条右上角 ✏️ 修改 可把修改意见发给修改师)": "Resultado do agente de texto decorativo (somente leitura; clique ✏️ Editar no canto superior direito de cada item para enviar comentários ao Revisor)",
 "对这条花字提修改意见,发给修改师处理": "Dar comentários sobre este texto decorativo; envia uma mensagem ao Revisor",
 "对这套服装的设定或 sheet 提修改意见,发给修改师处理": "Sugerir alterações a este traje ou ficha e avisar o Revisor",
 "对这张分镜背景图提修改意见,发给修改师处理": "Enviar observações sobre este fundo ao Revisor",

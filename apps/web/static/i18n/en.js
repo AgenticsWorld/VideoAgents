@@ -2508,7 +2508,7 @@ window.I18N_DICT = {
 "对这个场景的设定提修改意见,发给修改师处理": "Give revision notes on this scene's profile; sends a message to the Reviser",
 "对这个道具的设定提修改意见,发给修改师处理": "Give revision notes on this prop's profile; sends a message to the Reviser",
 "对该文档提修改意见,发给修改师处理": "Give revision notes on this document; sends a message to the Reviser",
-"花字 Agent 的设计产物(只读;点每条右上角 ✏️ 编辑 可把修改意见发给修改师)": "Design output of the Caption agent (read-only; click ✏️ Edit at the top-right of each item to send revision notes to the Reviser)",
+"花字 Agent 的设计产物(只读;点每条右上角 ✏️ 修改 可把修改意见发给修改师)": "Design output of the Caption agent (read-only; click ✏️ Edit at the top-right of each item to send revision notes to the Reviser)",
 "对这条花字提修改意见,发给修改师处理": "Give revision notes on this fancy-text item; sends a message to the Reviser",
 "对这套服装的设定或 sheet 提修改意见,发给修改师处理": "Suggest changes to this outfit's settings or sheet and message the Reviser",
 "对这张分镜背景图提修改意见,发给修改师处理": "Send revision notes for this shot plate to the Reviser",

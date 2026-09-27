@@ -2403,7 +2403,7 @@ window.I18N_DICT = {
 "对这个场景的设定提修改意见,发给修改师处理": "Berikan catatan revisi untuk adegan ini; mengirim pesan ke Perevisi",
 "对这个道具的设定提修改意见,发给修改师处理": "Berikan catatan revisi untuk properti ini; mengirim pesan ke Perevisi",
 "对该文档提修改意见,发给修改师处理": "Beri catatan revisi pada dokumen ini; mengirim pesan ke Perevisi",
-"花字 Agent 的设计产物(只读;点每条右上角 ✏️ 编辑 可把修改意见发给修改师)": "Hasil desain agen Caption (hanya-baca; klik ✏️ Edit di kanan atas tiap item untuk mengirim masukan revisi ke Perevisi)",
+"花字 Agent 的设计产物(只读;点每条右上角 ✏️ 修改 可把修改意见发给修改师)": "Hasil desain agen Caption (hanya-baca; klik ✏️ Ubah di kanan atas tiap item untuk mengirim masukan revisi ke Perevisi)",
 "对这条花字提修改意见,发给修改师处理": "Beri masukan revisi untuk teks hias ini; mengirim pesan ke Perevisi",
 "对这套服装的设定或 sheet 提修改意见,发给修改师处理": "Sarankan perubahan pada pengaturan atau lembar kostum ini dan kirim pesan ke perevisi",
 "对这张分镜背景图提修改意见,发给修改师处理": "Kirim catatan revisi untuk latar ini ke Perevisi",

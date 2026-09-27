@@ -2403,7 +2403,7 @@ window.I18N_DICT = {
 "对这个场景的设定提修改意见,发给修改师处理": "Änderungswünsche zur Szene geben; sendet eine Nachricht an den Reviser",
 "对这个道具的设定提修改意见,发给修改师处理": "Änderungswünsche zur Requisite geben; sendet eine Nachricht an den Reviser",
 "对该文档提修改意见,发给修改师处理": "Änderungswünsche zu diesem Dokument als Nachricht an den Reviser senden",
-"花字 Agent 的设计产物(只读;点每条右上角 ✏️ 编辑 可把修改意见发给修改师)": "Ergebnis des Stiltext-Agenten (schreibgeschützt; ✏️ Bearbeiten oben rechts an jedem Eintrag sendet Änderungswünsche an den Reviser)",
+"花字 Agent 的设计产物(只读;点每条右上角 ✏️ 修改 可把修改意见发给修改师)": "Ergebnis des Stiltext-Agenten (schreibgeschützt; ✏️ Bearbeiten oben rechts an jedem Eintrag sendet Änderungswünsche an den Reviser)",
 "对这条花字提修改意见,发给修改师处理": "Änderungswünsche zu diesem Stiltext; sendet eine Nachricht an den Reviser",
 "对这套服装的设定或 sheet 提修改意见,发给修改师处理": "Änderungsvorschläge zu diesem Outfit oder Sheet an den Reviser senden",
 "对这张分镜背景图提修改意见,发给修改师处理": "Änderungswünsche zu diesem Hintergrund an den Reviser senden",
