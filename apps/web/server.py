@@ -414,6 +414,94 @@ async def open_project_folder(request: Request):
     return {"ok": True}
 
 
+_PICK_LOCK = threading.Lock()
+
+
+class _PickUnavailable(RuntimeError):
+    """本机没有可用的系统文件对话框(无桌面环境 / 缺 zenity|kdialog / osascript 不可用)。"""
+
+
+def _native_pick_files(title: str) -> list[str]:
+    """在本机弹系统「选择文件」对话框,返回所选文件的绝对路径;用户取消返回 []。阻塞,须放线程里跑。"""
+    if sys.platform == "darwin":
+        safe = title.replace("\\", "\\\\").replace('"', '\\"')
+        script = (
+            f'set fs to choose file with prompt "{safe}" with multiple selections allowed\n'
+            'set out to ""\n'
+            "repeat with f in fs\n"
+            "set out to out & POSIX path of f & linefeed\n"
+            "end repeat\n"
+            "return out"
+        )
+        try:
+            proc = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=600)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise _PickUnavailable(str(exc)) from exc
+        if proc.returncode != 0:
+            if "-128" in proc.stderr or "canceled" in proc.stderr.lower():
+                return []
+            raise _PickUnavailable(proc.stderr.strip() or f"osascript exit {proc.returncode}")
+        return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+    if os.name == "nt":
+        safe = title.replace("'", "''")
+        script = (
+            "Add-Type -AssemblyName System.Windows.Forms; "
+            "$d = New-Object System.Windows.Forms.OpenFileDialog; $d.Multiselect = $true; "
+            f"$d.Title = '{safe}'; "
+            "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $d.FileNames | ForEach-Object { Write-Output $_ } }"
+        )
+        try:
+            proc = subprocess.run(["powershell", "-NoProfile", "-STA", "-Command", script], capture_output=True, text=True, timeout=600)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise _PickUnavailable(str(exc)) from exc
+        if proc.returncode != 0:
+            raise _PickUnavailable(proc.stderr.strip() or f"powershell exit {proc.returncode}")
+        return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+    # Linux:zenity 优先,其次 kdialog;两者都没有(或无 DISPLAY)视为不可用,前端转手填
+    if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        raise _PickUnavailable("no display")
+    for command in (
+        ["zenity", "--file-selection", "--multiple", "--separator=\n", f"--title={title}"],
+        ["kdialog", "--getopenfilename", ".", "--multiple", "--separate-output", "--title", title],
+    ):
+        try:
+            proc = subprocess.run(command, capture_output=True, text=True, timeout=600)
+        except FileNotFoundError:
+            continue
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise _PickUnavailable(str(exc)) from exc
+        if proc.returncode == 1 and not proc.stdout.strip():
+            return []   # 用户取消
+        if proc.returncode != 0:
+            raise _PickUnavailable(proc.stderr.strip() or f"{command[0]} exit {proc.returncode}")
+        return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+    raise _PickUnavailable("zenity/kdialog not found")
+
+
+@app.post("/actions/pick-files", include_in_schema=False)
+async def pick_files(request: Request):
+    """输入框「+」附件按钮的网页版后端:在本机弹系统「选择文件」对话框,只返回绝对路径,不上传文件。
+
+    浏览器与本服务同机时可用(桌面客户端走 Electron 原生对话框,不经此处);对话框不可用返回 501,前端转手填路径。
+    """
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    payload = payload if isinstance(payload, dict) else {}
+    title = str(payload.get("title") or "选择文件")[:120]
+    lang = str(payload.get("lang") or "zh")
+    if not _PICK_LOCK.acquire(blocking=False):
+        raise HTTPException(409, "文件对话框已打开,请先处理它" if lang == "zh" else "A file dialog is already open; finish it first")
+    try:
+        paths = await asyncio.to_thread(_native_pick_files, title)
+    except _PickUnavailable as exc:
+        raise HTTPException(501, (f"本机无法打开系统文件对话框:{exc}" if lang == "zh" else f"No system file dialog on this host: {exc}"))
+    finally:
+        _PICK_LOCK.release()
+    return {"paths": [p for p in paths if os.path.isabs(p)]}
+
+
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 

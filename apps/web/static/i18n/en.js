@@ -3863,4 +3863,20 @@ window.I18N_DICT = {
 "本集暂无组注释": "This episode has no group notes",
 "把本集 {n} 条组注释一次性发给修改师处理,并清空这些注释?": "Send all {n} group notes of this episode to the reviser in one go and clear them?",
 "✅ 已把 {n} 条组注释发给修改师,注释已清空": "✅ {n} group notes sent to the reviser; notes cleared",
+
+"添加文件:选择本机文件,不上传,只把绝对路径附在消息里发给 Agent(Shift+点击可手填路径)": "Add files: pick local files; nothing is uploaded, only their absolute paths are appended to the message for the agent (Shift+click to type paths)",
+"添加文件": "Add files",
+"附件(本机文件绝对路径,请直接读取):": "Attachments (absolute paths of local files; read them directly):",
+"远程服务:请填写服务所在机器上的文件绝对路径(每行一个):": "Remote backend: enter absolute file paths on the machine running the service (one per line):",
+"无法打开系统文件对话框,请粘贴文件的绝对路径(每行一个):": "The system file dialog could not be opened; paste absolute file paths instead (one per line):",
+"粘贴文件的绝对路径(每行一个):": "Paste absolute file paths (one per line):",
+"选择文件": "Choose files",
+"选择文件失败": "Choosing files failed",
+"如 /Users/you/Desktop/a.png,每行一个": "e.g. /Users/you/Desktop/a.png, one per line",
+"不是绝对路径:{p}": "Not an absolute path: {p}",
+// 🗒 剧本注释(2026-09-27,剧本预览页)
+"🗒 剧本注释": "🗒 Script note",
+"写下你对这里的想法:情节走向、人物动机、台词语气、节奏、必须保留或避免的处理…(Shift+Enter 保存)": "Write down your thoughts here: plot direction, character motivation, tone of the lines, pacing, what must be kept or avoided… (Shift+Enter to save)",
+"注释存到 story/episodes/<ep>/script_notes.json;点分集行右侧「📨 提交注释」把本集全部注释一次性发给修改师处理": "Notes are saved to story/episodes/<ep>/script_notes.json; click 「📨 Submit notes」 at the right of the episode row to send all of this episode's notes to the reviser in one go",
+"对这一块加注释:存到 story/episodes/<ep>/script_notes.json,点分集行右侧「📨 提交注释」整集一次性发给修改师": "Add a note here: saved to story/episodes/<ep>/script_notes.json; 「📨 Submit notes」 at the right of the episode row sends the whole episode's notes to the reviser in one go",
 };

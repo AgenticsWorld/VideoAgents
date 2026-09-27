@@ -10,7 +10,7 @@
 <script src="/static/jump-anchor.js?v=20260912"></script>
 <script src="/static/preview-stickbar.js?v=20260913" defer></script>
 <script src="/static/preview-nav.js?v=20260913" defer></script>
-<script src="/static/edit-popup.js?v=20260911-reviser"></script>
+<script src="/static/edit-popup.js?v=20260927a-reviser"></script>
 <script src="/static/mini-md.js?v=20260911"></script>
 <script src="/static/image-models.js?v=20260911"></script>
 <script src="/static/image-model-picker.js?v=20260912"></script>
@@ -156,8 +156,8 @@ td.e .jumps{margin-right:6px;vertical-align:middle}
 .editbtn:hover{color:var(--accent);border-color:var(--accent)}
 .editbtn.pri{color:var(--text)}
 .editbtn.sm{font-size:10.5px;padding:0 5px;opacity:.75}
-/* 用户注释(2026-09-15):🗒 按钮在 ✏️ 反馈/修改 前;有注释时按钮与正文都用黄色 */
-.editbtn.notebtn{margin-right:4px}
+/* 用户注释(2026-09-15):🗒 按钮在 ✏️ 反馈/修改 后(2026-09-27 调换);有注释时按钮与正文都用黄色 */
+.editbtn.notebtn{margin-left:4px}
 .editbtn.notebtn.has{color:var(--yellow);border-color:rgba(251,191,36,.55);opacity:1}
 td.c .ln.un .v{color:var(--yellow);white-space:pre-wrap}
 .scene .note.un{color:var(--yellow)}
@@ -253,7 +253,7 @@ function editBtn(loc,cls,label,agent){
   return `<button class="editbtn ${cls||''}" data-ep="${esc(EP)}" data-loc="${esc(loc)}"${agent?` data-agent="${esc(agent)}"`:''} title="${esc(agent?t('对这张草图提修改意见,由分镜草图工位重绘'):t('对这一块提修改意见,发给修改师处理(牵涉上下游时由总制片按变更记录标脏)'))}">✏️ ${esc(label||t('修改'))}</button>`;
 }
 /* 🗒 注释(2026-09-15):用户对整集(*)/场次(S01)/镜(S01-03)写的设计意见,存 directing/<ep>/storyboard_notes.json,
-   分镜师 / 镜头表工位 / 修改师重做分镜时必读;按钮放在 ✏️ 反馈/修改 前面 */
+   分镜师 / 镜头表工位 / 修改师重做分镜时必读;按钮放在 ✏️ 反馈/修改 后面 */
 function noteBtn(key,cls){
   const n=NOTES[key];
   return `<button class="editbtn notebtn ${cls||''} ${n?'has':''}" data-note="${esc(key)}" title="${esc(n?t('注释:')+n.text:t('对这一块加注释:存到 directing/<ep>/storyboard_notes.json,分镜师 / 镜头表工位 / 修改师重做本集分镜时作为设计参考'))}">🗒 ${esc(t('注释'))}</button>`;
@@ -341,7 +341,7 @@ function render(d){
   if(!ep){box.innerHTML=`<div class="empty">${esc(t('该项目还没有分集数据(story/episodes 与 directing 为空)'))}</div>`;return}
   const epi=(d.episodes||[]).find(e=>e.ep===ep)||{};
   const T=d.totals||{};
-  let h=`<h2 class="title">${esc(ep)} ${esc(d.title||epi.title||'')}<span class="sub">${d.has_storyboard?esc(I18N.f('{n} 场 · {m} 镜草案 · {g} 组草案 · 草案 Σ {d}s',{n:T.scenes??0,m:T.shots??0,g:T.groups??0,d:num(T.draft_sum_s,1)})):''}${T.final_total_s!=null?esc(I18N.f(' · 定稿 {f}s / 预算 {b}s({s} 镜 {g} 组)',{f:num(T.final_total_s,1),b:T.budget_s==null?'—':num(T.budget_s,0),s:T.final_shots??'—',g:T.final_groups??'—'})):''}${narrSummary(d)}</span><span class="spacer"></span><span id="skbatch">${d.has_storyboard?batchBtnHtml():''}</span>${d.has_storyboard?`<span id="epnotebtn">${noteBtn('*')}</span>`:''}${editBtn(I18N.f('故事板 {ep} {title}(整体反馈;文件 directing/{ep}/storyboard.json、directing_plan.md)',{ep,title:d.title||epi.title||''}))}</h2>`;
+  let h=`<h2 class="title">${esc(ep)} ${esc(d.title||epi.title||'')}<span class="sub">${d.has_storyboard?esc(I18N.f('{n} 场 · {m} 镜草案 · {g} 组草案 · 草案 Σ {d}s',{n:T.scenes??0,m:T.shots??0,g:T.groups??0,d:num(T.draft_sum_s,1)})):''}${T.final_total_s!=null?esc(I18N.f(' · 定稿 {f}s / 预算 {b}s({s} 镜 {g} 组)',{f:num(T.final_total_s,1),b:T.budget_s==null?'—':num(T.budget_s,0),s:T.final_shots??'—',g:T.final_groups??'—'})):''}${narrSummary(d)}</span><span class="spacer"></span><span id="skbatch">${d.has_storyboard?batchBtnHtml():''}</span>${editBtn(I18N.f('故事板 {ep} {title}(整体反馈;文件 directing/{ep}/storyboard.json、directing_plan.md)',{ep,title:d.title||epi.title||''}))}${d.has_storyboard?`<span id="epnotebtn">${noteBtn('*')}</span>`:''}</h2>`;
   if(d.has_storyboard)h+=`<div id="epnote">${epNoteHtml()}</div>`;
   const sm=d.storyboard_meta||{};
   if(d.has_storyboard)h+=`<div class="src"><span>🎬</span><span class="msg">${esc(I18N.f('分镜层产物 directing/{ep}/storyboard.json',{ep}))}${sm.task_id?` · ${esc(sm.task_id)}`:''}${sm.written_at?` · ${esc(sm.written_at)}`:''}${sm.status?` · ${esc(sm.status)}`:''} · ${esc(t('草图为铅笔手绘小图,只用于看构图与调度,不进视频参考图'))}</span></div>`;
@@ -468,7 +468,7 @@ function sceneCard(sc,d){
     (d.script_scenes||[]).includes(sc.scene_no)?JumpAnchor.link('script',proj0,ep,'scene',sc.scene_no):'',
     (d.shot_scenes||[]).includes(sc.scene_no)?JumpAnchor.link('storyboard',proj0,ep,'scene',sc.scene_no):'']);
   hd+=`<span class="meta" title="${esc(t('已出草图 / 镜数;整集批量出图在上方标题行'))}">🖊 ${nDone}/${sc.shots.length}</span>`;
-  hd+=noteBtn(sc.scene_no)+editBtn(I18N.f('故事板 {ep} 场次 {no}{name}(文件 directing/{ep}/storyboard.json scenes[{no}])',{ep,no:sc.scene_no,name:sc.location?' '+sc.location:''}))+`</div>`;
+  hd+=editBtn(I18N.f('故事板 {ep} 场次 {no}{name}(文件 directing/{ep}/storyboard.json scenes[{no}])',{ep,no:sc.scene_no,name:sc.location?' '+sc.location:''}))+noteBtn(sc.scene_no)+`</div>`;
   let as='';
   if(sc.scene_id)as+=aChip('scenes',sc.scene_id,'🏞');
   (sc.cast||[]).forEach(c=>{as+=aChip('characters',c,'👤')});
@@ -513,7 +513,7 @@ function shotRow(sc,sh,ep){
   // 镜行右侧:每个定稿镜号一个 🎦(拆镜时一行草案对多镜,tooltip 带镜号区分)
   const proj0=$('#project').value.trim()||'demo';
   const jumps=JumpAnchor.group((sh.final||[]).map(f=>f.shot_id?JumpAnchor.link('storyboard',proj0,ep,'shot',f.shot_id):''));
-  return `<tr data-stick-shot="${esc(JSON.stringify([...new Set([sh.shot_id||sh.key,...(sh.final||[]).map(f=>f.shot_id)].filter(Boolean))]))}" data-row="${esc(sh.key)}" id="sh-${esc(sh.key)}"><td class="no">${no}</td><td class="c" data-no-i18n>${c}</td><td class="s ${PORTRAIT?'portrait':''}" data-cell="${esc(sh.key)}">${sketchCell(sc,sh,ep)}</td><td class="e">${jumps}${noteBtn(sh.key,'sm')}${editBtn(loc,'sm',t('反馈'))}</td></tr>`;
+  return `<tr data-stick-shot="${esc(JSON.stringify([...new Set([sh.shot_id||sh.key,...(sh.final||[]).map(f=>f.shot_id)].filter(Boolean))]))}" data-row="${esc(sh.key)}" id="sh-${esc(sh.key)}"><td class="no">${no}</td><td class="c" data-no-i18n>${c}</td><td class="s ${PORTRAIT?'portrait':''}" data-cell="${esc(sh.key)}">${sketchCell(sc,sh,ep)}</td><td class="e">${jumps}${editBtn(loc,'sm',t('反馈'))}${noteBtn(sh.key,'sm')}</td></tr>`;
 }
 
 const POSE_ZH={stand:'站',sit:'坐',lie:'躺',kneel:'跪',crouch:'蹲',prone:'趴'};   // 与 modules/storyboard_board.POSE_ZH 一致

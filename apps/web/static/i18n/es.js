@@ -3854,4 +3854,20 @@ window.I18N_DICT = {
 "本集暂无组注释": "Este episodio no tiene notas de grupo",
 "把本集 {n} 条组注释一次性发给修改师处理,并清空这些注释?": "¿Enviar de una vez las {n} notas de grupo de este episodio al revisor y borrarlas?",
 "✅ 已把 {n} 条组注释发给修改师,注释已清空": "✅ {n} notas de grupo enviadas al revisor; notas borradas",
+
+"添加文件:选择本机文件,不上传,只把绝对路径附在消息里发给 Agent(Shift+点击可手填路径)": "Añadir archivos: elige archivos locales; no se sube nada, solo se añaden sus rutas absolutas al mensaje para el agente (Shift+clic para escribir rutas)",
+"添加文件": "Añadir archivos",
+"附件(本机文件绝对路径,请直接读取):": "Adjuntos (rutas absolutas de archivos locales; léelos directamente):",
+"远程服务:请填写服务所在机器上的文件绝对路径(每行一个):": "Servicio remoto: escribe rutas absolutas de archivos en la máquina donde corre el servicio (una por línea):",
+"无法打开系统文件对话框,请粘贴文件的绝对路径(每行一个):": "No se pudo abrir el diálogo de archivos del sistema; pega rutas absolutas de archivos (una por línea):",
+"粘贴文件的绝对路径(每行一个):": "Pega rutas absolutas de archivos (una por línea):",
+"选择文件": "Elegir archivos",
+"选择文件失败": "No se pudieron elegir los archivos",
+"如 /Users/you/Desktop/a.png,每行一个": "p. ej. /Users/you/Desktop/a.png, una por línea",
+"不是绝对路径:{p}": "No es una ruta absoluta: {p}",
+// 🗒 剧本注释(2026-09-27,剧本预览页)
+"🗒 剧本注释": "🗒 Nota de guion",
+"写下你对这里的想法:情节走向、人物动机、台词语气、节奏、必须保留或避免的处理…(Shift+Enter 保存)": "Escribe aquí tus ideas: rumbo de la trama, motivación de los personajes, tono de los diálogos, ritmo, qué conservar o evitar… (Shift+Enter guarda)",
+"注释存到 story/episodes/<ep>/script_notes.json;点分集行右侧「📨 提交注释」把本集全部注释一次性发给修改师处理": "Las notas se guardan en story/episodes/<ep>/script_notes.json; 「📨 Enviar notas」 a la derecha de la fila de episodios envía de una vez todas las notas del episodio al revisor",
+"对这一块加注释:存到 story/episodes/<ep>/script_notes.json,点分集行右侧「📨 提交注释」整集一次性发给修改师": "Añade una nota aquí: se guarda en story/episodes/<ep>/script_notes.json; 「📨 Enviar notas」 a la derecha de la fila de episodios envía de una vez todas las notas del episodio al revisor",
 };

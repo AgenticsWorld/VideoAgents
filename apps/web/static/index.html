@@ -9,6 +9,7 @@
 <script src="/static/image-models.js?v=20260911"></script>
 <script src="/static/i18n/i18n.js"></script>
 <script src="/static/voice-input.js?v=20260911"></script>
+<script src="/static/file-attach.js?v=20260927a"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -83,9 +84,9 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 #voice-prog .vbar{height:6px;background:var(--panel);border:1px solid var(--border);border-radius:4px;overflow:hidden}
 #voice-prog .vbar i{display:block;height:100%;background:var(--accent);width:0;transition:width .4s}
 #input{flex:1;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 12px;resize:none;height:64px;font:inherit}
+#input:focus{outline:none}   /* 去掉浏览器默认聚焦白边(总制片与其它 Agent 一致) */
 /* 总制片输入框:光晕环向外扩散(grow)循环,提示当前是在跟总制片说话,避免误发给其它 Agent;只动阴影/边框,不改尺寸 */
 #composer.dispatcher #input{border-color:var(--accent);animation:composer-grow 2s ease-out infinite}
-#composer.dispatcher #input:focus{outline:none}
 @keyframes composer-grow{0%{box-shadow:0 0 0 0 rgba(108,158,248,.55)}70%{box-shadow:0 0 0 7px rgba(108,158,248,0)}100%{box-shadow:0 0 0 0 rgba(108,158,248,0)}}
 #soul-view{display:none;flex:1;overflow-y:auto;padding:18px;white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#b9c2d6}
 /* 右栏 */
@@ -3054,12 +3055,14 @@ function loadDraft(){try{return localStorage.getItem(DRAFT_KEY)||''}catch(e){ret
 /* ---------- 发送 ---------- */
 async function send(){
   const t=$('#input').value.trim(); if(!t||!CURRENT)return;
-  $('#input').value='';saveDraft();
+  const files=ATTACH.paths();
+  const msg=ATTACH.compose(t);        // 附件:本机文件绝对路径拼在正文末尾,文件不上传,Agent 按路径自行读取
+  $('#input').value='';saveDraft();ATTACH.clear();
   try{
-    await api('/api/v1/runs',{agent:CURRENT,message:t,project:$('#project').value.trim()||'demo',
+    await api('/api/v1/runs',{agent:CURRENT,message:msg,project:$('#project').value.trim()||'demo',
       model:getModel(),engine:$('#engine').value});
   }catch(e){
-    $('#input').value=t;saveDraft();   // 发送失败把内容还给用户,不能只留一条错误提示
+    $('#input').value=t;saveDraft();ATTACH.setPaths(files);   // 发送失败把内容(含附件)还给用户,不能只留一条错误提示
     appendMsg('assistant','发送失败:'+e.message,{status:'error'})
   }
 }
@@ -3067,6 +3070,7 @@ $('#send').onclick=send;
 $('#input').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.shiftKey){e.preventDefault();send()}});
 $('#input').addEventListener('input',saveDraft);
 VoiceInput.attach($('#input'));   // 语音输入按钮:仅设置「语音输入」开启时显示
+const ATTACH=FileAttach.attach($('#input'),{storageKey:'webui_draft_files'});   // 输入框右上角「+」附件按钮(语音按钮在右下角):附件随草稿留存
 
 /* ---------- 设置菜单:界面语言(语言名是各语言自称,不翻译) ---------- */
 (function(){

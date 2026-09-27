@@ -8643,6 +8643,8 @@ def _preview_script(project: str, ep: str):
     # 跨预览页跳转(2026-09-12):故事板 / 分镜表里实际存在的场次号,页面只对存在的目标显示 📋 / 🎦 链接
     data["board_scenes"] = sbb.board_targets(_read_json_safe(base / "directing" / ep / "storyboard.json") or {})[0]
     data["shot_scenes"] = _shot_list_scene_nos(_read_json_safe(base / "directing" / ep / "shot_list.json") or {})
+    from modules import script_notes as scn
+    data["notes"] = scn.load_notes(base, ep)["notes"]      # 用户注释(2026-09-27):* / S01 / S01/b3 / nar:ID / hook:ID / event:ID / pacing:S01 / trim:S01/n / plan
     out = (load_project_settings(base.name).get("output") or {})
     data["narration_enabled"] = out.get("narration_enabled") is True
     # 本集拆解是否已派单在跑(页面刷新后仍能显示「分析中」并继续轮询)
@@ -8656,6 +8658,100 @@ def _preview_script(project: str, ep: str):
 
 async def api_preview_script(project: str = "demo", ep: str = ""):
     return await asyncio.to_thread(_preview_script, project, ep)
+
+
+def _script_note_set(project: str, ep: str, body: dict) -> dict:
+    from modules import script_notes as scn
+    base = _proj_base(project)
+    ep = re.sub(r"[^\w\-]", "", ep)
+    key = str(body.get("key") or "").strip()
+    if not scn.note_key_ok(key):
+        raise ServiceError(400, "bad note key (expected '*', 'S01', 'S01/b3', 'nar:ID', 'hook:ID', 'event:ID', 'pacing:S01', 'trim:S01/n' or 'plan')")
+    text = str(body.get("text") or "")
+    if len(text.strip()) > scn.NOTE_MAX_CHARS:
+        raise ServiceError(400, f"note too long (>{scn.NOTE_MAX_CHARS} chars)")
+    if not (base / "story" / "episodes" / ep).is_dir() and not scn.notes_path(base, ep).is_file():
+        raise ServiceError(404, f"story/episodes/{ep} not found")
+    d = scn.update_note(base, ep, key, text, str(body.get("label") or ""))
+    return {"ok": True, "key": key, "note": d["notes"].get(key), "notes": d["notes"], "path": scn.NOTES_REL.format(ep=ep)}
+
+
+async def api_script_note_set(project: str, ep: str, body: dict):
+    """剧本预览页「🗒 注释」(2026-09-27):{key, text, label?}(text 空 = 删除)→ story/episodes/<ep>/script_notes.json。"""
+    return await asyncio.to_thread(_script_note_set, project, ep, body)
+
+
+_SCRIPT_NOTE_LEVEL_ZH = {"episode": "整集", "scene": "场次", "block": "场内段落", "nar": "旁白", "hook": "钩子",
+                         "event": "事件卡", "pacing": "节奏/情绪", "trim": "删减建议", "plan": "分集计划"}
+_SCRIPT_NOTE_LEVEL_EN = {"episode": "whole episode", "scene": "scene", "block": "scene block", "nar": "narration",
+                         "hook": "hook", "event": "event card", "pacing": "pacing/emotion", "trim": "trim suggestion",
+                         "plan": "episode plan"}
+
+
+async def api_script_notes_submit(project: str, ep: str, body: dict | None = None):
+    """剧本预览页「📨 提交注释」(2026-09-27):本集全部剧本注释(键 + 写注释时的对象定位文本 + 正文)拼成一张修改单
+    发修改师(kind=script),派单成功后清空 story/episodes/<ep>/script_notes.json。{rerun_downstream?}。"""
+    from modules import script_notes as scn
+    body = body or {}
+    base = _proj_base(project)
+    ep = re.sub(r"[^\w\-]", "", ep)
+    notes = scn.load_notes(base, ep)["notes"]
+    zh = _notes_submit_zh()
+    if not notes:
+        raise ServiceError(400, "本集没有注释可提交" if zh else "This episode has no notes to submit")
+    # 顺序:整集 → 分集计划/钩子选定 → 按场次号(场次、场内块、该场的节奏/删减)→ 其余按键名
+    def _sk(k: str):
+        if k == "*":
+            return (0, "", 0, k)
+        if k in ("plan", "hook:*"):
+            return (1, "", 0, k)
+        m = re.match(r"^(?:(pacing|trim):)?(S\d+[A-Za-z]?)(?:/(?:b)?(\d+))?$", k)
+        if m:
+            return (2, m.group(2), int(m.group(3) or 0) + (0 if not m.group(1) else 1000), k)
+        return (3, "", 0, k)
+    keys = sorted(notes, key=_sk)
+    lines = []
+    for i, k in enumerate(keys, 1):
+        n = notes[k]
+        lvl = n.get("level") or scn.note_level(k)
+        lvl_txt = (_SCRIPT_NOTE_LEVEL_ZH if zh else _SCRIPT_NOTE_LEVEL_EN).get(lvl, lvl)
+        label = (n.get("label") or "").strip()
+        when = n.get("updated_at") or n.get("created_at") or ""
+        obj = f"{lvl_txt}:{label}" if label else lvl_txt
+        lines.append(f"{i}. [{k}] {obj}" + (f"({when})" if when and zh else f" ({when})" if when else "") + "\n"
+                     + ("   注释:" if zh else "   Note: ") + str(n.get("text") or "").strip().replace("\n", "\n   "))
+    n = len(keys)
+    epdir = base / "story" / "episodes" / ep
+    files = [f"story/episodes/{ep}/{f}" for f in ("screenplay.md", "narration.md", "hooks.json", "pacing.json", "script_breakdown.json")
+             if (epdir / f).is_file()]
+    if any(k.startswith("event:") for k in keys) and (base / "story" / "events.json").is_file():
+        files.append("story/events.json")
+    if "plan" in keys and (base / "story" / "episode_plan.json").is_file():
+        files.append("story/episode_plan.json")
+    if zh:
+        head = (f"以下是用户在「📜 剧本预览」页对 {ep} 写的全部注释(共 {n} 条),一次性提交给你处理;每条前面是它挂在的对象"
+                f"(键:* 整集 / S01 场次 / S01/b3 场内第 3 段 / nar:ID 旁白 / hook:ID 钩子 / event:ID 事件卡 / pacing:S01 节奏 / "
+                f"trim:S01/n 删减建议 / plan 分集计划)和写注释时该对象的定位文本(含文件路径)。请逐条落实到对应的剧情层文件"
+                f"(剧本 screenplay.md、旁白 narration.md、钩子 hooks.json、节奏 pacing.json、事件 story/events.json、分集计划 "
+                f"story/episode_plan.json),按代行工位规约改;剧本改动后拆解表 script_breakdown.json 须一并更新;"
+                f"落实不了的在汇报里逐条说明原因。提交时这些注释已从 story/episodes/{ep}/script_notes.json 清空,以本单为准。")
+    else:
+        head = (f"Below are all {n} notes the user wrote on the Script preview page for {ep}, submitted together for you to act on; "
+                f"each is prefixed with the object it is attached to (key: * whole episode / S01 scene / S01/b3 3rd block of the scene / "
+                f"nar:ID narration / hook:ID hook / event:ID event card / pacing:S01 pacing / trim:S01/n trim suggestion / plan episode plan) "
+                f"and the object's location text (with file path) at the time the note was written. Apply every note to the matching "
+                f"story-layer file (screenplay.md, narration.md, hooks.json, pacing.json, story/events.json, story/episode_plan.json) per the "
+                f"delegated workstation rules; update script_breakdown.json after screenplay changes; for any note you cannot apply, explain "
+                f"why, one by one, in your report. The notes were cleared from story/episodes/{ep}/script_notes.json on submission; "
+                f"this order is the source of truth.")
+    message = head + "\n\n" + "\n".join(lines)
+    target = {"kind": "script", "id": "", "ep": ep, "files": files[:20],
+              "label": (f"剧本 {ep} 全部注释({n} 条)" if zh else f"Script {ep}: all notes ({n})"),
+              "rerun_downstream": bool(body.get("rerun_downstream"))}
+    res = await api_chat({"agent": REVISER_ID, "message": message, "project": base.name, "target": target, "source": "user"})
+    cleared = await asyncio.to_thread(scn.clear_notes, base, ep)
+    print(f"[notes-submit] 剧本注释 {base.name}/{ep} {cleared} 条已发修改师 run={res.get('run_id')}", flush=True)
+    return {"ok": True, "run_id": res.get("run_id"), "count": cleared, "keys": keys, "notes": {}}
 
 
 # ---------------- 故事板(2026-09-11):分镜层产物 storyboard.json 的表格视图 + 分镜草图 ----------------

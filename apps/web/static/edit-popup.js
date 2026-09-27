@@ -16,6 +16,7 @@
  *      下游是否重跑由总制片按变更记录决定;勾上则修改师完成后宿主立即把变更记录投递总制片),
  *      并查一次 /api/v1/runs:与本对象相关的任务正在跑时显示冲突提示(不拦发送);
  *      Shift+Enter 或「发送」按钮 POST /api/v1/runs(引擎/模型不传,由服务端回退顶栏全局设置);
+ *      输入框右上角「+」按钮(file-attach.js,语音按钮开启时居右下角)可附本机文件:不上传,只把绝对路径拼在正文末尾;
  *      发出后浮窗折叠成一条「✅ 已发送给 …」小提示,数秒后自动消失;失败则保留原文并显示错误。
  * 控制台 index.html 仍保留 ?project=&compose=&agent= 预填通道(飞书等外部入口沿用),本文件不替代它。
  */
@@ -73,6 +74,16 @@
     s.onload=function(){if(window.VoiceInput)VoiceInput.attach(ta)};
     document.head.appendChild(s);
   }
+  // 「+」附件按钮:共用 /static/file-attach.js,未随页面加载时按需拉取;就位前发送不带附件(按钮尚未出现,用户也选不了)
+  var attach=null;
+  function attachFiles(ta){
+    var go=function(){if(window.FileAttach&&!attach)attach=FileAttach.attach(ta)};
+    if(window.FileAttach){go();return}
+    if(document.querySelector('script[data-file-attach]'))return;
+    var s=document.createElement('script');s.src='/static/file-attach.js?v=20260927a';s.setAttribute('data-file-attach','1');
+    s.onload=go;
+    document.head.appendChild(s);
+  }
   function ensure(){
     if(root)return root;
     var st=document.createElement('style');st.textContent=CSS;document.head.appendChild(st);
@@ -96,6 +107,7 @@
     root.querySelector('.ep-send').onclick=send;
     var ta=root.querySelector('textarea');
     attachVoice(ta);
+    attachFiles(ta);
     ta.addEventListener('keydown',function(e){
       if(e.key==='Enter'&&e.shiftKey){e.preventDefault();send();}   // 与控制台输入框同一快捷键
       else if(e.key==='Escape'){e.preventDefault();close();}         // 仅焦点在浮窗内时 Esc 关闭,不截获页面其它 Esc
@@ -167,6 +179,7 @@
          onSent:typeof opt.onSent==='function'?opt.onSent:null};
     var ta=el.querySelector('textarea');
     ta.value=cur.text;
+    if(attach)attach.clear();
     el.hidden=false;
     ta.focus({preventScroll:true});ta.setSelectionRange(ta.value.length,ta.value.length);
     var mine=cur;
@@ -189,6 +202,7 @@
     var ta=root.querySelector('textarea'), btn=root.querySelector('.ep-send'), err=root.querySelector('.ep-err');
     var text=ta.value.trim();
     if(!text)return;
+    if(attach)text=attach.compose(text);   // 附件:本机文件绝对路径拼在正文末尾,文件不上传
     var target=cur.agent, mine=cur;
     err.textContent='';btn.disabled=true;btn.textContent=T('发送中…');
     var go=function(){
@@ -211,6 +225,7 @@
       if(cur!==mine)return;
       root.querySelector('.ep-done').textContent=F('✅ 已发送给 {agent}',{agent:target.name||target.id});
       root.classList.add('ep-sent');
+      if(attach)attach.clear();
       hideTimer=setTimeout(close,HIDE_MS);
       if(mine.onSent){try{mine.onSent(j||{})}catch(_){}}
     }).catch(function(e){

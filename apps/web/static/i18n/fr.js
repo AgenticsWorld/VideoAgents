@@ -3854,4 +3854,20 @@ window.I18N_DICT = {
 "本集暂无组注释": "Cet épisode n'a aucune note de groupe",
 "把本集 {n} 条组注释一次性发给修改师处理,并清空这些注释?": "Envoyer d'un coup les {n} notes de groupe de cet épisode au réviseur et les effacer ?",
 "✅ 已把 {n} 条组注释发给修改师,注释已清空": "✅ {n} notes de groupe envoyées au réviseur ; notes effacées",
+
+"添加文件:选择本机文件,不上传,只把绝对路径附在消息里发给 Agent(Shift+点击可手填路径)": "Ajouter des fichiers : choisir des fichiers locaux ; rien n’est téléversé, seuls leurs chemins absolus sont ajoutés au message pour l’agent (Maj+clic pour saisir des chemins)",
+"添加文件": "Ajouter des fichiers",
+"附件(本机文件绝对路径,请直接读取):": "Pièces jointes (chemins absolus de fichiers locaux ; à lire directement) :",
+"远程服务:请填写服务所在机器上的文件绝对路径(每行一个):": "Service distant : saisir les chemins absolus des fichiers sur la machine du service (un par ligne) :",
+"无法打开系统文件对话框,请粘贴文件的绝对路径(每行一个):": "Impossible d’ouvrir la boîte de dialogue de fichiers du système ; collez des chemins absolus (un par ligne) :",
+"粘贴文件的绝对路径(每行一个):": "Collez des chemins de fichiers absolus (un par ligne) :",
+"选择文件": "Choisir des fichiers",
+"选择文件失败": "Échec de la sélection des fichiers",
+"如 /Users/you/Desktop/a.png,每行一个": "p. ex. /Users/you/Desktop/a.png, un par ligne",
+"不是绝对路径:{p}": "Chemin non absolu : {p}",
+// 🗒 剧本注释(2026-09-27,剧本预览页)
+"🗒 剧本注释": "🗒 Note de scénario",
+"写下你对这里的想法:情节走向、人物动机、台词语气、节奏、必须保留或避免的处理…(Shift+Enter 保存)": "Notez ici vos idées : direction de l'intrigue, motivation des personnages, ton des répliques, rythme, ce qu'il faut garder ou éviter… (Maj+Entrée pour enregistrer)",
+"注释存到 story/episodes/<ep>/script_notes.json;点分集行右侧「📨 提交注释」把本集全部注释一次性发给修改师处理": "Les notes sont enregistrées dans story/episodes/<ep>/script_notes.json ; 「📨 Envoyer les notes」 à droite de la ligne des épisodes envoie d'un coup toutes les notes de l'épisode au réviseur",
+"对这一块加注释:存到 story/episodes/<ep>/script_notes.json,点分集行右侧「📨 提交注释」整集一次性发给修改师": "Ajouter une note ici : enregistrée dans story/episodes/<ep>/script_notes.json ; 「📨 Envoyer les notes」 à droite de la ligne des épisodes envoie d'un coup toutes les notes de l'épisode au réviseur",
 };

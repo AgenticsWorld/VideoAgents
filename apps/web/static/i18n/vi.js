@@ -3852,4 +3852,20 @@ window.I18N_DICT = {
 "本集暂无组注释": "Tập này chưa có ghi chú nhóm",
 "把本集 {n} 条组注释一次性发给修改师处理,并清空这些注释?": "Gửi cùng lúc {n} ghi chú nhóm của tập này cho người sửa và xóa chúng?",
 "✅ 已把 {n} 条组注释发给修改师,注释已清空": "✅ Đã gửi {n} ghi chú nhóm cho người sửa; ghi chú đã được xóa",
+
+"添加文件:选择本机文件,不上传,只把绝对路径附在消息里发给 Agent(Shift+点击可手填路径)": "Thêm tệp: chọn tệp trên máy; không tải lên, chỉ nối đường dẫn tuyệt đối vào tin nhắn gửi cho agent (Shift+bấm để nhập đường dẫn)",
+"添加文件": "Thêm tệp",
+"附件(本机文件绝对路径,请直接读取):": "Tệp đính kèm (đường dẫn tuyệt đối trên máy; hãy đọc trực tiếp):",
+"远程服务:请填写服务所在机器上的文件绝对路径(每行一个):": "Dịch vụ từ xa: nhập đường dẫn tuyệt đối của tệp trên máy chạy dịch vụ (mỗi dòng một đường dẫn):",
+"无法打开系统文件对话框,请粘贴文件的绝对路径(每行一个):": "Không mở được hộp thoại chọn tệp của hệ thống; hãy dán đường dẫn tuyệt đối (mỗi dòng một đường dẫn):",
+"粘贴文件的绝对路径(每行一个):": "Dán đường dẫn tuyệt đối của tệp (mỗi dòng một đường dẫn):",
+"选择文件": "Chọn tệp",
+"选择文件失败": "Chọn tệp thất bại",
+"如 /Users/you/Desktop/a.png,每行一个": "ví dụ /Users/you/Desktop/a.png, mỗi dòng một đường dẫn",
+"不是绝对路径:{p}": "Không phải đường dẫn tuyệt đối: {p}",
+// 🗒 剧本注释(2026-09-27,剧本预览页)
+"🗒 剧本注释": "🗒 Ghi chú kịch bản",
+"写下你对这里的想法:情节走向、人物动机、台词语气、节奏、必须保留或避免的处理…(Shift+Enter 保存)": "Ghi lại suy nghĩ của bạn ở đây: hướng cốt truyện, động cơ nhân vật, giọng thoại, nhịp độ, những gì phải giữ hoặc tránh… (Shift+Enter để lưu)",
+"注释存到 story/episodes/<ep>/script_notes.json;点分集行右侧「📨 提交注释」把本集全部注释一次性发给修改师处理": "Ghi chú được lưu vào story/episodes/<ep>/script_notes.json; nút 「📨 Gửi ghi chú」 ở bên phải hàng chọn tập gửi cùng lúc toàn bộ ghi chú của tập cho người sửa",
+"对这一块加注释:存到 story/episodes/<ep>/script_notes.json,点分集行右侧「📨 提交注释」整集一次性发给修改师": "Thêm ghi chú ở đây: lưu vào story/episodes/<ep>/script_notes.json; nút 「📨 Gửi ghi chú」 ở bên phải hàng chọn tập gửi cùng lúc toàn bộ ghi chú của tập cho người sửa",
 };

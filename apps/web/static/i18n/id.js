@@ -3852,4 +3852,20 @@ window.I18N_DICT = {
 "本集暂无组注释": "Episode ini belum punya catatan grup",
 "把本集 {n} 条组注释一次性发给修改师处理,并清空这些注释?": "Kirim semua {n} catatan grup episode ini ke reviser sekaligus dan hapus catatannya?",
 "✅ 已把 {n} 条组注释发给修改师,注释已清空": "✅ {n} catatan grup terkirim ke reviser; catatan dihapus",
+
+"添加文件:选择本机文件,不上传,只把绝对路径附在消息里发给 Agent(Shift+点击可手填路径)": "Tambah berkas: pilih berkas lokal; tidak ada yang diunggah, hanya jalur absolutnya yang ditambahkan ke pesan untuk agen (Shift+klik untuk mengetik jalur)",
+"添加文件": "Tambah berkas",
+"附件(本机文件绝对路径,请直接读取):": "Lampiran (jalur absolut berkas lokal; baca langsung):",
+"远程服务:请填写服务所在机器上的文件绝对路径(每行一个):": "Layanan jarak jauh: masukkan jalur absolut berkas di mesin tempat layanan berjalan (satu per baris):",
+"无法打开系统文件对话框,请粘贴文件的绝对路径(每行一个):": "Dialog berkas sistem tidak dapat dibuka; tempel jalur absolut berkas (satu per baris):",
+"粘贴文件的绝对路径(每行一个):": "Tempel jalur absolut berkas (satu per baris):",
+"选择文件": "Pilih berkas",
+"选择文件失败": "Gagal memilih berkas",
+"如 /Users/you/Desktop/a.png,每行一个": "mis. /Users/you/Desktop/a.png, satu per baris",
+"不是绝对路径:{p}": "Bukan jalur absolut: {p}",
+// 🗒 剧本注释(2026-09-27,剧本预览页)
+"🗒 剧本注释": "🗒 Catatan naskah",
+"写下你对这里的想法:情节走向、人物动机、台词语气、节奏、必须保留或避免的处理…(Shift+Enter 保存)": "Tulis pendapat Anda di sini: arah cerita, motivasi tokoh, nada dialog, ritme, apa yang harus dipertahankan atau dihindari… (Shift+Enter untuk menyimpan)",
+"注释存到 story/episodes/<ep>/script_notes.json;点分集行右侧「📨 提交注释」把本集全部注释一次性发给修改师处理": "Catatan disimpan ke story/episodes/<ep>/script_notes.json; 「📨 Kirim catatan」 di kanan baris episode mengirim semua catatan episode ini ke reviser sekaligus",
+"对这一块加注释:存到 story/episodes/<ep>/script_notes.json,点分集行右侧「📨 提交注释」整集一次性发给修改师": "Tambahkan catatan di sini: disimpan ke story/episodes/<ep>/script_notes.json; 「📨 Kirim catatan」 di kanan baris episode mengirim semua catatan episode ke reviser sekaligus",
 };

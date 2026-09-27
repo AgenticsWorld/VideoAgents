@@ -286,6 +286,18 @@ async def board_signoff(project: str, ep: str, body: dict[str, Any]) -> dict[str
     return await core.api_board_signoff(project, ep, body)
 
 
+@api.post("/projects/{project}/script/{ep}/notes", tags=["artifacts"])
+async def script_note(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
+    """剧本预览页「🗒 注释」(2026-09-27):{key, text, label?}(空 text = 删除)→ story/episodes/<ep>/script_notes.json。"""
+    return await core.api_script_note_set(project, ep, body)
+
+
+@api.post("/projects/{project}/script/{ep}/notes/submit", tags=["artifacts"])
+async def script_notes_submit(project: str, ep: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    """剧本预览页「📨 提交注释」(2026-09-27):本集全部注释一张修改单发修改师,派单成功后清空;{rerun_downstream?}。"""
+    return await core.api_script_notes_submit(project, ep, body or {})
+
+
 @api.post("/projects/{project}/board/{ep}/notes", tags=["artifacts"])
 async def board_note(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
     """故事板页「🗒 注释」:{key: '*'|'S01'|'S01-03', text}(空 text = 删除)→ directing/<ep>/storyboard_notes.json,供分镜设计参考。"""

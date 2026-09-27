@@ -894,6 +894,16 @@ ipcMain.handle('desktop:logout', async () => {
   app.exit(0)
   return true
 })
+ipcMain.handle('desktop:pick-files', async (event, options: unknown) => {
+  // 输入框「+」附件按钮:本机原生「选择文件」对话框,只回绝对路径,不上传;连远程后端时本机路径对 Agent 无意义,交页面转手填
+  if (process.env.VIDEOAGENTS_API_URL) throw new Error('远程服务时不能选择本机文件')
+  const title = options && typeof options === 'object' && typeof (options as {title?: unknown}).title === 'string'
+    ? (options as {title: string}).title.slice(0, 120) : '选择文件'
+  const anchor = BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow() ?? window
+  const dialogOptions = {title, properties: ['openFile', 'multiSelections'] as Array<'openFile' | 'multiSelections'>}
+  const result = anchor ? await dialog.showOpenDialog(anchor, dialogOptions) : await dialog.showOpenDialog(dialogOptions)
+  return result.canceled ? [] : result.filePaths
+})
 ipcMain.handle('desktop:open-project-folder', async (_event, project: unknown) => {
   if (process.env.VIDEOAGENTS_API_URL) throw new Error('远程项目目录不能在本机打开')
   if (typeof project !== 'string' || !/^[A-Za-z0-9_-]+$/.test(project)) throw new Error('项目名称无效')
