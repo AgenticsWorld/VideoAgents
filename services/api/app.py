@@ -259,6 +259,7 @@ async def preview(project: str, kind: str, ep: str = "") -> dict[str, Any]:
         "board": lambda: core.api_preview_board(project, ep),
         "videos": lambda: core.api_preview_videos(project, ep),
         "defects": lambda: core.api_preview_defects(project),
+        "music-library": lambda: core.api_preview_music_library(project),
         "post": lambda: core.api_preview_post(project, ep),
         "workflow": lambda: core.api_preview_workflow(project),
         "asset-episodes": lambda: core.api_preview_asset_episodes(project),
@@ -266,6 +267,12 @@ async def preview(project: str, kind: str, ep: str = "") -> dict[str, Any]:
     if kind not in handlers:
         raise HTTPException(404, "unknown preview type")
     return _artifact_urls(await handlers[kind](), project)
+
+
+@api.post("/projects/{project}/music-library/sync", tags=["artifacts"])
+async def music_library_sync(project: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    """音乐库页「同步入库」(2026-09-27):按各集 cue sheet 把没入库的 BGM 入库并重算使用记录;{ep?} 缺省 = 全部集。"""
+    return _artifact_urls(await core.api_music_library_sync(project, body or {}), project)
 
 
 @api.get("/projects/{project}/board/{ep}/sketches", tags=["artifacts"])

@@ -409,7 +409,9 @@ phases:
                                no_overlap_with_dialogue, narration_anchor_sync], qa: [11-qa/audio-qa] } }
       - { id: p8-music, agent: 09-audio/music, outputs: ["assets/audio/bgm/{ep}/"],
           # BGM 只在需烘托处落 cue(开场/转折/高潮/收束),不从头铺到尾
-          validation: { auto: [bgm_coverage_30_60pct],
+          # 项目音乐库(2026-09-27):选曲先查 assets/audio/library/music/(code/music_library.py list/search),有合适的复用、
+          # 没有才新生成;cue sheet 写完后 sync --ep {ep} --write 把本集新增曲目入库并登记使用记录
+          validation: { auto: [bgm_coverage_30_60pct, music_library_synced],
                         qa: [11-qa/audio-qa, 11-qa/copyright] } }
       # p8-voice(兜底逐句 TTS patches/ 供 lip-sync 重驱)已废止(2026-07-09,§8A 红线:
       # TTS 进成片对白=严重口型问题);对白语音/口型缺陷走 p7-video 整组重生成

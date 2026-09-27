@@ -11566,6 +11566,65 @@ async def api_preview_defects(project: str = "demo"):
     return await asyncio.to_thread(_preview_defects, project)
 
 
+# ---------------- 音乐库(项目设置 → 音乐库,/music-library,2026-09-27) ----------------
+# 每集新增的 BGM 入库(assets/audio/library/music/),之后的剧集先在库里选曲、没有合适的再生成;
+# 台账与对账逻辑在 modules/music_library.py(配乐工位经宿主 CLI code/music_library.py 读写同一份)。
+
+_MUSIC_LIBRARY_LOCK = threading.Lock()
+
+
+def _preview_music_library(project: str):
+    """音乐库页:库内曲目(标记数据 + 试听 url + 使用它的集 / cue)+ 分集列表 + 尚未同步进库的集。"""
+    from modules import music_library as ml
+    base = _proj_base(project)
+    plan = _read_json_safe(base / "story" / "episode_plan.json") or {}
+    titles = {e.get("ep"): e.get("title", "") for e in plan.get("episodes", [])
+              if isinstance(e, dict) and e.get("ep")}
+    idx = ml.load_index(base)
+    tracks = []
+    for t in idx["tracks"]:
+        row = dict(t)
+        f = ml.track_file(base, t)
+        row["path"] = f"{ml.LIB_REL}/{t.get('file')}"
+        row["exists"] = f.is_file()
+        row["url"] = f"/projects/{base.name}/{row['path']}?v={int(f.stat().st_mtime)}" if row["exists"] else None
+        row["eps"] = sorted({u.get("ep") for u in t.get("used_in") or [] if u.get("ep")})
+        row["origin_ep"] = (t.get("origin") or {}).get("ep") or ""
+        tracks.append(row)
+    try:
+        pending = ml.pending(base)
+    except Exception as error:  # noqa: BLE001
+        pending = {"episodes": [], "tracks": 0, "error": str(error)}
+    eps = set(titles) | set(ml.list_episodes(base)) | {e for r in tracks for e in r["eps"]} \
+        | {r["origin_ep"] for r in tracks if r["origin_ep"]}
+    return {"project": base.name, "library": ml.LIB_REL, "updated_at": idx.get("updated_at"),
+            "tracks": tracks, "pending": pending,
+            "episodes": [{"ep": e, "title": titles.get(e, "")} for e in sorted(eps)]}
+
+
+async def api_preview_music_library(project: str = "demo"):
+    return await asyncio.to_thread(_preview_music_library, project)
+
+
+def _music_library_sync(project: str, ep: str = ""):
+    from modules import music_library as ml
+    base = _proj_base(project)
+    ep = str(ep or "").strip()
+    if ep and not re.fullmatch(r"ep\d+", ep):
+        raise ServiceError(400, f"Invalid episode: {ep}")
+    with _MUSIC_LIBRARY_LOCK:
+        idx = ml.load_index(base)
+        # 页面上点的同步 = 宿主回补(不是配乐工位交付):首次对账的集按存量标记,机检对缺 music_library_report 只提醒
+        reports = ml.sync_all(base, idx, [ep] if ep else None, write=True, backfill=True)
+        if reports:
+            ml.save_index(base, idx)
+    return {"reports": reports, **_preview_music_library(project)}
+
+
+async def api_music_library_sync(project: str = "demo", body: dict | None = None):
+    return await asyncio.to_thread(_music_library_sync, project, (body or {}).get("ep") or "")
+
+
 # ---------------- 工作流预览(DAG 可视化) ----------------
 # 页面 preview_workflow.html:把 runs/dag.json 展开成阶段泳道图,标注状态/依赖/
 # 签字节点,并按历史运行(runs/<task>/meta.json 的起止时刻,兜底

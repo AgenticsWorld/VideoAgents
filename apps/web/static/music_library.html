@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>音乐库 · Agentics：VideoAgents</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Crect%20x%3D%273%27%20y%3D%273%27%20width%3D%2718%27%20height%3D%2718%27%20rx%3D%274%27%20fill%3D%27%236c9ef8%27%2F%3E%3Cpath%20d%3D%27M10%2016.5V8l6-1.5v8%27%20stroke%3D%27%230f1117%27%20stroke-width%3D%271.8%27%20fill%3D%27none%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%2F%3E%3Ccircle%20cx%3D%278.5%27%20cy%3D%2716.5%27%20r%3D%271.8%27%20fill%3D%27%230f1117%27%2F%3E%3Ccircle%20cx%3D%2714.5%27%20cy%3D%2714.5%27%20r%3D%271.8%27%20fill%3D%27%230f1117%27%2F%3E%3C%2Fsvg%3E">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/static/i18n/i18n.js"></script>
+<script>
+/* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
+if(!window.I18N){
+  window.I18N={lang:'zh',langs:{zh:'中文'},t:function(s){return s},
+    f:function(s,p){p=p||{};return String(s).replace(/\{(\w+)\}/g,function(m,k){return k in p?p[k]:m})},
+    setLang:function(){return Promise.resolve()}};
+  window.t=function(s){return s};window.I18N_DICT={};
+}
+</script>
+<style>
+:root{
+  --bg:#0f1117; --panel:#161a23; --panel2:#1c2130; --border:#2a3040;
+  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --link:#fb923c; --green:#4ade80;
+  --red:#f87171; --yellow:#fbbf24; --purple:#c084fc;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+a{color:var(--link)}
+body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel)}
+header h1{font-size:15px;font-weight:600}
+header h1 .proj{color:var(--accent);font-weight:600}
+header a.back{color:var(--dim);text-decoration:none;font-size:13px;border:1px solid var(--border);border-radius:6px;padding:3px 10px;line-height:1.4}
+header a.back:hover{color:var(--accent);border-color:var(--accent)}
+header .spacer{flex:1}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:13px}
+button:hover{border-color:var(--accent)}
+button:disabled{opacity:.5;cursor:default}
+select,input[type=search]{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px}
+select{cursor:pointer}
+select:hover,input[type=search]:focus{border-color:var(--accent);outline:none}
+input[type=search]{width:260px}
+#content{flex:1;overflow-y:auto;padding:20px 26px 120px}
+.empty{color:var(--dim);text-align:center;margin-top:60px}
+h3.sec{font-size:15px;margin:0 0 10px;border-left:3px solid var(--accent);padding-left:10px;display:flex;align-items:baseline;gap:10px}
+h3.sec .n{color:var(--dim);font-size:12px;font-weight:400}
+.none{color:var(--dim);font-size:13px;margin:6px 0 0 13px}
+.bar{display:flex;align-items:center;gap:14px;margin:2px 0 10px 13px;color:var(--dim);font-size:12.5px;flex-wrap:wrap}
+.bar label{display:flex;align-items:center;gap:5px;cursor:pointer}
+.pend{display:flex;align-items:center;gap:12px;margin:0 0 12px 13px;padding:8px 12px;border:1px solid var(--yellow);border-radius:8px;color:var(--yellow);font-size:12.5px;background:rgba(251,191,36,.06)}
+.pend button{padding:2px 10px;font-size:12px}
+.msg{margin:0 0 12px 13px;font-size:12.5px;color:var(--green)}
+.msg.err{color:var(--red)}
+/* table-layout:fixed + 列宽百分比:表格恒为容器 100% 宽,长内容截断省略(悬停 title 看全文) */
+table.ml{width:100%;max-width:100%;table-layout:fixed;border-collapse:collapse;background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden;font-size:12.5px}
+table.ml th{background:var(--panel2);color:var(--dim);font-weight:600;text-align:left;padding:7px 10px;border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+table.ml td{padding:6px 10px;border-bottom:1px solid var(--border);vertical-align:top;overflow:hidden;word-break:break-word}
+table.ml tr.row{cursor:pointer}
+table.ml tr.row:hover td{background:var(--panel2)}
+table.ml tr.row.old td{opacity:.55}
+table.ml td.ell{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+table.ml td.id{font-weight:600;color:var(--accent);white-space:nowrap}
+table.ml td.dim{color:var(--dim)}
+table.ml td.play{text-align:center}
+table.ml td.play button{width:28px;height:24px;padding:0;font-size:11px;line-height:1}
+table.ml td.play button.on{background:var(--accent);border-color:var(--accent);color:#0b1020}
+.tag{display:inline-block;font-size:11px;border:1px solid var(--border);border-radius:4px;padding:0 6px;margin:0 4px 2px 0;white-space:nowrap;color:var(--dim)}
+.tag.ep{color:var(--accent);border-color:var(--accent)}
+.tag.re{color:var(--green);border-color:var(--green)}
+.tag.user{color:var(--purple);border-color:var(--purple)}
+.tag.old{color:var(--yellow);border-color:var(--yellow)}
+.tag.miss{color:var(--red);border-color:var(--red)}
+tr.detail td{background:var(--bg);padding:12px 14px}
+tr.detail audio{width:100%;max-width:560px;height:34px;margin-bottom:8px;display:block}
+tr.detail .kv{margin:4px 0;font-size:12.5px}
+tr.detail .kv b{color:var(--dim);font-weight:600;margin-right:6px}
+tr.detail pre{white-space:pre-wrap;word-break:break-word;font:12px/1.7 inherit;color:#c8d0e0;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-top:4px;max-height:220px;overflow-y:auto}
+tr.detail h4{font-size:12.5px;color:var(--dim);margin:12px 0 6px}
+table.use{width:100%;border-collapse:collapse;font-size:12px;background:var(--panel);border:1px solid var(--border);border-radius:6px;overflow:hidden}
+table.use th{background:var(--panel2);color:var(--dim);font-weight:600;text-align:left;padding:4px 8px;border-bottom:1px solid var(--border)}
+table.use td{padding:4px 8px;border-bottom:1px solid var(--border);vertical-align:top}
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="/" onclick="if(history.length>1){history.back();return false}" title="后退">&lt;</a>
+  <a class="back" href="/">控制台</a>
+  <h1>🎵 音乐库 — <span class="proj" id="proj-name" data-no-i18n></span></h1>
+  <div class="spacer"></div>
+  <button id="sync" title="按各集 cue sheet 对账:把还没入库的配乐复制进音乐库,并重算每首曲目被哪些分集使用(不生成、不花钱)">同步入库</button>
+  <button id="reload">刷新</button>
+</header>
+<div id="content"><div class="empty">加载中…</div></div>
+<script>
+/* 音乐库页(项目设置 → 音乐库,2026-09-27):本项目 assets/audio/library/music/ 已入库的配乐。
+ * 每集新增的 BGM 由配乐工位交付时入库并标记数据;之后的剧集先在库里选曲,没有合适的再新生成。
+ * 「谁在用」由各集 cue sheet 推导;页面只读 + 「同步入库」(宿主对账,回补音乐库上线前已交付的集)。 */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const _q=new URLSearchParams(location.search);
+const PROJ=_q.get('project')||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';
+// 过滤:SCOPE = ''(全部)| epNN(该集用到或该集新增的曲目);SRC = '' | generated | user_provided | reused(跨集复用)
+let SCOPE=_q.get('ep')||'',SRC='',KW='',SHOW_OLD=false,LAST=null,SHOWN=[],OPEN=new Set(),MSG=null;
+const PLAYER=new Audio();let PLAYING='';
+$('#proj-name').textContent=PROJ;
+
+const tc=s=>{if(s==null||s==='')return '—';s=Math.max(0,+s);const m=Math.floor(s/60),r=s-m*60;return m+':'+(r<10?'0':'')+r.toFixed(1)};
+const dur=s=>s==null||s===''?'—':(+s).toFixed(1)+'s';
+const isReused=x=>new Set((x.eps||[]).concat(x.origin_ep?[x.origin_ep]:[])).size>1;
+function srcTag(x){
+  return x.source==='user_provided'?`<span class="tag user">${esc(t('用户提供'))}</span>`:`<span class="tag">${esc(t('新生成'))}</span>`;
+}
+
+function usageTable(x){
+  const u=x.used_in||[];
+  if(!u.length)return `<div class="none" style="margin-left:0">${esc(t('还没有分集使用这首曲目'))}</div>`;
+  return `<table class="use"><thead><tr><th>所在分集</th><th>配乐点</th><th>入点 – 出点</th><th>铺乐时长</th><th>所在场景</th><th>情绪段</th><th></th></tr></thead><tbody>`
+    +u.map(r=>`<tr><td data-no-i18n>${esc(r.ep)}</td><td data-no-i18n>${esc(r.cue_id||'')}</td>
+      <td data-no-i18n>${tc(r.in_s)} – ${tc(r.out_s)}</td><td data-no-i18n>${dur(r.duration_s)}</td>
+      <td data-no-i18n>${esc(r.scene||'')}</td><td data-no-i18n>${esc(r.mood||'')}</td>
+      <td>${r.reused?`<span class="tag re">${esc(t('跨集复用'))}</span>`:`<span class="tag">${esc(t('首次使用'))}</span>`}${r.derived?` <span class="tag old" title="${esc(t('本集用的是裁剪 / 循环过的派生文件,与库内原曲不是同一份'))}">${esc(t('派生文件'))}</span>`:''}</td></tr>`).join('')
+    +'</tbody></table>';
+}
+
+function rows(list){
+  return list.map((x,i)=>{
+    const kv=(k,v)=>v==null||v===''||(Array.isArray(v)&&!v.length)?'':`<div class="kv"><b>${esc(t(k))}</b><span data-no-i18n>${esc(Array.isArray(v)?v.join(' · '):v)}</span></div>`;
+    const lic=x.license&&Object.keys(x.license).length?`<div class="kv"><b>${esc(t('授权来源'))}</b></div><pre data-no-i18n>${esc(JSON.stringify(x.license,null,1))}</pre>`:'';
+    const o=x.origin||{};
+    const detail=(x.url?`<audio controls preload="none" src="${esc(x.url)}"></audio>`:'')
+      +kv('曲目标题',x.title)+kv('情绪',x.mood)+kv('曲风',x.genre)+kv('曲目节奏',x.tempo_bpm?x.tempo_bpm+' bpm':'')
+      +kv('乐器',x.instrumentation)+kv('情绪强度',x.intensity)+kv('曲目标签',x.tags)+kv('曲目说明',x.description)
+      +kv('生成提示词',x.prompt)+kv('库内文件',x.path)+kv('入库来源',[o.ep,o.cue_id,o.file].filter(Boolean).join(' · '))
+      +kv('入库时间',String(x.added_at||'').replace('T',' '))
+      +kv('音频规格',x.format?[x.format.codec,x.format.sample_rate?x.format.sample_rate+' Hz':'',x.format.channels?x.format.channels+' ch':''].filter(Boolean).join(' · '):'')
+      +lic+`<h4>${esc(t('使用记录'))}</h4>`+usageTable(x);
+    const feel=[x.genre,x.tempo_bpm?x.tempo_bpm+' bpm':'',x.instrumentation].filter(Boolean).join(' · ');
+    const old=x.status==='superseded';
+    return `<tr class="row${old?' old':''}" data-id="${esc(x.track_id)}">
+      <td class="play"><button type="button" class="pl${PLAYING===x.track_id?' on':''}" data-i="${i}" ${x.url?'':'disabled'} title="${esc(t('试听'))}">${PLAYING===x.track_id?'■':'▶'}</button></td>
+      <td class="id" data-no-i18n>${esc(x.track_id)}</td>
+      <td class="ell" data-no-i18n title="${esc(x.mood||x.title||'')}">${esc(x.mood||x.title||'')}</td>
+      <td class="ell dim" data-no-i18n title="${esc(feel)}">${esc(feel)}</td>
+      <td class="ell" data-no-i18n>${dur(x.duration_s)}</td>
+      <td>${srcTag(x)}${old?`<span class="tag old" title="${esc(t('来源集重做配乐后不再使用的旧曲:文件保留,选曲时默认不列'))}">${esc(t('已被替换'))}</span>`:''}${x.exists?'':`<span class="tag miss">${esc(t('文件缺失'))}</span>`}</td>
+      <td class="ell" data-no-i18n>${esc(x.origin_ep||'—')}</td>
+      <td>${(x.eps||[]).map(e=>`<span class="tag ep${e!==x.origin_ep?' re':''}" data-no-i18n>${esc(e)}</span>`).join('')||'<span class="tag">'+esc(t('暂未使用'))+'</span>'}</td>
+      <td class="ell" data-no-i18n>${(x.used_in||[]).length}</td>
+    </tr>
+    <tr class="detail" data-for="${esc(x.track_id)}" style="display:${OPEN.has(x.track_id)?'':'none'}"><td colspan="9">${detail}</td></tr>`;
+  }).join('');
+}
+
+function render(d){
+  LAST=d;
+  const all=d.tracks||[],eps=d.episodes||[],pend=d.pending||{};
+  if(SCOPE&&!eps.some(e=>e.ep===SCOPE))SCOPE='';
+  const kw=KW.trim().toLowerCase().split(/[\s,,、]+/).filter(Boolean);
+  SHOWN=all.filter(x=>SHOW_OLD||x.status!=='superseded')
+    .filter(x=>!SCOPE||(x.eps||[]).includes(SCOPE)||x.origin_ep===SCOPE)
+    .filter(x=>SRC===''?true:SRC==='reused'?isReused(x):SRC==='user_provided'?x.source==='user_provided':x.source!=='user_provided')
+    .filter(x=>{if(!kw.length)return true;
+      const hay=[x.track_id,x.title,x.mood,x.genre,x.instrumentation,x.description,x.prompt,(x.tags||[]).join(' ')].join(' ').toLowerCase();
+      return kw.every(w=>hay.includes(w))});
+  const live=all.filter(x=>x.status!=='superseded');
+  let h=`<h3 class="sec">🎵 项目音乐库<span class="n">${esc(I18N.f('{dir}/ · 显示 {a}/{b} 首,点击行展开详情',{dir:d.library||'',a:SHOWN.length,b:all.length}))}</span></h3>`;
+  if(MSG)h+=`<div class="msg${MSG.err?' err':''}">${esc(MSG.text)}</div>`;
+  if((pend.episodes||[]).length)
+    h+=`<div class="pend"><span>${esc(I18N.f('有 {n} 集的配乐还没同步进音乐库:{eps}',{n:pend.episodes.length,eps:pend.episodes.join(', ')}))}</span><button type="button" id="pend-sync">同步入库</button></div>`;
+  h+=`<div class="bar"><select id="scope" title="按分集过滤:该集用到或该集新增的曲目">
+      <option value="">${esc(t('全部分集'))}</option>
+      ${eps.map(e=>`<option value="${esc(e.ep)}"${e.ep===SCOPE?' selected':''} data-no-i18n>${esc(e.ep)}${e.title?' '+esc(e.title):''}</option>`).join('')}</select>
+    <select id="src" title="按来源过滤">
+      <option value="">${esc(t('全部来源'))}</option>
+      <option value="generated"${SRC==='generated'?' selected':''}>${esc(t('新生成'))}</option>
+      <option value="user_provided"${SRC==='user_provided'?' selected':''}>${esc(t('用户提供'))}</option>
+      <option value="reused"${SRC==='reused'?' selected':''}>${esc(t('跨集复用过的'))}</option></select>
+    <input type="search" id="kw" placeholder="搜索情绪 / 曲风 / 乐器 / 提示词" value="${esc(KW)}">
+    <label><input type="checkbox" id="showold" ${SHOW_OLD?'checked':''}>显示已被替换的旧曲</label>
+    <span>${esc(I18N.f('共 {n} 首 · 跨集复用 {m} 首',{n:live.length,m:live.filter(isReused).length}))}</span></div>`;
+  h+=SHOWN.length?`<table class="ml">
+    <colgroup><col style="width:5%"><col style="width:9%"><col style="width:24%"><col style="width:22%"><col style="width:6%"><col style="width:10%"><col style="width:7%"><col style="width:12%"><col style="width:5%"></colgroup>
+    <thead><tr>
+      <th></th><th>曲目ID</th><th>情绪</th><th>曲风 / 节奏 / 乐器</th><th>曲目时长</th><th>来源</th><th>入库分集</th><th>使用的分集</th><th>使用次数</th>
+    </tr></thead><tbody>${rows(SHOWN)}</tbody></table>`
+    :`<div class="none">${esc(t(all.length?'没有匹配的曲目':'音乐库还是空的:配乐工位交付一集后曲目会自动入库;已有配乐的项目点右上角「同步入库」回补'))}</div>`;
+  const box=$('#content'),top=box.scrollTop,focus=document.activeElement&&document.activeElement.id==='kw';
+  box.innerHTML=h;box.scrollTop=top;
+  $('#scope').onchange=()=>{SCOPE=$('#scope').value;syncUrl();render(LAST)};
+  $('#src').onchange=()=>{SRC=$('#src').value;render(LAST)};
+  $('#showold').onchange=()=>{SHOW_OLD=$('#showold').checked;render(LAST)};
+  const kwEl=$('#kw');
+  kwEl.oninput=()=>{KW=kwEl.value;render(LAST)};
+  if(focus){kwEl.focus();kwEl.setSelectionRange(KW.length,KW.length)}
+  if($('#pend-sync'))$('#pend-sync').onclick=doSync;
+  document.querySelectorAll('tr.row').forEach(tr=>tr.onclick=()=>{
+    const id=tr.dataset.id,dt=document.querySelector(`tr.detail[data-for="${CSS.escape(id)}"]`);
+    if(!dt)return;
+    if(OPEN.has(id)){OPEN.delete(id);dt.style.display='none'}else{OPEN.add(id);dt.style.display=''}
+  });
+  document.querySelectorAll('button.pl').forEach(b=>b.onclick=e=>{
+    e.stopPropagation();
+    const x=SHOWN[+b.dataset.i];if(!x||!x.url)return;
+    if(PLAYING===x.track_id){PLAYER.pause();PLAYING=''}
+    else{PLAYER.src=x.url;PLAYING=x.track_id;PLAYER.play().catch(()=>{PLAYING='';render(LAST)})}
+    render(LAST);
+  });
+}
+PLAYER.onended=()=>{PLAYING='';if(LAST)render(LAST)};
+
+function syncUrl(){
+  history.replaceState(null,'','?project='+encodeURIComponent(PROJ)+(SCOPE?'&ep='+encodeURIComponent(SCOPE):''));
+}
+async function load(){
+  syncUrl();
+  if(!LAST)$('#content').innerHTML='<div class="empty">加载中…</div>';
+  try{
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(PROJ)+'/previews/music-library');
+    if(!r.ok)throw new Error((await r.json()).detail||r.status);
+    render(await r.json());
+  }catch(e){$('#content').innerHTML=`<div class="empty">${esc(t('加载失败:'))}${esc(e.message)}</div>`}
+}
+async function doSync(){
+  const btn=$('#sync');btn.disabled=true;
+  try{
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(PROJ)+'/music-library/sync',
+      {method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||r.status);
+    const reps=(d.reports||[]).filter(x=>!x.error);
+    const added=reps.reduce((n,x)=>n+(x.added||[]).length,0),miss=reps.reduce((n,x)=>n+(x.missing_files||[]).length,0);
+    MSG={text:I18N.f('已同步 {e} 集:新入库 {a} 首',{e:reps.length,a:added})+(miss?' · '+I18N.f('{m} 个 cue 引用的音频文件不存在,未入库',{m:miss}):''),err:false};
+    render(d);
+  }catch(e){MSG={text:t('同步失败:')+e.message,err:true};if(LAST)render(LAST)}
+  btn.disabled=false;
+}
+$('#sync').onclick=doSync;
+$('#reload').onclick=()=>{MSG=null;load()};
+load();
+</script>
+</body>
+</html>

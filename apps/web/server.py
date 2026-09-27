@@ -537,6 +537,11 @@ async def defects():
     return _page("defects.html")
 
 
+@app.get("/music-library")
+async def music_library():
+    return _page("music_library.html")
+
+
 @app.get("/clawbot")
 async def clawbot():
     return _page("clawbot.html")

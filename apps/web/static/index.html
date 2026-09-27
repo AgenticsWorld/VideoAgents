@@ -277,6 +277,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <a href="#" id="menu-project-skills">项目技能</a>
       <a href="#" id="menu-review" title="音频/角色/内容安全/版权/逻辑/时间线/画面/世界观 审核力度,按项目独立">审核设置</a>
       <a href="#" id="menu-defects" title="缺陷单:本项目 qa/defects/ 审核问题反馈,可逐条发给总制片处理">缺陷单</a>
+      <a href="#" id="menu-music-library" title="音乐库:本项目各集已入库的配乐(BGM),可试听并查看标记数据与使用它的分集;之后的剧集配乐优先从库里选">音乐库</a>
     </div></div>
   </div>
   <div id="settings-menu">
@@ -2181,6 +2182,7 @@ async function openRevModal(){
 }
 $('#menu-review').onclick=e=>{e.preventDefault();openRevModal()};
 $('#menu-defects').onclick=e=>{e.preventDefault();location.href='/defects?project='+encodeURIComponent(curProj())};
+$('#menu-music-library').onclick=e=>{e.preventDefault();location.href='/music-library?project='+encodeURIComponent(curProj())};
 $('#rev-cancel').onclick=()=>$('#rev-modal').style.display='none';
 $('#rev-ok').onclick=async()=>{
   const review={};
