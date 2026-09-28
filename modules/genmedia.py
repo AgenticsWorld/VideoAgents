@@ -6812,14 +6812,28 @@ def _check_id_digits(*paths):
     """grpsh_id_3digits 前置机检:输出路径里的组/镜编号必须三位零填充
     (grp001/sh001,与 shot_list 的 group_id/shot_id 逐字符一致,WORKFLOW.md §7A)。
     模型写盘时位数偶发漂移(grp01.mp4 对 group_id=grp001),webui 预览与后续机检
-    全部对不上号,提交前拦下并给出正名。"""
+    全部对不上号,提交前拦下并给出正名。
+    预留插入位制项目(settings.json#numbering.step=10,modules/id_scheme.py)编号四位
+    (grp0010/sh0010),同一机检按四位核。"""
+    from modules import id_scheme
     for path in paths:
         if not path:
             continue
         p = Path(path)
+        base = id_scheme.project_dir_of(p)
+        spaced = bool(base) and id_scheme.project_step(base) == id_scheme.STEP_SPACED
         for part in (*p.parent.parts, p.stem):
             m = re.match(r"^(grp|sh)(\d+)", part)
-            if m and len(m.group(2)) != 3 and int(m.group(2)) < 1000:
+            if not m:
+                continue
+            if spaced:
+                if len(m.group(2)) != 4 and int(m.group(2)) < 10000:
+                    raise RuntimeError(
+                        f"输出路径段 {part!r} 编号位数不合规(grpsh_id_3digits):"
+                        f" 本项目为预留插入位编号制,grp/sh 编号固定四位零填充(首次编号 {m.group(1)}0010、"
+                        f"{m.group(1)}0020…,插入用 {m.group(1)}0011),须与 shot_list 的 group_id/shot_id "
+                        f"逐字符一致(完整路径 {path})")
+            elif len(m.group(2)) != 3 and int(m.group(2)) < 1000:
                 fixed = f"{m.group(1)}{int(m.group(2)):03d}{part[m.end():]}"
                 raise RuntimeError(
                     f"输出路径段 {part!r} 编号位数不合规(grpsh_id_3digits):"

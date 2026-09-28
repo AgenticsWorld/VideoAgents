@@ -39,8 +39,8 @@ from datetime import datetime, timezone
 from _common import narration_enabled, parse_args
 
 WINDOW_FACTOR = 0.9          # §7D ②:实测时长 ≤ 窗口×0.9
-GRP_RE = re.compile(r"grp\d{3}")
-SH_RE = re.compile(r"sh\d{3}")
+GRP_RE = re.compile(r"grp\d{3,4}(?!\d)")    # 三位(逐一制)/ 四位(预留插入位制 grp0010)
+SH_RE = re.compile(r"sh\d{3,4}(?!\d)")
 
 
 def canonical_fingerprint(narration_anchors) -> str:

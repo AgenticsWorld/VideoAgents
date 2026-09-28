@@ -13,7 +13,7 @@
 
 场次人物默认继承：每组保留 `scene_no`，以同集 `scene_no + scene_id` 建立完整 `scene_cast`，包含无对白、画外和静止陪衬人物。`characters_union` 是组内叙事角色合集，维持现有分组统计；完整在场集合单独记录，不再用叙事列表限制白模或引用人物。定稿后运行 `python code/sync_scene_cast.py --project <slug> --ep <ep> --write`，读取缺图报告并补交上游；同地点的不同时间、闪回不得混场。明确进退场与远程声音例外，不能把暂未入画解释为离场。
 
-1. 把 `storyboard.json` 的镜头草案逐条定稿:分配唯一镜号(sh001…)、定终稿时长、景别、机位描述;**先读用户注释 `directing/epNN/storyboard_notes.json`(2026-09-15,有则必读;键 `*` 整集 / `S01` 场次 / `S01-03` 场次-草案镜序,镜级条目带 scene_no/order/shot_id/content 便于对回草案镜)**——用户在故事板页写的分镜设计意见,定稿镜号/时长/景别/机位与分组时逐条对照落实,落实不了的在汇报里说明;每镜终稿时长必须落在「用户全局时长设定 · 单个分镜时长范围」内(未注入时默认 4–8 秒)。
+1. 把 `storyboard.json` 的镜头草案逐条定稿:分配唯一镜号(sh001…;**仅当**运行提示词含「## 编号制:预留插入位」一节时——宿主只对 2026-09-28 起新建的项目注入——镜号改 `sh0010`、`sh0020`…、组号改 `grp0010`、`grp0020`…,之后插入用 `sh0011` / `grp0011`,已有编号不重排;无此节的项目照旧)、定终稿时长、景别、机位描述;**先读用户注释 `directing/epNN/storyboard_notes.json`(2026-09-15,有则必读;键 `*` 整集 / `S01` 场次 / `S01-03` 场次-草案镜序,镜级条目带 scene_no/order/shot_id/content 便于对回草案镜)**——用户在故事板页写的分镜设计意见,定稿镜号/时长/景别/机位与分组时逐条对照落实,落实不了的在汇报里说明;每镜终稿时长必须落在「用户全局时长设定 · 单个分镜时长范围」内(未注入时默认 4–8 秒)。
 2. 挂 ID:每镜标注出场角色 ID(`bible/characters/index.json`)与场景 ID(`bible/scenes/index.json`),标记是否对白镜头(供 lip-sync 与 voice-generation 排产)。
 3. 按 `pacing.json` 的逐场时长分配收敛总时长:Σ镜头时长 = 集时长 ±10%;超预算时按 pacing 的删减建议裁,并记录取舍。
 4. **定稿生成组(generation_groups)**:以 storyboard 的 groups_draft 为底稿逐组校验定稿——

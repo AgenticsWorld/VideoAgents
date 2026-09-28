@@ -40,6 +40,7 @@ from modules.output_format import OUTPUT_ASPECTS, resolve_output
 from modules import skill_records
 from modules.prompt_layout import paragraphize
 from modules import caption_catalog as _ccat
+from modules import id_scheme
 from services.runtime import rhythm as narrative_rhythm
 
 # ---------------- 配置 ----------------
@@ -1040,6 +1041,10 @@ DEFAULT_GENCONFIG = {
     "prompt_skill": {"mode": "auto", "skill_id": "", "effective": {}},
     # 仅记录用户覆盖;未设置时只有生效视频提示词技能默认开启。
     "project_skills": {"overrides": {}},
+    # 编号制(项目级,modules/id_scheme.py):step=1 逐一制(S01/grp001/sh001;存量项目无此段一律按此)/
+    # step=10 预留插入位制(S010/grp0010/sh0010,之后插入用 S011/grp0011/sh0011)。
+    # 新建项目时由 api_projects_create 盖 step=10,此后不可改(api_projconfig_set 不接受此段)
+    "numbering": {"step": 1},
     # 界面语言(设置菜单「界面语言」,全局):影响界面文案与 agent 对话/汇报语言;
     # ""=未设置(首次打开浏览器自动判断后写入),成片内容语言仍由项目级 output.language 决定;
     # 持久化以 state.json 的 ui_lang 为准(写入时双写,此键保留兼容旧版回读)
@@ -1950,7 +1955,10 @@ def resolve_deepagents(cfg: dict | None = None) -> dict:
 # 生成模型/模型策略 为全局配置(genconfig.json/agentmodels.json);
 # output/duration/review 落盘 data/projects/<项目>/settings.json,随项目走。
 PROJECT_SETTINGS_KEYS = ("output", "duration", "shot_group", "review",
-                         "packaging", "prompt_skill", "project_skills", "transitions")
+                         "packaging", "prompt_skill", "project_skills", "transitions",
+                         "numbering")
+# 建项目时锁定、设置接口不可改的段
+PROJECT_SETTINGS_LOCKED = ("numbering",)
 
 
 def project_settings_path(project: str) -> Path:
@@ -1963,8 +1971,10 @@ def load_project_settings(project: str) -> dict:
         saved = json.loads(project_settings_path(project).read_text())
     except Exception:
         saved = {}
-    return _merge(base, {k: v for k, v in saved.items()
-                         if k in PROJECT_SETTINGS_KEYS})
+    cfg = _merge(base, {k: v for k, v in saved.items()
+                        if k in PROJECT_SETTINGS_KEYS})
+    cfg["numbering"] = id_scheme.normalize(saved.get("numbering"))
+    return cfg
 
 
 def _validate_duration(d: dict):
@@ -3325,6 +3335,7 @@ def build_role_prompt(agent_id: str, project: str,
               "- 提交 issue **不改变**既有纪律:宿主代码仍然禁止自行修改/改写,照常上报 orchestrator 并在回执里注明已提交的 issue;"
               "同一问题只提交一次(重复提交会被签名去重)。")
     p += nsfw_prompt_section(project)     # NSFW 模式(仅开关开启时注入,条件式)
+    p += id_scheme.prompt_section(load_project_settings(project)["numbering"]["step"])   # 编号制(仅预留插入位制项目注入)
     if agent_id == WHITEBOX_REEL_AGENT:
         p += ("\n\n## 白模自检设定(Web 客户端「设置→高级→Agent 高级设置」全局设置,实时生效)\n"
               + ("- 白模自检:**开启** —— 白模调度/修改类工单在 `--compile-only` 通过后,**仅对本单新建或改动过的组**运行 "
@@ -7026,7 +7037,7 @@ _NUM_ID_RE = re.compile(r"^([A-Za-z]+)0*(\d+)")
 
 
 def _num_id_key(token: str) -> tuple[str, int] | None:
-    """grp001/grp01/grp1 → ("grp", 1)。规范是三位零填充(WORKFLOW.md §7A),
+    """grp001/grp01/grp1 → ("grp", 1)。规范是三位零填充(WORKFLOW.md §7A;预留插入位制项目四位,grp0010 → ("grp", 10)),
     但生成 agent 写盘时位数偶发漂移(grp01.mp4 对 group_id=grp001),
     预览对位按 前缀词+编号数值 容错,不要求逐字符相同。"""
     m = _NUM_ID_RE.match(token or "")
@@ -12252,7 +12263,7 @@ async def api_projconfig_set(body: dict):
             raise ServiceError(400, "unknown skill id: " + ", ".join(sorted(unknown)))
     cfg = _merge(load_project_settings(project),
                  {k: v for k, v in (body or {}).items()
-                  if k in PROJECT_SETTINGS_KEYS})
+                  if k in PROJECT_SETTINGS_KEYS and k not in PROJECT_SETTINGS_LOCKED})
     _validate_duration(cfg.get("duration") or {})
     _validate_shot_group(cfg.get("shot_group") or {})
     _validate_output(cfg.get("output") or {})
@@ -13863,7 +13874,9 @@ async def api_projects_create(body: dict):
     # 新建项目片头/片尾/下集预告默认不启用(原向导「片头片尾」步的默认值;2026-09-13 该步删除后由此兜底,开关移到后期处理页)
     base["packaging"] = {**base["packaging"], "intro_enabled": False, "outro_enabled": False, "teaser_enabled": False}
     cfg = _merge(base, {k: v for k, v in settings.items()
-                        if k in PROJECT_SETTINGS_KEYS})
+                        if k in PROJECT_SETTINGS_KEYS and k not in PROJECT_SETTINGS_LOCKED})
+    # 编号制(2026-09-28):新建项目一律预留插入位制(S010/grp0010/sh0010);存量项目无此段仍按逐一制
+    cfg["numbering"] = {"step": id_scheme.STEP_SPACED}
     # 过场模式(2026-09-24):新项目默认经典;向导传了整段则以其为准
     cfg["transitions"] = _validate_transitions(settings.get("transitions") if isinstance(settings.get("transitions"), dict)
                                                else {**cfg.get("transitions", {}), "mode": "classic"})

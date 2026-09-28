@@ -171,7 +171,17 @@ def derive_narration_path(shot_list_path: Path) -> Path | None:
     return p if p.is_file() else None
 
 
-def propose_groups(shots: list[dict]) -> list[dict]:
+def project_id_step(shot_list_path: Path) -> int:
+    """项目编号制(settings.json#numbering.step):1=逐一制 grp001,10=预留插入位制 grp0010;
+    读不到按逐一制(存量项目)。"""
+    try:
+        st = json.loads((shot_list_path.resolve().parents[2] / "settings.json").read_text())
+        return 10 if int((st.get("numbering") or {}).get("step", 1)) == 10 else 1
+    except Exception:
+        return 1
+
+
+def propose_groups(shots: list[dict], id_step: int = 1) -> list[dict]:
     """贪心草案:同场景、连续、Σ≤15 整数、组内角色 ≤4。"""
     groups, cur = [], []
 
@@ -179,7 +189,8 @@ def propose_groups(shots: list[dict]) -> list[dict]:
         if not cur:
             return
         groups.append({
-            "group_id": f"grp{len(groups) + 1:03d}",
+            "group_id": (f"grp{(len(groups) + 1) * 10:04d}" if id_step == 10
+                         else f"grp{len(groups) + 1:03d}"),
             "scene_id": cur[0].get("scene_id"),
             "scene_no": cur[0].get("scene_no"),
             "shots": [s["shot_id"] for s in cur],
@@ -810,7 +821,7 @@ def main():
     MAX_GROUP_S = project_max_group_s(path)
 
     if args.propose:
-        groups = propose_groups(data.get("shots") or [])
+        groups = propose_groups(data.get("shots") or [], project_id_step(path))
         data["generation_groups"] = groups
         durs = [g["total_duration_s"] for g in groups]
         sizes = [len(g["shots"]) for g in groups]
