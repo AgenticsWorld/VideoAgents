@@ -154,6 +154,8 @@ ul.arr>li{margin:2px 0}
 .world-panel .ws-gen.armed{border-color:var(--yellow);color:var(--yellow)}
 .world-panel .wv-toolbar label{display:inline-flex;align-items:center;gap:4px;color:var(--dim)}
 .world-panel .wv-toolbar input[type=number]{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:3px 6px}
+/* 「💾 背景图」与全景 360° 视窗里的同名按钮同色(pano-viewer.js .p360-save) */
+.world-panel .wv-toolbar button.wv-save{background:rgba(40,120,70,.85);color:#fff;border-color:rgba(255,255,255,.25)}
 #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:99;cursor:zoom-out}
 #lightbox img{max-width:96vw;max-height:96vh;border-radius:6px}
 /* ✂ 裁剪分镜背景图(2026-09-15):比例固定为项目画幅的框选浮层,拖选框移动、拖四角缩放,确认后服务端裁切覆盖原图 */
