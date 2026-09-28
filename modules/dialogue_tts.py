@@ -21,6 +21,12 @@
 - 静音修剪(2026-09-15):合成原声落 _raw/,库文件为裁掉首尾静音的版本(首留 0.10s、尾留 0.15s;seed-audio
   首尾常各带 0.4–1.0s 空白,短句尤甚);output.dialogue_tts_max_pause>0 时句中超过该秒数的停顿也压到该值(默认 0=不动)。
   修剪是后处理,不进 key:参数变了从 _raw/ 重裁,不重新调 TTS;台账每句记 trim{lead_s,tail_s,pause_s,params}。
+- 节奏贴合(2026-09-28):seed-audio 自然语速约 3 字/秒且标点处停顿 0.6–1.7s,而分镜按 est_duration_s(约 4.2 字/秒)
+  定镜长,样片里对白普遍拖到下一镜、与下一句重叠。库文件(自然语速)不动——后期配音仍取它按开口时段贴合;
+  另出一份**节奏贴合版** _paced/<同名文件> 供动态样片/白模样片用:自然时长超过 est_duration_s 的句子先把句中
+  停顿压到 PACE_MAX_PAUSE,仍超出再 atempo 变速不变调贴到估时,倍率上限 output.dialogue_tts_max_tempo
+  (默认 1.5,1.0=关闭)。同为后处理不进 key、不重新调 TTS;台账每句记 pace{file,duration_s,tempo,pause_s,target_s,params},
+  消费方用 line_audio(paced=True) 取用。
 """
 from __future__ import annotations
 
@@ -45,6 +51,13 @@ TRIM_MIN_SIL = 0.20       # 短于此的空白不算静音段
 TRIM_KEEP_HEAD = 0.10     # 开头保留的静音
 TRIM_KEEP_TAIL = 0.15     # 结尾保留的静音
 SPEED_RANGE = (0.5, 2.0)  # 语速倍率合法区间(火山 speech_rate -50..100 / minimax 0.5..2.0 同口径)
+PACED_DIR = "_paced"      # 节奏贴合版(样片用)存放子目录
+PACE_MAX_TEMPO = 1.5      # 贴合变速倍率上限的默认值(output.dialogue_tts_max_tempo;1.0=关闭节奏贴合)
+PACE_MAX_PAUSE = 0.30     # 贴合时句中停顿压到该秒数
+PACE_TOLERANCE = 0.02     # 自然时长超出估时不到该比例视为已贴合,不另出贴合版
+PACE_KEEP_HEAD = 0.05     # 贴合版开头保留的静音(排轨另有 LEAD_S)
+PACE_KEEP_TAIL = 0.08     # 贴合版结尾保留的静音(排轨另有 GAP_S)
+TEMPO_RANGE = (1.0, 2.0)  # 贴合变速倍率合法区间(单级 atempo 上限 2.0)
 
 
 # ---------------------------------------------------------------- 基础读取
@@ -91,6 +104,14 @@ def default_max_pause(base: Path) -> float:
     st = _read(Path(base) / "settings.json") or {}
     v = _f((st.get("output") or {}).get("dialogue_tts_max_pause"))
     return v if v and v > 0 else 0.0
+
+
+def default_max_tempo(base: Path) -> float:
+    """项目输出设置 output.dialogue_tts_max_tempo:节奏贴合的变速倍率上限(1.0–2.0,默认 1.5;1.0=关闭贴合)。"""
+    st = _read(Path(base) / "settings.json") or {}
+    v = (st.get("output") or {}).get("dialogue_tts_max_tempo")
+    f = None if isinstance(v, bool) else _f(v)
+    return f if f is not None and TEMPO_RANGE[0] <= f <= TEMPO_RANGE[1] else PACE_MAX_TEMPO
 
 
 def lib_dir(base: Path, ep: str) -> Path:
@@ -384,14 +405,14 @@ def trim_plan(silences: list[tuple[float, float]], total: float, keep_head: floa
     return {"keep": keep, "lead_s": round(lead, 3), "tail_s": round(tail, 3), "pause_s": round(pause, 3)}
 
 
-def apply_trim(src: Path, dst: Path, keep: list[tuple[float, float]]) -> None:
-    """按 keep 区间 atrim+concat 重编码到 dst(mp3 128k / 其它按扩展名默认编码器)。"""
+def apply_trim(src: Path, dst: Path, keep: list[tuple[float, float]], tempo: float = 1.0) -> None:
+    """按 keep 区间 atrim+concat 重编码到 dst(mp3 128k / 其它按扩展名默认编码器);tempo≠1 时拼完再 atempo 变速不变调。"""
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise RuntimeError("缺 ffmpeg,无法修剪静音")
     parts = "".join(f"[0:a]atrim=start={a}:end={b},asetpts=PTS-STARTPTS[s{i}];" for i, (a, b) in enumerate(keep))
     chain = "".join(f"[s{i}]" for i in range(len(keep)))
-    fc = f"{parts}{chain}concat=n={len(keep)}:v=0:a=1[out]"
+    fc = f"{parts}{chain}concat=n={len(keep)}:v=0:a=1" + (f",atempo={tempo:.4f}" if abs(tempo - 1.0) > 1e-3 else "") + "[out]"
     codec = ["-c:a", "libmp3lame", "-b:a", "128k"] if dst.suffix.lower() == ".mp3" else []
     tmp = dst.with_name(dst.stem + ".trim.tmp" + dst.suffix)
     r = subprocess.run([ffmpeg, "-hide_banner", "-nostats", "-loglevel", "error", "-y", "-i", str(src),
@@ -420,6 +441,39 @@ def trim_file(raw: Path, dst: Path, max_pause: float = 0.0, probe=None) -> dict:
         return {"lead_s": 0.0, "tail_s": 0.0, "pause_s": 0.0, "params": params}
     apply_trim(raw, dst, tp["keep"])
     return {"lead_s": tp["lead_s"], "tail_s": tp["tail_s"], "pause_s": tp["pause_s"], "params": params}
+
+
+# ---------------------------------------------------------------- 节奏贴合(后处理,样片用)
+
+def pace_plan(silences: list[tuple[float, float]], total: float, target: float, max_tempo: float = PACE_MAX_TEMPO,
+              max_pause: float = PACE_MAX_PAUSE) -> dict:
+    """纯计算:先按 max_pause 压句中停顿(首尾静音留 PACE_KEEP_HEAD/TAIL),压完仍超过 target 的部分用变速补,
+    倍率封顶 max_tempo。返回 {keep, tempo, pause_s, duration_s(贴合后预计时长)}。"""
+    tp = trim_plan(silences, total, keep_head=PACE_KEEP_HEAD, keep_tail=PACE_KEEP_TAIL, max_pause=max_pause)
+    kept = sum(b - a for a, b in tp["keep"])
+    tempo = min(float(max_tempo), max(1.0, kept / target)) if target > 0 else 1.0
+    if tempo < 1.02:                                  # 2% 以内听不出,免得白白重采样
+        tempo = 1.0
+    return {"keep": tp["keep"], "tempo": round(tempo, 4), "pause_s": tp["pause_s"], "duration_s": round(kept / tempo, 3)}
+
+
+def pace_params(target: float, max_tempo: float) -> dict:
+    return {"target_s": round(float(target), 3), "max_tempo": round(float(max_tempo), 3), "max_pause": PACE_MAX_PAUSE,
+            "keep_head": PACE_KEEP_HEAD, "keep_tail": PACE_KEEP_TAIL, "noise_db": TRIM_NOISE_DB}
+
+
+def pace_file(src: Path, dst: Path, target: float, max_tempo: float = PACE_MAX_TEMPO, probe=None) -> dict:
+    """src(合成原声,没有则库文件)→ dst(节奏贴合版);返回台账 pace 段(不含 file)。"""
+    probe = probe or probe_duration
+    total = probe(src)
+    if not total:
+        raise RuntimeError("读不到音频时长")
+    pp = pace_plan(detect_silences(src), total, target, max_tempo=max_tempo)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    apply_trim(src, dst, pp["keep"], tempo=pp["tempo"])
+    dur = probe(dst)
+    return {"duration_s": round(dur, 3) if dur is not None else pp["duration_s"], "tempo": pp["tempo"],
+            "pause_s": pp["pause_s"], "target_s": round(float(target), 3), "params": pace_params(target, max_tempo)}
 
 
 def _default_tts(base: Path):
@@ -458,16 +512,21 @@ class _Lock:
 
 
 def sync(base: Path, ep: str, *, force: bool = False, tts=None, probe=None, log=print, only_shots=None,
-         speed: float | None = None, trim: bool = True, max_pause: float | None = None) -> dict:
+         speed: float | None = None, trim: bool = True, max_pause: float | None = None,
+         max_tempo: float | None = None) -> dict:
     """把库同步到当前台词:只合成 stale/missing(force=全部重出),删掉的句子文件移到 _prev/,写 tts_manifest.json。
     tts(entry, out_path) / probe(path)->秒 可注入(测试或替换合成器);任一句合成失败记 status=failed 不中断。
     only_shots:仅同步这些镜(后期配音按组取用时用),其余句子沿用旧台账记录。
     speed:本次默认语速倍率(None=项目设置);trim:合成后裁首尾静音(原声留 _raw/);max_pause:句中停顿上限秒
-    (None=项目设置 output.dialogue_tts_max_pause,0=不压缩)。已有句子修剪参数变了只从 _raw/ 重裁,不重新合成。"""
+    (None=项目设置 output.dialogue_tts_max_pause,0=不压缩)。已有句子修剪参数变了只从 _raw/ 重裁,不重新合成。
+    max_tempo:节奏贴合变速倍率上限(None=项目设置 output.dialogue_tts_max_tempo,1.0=不出贴合版);贴合版落 _paced/,
+    库文件本身保持自然语速。"""
     base = Path(base)
     ldir = lib_dir(base, ep)
     rdir = ldir / RAW_DIR
+    pdir = ldir / PACED_DIR
     max_pause = float(max_pause) if max_pause is not None else default_max_pause(base)
+    max_tempo = min(TEMPO_RANGE[1], max(TEMPO_RANGE[0], float(max_tempo))) if max_tempo is not None else default_max_tempo(base)
     with _Lock(ldir / ".lock"):
         p = plan(base, ep, speed=speed)
         provider, model = p["provider"], p["model"]
@@ -475,8 +534,31 @@ def sync(base: Path, ep: str, *, force: bool = False, tts=None, probe=None, log=
         tts = tts or _default_tts(base)
         probe = probe or probe_duration
         old_lines = {e.get("file"): e for e in (p["manifest"] or {}).get("lines") or [] if isinstance(e, dict)}
-        done, failed, synth, retrim = [], 0, 0, 0
+        done, failed, synth, retrim, paced = [], 0, 0, 0, 0
         t0 = time.time()
+
+        def pace(e: dict, prev: dict, changed: bool) -> None:
+            """节奏贴合版:自然时长超出估时的句子才出;参数与上次一致且文件在就沿用。失败只 WARN,样片退回自然语速。"""
+            nonlocal paced
+            target, dur = e.get("est_duration_s"), e.get("duration_s")
+            dst = pdir / e["file"]
+            e["pace"] = None
+            if max_tempo <= 1.0 or not target or not dur or dur <= target * (1 + PACE_TOLERANCE) or not shutil.which("ffmpeg"):
+                dst.unlink(missing_ok=True)
+                return
+            old = prev.get("pace") if isinstance(prev.get("pace"), dict) else None
+            if not changed and old and old.get("params") == pace_params(target, max_tempo) and dst.is_file():
+                e["pace"] = old
+                return
+            try:
+                src = rdir / e["file"] if (rdir / e["file"]).is_file() else ldir / e["file"]
+                e["pace"] = dict(pace_file(src, dst, target, max_tempo=max_tempo, probe=probe), file=f"{PACED_DIR}/{e['file']}")
+                paced += 1
+                log(f"[dialogue-tts] 贴合 {e['shot_id']} l{e['idx']:02d} {e['speaker']} {dur:.2f}s → {e['pace']['duration_s']:.2f}s"
+                    f"(估时 {target:.2f}s,压停顿 {e['pace']['pause_s']:.2f}s,x{e['pace']['tempo']:g})")
+            except Exception as err:  # noqa: BLE001
+                dst.unlink(missing_ok=True)
+                log(f"[dialogue-tts] WARN 节奏贴合失败 {e['shot_id']} l{e['idx']:02d}:{str(err)[:160]}")
 
         def finish(e: dict, raw: Path, out: Path) -> float | None:
             """raw → out(修剪或原样),回填 trim 段与时长。"""
@@ -499,7 +581,8 @@ def sync(base: Path, ep: str, *, force: bool = False, tts=None, probe=None, log=
             if only_shots is not None and e["shot_id"] not in only_shots and e["status"] != "fresh":
                 prev = old_lines.get(e["file"]) or {}
                 e.update(status=prev.get("status") or "missing", duration_s=prev.get("duration_s"),
-                         generated_at=prev.get("generated_at"), reason=prev.get("reason", ""), trim=prev.get("trim"))
+                         generated_at=prev.get("generated_at"), reason=prev.get("reason", ""), trim=prev.get("trim"),
+                         pace=prev.get("pace"))
                 done.append(e)
                 continue
             out = ldir / e["file"]
@@ -511,6 +594,7 @@ def sync(base: Path, ep: str, *, force: bool = False, tts=None, probe=None, log=
                 want = {"noise_db": TRIM_NOISE_DB, "keep_head": TRIM_KEEP_HEAD, "keep_tail": TRIM_KEEP_TAIL,
                         "max_pause": round(max_pause, 3)} if trim else None
                 have = (prev.get("trim") or {}).get("params") if prev.get("trim") else None
+                changed = False
                 if trim and have != want:
                     try:
                         src = raw if raw.is_file() else out
@@ -521,9 +605,11 @@ def sync(base: Path, ep: str, *, force: bool = False, tts=None, probe=None, log=
                         dur = finish(e, src, out)
                         e["duration_s"] = round(dur, 3) if dur is not None else e.get("duration_s")
                         retrim += 1
+                        changed = True
                         log(f"[dialogue-tts] 重裁 {e['shot_id']} l{e['idx']:02d} {e['speaker']} → {dur if dur is None else f'{dur:.2f}s'}")
                     except Exception as err:  # noqa: BLE001  重裁失败沿用现有文件
                         log(f"[dialogue-tts] WARN 重裁失败 {e['shot_id']} l{e['idx']:02d}:{str(err)[:160]}")
+                pace(e, prev, changed)
                 done.append(e)
                 continue
             e["_voice_by_character"] = by_char
@@ -541,9 +627,10 @@ def sync(base: Path, ep: str, *, force: bool = False, tts=None, probe=None, log=
                 cut = (tr.get("lead_s") or 0) + (tr.get("tail_s") or 0) + (tr.get("pause_s") or 0)
                 log(f"[dialogue-tts] {e['shot_id']} l{e['idx']:02d} {e['speaker']}/{e['variant']} "
                     f"{dur if dur is None else f'{dur:.2f}s'}{f' (裁 {cut:.2f}s)' if cut else ''} x{e['speed']:g}  {e['text'][:24]}")
+                pace(e, {}, True)
             except Exception as err:  # noqa: BLE001  单句失败不中断整集
                 failed += 1
-                e.update(status="failed", reason=str(err)[:300], duration_s=None)
+                e.update(status="failed", reason=str(err)[:300], duration_s=None, pace=None)
                 log(f"[dialogue-tts] FAIL {e['shot_id']} l{e['idx']:02d} {e['speaker']}:{str(err)[:200]}")
             e.pop("_voice_by_character", None)
             done.append(e)
@@ -559,6 +646,7 @@ def sync(base: Path, ep: str, *, force: bool = False, tts=None, probe=None, log=
                         dst = prev_dir / f"{Path(f).stem}.{int(time.time())}{Path(f).suffix}"
                     os.replace(src, dst)
                 (rdir / f).unlink(missing_ok=True)
+                (pdir / f).unlink(missing_ok=True)
         est_warn = []
         for e in done:
             est, act = e.get("est_duration_s"), e.get("duration_s")
@@ -568,11 +656,13 @@ def sync(base: Path, ep: str, *, force: bool = False, tts=None, probe=None, log=
         sl_path = base / "directing" / ep / "shot_list.json"
         manifest = {
             "schema": SCHEMA, "ep": ep, "generated_by": "modules/dialogue_tts.py",
-            "note": "对白语音库:按 shot_list dialogue_lines 逐句、人物嗓音模板合成的自然语速 TTS(库文件已裁首尾静音,合成原声在 _raw/);消费方(动态样片/白模样片/后期配音)只读此表",
+            "note": "对白语音库:按 shot_list dialogue_lines 逐句、人物嗓音模板合成的自然语速 TTS(库文件已裁首尾静音,合成原声在 _raw/;样片用的节奏贴合版在 _paced/,见逐句 pace 段);消费方(动态样片/白模样片/后期配音)只读此表",
             "source": f"directing/{ep}/shot_list.json", "source_mtime": int(sl_path.stat().st_mtime) if sl_path.is_file() else 0,
             "tts_provider": provider, "tts_model": model, "synced_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "sync_seconds": round(time.time() - t0, 1), "synthesized": synth, "retrimmed": retrim,
             "default_speed": p["speed"], "trim": {"enabled": bool(trim), "max_pause": round(max_pause, 3)},
+            "pace": {"max_tempo": round(max_tempo, 3), "max_pause": PACE_MAX_PAUSE, "repaced": paced,
+                     "lines": sum(1 for e in done if e.get("pace"))},
             "lines": done,
             "summary": {"total": len(done), "ok": sum(1 for e in done if e["status"] == "ok"),
                         "unbound": sum(1 for e in done if e["status"] == "unbound"), "failed": failed,
@@ -601,8 +691,10 @@ def ensure(base: Path, ep: str, *, log=print, **kw) -> dict | None:
         return load_manifest(base, ep)
 
 
-def line_audio(base: Path, ep: str, manifest: dict | None = None) -> dict[tuple[str, int], dict]:
-    """可用的逐句音频:{(shot_id, idx): {file(绝对路径), duration_s, speaker, text, ...}},只含 status=ok 且文件存在的句子。"""
+def line_audio(base: Path, ep: str, manifest: dict | None = None, paced: bool = False) -> dict[tuple[str, int], dict]:
+    """可用的逐句音频:{(shot_id, idx): {path(绝对路径), duration_s, speaker, text, ...}},只含 status=ok 且文件存在的句子。
+    paced=True(样片用):有节奏贴合版的句子改给贴合版的 path/duration_s,自然时长另记 natural_duration_s;
+    后期配音用默认的自然语速版。"""
     base = Path(base)
     m = manifest if manifest is not None else load_manifest(base, ep)
     ldir = lib_dir(base, ep)
@@ -612,12 +704,20 @@ def line_audio(base: Path, ep: str, manifest: dict | None = None) -> dict[tuple[
             continue
         f = ldir / e["file"]
         if f.is_file() and e.get("duration_s"):
-            out[(e["shot_id"], int(e["idx"]))] = dict(e, path=f)
+            item = dict(e, path=f)
+            pc = e.get("pace") if paced and isinstance(e.get("pace"), dict) else None
+            if pc and pc.get("file") and pc.get("duration_s") and (ldir / pc["file"]).is_file():
+                item.update(path=ldir / pc["file"], duration_s=pc["duration_s"], natural_duration_s=e["duration_s"],
+                            tempo=pc.get("tempo"))
+            out[(e["shot_id"], int(e["idx"]))] = item
     return out
 
 
 def library_fingerprint(manifest: dict | None) -> str:
-    """库内容指纹(进样片清单,任一句音频换了样片判过期)。"""
-    payload = sorted((e.get("file"), e.get("key"), e.get("status"), e.get("duration_s"))
-                     for e in (manifest or {}).get("lines") or [] if isinstance(e, dict))
+    """库内容指纹(进样片清单,任一句音频换了样片判过期)。有节奏贴合版的句子把贴合时长/倍率也算进去
+    (没有贴合版的句子指纹口径不变,存量样片不会因此集体判过期)。"""
+    def item(e: dict) -> tuple:
+        pc = e.get("pace") if isinstance(e.get("pace"), dict) else None
+        return (e.get("file"), e.get("key"), e.get("status"), e.get("duration_s")) + ((pc.get("duration_s"), pc.get("tempo")) if pc else ())
+    payload = sorted(item(e) for e in (manifest or {}).get("lines") or [] if isinstance(e, dict))
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False).encode("utf-8")).hexdigest() if payload else ""

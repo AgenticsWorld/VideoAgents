@@ -15,7 +15,11 @@
                                                                      #   casting 条目有数字 speed 的句子仍用条目值)
   python3 code/dialogue_tts.py ... --max-pause 0.5                   # 句中停顿压到 ≤0.5s(覆盖 output.dialogue_tts_max_pause)
   python3 code/dialogue_tts.py ... --no-trim                         # 不裁首尾静音(默认裁:首留 0.10s、尾留 0.15s,原声在 _raw/)
+  python3 code/dialogue_tts.py ... --max-tempo 1.35                  # 节奏贴合变速倍率上限(覆盖 output.dialogue_tts_max_tempo,
+                                                                     #   默认 1.5;1.0=不出贴合版,样片挂自然语速)
 修剪是后处理不进 key:参数变了只从 _raw/ 重裁已有句子,不重新调 TTS;--speed 进 key,改了才重出。
+节奏贴合(2026-09-28)同为后处理:自然时长超过 est_duration_s 的句子先压句中停顿、再变速不变调贴到估时,落 _paced/
+供动态样片/白模样片用;库文件本身保持自然语速(后期配音取用)。
 退出码:0 完成、2 shot_list 缺失、3 开关关闭且未 --ignore-setting、4 有句子合成失败(其余已落盘)。
 """
 import json
@@ -38,6 +42,8 @@ def main() -> int:
         ap.add_argument("--max-pause", type=float, default=None,
                         help="句中停顿上限秒,0=不压缩(默认取项目 output.dialogue_tts_max_pause)")
         ap.add_argument("--no-trim", action="store_true", help="不裁首尾静音")
+        ap.add_argument("--max-tempo", type=float, default=None,
+                        help="节奏贴合变速倍率上限 1.0–2.0,1.0=关闭(默认取项目 output.dialogue_tts_max_tempo,缺省 1.5)")
     args, root = parse_args("对白语音库:按人物嗓音模板逐句合成对白 TTS(惰性同步)", configure=configure)
     ep = args.ep
     if not (root / "directing" / ep / "shot_list.json").is_file():
@@ -59,13 +65,17 @@ def main() -> int:
     if args.speed is not None and dt.num_speed(args.speed) is None:
         print(f"ERROR --speed 须在 {dt.SPEED_RANGE[0]}–{dt.SPEED_RANGE[1]} 之间")
         return 2
+    if args.max_tempo is not None and not dt.TEMPO_RANGE[0] <= args.max_tempo <= dt.TEMPO_RANGE[1]:
+        print(f"ERROR --max-tempo 须在 {dt.TEMPO_RANGE[0]}–{dt.TEMPO_RANGE[1]} 之间")
+        return 2
     m = dt.sync(root, ep, force=args.force, only_shots=only, speed=args.speed,
-                trim=not args.no_trim, max_pause=args.max_pause)
+                trim=not args.no_trim, max_pause=args.max_pause, max_tempo=args.max_tempo)
     s = m["summary"]
     print(f"OK {dt.LIB_REL.format(ep=ep)} 共 {s['total']} 句:合成 {m['synthesized']} · 重裁 {m['retrimmed']} · 可用 {s['ok']}"
           f" · 未选角 {s['unbound']} · 失败 {s['failed']} · 移除 {s['removed']}"
           f"  ({m['sync_seconds']}s, {m['tts_provider']}/{m['tts_model']}, 默认语速 x{m['default_speed']:g},"
-          f" 修剪={'on' if m['trim']['enabled'] else 'off'} max_pause={m['trim']['max_pause']:g})")
+          f" 修剪={'on' if m['trim']['enabled'] else 'off'} max_pause={m['trim']['max_pause']:g},"
+          f" 节奏贴合 {m['pace']['lines']} 句 ≤x{m['pace']['max_tempo']:g})")
     if m["checks"]["est_vs_actual"]:
         print(f"WARN {len(m['checks']['est_vs_actual'])} 句实测时长与 est_duration_s 偏差 >30%(见 tts_manifest.json checks.est_vs_actual)")
     return 4 if s["failed"] else 0

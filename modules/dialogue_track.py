@@ -3,6 +3,8 @@
 
 - place_lines(audio, timeline):同镜多句从镜起点按实测时长顺序排开(句间留 GAP_S),不截断;超出镜时长的部分
   记 overflow_s 回给调用方写进各自 manifest(这是分镜规划的反馈信号,不在这里硬塞)。
+  上一句拖进本镜时本句起点顺延到它说完(2026-09-28,两句不叠着说;顺延不超过本镜时长的 MAX_DELAY_RATIO,记 delay_s)。
+  样片传进来的是对白语音库的节奏贴合版(dialogue_tts.line_audio(paced=True)),时长已按估时压过。
 - build_track(placements, total_s, out):anullsrc 底 + 每句 adelay → amix(normalize=0) → alimiter,
   输出 48k 立体声 wav,长度精确到 total_s。
 - cues_from_placements(...):按实际音频起止生成字幕条(替代按估时均摊),供白模样片字幕带用。
@@ -13,8 +15,9 @@ import shutil
 import subprocess
 from pathlib import Path
 
-GAP_S = 0.15      # 同镜相邻两句之间的停顿
+GAP_S = 0.15      # 相邻两句之间的停顿
 LEAD_S = 0.10     # 镜起点到第一句开口的提前量
+MAX_DELAY_RATIO = 0.5   # 为避让上一句,本镜第一句最多顺延到本镜时长的这个比例处
 
 
 def place_lines(audio: dict[tuple[str, int], dict], timeline: dict[str, dict]) -> tuple[list[dict], list[dict]]:
@@ -25,19 +28,26 @@ def place_lines(audio: dict[tuple[str, int], dict], timeline: dict[str, dict]) -
         if sid in timeline:
             by_shot.setdefault(sid, []).append((idx, e))
     placements, overflow = [], []
-    for sid, items in by_shot.items():
+    busy = None       # 上一句说完的时刻 + GAP_S
+    for sid, items in sorted(by_shot.items(), key=lambda kv: float(timeline[kv[0]]["start"])):
         seg = timeline[sid]
-        t = float(seg["start"]) + LEAD_S
-        end = float(seg["end"])
+        start, end = float(seg["start"]), float(seg["end"])
+        t = start + LEAD_S
+        if busy is not None and busy > t:
+            t = max(t, min(busy, start + max(LEAD_S, (end - start) * MAX_DELAY_RATIO)))
+        delay = t - (start + LEAD_S)
         for idx, e in sorted(items, key=lambda x: x[0]):
             dur = float(e.get("duration_s") or 0)
             pl = {"shot_id": sid, "idx": idx, "start": round(t, 3), "end": round(t + dur, 3), "duration_s": round(dur, 3),
                   "path": Path(e["path"]), "speaker": e.get("speaker", ""), "text": e.get("text", ""),
                   "group_id": seg.get("group_id", ""), "overflow_s": round(max(0.0, t + dur - end), 3)}
+            if delay > 0.001:
+                pl["delay_s"] = round(delay, 3)
             placements.append(pl)
             if pl["overflow_s"] > 0.05:
                 overflow.append({k: pl[k] for k in ("shot_id", "idx", "speaker", "start", "end", "overflow_s")})
             t += dur + GAP_S
+        busy = t
     placements.sort(key=lambda p: (p["start"], p["shot_id"], p["idx"]))
     return placements, overflow
 

@@ -207,7 +207,7 @@ def episode_reel_status(base, ep):
     audio_on = dt.enabled(base)
     lib = dt.load_manifest(base, ep) if audio_on else None
     try:
-        placements, overflow = episode_dialogue_placements(base, ep, ready, durations, dt.line_audio(base, ep, lib) if lib else None)
+        placements, overflow = episode_dialogue_placements(base, ep, ready, durations, dt.line_audio(base, ep, lib, paced=True) if lib else None)
     except Exception:  # noqa: BLE001
         placements, overflow = [], []
     audio_sha = dt.library_fingerprint(lib) if lib else ''

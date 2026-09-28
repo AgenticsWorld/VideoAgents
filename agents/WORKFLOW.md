@@ -83,6 +83,9 @@ data/projects/<slug>/
 │                   #   按 shot_list dialogue_lines 逐句、人物嗓音模板合成的自然语速 TTS <shot>_l<idx>_<CHAR>.mp3 + tts_manifest.json,
 │                   #   台词/音色/样本/渠道任一变了在使用时惰性补合成(宿主 CLI code/dialogue_tts.py);消费方=故事板动态样片、
 │                   #   分镜白模样片(挂对白轨)、p7-dub(先取库音频再贴合);未选角句 unbound 跳过+WARN;视频原声模式下严禁进成片对白
+│                   #   tts/_paced/=节奏贴合版(2026-09-28,宿主后处理不重合成):自然时长超过 est_duration_s 的句子先压句中停顿、
+│                   #   再变速不变调贴到估时(倍率上限 output.dialogue_tts_max_tempo,默认 1.5,1.0=关闭);只供两种样片挂对白轨,
+│                   #   p7-dub 仍取自然语速的库文件
 │                   #   library/music/=项目音乐库(2026-09-27,modules/music_library.py):index.json 台账 + MUS-NNNN.<ext>;
 │                   #   每集新增的 BGM 由 p8-music 交付时入库(复制一份,标记情绪/曲风/节奏/乐器/时长/提示词/授权链),
 │                   #   used_in[] 记哪些集的哪个 cue 在用(由各集 cue sheet 推导);之后的剧集配乐先查库、有合适的复用、没有才新生成

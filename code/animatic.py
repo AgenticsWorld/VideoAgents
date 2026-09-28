@@ -204,7 +204,7 @@ def main() -> int:
     has_final = bool(sl.get("shots"))
     # 对白语音库(输出设置「生成对白语音」):先惰性同步(只补缺/过期),再按镜起点排轨;关闭时 lib=None
     lib = None if args.no_audio else dt.ensure(root, ep, log=print)
-    audio_lines = dt.line_audio(root, ep, lib) if lib else {}
+    audio_lines = dt.line_audio(root, ep, lib, paced=True) if lib else {}
     names = character_names(root) if audio_lines else {}
     plan, t, missing = [], 0.0, 0
     shot_start: dict[str, float] = {}      # 定稿镜号 → 起始秒(音轨挂点用)

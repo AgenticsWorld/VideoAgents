@@ -999,8 +999,12 @@ DEFAULT_GENCONFIG = {
                # dialogue_tts_speed=对白语音默认语速倍率(2026-09-15,0.5–2.0,默认 1.0):casting.json 条目没有数字 speed 的句子按此
                #   合成(火山 speech_rate / minimax / elevenlabs / openrouter 同一倍率口径);改了对白语音库按 key 自动重出。
                # dialogue_tts_max_pause=句中停顿上限秒(0=不压缩):库文件合成后一律裁首尾静音,>0 时句中长停顿也压到该值(后处理,不重合成)
+               # dialogue_tts_max_tempo=样片对白节奏贴合的变速倍率上限(2026-09-28,1.0–2.0,默认 1.5,1.0=关闭):自然时长超过
+               #   est_duration_s 的句子另出节奏贴合版(_paced/,先压句中停顿再变速不变调),动态样片/白模样片挂贴合版;
+               #   库文件本身保持自然语速(后期配音取用),后处理不重合成
                "dialogue_tts_speed": 1.0,
                "dialogue_tts_max_pause": 0,
+               "dialogue_tts_max_tempo": 1.5,
                "spatial_blocking": False,
                # scene_plates=场景图(2026-09-17,仅白模关闭时生效;A 方案 docs/scene_plates.md):auto(默认)=每场景必出正向图(站在入口往内看的主视角图,
                #   environment-concept 登记 assets/concepts/scenes/<sid>/scene_plates.json),分镜定稿后各集 shot_list 有镜 plate_view=reverse 才由
@@ -2059,6 +2063,10 @@ def _validate_output(o: dict):
         v = o["dialogue_tts_max_pause"]
         if isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v <= 5:
             raise ServiceError(400, "output.dialogue_tts_max_pause must be a number of seconds between 0 and 5")
+    if "dialogue_tts_max_tempo" in o:
+        v = o["dialogue_tts_max_tempo"]
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not 1.0 <= v <= 2.0:
+            raise ServiceError(400, "output.dialogue_tts_max_tempo must be a number between 1.0 and 2.0")
     if "platforms" in o:
         pf = o["platforms"]
         if not isinstance(pf, list) or not pf:
