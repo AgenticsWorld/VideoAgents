@@ -8036,6 +8036,28 @@ async def api_scene_pano_adopt(project: str, sid: str, body: dict):
     return await asyncio.to_thread(_scene_pano_adopt, project, sid, body or {})
 
 
+def _scene_pano_discard(project: str, sid: str, body: dict) -> dict:
+    """场景预览页归档图「弃用」(2026-09-28):{anchor, file} → modules.scene_panos.discard_archived,
+    把那一张归档图连同 sidecar 挪进 <锚点>/discarded/,页面不再显示、也不再能认领(不删文件,不花钱)。"""
+    from modules import scene_panos as _sp
+    zh = (ui_lang_code() or "zh") == "zh"   # 文案随界面语言,非中文一律英文
+    base = _proj_base(project)
+    sid = re.sub(r"[^\w\-]", "", sid)
+    anchor = re.sub(r"[^\w\-]", "", str(body.get("anchor") or ""))
+    fname = re.sub(r"[^\w\-.]", "", str(body.get("file") or ""))
+    if not sid or not anchor or not fname:
+        raise ServiceError(400, "scene id / anchor / file is required")
+    try:
+        rec = _sp.discard_archived(base, sid, anchor, fname, log=lambda x: None)
+    except _sp.PanoError:
+        raise ServiceError(404, f"{sid}/{anchor}: 没有可弃用的归档图 {fname}" if zh else f"{sid}/{anchor}: no archived image {fname} to discard") from None
+    return {"ok": True, "scene_id": sid, "anchor": anchor, **rec}
+
+
+async def api_scene_pano_discard(project: str, sid: str, body: dict):
+    return await asyncio.to_thread(_scene_pano_discard, project, sid, body or {})
+
+
 async def api_scene_world_start(project: str, sid: str, body: dict):
     """场景预览页「生成世界模型」:{source: scene_pano, anchor?, scheme?, force?}。
     仅项目「白模」选项开启且场景已建白模、且已有全景图时可用(2026-09-13 起世界模型必须基于全景图,

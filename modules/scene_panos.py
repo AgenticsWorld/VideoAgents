@@ -2027,3 +2027,26 @@ def archived_panos(base: Path, sid: str, anchor: dict) -> list[dict]:
                                   and not (isinstance(size, list) and len(size) == 2 and size[1] and abs(size[0] / size[1] - 2.0) > ASPECT_TOLERANCE)})
     rows.sort(key=lambda r: r['mtime'], reverse=True)
     return rows
+
+
+DISCARDED_DIR = 'discarded'   # 用户「弃用」的归档图挪到 <锚点>/discarded/:归档图子行与 --adopt 都只扫锚点目录一层,挪进来即不再显示 / 不再认领
+
+
+def discard_archived(base: Path, sid: str, anchor_id: str, fname: str, log=print) -> dict:
+    """预览页归档图「弃用」(2026-09-28):把这一张归档图连同 sidecar 挪进 <锚点>/discarded/,页面不再列出、--adopt 也不再认它。
+    不删文件(用户反悔可手工挪回锚点目录);只受理归档图(.rejected-* / .redo-* / .rejected.png),正式全景与白模全景不动。"""
+    out = panos_dir(base, sid) / component(anchor_id)
+    src = out / fname
+    if Path(fname).name != fname or not (ARCHIVED_PANO_RE.search(fname) or fname.endswith('.rejected.png')) or not src.is_file():
+        raise PanoError(f'{sid}/{anchor_id}: 没有可弃用的归档图 {fname}')
+    dst_dir = out / DISCARDED_DIR
+    dst_dir.mkdir(exist_ok=True)
+    dst = dst_dir / fname
+    if dst.exists():                                    # 非 2:1 的 <scheme>.rejected.png 文件名不带时间,重名时补时间戳
+        dst = dst_dir / f"{fname[:-len('.png')]}-{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}.png"
+    src.rename(dst)
+    side = src.with_suffix('.json')
+    if side.is_file():
+        side.rename(dst.with_suffix('.json'))
+    log(f"   已弃用 {fname} → {DISCARDED_DIR}/{dst.name}")
+    return {'file': fname, 'moved_to': f'{DISCARDED_DIR}/{dst.name}'}

@@ -480,6 +480,12 @@ async def scene_pano_adopt(project: str, sid: str, body: dict[str, Any]) -> dict
     return await core.api_scene_pano_adopt(project, sid, body)
 
 
+@api.post("/projects/{project}/scenes/{sid}/panos/discard", tags=["artifacts"])
+async def scene_pano_discard(project: str, sid: str, body: dict[str, Any]) -> dict[str, Any]:
+    """场景预览页全景「归档图」子行「弃用」(2026-09-28):{anchor, file} → 该归档图挪进 <锚点>/discarded/,页面不再显示(不删文件)。"""
+    return await core.api_scene_pano_discard(project, sid, body)
+
+
 @api.post("/projects/{project}/scenes/{sid}/plates/crop", tags=["artifacts"])
 async def scene_plate_crop(project: str, sid: str, body: dict[str, Any]) -> dict[str, Any]:
     """场景预览页「✂ 裁剪」分镜背景图:{key, left, top, width, height}(0..1 归一化选区)→ 按项目画幅比例裁切并覆盖原图。"""

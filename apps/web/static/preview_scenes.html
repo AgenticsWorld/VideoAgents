@@ -133,6 +133,8 @@ ul.arr>li{margin:2px 0}
 .pano-archived .pano-arch-meta{display:block;color:var(--dim)}
 .pano-archived .pano-adopt{margin-top:4px;font-size:12px}
 .pano-archived .pano-adopt[disabled]{opacity:.5;cursor:not-allowed}
+.pano-archived .pano-discard{margin-top:4px;margin-left:6px;font-size:12px}
+.pano-archived .pano-discard[disabled]{opacity:.5;cursor:not-allowed}
 .pano-blocked{border:1px solid var(--red);color:var(--red);border-radius:8px;padding:8px 12px;margin:8px 0;font-size:13px}
 /* 创建全景图(2026-09-13):俯视图点选坐标 → 黄色待定点 + 坐标/方案表单 + 后台日志 */
 .pano-map.picking{cursor:crosshair}
@@ -629,7 +631,8 @@ async function mountPanoSection(host,s){
         h+=`<figure><span class="pano-badge${r.kind==='redo'?' redo':''}">${esc(kindText(r.kind))}</span>`
           +`<img src="${esc(bust(r.url))}" loading="lazy" onclick="zoomPano(this.src)" title="${esc(t('点击打开 360° 预览'))}">`
           +`<figcaption>${reason?`<span class="pano-reason">${esc(reason)}</span>`:''}<span class="pano-arch-meta" title="${esc(r.file)}">${esc(meta)}</span>`
-          +`<button type="button" class="pano-adopt" data-anchor="${esc(a.anchor_id)}" data-file="${esc(r.file)}" data-scheme="${esc(r.scheme)}"${(r.adoptable&&!has)?'':' disabled'} title="${esc(why||t('目视认可这张全景后认领为正式全景(等同 render_scene_panos.py --adopt,不花钱;之后分镜背景图链用它出图)'))}">${esc(t('✔ 认领为正式全景'))}</button></figcaption></figure>`;
+          +`<button type="button" class="pano-adopt" data-anchor="${esc(a.anchor_id)}" data-file="${esc(r.file)}" data-scheme="${esc(r.scheme)}"${(r.adoptable&&!has)?'':' disabled'} title="${esc(why||t('目视认可这张全景后认领为正式全景(等同 render_scene_panos.py --adopt,不花钱;之后分镜背景图链用它出图)'))}">${esc(t('✔ 认领为正式全景'))}</button>`
+          +`<button type="button" class="pano-discard" data-anchor="${esc(a.anchor_id)}" data-file="${esc(r.file)}" title="${esc(t('弃用这张归档图:挪进该锚点的 discarded/ 目录,本页不再显示、也不能再认领(文件不删,可手工挪回)'))}">${esc(t('🗑 弃用'))}</button></figcaption></figure>`;
       });
       h+='</div></div>';
     }
@@ -654,6 +657,23 @@ async function mountPanoSection(host,s){
     }catch(e){
       b.disabled=false;b.textContent=t('✔ 认领为正式全景');
       if(st){st.className='wb-status ps-status err';st.textContent=t('认领失败:')+e.message;}
+    }
+  }));
+  // 归档图「弃用」(2026-09-28):确认 → POST panos/discard(挪进 <锚点>/discarded/,不删文件)→ 原位重载,该图不再显示
+  sec.querySelectorAll('.pano-discard').forEach(b=>b.addEventListener('click',async()=>{
+    const {anchor,file}=b.dataset;
+    if(!confirm(I18N.f('弃用 {anchor} 的这张归档图?\n{file}\n\n弃用后本页不再显示、也不能再认领;文件不删除,挪到该锚点的 discarded/ 目录。',{anchor,file})))return;
+    const st=sec.querySelector('.ps-status');
+    b.disabled=true;b.textContent=t('弃用中…');
+    try{
+      const r=await fetch(`/api/v1/projects/${encodeURIComponent(proj)}/scenes/${encodeURIComponent(s.id)}/panos/discard`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({anchor,file})});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok)throw new Error(d.detail||(r.status===404||r.status===405?t('服务未重启:弃用接口不可用'):String(r.status)));
+      if(st){st.className='wb-status ps-status ok';st.textContent=I18N.f('已弃用 {anchor} 的归档图 {file}(挪到 {dir})',{anchor,file,dir:d.moved_to||'discarded/'});}
+      reloadKeep();
+    }catch(e){
+      b.disabled=false;b.textContent=t('🗑 弃用');
+      if(st){st.className='wb-status ps-status err';st.textContent=t('弃用失败:')+e.message;}
     }
   }));
   // ---- 创建全景图:点选/填坐标 → 提交后台任务
