@@ -1028,7 +1028,7 @@ async function openPlateSwap(shot,role,key){
     if(!list.length){$('#pw-imgs').innerHTML='<div class="ph">'+t('(本场景背景图库为空)')+'</div>';return}
     $('#pw-imgs').innerHTML=list.map(p=>{
       const cam=p.camera||{};
-      const src=!p.pano_ref?t('旧法(非全景制)'):p.pano_ref.kind==='revision'?I18N.f('按修改意见重出(基于 {k})',{k:p.pano_ref.source_key||'-'}):p.pano_ref.kind==='grid9'?t('九宫格'):p.pano_ref.kind==='grid9_fallback'?t('九宫格补图'):p.pano_ref.kind==='pano_manual'?I18N.f('手工截取(全景 {a})',{a:p.pano_ref.anchor_id||'-'}):p.pano_ref.kind==='world_manual'?t('手工截取(世界模型)'):p.pano_ref.kind==='world'?(p.pano_ref.anchor_id?I18N.f('世界模型(全景 {a})',{a:p.pano_ref.anchor_id}):t('世界模型')):I18N.f('全景 {a}',{a:p.pano_ref.anchor_id});
+      const src=!p.pano_ref?t('旧法(非全景制)'):p.pano_ref.kind==='revision'?I18N.f('按修改意见重出(基于 {k})',{k:p.pano_ref.source_key||'-'}):p.pano_ref.kind==='copy'?I18N.f('副本(复制自 {k})',{k:p.pano_ref.source_key||'-'}):p.pano_ref.kind==='grid9'?t('九宫格'):p.pano_ref.kind==='grid9_fallback'?t('九宫格补图'):p.pano_ref.kind==='pano_manual'?I18N.f('手工截取(全景 {a})',{a:p.pano_ref.anchor_id||'-'}):p.pano_ref.kind==='world_manual'?t('手工截取(世界模型)'):p.pano_ref.kind==='world'?(p.pano_ref.anchor_id?I18N.f('世界模型(全景 {a})',{a:p.pano_ref.anchor_id}):t('世界模型')):I18N.f('全景 {a}',{a:p.pano_ref.anchor_id});
       const cap=[cam.facing?I18N.f('朝向 {d}',{d:cam.facing}):'',cam.height_m!=null?I18N.f('机高 {h} m',{h:cam.height_m}):'',cam.lens_mm_equiv?`${cam.lens_mm_equiv}mm`:'',p.time_of_day||'',src].filter(Boolean).join(' · ');
       const used=(p.used_by||[]).join(', ');
       const isCur=p.key===PW_KEY;

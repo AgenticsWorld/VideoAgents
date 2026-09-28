@@ -3114,6 +3114,18 @@ window.I18N_DICT = {
 "按分类选择资产(🖊 草图=故事板分镜草图,左列本集分镜、右侧该镜草图),点选一张图片加入本组参考图(双击看大图);随本组重出时作为参考图传给视频生成模型": "Kategorie wählen (🖊 Skizzen = Storyboard-Shot-Skizzen: links die Shots dieser Episode, rechts die Skizzen des Shots), dann ein Bild anklicken, um es den Referenzen der Gruppe hinzuzufügen (Doppelklick zum Vergrößern); beim Neugenerieren dieser Gruppe wird es dem Videomodell als Referenz übergeben",
 "(本集还没有分镜草图:到故事板页「出草图」后再来选)": "(Diese Episode hat noch keine Shot-Skizzen: zuerst auf der Storyboard-Seite erzeugen)",
 "(本集还没有故事板,没有分镜草图可选)": "(Diese Episode hat noch kein Storyboard, daher keine Skizzen zur Auswahl)",
+// ⧉ 复制 / ⇋ 水平翻转 / ⇅ 垂直翻转分镜背景图(2026-09-28,场景预览页)
+"水平翻转": "Horiz. spiegeln",
+"垂直翻转": "Vert. spiegeln",
+"复制中…": "Wird kopiert…",
+"翻转中…": "Wird gespiegelt…",
+"已翻转并替换": "Gespiegelt und ersetzt",
+"翻转失败:": "Spiegeln fehlgeschlagen: ",
+"服务未重启:接口不可用": "Dienst nicht neu gestartet: API nicht verfügbar",
+"副本(复制自 {k})": "Kopie (von {k})",
+"创建这张背景图的副本(库里新增一张,原图不动;副本可在分镜预览「换图」里选用)": "Kopie dieses Hintergrundbilds erstellen (neuer Bibliothekseintrag, das Original bleibt unverändert; die Kopie ist in der Storyboard-Vorschau über „Bild tauschen“ wählbar)",
+"水平翻转这张背景图并覆盖原图(再点一次翻回;首次改动保留 .orig 备份)": "Dieses Hintergrundbild horizontal spiegeln und überschreiben (erneut klicken zum Zurückspiegeln; bei der ersten Änderung bleibt eine .orig-Sicherung erhalten)",
+"垂直翻转这张背景图并覆盖原图(再点一次翻回;首次改动保留 .orig 备份)": "Dieses Hintergrundbild vertikal spiegeln und überschreiben (erneut klicken zum Zurückspiegeln; bei der ersten Änderung bleibt eine .orig-Sicherung erhalten)",
 // 分镜剪辑·插黑 / 定格(2026-09-17)
 "插黑 / 定格": "Schwarz / Standbild",
 "把选中的时间段直接删掉,剩下的内容按原顺序拼成本组新版本(时长变短,出成片时外挂声轨/字幕按时间映射表自动同步)": "Die markierten Bereiche werden entfernt und der Rest in Originalreihenfolge zu einer neuen Version dieser Gruppe verbunden (Laufzeit wird kürzer; beim Finalisieren werden externe Tonspur und Untertitel über die Zeitkarte neu synchronisiert)",

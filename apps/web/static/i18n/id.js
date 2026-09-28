@@ -3114,6 +3114,18 @@ window.I18N_DICT = {
 "按分类选择资产(🖊 草图=故事板分镜草图,左列本集分镜、右侧该镜草图),点选一张图片加入本组参考图(双击看大图);随本组重出时作为参考图传给视频生成模型": "Pilih kategori (🖊 Sketsa = sketsa shot storyboard: kiri daftar shot episode ini, kanan sketsa shot tersebut), lalu klik gambar untuk menambahkannya ke referensi grup (klik dua kali untuk memperbesar); diteruskan ke model video sebagai referensi saat grup ini dibuat ulang",
 "(本集还没有分镜草图:到故事板页「出草图」后再来选)": "(Episode ini belum punya sketsa shot: buat dulu di halaman Storyboard)",
 "(本集还没有故事板,没有分镜草图可选)": "(Episode ini belum punya storyboard, jadi tidak ada sketsa untuk dipilih)",
+// ⧉ 复制 / ⇋ 水平翻转 / ⇅ 垂直翻转分镜背景图(2026-09-28,场景预览页)
+"水平翻转": "Balik H",
+"垂直翻转": "Balik V",
+"复制中…": "Menyalin…",
+"翻转中…": "Membalik…",
+"已翻转并替换": "Dibalik dan diganti",
+"翻转失败:": "Gagal membalik: ",
+"服务未重启:接口不可用": "Layanan belum dimulai ulang: API tidak tersedia",
+"副本(复制自 {k})": "salinan (dari {k})",
+"创建这张背景图的副本(库里新增一张,原图不动;副本可在分镜预览「换图」里选用)": "Buat salinan latar ini (menambah satu entri baru di pustaka, gambar asli tidak berubah; salinan dapat dipilih lewat “Ganti gambar” di pratinjau storyboard)",
+"水平翻转这张背景图并覆盖原图(再点一次翻回;首次改动保留 .orig 备份)": "Balik latar ini secara horizontal dan timpa (klik lagi untuk mengembalikan; perubahan pertama menyimpan cadangan .orig)",
+"垂直翻转这张背景图并覆盖原图(再点一次翻回;首次改动保留 .orig 备份)": "Balik latar ini secara vertikal dan timpa (klik lagi untuk mengembalikan; perubahan pertama menyimpan cadangan .orig)",
 // 分镜剪辑·插黑 / 定格(2026-09-17)
 "插黑 / 定格": "Hitam / beku",
 "把选中的时间段直接删掉,剩下的内容按原顺序拼成本组新版本(时长变短,出成片时外挂声轨/字幕按时间映射表自动同步)": "Hapus rentang yang ditandai dan sambung sisanya berurutan menjadi versi baru grup ini (durasi memendek; saat finalisasi, audio eksternal dan subtitle disinkronkan ulang lewat peta waktu)",

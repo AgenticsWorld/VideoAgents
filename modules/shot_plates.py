@@ -472,7 +472,7 @@ def is_legacy(entry: dict) -> bool:
     """不再被新决策复用的库条目:2026-09-10 前白模帧直出(无 pano_ref)、2026-09-14 前逐镜按全景重投影直出(非母图)。
     已落在集索引里的镜仍照旧引用(fresh),--repano 才整体按母图制重出。"""
     return not entry.get('pending') and not (entry.get('pano_ref') and (is_master(entry) or entry.get('grid9') or entry.get('grid9_fallback')
-                                                                          or entry.get('revised')))
+                                                                          or entry.get('revised') or entry.get('copy')))
 
 
 # ---------------------------------------------------------------- 背景图模式(2026-09-22):全景图 | 世界模型
@@ -2525,3 +2525,108 @@ def revise_shot_plate(base: Path, ep: str, shot_id: str, role: str, change: str,
     result['sync'] = sync
     result['index'] = str(episode_index_path(base, ep).relative_to(base))
     return result
+
+
+# ---------------------------------------------------------------- 场景预览页「⧉ 复制」「⇋ 翻转」(2026-09-28,分镜背景图板块)
+# 复制:库里新增一张副本 <原 key 去掉已有 _copyN>_copy<N>(图片文件整份拷贝 + <key>.json 台账),条目 copy=True / pano_ref.kind='copy'
+# 记来源;副本**不带** master / grid9 / grid9_fallback 标记——不参与 find_master 派生、九宫格选格、补图复用这些自动决策(同机位
+# 两张图会互相抢),只供分镜预览「🔁 换图」手选,之后可单独裁剪/翻转而不动原图。is_legacy 对副本为否(--status 不报 WARN)。
+# 翻转:水平(h,左右镜像)/ 垂直(v,上下颠倒)翻转后**原地覆盖同一文件**(首次改动把原图留作 <key>.orig.<ext>,与裁剪共用一份备份),
+# 条目 mirrored / flipped_vertical 分别记当前是否处于水平 / 垂直翻转态(同向翻两次回正)。集索引与组 prompt refs 只记 key/路径,
+# 不必改动;机位事实(camera)不动——翻转用于纠正出图方向颠倒。
+FLIP_DIRECTIONS = {'h': 'mirrored', 'v': 'flipped_vertical'}   # 方向 → 条目里的状态字段
+COPY_KEY_RE = re.compile(r'_copy\d+$')
+
+
+def copy_key(lib: dict, source_key: str) -> str:
+    """<原 key 去掉已有 _copyN>_copy<N>,N 取库里同根已有副本号最大值 + 1(副本的副本不嵌套 _copy1_copy1)。"""
+    root = COPY_KEY_RE.sub('', source_key)
+    n = 0
+    for e in lib.get('plates', []):
+        m = re.fullmatch(re.escape(root) + r'_copy(\d+)', str(e.get('key') or ''))
+        if m:
+            n = max(n, int(m.group(1)))
+    return f'{root}_copy{n + 1}'
+
+
+def _library_plate(base: Path, sid: str, key: str):
+    """(库, 条目, 图片绝对路径);条目/文件不存在抛 LookupError,路径越出项目目录抛 ValueError。"""
+    lib = load_library(base, sid)
+    entry = next((e for e in lib['plates'] if e.get('key') == key), None)
+    if not entry or not entry.get('file'):
+        raise LookupError(f'{sid} 的背景图库里没有 {key}')
+    f = (base/str(entry['file'])).resolve()
+    try:
+        f.relative_to(base.resolve())
+    except ValueError:
+        raise ValueError('invalid plate path') from None
+    if not f.is_file():
+        raise LookupError(f"背景图文件不存在:{entry['file']}")
+    return lib, entry, f
+
+
+def copy_plate(base: Path, sid: str, key: str) -> dict:
+    """库图 key 复制出一张副本入库(排在原图及其已有副本之后),返回新条目。"""
+    import shutil
+    sid = component(sid)
+    lib, src, f = _library_plate(base, sid, key)
+    new_key = copy_key(lib, key)
+    out = f.with_name(f'{new_key}{f.suffix}')
+    while out.exists() or any(e.get('key') == new_key for e in lib['plates']):   # 库外残留同名文件:顺延编号,不覆盖
+        new_key = COPY_KEY_RE.sub('', new_key) + f"_copy{int(new_key.rsplit('_copy', 1)[1]) + 1}"
+        out = f.with_name(f'{new_key}{f.suffix}')
+    shutil.copy2(f, out)
+    rel = str(out.relative_to(base.resolve()))
+    src_pr = src.get('pano_ref') or {}
+    src_kind = src_pr.get('kind') or ('manual' if src.get('manual') else ('master' if src.get('master') else 'legacy'))
+    entry = copy.deepcopy(src)
+    for k in ('master', 'grid9', 'grid9_fallback', 'pending', 'original_file'):
+        entry.pop(k, None)
+    entry.update({'key': new_key, 'file': rel, 'master': False, 'copy': True,
+                  'pano_ref': {'kind': 'copy', 'source_key': key, 'source_file': src['file'], 'source_kind': src_kind,
+                               'anchor_id': src_pr.get('anchor_id'), 'scheme': src_pr.get('scheme')},
+                  'created_by': {'source': 'preview_ui', 'tool': 'plate-copy'},
+                  'written_at': dt.datetime.now().isoformat(timespec='seconds')})
+    out.with_suffix('.json').write_text(json.dumps(entry, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+    at = next(i for i, e in enumerate(lib['plates']) if e.get('key') == key)
+    root = re.escape(COPY_KEY_RE.sub('', key))
+    while at + 1 < len(lib['plates']) and re.fullmatch(root + r'_copy\d+', str(lib['plates'][at + 1].get('key') or '')):
+        at += 1                                                                  # 排在同根已有副本之后:原图、_copy1、_copy2 …
+    lib['plates'].insert(at + 1, entry)
+    save_library(base, sid, lib)
+    return entry
+
+
+def flip_plate(base: Path, sid: str, key: str, direction: str = 'h') -> dict:
+    """库图 key 按 direction(h 水平 / v 垂直)翻转并原地覆盖(首次改动留 .orig 备份),返回更新后的条目。"""
+    import shutil
+    from PIL import Image
+    direction = str(direction or 'h').strip().lower()
+    if direction not in FLIP_DIRECTIONS:
+        raise ValueError('direction 只能是 h(水平)或 v(垂直)')
+    sid = component(sid)
+    lib, entry, f = _library_plate(base, sid, key)
+    with Image.open(f) as im:
+        im.load()
+        src_fmt = im.format or 'PNG'
+        orig = f.with_name(f'{f.stem}.orig{f.suffix}')
+        if not orig.exists():   # 只留最初那张原图;多次裁剪/翻转不覆盖备份
+            shutil.copy2(f, orig)
+        out = im.transpose(Image.FLIP_LEFT_RIGHT if direction == 'h' else Image.FLIP_TOP_BOTTOM)
+        tmp = f.with_name(f.name + '.tmp')
+        if src_fmt == 'JPEG':
+            out.save(tmp, format='JPEG', quality=95)
+        else:
+            out.save(tmp, format=src_fmt)
+    os.replace(tmp, f)
+    flag = FLIP_DIRECTIONS[direction]
+    entry[flag] = not entry.get(flag)
+    entry['flipped_at'] = dt.datetime.now().isoformat(timespec='seconds')
+    entry['original_file'] = str(orig.relative_to(base.resolve()))
+    save_library(base, sid, lib)
+    side = f.with_suffix('.json')
+    sd = read(side, None) if side.is_file() else None
+    if isinstance(sd, dict):
+        sd.update({k: entry[k] for k in (flag, 'flipped_at', 'original_file')})
+        side.write_text(json.dumps(sd, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+    return entry

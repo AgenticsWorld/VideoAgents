@@ -7658,6 +7658,50 @@ async def api_scene_plate_crop(project: str, sid: str, body: dict):
     return await asyncio.to_thread(_scene_plate_crop, project, sid, body)
 
 
+def _scene_plate_edit(project: str, sid: str, body: dict, op: str) -> dict:
+    """场景预览页分镜背景图「⧉ 复制」「⇋ 水平翻转」「⇅ 垂直翻转」(2026-09-28):{key} → modules.shot_plates.copy_plate(库里新增副本
+    <key>_copyN,不参与自动选图,只供「换图」手选)/ {key, direction: h|v} → flip_plate(水平 / 垂直翻转原地覆盖,首次改动留 .orig 备份)。
+    返回条目的预览字段(同预览数据口径)。"""
+    from modules import shot_plates
+    base = _proj_base(project)
+    sid = re.sub(r"[^\w\-]", "", sid)
+    key = re.sub(r"[^\w\-.]", "", str((body or {}).get("key") or ""))
+    if not sid or not key:
+        raise ServiceError(400, "scene id / plate key is required")
+    try:
+        if op == "copy":
+            entry = shot_plates.copy_plate(base, sid, key)
+        else:
+            entry = shot_plates.flip_plate(base, sid, key, str((body or {}).get("direction") or "h"))
+    except ImportError:  # pragma: no cover
+        raise ServiceError(501, "缺少 Pillow,无法翻转:pip install Pillow") from None
+    except LookupError as e:
+        raise ServiceError(404, str(e.args[0]) if e.args else str(e)) from None
+    except ValueError as e:
+        raise ServiceError(400, str(e)) from None
+    f = base / entry["file"]
+    cam = entry.get("camera") or {}
+    pr = entry.get("pano_ref") or {}
+    return {"ok": True, "key": entry["key"], "file": entry["file"], "size": entry.get("size"), "mirrored": bool(entry.get("mirrored")),
+            "flipped_vertical": bool(entry.get("flipped_vertical")),
+            "source_key": key,
+            "url": f"/projects/{base.name}/{entry['file']}?v={int(f.stat().st_mtime)}",
+            "plate": {"key": entry["key"], "file": entry["file"],
+                      "url": f"/projects/{base.name}/{entry['file']}?v={int(f.stat().st_mtime)}",
+                      "lighting_scheme_id": entry.get("lighting_scheme_id"), "time_of_day": entry.get("time_of_day"),
+                      "camera": {k: cam.get(k) for k in ("facing", "height_m", "lens_mm_equiv", "bearing_deg")},
+                      "pano_ref": {k: pr.get(k) for k in ("kind", "anchor_id", "scheme", "hole_fraction", "source_key")} if pr else None,
+                      "created_by": entry.get("created_by"), "used_by": []}}
+
+
+async def api_scene_plate_copy(project: str, sid: str, body: dict):
+    return await asyncio.to_thread(_scene_plate_edit, project, sid, body, "copy")
+
+
+async def api_scene_plate_flip(project: str, sid: str, body: dict):
+    return await asyncio.to_thread(_scene_plate_edit, project, sid, body, "flip")
+
+
 # ---------------- 场景预览页「💾 背景图」(2026-09-26):把全景 360° 视窗 / 世界模型视窗当前画面存为一张新背景图 ----------------
 def _scene_plate_manual(project: str, sid: str, body: dict) -> dict:
     """{source: pano|world, image: dataURL(JPEG/PNG,客户端已按分镜图规格渲染), camera: {position, target, fov_v_deg}(白模坐标,米),

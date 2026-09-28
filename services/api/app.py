@@ -486,6 +486,18 @@ async def scene_plate_crop(project: str, sid: str, body: dict[str, Any]) -> dict
     return _artifact_urls(await core.api_scene_plate_crop(project, sid, body), project)
 
 
+@api.post("/projects/{project}/scenes/{sid}/plates/copy", tags=["artifacts"])
+async def scene_plate_copy(project: str, sid: str, body: dict[str, Any]) -> dict[str, Any]:
+    """场景预览页「⧉ 复制」分镜背景图(2026-09-28):{key} → 库里新增一张副本 <key>_copyN(不参与自动选图,供「换图」手选)。"""
+    return _artifact_urls(await core.api_scene_plate_copy(project, sid, body), project)
+
+
+@api.post("/projects/{project}/scenes/{sid}/plates/flip", tags=["artifacts"])
+async def scene_plate_flip(project: str, sid: str, body: dict[str, Any]) -> dict[str, Any]:
+    """场景预览页「⇋ 水平翻转」「⇅ 垂直翻转」分镜背景图(2026-09-28):{key, direction: h|v(缺省 h)} → 翻转并覆盖原图(首次改动保留 .orig 备份)。"""
+    return _artifact_urls(await core.api_scene_plate_flip(project, sid, body), project)
+
+
 
 @api.post("/projects/{project}/scenes/{sid}/plates/manual", tags=["artifacts"])
 async def scene_plate_manual(project: str, sid: str, body: dict[str, Any]) -> dict[str, Any]:
