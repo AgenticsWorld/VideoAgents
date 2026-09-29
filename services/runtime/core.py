@@ -14946,6 +14946,9 @@ def _dag_runnable(proj: str) -> tuple[list[str], list[str]]:
         # blocked 是用户明确暂缓:都不算待办,否则看门狗每轮都会据此空唤醒总制片
         if n.get("state") in _WF_TERMINAL_SKIP or n.get("state") == "blocked":
             continue
+        # #72:template/expanded 是 for_each 扇出骨架(已按实例扇出,本身不可派单),人工/非人工一律不算待办
+        if n.get("state") in ("template", "expanded"):
+            continue
         if not all(d in done for d in (n.get("depends_on") or [])):
             continue
         if n.get("human"):
