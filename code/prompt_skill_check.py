@@ -91,7 +91,8 @@ def sd25_structure_errors(d: dict, name: str) -> list[str]:
     按官方「类型分组 + 逐镜使用/不采用 + 未采用素材」写才逐镜切换。要求(团队锚点 Overall visual style:/Shot N/[Image N]/
     Global constraints: 照旧保留,与本结构并存):
       ① 素材职责分组:【人物】(或【参考素材职责】)且每张角色/生物图有 `<名>@Image N` 绑定;有 video_refs/audio_refs 时
-         【动作与声音】(或【参考素材职责】)逐份写 `[Video N] 用于…` / `[Audio N] 用于…`;
+         【动作与声音】(或【参考素材职责】)逐份写 `[Video N] 用于…` / `[Audio N] 用于…`(尾段续接视频 *.continuation.mp4
+         由宿主续接块承担职责,免写,#84);
       ② 每个 Shot 段(Shot k: / Shot k｜标题。)含「使用：」与「不采用：」清单(逐镜点名激活);
       ③ 【未采用素材】段(无则写「无」);④ 【保持一致】(或「保持一致：」)。
     【场景】槽位与逐镜「场景激活：」句由 code/sync_shot_plates.py 按背景图机器写入,机检在 shot_plate_bound。"""
@@ -114,7 +115,15 @@ def sd25_structure_errors(d: dict, name: str) -> list[str]:
     arefs = [a for a in (d.get("audio_refs") or []) if isinstance(a, str)]
     if (vrefs or arefs) and not _has(r"【\s*(?:动作与声音|参考素材职责|(?:action|motion)s?\s*(?:&|and)\s*sound|reference\s+roles?|asset\s+roles?)\s*】"):
         errs.append(f"{name}: 有参考视频/音频但缺【动作与声音】(或【参考素材职责】)分组段")
-    for i in range(1, len(vrefs) + 1):
+    # 尾段续接视频(*.continuation.mp4,#84):职责由 modules/continuity_refs.apply_prompt 写入的宿主续接块承担——
+    # `Continuation reference: … End continuation reference.` 块内点名 [Video n],或正文含
+    # `Extend [Video n] forward`(continuous 边界)/ `Continue from the final moment of [Video n]`(cut 边界)句式即视为已满足
+    cont_blocks = re.findall(r"Continuation reference:.*?End continuation reference\.", vp, re.S)
+    for i, v in enumerate(vrefs, 1):
+        if v.endswith(".continuation.mp4") and (
+                any(re.search(r"\[Video\s*%d\]" % i, b) for b in cont_blocks)
+                or re.search(r"Extend\s+\[Video\s*%d\]\s+forward|Continue\s+from\s+the\s+final\s+moment\s+of\s+\[Video\s*%d\]" % (i, i), vp, re.I)):
+            continue
         if not re.search(r"\[Video\s*%d\][^\n]{0,60}(?:用于|(?:used\s+)?for\b|provides|drives)" % i, vp, re.I):
             errs.append(f"{name}: 缺 `[Video {i}] 用于…` 职责句")
     for i in range(1, len(arefs) + 1):
