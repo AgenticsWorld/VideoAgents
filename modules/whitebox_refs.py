@@ -81,7 +81,8 @@ def actor_bounds(actor: dict, key: dict) -> tuple:
     """人物在该关键帧的轴对齐包围盒(世界坐标):(center, half_extents)。按姿态取占位——
     stand: size_m 全高、脚印 max(w,d);sit: 0.8 身高(头顶≈0.725h+头半径,与 whitebox-renderer.js 同比例)、脚印加腿前伸 0.2h;
     lie / prone: 0.35 身高、脚印 0.5 身长;kneel: 0.825 身高(小腿平贴地面,头顶 0.725h+头半径)、脚印加小腿后伸 0.175h;
-    crouch: 0.73 身高(髋在 0.175h、上身前俯 0.6 rad)、脚印加前俯 0.31h(2026-09-14 六态)。脚印按 max(w,d) 取方形,与 yaw 无关(略保守)。"""
+    crouch: 0.73 身高(髋在 0.175h、上身前俯 0.6 rad)、脚印加前俯 0.31h(2026-09-14 六态)。脚印按 max(w,d) 取方形,与 yaw 无关(略保守)。
+    stand/kneel 写了非零 bend、或 crouch 显式写 bend 时(#77)按前俯几何压低高度、脚印沿面朝方向前移。"""
     size = actor.get('size_m') or [0.5, 1.7, 0.4]
     w = float(size[0]); h = float(size[1]) if len(size) > 1 else 1.7; d = float(size[2]) if len(size) > 2 else w
     half_w = 0.5 * max(w, d)
@@ -98,6 +99,23 @@ def actor_bounds(actor: dict, key: dict) -> tuple:
         height = h
     pos = key.get('position') or [0, 0, 0]
     center = [float(pos[0]), float(pos[1]) + height / 2, float(pos[2])]
+    if pose in ('stand', 'kneel') and key.get('bend') or pose == 'crouch' and key.get('bend') is not None:
+        # #77:显式 bend 前俯(与 whitebox-renderer.js 同一髋点/旋转)——高度取头顶/躯干顶/髋三者最高,
+        # 脚印沿面朝方向(yaw + torso_yaw)前移到头与躯干前缘,后缘保留姿态原脚印。
+        from modules.whitebox import lean_bend, lean_hip
+        bend = float(lean_bend(key)); hip = h * lean_hip(pose); low = pose != 'stand'
+        head_r = 0.1 * h
+        head_c = (0.725 if low else 0.9) * h - hip
+        torso_c = (0.4 if low else 0.575) * h - hip
+        c, sn = math.cos(bend), math.sin(bend)
+        height = max(hip, hip + head_c * c + head_r,
+                     hip + torso_c * c + 0.225 * h * abs(c) + 0.5 * d * abs(sn))
+        front = max(half_w, head_c * sn + head_r, torso_c * sn + 0.225 * h * abs(sn) + 0.5 * d * abs(c))
+        shift = (front - half_w) / 2
+        yaw = float(key.get('yaw') or 0) + float(key.get('torso_yaw') or 0)
+        half_h = max(half_w, (front + half_w) / 2)
+        center = [float(pos[0]) + shift * math.sin(yaw), float(pos[1]) + height / 2, float(pos[2]) + shift * math.cos(yaw)]
+        return center, [half_h, height / 2, half_h]
     return center, [half_w, height / 2, half_w]
 
 

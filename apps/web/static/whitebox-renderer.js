@@ -42,6 +42,19 @@ export function sample(keys, time) {
   return {...keys.at(-1)};
 }
 
+// Upper-body lean shared with modules/whitebox.py (lean_bend/lean_hip/shoulder_point, #77) — keep in sync.
+// stand: bend defaults 0 about a 0.35h hip; crouch: 0.6 rad default about 0.175h; kneel: 0 default about
+// 0.175h (knees stay on the ground). Other poses never lean.
+export const ARM_SEGMENT=.21;
+export function leanBend(k){const pose=k.pose||'stand';return pose==='stand'||pose==='kneel'?(k.bend||0):pose==='crouch'?(k.bend??.6):0;}
+export function leanHip(pose){return pose==='crouch'||pose==='kneel'?.175:.35;}
+// Shoulder (body-local, before torso_yaw/yaw) rotated about the hip by the lean, like torso and head.
+export function shoulderPoint(size,k,side){
+  const pose=k.pose||'stand',h=size[1],low=pose==='sit'||pose==='kneel'||pose==='crouch';
+  const bend=leanBend(k),hip=h*leanHip(pose),y=h*(low?.58:.77)-hip;
+  return [side*size[0]*.52,hip+y*Math.cos(bend),y*Math.sin(bend)];
+}
+
 // One detached WebGL context shared by every per-shot preview on a page: each
 // panel renders into it and copies the frame to its own 2D canvas, so hundreds
 // of storyboard shots never approach the browser's WebGL context limit.
@@ -290,7 +303,9 @@ export class WhiteboxRenderer {
         // Lean the upper body about the hips without turning a standing
         // performer into a horizontal, bed-anchored lying performer.
         // A crouch leans forward by default (0.6 rad about a low hip) unless the keyframe gives its own bend.
-        const bend=pose==='stand'?(k.bend||0):crouch?(k.bend??.6):0,hip=h*(crouch?.175:.35);
+        // kneel (#77): bend leans the upper body about the low hip (0.175h, top of the upright thighs);
+        // thighs/shins and so the knee support points stay put. Other poses ignore bend (compiler warns).
+        const bend=leanBend(k),hip=h*leanHip(pose);
         a.torso.rotation.x=bend;
         a.torso.position.z=(a.torso.position.y-hip)*Math.sin(bend);
         a.torso.position.y=hip+(a.torso.position.y-hip)*Math.cos(bend);
@@ -304,14 +319,24 @@ export class WhiteboxRenderer {
         }
       }
       for(const arm of a.arms){
-        const shoulder=new THREE.Vector3(arm.side*a.data.size_m[0]*.52,h*(low?.58:.77),0);
-        const hand=new THREE.Vector3(...k[arm.key]);
-        // Two equal arm segments: elbow bends outward, with a stable pole.
-        const delta=hand.clone().sub(shoulder),distance=delta.length(),axis=delta.clone().normalize();
-        const pole=new THREE.Vector3(arm.side,-.35,0).addScaledVector(axis,-new THREE.Vector3(arm.side,-.35,0).dot(axis)).normalize();
-        const elbow=shoulder.clone().addScaledVector(delta,.5).addScaledVector(pole,Math.sqrt(Math.max(0,(h*.21)**2-(distance/2)**2)));
+        // Shoulder follows the same hip lean as torso/head (#77, stand/crouch/kneel); see shoulderPoint.
+        const shoulder=new THREE.Vector3(...shoulderPoint(a.data.size_m,k,arm.side));
+        const seg=h*ARM_SEGMENT;
+        let hand=new THREE.Vector3(...k[arm.key]);
+        // Two fixed-length arm segments: elbow bends outward, with a stable pole. A target beyond
+        // full extension is not reached by stretching the mesh: the hand stops on the straight arm
+        // pointing at it (the compiler reports a reach warning).
+        let delta=hand.clone().sub(shoulder),distance=delta.length();
+        if(distance<1e-9){delta.set(0,-1e-9,0);distance=1e-9;}
+        const axis=delta.clone().divideScalar(distance);
+        if(distance>2*seg){hand=shoulder.clone().addScaledVector(axis,2*seg);delta=hand.clone().sub(shoulder);distance=2*seg;}
+        const ref=new THREE.Vector3(arm.side,-.35,0);
+        let pole=ref.clone().addScaledVector(axis,-ref.dot(axis));
+        if(pole.lengthSq()<1e-12)pole.set(0,0,1).addScaledVector(axis,-axis.z);
+        pole.normalize();
+        const elbow=shoulder.clone().addScaledVector(delta,.5).addScaledVector(pole,Math.sqrt(Math.max(0,seg**2-(distance/2)**2)));
         for(const [mesh,start,end] of [[arm.upper,shoulder,elbow],[arm.lower,elbow,hand]]){
-          const d=end.clone().sub(start);mesh.position.copy(start).add(end).multiplyScalar(.5);mesh.scale.y=d.length();
+          const d=end.clone().sub(start);mesh.position.copy(start).add(end).multiplyScalar(.5);mesh.scale.y=seg;
           mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize());
         }
         arm.hand.position.copy(hand);

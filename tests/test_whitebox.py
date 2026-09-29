@@ -407,6 +407,80 @@ assert.deepEqual(names(make({floor:'none'})),['ground-grid','wall']);
     assert out.returncode==0,out.stderr
 
 
+def test_lean_shoulder_matches_renderer_and_reach_warnings():
+    """#77:肩点算法 Python/JS 一致;非前俯姿态写 bend、手够不着只报 WARN。"""
+    import shutil
+    import subprocess
+    from modules.whitebox import pose_channel_warnings, shoulder_point
+    size=[.48,1.7,.38]
+    cases=[{'pose':p,**({'bend':b} if b is not None else {})} for p in ('stand','crouch','kneel','sit','lie') for b in (None,0,.7,1.4)]
+    py=[shoulder_point(size,k,s) for k in cases for s in (-1,1)]
+    kneel=shoulder_point(size,{'pose':'kneel','bend':1.2},1)
+    assert kneel[1]==pytest.approx(.175*1.7+(.58-.175)*1.7*math.cos(1.2)) and kneel[2]>0
+    assert shoulder_point(size,{'pose':'sit','bend':1.2},1)==shoulder_point(size,{'pose':'sit'},1)
+    if shutil.which('node'):
+        module=(Path(__file__).resolve().parents[1]/'apps/web/static/whitebox-renderer.js').as_uri()
+        script=f'import {{shoulderPoint}} from {json.dumps(module)};const c={json.dumps(cases)};console.log(JSON.stringify(c.flatMap(k=>[-1,1].map(s=>shoulderPoint({json.dumps(size)},k,s)))));'
+        js=json.loads(subprocess.check_output(['node','--input-type=module','-e',script],text=True,stderr=subprocess.DEVNULL))
+        for a,b in zip(py,js):assert a==pytest.approx(b,abs=1e-12)
+    far=[.2,.05,1.6]
+    actor={'id':'CHAR-1','kind':'person','size_m':size,'keyframes':[
+        {'t':0,'position':[0,0,0],'pose':'sit','bend':.5,'right_hand':[.25,.9,.3]},
+        {'t':2,'position':[0,0,0],'pose':'kneel','bend':1.2,'right_hand':far}]}
+    warns=pose_channel_warnings(actor)
+    assert any('sit' in w and 'bend' in w for w in warns)
+    assert any('right_hand' in w and 't=2' in w for w in warns)
+    actor['keyframes'][1]['right_hand']=[.25,.3,.6]
+    actor['keyframes'][0].pop('bend')
+    assert pose_channel_warnings(actor)==[]
+
+
+def test_actor_bounds_follow_lean():
+    from modules.whitebox_refs import actor_bounds
+    actor={'size_m':[.48,1.7,.38]}
+    upright=actor_bounds(actor,{'position':[0,0,0],'pose':'kneel'})
+    assert upright==actor_bounds(actor,{'position':[0,0,0],'pose':'kneel','bend':0})   # 存量不变
+    bent=actor_bounds(actor,{'position':[0,0,0],'pose':'kneel','bend':1.2,'yaw':0})
+    assert bent[1][1]<upright[1][1]            # 高度压低
+    assert bent[0][2]>0 and bent[0][0]==pytest.approx(0)   # 沿 +Z(yaw 0 面朝)前移
+    head_z=(.725-.175)*1.7*math.sin(1.2)+.17
+    assert bent[0][2]+bent[1][2]>=head_z-1e-9  # 前缘罩住头
+    side=actor_bounds(actor,{'position':[0,0,0],'pose':'kneel','bend':1.2,'yaw':math.pi/2})
+    assert side[0][0]>0 and side[0][2]==pytest.approx(0,abs=1e-9)
+    assert actor_bounds(actor,{'position':[0,0,0],'pose':'crouch'})==actor_bounds(actor,{'position':[0,0,0],'pose':'crouch','torso_yaw':.3})
+
+def test_kneel_bend_keeps_knees_and_arms_fixed_length():
+    """#77:跪姿 bend 绕 0.175h 髋前俯、膝不动;手臂两段定长,够不着停在伸直方向。"""
+    import shutil
+    import subprocess
+    if not shutil.which('node'):pytest.skip('Node unavailable')
+    static=Path(__file__).resolve().parents[1]/'apps/web/static'
+    script='''
+import assert from 'node:assert/strict';
+import * as T from THREE_MODULE;
+import {WhiteboxRenderer,shoulderPoint} from RENDERER_MODULE;
+const r=Object.create(WhiteboxRenderer.prototype);
+Object.assign(r,{width:960,height:540,scene:null,controls:null,camera:new T.PerspectiveCamera(),overview:new T.PerspectiveCamera(),top:new T.OrthographicCamera()});
+const h=1.7,size=[.48,h,.38],far=[.2,.05,1.6];
+r.load({dimensions_m:[8,3,6],objects:[]},{duration_s:2,actors:[{id:'a',kind:'person',color:'#cc4444',size_m:size,keyframes:[
+  {t:0,position:[0,0,0],pose:'kneel',right_hand:[.25,.5,.2]},{t:2,position:[0,0,0],pose:'kneel',bend:1.2,right_hand:far}]}],
+  cameras:[{start:0,duration_s:2,keyframes:[{t:0,position:[0,2,5],target:[0,1,0],fov:45}]}]});
+const a=r.actors[0],arm=a.arms[0];
+const st=t=>{r.setTime(t);r.scene.updateMatrixWorld(true);return {head:a.head.getWorldPosition(new T.Vector3()),knees:a.legs.map(l=>l.thigh.getWorldPosition(new T.Vector3()))};};
+const up=st(0),bent=st(2);
+assert.ok(bent.head.y<up.head.y-.2&&bent.head.z>up.head.z+.3);
+for(let i=0;i<2;i++)assert.ok(bent.knees[i].distanceTo(up.knees[i])<1e-9);
+const sh=new T.Vector3(...shoulderPoint(size,{pose:'kneel',bend:1.2},1));
+assert.ok(new T.Vector3(0,-.5,0).applyMatrix4(arm.upper.matrix).distanceTo(sh)<1e-9);
+for(const m of [arm.upper,arm.lower])assert.ok(Math.abs(m.scale.y-.21*h)<1e-12);
+assert.ok(Math.abs(arm.hand.position.distanceTo(sh)-.42*h)<1e-9);
+r.disposeScene();
+'''.replace('THREE_MODULE',json.dumps((static/'vendor/three/three.module.js').as_uri()))\
+   .replace('RENDERER_MODULE',json.dumps((static/'whitebox-renderer.js').as_uri()))
+    out=subprocess.run(['node','--input-type=module','-e',script],capture_output=True,text=True)
+    assert out.returncode==0,out.stderr
+
+
 def test_face_direction_follows_actor_turn_pose_and_altitude():
     """Use real Three.js scene graphs without a GPU to check both actor types."""
     import shutil

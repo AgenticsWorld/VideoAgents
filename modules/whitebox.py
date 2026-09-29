@@ -314,6 +314,58 @@ def pose_from(text, other_names=()):
     return 'stand'
 
 
+# 上身前俯与手臂可达性(#77;与 whitebox-renderer.js leanBend/leanHip/shoulderPoint/ARM_SEGMENT 同一算法,改动须两边同步):
+# stand 默认 bend 0、髋 0.35h;crouch 默认 0.6 rad、髋 0.175h;kneel 默认 0、髋 0.175h(大腿顶,膝点不动);
+# 其余姿态不前俯。肩点随 bend 绕髋旋转;每段臂长 0.21h,手目标离肩 > 0.42h 即够不着(渲染停在伸直方向)。
+LEAN_POSES = ('stand', 'crouch', 'kneel')
+ARM_SEGMENT = .21
+
+
+def lean_bend(key):
+    pose = key.get('pose') or 'stand'
+    if pose in ('stand', 'kneel'):
+        return key.get('bend') or 0
+    if pose == 'crouch':
+        return key['bend'] if key.get('bend') is not None else .6
+    return 0
+
+
+def lean_hip(pose):
+    return .175 if pose in ('crouch', 'kneel') else .35
+
+
+def shoulder_point(size_m, key, side):
+    """肩点(人物本体局部坐标,未计 torso_yaw/yaw);side 左 -1 右 +1。"""
+    pose = key.get('pose') or 'stand'
+    h = size_m[1]
+    bend, hip = lean_bend(key), h*lean_hip(pose)
+    y = h*(.58 if pose in ('sit', 'kneel', 'crouch') else .77) - hip
+    return [side*size_m[0]*.52, hip + y*math.cos(bend), y*math.sin(bend)]
+
+
+def pose_channel_warnings(actor):
+    """bend 写在不支持前俯的姿态上 → 提示被忽略;手目标超出两段臂长 → 可达性 WARN(不改数据、不报错)。"""
+    out = []; ignored = set(); reach = {}
+    size = actor.get('size_m') or [.5, 1.7, .4]
+    for key in actor.get('keyframes', []):
+        pose = key.get('pose') or 'stand'
+        if key.get('bend') and pose not in LEAN_POSES:
+            ignored.add(pose)
+        if actor.get('kind', 'person') == 'creature':
+            continue
+        for side, name in ((-1, 'left_hand'), (1, 'right_hand')):
+            if isinstance(key.get(name), list) and len(key[name]) == 3:
+                gap = math.dist(key[name], shoulder_point(size, key, side)) - 2*ARM_SEGMENT*size[1]
+                if gap > 1e-6 and gap > reach.get(name, (0, 0))[1]:
+                    reach[name] = (key['t'], gap)
+    if ignored:
+        out.append(f"{actor['id']}: bend 只对 stand/crouch/kneel 生效,{'/'.join(sorted(ignored))} 姿态上的 bend 已忽略。")
+    for name, (t, gap) in reach.items():
+        out.append(f"{actor['id']}: {name} 在 t={t:g}s 距肩超出臂长 {gap:.2f} m(两段臂各 {ARM_SEGMENT:g}h),"
+                   '渲染时手停在伸直方向上;请加 bend 前俯、移近人物或改手部坐标。')
+    return out
+
+
 def shot_pose_of(shot, cid):
     """shot_list 每镜 `poses[<id>]`(分镜层 storyboard shots_draft[].poses 继承而来,2026-09-14)的体位;无/非法返回 None。"""
     poses = shot.get('poses') if isinstance(shot, dict) else None
@@ -591,6 +643,7 @@ def compile_group(base, ep, group, shots, scene, colors=None):
             if not re.fullmatch(r'#[0-9a-fA-F]{6}', actor['morph_target'].get('color', '')):
                 raise ValueError('morph_target.color must be a hex color')
         validate_keys(actor['keyframes'], duration)
+        warnings.extend(pose_channel_warnings(actor))
     props = plan.get('props', [])
     prop_ids = set()
     for prop in props:
