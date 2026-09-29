@@ -42,9 +42,9 @@ def _seq_sum(values):
     return total
 
 
-def free_color(actors):
-    """本组尚未被任何 actor 占用的下一个身份色(仅供整集配色表漏项时兜底)。"""
-    used = {a.get('color', '').lower() for a in actors}
+def free_color(actors, exclude=()):
+    """本组尚未被任何 actor 占用、且不在 exclude(整集已登记身份色,#70)里的下一个身份色(仅供整集配色表漏项时兜底)。"""
+    used = {a.get('color', '').lower() for a in actors} | {str(c).lower() for c in exclude}
     index = 0
     while palette_color(index).lower() in used:
         index += 1
@@ -429,7 +429,7 @@ def compile_group(base, ep, group, shots, scene, colors=None):
                 key['pose'] = 'sit'
     for actor in actors:   # 整集配色表漏项(坐骑等)从本组未用色兜底
         if not actor['color']:
-            actor['color'] = free_color(actors)
+            actor['color'] = free_color(actors, colors.values())
     if 'actors' not in plan:
         warnings.append('存量人物身高、文字姿态及未标时动线按规约推断；精确节拍可在白模计划中覆盖。')
     cameras = []; offset = 0
@@ -502,7 +502,7 @@ def compile_group(base, ep, group, shots, scene, colors=None):
         if actor['id'] not in group.get('scene_cast', []) or actor['id'] in {a['id'] for a in actors}:
             raise ValueError('scene_actors must be unique scene cast outside the blocking-map cast')
         actor = copy.deepcopy(actor)
-        actor['color'] = colors.get(actor['id']) or free_color(actors)
+        actor['color'] = colors.get(actor['id']) or free_color(actors, colors.values())
         actor['letter'] = ''
         actors.append(actor)
     if 'cameras' in plan:
@@ -621,7 +621,7 @@ def complete_scene_actors(groups, contexts, raw_groups, errors, colors=None):
             anchor = copy.deepcopy(actor['keyframes'][-1 if index < i else 0])
             actor['keyframes'] = [{**copy.deepcopy(anchor), 't': t} for t in (0, group['duration_s'])]
             actor['letter'] = ''
-            actor['color'] = colors.get(cid) or free_color(group['actors'])
+            actor['color'] = colors.get(cid) or free_color(group['actors'], colors.values())
             actor['scene_inherited_from'] = origin
             group['actors'].append(actor)
             group['warnings'].append(f'{cid}: 同场次在场人物，沿用 {origin} 的'+('尾' if index < i else '首')+'姿态与位置；补充走位可写 scene_actors。')
@@ -691,13 +691,18 @@ def compile_episode(base: Path, ep: str, apply_overrides: bool = True):
             ov = ov_groups.get(group['group_id'])
             if ov:
                 _apply_ov(group, ov)
+    registered = {c.lower() for c in colors.values()}
+    extra_colors = {}   # 同一群演 ID 跨组沿用首次改派的颜色(#70)
     for group in groups:
-        # 群演(人/生物)颜色是计划手填的:缺色或与登记角色撞色时宿主改派本组未用色;群演之间可共用一色。
-        taken = {a.get('color', '').lower() for a in group['actors']}
+        # 群演(人/生物)颜色是计划手填的:缺色或与登记角色撞色时宿主改派未用色;群演之间可共用一色。
+        # #70:撞色判定与改派都避开整集 actor_colors 的全部登记身份色,而不只是本组 actors。
+        taken = {a.get('color', '').lower() for a in group['actors']} | registered
         for extra in group.get('extras', []):
             color = str(extra.get('color') or '')
             if not re.fullmatch(r'#[0-9a-fA-F]{6}', color) or color.lower() in taken:
-                extra['color'] = free_color(group['actors'] + group['extras'])
+                kept = extra_colors.get(extra['id'])
+                extra['color'] = kept if kept and kept.lower() not in taken else free_color(group['actors'] + group['extras'], registered)
+                extra_colors[extra['id']] = extra['color']
                 group['warnings'].append(f"{extra['id']}: 群演颜色{'缺失' if not color else '与登记角色撞色'}，宿主改为 {extra['color']}。")
         try:
             validate_actor_colors(group['actors'])

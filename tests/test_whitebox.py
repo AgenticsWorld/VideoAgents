@@ -204,6 +204,30 @@ def test_extra_color_clash_is_reassigned(project):
     assert group['extras'][0]['color']!=first['color'] and any('EXTRA-HORSE-1' in w for w in group['warnings'])
 
 
+def test_extra_auto_color_avoids_episode_identity_colors(project):
+    """#70:群演自动色避开整集登记身份色(含其他组人物),同一群演跨组同色。"""
+    path, data = source(project)
+    data['shots'].append({'shot_id': 'sh2', 'scene_id': 'SCN-1', 'duration_s': 3, 'characters': ['CHAR-2'], 'view_tile': 1})
+    data['generation_groups'].append(
+        {'group_id': 'grp2', 'scene_id': 'SCN-1', 'scene_no': 'S2', 'shots': ['sh2'], 'total_duration_s': 3,
+         'characters_union': ['CHAR-2'], 'blocking_map': {'characters': [
+             {'id': 'CHAR-2', 'label': 'B', 'start': {'landmark': 'desk'}, 'end': {'landmark': 'door'}}]}})
+    write(path, data)
+    first = compile_episode(project, 'ep01')['groups'][0]['actors'][0]
+    extra = {k: v for k, v in copy.deepcopy(first).items() if k != 'color'}
+    extra.update(id='EXTRA-1', label='passer')
+    write(project/'directing/ep01/whitebox_plans/grp1.json', {'extras': [extra]})
+    extra2 = copy.deepcopy(extra)
+    extra2['keyframes'] = [{**k, 't': k['t'] * 3 / 4} for k in extra2['keyframes']]
+    extra2['color'] = '#e63946'   # 手填成 grp1 的 CHAR-1 身份色(本组没有 CHAR-1)
+    write(project/'directing/ep01/whitebox_plans/grp2.json', {'extras': [extra2]})
+    result = compile_episode(project, 'ep01'); assert not result['errors']
+    registered = {c.lower() for c in result['actor_colors'].values()}
+    got = [g['extras'][0]['color'] for g in result['groups']]
+    assert all(c.lower() not in registered for c in got), got
+    assert got[0] == got[1]
+
+
 def test_missing_cast_blocks_instead_of_disappearing(project):
     path,data=source(project);data['generation_groups'][0]['creatures_union']=['CRE-1'];write(path,data)
     result=compile_episode(project,'ep01')
