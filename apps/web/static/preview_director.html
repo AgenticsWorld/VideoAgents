@@ -819,7 +819,7 @@ function pickAt(e){
   for(const a of RA.actors)if(a.root.visible)targets.push(a.root);
   for(const p of RA.props)if(p.mesh.visible)targets.push(p.mesh);
   if(VIEW!=='camera'&&RA.marker)targets.push(RA.marker);
-  if(VIEW!=='world')for(const m of RA.solids.slice(2))targets.push(m);
+  if(VIEW!=='world')for(const m of RA.solids.filter(m=>m.name!=='ground-floor'&&m.name!=='ground-grid'))targets.push(m);
   const hits=rc.intersectObjects(targets,true);
   const up=(obj,set)=>{for(let p=obj;p;p=p.parent)if(set(p))return p;return null};
   const g=grpById(SEL);
@@ -832,7 +832,7 @@ function pickAt(e){
     const actor=RA.actors.find(a=>up(o,p=>p===a.root));if(actor){picked=actorPick(actor);break}
     const prop=RA.props.find(p=>up(o,x=>x===p.mesh));if(prop){picked={kind:'prop',id:prop.data.id,label:prop.data.id};break}
     if(up(o,p=>p===RA.marker)){picked={kind:'camera',id:RA.shotId,label:t('摄影机')+' '+RA.shotId};break}
-    const solid=RA.solids.slice(2).find(m=>up(o,x=>x===m));if(solid&&!solidHit)solidHit=solid;
+    const solid=RA.solids.filter(m=>m.name!=='ground-floor'&&m.name!=='ground-grid').find(m=>up(o,x=>x===m));if(solid&&!solidHit)solidHit=solid;
   }
   if(!picked){
     const tol=16/r.width*2;let best=null,bd=tol;
