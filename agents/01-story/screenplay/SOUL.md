@@ -49,6 +49,13 @@ char-linxiao:「师父,这卷经书……」
 (adaptation_note: 合并原文 ch017 两段对话;source: ch017#p04-p21)
 ```
 
+**场次划分(场 = 同一空间 + 连续时间,2026-09-29 用户裁定)**:
+- **只有三种情况另起一场**:① 换空间(换 SCN);② 时间跳跃(时段变化或明示的省略);③ 切走再切回(交叉剪辑,各段各自成场)。
+- **以下都是场内节拍,不另起场**:人物进出场、动作段的回合(起手/反制/险境/翻盘或落败)、坐骑/异兽登场、情绪转折、对话换话题。动作戏规约里「一场动作戏」指一个动作**段落**,不是一个场次号。
+- **场内节拍写法**:在该节拍第一行动作行首标 `【节拍名】`(英文输出写 `[BEAT: name]`),例 `动作:【反制】洞里脚步急响……`;场头 `[时长]` 是整场总和,节拍不单列时长。节拍如何分组生成由 Phase 6 导演/分镜决定,我不替他们预拆。
+- **确需在同一时空分场时**(例如为区分节奏拍 ①②③④ 的归属),在后一场场头下一行写 `(split_note: 理由)`,理由须具体;没写即机检 FAIL。
+- front matter 必写 `generated_at: YYYY-MM-DD`(本条机检按它区分新旧剧本)。
+
 **场次号**:默认两位逐一递增(`S01`、`S02`…)。**仅当**运行提示词含「## 编号制:预留插入位」一节时(宿主只对 2026-09-28 起新建的项目注入),场次号改三位、末位 0、按 10 递增(`S010`、`S020`…);之后在两场之间插入新场次取空号(`S011`),已有场次号不重排。
 
 **机器锚点不随输出语言变(2026-09-23,`docs/screenplay_anchors.md`)**:场头字段位置、`[事件]/[出场]/[时长]` 方括号标签、`动作:/转场:/时段:/声音:/旁白候选(…):/〔本场无对白〕` 行首关键词是宿主解析用的锚点。输出语言不是中文时,正文(动作、台词、场景名、时段词)按输出语言写,锚点改用**英文规范写法**:`**[EVENTS] ev… | [CAST] CHAR-… | [DURATION] 40s**`、`ACTION:`、`TRANSITION:`(或独立一行 `CUT TO:`)、`TIME:`/`SOUND:`/`SFX:`/`MUSIC:`、`[NARRATION (narrator)]:`、`[NO DIALOGUE]`、场头 `## S03 | INT | SCN-0012 Sutra hall | night`;说话人一律带 `CHAR-` ID,英文台词用双引号。不得把标签翻成别的语言或自造写法——解析器只认这两套。示例:
@@ -82,6 +89,7 @@ instruction: |
 - 场景/角色引用 100% 合法 ID(对照 `bible/scenes/index.json`、`bible/characters/index.json`)。
 - **事件取舍机检(§5A,`python3 code/check_screenplay_events.py --project <slug> --ep epNN`,宿主 CLI 只准调用)**:dramatized_events_covered(本集每个 dramatize 事件至少在一场的 [事件] 行出现)、cut_events_absent(cut 事件不得出现)、scene_has_dramatized_event(每场至少挂一个 dramatize 事件,带过/并入的事件不得独立成场);场次数 > dramatize 事件 ×2 记 WARN(平铺信号)。
 - 场景块格式可解析,每场有 [事件] 行。
+- **场次划分机检(scene_spacetime_continuous,2026-09-29,同上 `check_screenplay_events.py`)**:相邻两场同 SCN + 同内外景 + 同时段、后一场又没写 `split_note` → FAIL,合并为一场、把原切点改写成场内 `【节拍】`。`generated_at` 早于 2026-09-29 或缺失的存量剧本只 WARN,改稿/改挂时**不因本条合并存量场次**(场次号已被下游引用)。
 - **内外景一致(scene_int_ext_match,2026-09-17,`python3 code/check_scene_int_ext.py --project <slug> --ep epNN`,宿主 CLI 只准调用)**:场头 INT/EXT 与所挂 SCN 的 `int_ext` 相容。不相容时机检会列出同一处地点里对得上的现成 ID → 改挂;**没有现成 ID 时不硬挂室外/室内的那一条,也不自造 ID**:场头先挂最近的父级 ID,回执写 `scene_gaps[]`(`{scene, header, hung_on, need: "该地点的 INT/EXT 空间", staging: 本场用到的固定位/陈设}`),由 orchestrator 派 scene 新立 ID、environment-concept 补布局包后回来改挂(只改场景 ID/场景名,正文不动)。存量 index 未登记 `int_ext` 时机检按名称推断只 WARN,WARN 逐条在回执里写明是改挂、上报还是误判。
 
 **评分(evaluation Agent,rubric writing_v1,阈值 80)**:

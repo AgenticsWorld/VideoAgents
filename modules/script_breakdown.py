@@ -59,14 +59,14 @@ _INT_EXT = {"INT": "INT", "EXT": "EXT", "内": "INT", "外": "EXT", "内景": "I
 _NOT_SPEAKER = {"动作", "转场", "时段", "声音", "旁白", "画面", "音效", "音乐", "镜头", "字幕", "字卡", "备注", "注",
                 "场景", "时间", "地点", "人物", "出场", "事件", "时长", "目标时长", "活跃时间线", "分配事件",
                 "主场景", "片头", "片尾", "下集预告", "片头文字", "讲述文本", "环境", "光线", "氛围", "道具",
-                "adaptation_note", "source", "视觉", "听觉", "情绪", "节奏", "提示", "说明", "logline",
+                "adaptation_note", "split_note", "source", "视觉", "听觉", "情绪", "节奏", "提示", "说明", "logline",
                 "集号", "章节范围", "覆盖事件", "开场钩子", "结尾悬念", "叙述人称", "主要角色", "本集看点",
                 # 英文锚点/元信息前缀(大小写不敏感,比对时 upper)
                 "ACTION", "VISUAL", "TRANSITION", "TIME", "SOUND", "SFX", "MUSIC", "NARRATION", "NARRATOR", "V.O.", "VO", "O.S.", "OS",
                 "NOTE", "NOTES", "SCENE", "LOCATION", "SETTING", "CAST", "PRESENT", "EVENT", "EVENTS", "DURATION", "DUR", "TARGET DURATION",
                 "PROPS", "LIGHTING", "MOOD", "ATMOSPHERE", "TITLE", "TITLE CARD", "CAPTION", "SUBTITLE", "CAMERA", "SHOT", "AUDIO",
                 "SOURCE", "TEASER", "RECAP", "INTRO", "OUTRO", "NEXT EPISODE", "HOOK", "PACE", "TEMPO", "EMOTION", "POV", "LOGLINE",
-                "EPISODE", "CHAPTERS", "MAIN CAST", "OPENING HOOK", "CLIFFHANGER", "ADAPTATION_NOTE"}
+                "EPISODE", "CHAPTERS", "MAIN CAST", "OPENING HOOK", "CLIFFHANGER", "ADAPTATION_NOTE", "SPLIT_NOTE"}
 
 
 def _not_speaker(spk: str) -> bool:
@@ -192,7 +192,7 @@ def _parse_heading(text: str) -> dict | None:
     fields = [f.strip() for f in re.split(r"\s*[|｜]\s*", rest) if f.strip()]
     sc: dict[str, Any] = {"no": no, "scene_id": None, "scene_name": None, "int_ext": None,
                           "time_of_day": None, "events": [], "cast": [], "alloc_s": None,
-                          "segment": None, "note": None}
+                          "segment": None, "note": None, "split_note": None}
     if not fields and rest:
         fields = [rest]
     leftovers: list[str] = []
@@ -412,6 +412,10 @@ def parse_screenplay(text: str, known_names: set[str] | None = None) -> dict:
         m = re.match(r"^\(?\s*adaptation_note\s*[:：]\s*(.+?)\)?\s*$", s, re.I)
         if m:
             cur["notes"].append(m.group(1).strip())
+            continue
+        m = re.match(r"^\(?\s*split_note\s*[:：]\s*(.+?)\)?\s*$", s, re.I)
+        if m:   # 与上一场同时空仍分场的理由(scene_spacetime_continuous 豁免,2026-09-29)
+            cur["split_note"] = m.group(1).strip()
             continue
         m = re.match(r"^[\[〔]?(?:旁白候选|NARRATION(?: CANDIDATE)?|V\.?O\.?)\s*(?:[（(]([^)）]*)[)）])?\s*[〕\]]?\s*[:：]?\s*(.*)$", s, re.I)
         if m:

@@ -6,6 +6,8 @@
   dramatized_events_covered   本集每个 dramatize 事件至少出现在一场的 [事件] 行
   cut_events_absent           任何场次不得引用 cut 事件
   scene_has_dramatized_event  每场 [事件] 至少含一个 dramatize 事件(mention/merge 事件不得独立成场)
+  scene_spacetime_continuous  相邻两场同 SCN + 同内外景 + 同时段且后一场无 (split_note: …) → FAIL
+                              (场 = 同一空间 + 连续时间,2026-09-29;generated_at 早于该日或缺失的存量剧本只 WARN)
 WARN:场次引用本集之外的事件;场次无 [事件] 行;场次数 > dramatize 事件数 ×2(平铺信号);
       episode_plan 本集无 treatments(旧格式)→ 全部事件按 dramatize 核,不阻断存量项目。
 

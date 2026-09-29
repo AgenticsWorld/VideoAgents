@@ -13,6 +13,7 @@
 
 1. 逐场分配时长:按 screenplay 场景列表分配秒数(依据对白/旁白估时 + 动作体量 + 钩子占位),Σ 场景时长 = episode_plan 集预算 ±10%。
 2. 画情绪曲线:逐场标情绪类型与强度,与 `bible/color_script.json` 本集色彩情绪对齐,标出峰谷,保证高潮场留足时长。
+   - **场内节拍(2026-09-29)**:剧本按「场 = 同一空间 + 连续时间」切场后,一场可能含多个节拍(动作行首 `【节拍名】` / `[BEAT: name]`)。含 ≥2 个节拍的场加可选 `beats[]`(`beat` 与剧本标记同名、各自 `alloc_s` 与 `emotion`,Σ beats.alloc_s = 场 alloc_s),情绪峰谷落到节拍上;场级 `alloc_s`/`emotion` 照写(取主节拍),下游只读场级字段时不受影响。
 3. 出删减/压缩建议:超预算时按「不动主线事件、优先压背景与重复信息」列场景级建议清单(省几秒、怎么省、风险);执行权在 `screenplay`(走退回改稿),我不动剧本。
 4. 校验卡点占位:开头 3 秒钩子与结尾悬念的时长位置合规,预留 `hook_reserve_s`。
 5. 供下游对账:我的逐场分配是 Phase 6 `shot-planning`(Σ镜头时长)与 Phase 9 `edit`(精剪)的时长基准。
@@ -43,7 +44,9 @@
 ```json
 {
   "duration_budget_s": 180,
-  "scenes": [{ "scene": "S03", "alloc_s": 22, "emotion": { "type": "紧张", "intensity": 0.8 } }],
+  "scenes": [{ "scene": "S03", "alloc_s": 22, "emotion": { "type": "紧张", "intensity": 0.8 },
+              "beats": [{ "beat": "起手", "alloc_s": 6, "emotion": { "type": "紧张", "intensity": 0.6 } },
+                        { "beat": "险境", "alloc_s": 16, "emotion": { "type": "紧张", "intensity": 0.9 } }] }],
   "hook_reserve_s": { "opening": 3, "ending": 8 },
   "trim_suggestions": [{ "scene": "S05", "save_s": 6, "how": "合并两段赶路戏", "risk": "low" }],
   "total_s": 178

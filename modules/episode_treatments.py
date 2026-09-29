@@ -360,6 +360,33 @@ def _norm_ev(x: str) -> str:
     return x.strip().lower()
 
 
+# 场 = 同一空间 + 连续时间(2026-09-29 用户裁定):相邻两场同 SCN、同内外景、同时段即判拆碎,
+# 除非后一场写 `(split_note: …)` 说明理由。此日期前生成(front matter generated_at 缺失或更早)的存量剧本只 WARN。
+SPACETIME_RULE_SINCE = "2026-09-29"
+
+
+def _generated_at(text: str) -> str | None:
+    m = re.match(r"^---\s*\n(.*?)\n---", text, re.S)
+    if not m:
+        return None
+    d = re.search(r"^generated_at\s*:\s*['\"]?(\d{4}-\d{2}-\d{2})", m.group(1), re.M)
+    return d.group(1) if d else None
+
+
+def adjacent_same_spacetime(parsed_scenes: list[dict]) -> list[str]:
+    """相邻两场同 SCN + 同内外景 + 同时段、且后一场无 split_note → ["S03→S04(SCN-0143 EXT 夜)", …]"""
+    out = []
+    for a, b in zip(parsed_scenes, parsed_scenes[1:]):
+        sid = a.get("scene_id")
+        if not sid or sid != b.get("scene_id") or b.get("split_note"):
+            continue
+        ie_a, ie_b = a.get("int_ext"), b.get("int_ext")
+        tod_a, tod_b = (a.get("time_of_day") or "").strip(), (b.get("time_of_day") or "").strip()
+        if ie_a == ie_b and tod_a == tod_b:
+            out.append(f"{a.get('no')}→{b.get('no')}({sid} {ie_a or '?'} {tod_a or '?'})")
+    return out
+
+
 def verify_screenplay(screenplay_text: str, plan: dict | None, ep: str) -> dict:
     """剧本 vs 本集 treatment。→ {checks, errors, warns, scenes: [{scene, events}], treatments}"""
     from modules import script_breakdown as sb   # 复用剧本解析(场次/[事件] 行)
@@ -373,7 +400,8 @@ def verify_screenplay(screenplay_text: str, plan: dict | None, ep: str) -> dict:
               for s in parsed.get("scenes") or []]
     if ep_plan is None:
         warns.append(f"episode_plan 里没有 {ep},无法核 treatment(仅解析场次)")
-        return {"checks": {"dramatized_events_covered": True, "cut_events_absent": True, "scene_has_dramatized_event": True},
+        return {"checks": {"dramatized_events_covered": True, "cut_events_absent": True, "scene_has_dramatized_event": True,
+                           "scene_spacetime_continuous": True},
                 "errors": errors, "warns": warns, "scenes": scenes, "treatments": {}, "legacy": True}
     evs = episode_events(ep_plan)
     tr, ferrs = episode_treatments(ep_plan)
@@ -420,6 +448,16 @@ def verify_screenplay(screenplay_text: str, plan: dict | None, ep: str) -> dict:
     no_event_scenes = [s["scene"] or "?" for s in scenes if not s["events"]]
     if no_event_scenes:
         warns.append(f"场次无 [事件] 行,无法核对: {no_event_scenes}")
+    split = adjacent_same_spacetime(parsed.get("scenes") or [])
+    gen = _generated_at(screenplay_text)
+    legacy_split = not gen or gen < SPACETIME_RULE_SINCE
+    msg = ("相邻场同一空间 + 连续时间被拆成多场(场 = 同一空间 + 连续时间;人物进出、动作回合写成场内【节拍】,"
+           "确需分场在后一场写 `(split_note: 理由)`): " + "; ".join(split))
+    if split and legacy_split:
+        warns.append(msg + f"(存量剧本 generated_at={gen or '缺失'} 早于 {SPACETIME_RULE_SINCE},只 WARN)")
+    elif split:
+        errors.append(msg)
+    checks["scene_spacetime_continuous"] = not split or legacy_split
     if dram and len(scenes) > len(dram) * 2:
         warns.append(f"场次 {len(scenes)} 场 > dramatize 事件 {len(dram)} 个的 2 倍,疑似平铺(每个演的事件平均 ≤2 场为宜)")
     return {"checks": checks, "errors": errors, "warns": warns, "scenes": scenes, "treatments": treat, "legacy": legacy,

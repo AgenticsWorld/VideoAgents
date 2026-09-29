@@ -19,6 +19,8 @@
 | 场内子标题 | `### 旁白` / `### 对白` / `### 声音` | `### Narration` / `### Dialogue` / `### Sound` | 决定其后段落归类 |
 | 集级元信息 | `时长预算:180s` `本集看点:…` `叙述人称:…` | `Duration budget: 180s` `Logline: …` `POV: …` | 出现在第一个场头之前 |
 | 改编注 | `(adaptation_note: …)` | 同左 | 键名固定英文 |
+| 场内节拍 | `动作:【反制】…` | `ACTION: [BEAT: Counter] …` | 标在该节拍第一行动作行首;解析层当动作文本保留,pacing `beats[].beat` 按同名对齐(2026-09-29) |
+| 同时空分场理由 | `(split_note: …)` | 同左 | 键名固定英文;写在后一场场头下,豁免 `scene_spacetime_continuous` |
 
 ## narration.md
 
