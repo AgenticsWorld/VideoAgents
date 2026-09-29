@@ -145,6 +145,8 @@ def _name_index(base: Path) -> dict[str, str]:
                 if c.get(k):
                     out.setdefault(str(c[k]).strip(), c["id"])
             for a in c.get("aliases") or []:
+                # 别名两种落盘形态:纯字符串,或 {name, source_chapter…}(#58)
+                a = a.get("name") or a.get("alias") if isinstance(a, dict) else a
                 if isinstance(a, str) and a.strip():
                     out.setdefault(a.strip(), c["id"])
     cr = _read(Path(base) / "bible" / "creatures" / "index.json") or {}
@@ -152,6 +154,27 @@ def _name_index(base: Path) -> dict[str, str]:
         if isinstance(c, dict) and c.get("id") and c.get("name"):
             out.setdefault(str(c["name"]).strip(), c["id"])
     return out
+
+
+name_index = _name_index   # 公共名:check_dialogue_fit 等机检共用同一套别名表(#58)
+
+_SPK_ID_RE = re.compile(r"((?:CHAR|CRE)-\d+)")
+
+
+def resolve_speaker(ln: dict, names: dict[str, str]) -> tuple[str, str]:
+    """对白行 → (说话人编号 或 '', 原始说话人文本)。与 code/check_dialogue_fit.py 共用口径(#58):
+    ① speaker / char 中的 CHAR-/CRE- 编号 → ② 同级 speaker_char / character_id 编号
+    → ③ 规范名/别名表反查 speaker(全文,再去括注)→ 仍无返回 ''。"""
+    raw = str(ln.get("speaker") or ln.get("char") or ln.get("character_id") or "").strip()
+    m = _SPK_ID_RE.search(raw)
+    if m:
+        return m.group(1), raw
+    for k in ("speaker_char", "character_id"):
+        m = _SPK_ID_RE.search(str(ln.get(k) or "").strip())
+        if m:
+            return m.group(1), raw
+    hit = names.get(raw) or names.get(re.sub(r"[〔【(\[（].*$", "", raw).strip())
+    return (hit or ""), raw
 
 
 def collect_lines(base: Path, ep: str, shot_list: dict | None = None) -> list[dict]:
@@ -178,9 +201,7 @@ def collect_lines(base: Path, ep: str, shot_list: dict | None = None) -> list[di
             text = str(ln.get("text") or ln.get("line") or "").strip()
             if not text:
                 continue
-            raw = str(ln.get("speaker") or ln.get("character_id") or "").strip()
-            m = re.match(r"^((?:CHAR|CRE)-\d+)", raw)
-            speaker = m.group(1) if m else names.get(raw, "")
+            speaker, raw = resolve_speaker(ln, names)
             out.append({"seq": seq, "shot_id": s["shot_id"], "idx": idx, "group_id": group_of.get(s["shot_id"], ""),
                         "speaker": speaker, "speaker_raw": raw, "text": text,
                         "emotion": str(ln.get("emotion") or ln.get("tone") or "").strip(),
