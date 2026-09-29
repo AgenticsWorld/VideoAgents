@@ -20,10 +20,32 @@ def _canonical_numbers(value):
     return value
 
 
-def _fingerprint(payload, *, legacy=False):
+def _fingerprint(payload, *, legacy=False, prefix='v2:'):
     data = payload if legacy else _canonical_numbers(payload)
     digest = hashlib.sha256(json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
-    return digest if legacy else 'v2:' + digest
+    return digest if legacy else prefix + digest
+
+
+# 场景白模 bible/scenes/<sid>/whitebox.json 里的纯说明/台账字段(#65):不参与编译、渲染与机位几何
+# (modules/whitebox.load_scene 只读 dimensions_m / objects;inferred、scale_basis 只进预览页说明文字),
+# 改它们不应让引用该场景的已审机位契约失效。v3 起 placement 指纹剔除这些字段;未列出的键一律照算(宁可失效不可漏)。
+SCENE_DESCRIPTIVE_KEYS = frozenset((
+    'workflow_notes', 'modeling_notes', 'orientation_note', 'clearance_note', 'collision_clearance_note', 'units_note',
+    'scale_basis', 'inferred', 'inferred_items', 'landmarks_covered', 'covered_landmarks', 'landmark_coverage',
+    'handover', 'downstream', 'task_id', 'agent', 'date', 'revision', 'supersedes_task', 'deviation_from_parent',
+    'source', 'source_files', '_meta'))
+OBJECT_DESCRIPTIVE_KEYS = frozenset(('note',))
+PLACEMENT_PREFIX = 'v3:'
+
+
+def _geometric_scene(scene):
+    if not isinstance(scene, dict):
+        return scene
+    out = {k: v for k, v in scene.items() if k not in SCENE_DESCRIPTIVE_KEYS}
+    if isinstance(out.get('objects'), list):
+        out['objects'] = [{k: v for k, v in o.items() if k not in OBJECT_DESCRIPTIVE_KEYS} if isinstance(o, dict) else o
+                          for o in out['objects']]
+    return out
 
 
 def _source_payload(base, ep, shot):
@@ -41,26 +63,38 @@ def source_fingerprint(base, ep, shot, *, legacy=False):
     return _fingerprint(_source_payload(base, ep, shot), legacy=legacy)
 
 
-def _placement_payload(base, ep, gid):
+def _placement_payload(base, ep, gid, *, full_scene=False):
+    """full_scene=True:v2/legacy 口径(场景 whitebox.json 整份进指纹),只供旧指纹比对。"""
     def read(rel):
         p = Path(base)/rel
         return json.loads(p.read_text()) if p.is_file() else {}
     source = read(f'directing/{ep}/shot_list.json')
     group = next((g for g in source.get('generation_groups', []) if g['group_id'] == gid), {})
     plan = read(f'directing/{ep}/whitebox_plans/{gid}.json')
+    scene = read(f'bible/scenes/{group.get("scene_id")}/whitebox.json')
     payload = {'group': {k: group.get(k) for k in ('scene_id', 'scene_no', 'blocking_map', 'scene_presence')},
                'staging': {k: plan.get(k) for k in ('actors', 'scene_actors', 'extras', 'props')},
-               'scene': read(f'bible/scenes/{group.get("scene_id")}/whitebox.json')}
+               'scene': scene if full_scene else _geometric_scene(scene)}
     return payload
 
 
 def placement_fingerprint(base, ep, gid, *, legacy=False):
-    return _fingerprint(_placement_payload(base, ep, gid), legacy=legacy)
+    """新写入一律 v3(剔除场景说明字段);legacy=True 仍给旧无前缀口径(测试/迁移比对用)。"""
+    if legacy:
+        return _fingerprint(_placement_payload(base, ep, gid, full_scene=True), legacy=True)
+    return _fingerprint(_placement_payload(base, ep, gid), prefix=PLACEMENT_PREFIX)
 
 
 def _matches_fingerprint(saved, payload):
     # Read unchanged legacy plans without silently blessing stale reviews.
     return saved == _fingerprint(payload) or saved == _fingerprint(payload, legacy=True)
+
+
+def _matches_placement(saved, base, ep, gid):
+    """v3 按剔除说明字段的 payload 比;存量 v2 / legacy 指纹按旧口径(整份场景)比,已签字组不因升版失效。"""
+    if isinstance(saved, str) and saved.startswith(PLACEMENT_PREFIX):
+        return saved == placement_fingerprint(base, ep, gid)
+    return _matches_fingerprint(saved, _placement_payload(base, ep, gid, full_scene=True))
 
 
 def direction(key):
@@ -84,7 +118,7 @@ def check_camera(base, ep, shot, camera, group_id=None):
         errors.append(f'{sid}: camera_contract: {message}')
     if not _matches_fingerprint(camera.get('source_fingerprint'), _source_payload(base, ep, shot)):
         fail('source changed; review staging against camera/composition/blocking again')
-    if group_id and not _matches_fingerprint(camera.get('placement_fingerprint'), _placement_payload(base, ep, group_id)):
+    if group_id and not _matches_placement(camera.get('placement_fingerprint'), base, ep, group_id):
         fail('actor/prop/scene placement changed; review framing and occlusion again')
     movement = source.get('movement') or shot.get('camera', {}).get('movement', 'static')
     if camera.get('movement') != movement:
