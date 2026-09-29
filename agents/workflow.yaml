@@ -374,7 +374,7 @@ phases:
           outputs: ["assets/transitions/{ep}/"],
           validation: { auto: [transition_clips_ready], qa: [11-qa/visual-qa] } }   # transition_clips_requested = 本集 shot_list 定稿设计含 establishing(source.mode=i2v)/ bridge 插入段(transition_design.py clips 非空)
       - { id: g7, gate: true, human: true, checkpoint: H3B-视觉生成确认, scope: episode, depends_on: [p7-upscale, p7-transition-clips],
-          validation: { auto: [group_pass_rate_100_waiver_5pct], qa: [human_sample_10pct] } }   # 每集:机检/抽检通过后,用户在「成片发布」页审看本集生成组 clip 并签字,未签字不进 Phase 9 剪辑合成;签字确认的是组内容质量,成片方式(超分路径)仍按 §7B 自动执行不另询问
+          validation: { auto: [group_pass_rate_100_waiver_5pct], qa: [human_sample_10pct] } }   # 每集:机检/抽检通过后,用户在「后期处理」页审看本集生成组 clip 并签字,未签字不进 Phase 9 剪辑合成;签字确认的是组内容质量,成片方式(超分路径)仍按 §7B 自动执行不另询问
 
   - id: p8
     name: 音频        # 音频范式见 WORKFLOW.md §8A:对白/音效/环境声由 Seedance 原生随组视频生成(视频原声,默认);项目「对白配音=后期配音」时对白轨由 p7-dub 按开口时段 TTS 替换(§8C),
