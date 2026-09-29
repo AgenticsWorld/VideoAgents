@@ -2154,7 +2154,6 @@ window.I18N_DICT = {
 
 // 分镜背景图(2026-09-09)
 "分镜背景图": "샷 배경 플레이트",
-"分镜背景图 {ep}/{sid}({role};文件 {file};库 key {key};重出命令 python code/render_shot_plates.py --project {proj} --ep {ep} {sid} --force)": "샷 배경 {ep}/{sid}({role}; 파일 {file}; 라이브러리 키 {key}; 재생성: python code/render_shot_plates.py --project {proj} --ep {ep} {sid} --force)",
 "对这张分镜背景图提修改意见,发消息给总制片": "이 배경 플레이트에 대한 수정 의견을 프로듀서에게 보내기",
 "起点": "시작",
 "终点": "끝",

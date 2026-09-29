@@ -2154,7 +2154,6 @@ window.I18N_DICT = {
 
 // 分镜背景图(2026-09-09)
 "分镜背景图": "Latar belakang shot",
-"分镜背景图 {ep}/{sid}({role};文件 {file};库 key {key};重出命令 python code/render_shot_plates.py --project {proj} --ep {ep} {sid} --force)": "Latar shot {ep}/{sid} ({role}; berkas {file}; kunci pustaka {key}; buat ulang: python code/render_shot_plates.py --project {proj} --ep {ep} {sid} --force)",
 "对这张分镜背景图提修改意见,发消息给总制片": "Kirim catatan revisi untuk latar ini ke Produser",
 "起点": "Awal",
 "终点": "Akhir",

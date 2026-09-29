@@ -43,6 +43,7 @@ Agent 须原文上报,请用户到控制台「🎨 生成模型」换图像模�
   本脚本必须在派发任务内前台同步跑完;禁止 nohup/&/后台派发;每出一张即打印 saved: 并按镜落盘索引与库,
   中途被杀不丢已出图,重跑自动续;长集用 --max-new 分批,退出码 3 表示还有待出,继续在前台跑;结单前跑 --status 作验收依据。
 """
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -66,8 +67,10 @@ def main():
         ap.add_argument('--max-new', type=int, default=None, help='本次最多新出 N 张后停止(索引已按镜落盘);还有待出图时退出码 3,Agent 在前台循环再跑直到 0')
         ap.add_argument('--status', action='store_true', help='机检 shot_plates_complete:逐镜覆盖状态(ok/partial/missing/stale),有问题退出码 1;验收以此为准')
         ap.add_argument('--repano', action='store_true', help='集索引里仍指向 legacy(非全景制)库图的镜视为需重做,按全景制重出(有费用,仅用户明确要求时)')
-        ap.add_argument('--grid-fallback', action='store_true', help='九宫格模式补图(2026-09-26 试验):最近格朝向/俯仰/距离/机高任一分量超限的镜,'
-                        '改以俯视图 + 九宫格整图为参考按本镜机位单独出图(相近机位复用);索引里已用不合适格子的镜也会重新决策(有费用,仅用户明确要求时)')
+        ap.add_argument('--grid-fallback', action=argparse.BooleanOptionalAction, default=True,
+                        help='九宫格模式补图(2026-09-26 起为默认流程,--no-grid-fallback 关闭):最近格朝向/俯仰/距离/机高任一分量超限的镜,'
+                        '改以俯视图 + 九宫格整图为参考按本镜机位单独出图(相近机位复用);索引里已用不合适格子的镜也会重新决策(不动已出宫格)。'
+                        '补图开着时 --force 只重出目标镜的补图,要重出整张宫格须显式 --no-grid-fallback --force(覆盖该方案全部 9 格,影响同场景其它镜)')
     args, base = parse_args(__doc__, configure=configure)
     reexec_with_host_python()   # 缺 Playwright 时换宿主解释器重跑(_common)
     ep = component(args.ep)
