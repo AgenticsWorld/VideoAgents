@@ -6837,8 +6837,16 @@ def _check_id_digits(*paths):
                     raise RuntimeError(
                         f"输出路径段 {part!r} 编号位数不合规(grpsh_id_3digits):"
                         f" 本项目为预留插入位编号制,grp/sh 编号固定四位零填充(首次编号 {m.group(1)}0010、"
-                        f"{m.group(1)}0020…,插入用 {m.group(1)}0011),须与 shot_list 的 group_id/shot_id "
-                        f"逐字符一致(完整路径 {path})")
+                        f"{m.group(1)}0020…;插入组/镜请用相邻编号 +1,如 {m.group(1)}0010 后插 {m.group(1)}0011,"
+                        f"不支持子组号),须与 shot_list 的 group_id/shot_id 逐字符一致(完整路径 {path})")
+            elif len(m.group(2)) > 3 and int(m.group(2)) < 1000:
+                # #86:逐一制存量项目里的四位号多半是拆组插入拼出的「原组号+序号」(grp0052 = grp005 后插第 2 个),
+                # 补零式正名(grp052)会把它误导成第 52 组,不给
+                raise RuntimeError(
+                    f"输出路径段 {part!r} 编号位数不合规(grpsh_id_3digits):"
+                    f" 本项目为逐一编号制,grp/sh 编号固定三位零填充,不支持子组号/四位号。"
+                    f"插入组请用相邻组号 +1(预留插入位制);逐一编号的存量项目无插入位,请取末尾空号"
+                    f"(本集现有最大编号 +1)作新号,并与 shot_list 的 group_id/shot_id 逐字符一致(完整路径 {path})")
             elif len(m.group(2)) != 3 and int(m.group(2)) < 1000:
                 fixed = f"{m.group(1)}{int(m.group(2)):03d}{part[m.end():]}"
                 raise RuntimeError(
