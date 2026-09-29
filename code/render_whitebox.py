@@ -61,10 +61,7 @@ def main():
                       'issues_text':format_summary(summary)},ensure_ascii=False),flush=True)
     if errors:return 1
     if args.check_only:return 0
-    output=base/'directing'/args.ep/'whitebox';output.mkdir(parents=True,exist_ok=True)
-    (output/'episode.json').write_text(json.dumps(episode,ensure_ascii=False,indent=2),encoding='utf-8')
-    for sid,scene in episode['scenes'].items():
-        (base/'assets/concepts/scenes'/sid/'whitebox.scene.json').write_text(json.dumps(scene,ensure_ascii=False,indent=2),encoding='utf-8')
+    # 核验模式只读(#85):在内存里算指纹比对,不落盘 episode.json / whitebox.scene.json,不导出、不接线
     if args.verify_export:
         from modules.whitebox_export import fingerprint
         report={}
@@ -80,6 +77,10 @@ def main():
         print(json.dumps({'whitebox_videos_exported':{'groups':len(report),'ok':len(report)-len(bad),'problems':bad}},ensure_ascii=False),flush=True)
         print(f"[whitebox_videos_exported] {args.project}/{args.ep}: {len(bad)} 组缺/过期 -> {'FAIL' if bad else 'PASS'}",flush=True)
         return 1 if bad else 0
+    output=base/'directing'/args.ep/'whitebox';output.mkdir(parents=True,exist_ok=True)
+    (output/'episode.json').write_text(json.dumps(episode,ensure_ascii=False,indent=2),encoding='utf-8')
+    for sid,scene in episode['scenes'].items():
+        (base/'assets/concepts/scenes'/sid/'whitebox.scene.json').write_text(json.dumps(scene,ensure_ascii=False,indent=2),encoding='utf-8')
     if args.stills:
         from modules.whitebox_stills import render_stills
         sheets=render_stills(base,episode,sorted(selected) if scoped else None,progress=lambda gid:print(f'{gid}: stills ok',flush=True))
