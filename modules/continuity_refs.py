@@ -92,6 +92,21 @@ def video_caps(model, provider, cfg=None):
     return None
 
 
+def scenes_parent_child(base, a, b):
+    """两个场景 ID 是否直接父子(bible/scenes/index.json 的 parent 或 sub_scenes,任一方向登记即算);同 ID / 缺 ID = False。"""
+    if not a or not b or a == b:
+        return False
+    from modules.scene_int_ext import load_index
+    index = load_index(Path(base))
+
+    def subs(e):
+        return {x if isinstance(x, str) else (x.get('id') if isinstance(x, dict) else None)
+                for x in ((e or {}).get('sub_scenes') or [])} - {None}
+
+    ea, eb = index.get(a) or {}, index.get(b) or {}
+    return (ea.get('parent') == b or eb.get('parent') == a or a in subs(eb) or b in subs(ea))
+
+
 def plan(base, ep, gid, prepare=False, budget=None):
     base = Path(base)
     ep, gid = component(ep), component(gid)
@@ -115,8 +130,13 @@ def plan(base, ep, gid, prepare=False, budget=None):
     if tr.get('from_group') and tr['from_group'] != prev['group_id']:
         raise ValueError(f'{gid}: continuity 前组与实际组序不符')
     transition = (group.get('transition_in') or tr.get('transition') or {}).get('type', 'hard_cut')
-    if (tr.get('anchor') == 'none' or tr.get('same_scene') is False
-            or group.get('scene_id') != prev.get('scene_id')
+    # 父子场景连续组界白名单(#71):一条连续运镜从父场景推进到它的直接子场景(或反向)被拆成两组时,
+    # continuity 显式标 anchor=last_frame + boundary_type=continuous 即按同场景口径续接(覆盖 same_scene:false);
+    # anchor 是规划标注,与连接方式(尾帧图片/尾段视频,由设置决定)无关,两种模式同样放行。兄弟场景、非 continuous 一律维持断点
+    parent_child = (tr.get('anchor') == 'last_frame' and tr.get('boundary_type') == 'continuous'
+                    and scenes_parent_child(base, group.get('scene_id'), prev.get('scene_id')))
+    if (tr.get('anchor') == 'none' or (tr.get('same_scene') is False and not parent_child)
+            or (group.get('scene_id') != prev.get('scene_id') and not parent_child)
             or transition not in ('hard_cut', 'match_cut', 'smash_cut')):
         result['reason'] = '跨场景、转场或显式断点'
         return result
