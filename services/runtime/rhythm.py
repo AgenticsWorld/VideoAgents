@@ -143,6 +143,8 @@ def parse_section(text: str) -> dict:
     import re
     pat = re.compile(r"^###\s*(单集节奏|跨集节奏)\s*[::]\s*(.*)$", re.M)
     marks = list(pat.finditer(text))
+    # #68:解析不出 `### <层>:` 结构(手写正文)或首个标题前有散文 → 原文按单集自定义兜底保留,不得丢
+    lead = text[:marks[0].start()].strip() if marks else text
     for i, m in enumerate(marks):
         label, name = m.group(1), m.group(2).strip()
         body = text[m.end():marks[i + 1].start() if i + 1 < len(marks) else len(text)].strip()
@@ -155,4 +157,13 @@ def parse_section(text: str) -> dict:
             out[kind] = CUSTOM_ID
             # 名字不认识且不是「自定义」:把名字并回正文,避免丢信息
             out[f"{kind}_custom"] = body if name == CUSTOM_NAME else f"{name}\n{body}".strip()
+    if lead:
+        ep = out["episode"]
+        if ep and ep != CUSTOM_ID:            # 目录节奏被散文前缀:并成自定义,名字与散文都留下
+            it = _find(EPISODE_RHYTHMS, "id", ep)
+            prev = f"{it['name']}\n节拍链:{it['beats']}" if it else ""
+        else:
+            prev = out["episode_custom"]
+        out["episode"] = CUSTOM_ID
+        out["episode_custom"] = "\n\n".join(x for x in (lead, prev) if x)
     return out

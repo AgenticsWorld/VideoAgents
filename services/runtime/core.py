@@ -12116,37 +12116,87 @@ STYLE_SECTION = "## 设计风格"
 RHYTHM_SECTION = "## 叙事节奏"   # 2026-09-07:单集/跨集叙事节奏,正文=节拍链文本(目录见 services/runtime/rhythm.py)
 
 
+# 2026-09-29(#68):小节标题按整行匹配(旧版 text.find 前缀匹配会把「## 叙事节奏规约…」误当节奏小节,
+# 保存时连带吞掉其后的自定义小节)。未知 `## ` 小节原样保留:
+# 跟在主要构想/设计风格(或开头无标题正文)之后的并入该小节正文(与旧行为一致,页面可见可改,原文回写);
+# 跟在叙事节奏之后的不能并入(节奏正文会被规范化重写),单独作为节奏尾随原文在 format 时写回原位。
+_BRIEF_H2_RE = re.compile(r"^##(?!#)[ \t]*(.*?)[ \t]*$", re.M)
+_BRIEF_KEYS = {BRIEF_SECTION[3:]: "brief", STYLE_SECTION[3:]: "style", RHYTHM_SECTION[3:]: "rhythm"}
+
+
+def _strip_brief_header(text: str) -> str:
+    text = (text or "").strip()
+    first, _, rest = text.partition("\n")
+    if first.strip() == BRIEF_HEADER:
+        return rest.strip()
+    return text
+
+
+def parse_brief_layout(text: str) -> tuple:
+    """brief.md 正文 → (主要构想, 设计风格, 叙事节奏结构, 版式)。版式 = {"order": [小节键…], "rhythm_tail": 原文},
+    交给 format_brief(layout=) 回写以保持小节位置与未知小节原文。"""
+    text = _strip_brief_header(text)
+    heads = list(_BRIEF_H2_RE.finditer(text))
+    chunks = {"brief": [], "style": [], "rhythm": []}
+    order, tail = [], []
+    cur = None
+    pre = (text[:heads[0].start()] if heads else text).strip()
+    if pre:
+        cur = "brief"
+        order.append(cur)
+        chunks[cur].append(pre)
+    for i, m in enumerate(heads):
+        end = heads[i + 1].start() if i + 1 < len(heads) else len(text)
+        key = _BRIEF_KEYS.get(m.group(1))
+        if key and key not in order:
+            cur = key
+            order.append(key)
+            chunks[key].append(text[m.end():end].strip())
+            continue
+        raw = text[m.start():end].strip()
+        if cur == "rhythm":
+            tail.append(raw)
+        else:
+            if cur is None:                   # 首个标题即未知小节:与旧格式一致归入主要构想
+                cur = "brief"
+                order.append(cur)
+            chunks[cur].append(raw)
+    join = lambda xs: "\n\n".join(x for x in xs if x)
+    rhythm = narrative_rhythm.parse_section(join(chunks["rhythm"]))
+    return join(chunks["brief"]), join(chunks["style"]), rhythm, {"order": order, "rhythm_tail": join(tail)}
+
+
 def parse_brief(text: str) -> tuple:
     """brief.md 正文 → (主要构想, 设计风格, 叙事节奏结构)。兼容旧格式(无小节标题=全文即主要构想)。
 
     叙事节奏结构 = rhythm.normalize 形状 {episode, episode_custom, season, season_custom}。
-    小节顺序不限:按各小节标题出现位置切分。"""
-    text = (text or "").strip()
-    if text.startswith(BRIEF_HEADER):
-        text = text[len(BRIEF_HEADER):].strip()
-    marks = sorted((i, sec) for sec in (STYLE_SECTION, RHYTHM_SECTION)
-                   if (i := text.find(sec)) >= 0)
-    parts = {}
-    end = len(text)
-    for i, sec in reversed(marks):
-        parts[sec] = text[i + len(sec):end].strip()
-        end = i
-    brief = text[:end].strip()
-    if brief.startswith(BRIEF_SECTION):
-        brief = brief[len(BRIEF_SECTION):].strip()
-    return brief, parts.get(STYLE_SECTION, ""), narrative_rhythm.parse_section(parts.get(RHYTHM_SECTION, ""))
+    小节顺序不限:按各小节标题(整行)出现位置切分;未知小节规则见 parse_brief_layout。"""
+    return parse_brief_layout(text)[:3]
 
 
-def format_brief(brief: str, style: str, rhythm: dict | None = None) -> str:
-    """(主要构想, 设计风格, 叙事节奏) → brief.md 全文;三者皆空返回 ''(表示应删除文件)。"""
-    parts = [BRIEF_HEADER]
-    if brief:
-        parts.append(f"{BRIEF_SECTION}\n\n{brief}")
-    if style:
-        parts.append(f"{STYLE_SECTION}\n\n{style}")
+def format_brief(brief: str, style: str, rhythm: dict | None = None, layout: dict | None = None) -> str:
+    """(主要构想, 设计风格, 叙事节奏) → brief.md 全文;全空(且无保留原文)返回 ''(表示应删除文件)。
+    layout 为 parse_brief_layout 回读的版式:按原小节顺序回写,叙事节奏之后的未知小节原文照写。"""
+    order = list((layout or {}).get("order") or [])
+    tail = str((layout or {}).get("rhythm_tail") or "").strip()
+    if "brief" not in order:
+        order.insert(0, "brief")
+    if "style" not in order:
+        order.insert(order.index("brief") + 1, "style")
+    if "rhythm" not in order:
+        order.append("rhythm")
     rhythm_text = narrative_rhythm.format_section(rhythm)
-    if rhythm_text:
-        parts.append(f"{RHYTHM_SECTION}\n\n{rhythm_text}")
+    parts = [BRIEF_HEADER]
+    for key in order:
+        if key == "brief" and brief:
+            parts.append(f"{BRIEF_SECTION}\n\n{brief}")
+        elif key == "style" and style:
+            parts.append(f"{STYLE_SECTION}\n\n{style}")
+        elif key == "rhythm":
+            if rhythm_text:
+                parts.append(f"{RHYTHM_SECTION}\n\n{rhythm_text}")
+            if tail:
+                parts.append(tail)
     return "\n\n".join(parts) + "\n" if len(parts) > 1 else ""
 
 
@@ -12170,12 +12220,15 @@ async def api_brief_set(body: dict):
         raise ServiceError(404, f"Project not found: {project}")
     p = PROJECTS_DIR / project / "brief.md"
     old = p.read_text().strip() if p.is_file() else ""
-    cur_brief, cur_style, cur_rhythm = parse_brief(old)
+    cur_brief, cur_style, cur_rhythm, layout = parse_brief_layout(old)
     brief = str(body.get("brief") or "").strip() if "brief" in body else cur_brief
     style = str(body.get("style") or "").strip() if "style" in body else cur_style
     rhythm = (narrative_rhythm.normalize(body.get("rhythm") if isinstance(body.get("rhythm"), dict) else None)
               if "rhythm" in body else cur_rhythm)
-    text = format_brief(brief, style, rhythm)
+    text = format_brief(brief, style, rhythm, layout)
+    # #68 守卫:叙事节奏之后的保留原文必须一字不差回写,否则拒绝写入(宁可报错也不静默丢数据)
+    if layout["rhythm_tail"] and parse_brief_layout(text)[3]["rhythm_tail"] != layout["rhythm_tail"]:
+        raise ServiceError(500, "brief.md 保存中止:叙事节奏之后的自定义小节回写不一致,已拒绝写入以免丢失内容")
     if text:
         p.write_text(text)
     elif p.is_file():
