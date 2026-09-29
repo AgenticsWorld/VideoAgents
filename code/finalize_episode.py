@@ -130,11 +130,12 @@ def find_cut(proj, ep, override=None):
         if not p.is_file():
             raise SystemExit(f"[FAIL] 正片不存在:{p}")
         return p
-    cands = sorted(ed.glob("cut_v*.mp4"),
-                   key=lambda p: int(re.search(r"cut_v(\d+)", p.name).group(1)))
-    if not cands:
+    # 无 --cut:与 render_captions / caption_timeline 同一口径(timemap_layers.resolve_cut,#79)——台账记录的正片优先,
+    # 台账过期/被写坏时改取后期拼片 cut_post_v2 / cut_post(须有后期证据)或更新的 cut_v*
+    cut = resolve_cut(proj, ep)
+    if cut is None:
         raise SystemExit(f"[FAIL] {ed} 下没有 cut_v*.mp4(edit 粗剪/transition 产物)")
-    return cands[-1]
+    return cut
 
 
 def find_audio(proj, ep, override=None):
@@ -192,7 +193,7 @@ def _declared_duration(placement, seg):
     return None, node.get("file")
 
 
-from timemap_layers import load_timemap, _apply_mix_basis  # noqa: E402,F401  2026-09-25 抽到 modules/,与 render_captions 共用
+from timemap_layers import load_timemap, _apply_mix_basis, resolve_cut  # noqa: E402,F401  2026-09-25 抽到 modules/,与 render_captions 共用
 
 
 def load_episode_close(proj, ep, cut):
@@ -248,6 +249,8 @@ def resolve_layout(proj, ep, layout, cut_override=None, audio_override=None, not
     for name in layout:
         if name == "cut":
             cut = find_cut(proj, ep, cut_override)
+            if not cut_override:
+                notes.append(f"正片未指定 --cut,自动解析为 {cut.name}(台账 final_layout.json 优先,台账过期时取后期拼片 cut_post*/更新的 cut_v*)")
             audio = find_audio(proj, ep, audio_override)
             ops, tm_info = load_timemap(proj, ep, cut, notes, audio_used=audio is not None)
             audio_src = audio
@@ -708,7 +711,8 @@ def main(argv=None):
         ap.add_argument("cmd", choices=("probe", "shift", "assemble", "check"))
         ap.add_argument("--layout", default=",".join(SEGMENTS),
                         help="段序,默认 intro,cut,outro,teaser(禁用/缺失的段自动跳过)")
-        ap.add_argument("--cut", default=None, help="正片文件(默认 edit/epNN/ 下版本号最高的 cut_v*.mp4)")
+        ap.add_argument("--cut", default=None, help="正片文件(默认按 timemap_layers.resolve_cut:台账 final_layout.json 记录的正片优先,"
+                             "有后期拼片时取 cut_post_v2/cut_post,否则最新 cut_v*;与花字 render_captions 同口径)")
         ap.add_argument("--audio", default=None,
                         help="外挂声轨(默认 assets/audio/final/epNN.wav;'none' = 用正片自带音轨)")
         ap.add_argument("--final", default=None, help="check:成片文件(默认 final.mp4,退回最新 *final*.mp4)")

@@ -10,7 +10,8 @@ finalize_episode.py(终版封装)与 render_captions.py(花字版:speech-align �
 本模块只做决定与换算,不碰文件;两个 CLI 调同一份代码,口径不会分叉。
 
   load_timemap(proj, ep, cut, notes, audio_used)  → (ops, info):ops = 字幕(原基准)→ cut 的总表;info["audio_ops"] = 外挂声轨 → cut 的表
-  resolve_cut(proj, ep)                            → 干净版成片所封装的正片文件(final_layout.json 记录的 cut 优先,其次 cut_post_v2 / cut_post / 最新 cut_v*)
+  resolve_cut(proj, ep)                            → 干净版成片所封装的正片文件(final_layout.json 记录的 cut 优先,台账过期/被写坏时
+                                                     改取后期拼片 cut_post_v2 / cut_post 或更新的 cut_v*;finalize_episode 不带 --cut 也用它)
   cut_offset_s(proj, ep)                           → 片头偏移(final_layout.json#cut_offset_s;无台账 = 0)
 """
 from __future__ import annotations
@@ -26,27 +27,87 @@ except ImportError:  # 服务端以 modules.* 包路径导入时
     from modules import mix_manifest, timemap
 
 
-def resolve_cut(proj: Path, ep: str) -> Path | None:
-    """干净版成片所用的正片:final_layout.json 的 cut 段(finalize 写)优先;否则按 post_apply.finalize 的选择顺序。"""
-    proj = Path(proj)
-    ed = proj / "edit" / ep
+def _ledger_cut(proj: Path, ed: Path) -> Path | None:
     lay = ed / "final_layout.json"
-    if lay.is_file():
+    if not lay.is_file():
+        return None
+    try:
+        d = json.loads(lay.read_text(encoding="utf-8"))
+        for s in d.get("segments") or []:
+            if s.get("name") == "cut" and s.get("file") and (proj / s["file"]).is_file():
+                return proj / s["file"]
+        c = (d.get("timemap") or {}).get("cut")
+        if c and (proj / c).is_file():
+            return proj / c
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def _post_cut(ed: Path) -> Path | None:
+    """后期拼片(post_apply finalize 的正片选择顺序 cut_post_v2 → cut_post);仅在有后期证据时返回:
+    timeline.json 带 post 节(sync-timeline 写)或存在 cut_post_v2.mp4(只由 post_apply finalize 产出)。
+    单跑 build-cut 只出 cut_post.mp4、不算后期已封装。"""
+    cands = [ed / n for n in ("cut_post_v2.mp4", "cut_post.mp4") if (ed / n).is_file()]
+    if not cands:
+        return None
+    evidence = (ed / "cut_post_v2.mp4").is_file()
+    if not evidence:
         try:
-            d = json.loads(lay.read_text(encoding="utf-8"))
-            for s in d.get("segments") or []:
-                if s.get("name") == "cut" and s.get("file") and (proj / s["file"]).is_file():
-                    return proj / s["file"]
-            c = (d.get("timemap") or {}).get("cut")
-            if c and (proj / c).is_file():
-                return proj / c
+            tl = json.loads((ed / "timeline.json").read_text(encoding="utf-8"))
+            evidence = isinstance(tl.get("post"), dict)
         except Exception:  # noqa: BLE001
-            pass
-    for name in ("cut_post_v2.mp4", "cut_post.mp4"):
-        if (ed / name).is_file():
-            return ed / name
+            evidence = False
+    return cands[0] if evidence else None
+
+
+def _is_post_family(ed: Path, cut: Path) -> bool:
+    """cut 本身是后期拼片,或是 render_transitions 以后期拼片为源的产物。"""
+    if cut.name.startswith("cut_post"):
+        return True
+    tr = ed / "transitions_render.json"
+    if tr.is_file():
+        try:
+            d = json.loads(tr.read_text(encoding="utf-8"))
+            return (bool(d.get("out_cut")) and Path(d["out_cut"]).name == cut.name
+                    and Path(str(d.get("src_cut") or "")).name.startswith("cut_post"))
+        except Exception:  # noqa: BLE001
+            return False
+    return False
+
+
+def _latest_cut_v(ed: Path) -> Path | None:
     cands = sorted(ed.glob("cut_v*.mp4"), key=lambda p: int(re.search(r"cut_v(\d+)", p.name).group(1)))
     return cands[-1] if cands else None
+
+
+def resolve_cut(proj: Path, ep: str) -> Path | None:
+    """干净版成片所用的正片。finalize_episode.py(不带 --cut)与 render_captions / caption_timeline 共用这一个口径(#79):
+      1. 台账 final_layout.json 记录的 cut 段(finalize 写)优先,但以下两种情形视为台账过期/被写坏:
+         a. 有后期证据(见 _post_cut)而台账记的不是后期系正片,且后期拼片不比它旧——兜住「不带 --cut 的 check/probe/shift
+            按最新 cut_v* 把台账回写成原粗剪」的存量;
+         b. 出现了比台账 cut 与 final.mp4 都新的 cut_v*(粗剪/转场已重出、尚未封装)→ 取最新 cut_v*(assemble 默认行为不变);
+      2. 无台账:后期拼片(cut_post_v2 → cut_post,须有后期证据)→ 最新 cut_v*;都没有 = None。"""
+    proj = Path(proj)
+    ed = proj / "edit" / ep
+    led = _ledger_cut(proj, ed)
+    post = _post_cut(ed)
+    latest_v = _latest_cut_v(ed)
+    if led is None:
+        return post or latest_v
+    if _is_post_family(ed, led):
+        return led
+
+    def mt(p: Path) -> float:
+        return p.stat().st_mtime
+
+    if post is not None and mt(post) >= mt(led) - 1.0:
+        return post
+    if latest_v is not None and latest_v != led and mt(latest_v) > mt(led):
+        fin = ed / "final.mp4"
+        if not fin.is_file() or mt(latest_v) > mt(fin):
+            return latest_v
+    return led
 
 
 def cut_offset_s(proj: Path, ep: str) -> float:

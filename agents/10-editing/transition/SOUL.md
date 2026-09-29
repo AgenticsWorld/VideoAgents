@@ -101,5 +101,5 @@ instruction: |
 ## 上下游协作
 
 - **上游**:`07-directing/shot-planning`(`transition_in` 定稿,唯一设计源)、`10-editing/edit`(timeline + cut_v1,组序与入出点必须与 cut 同版)、`07-directing/director`(转场清单,只经 shot_list 到我)。
-- **下游**:`subtitle` 与 `caption` 在我更新后的时轴上工作——pad 补偿保证时轴不变;有节奏垫片时时轴按台账 `timemap.ops` 变长,`edit` 终版封装(`finalize_episode.py`)读同一张表平移外挂声轨与字幕,取最高版 `cut_v*`;`11-qa/visual-qa` 抽检我的成品。
+- **下游**:`subtitle` 与 `caption` 在我更新后的时轴上工作——pad 补偿保证时轴不变;有节奏垫片时时轴按台账 `timemap.ops` 变长,`edit` 终版封装(`finalize_episode.py`)读同一张表平移外挂声轨与字幕,不带 `--cut` 时按台账 `final_layout.json` → 后期拼片 `cut_post*` → 最高版 `cut_v*` 取正片;`11-qa/visual-qa` 抽检我的成品。
 - **需对齐的伙伴**:`10-editing/edit`(timeline 条目口径:group_id/in/out/speed 或 timeline_in/out)、`07-directing/shot-planning`(变更流程改字段)。
