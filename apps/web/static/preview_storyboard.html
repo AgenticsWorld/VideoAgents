@@ -297,7 +297,8 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 #ar-modal .actions{display:flex;gap:8px;justify-content:flex-end;flex:none}
 #ar-modal #ar-ok:disabled{opacity:.5;cursor:default}
 /* 🔁 换分镜背景图弹窗(2026-09-23):列本场景背景图库全部图,点选一张替换本镜起点/终点背景图 */
-#pw-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:98}
+/* 靠左停靠(2026-09-29):不居中,让出右侧白模面板,选图时对照白模;宽度上限由 openPlateSwap 按本组白模栏左缘收窄 */
+#pw-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:flex-start;padding-left:16px;z-index:98}
 #pw-modal .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 24px;width:820px;max-width:94vw;height:80vh;display:flex;flex-direction:column}
 #pw-modal .cnt{font-size:12px;font-weight:400;margin-left:10px;color:var(--dim)}
 #pw-modal .hint{color:var(--dim);font-size:12.5px;margin-top:6px;line-height:1.6;flex:none}
@@ -1010,8 +1011,12 @@ async function copyId(btn){
 let PW_SHOT='',PW_ROLE='start',PW_KEY='',PW_SEL='';
 const pwMsg=m=>{$('#pw-err').textContent=m||''};
 function pwOkState(){$('#pw-ok').disabled=!PW_SEL||PW_SEL===PW_KEY}
-async function openPlateSwap(shot,role,key){
+async function openPlateSwap(shot,role,key,btn){
   PW_SHOT=shot;PW_ROLE=role||'start';PW_KEY=key||'';PW_SEL='';pwOkState();pwMsg('');
+  // 弹窗右缘收到本组白模面板左缘之内,不盖住白模;无白模栏 / 窄屏上下堆叠 / 左栏过窄时保持默认宽度
+  const box=$('#pw-modal .box'),wb=btn&&btn.closest('.gshots')?.querySelector('.wb-host');
+  const wbL=wb?wb.getBoundingClientRect().left:0;
+  box.style.maxWidth=wbL>=16+420+12?(wbL-16-12)+'px':'';
   $('#pw-shot').textContent=shot+' · '+(PW_ROLE==='end'?t('终点'):t('起点'));
   $('#pw-count').textContent='';$('#pw-cur').innerHTML='';
   $('#pw-imgs').innerHTML='<div class="ph">'+t('加载中…')+'</div>';
@@ -1065,7 +1070,7 @@ document.addEventListener('click',async e=>{
   const cp=e.target.closest('.cpid');
   if(cp){e.preventDefault();e.stopPropagation();return copyId(cp)}
   const pw=e.target.closest('.plswap');
-  if(pw)return openPlateSwap(pw.dataset.shot,pw.dataset.role,pw.dataset.key);
+  if(pw)return openPlateSwap(pw.dataset.shot,pw.dataset.role,pw.dataset.key,pw);
   const pb=e.target.closest('.promptbtn');
   if(pb)return openPrompt(pb.dataset.grp);
   const rb=e.target.closest('.refpickbtn');
