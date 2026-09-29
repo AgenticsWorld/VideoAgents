@@ -125,11 +125,16 @@ export class WhiteboxRenderer {
     scene.add(new THREE.HemisphereLight(0xffffff,0x8c968d,2.5));
     const sun=new THREE.DirectionalLight(0xffffff,2);sun.position.set(-8,20,10);scene.add(sun);
     const [w,h,d]=sceneData.dimensions_m;
-    const floor=new THREE.Mesh(new THREE.BoxGeometry(w,.05,d),new THREE.MeshStandardMaterial({color:0xd6ddd3,roughness:1}));
-    floor.position.y=-.05;scene.add(floor);
-    const grid=new THREE.GridHelper(Math.ceil(Math.max(w,d)),Math.ceil(Math.max(w,d)),0xa8b5a5,0xc0cbbd);
-    grid.position.y=.005;scene.add(grid);
-    this.solids=[floor,grid];this.realPlane=null;
+    // 开底/悬空场景(#76):scene.floor==='none' 不生成地面板,scene.grid===false 不生成网格;缺省照旧两者都有
+    this.solids=[];this.realPlane=null;
+    if(sceneData.floor!=='none'){
+      const floor=new THREE.Mesh(new THREE.BoxGeometry(w,.05,d),new THREE.MeshStandardMaterial({color:0xd6ddd3,roughness:1}));
+      floor.name='ground-floor';floor.position.y=-.05;scene.add(floor);this.solids.push(floor);
+    }
+    if(sceneData.grid!==false){
+      const grid=new THREE.GridHelper(Math.ceil(Math.max(w,d)),Math.ceil(Math.max(w,d)),0xa8b5a5,0xc0cbbd);
+      grid.name='ground-grid';grid.position.y=.005;scene.add(grid);this.solids.push(grid);
+    }
     if(this.assetBase&&sceneData.layout_top){
       // 俯视图上北下南左西右东 = 白模 -z 北 / +x 东;PlaneGeometry 绕 X 轴转 -90° 后图片上缘落到 -z
       const plane=new THREE.Mesh(new THREE.PlaneGeometry(w,d),new THREE.MeshBasicMaterial({color:0xffffff}));

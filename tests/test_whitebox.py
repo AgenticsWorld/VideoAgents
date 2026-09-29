@@ -374,6 +374,39 @@ r.disposeScene();
     subprocess.run(['node','--input-type=module','-e',script],check=True,capture_output=True,text=True)
 
 
+def test_open_bottom_scene_floor_and_grid(project):
+    """#76:场景级 floor none / grid false 透传;缺省时场景 JSON 不带这两个键(指纹不变),非法值报错。"""
+    import shutil
+    import subprocess
+    assert 'floor' not in load_scene(project,'SCN-1') and 'grid' not in load_scene(project,'SCN-1')
+    path=project/'bible/scenes/SCN-1/whitebox.json';data=json.loads(path.read_text())
+    write(path,{**data,'floor':'none','grid':False})
+    scene=load_scene(project,'SCN-1');assert scene['floor']=='none' and scene['grid'] is False
+    for bad in [{'floor':'glass'},{'grid':'no'}]:
+        write(path,{**data,**bad})
+        with pytest.raises(ValueError):load_scene(project,'SCN-1')
+    if not shutil.which('node'):pytest.skip('Node unavailable')
+    static=Path(__file__).resolve().parents[1]/'apps/web/static'
+    script='''
+import assert from 'node:assert/strict';
+import * as T from THREE_MODULE;
+import {WhiteboxRenderer} from RENDERER_MODULE;
+function make(extra){const r=Object.create(WhiteboxRenderer.prototype);
+Object.assign(r,{width:960,height:540,scene:null,controls:null,camera:new T.PerspectiveCamera(),overview:new T.PerspectiveCamera(),top:new T.OrthographicCamera()});
+r.load({dimensions_m:[8,3,6],objects:[{id:'wall',size_m:[1,3,.2],position:[0,1.5,0]}],...extra},null);return r;}
+const names=r=>r.solids.map(m=>m.name);
+assert.deepEqual(names(make({})),['ground-floor','ground-grid','wall']);
+const open=make({floor:'none',grid:false});
+assert.deepEqual(names(open),['wall']);
+assert.equal(open.scene.getObjectByName('ground-floor'),undefined);
+assert.equal(open.scene.getObjectByName('ground-grid'),undefined);
+assert.deepEqual(names(make({floor:'none'})),['ground-grid','wall']);
+'''.replace('THREE_MODULE',json.dumps((static/'vendor/three/three.module.js').as_uri()))\
+   .replace('RENDERER_MODULE',json.dumps((static/'whitebox-renderer.js').as_uri()))
+    out=subprocess.run(['node','--input-type=module','-e',script],capture_output=True,text=True)
+    assert out.returncode==0,out.stderr
+
+
 def test_face_direction_follows_actor_turn_pose_and_altitude():
     """Use real Three.js scene graphs without a GPU to check both actor types."""
     import shutil

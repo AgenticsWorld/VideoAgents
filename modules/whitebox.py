@@ -235,7 +235,18 @@ def load_scene(base: Path, sid: str):
             obj['position'] = xyz(obj['xy'], dimensions, obj.get('elevation_m', obj['size_m'][1]/2))
         vector(obj['position'], 'position')
         number(obj.get('yaw', 0), 'yaw')
-    return {'schema_version': 'whitebox_scene.v1', 'scene_id': sid,
+    # 开底/悬空场景(#76):场景级 floor "none"|"slab"(默认 slab)、grid 布尔(默认 true)。只在 whitebox.json
+    # 显式写了才透传,默认场景的 JSON 与指纹不变。
+    ground = {}
+    if 'floor' in authored:
+        if authored['floor'] not in ('none', 'slab'):
+            raise ValueError(f'{sid}: floor must be "none" or "slab"')
+        ground['floor'] = authored['floor']
+    if 'grid' in authored:
+        if not isinstance(authored['grid'], bool):
+            raise ValueError(f'{sid}: grid must be a boolean')
+        ground['grid'] = authored['grid']
+    return {**ground, 'schema_version': 'whitebox_scene.v1', 'scene_id': sid,
             'name': layout.get('scene_name', sid), 'units': 'meters',
             'dimensions_m': dimensions, 'objects': objects,
             'render': render_format(read(base / 'settings.json', {})),
