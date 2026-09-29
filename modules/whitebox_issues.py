@@ -32,6 +32,11 @@ SCHEMA = 'whitebox_decisions.v1'
 _ID_RE = re.compile(r'^WBI-(?P<ep>[A-Za-z0-9_-]+)-(?P<gid>[A-Za-z0-9_-]+)-(?P<seq>\d{3})$')
 
 
+def _issue_id_ok(iid: str, ep: str, gid: str) -> bool:
+    """issue_id 须恰为 WBI-{ep}-{gid}-NNN。ep/gid 已知,按前缀精确比对,不靠 _ID_RE 分组解析。"""
+    return re.fullmatch(re.escape(f'WBI-{ep}-{gid}-') + r'\d{3}', iid) is not None
+
+
 def _text(value, name, limit, required=True):
     if value is None and not required:
         return ''
@@ -62,8 +67,8 @@ def validate_issues(plan: dict, ep: str, gid: str, duration: float, shot_ids: li
         if not isinstance(item, dict):
             raise ValueError(f'{gid}: issues[{index}] must be an object')
         iid = _text(item.get('issue_id'), f'{gid}: issues[{index}].issue_id', 80)
-        m = _ID_RE.match(iid)
-        if not m or m.group('ep') != ep or m.group('gid') != gid:
+        # 已知 ep/gid 前缀精确匹配(#87):_ID_RE 的 ep/gid 都含连字符且贪婪,按组解析会歧义
+        if not _issue_id_ok(iid, ep, gid):
             raise ValueError(f'{gid}: issue_id {iid!r} must look like WBI-{ep}-{gid}-001')
         if iid in seen:
             raise ValueError(f'{gid}: duplicate issue_id {iid}')

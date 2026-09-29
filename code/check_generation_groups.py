@@ -253,8 +253,10 @@ def check(shot_list: dict) -> list[str]:
         real = sum(by_id[x]["duration_s"] for x in gshots if x in by_id)
         if not isinstance(td, int):
             errors.append(f"{gid} duration_int: total_duration_s={td!r} 非整数")
-        elif td != int(round(real)):
-            errors.append(f"{gid} duration_sum: total_duration_s={td} ≠ Σ镜时长 {real:g}")
+        elif abs(td - real) > 0.05:
+            # 与白模编译(modules/whitebox.compile_group)同口径:声明时长须与 Σ镜时长相差 ≤0.05s,
+            # 整数声明 + 小数镜长合计(如 19 vs 18.8)两边都拒,不再出现「这里过、白模编译拒」(#87)
+            errors.append(f"{gid} duration_sum: total_duration_s={td} ≠ Σ镜时长 {real:g}(差须 ≤0.05s)")
         if not (isinstance(td, (int, float)) and MIN_GROUP_S <= td <= MAX_GROUP_S):
             errors.append(f"{gid} duration_range: {td} ∉ [{MIN_GROUP_S},{MAX_GROUP_S}]")
         # 4. 角色数
