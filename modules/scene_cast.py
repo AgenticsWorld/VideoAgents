@@ -95,6 +95,7 @@ def scene_reference_rows(base: Path, ep: str, source, contexts=None):
         for row in read_json(base/'bible'/kind/'index.json', {}).get(key, []):
             names[row['id']] = row.get('canonical_name') or row.get('name') or row['id']
     result = {}
+    wardrobe = None   # bible/costumes.json 归一结果,首次需要时读
     for index, group in enumerate(groups):
         gid = group['group_id']; context = contexts[gid]
         peers = sorted((i for i, g in enumerate(groups) if contexts[g['group_id']]['key'] == context['key']),
@@ -122,6 +123,11 @@ def scene_reference_rows(base: Path, ep: str, source, contexts=None):
                 sheet = next((r for r in ledger.get('sheets', []) if r.get('costume_ref') == costume), {})
                 if sheet.get('file'):
                     candidates.append(prefix+sheet['file'])
+                # #59:默认装(或该角色只有这一套)按 SOUL 取 sheet.png;台账未命中时回落。非默认装缺图照报缺
+                if wardrobe is None:
+                    wardrobe = costume_wardrobe(base)
+                if is_default_costume(wardrobe, cid, costume):
+                    candidates.append(prefix+'sheet.png')
             else:
                 for i in peers:
                     candidates.extend(r for r in prompts[groups[i]['group_id']].get('refs', [])
@@ -132,6 +138,88 @@ def scene_reference_rows(base: Path, ep: str, source, contexts=None):
                          'missing': ref is None})
         result[gid] = rows
     return result
+
+
+_ACTOR_ID_RE = re.compile(r'(CHAR|CRE)-[A-Za-z0-9_-]+')
+_COSTUME_LIST_KEYS = {'costumes', 'outfits', 'entries', 'wardrobe', 'looks'}
+_DEFAULT_PTR_KEYS = ('default_outfit_id', 'default_outfit', 'default_costume', 'default_costume_id')
+_TRUE_WORDS = {'true', 'yes', 'y', '1', 'default', '是'}
+
+
+def _is_actor_id(v):
+    return isinstance(v, str) and bool(_ACTOR_ID_RE.fullmatch(v))
+
+
+def _truthy(v):
+    return v is True or (isinstance(v, (int, float)) and not isinstance(v, bool) and v == 1) \
+        or (isinstance(v, str) and v.strip().lower() in _TRUE_WORDS)
+
+
+def costume_wardrobe(base: Path) -> dict:
+    """bible/costumes.json → {角色 id: {'costumes': {套装 id}, 'defaults': {默认套装 id}}}。
+
+    各项目结构不一(顶层 costumes[] 带 character/character_ref/character_id;characters[] 内嵌 outfits[]
+    + default_outfit(_id);character_bindings[] 的 default 为套装 id;dict 以 CHAR-/COS- 为键…),
+    这里宽容遍历:归属取自身或最近祖先的角色字段,套装只认 costumes/outfits/entries 等列表(或以 id 为键的字典)
+    里带 id 的条目,默认标记认 default/is_default 真值与 default_* 指针。读不到/解析失败返回 {}。"""
+    try:
+        doc = json.loads((base/'bible'/'costumes.json').read_text(encoding='utf-8'))
+    except Exception:
+        return {}
+    out = {}
+
+    def slot(owner):
+        return out.setdefault(owner, {'costumes': set(), 'defaults': set()})
+
+    def owner_of(d, parent_key):
+        for k in ('character_id', 'character_ref', 'character', 'char_id', 'owner'):
+            if _is_actor_id(d.get(k)):
+                return d[k]
+        # 套装条目的 id 常以角色编号打头(CHAR-0001_daily_01),套装列表里的 id 不当角色
+        if parent_key not in _COSTUME_LIST_KEYS and _is_actor_id(d.get('id')):
+            return d['id']
+        return None
+
+    def walk(node, owner, parent_key=None, implicit_id=None):
+        if isinstance(node, list):
+            for item in node:
+                walk(item, owner, parent_key)
+            return
+        if not isinstance(node, dict):
+            return
+        own = owner_of(node, parent_key) or owner
+        cos_id = node.get('id') or node.get('outfit_id') or node.get('costume_id') or implicit_id
+        if own and parent_key in _COSTUME_LIST_KEYS and isinstance(cos_id, str) and cos_id and cos_id != own:
+            slot(own)['costumes'].add(cos_id)
+            if _truthy(node.get('default')) or _truthy(node.get('is_default')):
+                slot(own)['defaults'].add(cos_id)
+        if own:
+            for k in _DEFAULT_PTR_KEYS:
+                v = node.get(k)
+                v = v.get('id') if isinstance(v, dict) else v
+                if isinstance(v, str) and v.strip():
+                    slot(own)['defaults'].add(v.strip())
+            # character_bindings 式:{character_id, default: "<套装 id>"}
+            v = node.get('default')
+            if isinstance(v, str) and v.strip() and not _truthy(v) and v.strip().lower() not in ('false', 'no'):
+                slot(own)['defaults'].add(v.strip())
+        for k, v in node.items():
+            if _is_actor_id(k) and isinstance(v, (dict, list)):
+                walk(v, k, k)
+            elif k in _COSTUME_LIST_KEYS and isinstance(v, dict) and all(isinstance(x, dict) for x in v.values()):
+                for kk, vv in v.items():
+                    walk(vv, own, k, kk)
+            elif isinstance(v, (dict, list)):
+                walk(v, own, k)
+
+    walk(doc, None)
+    return out
+
+
+def is_default_costume(wardrobe: dict, cid: str, costume: str) -> bool:
+    """该套装是否为该角色默认装:标了默认,或该角色在 costumes.json 里只登记了这一套。"""
+    entry = (wardrobe or {}).get(cid) or {}
+    return costume in entry.get('defaults', ()) or entry.get('costumes') == {costume}
 
 
 def whitebox_cast(base: Path, ep: str, gid: str):
