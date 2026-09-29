@@ -33,6 +33,15 @@ def palette_color(index):
     return '#%02x%02x%02x' % (round(r * 255), round(g * 255), round(b * 255))
 
 
+def _seq_sum(values):
+    """显式从左到右逐项累加(#63):Python 3.12+ 内置 sum() 对浮点做补偿求和,末位随解释器变化,
+    会让组时长/取景中心进指纹后跨版本判 stale。此处固定为 3.10 的朴素累加语义,不取整(取整会让存量有效导出全体失效)。"""
+    total = 0
+    for value in values:
+        total += value
+    return total
+
+
 def free_color(actors):
     """本组尚未被任何 actor 占用的下一个身份色(仅供整集配色表漏项时兜底)。"""
     used = {a.get('color', '').lower() for a in actors}
@@ -342,7 +351,7 @@ def validate_keys(keys, duration, camera=False):
 def compile_group(base, ep, group, shots, scene, colors=None):
     colors = colors or {}
     gid = component(group['group_id'])
-    duration = sum(number(shots[s]['duration_s'], 'duration_s', .001) for s in group['shots'])
+    duration = _seq_sum(number(shots[s]['duration_s'], 'duration_s', .001) for s in group['shots'])
     declared = group.get('total_duration_s', duration)
     if abs(declared-duration) > .05:
         raise ValueError(f'{gid}: group duration differs from shot durations')
@@ -448,10 +457,10 @@ def compile_group(base, ep, group, shots, scene, colors=None):
             direction = [target[0]-pos[0], target[2]-pos[2]]
             length = math.hypot(*direction) or 1
             low = pos[1] == .25
-            altitude = sum(p[1] for p in centers)/len(centers)
+            altitude = _seq_sum(p[1] for p in centers)/len(centers)
             pos[1] += altitude
-            target = [sum(p[0] for p in centers)/len(centers), altitude + (.16 if low else 1.2),
-                      sum(p[2] for p in centers)/len(centers)]
+            target = [_seq_sum(p[0] for p in centers)/len(centers), altitude + (.16 if low else 1.2),
+                      _seq_sum(p[2] for p in centers)/len(centers)]
             frame_height = {'ECU':.35,'CU':.7,'MCU':1.2,'MS':2.1,'MLS':2.8,'FS':3.4,'WS':5,'EWS':9}.get(shot.get('size_code'),3.4)
             spread = max((math.dist(a,b) for a in centers for b in centers),default=0)
             fmt = scene['render']

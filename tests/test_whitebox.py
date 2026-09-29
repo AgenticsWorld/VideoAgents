@@ -216,6 +216,14 @@ def test_invalid_scale_rejected(project,bad):
     assert compile_episode(project,'ep01')['errors']
 
 
+def test_seq_sum_is_interpreter_independent():
+    # #63:组时长须是朴素左到右累加(3.10 语义),不能随 3.12+ 的补偿 sum() 变,也不能取整。
+    from modules.whitebox import _seq_sum
+    assert _seq_sum([1.8,1.0,2.4,1.8,1.0]) == 7.999999999999999
+    assert _seq_sum([2, 3]) == 5 and isinstance(_seq_sum([2, 3]), int)
+    assert _seq_sum(x for x in []) == 0
+
+
 def test_shot_duration_mismatch(project):
     path,data=source(project);data['generation_groups'][0]['total_duration_s']=7;write(path,data)
     assert 'duration' in compile_episode(project,'ep01')['errors'][0]['error']
@@ -547,6 +555,24 @@ def test_cli_check_only_has_no_export_or_writes(project,monkeypatch):
     monkeypatch.setattr(cli,'ensure_videos',lambda *a,**kw:pytest.fail('check-only exported'))
     assert cli.main()==0
     assert not (project/'directing/ep01/whitebox').exists()
+
+
+def test_cli_verify_export_is_read_only(project,monkeypatch,capsys):
+    """#85:--verify-export 只在内存里比对,不覆盖已落盘的编译 JSON(字节与 mtime 都不变)。"""
+    import os
+    episode_json=project/'directing/ep01/whitebox/episode.json'
+    scene_json=project/'assets/concepts/scenes/SCN-1/whitebox.scene.json'
+    for path in (episode_json,scene_json):
+        path.parent.mkdir(parents=True,exist_ok=True)
+        path.write_text('{"groups": [1.0]}\n',encoding='utf-8')   # 刻意与重编译序列化结果不同
+        os.utime(path,(1_000_000_000,1_000_000_000))
+    before={p:(p.read_bytes(),p.stat().st_mtime_ns) for p in (episode_json,scene_json)}
+    cli=whitebox_cli(monkeypatch,project,'--verify-export')
+    monkeypatch.setattr(cli,'ensure_videos',lambda *a,**kw:pytest.fail('verify-export exported'))
+    monkeypatch.setattr(cli,'sync_episode',lambda *a,**kw:pytest.fail('verify-export synced refs'))
+    assert cli.main()==1   # 无 camera.mp4 → missing
+    assert 'whitebox_videos_exported' in capsys.readouterr().out
+    assert {p:(p.read_bytes(),p.stat().st_mtime_ns) for p in (episode_json,scene_json)}==before
 
 
 def test_scene_update_exports_only_referencing_groups(project,monkeypatch):
