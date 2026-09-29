@@ -3116,9 +3116,8 @@ window.I18N_DICT = {
 "按分类选择资产(🖊 草图=故事板分镜草图,左列本集分镜、右侧该镜草图),点选一张图片加入本组参考图(双击看大图);随本组重出时作为参考图传给视频生成模型": "Choisissez une catégorie (🖊 Croquis = croquis des plans du storyboard : à gauche les plans de l'épisode, à droite les croquis du plan) puis cliquez sur une image pour l'ajouter aux références du groupe (double-clic pour agrandir) ; elle est transmise au modèle vidéo comme référence lors de la régénération de ce groupe",
 "(本集还没有分镜草图:到故事板页「出草图」后再来选)": "(Cet épisode n'a pas encore de croquis de plans : générez-les d'abord sur la page Storyboard)",
 "(本集还没有故事板,没有分镜草图可选)": "(Cet épisode n'a pas encore de storyboard, donc aucun croquis à choisir)",
-// ⧉ 复制 / ⇋ 水平翻转 / ⇅ 垂直翻转分镜背景图(2026-09-28,场景预览页)
-"水平翻转": "Miroir H",
-"垂直翻转": "Miroir V",
+// ⧉ 复制 / ⇋ 翻转分镜背景图(2026-09-28,场景预览页)
+"翻转": "Retourner",
 "复制中…": "Copie…",
 "翻转中…": "Retournement…",
 "已翻转并替换": "Retournée et remplacée",
@@ -3127,7 +3126,6 @@ window.I18N_DICT = {
 "副本(复制自 {k})": "copie (de {k})",
 "创建这张背景图的副本(库里新增一张,原图不动;副本可在分镜预览「换图」里选用)": "Créer une copie de ce décor (nouvelle entrée dans la bibliothèque, l’original reste intact ; la copie peut être choisie via « Changer l’image » dans l’aperçu du storyboard)",
 "水平翻转这张背景图并覆盖原图(再点一次翻回;首次改动保留 .orig 备份)": "Retourner ce décor horizontalement et l’écraser (cliquer à nouveau pour revenir ; la première modification conserve une sauvegarde .orig)",
-"垂直翻转这张背景图并覆盖原图(再点一次翻回;首次改动保留 .orig 备份)": "Retourner ce décor verticalement et l’écraser (cliquer à nouveau pour revenir ; la première modification conserve une sauvegarde .orig)",
 // 分镜剪辑·插黑 / 定格(2026-09-17)
 "插黑 / 定格": "Noir / arrêt",
 "把选中的时间段直接删掉,剩下的内容按原顺序拼成本组新版本(时长变短,出成片时外挂声轨/字幕按时间映射表自动同步)": "Supprime les plages marquées et enchaîne le reste dans l'ordre en une nouvelle version de ce groupe (durée réduite ; à la finalisation, la piste audio externe et les sous-titres sont resynchronisés via la carte temporelle)",

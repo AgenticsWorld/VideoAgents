@@ -166,9 +166,8 @@ ul.arr>li{margin:2px 0}
 .cropbtn.ok,.pcopybtn.ok,.pflipbtn.ok{color:var(--green);border-color:var(--green)}
 .pcopybtn.err,.pflipbtn.err{color:var(--red);border-color:var(--red);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pcopybtn:disabled,.pflipbtn:disabled{opacity:.5;cursor:default}
-/* 裁剪 / 复制 / 水平翻转 / 垂直翻转 单独一行(2026-09-28) */
-.gallery figcaption.pl-ops{flex-wrap:wrap;gap:4px}
-.gallery figcaption.pl-ops button{padding:1px 5px}   /* 四个按钮收紧间距,中文界面稳定排在一行;译文过长的语言自动折行 */
+/* 裁剪 / 复制 / 翻转 单独一行(2026-09-28) */
+.gallery figcaption.pl-ops{flex-wrap:wrap}
 #cropper{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;z-index:100;padding:12px}
 #cropper .cr-bar{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;color:var(--dim);font-size:13px;max-width:92vw;text-align:center}
 #cropper .cr-bar b{color:var(--text);font-weight:600}
@@ -373,12 +372,11 @@ function renderDetail(s){
         const cap=[cam.facing?I18N.f('朝向 {d}',{d:cam.facing}):'',cam.height_m!=null?I18N.f('机高 {h} m',{h:cam.height_m}):'',cam.lens_mm_equiv?`${cam.lens_mm_equiv}mm`:'',p.time_of_day||'',
           src].filter(Boolean).join(' · ');
         // ✂ 裁剪(2026-09-15):手动框选(比例固定为项目画幅)→ 服务端裁切覆盖同一文件;按钮与「修改」分开(不走 .editbtn 的修改师浮窗)
-        // ⧉ 复制 / ⇋ 水平翻转 / ⇅ 垂直翻转(2026-09-28):复制 = 库里新增一张副本;翻转 = 按方向翻转并覆盖这张图。四个按钮单独一行
+        // ⧉ 复制 / ⇋ 翻转(2026-09-28):复制 = 库里新增一张副本;翻转 = 水平翻转并覆盖这张图。三个按钮单独一行
         return `<figure title="${esc(p.key||'')}" data-key="${esc(p.key||'')}"><img src="${esc(bust(p.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption><span class="fn">${esc(cap||p.key||'')}</span></figcaption>`
           +`<figcaption class="pl-ops"><button type="button" class="cropbtn" data-sid="${esc(s.id)}" data-key="${esc(p.key||'')}" title="${esc(t('手动框选区域(比例固定为项目画幅)裁剪这张背景图,确认后覆盖原图'))}">✂ ${esc(t('裁剪'))}</button>`
           +`<button type="button" class="pcopybtn" data-sid="${esc(s.id)}" data-key="${esc(p.key||'')}" title="${esc(t('创建这张背景图的副本(库里新增一张,原图不动;副本可在分镜预览「换图」里选用)'))}">⧉ ${esc(t('复制'))}</button>`
-          +`<button type="button" class="pflipbtn" data-dir="h" data-sid="${esc(s.id)}" data-key="${esc(p.key||'')}" title="${esc(t('水平翻转这张背景图并覆盖原图(再点一次翻回;首次改动保留 .orig 备份)'))}">⇋ ${esc(t('水平翻转'))}</button>`
-          +`<button type="button" class="pflipbtn" data-dir="v" data-sid="${esc(s.id)}" data-key="${esc(p.key||'')}" title="${esc(t('垂直翻转这张背景图并覆盖原图(再点一次翻回;首次改动保留 .orig 备份)'))}">⇅ ${esc(t('垂直翻转'))}</button></figcaption>`
+          +`<button type="button" class="pflipbtn" data-sid="${esc(s.id)}" data-key="${esc(p.key||'')}" title="${esc(t('水平翻转这张背景图并覆盖原图(再点一次翻回;首次改动保留 .orig 备份)'))}">⇋ ${esc(t('翻转'))}</button></figcaption>`
           +`<figcaption><span class="fn">${esc(used?I18N.f('用于分镜:{s}',{s:used}):t('尚未被分镜引用'))}</span></figcaption></figure>`;
       }).join('')+'</div>':`<div class="meta-line">${esc(t('(暂无分镜背景图;白模签字 H3W 并导出后由分镜背景图链生成)'))}</div>`;
     h+=blk('shot_plates',`🎦 ${esc(t('分镜背景图'))} <span class="cnt">${esc(I18N.f('{n} 张',{n:plates.length}))}</span>`
@@ -898,8 +896,8 @@ document.addEventListener('click',e=>{
   openCrop(b.dataset.sid,b.dataset.key,bust(pl.url));
 });
 
-// ⧉ 复制 / ⇋ 水平翻转 / ⇅ 垂直翻转分镜背景图(2026-09-28):POST scenes/<sid>/plates/copy {key} | flip {key, direction: h|v}。
-// 复制 → 库里新增副本 <key>_copyN,重取预览数据原位重绘并高亮新图;翻转 → 服务端按方向翻转覆盖原图,原地换图不整页重载。
+// ⧉ 复制 / ⇋ 翻转分镜背景图(2026-09-28):POST scenes/<sid>/plates/copy|flip {key}。
+// 复制 → 库里新增副本 <key>_copyN,重取预览数据原位重绘并高亮新图;翻转 → 服务端水平翻转覆盖原图,原地换图不整页重载。
 function plateBtnFlash(b,cls,txt,restore,tip){
   const tip0=b.title;
   b.classList.add(cls);b.textContent=txt;if(tip)b.title=tip;
@@ -910,12 +908,11 @@ document.addEventListener('click',async e=>{
   if(!b||!b.dataset.key||b.disabled)return;
   const flip=b.classList.contains('pflipbtn');
   const sid=b.dataset.sid,key=b.dataset.key,proj=$('#project').value.trim()||'demo';
-  const vert=flip&&b.dataset.dir==='v';
-  const label=flip?(vert?'⇅ '+t('垂直翻转'):'⇋ '+t('水平翻转')):'⧉ '+t('复制');
+  const label=flip?'⇋ '+t('翻转'):'⧉ '+t('复制');
   b.disabled=true;b.textContent=flip?t('翻转中…'):t('复制中…');
   try{
     const r=await fetch(`/api/v1/projects/${encodeURIComponent(proj)}/scenes/${encodeURIComponent(sid)}/plates/${flip?'flip':'copy'}`,
-      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(flip?{key,direction:vert?'v':'h'}:{key})});
+      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
     const d=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(d.detail||((r.status===404||r.status===405)?t('服务未重启:接口不可用'):r.status));
     if(flip){

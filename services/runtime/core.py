@@ -7659,9 +7659,8 @@ async def api_scene_plate_crop(project: str, sid: str, body: dict):
 
 
 def _scene_plate_edit(project: str, sid: str, body: dict, op: str) -> dict:
-    """场景预览页分镜背景图「⧉ 复制」「⇋ 水平翻转」「⇅ 垂直翻转」(2026-09-28):{key} → modules.shot_plates.copy_plate(库里新增副本
-    <key>_copyN,不参与自动选图,只供「换图」手选)/ {key, direction: h|v} → flip_plate(水平 / 垂直翻转原地覆盖,首次改动留 .orig 备份)。
-    返回条目的预览字段(同预览数据口径)。"""
+    """场景预览页分镜背景图「⧉ 复制」「⇋ 翻转」(2026-09-28):{key} → modules.shot_plates.copy_plate(库里新增副本 <key>_copyN,
+    不参与自动选图,只供「换图」手选)/ flip_plate(水平镜像原地覆盖,首次改动留 .orig 备份)。返回条目的预览字段(同预览数据口径)。"""
     from modules import shot_plates
     base = _proj_base(project)
     sid = re.sub(r"[^\w\-]", "", sid)
@@ -7669,10 +7668,7 @@ def _scene_plate_edit(project: str, sid: str, body: dict, op: str) -> dict:
     if not sid or not key:
         raise ServiceError(400, "scene id / plate key is required")
     try:
-        if op == "copy":
-            entry = shot_plates.copy_plate(base, sid, key)
-        else:
-            entry = shot_plates.flip_plate(base, sid, key, str((body or {}).get("direction") or "h"))
+        entry = (shot_plates.copy_plate if op == "copy" else shot_plates.flip_plate)(base, sid, key)
     except ImportError:  # pragma: no cover
         raise ServiceError(501, "缺少 Pillow,无法翻转:pip install Pillow") from None
     except LookupError as e:
@@ -7683,7 +7679,6 @@ def _scene_plate_edit(project: str, sid: str, body: dict, op: str) -> dict:
     cam = entry.get("camera") or {}
     pr = entry.get("pano_ref") or {}
     return {"ok": True, "key": entry["key"], "file": entry["file"], "size": entry.get("size"), "mirrored": bool(entry.get("mirrored")),
-            "flipped_vertical": bool(entry.get("flipped_vertical")),
             "source_key": key,
             "url": f"/projects/{base.name}/{entry['file']}?v={int(f.stat().st_mtime)}",
             "plate": {"key": entry["key"], "file": entry["file"],

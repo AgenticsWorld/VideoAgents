@@ -3114,9 +3114,8 @@ window.I18N_DICT = {
 "按分类选择资产(🖊 草图=故事板分镜草图,左列本集分镜、右侧该镜草图),点选一张图片加入本组参考图(双击看大图);随本组重出时作为参考图传给视频生成模型": "Chọn danh mục (🖊 Phác thảo = phác thảo cảnh quay storyboard: cột trái là các cảnh quay của tập, bên phải là phác thảo của cảnh đó), rồi bấm một ảnh để thêm vào ảnh tham chiếu của nhóm (nhấp đúp để phóng to); ảnh sẽ được truyền cho mô hình video làm tham chiếu khi tạo lại nhóm này",
 "(本集还没有分镜草图:到故事板页「出草图」后再来选)": "(Tập này chưa có phác thảo cảnh quay: hãy vào trang Storyboard bấm「Tạo phác thảo」trước)",
 "(本集还没有故事板,没有分镜草图可选)": "(Tập này chưa có storyboard nên không có phác thảo để chọn)",
-// ⧉ 复制 / ⇋ 水平翻转 / ⇅ 垂直翻转分镜背景图(2026-09-28,场景预览页)
-"水平翻转": "Lật ngang",
-"垂直翻转": "Lật dọc",
+// ⧉ 复制 / ⇋ 翻转分镜背景图(2026-09-28,场景预览页)
+"翻转": "Lật",
 "复制中…": "Đang sao chép…",
 "翻转中…": "Đang lật…",
 "已翻转并替换": "Đã lật và thay thế",
@@ -3125,7 +3124,6 @@ window.I18N_DICT = {
 "副本(复制自 {k})": "bản sao (từ {k})",
 "创建这张背景图的副本(库里新增一张,原图不动;副本可在分镜预览「换图」里选用)": "Tạo bản sao của ảnh nền này (thêm một mục mới vào thư viện, ảnh gốc giữ nguyên; bản sao có thể chọn qua “Đổi ảnh” trong xem trước phân cảnh)",
 "水平翻转这张背景图并覆盖原图(再点一次翻回;首次改动保留 .orig 备份)": "Lật ngang ảnh nền này và ghi đè (bấm lần nữa để lật lại; lần sửa đầu tiên giữ bản sao lưu .orig)",
-"垂直翻转这张背景图并覆盖原图(再点一次翻回;首次改动保留 .orig 备份)": "Lật dọc ảnh nền này và ghi đè (bấm lần nữa để lật lại; lần sửa đầu tiên giữ bản sao lưu .orig)",
 // 分镜剪辑·插黑 / 定格(2026-09-17)
 "插黑 / 定格": "Đen / đóng băng",
 "把选中的时间段直接删掉,剩下的内容按原顺序拼成本组新版本(时长变短,出成片时外挂声轨/字幕按时间映射表自动同步)": "Xóa hẳn các đoạn đã đánh dấu và nối phần còn lại theo thứ tự thành phiên bản mới của nhóm này (thời lượng ngắn lại; khi hoàn thiện, âm thanh ngoài và phụ đề được đồng bộ lại qua bản đồ thời gian)",

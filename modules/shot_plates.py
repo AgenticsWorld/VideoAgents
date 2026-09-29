@@ -2531,10 +2531,9 @@ def revise_shot_plate(base: Path, ep: str, shot_id: str, role: str, change: str,
 # 复制:库里新增一张副本 <原 key 去掉已有 _copyN>_copy<N>(图片文件整份拷贝 + <key>.json 台账),条目 copy=True / pano_ref.kind='copy'
 # 记来源;副本**不带** master / grid9 / grid9_fallback 标记——不参与 find_master 派生、九宫格选格、补图复用这些自动决策(同机位
 # 两张图会互相抢),只供分镜预览「🔁 换图」手选,之后可单独裁剪/翻转而不动原图。is_legacy 对副本为否(--status 不报 WARN)。
-# 翻转:水平(h,左右镜像)/ 垂直(v,上下颠倒)翻转后**原地覆盖同一文件**(首次改动把原图留作 <key>.orig.<ext>,与裁剪共用一份备份),
-# 条目 mirrored / flipped_vertical 分别记当前是否处于水平 / 垂直翻转态(同向翻两次回正)。集索引与组 prompt refs 只记 key/路径,
-# 不必改动;机位事实(camera)不动——翻转用于纠正出图方向颠倒。
-FLIP_DIRECTIONS = {'h': 'mirrored', 'v': 'flipped_vertical'}   # 方向 → 条目里的状态字段
+# 翻转:水平镜像后**原地覆盖同一文件**(首次改动把原图留作 <key>.orig.<ext>,与裁剪共用一份备份),条目 mirrored 记当前是否处于
+# 镜像态(翻两次回正)。集索引与组 prompt refs 只记 key/路径,不必改动;机位事实(camera)不动——翻转用于纠正出图左右颠倒。
+# (垂直翻转 2026-09-28 做过,用户实测无实际用处,次日撤回。)
 COPY_KEY_RE = re.compile(r'_copy\d+$')
 
 
@@ -2597,13 +2596,10 @@ def copy_plate(base: Path, sid: str, key: str) -> dict:
     return entry
 
 
-def flip_plate(base: Path, sid: str, key: str, direction: str = 'h') -> dict:
-    """库图 key 按 direction(h 水平 / v 垂直)翻转并原地覆盖(首次改动留 .orig 备份),返回更新后的条目。"""
+def flip_plate(base: Path, sid: str, key: str) -> dict:
+    """库图 key 水平翻转并原地覆盖(首次改动留 .orig 备份),返回更新后的条目。"""
     import shutil
     from PIL import Image
-    direction = str(direction or 'h').strip().lower()
-    if direction not in FLIP_DIRECTIONS:
-        raise ValueError('direction 只能是 h(水平)或 v(垂直)')
     sid = component(sid)
     lib, entry, f = _library_plate(base, sid, key)
     with Image.open(f) as im:
@@ -2612,21 +2608,20 @@ def flip_plate(base: Path, sid: str, key: str, direction: str = 'h') -> dict:
         orig = f.with_name(f'{f.stem}.orig{f.suffix}')
         if not orig.exists():   # 只留最初那张原图;多次裁剪/翻转不覆盖备份
             shutil.copy2(f, orig)
-        out = im.transpose(Image.FLIP_LEFT_RIGHT if direction == 'h' else Image.FLIP_TOP_BOTTOM)
+        out = im.transpose(Image.FLIP_LEFT_RIGHT)
         tmp = f.with_name(f.name + '.tmp')
         if src_fmt == 'JPEG':
             out.save(tmp, format='JPEG', quality=95)
         else:
             out.save(tmp, format=src_fmt)
     os.replace(tmp, f)
-    flag = FLIP_DIRECTIONS[direction]
-    entry[flag] = not entry.get(flag)
+    entry['mirrored'] = not entry.get('mirrored')
     entry['flipped_at'] = dt.datetime.now().isoformat(timespec='seconds')
     entry['original_file'] = str(orig.relative_to(base.resolve()))
     save_library(base, sid, lib)
     side = f.with_suffix('.json')
     sd = read(side, None) if side.is_file() else None
     if isinstance(sd, dict):
-        sd.update({k: entry[k] for k in (flag, 'flipped_at', 'original_file')})
+        sd.update({k: entry[k] for k in ('mirrored', 'flipped_at', 'original_file')})
         side.write_text(json.dumps(sd, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
     return entry

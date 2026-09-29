@@ -500,7 +500,7 @@ async def scene_plate_copy(project: str, sid: str, body: dict[str, Any]) -> dict
 
 @api.post("/projects/{project}/scenes/{sid}/plates/flip", tags=["artifacts"])
 async def scene_plate_flip(project: str, sid: str, body: dict[str, Any]) -> dict[str, Any]:
-    """场景预览页「⇋ 水平翻转」「⇅ 垂直翻转」分镜背景图(2026-09-28):{key, direction: h|v(缺省 h)} → 翻转并覆盖原图(首次改动保留 .orig 备份)。"""
+    """场景预览页「⇋ 翻转」分镜背景图(2026-09-28):{key} → 水平翻转并覆盖原图(首次改动保留 .orig 备份)。"""
     return _artifact_urls(await core.api_scene_plate_flip(project, sid, body), project)
 
 
