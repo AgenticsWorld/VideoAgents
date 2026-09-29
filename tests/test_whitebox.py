@@ -173,6 +173,26 @@ def test_shot_list_poses_feed_keyframes(project):
         validate_keys([{'t':0,'position':[0,0,0],'pose':pose},{'t':4,'position':[1,0,0],'pose':pose}],4)
     from modules.whitebox import pose_from
     assert [pose_from(t) for t in ('趴在地上','跪在炉前','蹲下身','侧卧','落座','站定','face down on the floor','kneels')]==['prone','kneel','crouch','lie','sit','stand','prone','kneel']
+    # #60:同句他人的体位不归给本人
+    assert pose_from('甲站在门旁，乙在他面前跪下。', ['乙']) == 'stand'
+    assert pose_from('甲站在门旁，乙在他面前跪下。') == 'kneel'   # 不传他人名时维持旧行为
+    assert pose_from('A stands by the door, CHAR-2 kneels', ['CHAR-2']) == 'stand'
+    assert pose_from('甲跪在门旁，乙站着。', ['乙']) == 'kneel'
+    assert pose_from('甲蹲在乙身旁拔箭', ['乙']) == 'crouch'   # 他人名在体位词之后=宾语/方位,仍归本人
+    assert pose_from('站在高坡,随年长家将一同跪下', ['年长家将']) == 'kneel'   # 伴随介词后的他人名不是主语
+
+
+def test_route_pose_ignores_other_cast_clause(project):
+    path,data=source(project);g=data['generation_groups'][0]
+    g['characters_union']=['CHAR-1','CHAR-2'];data['shots'][0]['characters']=['CHAR-1','CHAR-2']
+    g['blocking_map']['characters'][0]['route_en']='甲站在门旁，乙在他面前跪下。'
+    g['blocking_map']['characters'][0]['label']='甲'
+    g['blocking_map']['characters'].append({'id':'CHAR-2','label':'乙','start':{'landmark':'desk'},'route_en':'乙跪下'})
+    write(path,data)
+    group=compile_episode(project,'ep01')['groups'][0]
+    poses={a['id']:a['keyframes'][0]['pose'] for a in group['actors']}
+    assert poses=={'CHAR-1':'stand','CHAR-2':'kneel'}
+    assert any(w.startswith('CHAR-1:') and '体位词' in w for w in group['warnings'])
 
 
 def test_mounted_creature_scale(project):

@@ -252,8 +252,44 @@ POSES = ('stand', 'sit', 'lie', 'kneel', 'crouch', 'prone')
 _POSE_TEXT_RE = r'坐|躺|卧|趴|跪|蹲|seat|sitting|lying|kneel|crouch|squat|prone'
 
 
-def pose_from(text):
-    """文字姿态粗推(兜底;优先级低于 blocking.json `pose` 与 shot_list 每镜 `poses`)。"""
+_POSE_ANY_RE = re.compile(r'趴|俯卧|匍匐|prone|face.?down|跪|kneel|蹲|crouch|squat|躺|卧|lying|lies|reclin|坐|落座|seat|sitting|sits', re.I)
+
+
+def _pose_clauses(text, other_names=()):
+    """按「，。；,;」分句,其他人物名/ID 出现在该分句体位词之前(=他人作主语)的分句剔除(#60)。
+
+    他人名只出现在体位词之后(「蹲在碧云身旁」这类宾语/方位),或紧跟在介词/伴随词后(「随年长家将一同跪下」
+    「在乙身旁蹲下」)时不算他人作主语,不剔除。返回 (本人分句文本, 被剔除分句文本)。"""
+    names = [n for n in other_names if isinstance(n, str) and n.strip()]
+    kept, dropped = [], []
+    for clause in re.split(r'[，。；,;]', text or ''):
+        hits = [m.start() for n in names for m in re.finditer(re.escape(n), clause)
+                if not re.search(r'(随|跟|跟着|和|与|同|向|朝|对|替|给|为|把|在|于|beside|with|to|near|by|behind)\s*$', clause[:m.start()], re.I)]
+        pose = _POSE_ANY_RE.search(clause)
+        (dropped if hits and (not pose or min(hits) < pose.start()) else kept).append(clause)
+    return '，'.join(c for c in kept if c), '，'.join(c for c in dropped if c)
+
+
+def pose_ambiguous(text, other_names=()):
+    """被剔除的他人分句里有体位词:兜底推导可能漏掉/误归属,调用方应出歧义诊断(#60)。"""
+    return pose_from(_pose_clauses(text, other_names)[1]) != 'stand'
+
+
+def other_cast_names(own, candidates):
+    """同组其他人物的名字/ID(给 pose_from 剔除他人分句);是本人名/ID 子串的候选不算,免得误删本人分句。"""
+    own = [n for n in own if isinstance(n, str) and n]
+    out = []
+    for name in candidates:
+        if isinstance(name, str) and name.strip() and name not in out and not any(name in o for o in own):
+            out.append(name)
+    return out
+
+
+def pose_from(text, other_names=()):
+    """文字姿态粗推(兜底;优先级低于 blocking.json `pose` 与 shot_list 每镜 `poses`)。
+
+    other_names:同组其他人物名/ID;含这些名字的分句不参与推导(#60,避免把同句他人的体位归给本人)。"""
+    text, _ = _pose_clauses(text, other_names)
     if re.search(r'趴|俯卧|匍匐|prone|face.?down', text, re.I):
         return 'prone'
     if re.search(r'跪|kneel', text, re.I):
@@ -365,7 +401,16 @@ def compile_group(base, ep, group, shots, scene, colors=None):
         positions = [point(p, landmarks, dims) for p in pts]
         times = [0] + [p.get('t', duration*i/(len(pts)-1)) if isinstance(p, dict) else duration*i/(len(pts)-1)
                        for i, p in enumerate(pts[1:-1], 1)] + [duration]
-        cid = component(route['id']); posture = route.get('pose') or pose_from(route.get('route_en', ''))
+        cid = component(route['id'])
+        # #60:同组其他人物名/ID(不含本人坐骑)所在分句不参与文字体位推导
+        others = other_cast_names([cid, route.get('label')], [
+            x for r in routes if isinstance(r, dict) and r is not route
+            for x in (r.get('id'), r.get('label'), r.get('mounted'))] + [
+            x for x in group.get('characters_union', []) + group.get('creatures_union', []) if x != cid])
+        posture = route.get('pose') or pose_from(route.get('route_en', ''), others)
+        if not route.get('pose') and pose_ambiguous(route.get('route_en', ''), others):
+            warnings.append(f'{cid}: route_en 中含其他人物的分句带体位词,已不计入本人;兜底姿态按本人分句推导为 {posture},'
+                            '主语不明时请在 blocking_map/blocking.json 写结构化 pose。')
         height = route.get('height_m', 1.4 if is_creature_id(cid) else 1.7)
         keys = []
         for i, (pos, t) in enumerate(zip(positions, times)):
@@ -390,8 +435,11 @@ def compile_group(base, ep, group, shots, scene, colors=None):
                     keyed[t] = key
             # 体位优先级:blocking.json 该角色 `pose` → shot_list 该镜 `poses[id].pose`(分镜层结构化字段)→ start_pos 文字粗推
             shot_pose = shot_pose_of(shots[sid], cid)
-            initial_pose = entry.get('pose') or shot_pose or pose_from(entry.get('start_pos', ''))
-            if entry.get('pose') or shot_pose or re.search(_POSE_TEXT_RE, entry.get('start_pos', ''), re.I):
+            own_start = _pose_clauses(entry.get('start_pos', ''), others)[0]
+            initial_pose = entry.get('pose') or shot_pose or pose_from(own_start)
+            if not entry.get('pose') and not shot_pose and pose_ambiguous(entry.get('start_pos', ''), others):
+                warnings.append(f'{sid}/{cid}: start_pos 中含其他人物的分句带体位词,已不计入本人;请写结构化 pose。')
+            if entry.get('pose') or shot_pose or re.search(_POSE_TEXT_RE, own_start, re.I):
                 keyed[offset] = {**keyed.get(offset, sample(keys, offset)), 't': offset, 'pose': initial_pose}
                 pose_events[offset] = initial_pose
             for beat in entry.get('path', []) + entry.get('beats', []):
