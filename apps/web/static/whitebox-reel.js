@@ -52,7 +52,7 @@
     w=w||{};const sub=w.subtitles||{};
     return [w.size_mb!=null?w.size_mb+' MB':'',w.duration_s?Math.round(w.duration_s)+'s':'',w.groups?tr('{n} 组',{n:w.groups}):'',
       sub.cues?tr('字幕 {n} 条(对白 {d} · 旁白 {r})',{n:sub.cues,d:sub.dialogue||0,r:sub.narration||0}):tr('无字幕'),
-      w.audio&&w.audio.kind==='dialogue_tts'?tr('对白语音 {n} 句',{n:w.audio.lines||0})+(w.audio.overflow&&w.audio.overflow.length?' ⚠'+tr('{k} 句超出镜长',{k:w.audio.overflow.length}):''):tr('无声'),
+      w.audio&&w.audio.kind==='dialogue_tts'&&w.audio.lines?tr('对白语音 {n} 句',{n:w.audio.lines||0})+(w.audio.overflow&&w.audio.overflow.length?' ⚠'+tr('{k} 句超出镜长',{k:w.audio.overflow.length}):''):tr('无声'),
       w.width&&w.height?w.width+'×'+w.height:'',w.fps?w.fps+'fps':''].filter(Boolean);
   }
   window.WhiteboxReel={AGENT,runId,setRun,message,dispatch,poll,statusHtml,metaList};

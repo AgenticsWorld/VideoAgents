@@ -223,7 +223,9 @@ def episode_reel_status(base, ep):
             stale_reason = 'groups'
         elif (manifest.get('subtitles') or {}).get('sha256', '') != subtitles_sha:
             stale_reason = 'subtitles'
-        elif audio_on and rec_audio.get('sha256', '') != audio_sha:
+        # #75:无对白轨的无声样片(发布时无可用逐句音频、如全部 unbound)当下也无可排音频 → 声轨不会变,不判过期;
+        # 只有样片带过对白轨(lines>0)或现在有可排音频时,才按库指纹比对(存量无声清单记 audio=False 同样自愈)
+        elif audio_on and (placements or rec_audio.get('lines')) and rec_audio.get('sha256', '') != audio_sha:
             stale_reason = 'audio'
     return {'ep': ep, 'path': paths['video'], 'manifest_path': paths['manifest'], 'exists': exists,
             'stale': bool(stale_reason), 'stale_reason': stale_reason, 'groups_total': len(order), 'groups_ready': ready,
@@ -329,8 +331,9 @@ def concat_episode(base, ep, *, allow_missing=False, subtitles=True):
         manifest = {'schema_version': 'whitebox_episode_export.v1', 'project': base.name, 'ep': ep,
                     'groups': len(status['groups_ready']), 'shots': sum(g['shots'] for g in status['order'] if g['group_id'] in records),
                     'duration_s': round(duration, 3), 'width': width, 'height': height, 'fps': fps, 'mode': mode,
-                    'audio': ({'kind': 'dialogue_tts', 'lines': len(placements), 'sha256': dialogue.get('sha256', ''),
-                               'overflow': dialogue.get('overflow') or []} if audio_wav else False),
+                    # 生成对白语音开着时无论有没有出声轨都记下同步时的库指纹(lines=0 即无声,预览页仍显示「无声」)
+                    'audio': ({'kind': 'dialogue_tts', 'lines': len(placements) if audio_wav else 0, 'sha256': dialogue.get('sha256', ''),
+                               'overflow': dialogue.get('overflow') or []} if audio_wav or dialogue.get('enabled') else False),
                     'subtitles': {'cues': len(cues), 'dialogue': sum(1 for c in cues if c['kind'] == 'dialogue'),
                                   'narration': sum(1 for c in cues if c['kind'] == 'narration'),
                                   'sha256': cues_fingerprint(cues) if cues else '',
