@@ -272,3 +272,50 @@ def test_rh_image_ref_slots_counts_loadimages_and_rejects_img2img():
     assert gm._rh_image_ref_slots(base) == 2
     img2img = {**base, "5": {"class_type": "VAEEncode", "inputs": {"pixels": ["7", 0]}}}
     assert gm._rh_image_ref_slots(img2img) == 0
+
+
+def test_clean_prose_drops_production_metadata():
+    """2026-09-29:【】段落、时间码分句、交组/续写类制作用语剔除,「A→B」只留起点。"""
+    t = sbb.clean_prose("【长镜头前段·镜内分段 0–7s 起幅】日落后天幕冷青,焦段 200→85mm;7s 起匀速降落推轨;"
+                        "组尾停在约 85mm(交组B 续写);近景,受力反馈=弦震与扬尘")
+    assert "【" not in t and "7s" not in t and "交组" not in t and "受力反馈" not in t
+    assert "日落后天幕冷青" in t and "焦段 200mm" in t
+
+
+def test_size_lens_horizon_rules():
+    assert sbb.size_rule({"size_hint": "大远景 → 远景推轨"}).startswith("extreme wide shot")
+    assert sbb.size_rule({"size_hint": "中近景"}).startswith("medium close-up")
+    assert sbb.size_rule({"size_hint": "MCU"}).startswith("medium close-up")
+    assert sbb.size_rule({"size_hint": "over the head"}) == "over the head"
+    # 时间码分句里的落幅焦段不算,取起幅
+    assert sbb.lens_rule({"sketch": "22s 起焦段稳在 50mm 平视", "content": "焦段 85→50mm"}).startswith("85mm telephoto")
+    assert sbb.lens_rule({"content": "24mm 贴地"}).startswith("24mm ultra-wide")
+    assert sbb.lens_rule({"content": "没写焦段"}) == ""
+    assert "high in the frame" in sbb.horizon_rule("high angle, profile")
+    assert sbb.horizon_rule("profile") == ""
+
+
+def test_build_prompt_panel_en_screen_direction_and_negative():
+    scene = {"location": "敌楼", "time_of_day": "黄昏", "screen_direction": "Nezha holds screen left"}
+    shot = {"cast": ["CHAR-1"], "size_hint": "近景", "content": "【分段 0–2s】她看向画右",
+            "panel_en": "Nezha on screen left facing right."}
+    prompt, neg = sbb.build_prompt(scene, shot, {"CHAR-1": "哪吒"})
+    assert "What we see (start frame): Nezha on screen left facing right." in prompt
+    assert "她看向画右" not in prompt          # 有 panel_en 不再拼中文散文
+    assert "Screen direction for this scene" in prompt and "close shot" in prompt
+    assert "scenery without people" in neg
+    _, neg_empty = sbb.build_prompt(scene, {"content": "空镜,城楼"}, {})
+    assert "scenery without people" not in neg_empty    # 空镜/定场不压人
+    # --panel 覆盖(台账 _panel)优先于分镜层 panel_en
+    p2, _ = sbb.build_prompt(scene, dict(shot, _panel="Override."), {"CHAR-1": "哪吒"})
+    assert "(start frame): Override." in p2
+
+
+def test_build_prompt_whitebox_layout_sentence():
+    prompt, _ = sbb.build_prompt({}, {"cast": ["CHAR-1"]}, {"CHAR-1": "哪吒"}, layout=True,
+                                 whitebox_legend=[("哪吒", "red")])
+    assert "3D blocking render" in prompt and "the red mannequin is 哪吒" in prompt
+    assert "hand-drawn layout" not in prompt
+    grid, _ = sbb.build_grid_prompt([({"scene_no": "S01"}, {"cast": ["CHAR-1"]}), ({"scene_no": "S01"}, {})],
+                                    {"CHAR-1": "哪吒"}, 2, 2, whitebox_legend=[])
+    assert "same 2x2 grid" in grid and "mannequin is" not in grid

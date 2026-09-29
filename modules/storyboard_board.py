@@ -10,7 +10,7 @@
 - build_prompt / collect_refs:草图提示词(铅笔手绘分镜风格,英文风格句 + 原文画面内容)与参考图
   (只带出场人物 sheet,缩到 512px 长边;不带场景图——俯视布局图会误导图像模型,场景只靠文字描述;
   也不用风格参考图,铅笔风格全靠提示词——2026-09-11 用户拍板);
-  **人物优先、背景留白**(2026-09-12 用户拍板:没有合适的场景参考图,草图弱化场景展现,主要按分镜表现
+  **人物优先**(2026-09-12 用户拍板;2026-09-29 起背景改「简化但空间准确」、画法改传统电影故事板,见 SKETCH_STYLE_PROMPT 注释:没有合适的场景参考图,草图弱化场景展现,主要按分镜表现
   镜头机位、人物比例、神态、动作):风格句要求人物线稿清晰、按景别画对人物比例、表情与肢体可读,背景只
   两三笔示意或留白;地点只留一句短提示放在最后,不再拼场景卡描述;从 content/sketch/action 文字里自动推导
   「Camera:」(角度/高度/镜头/朝向)与「Expressions:」(神态/视线)两句英文关键词加进提示词(camera_hint / expression_hint);
@@ -48,49 +48,59 @@ REF_MAX_EDGE = 512           # 参考图缩放长边(草图只需形象/空间�
 MAX_CAST_REFS = 3            # 人物参考图上限(多了反而稀释风格参考)
 STATUSES = ("queued", "running", "done", "failed")
 
-# 2026-09-12 用户拍板:人物优先、背景留白——草图只为看机位、人物比例、神态、动作,场景不展开(没有合适的场景参考图)。
+# 2026-09-12 用户拍板:人物优先——草图只为看机位、人物比例、神态、动作。
+# 2026-09-29 用户拍板(草图向传统电影故事板靠拢):画法从「速写本」改为专业实拍电影分镜师的铅笔+灰马克笔
+# (简化人物、脸几笔、2–3 级灰+少量纯黑分层与示光);背景从「留白」改为「简化但空间准确」——地平线/透视/
+# 前中后景大块面交代机位高度与焦段,不画细节装饰。附图人物 sheet 只取发型/服装轮廓/体型,不学其渲染画风。
 SKETCH_STYLE_PROMPT = (
-    "Film storyboard panel, rough pencil sketch on white paper: hand-drawn monochrome line art with loose "
-    "hatching and soft grey marker shading, quick gestural strokes, unfinished sketchbook look. "
-    "FIGURES FIRST: draw the characters with clear confident lines, correct body proportions and figure size "
-    "for the stated shot size, readable facial expressions, eye lines and body gestures; faces must be clear "
-    "enough to read the emotion. Pose every figure exactly as stated (standing, sitting, kneeling, crouching, "
-    "lying down, running, swinging a weapon, dodging…); the body state is as important as the face. "
-    "BACKGROUND MINIMAL: only two or three loose lines or a little light hatching to hint at the space, most of "
-    "the paper left blank; no architectural detail, no furniture detail, no props unless mentioned. "
+    "Professional live-action film storyboard panel, drawn by an experienced studio storyboard artist in pencil "
+    "and grey marker on white paper: fast, economical, confident gestural lines; figures built from simple solid "
+    "shapes with correct anatomy; faces simplified to a few marks (brows, eyes, mouth) that still read the "
+    "emotion clearly; two or three flat grey marker values plus a few spot blacks separate foreground, midground "
+    "and background and show where the light comes from; silhouettes stay readable at thumbnail size. "
+    "FIGURES FIRST: correct figure size and body cropping for the stated shot size, clear eye lines and body "
+    "gestures. Pose every figure exactly as stated (standing, sitting, kneeling, crouching, lying down, running, "
+    "swinging a weapon, dodging…); the body state is as important as the face. "
+    "ENVIRONMENT SIMPLIFIED BUT SPATIALLY CORRECT: a clear horizon line and perspective that match the stated "
+    "camera height and lens, big simple shapes for the main structures and any foreground framing element, depth "
+    "staging readable at a glance; no small detail, no ornament, no texture work, no props unless mentioned. "
     "The framing must show the camera angle, camera height and lens exactly as described (eye level, high "
     "angle, low angle, over-the-shoulder, profile, from behind). "
     "Strictly black-and-white, no color. A single frame, no panel borders, no text, no captions, no speech "
-    "bubbles, no watermark. "
+    "bubbles, no watermark. It must look like a page from a feature film's storyboard, not a manga, anime or "
+    "finished illustration. "
 )
 # 风格句结尾按有无参考图二选一(2026-09-17):有参考图 → 附图是人物设定;无参考图(comfyui 纯文生图)→ 人物按文字画
 SKETCH_REFS_SENTENCE = (
-    "The attached images are the project's official character designs — keep each character's likeness, "
-    "hairstyle and outfit, but redraw everything as a pencil sketch; the location is described in text only "
-    "and stays a faint hint."
+    "The attached images are the project's official character designs — take from them only what identifies "
+    "each character (hairstyle, costume shape, build, signature props); do not copy their rendering style, "
+    "colors or facial detail — draw everyone in the simplified storyboard manner above. The location is "
+    "described in text only and is drawn as simple shapes."
 )
 # 纯文生图整句风格提示(2026-09-17):不用 SKETCH_STYLE_PROMPT——Z-Image 这类 cfg=1 的本地模型不吃 negative,
 # 会把风格句里列举的姿态(standing, sitting, kneeling…)和「no panel borders」之类否定句照字面画成多格姿势表;
 # 这里只写正向描述、不列举姿态、不出现「panel/sheet/grid」字样。
 SKETCH_TEXT_ONLY_TAIL = ("Characters are drawn from the text description alone (age, build, hairstyle, "
-                         "outfit as stated); the location is described in text only and stays a faint hint.")
+                         "outfit as stated); the location is described in text only and is drawn as simple shapes.")
 # 上面这类渠道带参考图时的结尾(2026-09-19):同样只写正向句;逐张点名是谁(Qwen-Image-Edit 按 Picture N 认图),
 # 并写单实例——设定 sheet 多视角同框,不写会把一个人画成几个。{who} 由 ref_sentence_plain 填。
 SKETCH_REFS_SENTENCE_PLAIN = (
     "The attached pictures are character design sheets: {who}. Each sheet shows one single person from several "
-    "views; in the drawing that person appears exactly once, with the likeness, hairstyle and outfit of the "
-    "sheet, redrawn as a monochrome pencil sketch in the pose and framing described here. The location is "
-    "described in text only and stays a faint hint."
+    "views; in the drawing that person appears exactly once, recognisable by the hairstyle, costume shape and "
+    "build of the sheet, drawn in the simplified storyboard manner described here, in the pose and framing "
+    "described here. The location is described in text only and is drawn as simple shapes."
 )
 SKETCH_STYLE_PROMPT_TEXT_ONLY = (
-    "One rough pencil sketch on white paper filling the whole page: hand-drawn monochrome line art with loose "
-    "hatching and soft grey marker shading, quick gestural strokes, unfinished sketchbook look. It is a single "
-    "moment from a film, seen through the camera once, drawn as one picture. FIGURES FIRST: clear confident "
-    "lines for the characters, correct body proportions and figure size for the stated shot size, readable "
-    "facial expressions, eye lines and body gestures; each figure holds exactly the body position the shot "
-    "describes. BACKGROUND MINIMAL: two or three loose lines or a little light hatching to hint at the space, "
-    "most of the paper left blank. The framing shows the stated camera angle, camera height and lens. "
-    "Strictly black-and-white. " + SKETCH_TEXT_ONLY_TAIL
+    "One professional live-action film storyboard drawing filling the whole page, pencil and grey marker on white "
+    "paper, drawn by an experienced studio storyboard artist: fast, economical, confident gestural lines; figures "
+    "built from simple solid shapes with correct anatomy; faces simplified to a few marks that still read the "
+    "emotion; two or three flat grey values plus a few spot blacks separate foreground, midground and background "
+    "and show the light direction. It is a single moment from a film, seen through the camera once, drawn as one "
+    "picture. FIGURES FIRST: correct figure size and body cropping for the stated shot size, clear eye lines and "
+    "body gestures; each figure holds exactly the body position the shot describes. The environment is simplified "
+    "but spatially correct: a clear horizon line and perspective matching the stated camera height and lens, big "
+    "simple shapes for structures and foreground framing, plain surfaces. The framing shows the stated camera "
+    "angle, camera height and lens. Strictly black-and-white, clean storyboard linework. " + SKETCH_TEXT_ONLY_TAIL
 )
 # 参考图按「图生图是否配置」决定的渠道(2026-09-19 用户拍板,取代 09-17/09-18 的一律纯文生图):
 # comfyui 的单图原图重绘(img2img)模板,「参考图」是初始画面,传人物 sheet 会把构图
@@ -108,45 +118,64 @@ SKETCH_LAYOUT_SENTENCE = (
     "cleanly in the pencil storyboard style described above, with correct anatomy and readable faces; it is a "
     "layout guide only, its wobbly line quality is not the target."
 )
+# 白模机位构图底(2026-09-29):已导出白模 camera.mp4 的镜,可取本镜首帧作最后一张参考图(--whitebox-layout),
+# 机位/焦段/地平线/人物画内位置与大小全按白模;彩色假人按身份色逐个点名。只写正向句,各渠道通用。
+SKETCH_WHITEBOX_SENTENCE = (
+    "One exception among the attached pictures: the last one is not a character design but a flat grey 3D blocking "
+    "render of this exact camera setup{grid}. Keep its framing exactly — camera angle, camera height, lens, "
+    "horizon position, where each figure stands in the frame and how big it is. The coloured mannequins are "
+    "placeholders for the characters{who}. Replace every mannequin with that character drawn in the storyboard "
+    "style, in the pose and action stated below, and turn the grey blocks into simple sketched environment "
+    "shapes; its flat CG look is not the target."
+)
 HAND_DIR_REL = "assets/storyboard/{ep}/_hand"   # 手绘原稿存档(AI 加工的构图底;加工失败时回落为该镜草图)
 # 宫格批量退化为逐镜单张的渠道:只有 comfyui(本地模型跟不了严格 2×2 排版);agentics 文生图仍出宫格(不带参考图)
 SINGLE_ONLY_SKETCH_PROVIDERS = ("comfyui",)
 SKETCH_NEGATIVE = ("color, colorful, photo, photorealistic, 3d render, cgi, painting, ink wash, anime cel, "
+                   "manga, anime eyes, chibi, finished illustration, highly detailed rendering, dense cross-hatching, "
+                   "screentone, ornate detail, "
                    "text, letters, caption, watermark, logo, speech bubble, comic panel grid, multiple panels, "
-                   "border, frame lines, detailed background, cluttered environment, architectural rendering, "
+                   "border, frame lines, cluttered environment, architectural rendering, "
                    "interior design, landscape painting, scenery without people")
+# 无人物出场的镜(空镜/定场)负面词去掉这段,否则把定场镜也压成必须有人
+SKETCH_NEGATIVE_PEOPLE_TAIL = ", landscape painting, scenery without people"
 
 GRID_MAX_PANELS = 4          # 一张宫格图最多 4 镜(2×2;2026-09-12 由 3×3/9 镜降下来:每格更大才画得出表情,逐格文字预算也更宽)
 GRID_MAX_CAST_REFS = 4       # 宫格模式人物参考图上限(4 镜的出场并集,按出场次数取前几位)
 GRID_CELL_TRIM = 0.02        # 切分时每格四边各裁掉 2%,去掉模型画的格线/留白
 GRID_DIR_REL = "assets/storyboard/{ep}/_grids"
 GRID_STYLE_PROMPT = (
-    "A film storyboard contact sheet: a strict {cols}x{rows} grid of {n} equal-size panels on one white page, "
+    "A page from a feature film's storyboard: a strict {cols}x{rows} grid of {n} equal-size panels on one white page, "
     "{cols} columns and {rows} rows, separated only by thin straight black gutter lines, panels read left to right, "
-    "top to bottom, every panel filling its cell edge to edge with the same {aspect} framing. Each panel is a rough "
-    "pencil sketch: hand-drawn monochrome line art with loose hatching and soft grey marker shading, quick gestural "
-    "strokes, unfinished sketchbook look. FIGURES FIRST in every panel: clear confident lines for the characters, "
-    "correct body proportions and figure size for that panel's shot size, readable facial expressions, eye lines "
-    "and body gestures; pose every figure exactly as that panel states (standing, sitting, kneeling, crouching, "
-    "lying down, running, swinging, dodging…). BACKGROUND MINIMAL in every panel: only two or three loose lines to hint at the space, most "
-    "of the paper left blank; no architectural or furniture detail, no props unless mentioned. Each panel must show "
-    "its camera angle, height and lens exactly as described. Strictly black-and-white, no color. No text, no "
-    "numbers, no captions, no speech bubbles, no watermark inside the panels. {refs}{blank}"
+    "top to bottom, every panel filling its cell edge to edge with the same {aspect} framing. Every panel is drawn by "
+    "an experienced studio storyboard artist in pencil and grey marker: fast, economical, confident gestural lines; "
+    "figures built from simple solid shapes with correct anatomy; faces simplified to a few marks that still read the "
+    "emotion; two or three flat grey values plus a few spot blacks separate foreground, midground and background and "
+    "show the light direction. FIGURES FIRST in every panel: correct figure size and body cropping for that panel's "
+    "shot size, clear eye lines and body gestures; pose every figure exactly as that panel states (standing, "
+    "sitting, kneeling, crouching, lying down, running, swinging, dodging…). ENVIRONMENT SIMPLIFIED BUT SPATIALLY "
+    "CORRECT in every panel: a clear horizon line and perspective matching that panel's camera height and lens, big "
+    "simple shapes for structures and foreground framing, no small detail or ornament. Each panel must show its "
+    "camera angle, height and lens exactly as described. Strictly black-and-white, no color; storyboard drawing, not "
+    "manga, anime or finished illustration. No text, no numbers, no captions, no speech bubbles, no watermark inside "
+    "the panels. {refs}{blank}"
 )
 # 宫格风格句结尾按有无参考图二选一(2026-09-18):有参考图 → 附图是人物设定;无参考图(agentics 文生图)→ 人物按文字画
 GRID_REFS_SENTENCE = (
-    "The attached images are the project's official character designs — keep each character's likeness, hairstyle "
-    "and outfit in every panel, but redraw everything as a pencil sketch; locations are described in text only and "
-    "stay a faint hint."
+    "The attached images are the project's official character designs — take from them only what identifies each "
+    "character (hairstyle, costume shape, build, signature props) and keep it consistent in every panel; do not copy "
+    "their rendering style, colors or facial detail. Locations are described in text only and are drawn as simple shapes."
 )
 GRID_TEXT_ONLY_SENTENCE = (
     "Characters are drawn from the text description alone (age, build, hairstyle, outfit as stated) and stay "
-    "consistent across panels; locations are described in text only and stay a faint hint."
+    "consistent across panels; locations are described in text only and are drawn as simple shapes."
 )
 GRID_NEGATIVE = ("color, colorful, photo, photorealistic, 3d render, cgi, painting, ink wash, anime cel, "
+                 "manga, anime eyes, chibi, finished illustration, highly detailed rendering, dense cross-hatching, "
+                 "screentone, ornate detail, "
                  "text, letters, numbers, caption, watermark, logo, speech bubble, uneven panels, overlapping panels, "
-                 "panels of different sizes, decorative border, detailed background, cluttered environment, "
-                 "architectural rendering, interior design, scenery without people")
+                 "panels of different sizes, decorative border, cluttered environment, "
+                 "architectural rendering, interior design")
 
 _REF_RE = re.compile(r"^(.+?)(?:/shots_draft)?/order:(\d+)(?:/split:[^/]+)?$")
 _DLG_RE = re.compile(r"^\s*(?:S\d+[A-Za-z]?\s*[/·:\-]\s*)?(CHAR-\d+|NARRATOR|[^:：/·「」]{1,12})\s*[:：]\s*(.+?)\s*$")
@@ -576,6 +605,7 @@ def load_board(base: Path, ep: str, catalog: dict | None = None) -> dict:
                 "cast": cast,
                 "poses": normalize_poses(_first(d, "poses", "figure_states", default=None)),
                 "extras": str(_first(d, "extras", default="")),
+                "panel_en": str(_first(d, "panel_en", default="") or ""),
                 "dialogue": dialogue,
                 "narration_ref": [str(x) for x in _as_list(_first(d, "narration_ref", "narration_refs", "narrator_ref", default=[]))],
                 "beat": str(_first(d, "beat", default="")),
@@ -613,6 +643,7 @@ def load_board(base: Path, ep: str, catalog: dict | None = None) -> dict:
             "scene_description": (cat["scenes"].get(sid) or {}).get("description") or "",
             "location": str(_first(sc, "location", "scene_name", "name", "display_name", default="")),
             "time_of_day": str(_first(sc, "time_of_day", default="")),
+            "screen_direction": str(_first(sc, "screen_direction_en", "screen_direction", "axis_note", default="") or ""),
             "alloc_s": alloc, "draft_sum_s": draft_sum, "final_sum_s": final_sum,
             "note": str(_first(sc, "unit_note", "scene_note", "scene_intent", "beat", default="")),
             "color": str(_first(sc, "color_segment", "color_ref", default="")),
@@ -843,6 +874,7 @@ def episode_shots(board: dict, scene_no: str | None = None) -> list[tuple[dict, 
 _CAMERA_TERMS = (
     ("俯拍", "high angle"), ("俯视", "high angle"), ("高机位", "high angle"), ("顶拍", "top-down"), ("顶视", "top-down"),
     ("鸟瞰", "bird's-eye view"), ("仰拍", "low angle"), ("仰视", "low angle"), ("低机位", "low angle"), ("低角度", "low angle"),
+    ("高俯", "high angle"), ("俯角", "high angle"), ("俯瞰", "high angle"), ("仰角", "low angle"),
     ("平视", "eye level"), ("过肩", "over-the-shoulder"), ("主观", "POV"), ("POV", "POV"), ("正面", "frontal"),
     ("正对", "frontal"), ("侧面", "profile"), ("侧拍", "profile"), ("侧身", "three-quarter view"), ("背影", "from behind"),
     ("背对", "from behind"), ("背后", "from behind"), ("正反打", "shot/reverse shot"), ("反打", "reverse angle"),
@@ -1071,6 +1103,115 @@ def expression_hint(shot: dict) -> str:
     return ", ".join(_term_hits(text, _EXPRESSION_TERMS)[:8])
 
 
+# ---------------- 画面描述净化 / 景别 / 焦段 / 轴线(2026-09-29 用户拍板,草图向传统电影故事板靠拢) ----------------
+# 分镜散文里混着给下游工位的制作元数据(【长镜头前段·镜内分段 0–7s…】、交组B续写、受力反馈=…),原样进提示词
+# 既挤占宫格字数预算又干扰模型;草图只画起幅一帧,时间码与「A→B」变化过程只留起点。
+# 分镜层可写 shots_draft[].panel_en(≤60 词英文画面描述,见 storyboard SOUL);有则直接用,不再拼中文散文。
+_PROSE_DROP_WORDS = ("交组", "续写", "接缝", "指纹", "机检", "批次", "回派", "闭环", "复核", "工位", "台账",
+                     "受力反馈", "同空间硬切", "硬切", "WBI-", "grp0", "替代旧", "待与")
+_TIMECODE_RE = re.compile(r"\d+(?:\.\d+)?\s*(?:[–—\-~～至]\s*\d+(?:\.\d+)?\s*)?(?:s|秒)(?![a-zA-Z])")
+_ARROW_NUM_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(mm|°|%)?\s*(?:→|->|—>)\s*\d+(?:\.\d+)?\s*(mm|°|%)")
+_PAREN_RE = re.compile(r"[（(][^（）()]*[)）]")
+
+
+def clean_prose(text) -> str:
+    """分镜散文 → 只留可画的起幅画面:删【】段落标记、含制作用语或时间码的分句/括注,「200→85mm」只留起点。"""
+    t = str(text or "")
+    t = re.sub(r"【[^】]*】", "", t)
+    t = _ARROW_NUM_RE.sub(lambda m: m.group(1) + (m.group(2) or m.group(3) or ""), t)
+    t = _PAREN_RE.sub(lambda m: "" if any(w in m.group(0) for w in _PROSE_DROP_WORDS) or _TIMECODE_RE.search(m.group(0))
+                      else m.group(0), t)
+    keep = []
+    for c in re.split(r"(?<=[;；。，,])", t):
+        if not c.strip(" ;；。，,") or any(w in c for w in _PROSE_DROP_WORDS) or _TIMECODE_RE.search(c):
+            continue
+        keep.append(c)
+    out = re.sub(r"\s+", " ", "".join(keep)).strip(" ;；，,")
+    return re.sub(r"[;；，,]+$", "", out).strip()
+
+
+def panel_text(shot: dict) -> str:
+    """英文画面描述:草图台账 --panel 覆盖(_panel)> 分镜层 panel_en;都没有返回空(调用方退回净化后的中文散文)。"""
+    return re.sub(r"\s+", " ", str(shot.get("_panel") or shot.get("panel_en") or "")).strip()
+
+
+# 景别 → 可画的构图规则(人物占画高 / 画框切在身体哪里);长词优先。中文取「A → B」的起幅 A。
+_SIZE_RULES = (
+    ("大远景", "extreme wide shot: landscape or architecture dominates, any figures are tiny (under a tenth of the frame height)"),
+    ("极远景", "extreme wide shot: landscape or architecture dominates, any figures are tiny (under a tenth of the frame height)"),
+    ("大全景", "very wide shot: full figures small, about a fifth of the frame height, lots of surrounding space"),
+    ("中全景", "medium full shot: figures cut just above or below the knees"),
+    ("中近景", "medium close-up: figures cut at mid-chest, head and shoulders dominate the frame"),
+    ("大特写", "extreme close-up: a single detail (eyes, a hand, an object) fills the frame"),
+    ("远景", "wide shot: full figures, about a third of the frame height, surroundings clearly visible"),
+    ("全景", "full shot: whole body head to feet, filling about three quarters of the frame height"),
+    ("中景", "medium shot: figures cut at the waist"),
+    ("近景", "close shot: figures cut at the chest, the face large and clearly readable"),
+    ("特写", "close-up: the face fills the frame, cropped at the forehead and just below the chin"),
+    ("ECU", "extreme close-up: a single detail (eyes, a hand, an object) fills the frame"),
+    ("MCU", "medium close-up: figures cut at mid-chest, head and shoulders dominate the frame"),
+    ("CU", "close-up: the face fills the frame, cropped at the forehead and just below the chin"),
+    ("MFS", "medium full shot: figures cut just above or below the knees"),
+    ("MLS", "medium full shot: figures cut just above or below the knees"),
+    ("MS", "medium shot: figures cut at the waist"),
+    ("FS", "full shot: whole body head to feet, filling about three quarters of the frame height"),
+    ("EWS", "extreme wide shot: landscape or architecture dominates, any figures are tiny (under a tenth of the frame height)"),
+    ("ELS", "extreme wide shot: landscape or architecture dominates, any figures are tiny (under a tenth of the frame height)"),
+    ("WS", "wide shot: full figures, about a third of the frame height, surroundings clearly visible"),
+    ("LS", "wide shot: full figures, about a third of the frame height, surroundings clearly visible"),
+)
+
+
+def size_rule(shot: dict) -> str:
+    """景别 → 英文构图规则;认不出原样返回(可能已是英文),空返回空。"""
+    raw = str(shot.get("size_hint") or "").strip()
+    if not raw:
+        return ""
+    head = re.split(r"→|->|—>", raw)[0].strip()
+    for term, rule in _SIZE_RULES:
+        if (term.isascii() and re.search(rf"\b{term}\b", head)) or (not term.isascii() and term in head):
+            return rule
+    return head
+
+
+def lens_rule(shot: dict) -> str:
+    """焦段(分镜文字里首个 NNmm,变焦取起点)→ 透视描述;没写焦段返回空(广角/长焦字样由 camera_hint 覆盖)。"""
+    text = " ".join(clean_prose(shot.get(k)) for k in ("sketch", "content", "action"))     # 净化后:时间码分句里的落幅焦段不算
+    m = re.search(r"(\d{2,3})\s*mm", text)
+    if not m:
+        return ""
+    mm = int(m.group(1))
+    if mm <= 24:
+        look = "ultra-wide lens: strongly exaggerated perspective, steeply converging lines, near things huge and far things tiny"
+    elif mm <= 35:
+        look = "wide lens: noticeable perspective depth, converging lines, roomy framing"
+    elif mm <= 65:
+        look = "normal lens: natural perspective like the human eye"
+    elif mm <= 135:
+        look = "telephoto lens: compressed depth, background enlarged and close behind the subject, little perspective convergence"
+    else:
+        look = "long telephoto lens: very compressed depth, background layers stacked flat and large behind the subject, narrow field of view"
+    return f"{mm}mm {look}"
+
+
+def horizon_rule(cam: str) -> str:
+    """机位高度 → 地平线在画面里的位置(传统分镜交代机位高度的方式)。cam 为 camera_hint 结果。"""
+    if any(k in cam for k in ("top-down", "bird's-eye view")):
+        return "Looking almost straight down: no horizon in frame, figures seen from above."
+    if "high angle" in cam:
+        return "Horizon line high in the frame or above it; we look down on the figures."
+    if "low angle" in cam:
+        return "Horizon line low in the frame; the figures loom above it."
+    if "eye level" in cam:
+        return "Horizon line at the figures' eye height."
+    return ""
+
+
+def screen_direction(scene: dict) -> str:
+    """本场轴线/画面方向(storyboard.json scenes[].screen_direction_en / axis_note),各镜共用,保证跨镜画左画右一致。"""
+    return clean_prose(scene.get("screen_direction") or "")
+
+
 def _space_hint(scene: dict, max_chars: int = 60) -> str:
     """地点只留一句短提示(地点/场名 + 时段,截到 max_chars),不带场景卡描述——背景只是示意。"""
     loc = " ".join(x for x in (scene.get("location") or scene.get("scene_name") or "", scene.get("time_of_day") or "")
@@ -1122,11 +1263,61 @@ def sketch_single_only(provider: str) -> bool:
     return str(provider or "").strip().lower() in SINGLE_ONLY_SKETCH_PROVIDERS
 
 
+def whitebox_sentence(legend: list[tuple[str, str]], grid: str = "") -> str:
+    """白模构图底句:legend = [(人物名, 颜色英文名)];grid 为宫格说明(单张传空)。"""
+    who = (": " + "; ".join(f"the {c} mannequin is {n}" for n, c in legend)) if legend else ""
+    return SKETCH_WHITEBOX_SENTENCE.format(who=who, grid=grid)
+
+
+def _shot_parts(shot: dict, names: dict, clip: dict | None = None, grid: bool = False) -> list[str]:
+    """单镜/宫格格共用的逐镜描述:景别规则 → 机位+地平线 → 焦段 → 出场 → 姿态 → 画面(panel_en 或净化散文)→ 神态 → 群众。
+    clip = 宫格裁剪档(None 不裁)。"""
+    cut = (lambda s_, k: _short(s_, clip[k]) if clip and clip.get(k) else s_)
+    out = []
+    size = size_rule(shot)
+    if size:
+        out.append(f"Shot size: {size}.")
+    cam = camera_hint(shot)
+    if cam:
+        hz = horizon_rule(cam)
+        out.append(f"Camera: {cam}." + (f" {hz}" if hz else ""))
+    lens = lens_rule(shot)
+    if lens:
+        out.append(f"Lens: {lens}.")
+    cast = [names.get(c, c) for c in shot.get("cast") or []]
+    if cast:
+        out.append(("Characters: " if grid else "Characters in frame: ") + ", ".join(cast) + ".")
+    ph = pose_hint(shot, names)
+    if ph:      # 姿态/动作句不进裁剪(2026-09-14)
+        out.append((f"Poses: {ph}." if grid else f"Body poses and actions (draw exactly as stated): {ph}."))
+    panel = panel_text(shot)
+    if panel:
+        out.append(f"What we see (start frame): {cut(panel, 'panel')}")
+    else:
+        content = clean_prose(shot.get("content"))
+        action = clean_prose(shot.get("action"))
+        sketch = clean_prose(shot.get("sketch"))
+        if content:
+            out.append(("" if grid else "What we see: ") + cut(content, "content"))
+        if action and action not in content and (not clip or clip.get("action")):
+            out.append("Action: " + cut(action, "action"))
+        if sketch and (not clip or clip.get("sketch")):
+            out.append("Composition: " + cut(sketch, "sketch"))
+    ex = expression_hint(shot)
+    if ex:
+        out.append((f"Expressions: {ex}." if grid else f"Expressions and gestures to make readable: {ex}."))
+    if shot.get("extras") and not grid:
+        out.append(f"Background extras (loose figures only): {clean_prose(shot['extras'])}")
+    return out
+
+
 def build_prompt(scene: dict, shot: dict, names: dict, note: str = "", with_refs: bool = True,
                  plain_style: bool = False, ref_names: list[str] | None = None,
-                 layout: bool = False) -> tuple[str, str]:
-    """单镜提示词(2026-09-12 人物优先):风格句 → 景别 → 机位 → 出场 → **姿态/动作(2026-09-14)** → 画面/动作 → 神态 → 构图 → 群众 → 地点短提示(最后,只作示意) → 修改意见。
-    with_refs=False(comfyui 纯文生图)时整句风格提示换成 SKETCH_STYLE_PROMPT_TEXT_ONLY(不列举姿态、无否定句、人物按文字画)。"""
+                 layout: bool = False, whitebox_legend: list[tuple[str, str]] | None = None) -> tuple[str, str]:
+    """单镜提示词:风格句 →(构图底句)→ 逐镜描述(_shot_parts:景别规则/机位+地平线/焦段/出场/姿态/画面/神态/群众)
+    → 本场轴线 → 地点短提示 → 修改意见。
+    with_refs=False(comfyui 纯文生图)时整句风格提示换成 SKETCH_STYLE_PROMPT_TEXT_ONLY(不列举姿态、无否定句、人物按文字画)。
+    layout=True:最后一张参考图是构图底——whitebox_legend 不为 None 时是白模机位首帧(彩色假人逐个点名),否则是手绘稿。"""
     # plain_style(comfyui / agentics,2026-09-19)带参考图:正向风格句 + 逐张点名的参考图句,不用含否定句/姿态列举的 SKETCH_STYLE_PROMPT
     if not with_refs:
         parts = [SKETCH_STYLE_PROMPT_TEXT_ONLY]
@@ -1134,37 +1325,20 @@ def build_prompt(scene: dict, shot: dict, names: dict, note: str = "", with_refs
         parts = [SKETCH_STYLE_PROMPT_TEXT_ONLY[:-len(SKETCH_TEXT_ONLY_TAIL)] + ref_sentence_plain(ref_names or [])]
     else:
         parts = [SKETCH_STYLE_PROMPT + SKETCH_REFS_SENTENCE]
-    if layout:      # 手绘稿 AI 加工:手绘稿是最后一张参考图(调用方保证已挂)
-        parts.append(SKETCH_LAYOUT_SENTENCE)
-    if shot.get("size_hint"):
-        parts.append(f"Shot size: {shot['size_hint']}.")
-    cam = camera_hint(shot)
-    if cam:
-        parts.append(f"Camera: {cam}.")
-    cast = [names.get(c, c) for c in shot.get("cast") or []]
-    if cast:
-        parts.append("Characters in frame: " + ", ".join(cast) + ".")
-    ph = pose_hint(shot, names)
-    if ph:
-        parts.append(f"Body poses and actions (draw exactly as stated): {ph}.")
-    if shot.get("content"):
-        parts.append(f"What we see: {shot['content']}")
-    if shot.get("action") and shot["action"] not in (shot.get("content") or ""):
-        parts.append(f"Action: {shot['action']}")
-    ex = expression_hint(shot)
-    if ex:
-        parts.append(f"Expressions and gestures to make readable: {ex}.")
-    if shot.get("sketch"):
-        parts.append(f"Composition: {shot['sketch']}")
-    if shot.get("extras"):
-        parts.append(f"Background extras (loose figures only): {shot['extras']}")
-    # 场景只靠文字(2026-09-11 用户拍板);2026-09-12 起只留一句短地点提示,放最后,不再拼场景卡描述
+    if layout:      # 构图底是最后一张参考图(调用方保证已挂)
+        parts.append(whitebox_sentence(whitebox_legend) if whitebox_legend is not None else SKETCH_LAYOUT_SENTENCE)
+    parts += _shot_parts(shot, names)
+    sd = screen_direction(scene)
+    if sd:
+        parts.append(f"Screen direction for this scene (keep left/right consistent): {sd}.")
+    # 场景只靠文字(2026-09-11 用户拍板);只留一句短地点提示,放最后,不拼场景卡描述
     space = _space_hint(scene)
     if space:
-        parts.append(f"Space hint (background stays a few faint lines): {space}.")
+        parts.append(f"Location (draw as simple shapes): {space}.")
     if note and note.strip():
         parts.append(f"Revision instruction (takes priority): {note.strip()}")
-    return " ".join(parts), SKETCH_NEGATIVE
+    negative = SKETCH_NEGATIVE if shot.get("cast") else SKETCH_NEGATIVE.replace(SKETCH_NEGATIVE_PEOPLE_TAIL, "")
+    return " ".join(parts), negative
 
 
 def _shrink(src: Path, cache: Path) -> Path:
@@ -1200,6 +1374,85 @@ def collect_refs(base: Path, ep: str, scene: dict, shot: dict, catalog: dict, li
     return out
 
 
+# ---------------- 白模机位构图底(2026-09-29,--whitebox-layout) ----------------
+WHITEBOX_LAYOUT_DIR = "_whitebox"      # assets/storyboard/<ep>/_whitebox/<键>.jpg(按 camera.mp4 mtime+时刻缓存)
+WHITEBOX_EDGE_INSET_S = 1 / 24         # 与 whitebox_stills 同:镜首向内收一帧,避免采到上一镜
+
+
+def _whitebox_cameras(base: Path, ep: str) -> dict:
+    """白模编译结果 directing/<ep>/whitebox/episode.json → {shot_id: (group, camera)}。"""
+    epi = _read_json(base / "directing" / ep / "whitebox" / "episode.json") or {}
+    out = {}
+    for g in epi.get("groups") or []:
+        for cam in (g.get("cameras") or []) if isinstance(g, dict) else []:
+            if isinstance(cam, dict) and cam.get("shot_id"):
+                out[cam["shot_id"]] = (g, cam)
+    return out
+
+
+def whitebox_layout_frame(base: Path, ep: str, shot: dict, cameras: dict | None = None) -> tuple[Path | None, list]:
+    """本镜的白模机位首帧(取自已导出的 assets/whitebox/<ep>/<grp>/camera.mp4,对应 shot_list 定稿镜的首镜)与图例
+    [(人物名, 颜色英文名)](只列本镜出场、在该组白模里有假人的)。没有定稿镜/没导出/抽帧失败返回 (None, [])。"""
+    import shutil
+    import subprocess
+    cameras = _whitebox_cameras(base, ep) if cameras is None else cameras
+    hit = next((cameras[f["shot_id"]] for f in shot.get("final") or [] if f.get("shot_id") in cameras), None)
+    if not hit:
+        return None, []
+    group, cam = hit
+    video = base / "assets" / "whitebox" / ep / str(group.get("group_id") or "") / "camera.mp4"
+    ffmpeg = shutil.which("ffmpeg")
+    if not video.is_file() or not ffmpeg:
+        return None, []
+    try:
+        start, dur = float(cam.get("start") or 0), float(cam.get("duration_s") or 0)
+    except Exception:
+        return None, []
+    t = round(start + min(WHITEBOX_EDGE_INSET_S, dur / 4 if dur > 0 else 0), 3)
+    out_dir = sketch_dir(base, ep) / WHITEBOX_LAYOUT_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+    h = hashlib.sha1(f"{video}|{int(video.stat().st_mtime)}|{t}".encode()).hexdigest()[:10]
+    out = out_dir / f"{shot['key']}_{h}.jpg"
+    if not out.is_file():
+        for old in out_dir.glob(f"{shot['key']}_*.jpg"):
+            old.unlink(missing_ok=True)
+        r = subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-ss", str(t), "-i", str(video),
+                            "-frames:v", "1", "-q:v", "3", str(out)], capture_output=True)
+        if r.returncode != 0 or not out.is_file():
+            return None, []
+    from modules.whitebox_refs import color_name
+    cast = set(shot.get("cast") or [])
+    legend = [(str(a.get("label") or a.get("id")), color_name(a.get("color")))
+              for a in group.get("actors") or [] if isinstance(a, dict) and a.get("id") in cast and a.get("color")]
+    return out, legend
+
+
+def whitebox_grid_layout(base: Path, ep: str, panels: list[tuple[dict, dict]], cols: int, rows: int) -> tuple[Path | None, list]:
+    """宫格版:各格白模首帧按宫格排布拼成一张(缺帧的格留白),图例取并集;一格都没有返回 (None, [])。"""
+    cameras = _whitebox_cameras(base, ep)
+    frames, legend = [], []
+    for _, shot in panels:
+        f, lg = whitebox_layout_frame(base, ep, shot, cameras)
+        frames.append(f)
+        legend += [x for x in lg if x not in legend]
+    if not any(frames):
+        return None, []
+    from PIL import Image
+    cw, ch = 640, 360
+    for f in frames:
+        if f:
+            w, h = Image.open(f).size
+            ch = round(cw * h / w)
+            break
+    sheet = Image.new("RGB", (cw * cols, ch * rows), "white")
+    for k, f in enumerate(frames):
+        if f:
+            sheet.paste(Image.open(f).convert("RGB").resize((cw, ch)), ((k % cols) * cw, (k // cols) * ch))
+    out = sketch_dir(base, ep) / WHITEBOX_LAYOUT_DIR / f"grid_{panels[0][1]['key']}_{panels[-1][1]['key']}.jpg"
+    sheet.save(out, "JPEG", quality=88)
+    return out, legend
+
+
 def grid_layout(n: int) -> tuple[int, int]:
     """按镜数选宫格:1 镜单张(调用方走单镜路径)、2–4 镜 2×2(GRID_MAX_PANELS=4,2026-09-12 起不再出 3×3);
     超过 4 镜只作兜底返回 3×3,正常调用方已按 GRID_MAX_PANELS 分批。返回 (cols, rows)。"""
@@ -1215,24 +1468,31 @@ def _short(s, n: int) -> str:
     return s if len(s) <= n else s[:n - 1].rstrip() + "…"
 
 
-GRID_PROMPT_MAX = 2400       # 宫格提示词字符上限(4 格合一,按三档收紧逐格文字直到不超)
-# 2026-09-12 收紧顺序改为先砍地点(desc 第一档就不进),再压画面内容;机位/神态短语与构图最后才压——草图要的是机位、比例、神态、动作。
-_GRID_CLIPS = ({"desc": 0, "content": 260, "action": 160, "sketch": 200, "note": 160},
-               {"desc": 0, "content": 180, "action": 100, "sketch": 140, "note": 120},
-               {"desc": 0, "content": 120, "action": 60, "sketch": 90, "note": 90})
+GRID_PROMPT_MAX = 3600       # 宫格提示词字符上限(4 格合一,按档收紧逐格文字直到不超;2026-09-29 风格句/景别规则加长后由 2400 提到 3600)
+# 收紧顺序:先压画面散文/动作/构图,景别规则、机位、焦段、姿态、神态不裁——草图要的是机位、比例、神态、动作。
+_GRID_CLIPS = ({"content": 260, "action": 160, "sketch": 200, "note": 160, "panel": 400},
+               {"content": 180, "action": 100, "sketch": 140, "note": 120, "panel": 300},
+               {"content": 120, "action": 60, "sketch": 90, "note": 90, "panel": 220},
+               {"content": 80, "action": 0, "sketch": 0, "note": 60, "panel": 160})
 
 
 def build_grid_prompt(panels: list[tuple[dict, dict]], names: dict, cols: int, rows: int, aspect: str = "16:9",
-                      max_chars: int = GRID_PROMPT_MAX, with_refs: bool = True) -> tuple[str, str]:
-    """宫格提示词:风格总句 + 各场地点短提示一次(只作示意) + 逐格「Panel k (row r, col c)」景别/机位/地点/出场/姿态动作(不裁)/画面/动作/神态/构图(用台账 note)。
+                      max_chars: int = GRID_PROMPT_MAX, with_refs: bool = True,
+                      whitebox_legend: list[tuple[str, str]] | None = None) -> tuple[str, str]:
+    """宫格提示词:风格总句 +(白模构图底句)+ 各场地点短提示与轴线一次 + 逐格「Panel k (row r, col c)」逐镜描述(_shot_parts)。
     panels = [(scene, shot)],≤ cols*rows;格数不满时说明剩余格留白(切分时只取前 n 格)。
-    总长超 max_chars 时按 _GRID_CLIPS 三档收紧逐格文字(2026-09-12:地点描述不进,先压画面内容,机位/神态/构图最后压)。
-    with_refs=False(agentics 文生图宫格)时风格句结尾换成 GRID_TEXT_ONLY_SENTENCE(人物按文字画)。"""
+    总长超 max_chars 时按 _GRID_CLIPS 逐档收紧画面散文。
+    with_refs=False(agentics 文生图宫格)时风格句结尾换成 GRID_TEXT_ONLY_SENTENCE(人物按文字画)。
+    whitebox_legend 不为 None:最后一张参考图是与宫格同排布的白模机位首帧拼图。"""
     n = len(panels)
     cells = cols * rows
     blank = f" The last {cells - n} cell(s) of the grid stay blank white." if n < cells else ""
     head = GRID_STYLE_PROMPT.format(cols=cols, rows=rows, n=cells, aspect=aspect or "16:9", blank=blank,
                                     refs=GRID_REFS_SENTENCE if with_refs else GRID_TEXT_ONLY_SENTENCE)
+    if whitebox_legend is not None:
+        head += " " + whitebox_sentence(whitebox_legend, grid=f", laid out as the same {cols}x{rows} grid with cells "
+                                        "matching the panels one to one (a plain white cell has no blocking: draw that "
+                                        "panel from its text)")
     prompt = ""
     for clip in _GRID_CLIPS:
         parts = [head]
@@ -1242,35 +1502,16 @@ def build_grid_prompt(panels: list[tuple[dict, dict]], names: dict, cols: int, r
             if key in seen:
                 continue
             seen.append(key)
-            loc = _space_hint(sc)
-            desc = _short(sc.get("scene_description"), clip["desc"]) if clip["desc"] else ""
-            if loc or desc:
-                parts.append(f"Location {key} (background stays a few faint lines): {loc}{'. ' + desc if desc else ''}.")
+            loc, sd = _space_hint(sc), screen_direction(sc)
+            if loc or sd:
+                parts.append(f"Location {key} (draw as simple shapes): {loc or '-'}."
+                             + (f" Screen direction (keep left/right consistent): {_short(sd, 200)}." if sd else ""))
         for k, (sc, shot) in enumerate(panels, 1):
             r, c = (k - 1) // cols + 1, (k - 1) % cols + 1
             seg = [f"Panel {k} (row {r}, column {c}):"]
-            if shot.get("size_hint"):
-                seg.append(f"{shot['size_hint']} shot.")
-            cam = camera_hint(shot)
-            if cam:
-                seg.append(f"Camera: {cam}.")
             if len(seen) > 1:
                 seg.append(f"Location {sc.get('scene_no')}.")
-            cast = [names.get(x, x) for x in shot.get("cast") or []]
-            if cast:
-                seg.append("Characters: " + ", ".join(cast) + ".")
-            ph = pose_hint(shot, names)
-            if ph:      # 姿态/动作句不进三档裁剪(2026-09-14):它正是以前被长散文淹没、被截掉的信息
-                seg.append(f"Poses: {ph}.")
-            if shot.get("content"):
-                seg.append(_short(shot["content"], clip["content"]))
-            if clip["action"] and shot.get("action") and shot["action"] not in (shot.get("content") or ""):
-                seg.append("Action: " + _short(shot["action"], clip["action"]))
-            ex = expression_hint(shot)
-            if ex:
-                seg.append(f"Expressions: {ex}.")
-            if clip["sketch"] and shot.get("sketch"):
-                seg.append("Composition: " + _short(shot["sketch"], clip["sketch"]))
+            seg += _shot_parts(shot, names, clip=clip, grid=True)
             note = str(shot.get("_note") or "").strip()
             if note:
                 seg.append("Revision instruction: " + _short(note, clip["note"]))

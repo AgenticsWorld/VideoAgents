@@ -9,8 +9,12 @@ comfyui 须选真正收参考图的模板(RunningHub 的 Qwen-Image-Edit / FLUX.
 comfy/image-flux2-dev-fp8-ref10-api.json:多个 LoadImage 作条件输入、空 latent),张数以模板 LoadImage 个数封顶;
 单图原图重绘(img2img)模板是把图当初始画面,传 sheet 会把构图锁成设定稿,仍不传、走纯文生图。agentics 看图生图 profile 的 input_images.max_items,没配或取不到详情走文生图 profile。
 这两个渠道带参考图时风格句用正向写法 + 逐张点名(Picture N 是谁)+ 单实例句(cfg=1 蒸馏模型不吃 negative)。
-提示词(2026-09-12 用户拍板)**人物优先、背景留白**:草图只为看镜头机位、人物比例、神态、动作,地点只留一句短提示放在最后;
+提示词(2026-09-12 用户拍板)**人物优先**:草图只为看镜头机位、人物比例、神态、动作,地点只留一句短提示放在最后;
 机位/神态从分镜文字自动推导成英文短语(modules/storyboard_board.py camera_hint / expression_hint)。
+2026-09-29 用户拍板向传统电影故事板靠拢:专业分镜师铅笔+灰马克笔画法、背景「简化但空间准确」;景别换成构图规则、
+焦段(NNmm)换成透视描述、机位高度换成地平线位置;画面描述优先用英文 panel_en(分镜层字段 / --panel 覆盖),
+没有时中文散文先剔除【】段落、时间码与交组等制作用语;本场轴线(axis_note / screen_direction_en)进提示词;
+--whitebox-layout 取白模摄影机视角首帧作构图底。
 (缺省:台账里该镜上次用的 → 控制台故事板页保存的草图模型 state.json image_model_prefs.sketch → 全局图像渠道)。
 
 两种出图方式:
@@ -25,7 +29,8 @@ comfy/image-flux2-dev-fp8-ref10-api.json:多个 LoadImage 作条件输入、空 
   python3 code/storyboard_sketch.py --project <slug> --ep ep01 --scene S01 --order 3  # 只出/重出这一镜
   python3 code/storyboard_sketch.py --project <slug> --ep ep01 --grid                 # 整集 2×2 宫格批量(已出的跳过;--scene 限一场)
   python3 code/storyboard_sketch.py --project <slug> --ep ep01 --grid --keys S01-01,S01-02,S02-01   # 指定键(≤4,宿主后台分批用;不论状态都出)
-      [--note "修改意见/补充描述,会拼进提示词并存台账"] [--provider fal --model fal-ai/...] [--force] [--dry-run]
+      [--note "修改意见/补充描述,会拼进提示词并存台账"] [--panel "英文画面描述"] [--whitebox-layout]
+      [--provider fal --model fal-ai/...] [--force] [--dry-run]
 退出码:0 全部成功、1 有镜失败、2 storyboard.json 缺失或场/镜不存在。
 宿主 CLI,Agent(07-directing/storyboard-sketch)只准调用,禁止复制/改写到项目 code/;不改 storyboard.json。
 """
@@ -77,6 +82,13 @@ def _ref_rel(r, root) -> str:
     return str(r.relative_to(root)) if str(r).startswith(str(root)) else str(r.relative_to(sbb.ROOT))
 
 
+def _panel_of(args, rec: dict) -> str:
+    """英文画面描述覆盖:--clear-panel 清空 → --panel 新值 → 台账已有 panel_en;空 = 用分镜层 panel_en / 净化后的中文散文。"""
+    if getattr(args, "clear_panel", False):
+        return ""
+    return (getattr(args, "panel", "") or "").strip() or str(rec.get("panel_en") or "")
+
+
 def _now() -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -86,6 +98,8 @@ def _sketch_one(root, ep, scene, shot, names, catalog, aspect, args, rec: dict) 
     from modules.genmedia import generate_image, get_config
     key = shot["key"]
     note = "" if args.clear_note else (args.note.strip() or str(rec.get("note") or ""))
+    panel = _panel_of(args, rec)
+    shot = dict(shot, _panel=panel)
     provider, model = (args.provider, args.model) if (args.provider or args.model) else _default_channel(rec)
     _set_channel(provider, model)
     rel = f"{sbb.SKETCH_DIR_REL.format(ep=ep)}/{key}.png"
@@ -114,6 +128,14 @@ def _sketch_one(root, ep, scene, shot, names, catalog, aspect, args, rec: dict) 
                 sbb.update_index(root, ep, key, {"status": "failed", "error": err,
                                                  "scene_no": scene["scene_no"], "order": shot["order"]})
             return False
+    # --whitebox-layout(2026-09-29):已导出白模的镜取 camera.mp4 本镜首帧作构图底;没有或渠道收不了参考图就按文字出,不算失败
+    wb_legend = None
+    if layout is None and getattr(args, "whitebox_layout", False):
+        frame, legend = sbb.whitebox_layout_frame(root, ep, shot) if ref_cap != 0 else (None, [])
+        if frame is None:
+            print(f"INFO {key} 无可用白模机位帧(未出定稿镜/未导出 camera.mp4/渠道 {eff_provider} 不收参考图),按文字出图")
+        else:
+            layout, wb_legend = frame, legend
     cast_cap = ref_cap if (layout is None or ref_cap is None) else ref_cap - 1
     text_only = cast_cap == 0
     refs = [] if text_only else sbb.collect_refs(root, ep, scene, shot, catalog, limit=cast_cap)
@@ -121,7 +143,7 @@ def _sketch_one(root, ep, scene, shot, names, catalog, aspect, args, rec: dict) 
     ref_names = [names.get(c, c) for c in sbb.ref_cast_ids(root, shot, catalog, cast_cap)] if refs else []
     prompt, negative = sbb.build_prompt(scene, shot, names, note, with_refs=not text_only,
                                         plain_style=sbb.sketch_plain_style(eff_provider), ref_names=ref_names,
-                                        layout=layout is not None)
+                                        layout=layout is not None, whitebox_legend=wb_legend)
     if layout is not None:
         refs = refs + [layout]
     if args.dry_run:
@@ -131,8 +153,10 @@ def _sketch_one(root, ep, scene, shot, names, catalog, aspect, args, rec: dict) 
         return True
     sbb.update_index(root, ep, key, {
         "status": "running", "error": "", "scene_no": scene["scene_no"], "order": shot["order"],
-        "shot_id": shot.get("shot_id") or "", "prompt": prompt, "note": note,
-        "mode": "hand_ai" if layout is not None else "single", "layout": (args.layout if layout is not None else None),
+        "shot_id": shot.get("shot_id") or "", "prompt": prompt, "note": note, "panel_en": panel,
+        "mode": "hand_ai" if (layout is not None and wb_legend is None) else "single",
+        "layout": (args.layout if (layout is not None and wb_legend is None) else None),
+        "whitebox_layout": (_ref_rel(layout, root) if wb_legend is not None else None),
         "grid": None, "provider": eff_provider, "model": eff_model, "aspect": aspect,
         "refs": [_ref_rel(r, root) for r in refs], "started_at": _now()})
     out = root / rel
@@ -167,6 +191,7 @@ def _sketch_grid(root, ep, panels, names, catalog, aspect, args, index) -> int:
     for _, sh in panels:
         rec = index["shots"].get(sh["key"]) or {}
         sh["_note"] = "" if args.clear_note else (args.note.strip() or str(rec.get("note") or ""))
+        sh["_panel"] = _panel_of(args, rec)
     provider, model = (args.provider, args.model) if (args.provider or args.model) else _default_channel({})
     _set_channel(provider, model)
     try:
@@ -192,8 +217,21 @@ def _sketch_grid(root, ep, panels, names, catalog, aspect, args, index) -> int:
     # agentics:宫格照出;图生图 profile 收参考图才传人物 sheet(张数以其容量封顶),否则走文生图 profile(2026-09-19)
     ref_cap = sbb.sketch_ref_capacity(eff_provider, cfg)
     refs = [] if ref_cap == 0 else sbb.collect_grid_refs(root, ep, panels, catalog, limit=ref_cap)
+    # --whitebox-layout(2026-09-29):各格白模首帧拼成同排布的构图底,占参考图最后一张
+    wb_layout, wb_legend = None, None
+    if getattr(args, "whitebox_layout", False):
+        if ref_cap != 0:
+            wb_layout, wb_legend = sbb.whitebox_grid_layout(root, ep, panels, cols, rows)
+        if wb_layout is None:
+            wb_legend = None
+            print(f"INFO {', '.join(keys)} 无可用白模机位帧,宫格按文字出图")
+        elif ref_cap is not None and len(refs) >= ref_cap:
+            refs = refs[:ref_cap - 1]
     text_only = ref_cap is not None and not refs
-    prompt, negative = sbb.build_grid_prompt(panels, names, cols, rows, aspect, with_refs=not text_only)
+    prompt, negative = sbb.build_grid_prompt(panels, names, cols, rows, aspect, with_refs=not text_only,
+                                             whitebox_legend=wb_legend)
+    if wb_layout is not None:
+        refs = refs + [wb_layout]
     size = sbb.grid_size(eff_provider, aspect)
     grid_rel = f"{sbb.GRID_DIR_REL.format(ep=ep)}/{time.strftime('%Y%m%d-%H%M%S')}_{keys[0]}_{keys[-1]}.png"
     if args.dry_run:
@@ -205,7 +243,8 @@ def _sketch_grid(root, ep, panels, names, catalog, aspect, args, index) -> int:
     for k, (sc, sh) in enumerate(panels):
         sbb.update_index(root, ep, sh["key"], {
             "status": "running", "error": "", "scene_no": sc["scene_no"], "order": sh["order"],
-            "shot_id": sh.get("shot_id") or "", "prompt": prompt, "note": sh["_note"], "mode": "grid",
+            "shot_id": sh.get("shot_id") or "", "prompt": prompt, "note": sh["_note"], "panel_en": sh["_panel"], "mode": "grid",
+            "whitebox_layout": (_ref_rel(wb_layout, root) if wb_layout is not None else None),
             "grid": dict(grid_meta, cell=k), "provider": eff_provider, "model": eff_model, "aspect": aspect,
             "refs": [_ref_rel(r, root) for r in refs], "started_at": _now()})
     grid_out = root / grid_rel
@@ -245,6 +284,11 @@ def main() -> int:
         ap.add_argument("--layout", default="", help="手绘稿路径(项目内相对路径或绝对路径;须配 --order):作构图底、按草图风格 AI 重绘(故事板页「✍️ 手绘 · AI 加工」宿主用)")
         ap.add_argument("--note", default="", help="修改意见/补充描述:拼进提示词并写台账 note(空=沿用台账已有 note)")
         ap.add_argument("--clear-note", action="store_true", help="清掉台账里该镜的 note 后再出图")
+        ap.add_argument("--panel", default="", help="英文画面描述(≤60 词,起幅一帧:谁在画左/画右/前后景、朝向、视线、动作、光向),"
+                        "覆盖分镜层 panel_en 并写台账 panel_en(空=沿用台账已有)")
+        ap.add_argument("--clear-panel", action="store_true", help="清掉台账里该镜的 panel_en 覆盖后再出图")
+        ap.add_argument("--whitebox-layout", action="store_true", help="已导出白模 camera.mp4 的镜取本镜首帧作构图底"
+                        "(机位/焦段/人物画内位置按白模);没有则按文字出")
         ap.add_argument("--provider", default="", help="图像渠道(须已在「生成模型」页配置);缺省见文件头")
         ap.add_argument("--model", default="", help="图像模型 id;缺省见文件头")
         ap.add_argument("--force", action="store_true", help="已出图的镜也重出(--order 单镜时默认即重出)")
