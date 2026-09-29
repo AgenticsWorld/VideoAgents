@@ -24,7 +24,8 @@
 全景中心(问题「自动还是手动」):默认自动(上述规划),预览页「全景图」板块显示每个锚点在俯视图中的坐标;用户要改就
 `code/render_scene_panos.py --anchor x,z --force` 或直接改 index.json 后 --force 重出。
 预览页「创建全景图」(2026-09-13):俯视图上点一个坐标 → add_manual_anchor 加锁定锚点 → ensure_scene_panos(only=[新锚点], schemes={所选方案})
-只出这一张(链式/重打光规则照旧),其它锚点与背景图不动;后台任务 = CLI --anchor x,z[,yaw] --only-new --scheme <slug>。
+只出这一张(链式/重打光规则照旧),其它锚点与背景图不动;后台任务 = CLI --anchor x,z[,yaw[,y]] --only-new --scheme <slug>
+(y = 相机脚下平面海拔,2026-09-29;预览页默认 0 = 地面,相机 = y + 眼高;不带 y 照旧自动找站立面)。
 """
 from __future__ import annotations
 
@@ -355,6 +356,21 @@ def anchor_pos_at(scene: dict, x: float, z: float, cameras: list, eye: float) ->
             return p
     y = near[0]['position'][1] if near else surfs[-1] + eye
     return [round(x, 3), round(float(y), 3), round(z, 3)]
+
+
+def manual_anchor_pos(scene: dict, x: float, z: float, y: float, eye: float, *, indoor: bool = False) -> list:
+    """用户指定脚下平面海拔 y 的锚点位置 [x, y + 眼高, z](不自动找站立面)。y < 0、相机落在实体块里、室内场景相机高过屋顶 → PanoError。"""
+    if not math.isfinite(y) or y < 0:
+        raise PanoError(f'y(脚下平面海拔)须 ≥ 0:{y}')
+    p = [round(x, 3), round(y + eye, 3), round(z, 3)]
+    top = float(scene['dimensions_m'][1])
+    if indoor and p[1] >= top - .2:
+        raise PanoError(f'({x}, {z}) y={y:g} m:相机高 {p[1]} m 已到室内屋顶({top:g} m)之外,请把 y 调低到 {max(0.0, round(top - eye - .3, 1)):g} m 以内')
+    if not _free_at(scene, p):
+        free = [t for t in surfaces_at(scene, x, z) if _free_at(scene, [x, t + eye, z])]
+        raise PanoError(f'({x}, {z}) y={y:g} m:相机高 {p[1]} m 处在白模实体块里,出不了全景;'
+                        + (f"该点可站的平面海拔:{' / '.join(f'{t:g}' for t in free)} m" if free else '该点被体块包死,请换一个位置'))
+    return p
 
 
 def candidate_points(scene: dict, height: float, levels: list | None = None) -> list:
@@ -1837,11 +1853,29 @@ def scene_scheme_options(base: Path, sid: str, cameras: list | None = None) -> l
     return out
 
 
+def probe_anchor_height(base: Path, sid: str, x: float, z: float, *, cameras: list | None = None) -> dict:
+    """预览页「创建全景图」点位后自动填 y(2026-09-29):(x, z) 处按自动口径(anchor_pos_at:与最近机位同层的站立面,没有就自下而上
+    第一个相机不落在实体里的面)会站在哪个平面上。返回 {x, z(夹回地面内 0.5 m), y 脚下平面海拔, eye 眼高, camera_y, surfaces 该点可站的各平面海拔}。只读。"""
+    from modules.whitebox import load_scene
+    sid = component(sid)
+    scene = load_scene(base, sid)
+    cams = scene_cameras(base, sid) if cameras is None else cameras
+    w, _, d = scene['dimensions_m']
+    px = round(max(-w / 2 + .5, min(w / 2 - .5, float(x))), 3)
+    pz = round(max(-d / 2 + .5, min(d / 2 - .5, float(z))), 3)
+    eye = default_anchor_height(cams, scene)
+    pos = anchor_pos_at(scene, px, pz, cams, eye)
+    surfaces = [t for t in surfaces_at(scene, px, pz) if _free_at(scene, [px, t + eye, pz])]
+    return {'x': px, 'z': pz, 'y': round(max(0.0, pos[1] - eye), 3), 'eye': eye, 'camera_y': pos[1], 'surfaces': surfaces}
+
+
 def add_manual_anchor(base: Path, sid: str, x: float, z: float, yaw_deg: float = 0.0, *, cameras: list | None = None,
-                      persist: bool = True) -> dict:
+                      persist: bool = True, y: float | None = None) -> dict:
     """手动加一个锁定锚点(预览页俯视图点选 / CLI --anchor):坐标夹回白模地面内 0.5 m,高度 = 该点站立面 + 眼高(城墙顶/楼上随最近机位那一层),
     serves = 尚无锚点服务且它能服务的机位(不抢已有锚点的机位,不改动其它锚点)。写回 index.json,返回新锚点。
-    persist=False(CLI --dry-run):只算出这个锚点会是什么样,不写索引。"""
+    persist=False(CLI --dry-run):只算出这个锚点会是什么样,不写索引。
+    y(2026-09-29 预览页「创建全景图」的 y 输入):相机脚下平面的海拔(米,0 = 地面),相机高度 = y + 眼高,不再自动找站立面;
+    落在实体块里 / 室内场景高过屋顶 → PanoError(报出该点可站的平面海拔)。y=None 照旧自动。"""
     from modules.whitebox import load_scene
     sid = component(sid)
     scene = load_scene(base, sid)
@@ -1857,7 +1891,11 @@ def add_manual_anchor(base: Path, sid: str, x: float, z: float, yaw_deg: float =
     while f'A{n}' in used:
         n += 1
     served = {k for a in idx['anchors'] for k in a.get('serves', [])}
-    pos = anchor_pos_at(scene, px, pz, cams, default_anchor_height(cams, scene))   # 该点站立面 + 眼高(与最近机位同层)
+    eye = default_anchor_height(cams, scene)
+    if y is None:
+        pos = anchor_pos_at(scene, px, pz, cams, eye)   # 该点站立面 + 眼高(与最近机位同层)
+    else:
+        pos = manual_anchor_pos(scene, px, pz, float(y), eye, indoor=scene_indoor(base, sid) is True)
     serves = sorted(_cam_key(c) for c in cams if _cam_key(c) not in served and can_serve(pos, c, scene))
     anchor = {'anchor_id': f'A{n}', 'position': pos, 'yaw_deg': float(yaw_deg or 0.0), 'source': 'manual', 'locked': True,
               'serves': serves, 'panos': {}}

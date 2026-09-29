@@ -470,8 +470,14 @@ async def scene_world_start(project: str, sid: str, body: dict[str, Any]) -> dic
 
 @api.post("/projects/{project}/scenes/{sid}/panos", tags=["artifacts"])
 async def scene_pano_start(project: str, sid: str, body: dict[str, Any]) -> dict[str, Any]:
-    """场景预览页「创建全景图」:{x, z, yaw?, scheme?}(白模米制坐标)→ 后台加锁定锚点并只出这一张全景;进度经 SSE scene_panos。"""
+    """场景预览页「创建全景图」:{x, z, yaw?, y?, scheme?}(白模米制坐标;y = 相机脚下平面海拔)→ 后台加锁定锚点并只出这一张全景;进度经 SSE scene_panos。"""
     return await core.api_scene_pano_start(project, sid, body)
+
+
+@api.post("/projects/{project}/scenes/{sid}/panos/probe", tags=["artifacts"])
+async def scene_pano_probe(project: str, sid: str, body: dict[str, Any]) -> dict[str, Any]:
+    """场景预览页「创建全景图」点位后自动填 y(2026-09-29):{x, z} → 该点按自动口径所站平面的海拔 y、眼高、可站的各平面(只读)。"""
+    return await core.api_scene_pano_probe(project, sid, body)
 
 
 @api.post("/projects/{project}/scenes/{sid}/panos/adopt", tags=["artifacts"])

@@ -7951,8 +7951,9 @@ def _scene_world_worker(project: str, sid: str, jobkey: str, cmd: list[str]):
 
 
 async def api_scene_pano_start(project: str, sid: str, body: dict):
-    """场景预览页「创建全景图」(2026-09-13):{x, z, yaw?, scheme?} 白模米制坐标(俯视图点选换算)→ 后台跑
-    code/render_scene_panos.py --anchor x,z[,yaw] --only-new --scheme <slug>:加一个锁定锚点、只出它这一张全景,其它锚点/背景图不动。
+    """场景预览页「创建全景图」(2026-09-13):{x, z, yaw?, y?, scheme?} 白模米制坐标(俯视图点选换算)→ 后台跑
+    code/render_scene_panos.py --anchor x,z[,yaw[,y]] --only-new --scheme <slug>:加一个锁定锚点、只出它这一张全景,其它锚点/背景图不动。
+    y(2026-09-29)= 相机脚下平面海拔(0 = 地面),相机 = y + 眼高;请求体不带 y 照旧自动找站立面。落在实体块里由 CLI 报错(任务 failed)。
     进度经 SSE scene_panos 事件;完成后预览数据里多出该锚点。退出码 2 = 全景模型不支持 2:1(index.json#blocked,预览页红条)。"""
     base = _proj_base(project)
     sid = re.sub(r"[^\w\-]", "", sid)
@@ -7965,24 +7966,53 @@ async def api_scene_pano_start(project: str, sid: str, body: dict):
     try:
         x, z = float(body.get("x")), float(body.get("z"))
         yaw = float(body.get("yaw") or 0.0)
+        y = None if body.get("y") in (None, "") else float(body.get("y"))
     except (TypeError, ValueError):
         raise ServiceError(400, "x/z(米,白模坐标)必填且须为数字") from None
     if not all(math.isfinite(v) for v in (x, z, yaw)):
         raise ServiceError(400, "x/z/yaw 须为有限数")
+    if y is not None and not (math.isfinite(y) and y >= 0):
+        raise ServiceError(400, "y(相机脚下平面海拔,米)须为 ≥ 0 的有限数")
     scheme = re.sub(r"[^A-Za-z0-9_\-]", "", str(body.get("scheme") or ""))
     jobkey = f"{base.name}/{sid}"
     if (PANO_JOBS.get(jobkey) or {}).get("status") == "running":
         raise ServiceError(409, f"{sid} 正在生成全景图")
     cmd = [sys.executable, "-u", str(ROOT / "code" / "render_scene_panos.py"), "--project", base.name, "--scene", sid,
-           "--anchor", f"{x:g},{z:g},{yaw:g}", "--only-new"]
+           "--anchor", f"{x:g},{z:g},{yaw:g}" + ("" if y is None else f",{y:g}"), "--only-new"]
     if scheme:
         cmd += ["--scheme", scheme]
     PANO_JOBS[jobkey] = {"status": "running", "log": [], "started_at": time.time(), "finished_at": None, "error": "",
-                         "params": {"x": x, "z": z, "yaw": yaw, "scheme": scheme}}
+                         "params": {"x": x, "z": z, "yaw": yaw, "y": y, "scheme": scheme}}
     threading.Thread(target=_scene_job_worker, args=(PANO_JOBS, "scene_panos", base.name, sid, jobkey, cmd),
                      kwargs={"rc2_error": "当前全景模型不支持 2:1 全景,请到本页顶部「🌐 全景模型」切换后重试"}, daemon=True).start()
     HUB.publish({"type": "scene_panos", "project": base.name, "scene": sid, "status": "running", "line": ""})
     return {"ok": True, "job": jobkey}
+
+
+def _scene_pano_probe(project: str, sid: str, body: dict) -> dict:
+    """场景预览页「创建全景图」点位后自动填 y(2026-09-29):{x, z} → modules.scene_panos.probe_anchor_height,
+    返回该点按自动口径所站平面的海拔 y、眼高与该点可站的各平面。只读,不写索引、不出图。"""
+    from modules import scene_panos as _sp
+    base = _proj_base(project)
+    sid = re.sub(r"[^\w\-]", "", sid)
+    if not sid:
+        raise ServiceError(400, "scene id is required")
+    if not (base / "assets" / "concepts" / "scenes" / sid / "layout.json").is_file():
+        raise ServiceError(404, f"{sid} 还没有场景白模(layout.json)")
+    try:
+        x, z = float(body.get("x")), float(body.get("z"))
+    except (TypeError, ValueError):
+        raise ServiceError(400, "x/z(米,白模坐标)必填且须为数字") from None
+    if not (math.isfinite(x) and math.isfinite(z)):
+        raise ServiceError(400, "x/z 须为有限数")
+    try:
+        return {"ok": True, **_sp.probe_anchor_height(base, sid, x, z)}
+    except Exception as e:  # noqa: BLE001
+        raise ServiceError(409, str(e)[:300]) from None
+
+
+async def api_scene_pano_probe(project: str, sid: str, body: dict):
+    return await asyncio.to_thread(_scene_pano_probe, project, sid, body or {})
 
 
 def _scene_pano_adopt(project: str, sid: str, body: dict) -> dict:
