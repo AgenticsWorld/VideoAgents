@@ -5,15 +5,16 @@
 [X, Z] 铺满地面,白模墙线若不是按同一张图量出来的,就会出现墙偏出地面、门洞错位、凭空多墙;dimensions_m
 的 X:Z 若不等于图幅宽高比,整张图还会被单向拉伸(米制家具尺寸随之失真)。本脚本:
   1. 比例:dimensions_m X/Z 与 layout_top.png 宽/高比偏差 > 2% → FAIL(图幅整体铺地,必须同比);
-  2. 出图:在 layout_top.png 上叠 1m 网格 + 全部几何体脚印(墙体红、其余蓝、地标黄点)写
+  2. 出图:在 layout_top.png 上叠 1m 网格 + 全部几何体脚印(按 yaw 旋转的多边形;墙体红、其余蓝、地标黄点)写
      assets/concepts/scenes/<sid>/whitebox_overlay.png,供建模 Agent 与用户目视核对墙线是否压在图上墙位;
-  3. 越界:任一几何体脚印超出图幅 → FAIL;
+  3. 越界:任一几何体旋转后脚印四角超出图幅 → FAIL;
   4. 列出墙体归一化范围便于逐段比对。
 用法:python code/whitebox_layout_check.py --project <slug> --scene SCN-0001 [--scene SCN-0004 ...]
       不带 --scene 时检查项目内所有已建白模(bible/scenes/*/whitebox.json 含 objects)的场景。
 本脚本是宿主 CLI:Agent 只准按上方用法调用,禁止复制/改写到项目 code/。退出码:全部 PASS 0,否则 1。
 """
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -25,11 +26,28 @@ ASPECT_TOLERANCE = 0.02
 WALL_ROLES = ('wall',)
 
 
-def footprint(obj, dims):
+def footprint_polygon(obj, dims):
+    """脚印四角(归一化图幅坐标)。按渲染器 whitebox-renderer.js mesh.rotation.set(pitch, yaw, roll) 的
+    three.js rotation.y 约定旋转(#78):局部 X → (cos yaw, −sin yaw),局部 Z → (sin yaw, cos yaw)(世界 X, Z)。
+    俯视脚印只计 yaw;pitch/roll 不影响(白模场景物体几乎不用)。"""
     sx, _, sz = obj['size_m']
     px, _, pz = obj['position']
     W, _, D = dims
-    return ((px - sx / 2) / W + .5, (pz - sz / 2) / D + .5, (px + sx / 2) / W + .5, (pz + sz / 2) / D + .5)
+    yaw = float(obj.get('yaw') or 0)
+    c, s = math.cos(yaw), math.sin(yaw)
+    corners = []
+    for lx, lz in ((-sx / 2, -sz / 2), (sx / 2, -sz / 2), (sx / 2, sz / 2), (-sx / 2, sz / 2)):
+        wx = px + lx * c + lz * s
+        wz = pz - lx * s + lz * c
+        corners.append((wx / W + .5, wz / D + .5))
+    return corners
+
+
+def footprint(obj, dims):
+    """旋转后脚印的轴对齐范围 (x0, y0, x1, y1),越界判定与 walls 输出用。"""
+    corners = footprint_polygon(obj, dims)
+    xs, ys = [c[0] for c in corners], [c[1] for c in corners]
+    return (min(xs), min(ys), max(xs), max(ys))
 
 
 def is_wall(obj):
@@ -77,9 +95,10 @@ def check_scene(base, sid, write_overlay=True):
             y = metre / D * ih
             draw.line([(0, y), (iw, y)], fill=(0, 190, 255), width=1)
         for obj in scene.get('objects', []):
-            x0, y0, x1, y1 = footprint(obj, dims)
+            corners = footprint_polygon(obj, dims)
+            x0, y0, _, _ = footprint(obj, dims)
             colour = (255, 0, 0) if is_wall(obj) else (30, 90, 255)
-            draw.rectangle([x0 * iw, y0 * ih, x1 * iw, y1 * ih], outline=colour, width=max(2, iw // 640))
+            draw.polygon([(x * iw, y * ih) for x, y in corners], outline=colour, width=max(2, iw // 640))
             draw.text((x0 * iw + 4, y0 * ih + 2), obj['id'], fill=colour, font=font)
         for lm in scene.get('landmarks', []):
             x, y = lm['xy'][0] * iw, lm['xy'][1] * ih
