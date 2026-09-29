@@ -3224,7 +3224,8 @@ def _apply_rh_image_seed(workflow: dict, sampler: dict, seed) -> None:
           file=sys.stderr)
 
 
-_RH_IMAGE_SLOT_RE = re.compile(r"^image_?(\d+)$")
+# image2 / image_2(EditPlus 一类),以及 Autogrow 可扩展槽位导出的 images.image_2(TextEncodeQwenImage21)
+_RH_IMAGE_SLOT_RE = re.compile(r"^(?:images\.)?image_?(\d+)$")
 
 
 def _rh_image_load_order(workflow: dict) -> list[str]:
