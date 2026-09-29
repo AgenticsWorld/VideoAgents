@@ -108,7 +108,9 @@ def check_group(pf: Path, strict: bool):
             errs.append(f"{gid}: [Video {i}] {'/'.join(r.split('/')[-2:])} 正文未引用(参考视频白挂;白模视频跑 code/sync_whitebox_refs.py --write 补固定说明段)")
     for i, r in enumerate(vrefs, 1):
         if r.endswith('.continuation.mp4'):
-            if not re.search(r'Extend\s*\[Video\s*'+str(i)+r'\]\s*forward from its final frame', vp):
+            # continuous 边界「Extend … forward」/ cut 边界「Continue from the final moment of …」均认
+            if not re.search(r'(?:Extend\s*\[Video\s*'+str(i)+r'\]\s*forward from its final frame'
+                             r'|Continue from the final moment of\s*\[Video\s*'+str(i)+r'\])', vp):
                 errs.append(f"{gid}: 尾段 [Video {i}] 缺向后续写声明")
             if any(v.endswith('.last_frame.png') for v in refs):
                 errs.append(f"{gid}: 尾段续写不应重复挂尾帧参考图")

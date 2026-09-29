@@ -4001,7 +4001,12 @@ _V25_EDIT_RE = re.compile(
 _V25_EXTEND_RE = re.compile(
     r"(?:向前|向后)延长\s*" + _V25_VREF                                # 向后延长@视频1
     + r"|" + _V25_VREF + r"[^。;;\n]{0,12}?(?:向前|向后)延长"           # @视频1是需要向后延长的原视频
-    + r"|续写\s*" + _V25_VREF)
+    + r"|续写\s*" + _V25_VREF
+    + r"|承接\s*" + _V25_VREF + r"\s*的结尾"                             # 长镜头尾段续写 cut 边界声明
+    + r"|(?:Extend|Continue from the final moment of)\s*" + _V25_VREF)  # continuity_refs 英文声明
+# 长镜头「尾段视频」续写素材(modules/continuity_refs.TAIL_VIDEO):方舟按「视频延长」判任务类型,
+# cut / continuous 两种声明句都一样,直接以素材为判据,不依赖正文措辞(2026-09-29 fengshen3 ep07 grp003)
+_TAIL_VIDEO_SUFFIX = ".continuation.mp4"
 
 
 def _seedance_precheck(model, prompt, first, last, duration, resolution, aspect,
@@ -4069,7 +4074,8 @@ def _seedance_precheck(model, prompt, first, last, duration, resolution, aspect,
             print(f"[genmedia] Seedance 2.5 首帧/首尾帧任务仅支持 ratio=adaptive"
                   f"(输出自动与首帧图同比),已忽略 --aspect {aspect}", file=sys.stderr)
             aspect = "adaptive"
-        elif video_refs and (_V25_EDIT_RE.search(prompt) or _V25_EXTEND_RE.search(prompt)):
+        elif video_refs and (any(str(v).endswith(_TAIL_VIDEO_SUFFIX) for v in video_refs)
+                             or _V25_EDIT_RE.search(prompt) or _V25_EXTEND_RE.search(prompt)):
             print(f"[genmedia] Seedance 2.5 视频编辑/延长任务仅支持 ratio=adaptive"
                   f"(输出自动与输入视频同比),已忽略 --aspect {aspect}", file=sys.stderr)
             aspect = "adaptive"
