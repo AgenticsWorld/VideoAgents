@@ -296,3 +296,53 @@ def test_legacy_two_view_manifest_still_attaches_camera_only(project):
         'camera': 'assets/whitebox/ep01/grp002/camera.mp4', 'skipped_reason': '',
         'model': pj['whitebox_refs']['model'], 'source': 'sync_whitebox_refs.v1'}
     assert pj['whitebox_refs']['cast'] == {'visible': [], 'hidden': {}, 'dropped_refs': [], 'source': 'whitebox_cast.v1'}
+
+
+# ---- #71 父子场景 continuous 组界白名单 ----
+def _parent_child_setup(base, prev_scene, next_scene, *, boundary='continuous', same_scene=False, anchor='last_frame'):
+    write(base/'bible/scenes/index.json', {'scenes': [
+        {'id': 'SCN-site', 'sub_scenes': ['SCN-hall']},
+        {'id': 'SCN-hall', 'parent': 'SCN-site'},
+        {'id': 'SCN-yard', 'parent': 'SCN-site'},
+        {'id': 'SCN-den'},
+        {'id': 'SCN-kid', 'parent': 'SCN-den'}]})   # 只在子条目登记 parent
+    edit(base/'settings.json', lambda d: d['duration'].update(long_take_mode='last_frame'))
+    write(base/'directing/ep01/shot_list.json', {'generation_groups': [
+        {'group_id': 'grp001', 'scene_id': prev_scene}, {'group_id': 'grp002', 'scene_id': next_scene}]})
+    write(base/'directing/ep01/continuity.json', {'group_transitions': [
+        {'from_group': 'grp001', 'to_group': 'grp002', 'anchor': anchor, 'boundary_type': boundary,
+         'same_scene': same_scene}]})
+
+
+@pytest.mark.parametrize('prev_scene,next_scene', [('SCN-site', 'SCN-hall'), ('SCN-hall', 'SCN-site'), ('SCN-den', 'SCN-kid')])
+def test_parent_child_continuous_boundary_continues(project, prev_scene, next_scene):
+    _parent_child_setup(project, prev_scene, next_scene)
+    c = cr.plan(project, 'ep01', 'grp002')
+    assert c['mode'] == 'last_frame' and c['boundary'] == 'continuous' and c['from_group'] == 'grp001'
+
+
+def test_parent_child_tail_video_mode_also_continues(project):
+    _parent_child_setup(project, 'SCN-site', 'SCN-hall')
+    edit(project/'settings.json', lambda d: d['duration'].update(long_take_mode='tail_video'))
+    assert cr.plan(project, 'ep01', 'grp002', budget={'provider': 'fal', 'model': 'bytedance/seedance-2.0',
+                                                       'max_videos': 3, 'max_total_s': 15.})['mode'] != 'none'
+
+
+def test_sibling_scenes_stay_broken(project):
+    _parent_child_setup(project, 'SCN-hall', 'SCN-yard')
+    assert cr.plan(project, 'ep01', 'grp002')['mode'] == 'none'
+
+
+@pytest.mark.parametrize('kw', [{'boundary': 'cut'}, {'anchor': 'none'}, {'anchor': 'approved_match_cut_exception'}])
+def test_parent_child_without_continuous_last_frame_stays_broken(project, kw):
+    _parent_child_setup(project, 'SCN-site', 'SCN-hall', **kw)
+    assert cr.plan(project, 'ep01', 'grp002')['mode'] == 'none'
+
+
+def test_scenes_parent_child_helper(project):
+    _parent_child_setup(project, 'SCN-site', 'SCN-hall')
+    assert cr.scenes_parent_child(project, 'SCN-site', 'SCN-hall')
+    assert cr.scenes_parent_child(project, 'SCN-kid', 'SCN-den')
+    assert not cr.scenes_parent_child(project, 'SCN-hall', 'SCN-yard')
+    assert not cr.scenes_parent_child(project, 'SCN-site', 'SCN-site')
+    assert not cr.scenes_parent_child(project, 'SCN-site', None)
