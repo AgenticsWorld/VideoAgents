@@ -48,6 +48,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from modules.prose_hygiene import annotation_hits, describe, prompt_annotation_hits  # noqa: E402
 from _common import parse_args, spatial_blocking_enabled  # noqa: E402
 from modules.entity_ids import is_creature_id  # noqa: E402
 
@@ -216,6 +218,10 @@ def validate_map(gid: str, bm, chars_union, landmarks: dict, creatures_union=Non
         # 纯英文校验已取消(2026-08-24 二订):内容语言随界面语言
         elif (len(route_en.split()) > 40) if route_en.isascii() else (len(route_en) > 60):
             warns.append(f"{gid}/{cid}: route_en 过长(限 ≤40 英文词或 ≤60 字),建议精简")
+        if isinstance(route_en, str) and annotation_hits(route_en):
+            # prose_clean(2026-09-29):route_en 会被逐字拼进视频 prompt,只能是画面散文
+            errs.append(f"{gid}/{cid}: route_en 混入批注/数值({describe(annotation_hits(route_en))})——"
+                        "只写谁从哪到哪、朝哪;裁决出处写 issues/director_decisions,数值写 keyframes")
         bad = check_label(ch.get("label"))
         if bad:
             errs.append(f"{gid}/{cid}: {bad}")

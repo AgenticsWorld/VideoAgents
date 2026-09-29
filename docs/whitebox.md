@@ -184,6 +184,9 @@ continuity 从源组 continuity_from 取前组。actors 默认 validate，camera
 - API `GET /projects/<p>/whitebox/<ep>/issues`、`POST …/issues/<issue_id>/decision {choice, note}`。
 - H3W 签字卡（`g6w`）自动追加各集摘要；签字时阻断级未清 → 拒签；建议级未答复 → 按 `recommended`（无则 `provisional`）记为已决（by=sign:g6w），即**签字等于接受 Agent 的默认取舍**，有记录可追溯。
 
+
+**套用裁决不得污染逐字字段（prose_clean，2026-09-29）**：`space_fragment_en` / `route_en` 会被逐字拼进视频 prompt，套用时只能整句改写为画面散文；裁决出处写 `director_decisions` / `issues[].applied.note`，坐标与秒数写 keyframes / beats。检测器 `modules/prose_hygiene.py`（裁决/修订批注、选项引用、白模术语、内部编号、坐标、时间码、重复句为错误；小数米数仅提示），接入 `render_whitebox.py`（报 errors 不落盘）、`blocking_map_check.py`、`blocking_bound_check.py`（另扫 prompt 正文残留）、`layout_map_bound_check.py`；后两者是 video-generation 开跑前的单组复核，污染组不会进生成。前科 fengshen3 ep07 grp005/007/008/009/013/015/017/018/020。
+
 ## 编译、输出与验证
 
 ```sh

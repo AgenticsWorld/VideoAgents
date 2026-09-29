@@ -12,6 +12,9 @@
     福瓦德门外瞬移入门内);
   - Shot 段与镜的对应:组 prompt 的 Shot i 对应 grpNNN.json shots[i-1];Shot 段数
     与镜数不符时降级为全文匹配并给出 WARN。
+  - prose_clean(2026-09-29):space_fragment_en 自身混入裁决批注/坐标/时间码/白模术语
+    (modules/prose_hygiene.py)= VIOLATION,不得照抄也不得在 prompt 里擅改,回派上游清理;
+    video_prompt 正文残留「导演裁决」/visible:false/yaw=/坐标 = VIOLATION(前科 fengshen3 ep07 9 组);
   - 存量 blocking.json 无 space_fragment_en 的按 WARN 报(待回派 blocking 补写),
     加 --strict 时按 FAIL。
 
@@ -26,6 +29,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from modules.prose_hygiene import annotation_hits, describe, prompt_annotation_hits  # noqa: E402
 from _common import parse_args
 
 
@@ -72,8 +77,17 @@ def check_group(pf: Path, proj_root: Path, ep: str, strict: bool):
             if not frag:
                 warns.append(f"{gid}/{shot_id}: {cid} 缺 space_fragment_en(回派 blocking 补写)")
                 continue
-            if norm(frag) not in haystack:
+            hits = annotation_hits(frag)
+            if hits:
+                # prose_clean(2026-09-29,前科 fengshen3 ep07 grp009 38 处「导演裁决」):源头混了批注不得照抄——回派上游清理
+                errs.append(f"{gid}/{shot_id}: {cid} 上游 space_fragment_en 混入批注/数值({describe(hits)}),不得逐字抄进 prompt——"
+                            "回派 whitebox-staging(裁决套用)/ blocking 清理 blocking.json 后重写本组")
+            elif norm(frag) not in haystack:
                 errs.append(f"{gid}/{shot_id}: {cid} 站位片段未逐字命中{where} —— \"{frag}\"")
+    left = prompt_annotation_hits(vp)
+    if left:
+        errs.append(f"{gid}: video_prompt 正文残留裁决/白模数值批注 {len(left)} 处(会被画成画面文字、打乱时序;"
+                    f"清理上游片段后重写):" + "; ".join(f"{lab}「{ctx}」" for lab, _, ctx in left[:3]))
     if strict:
         errs += [w for w in warns if "缺 space_fragment_en" in w]
         warns = [w for w in warns if "缺 space_fragment_en" not in w]

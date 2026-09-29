@@ -44,6 +44,13 @@ def main():
         if not selected:raise ValueError('No storyboard groups reference this scene in the episode')
     scoped=bool(args.groups or args.scene)
     errors=[e for e in episode['errors'] if not scoped or e['group_id'] in selected]
+    # prose_clean(2026-09-29,前科 fengshen3 ep07):套用裁决/导演台批次回写源文件时,space_fragment_en / route_en
+    # 只能是画面散文(下游逐字拼进视频 prompt);裁决出处/坐标/秒数/visible 写进这两处 = 交付不通过
+    from modules.prose_hygiene import scan_episode, describe
+    for row in scan_episode(base,args.ep):
+        if not scoped or row['group_id'] in selected:
+            errors.append({'group_id':row['group_id'],'error':f"prose_clean: {row['where']} {row['field']} 混入批注/数值({describe(row['hits'])});"
+                           "该字段会被逐字拼进视频 prompt,只写画面散文——裁决出处写 director_decisions / issues[].applied.note,数值写 keyframes,时序写 beats[].t"})
     missing=selected-{g['group_id'] for g in episode['groups']}-{e['group_id'] for e in errors}
     errors.extend({'group_id':g,'error':'Unknown group'} for g in sorted(missing))
     print(json.dumps({'groups':len(episode['groups']),'scenes':len(episode['scenes']),'errors':errors},ensure_ascii=False),flush=True)

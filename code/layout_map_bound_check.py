@@ -9,6 +9,7 @@
          场景空间由白模摄影机视频(whitebox_ref_bound)+ 分镜背景图(shot_plate_bound,code/sync_shot_plates.py)承担;
       ② 正文残留 `Spatial layout:` / `Map usage:` 俯视图声明句按 WARN(跑 code/sync_shot_plates.py --write 自动清理);
       ③ blocking_map.characters[].route_en 逐字出现在 video_prompt(比对忽略大小写与连续空白);
+         route_en 自身混入裁决批注/坐标/时间码/白模术语(prose_clean,2026-09-29)= VIOLATION,回派上游清理;
       ④ 主体定义句用同一个词:video_prompt 须含 "<label>@Image N"(label 逐字取 blocking_map.characters[].label
          短规范名,全集同角色同词;骑乘态生物并入骑手条目、独立态生物条目同规则)。
   - blocking_map 为空/缺失的组按 WARN(存量项目;--strict 按 FAIL)。
@@ -23,6 +24,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from modules.prose_hygiene import annotation_hits, describe, prompt_annotation_hits  # noqa: E402
 from _common import parse_args, spatial_blocking_enabled  # noqa: E402
 
 # 不要求紧跟 [Image:图号 token 被 remap 删掉后残留的「Spatial layout: is the …」空悬句也要测出(2026-09-14)
@@ -76,7 +79,12 @@ def check_group(pf: Path, groups: dict, proj_root: Path, ep: str, strict: bool):
         if not route:
             errs.append(f"{gid}/{cid}: blocking_map 缺 route_en(回派 storyboard 补写)")
             continue
-        if norm(route) not in hay:
+        hits = annotation_hits(route)
+        if hits:
+            # prose_clean(2026-09-29,前科 fengshen3 ep07 grp009):源头混了批注就不能照抄,也不能擅改——回派上游清理
+            errs.append(f"{gid}/{cid}: 上游 route_en 混入批注/数值({describe(hits)}),不得逐字抄进 prompt——"
+                        "回派 whitebox-staging(裁决套用)/ shot-planning 清理 shot_list blocking_map 后重写本组")
+        elif norm(route) not in hay:
             errs.append(f"{gid}/{cid}: 动线句未逐字命中 video_prompt —— \"{route}\"")
     return errs, warns
 

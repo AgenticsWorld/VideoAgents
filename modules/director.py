@@ -376,6 +376,8 @@ def build_message(base: Path, ep: str, groups: list, notes: list, issues: dict, 
              "- 只改 directing/{ep}/whitebox_plans/<组>.json 里对应对象的关键帧/机位/可见名单,并同步回写权威源文件"
              "(shots/<镜>/blocking.json、camera.json(含 whitebox_contract)、shot_list.json 的 blocking_map),不得只改计划不改源;".format(ep=ep),
              "- 注释里的数值(位置米制、朝向弧度、组内秒)照抄不改;文字要求按规约换算成关键帧,时刻 t 是组内秒,shot 是所在镜;",
+             "- 数值只进关键帧/机位/beats[].t;blocking.json 的 space_fragment_en 与 blocking_map 的 route_en 会被逐字拼进视频 prompt,"
+             "只能整句改写成画面散文,不得写入或追加坐标、秒数、visible、裁决出处、注释/镜号编号(prose_clean,--check-only 会报错);",
              "- 改完跑碰撞与朝向自检(docs/whitebox.md「防穿模检查」「对话身体朝向」),不得靠换机位、隐藏人、缩小人掩盖;",
              "- 全部源文件回写与人物同步完成后,复核受影响组全部机位及跨组 match,再用宿主 modules.whitebox_camera 的指纹函数记录审查;禁止只刷指纹或删除契约消错;",
              f"- 交付前执行 python code/render_whitebox.py --project {proj} --ep {ep} --check-only (不带组号),必须退出码0、errors为空且组数齐全,不能只验选中组;",
