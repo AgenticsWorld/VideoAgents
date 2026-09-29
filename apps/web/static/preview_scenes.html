@@ -140,6 +140,9 @@ ul.arr>li{margin:2px 0}
 .pano-map.picking{cursor:crosshair}
 .pano-map.picking img{outline:2px dashed var(--yellow);outline-offset:-2px}
 .pano-dot.new{background:var(--yellow);color:#000;pointer-events:none}
+/* 新锚点朝向短线:零尺寸支点在圆点中心,按 yaw 旋转;短线从圆点外沿(12px)向外伸 */
+.pano-dir{position:absolute;left:50%;top:50%;width:0;height:0}
+.pano-dir::after{content:'';position:absolute;left:-2px;bottom:12px;width:4px;height:16px;box-sizing:border-box;background:var(--yellow);border:1px solid #000;border-radius:2px;box-shadow:0 0 0 1px #fff}
 .pano-panel .ps-hint{color:var(--dim);font-size:12px;margin:2px 0 6px}
 .pano-panel .ps-form[hidden],.pano-panel .ps-hint[hidden]{display:none}
 .pano-panel .ps-form{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 10px;padding:8px 10px;border:1px dashed var(--border);border-radius:8px}
@@ -722,6 +725,16 @@ async function mountPanoSection(host,s){
     if(!dot){dot=document.createElement('span');dot.className='pano-dot new';dot.textContent='+';inner.appendChild(dot);}
     dot.style.left=((x/W+.5)*100).toFixed(2)+'%';dot.style.top=((z/D+.5)*100).toFixed(2)+'%';
     dot.title=`(${x}, ${z})`;
+    setDir();
+  };
+  // 朝向短线:画面中心 = 世界 (-sin yaw, -cos yaw)(yaw 0 朝图上方,+90° 转向图左);按俯视图实际宽高比换算成屏幕角
+  const setDir=()=>{
+    if(!dot)return;
+    let dir=dot.querySelector('.pano-dir');
+    if(!dir){dir=document.createElement('i');dir.className='pano-dir';dot.appendChild(dir);}
+    const yaw=(parseFloat(form.querySelector('.ps-yaw')?.value)||0)*Math.PI/180;
+    const sx=-Math.sin(yaw)*(inner.clientWidth||W)/W,sy=-Math.cos(yaw)*(inner.clientHeight||D)/D;
+    dir.style.transform=`rotate(${(Math.atan2(sx,-sy)*180/Math.PI).toFixed(1)}deg)`;
   };
   const openForm=()=>{
     const opts=panos.scheme_options||[];
@@ -736,6 +749,7 @@ async function mountPanoSection(host,s){
     const ix=form.querySelector('.ps-x'),iz=form.querySelector('.ps-z');
     const sync=()=>{const x=parseFloat(ix.value),z=parseFloat(iz.value);if(Number.isFinite(x)&&Number.isFinite(z)){pick={x,z};setDot(x,z);}};
     ix.oninput=iz.oninput=sync;
+    form.querySelector('.ps-yaw').oninput=setDir;
     form.querySelector('.ps-cancel').onclick=()=>{stopPick();form.hidden=true;form.innerHTML='';if(dot){dot.remove();dot=null;}pick=null;};
     form.querySelector('.ps-go').onclick=async()=>{
       const x=parseFloat(ix.value),z=parseFloat(iz.value),yaw=parseFloat(form.querySelector('.ps-yaw').value)||0,scheme=form.querySelector('.ps-scheme').value;
