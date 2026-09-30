@@ -734,6 +734,11 @@ async def pi_models(refresh: bool = False) -> dict[str, Any]:
     return await core.api_pi_models(refresh)
 
 
+@api.get("/engines/codex/models", tags=["configuration"])
+async def codex_models(refresh: bool = False) -> dict[str, Any]:
+    return await core.api_codex_models(refresh)
+
+
 @api.get("/engines/opencode/models", tags=["configuration"])
 async def opencode_models(refresh: bool = False) -> dict[str, Any]:
     return await core.api_opencode_models(refresh)

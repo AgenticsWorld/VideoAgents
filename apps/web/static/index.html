@@ -1074,6 +1074,12 @@ const OPENCODE_STATIC=[
   ['opencode/deepseek-v4-pro','DeepSeek V4 Pro (Zen)'],
   ['opencode/deepseek-v4-flash','DeepSeek V4 Flash (Zen)'],
 ];
+// codex 静态兜底(动态列表 GET /engines/codex/models 读不到时用;来源 `codex debug models` 官方目录)
+const CODEX_STATIC=[
+  ['gpt-6-sol','gpt-6-sol'],['gpt-6-luna','gpt-6-luna'],['gpt-6-astra','gpt-6-astra'],
+  ['gpt-5.6-sol','gpt-5.6-sol'],['gpt-5.6-terra','gpt-5.6-terra'],['gpt-5.6-luna','gpt-5.6-luna'],
+  ['gpt-5.5','gpt-5.5'],
+];
 // grok 静态兜底(动态列表 GET /engines/grok/models 读不到时用;来源 `grok models`,grok.com 登录凭证)
 const GROK_STATIC=[
   ['grok-4.6','Grok 4.6'],
@@ -1086,10 +1092,7 @@ const MODEL_OPTIONS={
           ['claude-opus-4-8','opus-4.8'],['claude-opus-4-7','opus-4.7'],
           ['claude-opus-4-6','opus-4.6'],
           ['haiku','haiku'],['','默认(CLI配置)'],['__custom','自定义…']],
-  codex:[[SMART,'智能分配'],['gpt-6-sol','gpt-6-sol'],['gpt-6-luna','gpt-6-luna'],['gpt-6-astra','gpt-6-astra'],['gpt-5.6-sol','gpt-5.6-sol'],['gpt-5.6-terra','gpt-5.6-terra'],
-         ['gpt-5.6-luna','gpt-5.6-luna'],['gpt-5.5','gpt-5.5'],['gpt-5.4','gpt-5.4'],
-         ['gpt-5.4-mini','gpt-5.4-mini'],['gpt-5.3-codex-spark','gpt-5.3-codex-spark'],
-         ['__custom','自定义…']],
+  codex:[[SMART,'智能分配'],...CODEX_STATIC,['__custom','自定义…']],
   kimi:[[SMART,'智能分配'],['kimi-code/k3','K3'],['kimi-code/kimi-for-coding','K2.7 Coding'],
         ['kimi-code/kimi-for-coding-highspeed','K2.7 Coding Highspeed'],
         ['','默认(CLI配置)'],['__custom','自定义…']],
@@ -1133,6 +1136,21 @@ async function loadOpencodeModelOptions(refresh=false){
     AM_MODEL_OPTIONS.opencode=[['','默认(CLI配置)'],...OPENCODE_STATIC,['__custom','自定义…']];
   }
 }
+let CODEX_MODEL_ERROR='';
+async function loadCodexModelOptions(refresh=false){
+  try{
+    const r=await api('/api/v1/engines/codex/models'+(refresh?'?refresh=true':''));
+    const dynamic=(r.models||[]).map(m=>[m.id,m.id]);   // 已按官方 priority 排序
+    const list=dynamic.length?dynamic:CODEX_STATIC;
+    MODEL_OPTIONS.codex=[[SMART,'智能分配'],...list,['__custom','自定义…']];
+    AM_MODEL_OPTIONS.codex=[['','默认'],...list,['__custom','自定义…']];
+    CODEX_MODEL_ERROR='';
+  }catch(e){
+    CODEX_MODEL_ERROR=e.message||String(e);
+    MODEL_OPTIONS.codex=[[SMART,'智能分配'],...CODEX_STATIC,['__custom','自定义…']];
+    AM_MODEL_OPTIONS.codex=[['','默认'],...CODEX_STATIC,['__custom','自定义…']];
+  }
+}
 let GROK_MODEL_ERROR='';
 async function loadGrokModelOptions(refresh=false){
   try{
@@ -1152,6 +1170,7 @@ async function loadGrokModelOptions(refresh=false){
   }
 }
 async function populateModels(engine,selected=null){
+  if(engine==='codex')await loadCodexModelOptions();
   if(engine==='pi')await loadPiModelOptions();
   if(engine==='opencode')await loadOpencodeModelOptions();
   if(engine==='grok')await loadGrokModelOptions();
@@ -1171,6 +1190,7 @@ async function populateModels(engine,selected=null){
     ?'deepagents 生效渠道:Agentics/本地模型/云端模型/OpenRouter;右侧下拉选该渠道的模型,端点与 API Key 在 🎨 生成模型 页「语言模型/DeepAgents」配置'
     :engine==='pi'?(PI_MODEL_ERROR?'pi 模型列表读取失败:'+PI_MODEL_ERROR:'来自当前 pi 登录凭证的可用模型')
     :engine==='opencode'?(OPENCODE_MODEL_ERROR?'opencode 模型列表读取失败:'+OPENCODE_MODEL_ERROR:'来自当前 opencode 登录凭证的可用模型')
+    :engine==='codex'?(CODEX_MODEL_ERROR?'codex 模型列表读取失败:'+CODEX_MODEL_ERROR:'来自 codex CLI 官方模型目录,随 CLI 版本自动更新')
     :engine==='grok'?(GROK_MODEL_ERROR?'grok 模型列表读取失败:'+GROK_MODEL_ERROR:'来自当前 grok 登录凭证的可用模型'):'';
   $('#model-custom').style.display=sel.value==='__custom'?'':'none';
   renderDaModels();   // deepagents 显示第二层模型下拉,其余引擎隐藏
@@ -3126,10 +3146,7 @@ const AM_MODEL_OPTIONS={
           ['claude-fable-5','fable-5'],['claude-fable-5-1','fable-5.1'],
           ['claude-opus-4-8','opus-4.8'],['claude-opus-4-7','opus-4.7'],
           ['claude-opus-4-6','opus-4.6'],['haiku','haiku'],['__custom','自定义…']],
-  codex:[['','默认'],['gpt-6-sol','gpt-6-sol'],['gpt-6-luna','gpt-6-luna'],['gpt-6-astra','gpt-6-astra'],['gpt-5.6-sol','gpt-5.6-sol'],['gpt-5.6-terra','gpt-5.6-terra'],
-         ['gpt-5.6-luna','gpt-5.6-luna'],['gpt-5.5','gpt-5.5'],['gpt-5.4','gpt-5.4'],
-         ['gpt-5.4-mini','gpt-5.4-mini'],['gpt-5.3-codex-spark','gpt-5.3-codex-spark'],
-         ['__custom','自定义…']],
+  codex:[['','默认'],...CODEX_STATIC,['__custom','自定义…']],
   kimi:[['','默认(CLI配置)'],['kimi-code/k3','K3'],
         ['kimi-code/kimi-for-coding','K2.7 Coding'],
         ['kimi-code/kimi-for-coding-highspeed','K2.7 Coding Highspeed'],
@@ -3157,6 +3174,7 @@ function updateModelBtn(){
 async function amPopulateModels(engine,selected){
   const sel=$('#am-model'),custom=$('#am-model-custom');
   if(!engine){sel.innerHTML='<option value="">跟随全局</option>';sel.disabled=true;custom.style.display='none';return}
+  if(engine==='codex')await loadCodexModelOptions();
   if(engine==='pi')await loadPiModelOptions();
   if(engine==='opencode')await loadOpencodeModelOptions();
   if(engine==='grok')await loadGrokModelOptions();

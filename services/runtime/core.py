@@ -13968,6 +13968,62 @@ async def api_pi_models(refresh: bool = False):
     return {"models": models, "cached": False}
 
 
+_CODEX_MODELS_CACHE: tuple[float, list[dict]] = (0, [])
+_CODEX_MODELS_TTL = 300
+
+
+def _parse_codex_models(output: str) -> list[dict]:
+    """`codex debug models` 输出官方模型目录 JSON({"models":[...]}),
+    只取 visibility=list 的项,按 priority 升序(与 codex 自身选择器一致)。"""
+    data = json.loads(output)
+    items = data.get("models") if isinstance(data, dict) else data
+    models = []
+    for m in items or []:
+        if not isinstance(m, dict) or m.get("visibility") != "list" or not m.get("slug"):
+            continue
+        models.append({"id": m["slug"], "name": m.get("display_name") or m["slug"],
+                       "provider": "openai", "model": m["slug"],
+                       "description": m.get("description") or "",
+                       "priority": m.get("priority") if isinstance(m.get("priority"), int) else 999})
+    models.sort(key=lambda x: x["priority"])
+    return models
+
+
+async def api_codex_models(refresh: bool = False):
+    """列出 codex CLI 官方模型目录(`codex debug models` 会联网刷新,约 2s),
+    供语言模型选择器动态显示;新模型需 CLI 版本够新才会下发。"""
+    global _CODEX_MODELS_CACHE
+    ts, cached = _CODEX_MODELS_CACHE
+    if ts and not refresh and time.time() - ts < _CODEX_MODELS_TTL:
+        return {"models": cached, "cached": True}
+    executable = await asyncio.to_thread(resolve_cli_executable, "codex")
+    if not executable:
+        raise ServiceError(503, cli_not_found_error("codex"))
+    env = {**os.environ, "NO_COLOR": "1"}
+    proc = await asyncio.create_subprocess_exec(
+        executable, "debug", "models", cwd=ROOT, env=env,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+    except asyncio.TimeoutError as exc:
+        proc.kill()
+        await proc.wait()
+        raise ServiceError(504, "读取 codex 模型列表超时") from exc
+    output = stdout.decode("utf-8", "replace")
+    if proc.returncode != 0:
+        detail = stderr.decode("utf-8", "replace").strip() or output.strip()
+        raise ServiceError(502, f"读取 codex 模型列表失败:{detail[:300]}")
+    try:
+        models = _parse_codex_models(output)
+    except (ValueError, AttributeError) as exc:
+        raise ServiceError(502, f"codex 模型目录解析失败:{output.strip()[:300]}") from exc
+    if not models:
+        detail = stderr.decode("utf-8", "replace").strip() or output.strip()
+        raise ServiceError(502, f"codex 未返回可用模型:{detail[:300]}")
+    _CODEX_MODELS_CACHE = (time.time(), models)
+    return {"models": models, "cached": False}
+
+
 _OPENCODE_MODELS_CACHE: tuple[float, list[dict]] = (0, [])
 _OPENCODE_MODELS_TTL = 30
 

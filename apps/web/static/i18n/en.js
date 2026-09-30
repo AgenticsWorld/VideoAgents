@@ -3591,6 +3591,8 @@ window.I18N_DICT = {
 "来自当前 opencode 登录凭证的可用模型": "Models available to the current opencode credentials",
 "grok 模型列表读取失败:": "Failed to read the grok model list:",
 "来自当前 grok 登录凭证的可用模型": "Models available to the current grok credentials",
+"codex 模型列表读取失败:": "Failed to read the codex model list:",
+"来自 codex CLI 官方模型目录,随 CLI 版本自动更新": "From the official codex CLI model catalog; updates automatically with the CLI version",
 "分镜时长需满足 0 < 下限 ≤ 上限": "Shot duration must satisfy 0 < minimum ≤ maximum",
 "连接断开": "Disconnected",
 "本页没有找到": "Not found on this page",

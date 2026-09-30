@@ -3585,6 +3585,8 @@ window.I18N_DICT = {
 "来自当前 opencode 登录凭证的可用模型": "Các mô hình khả dụng với thông tin đăng nhập opencode hiện tại",
 "grok 模型列表读取失败:": "Không đọc được danh sách mô hình grok:",
 "来自当前 grok 登录凭证的可用模型": "Các mô hình khả dụng với thông tin đăng nhập grok hiện tại",
+"codex 模型列表读取失败:": "Không đọc được danh sách mô hình codex:",
+"来自 codex CLI 官方模型目录,随 CLI 版本自动更新": "Từ danh mục mô hình chính thức của codex CLI; tự cập nhật theo phiên bản CLI",
 "连接断开": "Mất kết nối",
 "本页没有找到": "Không tìm thấy trên trang này",
 "复制失败": "Sao chép thất bại",

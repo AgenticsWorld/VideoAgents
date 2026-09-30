@@ -3585,6 +3585,8 @@ window.I18N_DICT = {
 "来自当前 opencode 登录凭证的可用模型": "Model yang tersedia untuk kredensial login opencode saat ini",
 "grok 模型列表读取失败:": "Gagal memuat daftar model grok:",
 "来自当前 grok 登录凭证的可用模型": "Model yang tersedia untuk kredensial login grok saat ini",
+"codex 模型列表读取失败:": "Gagal membaca daftar model codex:",
+"来自 codex CLI 官方模型目录,随 CLI 版本自动更新": "Dari katalog model resmi codex CLI; diperbarui otomatis sesuai versi CLI",
 "连接断开": "Koneksi terputus",
 "本页没有找到": "Tidak ditemukan di halaman ini",
 "复制失败": "Penyalinan gagal",

@@ -3587,6 +3587,8 @@ window.I18N_DICT = {
 "来自当前 opencode 登录凭证的可用模型": "Modèles disponibles avec l'identifiant opencode actuel",
 "grok 模型列表读取失败:": "Échec du chargement de la liste des modèles grok : ",
 "来自当前 grok 登录凭证的可用模型": "Modèles disponibles avec l'identifiant grok actuel",
+"codex 模型列表读取失败:": "Échec de lecture de la liste des modèles codex :",
+"来自 codex CLI 官方模型目录,随 CLI 版本自动更新": "Issu du catalogue officiel des modèles de la CLI codex ; se met à jour automatiquement avec la version de la CLI",
 "连接断开": "Connexion interrompue",
 "本页没有找到": "Introuvable sur cette page",
 "复制失败": "Échec de la copie",
