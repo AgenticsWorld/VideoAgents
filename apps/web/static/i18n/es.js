@@ -1,4 +1,5 @@
 window.I18N_DICT = {
+"用本机文件对话框选另一版本视频(默认打开本集 assets/clips/<ep>/archive 归档目录),导入为本组新版本": "Elegir otra versión del vídeo con el diálogo de archivos del sistema (abre por defecto la carpeta de archivo assets/clips/<ep>/archive de este episodio) e importarla como nueva versión del grupo",
 "读取分辨率…": "Leyendo resolución…",
 "读取分辨率失败:{e}": "No se pudo leer la resolución: {e}",
 "分辨率一致": "Misma resolución",

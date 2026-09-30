@@ -882,7 +882,7 @@ function renderCut(){
   if(M==='insert'){
     const tcur=$('#va').currentTime||0;
     h+=`<div class="row"><span class="lb">${esc(t('插入源'))}</span><select id="cut-alt" ${alts.length?'':'disabled'}>${alts.length?alts.map(v=>`<option value="${v.v}" ${v.v===CUT_ALT?'selected':''}>${verLabel(v)}</option>`).join(''):`<option>${esc(t('还没有其他版本'))}</option>`}</select>
-      <button class="xs" id="cut-pick" title="${esc(t('用本机文件对话框选另一版本视频(默认打开本组视频所在目录),导入为本组新版本'))}">📂 ${esc(t('导入另一版本…'))}</button><input type="file" id="cut-file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.mkv,.m4v" style="display:none">
+      <button class="xs" id="cut-pick" title="${esc(t('用本机文件对话框选另一版本视频(默认打开本集 assets/clips/<ep>/archive 归档目录),导入为本组新版本'))}">📂 ${esc(t('导入另一版本…'))}</button><input type="file" id="cut-file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.mkv,.m4v" style="display:none">
       <button class="xs" id="cut-ab" ${CUT_ALT==null?'disabled':''} title="${esc(t('把插入源放到 B 画面,切到 A|B 分屏比对'))}">A|B</button></div>`;
     h+=`<div class="row"><span class="lb">${esc(t('位置'))}</span><span class="seg" id="ins-pos" style="flex-wrap:wrap">`+
       `<span data-p="start" class="${INS.pos==='start'?'on':''}" title="${esc(t('插到 A 的开头'))}">${esc(t('最前面'))}</span>`+

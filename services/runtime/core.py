@@ -11057,12 +11057,14 @@ def _post_import_version(base: Path, ep: str, plan: dict, gid: str, src: Path | 
 
 
 async def api_post_pick_file(project: str, ep: str, body: dict):
-    """弹本机文件对话框选另一版本视频,默认打开本组当前版本视频所在目录;返回 {path} 或 {cancelled:true}。"""
+    """弹本机文件对话框选另一版本视频,默认打开本集 assets/clips/<ep>/archive(历次生成的归档版本);
+    该目录不存在时退回本组当前版本视频所在目录。返回 {path} 或 {cancelled:true}。"""
     def _do():
         pp, base, ep2, plan = _post_load(project, ep)
         gid = _post_group_guard(str(body.get("group_id") or ""))
+        archive = base / "assets" / "clips" / ep2 / "archive"
         cur = pp.current_file(base, ep2, gid, plan)
-        start = cur.parent if cur else (base / "assets" / "clips" / ep2)
+        start = archive if archive.is_dir() else cur.parent if cur else (base / "assets" / "clips" / ep2)
         path = _post_native_pick_file(start, f"选择 {gid} 的另一个版本视频")
         if not path:
             return {"ok": True, "cancelled": True}

@@ -1,4 +1,5 @@
 window.I18N_DICT = {
+"用本机文件对话框选另一版本视频(默认打开本集 assets/clips/<ep>/archive 归档目录),导入为本组新版本": "Chọn phiên bản video khác bằng hộp thoại tệp của hệ thống (mặc định mở thư mục lưu trữ assets/clips/<ep>/archive của tập này) và nhập thành phiên bản mới của nhóm",
 "读取分辨率…": "Đang đọc độ phân giải…",
 "读取分辨率失败:{e}": "Không đọc được độ phân giải: {e}",
 "分辨率一致": "Cùng độ phân giải",
