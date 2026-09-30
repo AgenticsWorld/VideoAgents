@@ -6,6 +6,7 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Crect%20x%3D%273%27%20y%3D%273%27%20width%3D%2718%27%20height%3D%2718%27%20rx%3D%274%27%20fill%3D%27%236c9ef8%27%2F%3E%3Cpath%20d%3D%27M10%2016.5V8l6-1.5v8%27%20stroke%3D%27%230f1117%27%20stroke-width%3D%271.8%27%20fill%3D%27none%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%2F%3E%3Ccircle%20cx%3D%278.5%27%20cy%3D%2716.5%27%20r%3D%271.8%27%20fill%3D%27%230f1117%27%2F%3E%3Ccircle%20cx%3D%2714.5%27%20cy%3D%2714.5%27%20r%3D%271.8%27%20fill%3D%27%230f1117%27%2F%3E%3C%2Fsvg%3E">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="/static/i18n/i18n.js"></script>
+<script src="/static/edit-popup.js?v=20260927a-reviser"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -60,6 +61,8 @@ table.ml td.id{font-weight:600;color:var(--accent);white-space:nowrap}
 table.ml td.dim{color:var(--dim)}
 table.ml td.play{text-align:center}
 table.ml td.play button{width:28px;height:24px;padding:0;font-size:11px;line-height:1}
+table.ml td.edit{text-align:center}
+table.ml td.edit button{padding:2px 8px;font-size:12px}
 table.ml td.play button.on{background:var(--accent);border-color:var(--accent);color:#0b1020}
 .tag{display:inline-block;font-size:11px;border:1px solid var(--border);border-radius:4px;padding:0 6px;margin:0 4px 2px 0;white-space:nowrap;color:var(--dim)}
 .tag.ep{color:var(--accent);border-color:var(--accent)}
@@ -91,7 +94,9 @@ table.use td{padding:4px 8px;border-bottom:1px solid var(--border);vertical-alig
 <script>
 /* 音乐库页(项目设置 → 音乐库,2026-09-27):本项目 assets/audio/library/music/ 已入库的配乐。
  * 每集新增的 BGM 由配乐工位交付时入库并标记数据;之后的剧集先在库里选曲,没有合适的再新生成。
- * 「谁在用」由各集 cue sheet 推导;页面只读 + 「同步入库」(宿主对账,回补音乐库上线前已交付的集)。 */
+ * 「谁在用」由各集 cue sheet 推导;页面只读 + 「同步入库」(宿主对账,回补音乐库上线前已交付的集)。
+ * 每行末列「修改」= 右下角浮窗(/static/edit-popup.js)预填曲目定位,直发配乐工位 09-audio/music。 */
+const MUSIC_AGENT='09-audio/music';
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const _q=new URLSearchParams(location.search);
@@ -143,8 +148,9 @@ function rows(list){
       <td class="ell" data-no-i18n>${esc(x.origin_ep||'—')}</td>
       <td>${(x.eps||[]).map(e=>`<span class="tag ep${e!==x.origin_ep?' re':''}" data-no-i18n>${esc(e)}</span>`).join('')||'<span class="tag">'+esc(t('暂未使用'))+'</span>'}</td>
       <td class="ell" data-no-i18n>${(x.used_in||[]).length}</td>
+      <td class="edit"><button type="button" class="ed" data-i="${i}" title="${esc(t('修改'))}">${esc(t('修改'))}</button></td>
     </tr>
-    <tr class="detail" data-for="${esc(x.track_id)}" style="display:${OPEN.has(x.track_id)?'':'none'}"><td colspan="9">${detail}</td></tr>`;
+    <tr class="detail" data-for="${esc(x.track_id)}" style="display:${OPEN.has(x.track_id)?'':'none'}"><td colspan="10">${detail}</td></tr>`;
   }).join('');
 }
 
@@ -176,9 +182,9 @@ function render(d){
     <label><input type="checkbox" id="showold" ${SHOW_OLD?'checked':''}>显示已被替换的旧曲</label>
     <span>${esc(I18N.f('共 {n} 首 · 跨集复用 {m} 首',{n:live.length,m:live.filter(isReused).length}))}</span></div>`;
   h+=SHOWN.length?`<table class="ml">
-    <colgroup><col style="width:5%"><col style="width:9%"><col style="width:24%"><col style="width:22%"><col style="width:6%"><col style="width:10%"><col style="width:7%"><col style="width:12%"><col style="width:5%"></colgroup>
+    <colgroup><col style="width:5%"><col style="width:9%"><col style="width:21%"><col style="width:19%"><col style="width:6%"><col style="width:10%"><col style="width:7%"><col style="width:12%"><col style="width:5%"><col style="width:6%"></colgroup>
     <thead><tr>
-      <th></th><th>曲目ID</th><th>情绪</th><th>曲风 / 节奏 / 乐器</th><th>曲目时长</th><th>来源</th><th>入库分集</th><th>使用的分集</th><th>使用次数</th>
+      <th></th><th>曲目ID</th><th>情绪</th><th>曲风 / 节奏 / 乐器</th><th>曲目时长</th><th>来源</th><th>入库分集</th><th>使用的分集</th><th>使用次数</th><th>修改</th>
     </tr></thead><tbody>${rows(SHOWN)}</tbody></table>`
     :`<div class="none">${esc(t(all.length?'没有匹配的曲目':'音乐库还是空的:配乐工位交付一集后曲目会自动入库;已有配乐的项目点右上角「同步入库」回补'))}</div>`;
   const box=$('#content'),top=box.scrollTop,focus=document.activeElement&&document.activeElement.id==='kw';
@@ -194,6 +200,13 @@ function render(d){
     const id=tr.dataset.id,dt=document.querySelector(`tr.detail[data-for="${CSS.escape(id)}"]`);
     if(!dt)return;
     if(OPEN.has(id)){OPEN.delete(id);dt.style.display='none'}else{OPEN.add(id);dt.style.display=''}
+  });
+  document.querySelectorAll('button.ed').forEach(b=>b.onclick=e=>{
+    e.stopPropagation();
+    const x=SHOWN[+b.dataset.i];if(!x)return;
+    const name=x.title||x.mood||'';
+    EditPopup.open({project:PROJ,agent:MUSIC_AGENT,
+      compose:t('修改 ')+x.track_id+(name?' ('+name+')':'')+(x.path?'\n'+t('库内文件')+': '+x.path:'')+'\n'+t('修改意见:')});
   });
   document.querySelectorAll('button.pl').forEach(b=>b.onclick=e=>{
     e.stopPropagation();
