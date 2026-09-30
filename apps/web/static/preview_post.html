@@ -179,6 +179,8 @@ body.masking .frame .maskpad{display:block}
 .waves .tr i.nofile{opacity:.35;outline:1px dashed #ffffff55}
 .waves .tr i.live{box-shadow:0 0 0 1px #fff;filter:brightness(1.45)}
 /* 轨道条目选中(2026-09-16):点一条对白/旁白/BGM/音效 → 高亮 + 下方出现选中条(定位 / ✏️ 发修改意见给修改师) */
+.waves .tr{cursor:col-resize;touch-action:none}
+body.wscrub,body.wscrub *{cursor:col-resize!important;user-select:none!important}
 .waves .tr i[data-i]{cursor:pointer}
 .waves .tr i.sel{outline:2px solid var(--accent);outline-offset:1px;z-index:2}
 .waves .wsel{grid-column:1/-1;display:flex;gap:6px;align-items:center;padding:3px 8px;border-bottom:1px solid var(--border);font:11.5px var(--font,system-ui);color:var(--text);background:var(--panel2)}
@@ -576,6 +578,7 @@ function renderMonitorShell(){
   $('#b-mask').onclick=()=>{document.body.classList.toggle('masking');$('#b-mask').classList.toggle('pri',document.body.classList.contains('masking'))};
   $('#b-mute').onclick=()=>{va.muted=!va.muted;$('#b-mute').textContent=va.muted?'🔇':'🔊';if(EPA)EPA.muted=va.muted;stemSync()};
   $('#b-range').onclick=markRange;
+  bindWaveScrub();
   $('#b-frame').onclick=captureFrame;
   va.addEventListener('timeupdate',onTime);
   va.addEventListener('play',()=>{$('#b-play').textContent='⏸ '+t('暂停');if(AB!=='a'&&MODE==='group'){vb.currentTime=va.currentTime;vb.play().catch(()=>{})}if(MODE==='episode')epAudioSync(true);stemSync()});
@@ -774,7 +777,7 @@ function stemEnabled(){
   if(MODE==='episode'&&(D.finals||{}).final_audio)return false;
   return true;
 }
-function stemAbs(){const va=$('#va');const g=MODE==='episode'?D.groups[EPIDX]:grpById(SEL);return ((g&&g.cum_start_s)||0)+(va.currentTime||0)}
+function stemAbs(){const va=$('#va');if(MODE==='final')return va.currentTime||0;const g=MODE==='episode'?D.groups[EPIDX]:grpById(SEL);return ((g&&g.cum_start_s)||0)+(va.currentTime||0)}
 function stemSync(){
   const va=$('#va');if(!va||!D)return;
   const playing=stemEnabled()&&!!va.src&&!va.paused&&!va.ended,abs=stemAbs(),live=new Set();
@@ -1163,6 +1166,52 @@ let PAD={pos:'here',freeze:0,hold:12,audio:'sustain',type:'hard_cut',dur:0.6,ado
 const FPS=24,fr2s=f=>Math.round((+f||0)/FPS*1000)/1000;
 /* 波形轨道选中条目(2026-09-16):{lane:'dialogue'|'narration'|'bgm'|'sfx', i} */
 let WSEL=null;
+/* 波形四轨 · 拖动定位(2026-09-30):在轨道上按下拖动 = 播放头跟着走;单击空白处 = 跳到该处;
+   单击条目不动 = 仍是选中条目。按集时间轴换算:单组 → 组内时刻;整集连播 → 跨组时切到对应组;看成片 → 成片时刻 */
+let WSCRUB=null;
+function waveSeekAbs(abs){
+  const va=$('#va');
+  if(MODE==='final'){seekTo(Math.max(0,Math.min(abs,va.duration||abs)));return}
+  if(MODE==='group'){const g=grpById(SEL);if(!g)return;seekTo(Math.max(0,Math.min(abs-(g.cum_start_s||0),va.duration||g.duration||0)));return}
+  const gs=D.groups;if(!gs.length)return;
+  let i=gs.findIndex(g=>abs<(g.cum_start_s||0)+(g.duration||0));if(i<0)i=gs.length-1;
+  const t=Math.max(0,abs-(gs[i].cum_start_s||0));
+  if(i===EPIDX&&va.src){seekTo(Math.min(t,va.duration||t));return}
+  epPadCancel();epLoad(i,t);
+}
+function waveAbsAt(clientX){
+  const tr=$('#waves .tr');if(!tr)return null;const r=tr.getBoundingClientRect(),[w0,w1]=waveWindow();
+  return w0+Math.max(0,Math.min(1,(clientX-r.left)/Math.max(1,r.width)))*(w1-w0);
+}
+function waveScrubTo(abs){
+  // 整集连播拖动中跨到别的组:先只挪播放头,松手再切组(避免拖动途中连续换源)
+  if(MODE==='episode'){const g=D.groups[EPIDX];if(!g||abs<(g.cum_start_s||0)||abs>=(g.cum_start_s||0)+(g.duration||0)){
+    WSCRUB.pending=abs;const ph=$('#waves .wph'),[w0,w1]=waveWindow();if(ph)ph.style.left=`calc(52px + (100% - 52px) * ${((abs-w0)/Math.max(0.01,w1-w0)).toFixed(4)})`;return}}
+  WSCRUB.pending=null;waveSeekAbs(abs);
+}
+let WSCRUB_BOUND=false;
+function bindWaveScrub(){
+  const box=$('#waves');if(!box)return;
+  box.addEventListener('pointerdown',e=>{
+    if(e.button!==0||!e.target.closest('.tr'))return;
+    WSCRUB={x:e.clientX,moved:false,pending:null,item:e.target.closest('i[data-i]')};
+    if(!WSCRUB.item){const a=waveAbsAt(e.clientX);if(a!=null)waveScrubTo(a)}
+  });
+  if(WSCRUB_BOUND)return;WSCRUB_BOUND=true;
+  document.addEventListener('pointermove',e=>{
+    if(!WSCRUB)return;
+    if(!WSCRUB.moved&&Math.abs(e.clientX-WSCRUB.x)<4)return;
+    WSCRUB.moved=true;document.body.classList.add('wscrub');e.preventDefault();
+    const a=waveAbsAt(e.clientX);if(a!=null)waveScrubTo(a);
+  });
+  document.addEventListener('pointerup',()=>{
+    if(!WSCRUB)return;
+    const {moved,pending}=WSCRUB;WSCRUB=null;document.body.classList.remove('wscrub');
+    if(pending!=null)waveSeekAbs(pending);
+    // 拖过就吞掉紧随的 click(在条目上松手不切换选中);没有 click 跟来时下一拍撤掉
+    if(moved){const w=$('#waves');if(!w)return;const eat=ev=>{ev.stopPropagation();ev.preventDefault()};w.addEventListener('click',eat,{capture:true,once:true});setTimeout(()=>w.removeEventListener('click',eat,{capture:true}),0)}
+  });
+}
 /* 波形四轨 */
 function waveWindow(){
   if(MODE==='group'){const g=grpById(SEL);return g?[g.cum_start_s,g.cum_start_s+(g.duration||$('#va').duration||0)]:[0,1]}
