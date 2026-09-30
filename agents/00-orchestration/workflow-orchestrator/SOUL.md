@@ -104,7 +104,7 @@ instruction: |
 
 ## 场景 / 道具 / 生物按集出图（2026-09-30）
 
-Phase 4 不再派 environment-concept / creature-concept 出图工单，prop 只派设定卡（`bible/props.json` 文字字段，不出图）；H2 只看风格 + 角色人设图 + 服装 sheet。三类出图在 Phase 6 每集建单：`p6-env-concept`（+白模开启时 `p6-scene-model`）在本集开头按 `script_breakdown.json` 场次建单、与 director 并行，storyboard 等它；`p6-prop-concept` / `p6-creature-concept` 在 shot-planning 定稿后按 shot_list 建单。**实例只取本集用到且 `assets/concepts/{scenes,props,creatures}/<id>/` 主目录还没有所需产物的实体**（判定口径同 §6A ①，`candidates/` 不算），已出过的跨集复用，不得为后续集提前出图；本集零缺口 = 不实例化，下游依赖视同满足。工单 instruction 内联本集实体清单与「库里已有、跳过」清单。存量项目 dag.json 已按旧版在 p4 建好的场景/生物出图节点照原样执行，不回溯拆改。
+Phase 4 不再派 environment-concept / creature-concept 出图工单，prop 只派设定卡（`bible/props.json` 文字字段，不出图）；H2 只看风格 + 角色人设图 + 服装 sheet。三类出图在 Phase 6 每集建单：`p6-env-concept`（+白模开启时 `p6-scene-model`）在本集开头按 `script_breakdown.json` 场次建单、与 director 并行，storyboard 等它；`p6-prop-concept` / `p6-creature-concept` 在 shot-planning 定稿后按 shot_list 建单。**实例只取本集用到且 `assets/concepts/{scenes,props,creatures}/<id>/` 主目录还没有所需产物的实体**（判定口径同 §6A ①，`candidates/` 不算），已出过的跨集复用，不得为后续集提前出图；本集零缺口 = 不实例化，下游依赖视同满足。工单 instruction 内联本集实体清单与「库里已有、跳过」清单。存量项目 dag.json 已按旧版在 p4 建好的场景/生物出图节点照原样执行，不回溯拆改。**拆解表外的场景**（storyboard 或 shot_list 引用了、`script_breakdown.json` 没有的 SCN-*）：发现即为其追加 `p6-env-concept`（白模开启时再加 `p6-scene-model`）实例，白模开启时 storyboard 返工与 `p6-whitebox` 都等它们完成；白模关闭时由 `p6-scene-plates` 补正向图。**世界模型背景图模式**（白模开启且 `output.plate_mode=world`，或场景级覆盖为 world）：世界模型只能由用户在场景预览页手动生成（计费），`p6-env-concept` 一结单就在给用户的回复里列出本集新出的场景清单、请其在分镜签字前到场景预览页生成全景图与世界模型（只提醒、不弹签字、不阻塞后续节点）——别等到 `p6-shot-plates` 退出码 4 才发现。
 
 ## 白模参考视频派单
 

@@ -357,7 +357,16 @@ function renderDetail(s){
       +`<option value="single"${sp.mode==='single'?' selected':''}>${esc(t('只出正向'))}</option>`
       +`<option value="pair"${sp.mode==='pair'?' selected':''}>${esc(t('正反两张都出'))}</option></select>`
       +` <span style="color:var(--dim)">${esc(sp.reverse_reason||'')}${(sp.needed_by||[]).length?' · '+esc(I18N.f('用到反向图的镜:{s}',{s:sp.needed_by.join(', ')})):''}</span></div>`
-      +`<div class="gallery plates">${card(sp.front,'front')}${card(sp.reverse,'reverse')}</div>`);
+      +`<div class="gallery plates">${card(sp.front,'front')}${card(sp.reverse,'reverse')}</div>`
+      // 光照变体(2026-09-30):组光照方案 ≠ 母版方案时按需补出,以母版为参考只改光照
+      +((sp.variants||[]).length?`<div class="meta-line">${esc(t('光照变体'))}${sp.base_scheme?' · '+esc(I18N.f('母版光照 {s}',{s:sp.base_scheme})):''}</div><div class="gallery plates">`
+        +sp.variants.map(v=>{
+          const lab=(v.view==='reverse'?t('反向图'):t('正向图'))+' × '+v.scheme;
+          const used=(v.needed_by||[]).length?`<figcaption><span class="fn">${esc(I18N.f('用到的镜:{s}',{s:v.needed_by.join(', ')}))}</span></figcaption>`:'';
+          if(!v.url)return `<figure><div class="fthumb" style="display:flex;align-items:center;justify-content:center;min-height:120px;color:var(--dim)">${esc(t('光照变体未出:分镜定稿后由 p6-scene-plates 补出(code/render_scene_plates.py)'))}</div><figcaption><span class="fn">${esc(lab)}</span></figcaption>${used}</figure>`;
+          const stale=v.stale?` <span style="color:#e6b422">⚠ ${esc(t('过期:母版已重出,需重出光照变体'))}</span>`:'';
+          return `<figure title="${esc(v.file||'')}"><img src="${esc(bust(v.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption><span class="fn">${esc(lab)} · ${esc(v.file||'')}${stale}</span></figcaption>${used}</figure>`;
+        }).join('')+`</div>`:''));
   }
   // 分镜背景图(2026-09-09):场景库 plates/index.json,按机位指纹入库,标注被哪些集/镜引用
   // 背景图模式(2026-09-22):白模开启时板块常显,标题后「背景图模式」= 跟随全局 / 九宫格 / 全景图 / 世界模型(2026-09-26 场景级三项均可选)(POST scenes/<sid>/plates/plate-mode)

@@ -3140,7 +3140,7 @@ def build_role_prompt(agent_id: str, project: str,
         "(front 的站位 standing_en / 看向 looking_en / 画内清单 in_frame_en / 身后不入画 behind_en;pair 模式同时用宿主 `code/render_scene_plates.py --scene <sid>` 出反向图);不出 layout_top/layout.json、九宫格;"
         "storyboard/shot-planning 每镜写 `plate_view: front|reverse`(本镜机位看的是正向图那一面还是回望入口那一面;语义判定,不写坐标),不写 scene_refs/blocking_map/view_tile、不跑 blocking_map_check.py;"
         "blocking 不受 blocking_on_map 约束(space_fragment_en 地标词按场景空间描述自拟);"
-        "Phase 6 分镜定稿后 p6-scene-plates(06-art/environment-concept)跑 `code/render_scene_plates.py --ep epNN`:auto 模式只给有镜标 reverse 的场景以正向图为母版补出反向图 `reverse_01.png`(机检 scene_plates_complete = `--status`);"
+        "Phase 6 分镜定稿后 p6-scene-plates(06-art/environment-concept)跑 `code/render_scene_plates.py --ep epNN`:auto 模式只给有镜标 reverse 的场景以正向图为母版补出反向图 `reverse_01.png`,并按各组 `lighting_scheme_id` 补出与母版光照(`front.lighting_scheme_id`,environment-concept 出正向图时必登记)不同的昼/夜光照变体 `main_01__<方案>.png` / `reverse_01__<方案>.png`(2026-09-30,只出用到的,禁手工出)(机检 scene_plates_complete = `--status`);"
         "Phase 7 prompt 场景锚 = 该场景正向图(+反向图),**由宿主 `code/sync_scene_plates.py --project <slug> --ep epNN --write` 挂进 refs(角色/生物 sheet 之后)、在 `Shot 1:` 前写 `Scene plates:` 段、每个 Shot 段头写 `Scene plate: this shot uses [Image N] … and not [Image M].`**——prompt 工位不手写该段、不手挑场景图,产出后必跑 `--write`(机检 scene_plate_bound);refs 不得再挂该场景旧概念图/俯视图/九宫格;"
         "scene_layout_pack_ok/blocking_map_present/blocking_on_map/layout_map_bound/shot_plate_bound/whitebox_ref_bound 一律跳过(报 `skipped: spatial_blocking off`)——"
         "SOUL.md/WORKFLOW.md 标注 2026-08-19 的场景布局包/动线标注条款与白模链条款**不适用**")
@@ -7500,7 +7500,20 @@ def _preview_scenes(project: str):
                 scene_plates_view = {"mode": spr.get("mode", "inherit"), "effective": need["mode"], "legacy": bool(spr.get("legacy")),
                                      "front": _pl("front"), "reverse": _pl("reverse"),
                                      "reverse_needed": need["needed"], "reverse_reason": need["reason"], "needed_by": need["needed_by"],
-                                     "reverse_stale": _scp.reverse_stale(base, sid, spr)}   # 正向图重出后与母版不一致(2026-09-17)
+                                     "reverse_stale": _scp.reverse_stale(base, sid, spr),   # 正向图重出后与母版不一致(2026-09-17)
+                                     "base_scheme": _scp.base_scheme(spr, "front")}
+                # 光照变体(2026-09-30):各集组光照方案 ≠ 母版方案时需要的变体 + 已登记的变体
+                _vrows, _seen = [], set()
+                for _v in _scp.variants_needed(base, sid, spr) + [{"scheme": k, "view": vw, "needed_by": []}
+                                                                  for k, d in (spr.get("variants") or {}).items() for vw in (d or {})]:
+                    if (_v["scheme"], _v["view"]) in _seen:
+                        continue
+                    _seen.add((_v["scheme"], _v["view"]))
+                    _vf = _scp.variant_file(base, sid, spr, _v["scheme"], _v["view"])
+                    _vrows.append({"scheme": _v["scheme"], "view": _v["view"], "needed_by": _v["needed_by"], "file": _vf.name if _vf else None,
+                                   "url": f"/projects/{base.name}/assets/concepts/scenes/{sid}/{_vf.name}?v={int(_vf.stat().st_mtime)}" if _vf else None,
+                                   "stale": _scp.variant_stale(base, sid, spr, _v["scheme"], _v["view"])})
+                scene_plates_view["variants"] = _vrows
         except Exception as e:  # noqa: BLE001
             print(f"[preview-scenes] {sid} scene_plates 读取失败(忽略):{e}", flush=True)
         # 背景图模式(2026-09-22):场景级 inherit|pano|world(库 plates/index.json#mode)+ 生效值 + 是否已有世界模型

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """场景图(正向/反向)出图与状态(白模关闭项目的场景一致性 A 方案;规则见 modules/scene_plates.py、docs/scene_plates.md)。
 
-正向图由 06-art/environment-concept 在 p4 出图并登记 assets/concepts/scenes/<sid>/scene_plates.json;本脚本负责:
-  --status                 机检 scene_plates_complete:每个场景正向图在、按生效模式需要反向图的场景反向图在(退出码 1 = 缺)
+正向图由 06-art/environment-concept 在 p6-env-concept(每集开头,本集用到的场景)出图并登记 assets/concepts/scenes/<sid>/scene_plates.json;本脚本负责:
+  --status                 机检 scene_plates_complete:每个场景正向图在、按生效模式需要反向图的场景反向图在、各集用到的光照变体在且未过期(退出码 1 = 缺)
   (默认)                   按生效模式给需要反向图的场景出图(auto:各集 shot_list 有镜 plate_view=reverse 才出;pair:全出;single:不出),
-                           以正向图为母版(--ref),出完写回登记并对已产出的组 prompt 自动 --write 接线
+                           以正向图为母版(--ref);再按各集组 lighting_scheme_id 补光照变体(≠ 母版 front.lighting_scheme_id 的方案,
+                           main_01__<方案>.png / reverse_01__<方案>.png,以母版为 --ref 只改光照,2026-09-30);出完写回登记并对已产出的组 prompt 自动 --write 接线
   --scene SID [--force]    只处理该场景(--force 已有也重出,旧图移入 candidates/)
   --dry-run                只写 reverse_01.prompt.txt 不出图
 项目「白模」开启时报 skipped(那条链由 render_shot_plates.py 负责,本脚本不触碰)。

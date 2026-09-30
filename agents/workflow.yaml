@@ -228,11 +228,14 @@ phases:
       - { id: p6-env-concept, agent: 06-art/environment-concept, for_each: episode_scene,   # 实例 = 本集场景 − 库里已有布局包/正向图的场景
           outputs: ["assets/concepts/scenes/{id}/"],
           # 产物形态同原 p4-env-concept:白模开启 → 布局包 layout_top.png + layout.json;关闭 → 正向图 main_01.png + scene_plates.json(pair 模式同出反向图)
-          validation: { auto: [scene_layout_pack_ok], qa: [11-qa/visual-qa] } }   # code/blocking_map_check.py --scene <id>(白模关闭时 skipped,改核 scene_plates_complete)
+          validation: { auto: [scene_layout_pack_ok, scene_plates_complete], qa: [11-qa/visual-qa] } }   # 白模开启:code/blocking_map_check.py --scene <id>;白模关闭:code/render_scene_plates.py --status --scene <本集场景…>
+          # (须用 --scene 列本集场景,不能用 --ep——此时本集还没有 shot_list,--ep 取不到场景会空跑 PASS);两项各自在另一模式下 skipped
       - { id: p6-scene-model, agent: 05-scenes/scene-modeling, for_each: episode_scene,
           condition: whitebox_requested, depends_on: [p6-env-concept],   # 实例 = 本集场景 − 已有 bible/scenes/{id}/whitebox.json 的场景
           outputs: ["bible/scenes/{id}/whitebox.json"],
-          validation: { qa: [11-qa/visual-qa] } }
+          validation: { auto: [whitebox_layout_ok], qa: [11-qa/visual-qa] } }   # code/whitebox_layout_check.py --scene <id>;更新已有场景时对引用它的已有分镜集逐集跑 render_whitebox.py --scene <id>(自动刷新两路 MP4)
+      #   拆解表外的场景(storyboard / shot_list 引用了但 script_breakdown 没有的 SCN-*):orchestrator 发现即为其追加 p6-env-concept(+白模开启时 p6-scene-model)实例;
+      #   白模开启时 storyboard 的 blocking_map 与 p6-whitebox 都要等这些实例完成(布局包 / whitebox.json 缺失 = blocking_map_present / 白模编译必然失败)。
       - { id: p6-prop-concept, agent: 06-art/prop, depends_on: [p6-shots],   # 本集 shot_list 出场剧情道具 − 库里已有样式图+比例锚图的道具
           outputs: ["assets/concepts/props/{id}/", bible/props.json],   # 按 props.json 设定卡出样式图 main_01.png + 比例锚图 scale_ref_01.png,回写图路径;设定卡缺条目的先补卡
           # 道具图无人物红线(2026-08-18):道具全部参考图不出现人物/身体局部,--ref 禁传角色/服装概念图
@@ -302,6 +305,9 @@ phases:
           validation: { auto: [shot_plates_complete, shot_plate_bound], qa: [11-qa/visual-qa] } }   # shot_plates_complete=render_shot_plates.py --status 逐镜齐全(验收以此为准,不采信自述;前科 Agent 丢后台结单一张没出);code/render_shot_plates.py:运镜分档出镜首/镜尾、查库复用/裁切、缺的出新图(长边 1920,控制台默认图像模型)并自动 sync_shot_plates --write;机检 code/sync_shot_plates.py
           # 全景制(2026-09-10,docs/scene_panos.md):脚本先保证场景全景齐备(modules/scene_panos.py 按机位规划少数锚点、每光照方案一张 2:1 全景),背景图一律由全景按机位重投影后二次生成,不再基于白模帧+俯视图;图像模型不支持 2:1 全景 → 退出码 2 [pano_unsupported] 一张不出,Agent 上报用户换图像模型(不得自行换)
       - { id: p6-scene-plates, agent: 06-art/environment-concept, condition: scene_plates_requested, depends_on: [p6-shots, p6-camera],
+          # 按集出图后(2026-09-30):shot_list 引用了但还没有正向图的场景(拆解表外、分镜新增的场景),本节点先按 p6-env-concept 规范补正向图 + 登记,再补反向图
+          # 光照变体(2026-09-30,学生物阶段变体按集判缺口):p6-env-concept 只出母版光照(front.lighting_scheme_id = 本集该场景首个时段的方案);本集组 lighting_scheme_id ≠ 母版的,
+          # 同一脚本以母版为参考只改光照补出 main_01__<方案>.png / reverse_01__<方案>.png(scene_plates.json#variants),sync_scene_plates 按组方案挂变体;--status 同时核变体齐且未过期
           outputs: ["assets/concepts/scenes/{id}/scene_plates.json"],   # 场景图(正向/反向,2026-09-17,白模关闭项目):分镜定稿后按 shot_list 每镜 plate_view 与项目/场景模式,用 code/render_scene_plates.py --ep epNN 以正向图为母版补出需要的反向图并自动 sync_scene_plates --write
           validation: { auto: [scene_plates_complete], qa: [11-qa/visual-qa] } }   # scene_plates_complete = render_scene_plates.py --status:每场景正向图在、需要反向图的场景反向图在(验收以此为准,不采信自述)
       - { id: p6-concept-audit, agent: 06-art/art-director, depends_on: [p6-shots, p6-env-concept, p6-prop-concept, p6-creature-concept],   # 2026-09-30 起按集出图节点先出,本审计只兜底核对 + 补漏

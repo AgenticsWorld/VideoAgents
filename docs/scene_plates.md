@@ -8,7 +8,7 @@ offer ep02 grp003/grp004 的俯视布局图被当成场景渲进成片（8 月�
 
 ## 做法
 
-1. **正向图 front**：`06-art/environment-concept` 在 p4 出 `assets/concepts/scenes/<sid>/main_01.png`——站在入口（门口）往内看的主视角，整间主体陈设一次入画，无人，平视不倾斜；并登记 `scene_plates.json`：
+1. **正向图 front**：`06-art/environment-concept` 在 p6-env-concept（每集开头，本集用到且库里还没有的场景）出 `assets/concepts/scenes/<sid>/main_01.png`——站在入口（门口）往内看的主视角，整间主体陈设一次入画，无人，平视不倾斜；并登记 `scene_plates.json`：
    ```json
    {"schema_version": "scene_plates.v1", "scene_id": "SCN-0006", "mode": "inherit",
     "front": {"file": "main_01.png", "standing_en": "just inside the west doorway", "looking_en": "east across the hall toward the idol on the far wall",
@@ -20,12 +20,13 @@ offer ep02 grp003/grp004 的俯视布局图被当成场景渲进成片（8 月�
 2. **反向图 reverse**：宿主 `code/render_scene_plates.py` 以正向图为 `--ref` 出 `reverse_01.png`（提示词写明「同一地点的反向视角、远变近、门洞居中、不得照抄构图」，门窗位置按 architecture 描述），写回登记并自动 `sync_scene_plates --write`。
 3. **每镜用哪张**：storyboard / shot-planning 每镜写 `plate_view: front | reverse`（本镜看正向图那一面还是回望入口那一面；语义判定，不写坐标；拿不准写 front）。
 4. **组 prompt 接线**：`code/sync_scene_plates.py --project <slug> --ep epNN --write`——剔除该场景旧概念图/俯视图/九宫格 refs，把正向（+本组有镜用到且已出的反向）图插在角色/生物 sheet 之后，`Shot 1:` 前写 `Scene plates:` 段（两图各自站位/看向/画内/身后清单 + 「每镜只用点名的那张、不得渲成空场、不得俯视」），每个 Shot 段头写 `Scene plate: this shot uses [Image N] (the front view, standing …, looking …) and not [Image M].`，`Global constraints:` 末尾追加禁俯视/地图句；幂等，原 prompt 首次备份到 `directing/<ep>/scene_plates_backups/`。机检 `scene_plate_bound`。
+5. **昼/夜光照变体**（2026-09-30，学生物阶段变体按集判缺口）：正向图按本集该场景首个时段匹配的 `lighting.json` 方案画，方案 id 登记为 `front.lighting_scheme_id`（母版光照，反向图沿用）。之后任一集 shot_list 有组的 `lighting_scheme_id` 与母版不同，就缺「该视角 × 该方案」的变体图：`render_scene_plates.py` 以母版为 `--ref`、构图不动只改光照，出 `main_01__<方案>.png` / `reverse_01__<方案>.png`，登记到 `scene_plates.json#variants.<方案>.<front|reverse>`（记母版哈希 `base_sha256`）。只出用到的方案×视角，跨集复用；母版重出后变体判过期、自动重出；`single` 模式只判正向变体。`sync_scene_plates` 按组方案挂变体图，变体未出/过期暂挂母版并 WARN；`--status` 缺变体/过期即 FAIL。母版未登记 `lighting_scheme_id` 的旧场景不判变体缺口（WARN 建议补登记）。场景预览页「场景图」板块下方列出光照变体。
 
 ## 配置
 
 | 层级 | 位置 | 取值 | 说明 |
 |---|---|---|---|
-| 项目 | `settings.json` → `output.scene_plates`（输出设置弹窗 / 新建向导「场景图」，白模开启时置灰） | `auto`（默认）/ `single` / `pair` | auto = 正向必出，任一集 shot_list 该场景有镜 `plate_view=reverse` 才出反向；single = 只出正向（平面动画、单面布景），标 reverse 的镜照用正向并 WARN；pair = 每场景两张，p4 一并出 |
+| 项目 | `settings.json` → `output.scene_plates`（输出设置弹窗 / 新建向导「场景图」，白模开启时置灰） | `auto`（默认）/ `single` / `pair` | auto = 正向必出，任一集 shot_list 该场景有镜 `plate_view=reverse` 才出反向；single = 只出正向（平面动画、单面布景），标 reverse 的镜照用正向并 WARN；pair = 每场景两张，p6-env-concept 一并出 |
 | 场景 | `scene_plates.json#mode`（场景预览页「🖼 场景图」板块下拉，`POST /projects/<p>/scenes/<sid>/plates/mode`） | `inherit` / `single` / `pair` | 优先于项目级 |
 | 分镜 | 无开关 | — | 系统按每镜 `plate_view` 选图；反向未出时暂用正向并 WARN |
 

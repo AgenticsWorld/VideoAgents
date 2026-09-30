@@ -4,7 +4,7 @@
 白模视频 + 全景 + 分镜背景图那条链(modules/shot_plates.py / whitebox_refs.py),本模块一律跳过、互不触碰。
 
 做法(offer SCN-0006 三组实测,docs/scene_plates.md):
-  1. 正向图 front:环境概念工位(p4)出的主视角图——站在入口往内看,整间主体陈设一次入画;连同站位/看向/画内清单登记到
+  1. 正向图 front:环境概念工位(p6-env-concept,每集开头按集出)出的主视角图——站在入口往内看,整间主体陈设一次入画;连同站位/看向/画内清单登记到
      assets/concepts/scenes/<sid>/scene_plates.json。
   2. 反向图 reverse:以正向图为母版,站在场景远端朝入口回望,补全正向图缺的那面(门、窗等开口尤其要对);由宿主脚本
      code/render_scene_plates.py 按需生成(p6-scene-plates 节点,分镜定稿后)。
@@ -12,11 +12,16 @@
      code/sync_scene_plates.py --write 把两张整图挂进组 refs(角色/生物 sheet 之后),`Shot 1:` 前写 `Scene plates:` 段,
      每个 Shot 段头写 `Scene plate: this shot uses [Image N] … and not [Image M].`;机检 scene_plate_bound。
 
+  4. 光照变体(2026-09-30,学生物阶段变体按集判缺口):正向图 / 反向图按登记的 `lighting_scheme_id`(母版光照方案)画;
+     某集 shot_list 有组的 lighting_scheme_id 与母版不同 → 该视角缺该方案的变体图 `main_01__<方案>.png` / `reverse_01__<方案>.png`
+     (以母版为 --ref 只改光照,构图不动),由 p6-scene-plates 同一脚本按需补出、登记在 scene_plates.json#variants;
+     组接线按组方案挑变体图,变体未出/过期暂用母版并 WARN。母版未登记 lighting_scheme_id 的旧场景不判变体缺口。
+
 配置:
   项目级 settings.json output.scene_plates ∈ auto(默认) | single | pair
     auto   = 正向必出;本项目任一集 shot_list 里该场景有镜标 reverse 才出反向图(分镜定稿后按需)
     single = 只出正向(平面动画 / 单面布景);标 reverse 的镜照用正向图并 WARN
-    pair   = 每场景正反两张都出(p4 一并出)
+    pair   = 每场景正反两张都出(p6-env-concept 出正向图时一并出)
   场景级 scene_plates.json mode ∈ inherit(默认) | single | pair,优先于项目级。
 """
 from __future__ import annotations
@@ -102,8 +107,11 @@ def save_scene_plates(base: Path, sid: str, rec: dict):
 
 def front_digest(base: Path, sid: str, rec: dict | None) -> str | None:
     """正向图文件 sha256(出反向图时记进 reverse.front_sha256;正向图重出后不一致 = 反向图过期)。"""
+    return _digest(plate_file(base, sid, rec or {}, 'front'))
+
+
+def _digest(f: Path | None) -> str | None:
     import hashlib
-    f = plate_file(base, sid, rec or {}, 'front')
     if not f:
         return None
     h = hashlib.sha256()
@@ -135,6 +143,74 @@ def plate_file(base: Path, sid: str, rec: dict, view: str) -> Path | None:
     return p if p.is_file() else None
 
 
+# ---------------------------------------------------------------- 光照变体(2026-09-30)
+def lighting_schemes(base: Path, sid: str) -> dict:
+    """该场景 lighting.json 的方案 {scheme_id: scheme}(键取 scheme_id,旧卡取 id)。"""
+    out = {}
+    for sc in (read(base / 'bible/scenes' / component(sid) / 'lighting.json', {}) or {}).get('schemes') or []:
+        if isinstance(sc, dict) and (sc.get('scheme_id') or sc.get('id')):
+            out[str(sc.get('scheme_id') or sc.get('id'))] = sc
+    return out
+
+
+def scheme_fragment(base: Path, sid: str, scheme_id: str | None) -> str:
+    """方案的光照片段(去掉开头的 Lighting:);scheme_id 为空或找不到时取第一个有片段的方案(旧行为)。"""
+    schemes = lighting_schemes(base, sid)
+    cands = ([schemes[scheme_id]] if scheme_id and scheme_id in schemes else []) or list(schemes.values())
+    for sc in cands:
+        if sc.get('prompt_fragment_en'):
+            return re.sub(r'^\s*lighting:\s*', '', str(sc['prompt_fragment_en']).strip(), flags=re.I)
+    return ''
+
+
+def base_scheme(rec: dict | None, view: str) -> str | None:
+    """母版光照方案:正向图 = front.lighting_scheme_id;反向图以正向图为母版出,未单独登记时同正向。"""
+    front = (rec or {}).get('front') or {}
+    if view == 'reverse':
+        return ((rec or {}).get('reverse') or {}).get('lighting_scheme_id') or front.get('lighting_scheme_id')
+    return front.get('lighting_scheme_id')
+
+
+def variant_name(view: str, scheme_id: str) -> str:
+    stem = 'reverse_01' if view == 'reverse' else 'main_01'
+    return f"{stem}__{re.sub(r'[^0-9A-Za-z_.-]+', '_', str(scheme_id))}.png"
+
+
+def variant_entry(rec: dict | None, scheme_id: str, view: str) -> dict:
+    return (((rec or {}).get('variants') or {}).get(str(scheme_id)) or {}).get(view) or {}
+
+
+def variant_file(base: Path, sid: str, rec: dict | None, scheme_id: str, view: str) -> Path | None:
+    name = variant_entry(rec, scheme_id, view).get('file')
+    p = scene_dir(base, sid) / str(name) if name else None
+    return p if p and p.is_file() else None
+
+
+def variant_stale(base: Path, sid: str, rec: dict | None, scheme_id: str, view: str) -> bool:
+    """变体图是否过期:记录的母版哈希与当前母版(正向/反向图)不同。未记哈希不判过期。"""
+    v = variant_entry(rec, scheme_id, view)
+    if not variant_file(base, sid, rec, scheme_id, view) or not v.get('base_sha256'):
+        return False
+    return _digest(plate_file(base, sid, rec or {}, view)) != v['base_sha256']
+
+
+def variants_needed(base: Path, sid: str, rec: dict | None, ep: str | None = None) -> list:
+    """按各集 shot_list 判缺哪些光照变体:[{scheme, view, needed_by}]。组方案 = 母版方案的不算;
+    single 模式标 reverse 的镜按正向算;母版未登记 lighting_scheme_id 的场景返回 [](不判)。"""
+    mode = effective_mode(base, rec)
+    need: dict = {}
+    for s in shots_by_scene(base, sid, ep):
+        sch = s.get('lighting_scheme_id')
+        if not sch:
+            continue
+        view = 'reverse' if (s['plate_view'] == 'reverse' and mode != 'single') else 'front'
+        bs = base_scheme(rec, view)
+        if not bs or sch == bs:
+            continue
+        need.setdefault((sch, view), []).append(f"{s['ep']}/{s['shot_id']}")
+    return [{'scheme': k[0], 'view': k[1], 'needed_by': v} for k, v in sorted(need.items())]
+
+
 # ---------------------------------------------------------------- 分镜引用
 def _shot_list_files(base: Path, ep: str | None = None):
     if ep:
@@ -160,8 +236,10 @@ def shots_by_scene(base: Path, sid: str, ep: str | None = None) -> list:
             if shot_scene_id(s, gmap) != sid:
                 continue
             pv = str(s.get('plate_view') or '').strip().lower() or None
-            out.append({'ep': f.parent.name, 'shot_id': s.get('shot_id'), 'group_id': s.get('group_id') or (gmap.get(s.get('shot_id')) or {}).get('group_id'),
-                        'plate_view': pv if pv in VIEWS else None, 'plate_view_raw': s.get('plate_view')})
+            g = gmap.get(s.get('shot_id')) or {}
+            out.append({'ep': f.parent.name, 'shot_id': s.get('shot_id'), 'group_id': s.get('group_id') or g.get('group_id'),
+                        'plate_view': pv if pv in VIEWS else None, 'plate_view_raw': s.get('plate_view'),
+                        'lighting_scheme_id': g.get('lighting_scheme_id') or s.get('lighting_scheme_id')})
     return out
 
 
@@ -217,12 +295,30 @@ def status(base: Path, ep: str | None = None, scenes: list | None = None) -> dic
             errors.append(f"{sid}: 反向图过期——正向图 {(rec.get('front') or {}).get('file')} 已重出,与母版不一致;重跑 python3 code/render_scene_plates.py --project <slug> --scene {sid}"); state = 'stale_reverse'
         elif rec.get('legacy'):
             warnings.append(f'{sid}: 只有旧版 main_01.png、无 scene_plates.json 登记(站位/画内清单为空,建议回派 environment-concept 补登记)'); state = 'legacy'
+        vrows = []
+        for v in (variants_needed(base, sid, rec) if front else []):
+            vf = variant_file(base, sid, rec, v['scheme'], v['view'])
+            vst = 'ok'
+            if v['view'] == 'reverse' and not plate_file(base, sid, rec, 'reverse'):
+                vst = 'missing_base'      # 反向母版未出,上面已报;出完反向图再补变体
+            elif not vf:
+                vst = 'missing'
+                errors.append(f"{sid}: 缺光照变体 {v['view']}×{v['scheme']}({len(v['needed_by'])} 镜用到,如 {v['needed_by'][0]}):"
+                              f"python3 code/render_scene_plates.py --project <slug> --scene {sid}")
+            elif variant_stale(base, sid, rec, v['scheme'], v['view']):
+                vst = 'stale'
+                errors.append(f"{sid}: 光照变体 {vf.name} 过期(母版已重出);重跑 python3 code/render_scene_plates.py --project <slug> --scene {sid}")
+            if vst != 'ok' and state == 'ok':
+                state = 'missing_variant' if vst != 'stale' else 'stale_variant'
+            vrows.append({**v, 'file': str(vf.relative_to(base)) if vf else None, 'state': vst})
+        if front and not base_scheme(rec, 'front') and any(s.get('lighting_scheme_id') for s in shots_by_scene(base, sid)):
+            warnings.append(f'{sid}: 正向图未登记 lighting_scheme_id(母版光照方案),不判光照变体缺口;建议回派 environment-concept 补登记')
         for s in shots_by_scene(base, sid, ep):
             if s['plate_view'] is None and s.get('shot_id'):
                 warnings.append(f"{s['ep']}/{s['shot_id']}: 未写 plate_view(按 front 处理)")
         rows.append({'scene_id': sid, 'mode': rec.get('mode', 'inherit'), 'effective': need['mode'], 'front': str(front.relative_to(base)) if front else None,
                      'reverse': str(rev.relative_to(base)) if rev else None, 'reverse_needed': need['needed'], 'needed_by': need['needed_by'],
-                     'reverse_stale': bool(rev) and reverse_stale(base, sid, rec), 'state': state})
+                     'reverse_stale': bool(rev) and reverse_stale(base, sid, rec), 'variants': vrows, 'state': state})
     return {'scenes': rows, 'errors': errors, 'warnings': warnings, 'project_mode': project_mode(base)}
 
 
@@ -290,6 +386,7 @@ def build_reverse_prompt(base: Path, sid: str, rec: dict) -> tuple[str, str]:
     behind = rev.get('behind_en') or front.get('in_frame_en') or []
     must_show = front.get('behind_en') or []
     desc, light, arch_neg = _scene_docs(base, sid)
+    light = scheme_fragment(base, sid, base_scheme(rec, 'front')) or light      # 反向图与正向图同一母版光照
     style, style_neg = _style(base)
     parts = [f'Empty location background plate, one single full-frame still with nobody present and nothing moving. Location: {name}.',
              f'This is the REVERSE view of the same location as [Image 1]. [Image 1] is the front view: standing {f_stand}, looking {f_look}. '
@@ -367,6 +464,8 @@ def render_reverse(base: Path, sid: str, *, force: bool = False, dry_run: bool =
                 'channel': {'provider': cfg.get('provider'), 'model': cfg.get('model')}, 'prompt': prompt, 'negative': negative})
     rev.setdefault('standing_en', f"at the far end of the location, opposite {((rec.get('front') or {}).get('standing_en') or 'the entrance')}")
     rev.setdefault('looking_en', 'back toward the entrance')
+    if base_scheme(rec, 'front'):
+        rev['lighting_scheme_id'] = base_scheme(rec, 'front')
     rec['reverse'] = rev
     rec['reverse_needed_by'] = reverse_needed(base, sid, rec)['needed_by']
     save_scene_plates(base, sid, rec)
@@ -374,8 +473,68 @@ def render_reverse(base: Path, sid: str, *, force: bool = False, dry_run: bool =
     return rec
 
 
+def build_variant_prompt(base: Path, sid: str, rec: dict, scheme_id: str, view: str) -> tuple[str, str]:
+    """光照变体提示词:[Image 1] = 该视角母版;构图/机位/陈设全部不动,只换成目标方案的光照。"""
+    name = scene_name(base, sid)
+    src = scheme_fragment(base, sid, base_scheme(rec, view))
+    dst = scheme_fragment(base, sid, scheme_id)
+    cond = (lighting_schemes(base, sid).get(scheme_id) or {}).get('condition') or {}
+    when = _flat({k: cond.get(k) for k in ('time_of_day', 'weather', 'in_scene_light_source')})
+    style, style_neg = _style(base)
+    _, _, arch_neg = _scene_docs(base, sid)
+    parts = [f'Empty location background plate, one single full-frame still with nobody present and nothing moving. Location: {name}.',
+             f'[Image 1] is this exact location and this exact camera view' + (f' under its original lighting ({src.rstrip(".")})' if src else '') + '. '
+             'Produce the same picture again — identical camera position, lens, framing and composition, identical architecture, openings, furniture '
+             'and every fixed element in the same place — changing ONLY the lighting, time of day and weather.',
+             'New lighting: ' + (dst.rstrip('.') if dst else scheme_id) + '.' + (f' Condition: {when}.' if when else ''),
+             'Light sources, shadows, sky and window light, colour temperature and exposure all follow the new lighting consistently; '
+             'nothing is added, removed or moved.',
+             'Empty location plate: no people, no characters, no animals, no text, no watermark, one single photograph, everything in sharp focus front to back.']
+    if style:
+        parts.append('Style: ' + style)
+    negative = ', '.join(x for x in (NEGATIVE_BASE, style_neg, arch_neg) if x)
+    return '\n'.join(parts), negative
+
+
+def render_variant(base: Path, sid: str, scheme_id: str, view: str, *, force: bool = False, dry_run: bool = False, seed: int | None = None, log=print) -> dict:
+    rec = load_scene_plates(base, sid)
+    src = plate_file(base, sid, rec, view) if rec else None
+    if not src:
+        raise FileNotFoundError(f'{sid}: {view} 母版图不存在,先出母版再补光照变体')
+    existing = variant_file(base, sid, rec, scheme_id, view)
+    if existing and not force and not variant_stale(base, sid, rec, scheme_id, view):
+        log(f'   {sid}: 光照变体 {existing.name} 已有,跳过(--force 重出)')
+        return rec
+    prompt, negative = build_variant_prompt(base, sid, rec, scheme_id, view)
+    name = variant_name(view, scheme_id)
+    out = scene_dir(base, sid) / name
+    (scene_dir(base, sid) / (name[:-4] + '.prompt.txt')).write_text(prompt + '\n\nREFS: ' + src.name + '\n\nNEGATIVE: ' + negative + '\n', encoding='utf-8')
+    if dry_run:
+        log(f'   [dry-run] {sid}: 光照变体 {view}×{scheme_id} 提示词 {len(prompt)} 字(母版 {src.name})')
+        return rec
+    from modules.genmedia import generate_image, get_config, image_pref_env
+    with image_pref_env('scenes'):
+        cfg = get_config('image')
+    if out.is_file():
+        (scene_dir(base, sid) / 'candidates').mkdir(exist_ok=True)
+        out.rename(scene_dir(base, sid) / 'candidates' / f'{name[:-4]}.prev-{dt.datetime.now().strftime("%Y%m%d-%H%M%S")}.png')
+    size = plate_size(base)
+    if seed is None:
+        import random
+        seed = random.randint(1, 2 ** 31 - 1)
+    log(f"   出 {sid} 光照变体 {view}×{scheme_id} {cfg.get('provider')}/{cfg.get('model')} {size} seed {seed},母版 {src.name} …")
+    generate_image(prompt, str(out), negative=negative, refs=[str(src)], size=size, seed=seed)
+    rec.setdefault('variants', {}).setdefault(str(scheme_id), {})[view] = {
+        'file': out.name, 'base_file': src.name, 'base_sha256': _digest(src), 'base_scheme': base_scheme(rec, view),
+        'generated_at': _now(), 'seed': seed, 'size': size, 'channel': {'provider': cfg.get('provider'), 'model': cfg.get('model')},
+        'prompt': prompt, 'negative': negative}
+    save_scene_plates(base, sid, rec)
+    log(f'saved: {out.relative_to(base)}')
+    return rec
+
+
 def render_needed(base: Path, ep: str | None = None, scenes: list | None = None, *, force=False, dry_run=False, seed=None, log=print) -> dict:
-    """按生效模式给需要反向图的场景出图(auto 按各集 shot_list 的 plate_view 统计)。"""
+    """按生效模式给需要反向图的场景出图(auto 按各集 shot_list 的 plate_view 统计),再按各集组光照方案补光照变体。"""
     done, skipped = [], []
     for sid in (scenes or scene_ids(base, ep)):
         rec = load_scene_plates(base, sid)
@@ -383,11 +542,21 @@ def render_needed(base: Path, ep: str | None = None, scenes: list | None = None,
             skipped.append((sid, '无正向图登记')); continue
         need = reverse_needed(base, sid, rec)
         if not need['needed'] and not force:
-            skipped.append((sid, need['reason'])); log(f"   {sid}: {need['reason']}"); continue
-        if plate_file(base, sid, rec, 'reverse') and not force and not reverse_stale(base, sid, rec):
-            skipped.append((sid, '反向图已有且母版未变')); log(f'   {sid}: 反向图已有且母版未变,跳过'); continue
-        render_reverse(base, sid, force=force, dry_run=dry_run, seed=seed, log=log)
-        done.append(sid)
+            skipped.append((sid, need['reason'])); log(f"   {sid}: {need['reason']}")
+        elif plate_file(base, sid, rec, 'reverse') and not force and not reverse_stale(base, sid, rec):
+            skipped.append((sid, '反向图已有且母版未变')); log(f'   {sid}: 反向图已有且母版未变,跳过')
+        else:
+            render_reverse(base, sid, force=force, dry_run=dry_run, seed=seed, log=log)
+            done.append(sid)
+        rec = load_scene_plates(base, sid)
+        for v in variants_needed(base, sid, rec):
+            tag = f"{sid}:{v['view']}×{v['scheme']}"
+            if not plate_file(base, sid, rec, v['view']):
+                skipped.append((tag, f"{v['view']} 母版未出")); continue
+            if variant_file(base, sid, rec, v['scheme'], v['view']) and not force and not variant_stale(base, sid, rec, v['scheme'], v['view']):
+                skipped.append((tag, '光照变体已有且母版未变')); continue
+            rec = render_variant(base, sid, v['scheme'], v['view'], force=force, dry_run=dry_run, seed=seed, log=log)
+            done.append(tag)
     return {'rendered': done, 'skipped': skipped}
 
 
@@ -439,7 +608,26 @@ def plan_group(base: Path, ep: str, gid: str) -> dict:
     if rec and rec.get('legacy'):
         warnings.append(f'{gid}: 场景 {sid} 只有旧版 main_01.png、无 scene_plates.json 登记(站位/画内清单为空)')
     use_reverse = reverse is not None and any(s['view'] == 'reverse' for s in shots)
-    return {'group': g, 'scene_id': sid, 'rec': rec, 'mode': mode, 'shots': shots, 'warnings': warnings,
+    # 光照变体(2026-09-30):组光照方案 ≠ 母版方案时挂该方案的变体图;未出/过期暂用母版并 WARN
+    scheme = g.get('lighting_scheme_id')
+    variants_used = {}
+    for view in ('front', 'reverse'):
+        cur = front if view == 'front' else (reverse if use_reverse else None)
+        bs = base_scheme(rec, view)
+        if not cur or not scheme or not bs or scheme == bs:
+            continue
+        vf = variant_file(base, sid, rec, scheme, view)
+        if vf and variant_stale(base, sid, rec, scheme, view):
+            warnings.append(f'{gid}: 场景 {sid} 光照变体 {vf.name} 过期(母版已重出),暂用母版;重跑 code/render_scene_plates.py --scene {sid}'); vf = None
+        if not vf:
+            warnings.append(f'{gid}: 场景 {sid} 缺 {view}×{scheme} 光照变体(母版为 {bs}),暂用母版(跑 code/render_scene_plates.py)')
+            continue
+        variants_used[view] = scheme
+        if view == 'front':
+            front = vf
+        else:
+            reverse = vf
+    return {'group': g, 'scene_id': sid, 'rec': rec, 'mode': mode, 'shots': shots, 'warnings': warnings, 'variants': variants_used,
             'front': str(front.relative_to(base)) if front else None,
             'reverse': str(reverse.relative_to(base)) if use_reverse else None}
 
@@ -531,6 +719,7 @@ def apply_prompt(prompt: dict, plan: dict) -> tuple[dict, list]:
     out['refs'] = new
     out['video_prompt'] = vp
     out['scene_plates'] = {'scene_id': sid, 'mode': plan.get('mode'), 'front': plan['front'], 'reverse': plan.get('reverse'),
+                           'lighting_variants': plan.get('variants') or {},
                            'shots': [{'shot_id': s['shot_id'], 'view': s['view']} for s in plan['shots']], 'source': 'sync_scene_plates.v1'}
     notes = [n for n in (out.get('notes') or []) if not str(n).startswith('场景图自动接线(')]
     notes.append(f"场景图自动接线(code/sync_scene_plates.py):refs 挂正向图{'+反向图' if plan.get('reverse') else ''},逐镜 "

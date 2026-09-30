@@ -119,3 +119,69 @@ def test_reverse_stale_when_front_changes(tmp_path):
     # 未记哈希的旧记录不判过期
     rec['reverse'].pop('front_sha256'); sp.save_scene_plates(base, 'SCN-1', rec)
     assert not sp.reverse_stale(base, 'SCN-1', sp.load_scene_plates(base, 'SCN-1'))
+
+
+def _with_lighting(base: Path, group_scheme='L-NIGHT', base_scheme='L-DAY'):
+    """母版正向图登记为日景方案;本组光照方案另设。"""
+    (base / 'bible/scenes/SCN-1').mkdir(parents=True, exist_ok=True)
+    (base / 'bible/scenes/SCN-1/lighting.json').write_text(json.dumps({'schemes': [
+        {'scheme_id': 'L-DAY', 'condition': {'time_of_day': 'day'}, 'prompt_fragment_en': 'Lighting: soft daylight from the south windows'},
+        {'scheme_id': 'L-NIGHT', 'condition': {'time_of_day': 'night'}, 'prompt_fragment_en': 'a single oil lamp on the table, deep shadows'}]}))
+    rec = sp.load_scene_plates(base, 'SCN-1')
+    if base_scheme:
+        rec['front']['lighting_scheme_id'] = base_scheme
+    sp.save_scene_plates(base, 'SCN-1', rec)
+    sl = json.loads((base / 'directing/ep01/shot_list.json').read_text())
+    sl['generation_groups'][0]['lighting_scheme_id'] = group_scheme
+    (base / 'directing/ep01/shot_list.json').write_text(json.dumps(sl))
+
+
+def test_lighting_variant_needed_per_view_and_fallback(tmp_path):
+    base = _proj(tmp_path)
+    _with_lighting(base)
+    rec = sp.load_scene_plates(base, 'SCN-1')
+    need = sp.variants_needed(base, 'SCN-1', rec)
+    assert [(v['view'], v['scheme']) for v in need] == [('front', 'L-NIGHT'), ('reverse', 'L-NIGHT')]
+    assert need[1]['needed_by'] == ['ep01/ep01-sh002']
+    st = sp.status(base, 'ep01')
+    assert st['scenes'][0]['state'] == 'missing_variant' and sum('缺光照变体' in e for e in st['errors']) == 2
+    # 变体未出:接线暂用母版并 WARN
+    r = sp.sync_episode(base, 'ep01', None, write=True)
+    pack = json.loads((base / 'assets/prompts/ep01/grp001.json').read_text())
+    assert 'assets/concepts/scenes/SCN-1/main_01.png' in pack['refs'] and any('光照变体' in w for w in r['warnings'])
+    # 同方案 / single 模式 / 母版未登记方案
+    base2 = _proj(tmp_path / 'b'); _with_lighting(base2, group_scheme='L-DAY')
+    assert sp.variants_needed(base2, 'SCN-1', sp.load_scene_plates(base2, 'SCN-1')) == []
+    base3 = _proj(tmp_path / 'c', mode='single'); _with_lighting(base3)
+    assert [v['view'] for v in sp.variants_needed(base3, 'SCN-1', sp.load_scene_plates(base3, 'SCN-1'))] == ['front']
+    base4 = _proj(tmp_path / 'd'); _with_lighting(base4, base_scheme=None)
+    assert sp.variants_needed(base4, 'SCN-1', sp.load_scene_plates(base4, 'SCN-1')) == []
+    assert any('lighting_scheme_id' in w for w in sp.status(base4, 'ep01')['warnings'])
+
+
+def test_lighting_variant_render_wire_and_stale(tmp_path, monkeypatch):
+    import modules.genmedia as gm
+    from contextlib import nullcontext
+    calls = []
+    monkeypatch.setattr(gm, 'generate_image', lambda prompt, out, **kw: (calls.append((prompt, kw)), Path(out).write_bytes(b'v' + str(len(calls)).encode())))
+    monkeypatch.setattr(gm, 'get_config', lambda kind: {'provider': 'fake', 'model': 'm'})
+    monkeypatch.setattr(gm, 'image_pref_env', lambda kind: nullcontext())
+    base = _proj(tmp_path)
+    _with_lighting(base)
+    res = sp.render_needed(base, 'ep01', log=lambda *a: None)
+    assert res['rendered'] == ['SCN-1:front×L-NIGHT', 'SCN-1:reverse×L-NIGHT']
+    prompt, kw = calls[0]
+    assert 'oil lamp' in prompt and 'soft daylight' in prompt and kw['refs'][0].endswith('main_01.png')
+    assert calls[1][1]['refs'][0].endswith('reverse_01.png')
+    assert sp.status(base, 'ep01')['scenes'][0]['state'] == 'ok'
+    sp.sync_episode(base, 'ep01', None, write=True)
+    pack = json.loads((base / 'assets/prompts/ep01/grp001.json').read_text())
+    assert pack['refs'][1:3] == ['assets/concepts/scenes/SCN-1/main_01__L-NIGHT.png', 'assets/concepts/scenes/SCN-1/reverse_01__L-NIGHT.png']
+    assert pack['scene_plates']['lighting_variants'] == {'front': 'L-NIGHT', 'reverse': 'L-NIGHT'}
+    assert not sp.sync_episode(base, 'ep01', None, write=False)['errors']
+    # 已有且母版未变:不重出;母版重出 → 变体过期、自动重出
+    assert sp.render_needed(base, 'ep01', log=lambda *a: None)['rendered'] == []
+    (base / 'assets/concepts/scenes/SCN-1/main_01.png').write_bytes(b'new front')
+    assert sp.variant_stale(base, 'SCN-1', sp.load_scene_plates(base, 'SCN-1'), 'L-NIGHT', 'front')
+    assert sp.status(base, 'ep01')['scenes'][0]['state'] in ('stale_variant', 'ok') and any('过期' in e for e in sp.status(base, 'ep01')['errors'])
+    assert 'SCN-1:front×L-NIGHT' in sp.render_needed(base, 'ep01', log=lambda *a: None)['rendered']
