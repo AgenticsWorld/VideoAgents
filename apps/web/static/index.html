@@ -87,6 +87,10 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 #input:focus{outline:none}   /* 去掉浏览器默认聚焦白边(总制片与其它 Agent 一致) */
 /* 总制片输入框:光晕环向外扩散(grow)循环,提示当前是在跟总制片说话,避免误发给其它 Agent;只动阴影/边框,不改尺寸 */
 #composer.dispatcher #input{border-color:var(--accent);animation:composer-grow 2s ease-out infinite}
+/* 非总制片输入框:暖琥珀色底+描边,与总制片的蓝色光晕冷暖对比,一眼可辨在跟单个 Agent 说话;低饱和度不抢视线 */
+#composer.member #input{background:#221f18;border-color:rgba(251,191,36,.38)}
+#composer.member #input:focus{border-color:rgba(251,191,36,.6)}
+#composer.member #input::placeholder{color:#9a8f76}
 @keyframes composer-grow{0%{box-shadow:0 0 0 0 rgba(108,158,248,.55)}70%{box-shadow:0 0 0 7px rgba(108,158,248,0)}100%{box-shadow:0 0 0 0 rgba(108,158,248,0)}}
 #soul-view{display:none;flex:1;overflow-y:auto;padding:18px;white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#b9c2d6}
 /* 右栏 */
@@ -2982,6 +2986,8 @@ async function selectAgent(id){
   CURRENT=id; const a=AGENTS.find(x=>x.id===id);
   $('#c-title').textContent=agentName(a.name); $('#c-sub').textContent=id;
   $('#composer').classList.toggle('dispatcher',!!a.dispatcher);   // 总制片输入框加 grow 光晕,便于识别
+  $('#composer').classList.toggle('member',!a.dispatcher);          // 其它 Agent 输入框改暖琥珀色
+  $('#input').placeholder=I18N.f('给{name}发送工作指令… (Shift+Enter 发送,Enter 换行)',{name:agentName(a.name)});
   updateModelBtn();updateSkillBtn();
   $('#soul-view').style.display='none'; $('#messages').style.display='flex';
   OPEN_GROUPS.add(agentGroup(a));   // 展开该 Agent 所在组

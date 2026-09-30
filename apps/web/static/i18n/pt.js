@@ -811,6 +811,7 @@ window.I18N_DICT = {
 "跳过": "Pular",
 "跳过向导创建": "Pular o assistente e criar",
 "输入工作指令… (Shift+Enter 发送,Enter 换行)": "Digite uma instrução de trabalho… (Shift+Enter envia, Enter quebra linha)",
+"给{name}发送工作指令… (Shift+Enter 发送,Enter 换行)": "Enviar uma instrução de trabalho para {name}… (Shift+Enter envia, Enter quebra linha)",
 "输入模型 ID": "Digite o ID do modelo",
 "输入模型ID": "Digite o ID do modelo",
 "输入项目名称": "Digite o nome do projeto",

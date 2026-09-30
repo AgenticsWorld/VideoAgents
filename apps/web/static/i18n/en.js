@@ -850,6 +850,7 @@ window.I18N_DICT = {
 "跳过": "Skip",
 "跳过向导创建": "Skip wizard and create",
 "输入工作指令… (Shift+Enter 发送,Enter 换行)": "Type a work instruction… (Shift+Enter to send, Enter for a new line)",
+"给{name}发送工作指令… (Shift+Enter 发送,Enter 换行)": "Send a work instruction to {name}… (Shift+Enter to send, Enter for a new line)",
 "输入模型 ID": "Enter the model ID",
 "输入模型ID": "Enter model ID",
 "输入项目名称": "Enter a project name",

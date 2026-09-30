@@ -811,6 +811,7 @@ window.I18N_DICT = {
 "跳过": "Lewati",
 "跳过向导创建": "Buat tanpa wizard",
 "输入工作指令… (Shift+Enter 发送,Enter 换行)": "Ketik instruksi kerja… (Shift+Enter kirim, Enter baris baru)",
+"给{name}发送工作指令… (Shift+Enter 发送,Enter 换行)": "Kirim instruksi kerja ke {name}… (Shift+Enter kirim, Enter baris baru)",
 "输入模型 ID": "Masukkan ID model",
 "输入模型ID": "Masukkan ID model",
 "输入项目名称": "Masukkan nama proyek",

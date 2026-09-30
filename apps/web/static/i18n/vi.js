@@ -811,6 +811,7 @@ window.I18N_DICT = {
 "跳过": "Bỏ qua",
 "跳过向导创建": "Bỏ qua trình hướng dẫn và tạo ngay",
 "输入工作指令… (Shift+Enter 发送,Enter 换行)": "Nhập chỉ lệnh công việc… (Shift+Enter gửi, Enter xuống dòng)",
+"给{name}发送工作指令… (Shift+Enter 发送,Enter 换行)": "Gửi chỉ lệnh công việc cho {name}… (Shift+Enter gửi, Enter xuống dòng)",
 "输入模型 ID": "Nhập Model ID",
 "输入模型ID": "Nhập Model ID",
 "输入项目名称": "Nhập tên dự án",

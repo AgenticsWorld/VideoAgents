@@ -812,6 +812,7 @@ window.I18N_DICT = {
 "跳过": "スキップ",
 "跳过向导创建": "ウィザードをスキップして作成",
 "输入工作指令… (Shift+Enter 发送,Enter 换行)": "作業指示を入力… (Shift+Enter で送信、Enter で改行)",
+"给{name}发送工作指令… (Shift+Enter 发送,Enter 换行)": "{name} に作業指示を送信… (Shift+Enter で送信、Enter で改行)",
 "输入模型 ID": "モデル ID を入力",
 "输入模型ID": "モデルIDを入力",
 "输入项目名称": "プロジェクト名を入力",

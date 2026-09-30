@@ -812,6 +812,7 @@ window.I18N_DICT = {
 "跳过": "Passer",
 "跳过向导创建": "Créer sans l'assistant",
 "输入工作指令… (Shift+Enter 发送,Enter 换行)": "Saisir une instruction de travail… (Shift+Entrée pour envoyer, Entrée pour un saut de ligne)",
+"给{name}发送工作指令… (Shift+Enter 发送,Enter 换行)": "Envoyer une instruction de travail à {name}… (Shift+Entrée pour envoyer, Entrée pour un saut de ligne)",
 "输入模型 ID": "Saisir le Model ID",
 "输入模型ID": "Saisir le Model ID",
 "输入项目名称": "Saisir le nom du projet",

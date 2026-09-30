@@ -812,6 +812,7 @@ window.I18N_DICT = {
 "跳过": "건너뛰기",
 "跳过向导创建": "마법사 건너뛰고 만들기",
 "输入工作指令… (Shift+Enter 发送,Enter 换行)": "작업 지시 입력… (Shift+Enter 전송, Enter 줄바꿈)",
+"给{name}发送工作指令… (Shift+Enter 发送,Enter 换行)": "{name}에게 작업 지시 보내기… (Shift+Enter 전송, Enter 줄바꿈)",
 "输入模型 ID": "모델 ID 입력",
 "输入模型ID": "모델 ID 입력",
 "输入项目名称": "프로젝트 이름 입력",
