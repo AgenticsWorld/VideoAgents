@@ -3987,4 +3987,12 @@ window.I18N_DICT = {
 "写下你对这里的想法:情节走向、人物动机、台词语气、节奏、必须保留或避免的处理…(Shift+Enter 保存)": "Notez ici vos idées : direction de l'intrigue, motivation des personnages, ton des répliques, rythme, ce qu'il faut garder ou éviter… (Maj+Entrée pour enregistrer)",
 "注释存到 story/episodes/<ep>/script_notes.json;点分集行右侧「📨 提交注释」把本集全部注释一次性发给修改师处理": "Les notes sont enregistrées dans story/episodes/<ep>/script_notes.json ; 「📨 Envoyer les notes」 à droite de la ligne des épisodes envoie d'un coup toutes les notes de l'épisode au réviseur",
 "对这一块加注释:存到 story/episodes/<ep>/script_notes.json,点分集行右侧「📨 提交注释」整集一次性发给修改师": "Ajouter une note ici : enregistrée dans story/episodes/<ep>/script_notes.json ; 「📨 Envoyer les notes」 à droite de la ligne des épisodes envoie d'un coup toutes les notes de l'épisode au réviseur",
+"🎨 画风": "🎨 Style",
+"✅ 草图画风已切换为「{s}」,之后出的草图按此画风": "✅ Style des croquis passé à « {s} » ; les nouveaux croquis l'utiliseront",
+"画风保存失败:": "Échec de l'enregistrement du style : ",
+"铅笔灰马克": "Crayon et feutre gris",
+"铅笔彩铅": "Crayon et sépia",
+"粗犷线稿": "Encre brute",
+"灰调重点色": "Gris + couleur d'accent",
+"草图画风(按项目保存,只影响之后出的草图):铅笔灰马克 = 实拍电影分镜的铅笔+灰马克笔;铅笔彩铅 = 日式动画分镜的铅笔快线+竖向排线+少量茶色彩铅;粗犷线稿 = 好莱坞动作片的黑笔硬朗线+密集排线重黑;灰调重点色 = 平板速写的平涂灰调+一处重点色": "Style des croquis (par projet, s'applique aux nouveaux croquis) : Crayon et feutre gris = storyboard de film en prises de vues réelles ; Crayon et sépia = storyboard d'animation japonaise, traits rapides, hachures verticales, un peu de sépia ; Encre brute = stylo noir de film d'action hollywoodien, traits durs et hachures denses ; Gris + couleur d'accent = croquis sur tablette, gris à plat et une seule couleur d'accent",
 };

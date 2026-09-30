@@ -319,3 +319,41 @@ def test_build_prompt_whitebox_layout_sentence():
     grid, _ = sbb.build_grid_prompt([({"scene_no": "S01"}, {"cast": ["CHAR-1"]}), ({"scene_no": "S01"}, {})],
                                     {"CHAR-1": "哪吒"}, 2, 2, whitebox_legend=[])
     assert "same 2x2 grid" in grid and "mannequin is" not in grid
+
+
+def test_sketch_style_packs_konte(tmp_path):
+    """2026-09-30 画风包:konte 为铅笔絵コンテ(允许少量茶色、不压 anime),film 仍为默认;非法值回落 film。"""
+    shot = {"cast": ["CHAR-1"], "size_hint": "近景"}
+    film, film_neg = sbb.build_prompt({}, shot, {"CHAR-1": "甲"})
+    konte, konte_neg = sbb.build_prompt({}, shot, {"CHAR-1": "甲"}, style="konte")
+    assert film.startswith("Professional live-action film storyboard") and "anime" in film_neg
+    assert konte.startswith("Japanese animation production storyboard (e-konte)") and "sepia" in konte
+    assert "anime" not in konte_neg and "handwriting" in konte_neg
+    assert "Ghibli" not in konte and "Miyazaki" not in konte
+    # 纯文生图 / plain_style 同样按画风切换,且仍以 TEXT_ONLY_TAIL 结尾可截
+    t_only, _ = sbb.build_prompt({}, shot, {}, with_refs=False, style="konte")
+    assert t_only.startswith("One Japanese animation production storyboard")
+    plain, _ = sbb.build_prompt({}, shot, {}, plain_style=True, ref_names=["甲"], style="konte")
+    assert "Picture 1 is 甲" in plain and "sepia" in plain
+    grid, gneg = sbb.build_grid_prompt([({"scene_no": "S01"}, shot), ({"scene_no": "S01"}, {})], {}, 2, 2, style="konte")
+    assert grid.startswith("A page from a Japanese animation production storyboard") and "handwriting" in gneg
+    assert sbb.normalize_sketch_style("bogus") == "film"
+    assert sbb.resolve_sketch_style(tmp_path) == "film"
+    (tmp_path / "settings.json").write_text(json.dumps({"output": {"sketch_style": "konte"}}))
+    assert sbb.resolve_sketch_style(tmp_path) == "konte"
+
+
+def test_sketch_style_packs_ink_digital():
+    """2026-09-30:动作分镜(粗犷线稿,纯黑白)/ 数字分镜(灰调 + 单一重点色)两套画风包齐全,纯文生图版无否定句。"""
+    shot = {"cast": ["CHAR-1"]}
+    ink, ink_neg = sbb.build_prompt({}, shot, {}, style="ink")
+    dig, dig_neg = sbb.build_prompt({}, shot, {}, style="digital")
+    assert ink.startswith("live-action action-movie storyboard panel") and "cross hatching" in ink and "grey wash" in ink_neg
+    assert "exactly one accent color" in dig and "multiple accent colors" in dig_neg
+    for st in ("ink", "digital"):
+        t_only, _ = sbb.build_prompt({}, shot, {}, with_refs=False, style=st)
+        head = t_only[:-len(sbb.SKETCH_TEXT_ONLY_TAIL)]
+        assert " no " not in head.lower() and " not " not in head.lower()
+        grid, _ = sbb.build_grid_prompt([({"scene_no": "S01"}, shot), ({"scene_no": "S01"}, {})], {}, 2, 2, style=st)
+        assert "strict 2x2 grid" in grid
+    assert set(sbb.SKETCH_STYLE_LABELS) == set(sbb.SKETCH_STYLES) == {"film", "konte", "ink", "digital"}

@@ -468,6 +468,17 @@ async def post_signoff(project: str, ep: str, body: dict[str, Any]) -> dict[str,
 
 
 
+@api.get("/projects/{project}/board-sketch-style", tags=["artifacts"])
+async def board_sketch_style(project: str) -> dict[str, Any]:
+    """故事板页顶栏「画风」:项目草图画风 film(电影分镜,默认)/ konte(动画分镜)。"""
+    return await core.api_board_sketch_style_get(project)
+
+
+@api.post("/projects/{project}/board-sketch-style", tags=["artifacts"])
+async def set_board_sketch_style(project: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_board_sketch_style_set(project, body)
+
+
 @api.post("/projects/{project}/board/{ep}/sketch", tags=["artifacts"])
 async def board_sketch(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
     """故事板页「出草图」:{scene, order?, note?, provider?, model?, force?}。"""

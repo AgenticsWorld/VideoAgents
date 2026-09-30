@@ -3987,4 +3987,12 @@ window.I18N_DICT = {
 "写下你对这里的想法:情节走向、人物动机、台词语气、节奏、必须保留或避免的处理…(Shift+Enter 保存)": "Escreva aqui suas ideias: rumo da trama, motivação das personagens, tom das falas, ritmo, o que manter ou evitar… (Shift+Enter salva)",
 "注释存到 story/episodes/<ep>/script_notes.json;点分集行右侧「📨 提交注释」把本集全部注释一次性发给修改师处理": "As notas são salvas em story/episodes/<ep>/script_notes.json; 「📨 Enviar notas」 à direita da linha de episódios envia de uma vez todas as notas do episódio ao revisor",
 "对这一块加注释:存到 story/episodes/<ep>/script_notes.json,点分集行右侧「📨 提交注释」整集一次性发给修改师": "Adicione uma nota aqui: salva em story/episodes/<ep>/script_notes.json; 「📨 Enviar notas」 à direita da linha de episódios envia de uma vez todas as notas do episódio ao revisor",
+"🎨 画风": "🎨 Estilo",
+"✅ 草图画风已切换为「{s}」,之后出的草图按此画风": "✅ Estilo do esboço alterado para 「{s}」; os novos esboços o usarão",
+"画风保存失败:": "Falha ao salvar o estilo: ",
+"铅笔灰马克": "Lápis e marcador cinza",
+"铅笔彩铅": "Lápis e sépia",
+"粗犷线稿": "Tinta bruta",
+"灰调重点色": "Cinza + cor de destaque",
+"草图画风(按项目保存,只影响之后出的草图):铅笔灰马克 = 实拍电影分镜的铅笔+灰马克笔;铅笔彩铅 = 日式动画分镜的铅笔快线+竖向排线+少量茶色彩铅;粗犷线稿 = 好莱坞动作片的黑笔硬朗线+密集排线重黑;灰调重点色 = 平板速写的平涂灰调+一处重点色": "Estilo do esboço (por projeto, só afeta esboços novos): Lápis e marcador cinza = storyboard de cinema live-action; Lápis e sépia = storyboard de animação japonesa com traços rápidos, hachura vertical e um pouco de sépia; Tinta bruta = caneta preta de filme de ação de Hollywood, traços duros e hachuras densas; Cinza + cor de destaque = esboço em tablet com cinzas chapados e uma única cor de destaque",
 };

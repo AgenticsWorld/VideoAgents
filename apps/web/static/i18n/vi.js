@@ -3985,4 +3985,12 @@ window.I18N_DICT = {
 "写下你对这里的想法:情节走向、人物动机、台词语气、节奏、必须保留或避免的处理…(Shift+Enter 保存)": "Ghi lại suy nghĩ của bạn ở đây: hướng cốt truyện, động cơ nhân vật, giọng thoại, nhịp độ, những gì phải giữ hoặc tránh… (Shift+Enter để lưu)",
 "注释存到 story/episodes/<ep>/script_notes.json;点分集行右侧「📨 提交注释」把本集全部注释一次性发给修改师处理": "Ghi chú được lưu vào story/episodes/<ep>/script_notes.json; nút 「📨 Gửi ghi chú」 ở bên phải hàng chọn tập gửi cùng lúc toàn bộ ghi chú của tập cho người sửa",
 "对这一块加注释:存到 story/episodes/<ep>/script_notes.json,点分集行右侧「📨 提交注释」整集一次性发给修改师": "Thêm ghi chú ở đây: lưu vào story/episodes/<ep>/script_notes.json; nút 「📨 Gửi ghi chú」 ở bên phải hàng chọn tập gửi cùng lúc toàn bộ ghi chú của tập cho người sửa",
+"🎨 画风": "🎨 Phong cách",
+"✅ 草图画风已切换为「{s}」,之后出的草图按此画风": "✅ Đã chuyển phong cách phác thảo sang 「{s}」; phác thảo mới sẽ dùng phong cách này",
+"画风保存失败:": "Lưu phong cách thất bại: ",
+"铅笔灰马克": "Chì & bút dạ xám",
+"铅笔彩铅": "Chì & sepia",
+"粗犷线稿": "Mực thô",
+"灰调重点色": "Xám + màu nhấn",
+"草图画风(按项目保存,只影响之后出的草图):铅笔灰马克 = 实拍电影分镜的铅笔+灰马克笔;铅笔彩铅 = 日式动画分镜的铅笔快线+竖向排线+少量茶色彩铅;粗犷线稿 = 好莱坞动作片的黑笔硬朗线+密集排线重黑;灰调重点色 = 平板速写的平涂灰调+一处重点色": "Phong cách phác thảo (theo dự án, chỉ áp dụng phác thảo mới): Chì & bút dạ xám = storyboard phim người đóng; Chì & sepia = storyboard hoạt hình Nhật, nét chì nhanh, gạch dọc, chút sepia; Mực thô = bút đen kiểu phim hành động Hollywood, nét cứng và gạch dày; Xám + màu nhấn = phác thảo máy tính bảng với xám phẳng và một màu nhấn",
 };

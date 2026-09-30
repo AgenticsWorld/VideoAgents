@@ -3985,4 +3985,12 @@ window.I18N_DICT = {
 "写下你对这里的想法:情节走向、人物动机、台词语气、节奏、必须保留或避免的处理…(Shift+Enter 保存)": "Tulis pendapat Anda di sini: arah cerita, motivasi tokoh, nada dialog, ritme, apa yang harus dipertahankan atau dihindari… (Shift+Enter untuk menyimpan)",
 "注释存到 story/episodes/<ep>/script_notes.json;点分集行右侧「📨 提交注释」把本集全部注释一次性发给修改师处理": "Catatan disimpan ke story/episodes/<ep>/script_notes.json; 「📨 Kirim catatan」 di kanan baris episode mengirim semua catatan episode ini ke reviser sekaligus",
 "对这一块加注释:存到 story/episodes/<ep>/script_notes.json,点分集行右侧「📨 提交注释」整集一次性发给修改师": "Tambahkan catatan di sini: disimpan ke story/episodes/<ep>/script_notes.json; 「📨 Kirim catatan」 di kanan baris episode mengirim semua catatan episode ke reviser sekaligus",
+"🎨 画风": "🎨 Gaya",
+"✅ 草图画风已切换为「{s}」,之后出的草图按此画风": "✅ Gaya sketsa diganti ke 「{s}」; sketsa baru akan memakainya",
+"画风保存失败:": "Gagal menyimpan gaya: ",
+"铅笔灰马克": "Pensil & spidol abu-abu",
+"铅笔彩铅": "Pensil & sepia",
+"粗犷线稿": "Tinta kasar",
+"灰调重点色": "Abu-abu + warna aksen",
+"草图画风(按项目保存,只影响之后出的草图):铅笔灰马克 = 实拍电影分镜的铅笔+灰马克笔;铅笔彩铅 = 日式动画分镜的铅笔快线+竖向排线+少量茶色彩铅;粗犷线稿 = 好莱坞动作片的黑笔硬朗线+密集排线重黑;灰调重点色 = 平板速写的平涂灰调+一处重点色": "Gaya sketsa (per proyek, hanya untuk sketsa baru): Pensil & spidol abu-abu = storyboard film live-action; Pensil & sepia = storyboard animasi Jepang dengan garis cepat, arsiran vertikal, sedikit sepia; Tinta kasar = pena hitam ala film aksi Hollywood, goresan keras dan arsiran rapat; Abu-abu + warna aksen = sketsa tablet dengan abu-abu datar dan satu warna aksen",
 };

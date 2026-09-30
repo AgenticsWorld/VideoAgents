@@ -27,6 +27,7 @@
    用户要求「按白模机位/站位重画」时加 `--whitebox-layout`:该镜已导出白模 camera.mp4 就取本镜首帧作构图底(机位/焦段/人物画内位置照白模),没有则 CLI 打 INFO 按文字出——如实转告用户。
 3. 运行宿主 CLI(单镜调用默认就是重出):
    `python3 code/storyboard_sketch.py --project <slug> --ep epNN --scene S01 --order 3 --note "…"`
+   画风**不传**:CLI 按项目设置(故事板页顶栏「🎨 画风」,settings.json `output.sketch_style` = film 铅笔灰马克 / konte 铅笔彩铅 / ink 粗犷线稿 / digital 灰调重点色)出图,重画保持与其它草图同画风;只有用户在意见里明确要求换画风才传 `--style film|konte|ink|digital`(只影响这一张)。
    渠道/模型**不传**:CLI 自动沿用 台账该镜上次用的 → 用户在故事板页顶部选的草图模型(state.json `sketch_model`)→ 全局图像渠道;只有用户在意见里明确点名模型时才传 `--provider/--model`。exit 0 即完成,图片已覆盖原文件、台账 status=done。
 4. 失败(exit 1,台账 `status=failed`、`error` 有原因)时按原因处理:渠道/Key/模型不可用 → 原样报告用户,**不自作主张换渠道**;提示词被内容审核拦截 → 改措辞(去掉敏感词、改为中性描述)重试一次(计入运行提示词「用户重跑次数设定」:该值为 0 时不自行重试,原样报告),仍失败则报告。
 5. 回复一段话:草图键、翻译后的 `--note`、实际用的渠道/模型、图片路径;页面会在工单结束时自动刷新图片,不需要贴图或改页面。

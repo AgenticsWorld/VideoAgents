@@ -177,6 +177,190 @@ GRID_NEGATIVE = ("color, colorful, photo, photorealistic, 3d render, cgi, painti
                  "panels of different sizes, decorative border, cluttered environment, "
                  "architectural rendering, interior design")
 
+# ---------------- 草图画风包(2026-09-30 用户拍板) ----------------
+# 故事板页顶栏「画风」下拉,存项目 settings.json output.sketch_style(默认 film);CLI --style 可临时覆盖。
+# film    = 铅笔灰马克(实拍电影分镜,上面的 SKETCH_* / GRID_* 常量,2026-09-29 版);
+# konte   = 铅笔彩铅:日式动画絵コンテ,铅笔快线 + 竖向平行排线铺调子 + 少量茶色/赭石彩铅点染,人物为简化动画造型;
+# ink     = 粗犷线稿(2026-09-30):好莱坞实拍动作片分镜,黑铅笔/签字笔快速硬朗线、出轮廓的笔触、密集斜排线/交叉排线
+#           堆重黑、强对比、写实成人比例,无灰调无彩色;
+# digital = 灰调重点色(2026-09-30):平板数字速写,深灰数字铅笔线 + 2–3 级平涂灰,人物简化(点眼、一笔嘴)但动作清楚,
+#           全图只有一处重点色落在本镜叙事关键物(道具/液体/火/血/光),其余灰阶;参考图里的运动箭头与手写字不让模型画。
+#   四种都只用文字描述画风特征,不写作者/工作室/片名,不传任何风格参考图(用户给的扫描页只作画风参考,不进 refs)。
+SKETCH_STYLES = ("film", "konte", "ink", "digital")
+SKETCH_STYLE_LABELS = {"film": "铅笔灰马克", "konte": "铅笔彩铅", "ink": "粗犷线稿", "digital": "灰调重点色"}
+DEFAULT_SKETCH_STYLE = "film"
+_KONTE_LOOK = (
+    "soft graphite pencil on white paper, drawn by a veteran animation director: quick, lively, confident pencil "
+    "lines, slightly rough and searching; characters in a clean simplified anime layout style with correct anatomy "
+    "and clearly readable expressions; tone laid in with loose parallel vertical pencil hatching instead of smooth "
+    "shading; a few light touches of warm sepia / ochre colored pencil on shadows, skin and key objects, everything "
+    "else graphite"
+)
+KONTE_STYLE_PROMPT = (
+    "Japanese animation production storyboard (e-konte) panel, " + _KONTE_LOOK + ". "
+    "FIGURES FIRST: correct figure size and body cropping for the stated shot size, clear eye lines and body "
+    "gestures. Pose every figure exactly as stated (standing, sitting, kneeling, crouching, lying down, running, "
+    "swinging a weapon, dodging…); the body state is as important as the face. "
+    "ENVIRONMENT SKETCHED BUT SPATIALLY CORRECT: a horizon line and perspective that match the stated camera height "
+    "and lens; trees, walls, rocks and ground indicated with a few loose lines and vertical hatching; no finished "
+    "rendering, no props unless mentioned. "
+    "The framing must show the camera angle, camera height and lens exactly as described (eye level, high "
+    "angle, low angle, over-the-shoulder, profile, from behind). "
+    "A single frame, no panel borders, no text, no handwriting, no cut numbers, no captions, no speech bubbles, "
+    "no watermark. It must look like a hand-drawn animation storyboard page, not a finished illustration, "
+    "painting or colored manga. "
+)
+KONTE_REFS_SENTENCE = (
+    "The attached images are the project's official character designs — keep each character's likeness, "
+    "hairstyle, costume shape and signature props, redrawn in the loose pencil storyboard manner above (graphite "
+    "with a little sepia pencil, no full color). The location is described in text only and is drawn as simple shapes."
+)
+KONTE_STYLE_PROMPT_TEXT_ONLY = (
+    "One Japanese animation production storyboard drawing (e-konte) filling the whole page, " + _KONTE_LOOK + ". "
+    "It is a single moment from a film, seen through the camera once, drawn as one picture. FIGURES FIRST: correct "
+    "figure size and body cropping for the stated shot size, clear eye lines and body gestures; each figure holds "
+    "exactly the body position the shot describes. The environment is sketched but spatially correct: a horizon "
+    "line and perspective matching the stated camera height and lens, trees, walls and ground indicated with loose "
+    "lines and vertical hatching. The framing shows the stated camera angle, camera height and lens. Graphite "
+    "pencil with light sepia accents, clean hand-drawn storyboard look. " + SKETCH_TEXT_ONLY_TAIL
+)
+KONTE_NEGATIVE = ("full color, saturated colors, color painting, photo, photorealistic, 3d render, cgi, painting, "
+                  "ink wash, digital illustration, finished illustration, cel shading, screentone, clean vector lineart, "
+                  "text, letters, handwriting, numbers, caption, watermark, logo, speech bubble, comic panel grid, "
+                  "multiple panels, border, frame lines, cluttered environment, architectural rendering, "
+                  "interior design" + SKETCH_NEGATIVE_PEOPLE_TAIL)
+KONTE_GRID_STYLE_PROMPT = (
+    "A page from a Japanese animation production storyboard (e-konte): a strict {cols}x{rows} grid of {n} equal-size "
+    "panels on one white page, {cols} columns and {rows} rows, separated only by thin straight black gutter lines, "
+    "panels read left to right, top to bottom, every panel filling its cell edge to edge with the same {aspect} "
+    "framing. Every panel: " + _KONTE_LOOK + ". FIGURES FIRST in every panel: correct figure size and body cropping "
+    "for that panel's shot size, clear eye lines and body gestures; pose every figure exactly as that panel states "
+    "(standing, sitting, kneeling, crouching, lying down, running, swinging, dodging…). ENVIRONMENT SKETCHED BUT "
+    "SPATIALLY CORRECT in every panel: horizon and perspective matching that panel's camera height and lens, loose "
+    "lines and vertical hatching, no finished rendering. Each panel must show its camera angle, height and lens "
+    "exactly as described. Graphite pencil with only light sepia accents, no full color; hand-drawn storyboard, not "
+    "a finished illustration. No text, no handwriting, no numbers, no captions, no speech bubbles, no watermark "
+    "inside the panels. {refs}{blank}"
+)
+KONTE_GRID_REFS_SENTENCE = (
+    "The attached images are the project's official character designs — keep each character's likeness, hairstyle, "
+    "costume shape and signature props consistent in every panel, redrawn in the loose pencil storyboard manner "
+    "(graphite with a little sepia pencil, no full color). Locations are described in text only and are drawn as simple shapes."
+)
+KONTE_GRID_NEGATIVE = ("full color, saturated colors, color painting, photo, photorealistic, 3d render, cgi, painting, "
+                       "ink wash, digital illustration, finished illustration, cel shading, screentone, clean vector "
+                       "lineart, text, letters, handwriting, numbers, caption, watermark, logo, speech bubble, uneven "
+                       "panels, overlapping panels, panels of different sizes, decorative border, cluttered environment, "
+                       "architectural rendering, interior design")
+
+
+def _style_pack(intro: str, look: str, env: str, env_plain: str, finish: str, finish_plain: str,
+                refs_manner: str, negative: str, grid_negative: str) -> dict:
+    """按「画法 look / 环境 env / 收尾 finish」拼一套画风包(单张/纯文生图/宫格三种风格句 + 两种参考图句 + 负面词)。
+    纯文生图版(text_only)只用正向句 env_plain / finish_plain(cfg=1 蒸馏模型不吃否定句)。"""
+    figures = ("correct figure size and body cropping for the stated shot size, clear eye lines and body gestures")
+    return {
+        "head": (f"{intro} panel, {look}. FIGURES FIRST: {figures}. Pose every figure exactly as stated (standing, "
+                 "sitting, kneeling, crouching, lying down, running, swinging a weapon, dodging…); the body state is as "
+                 f"important as the face. ENVIRONMENT {env}; no props unless mentioned. The framing must show the camera "
+                 "angle, camera height and lens exactly as described (eye level, high angle, low angle, over-the-shoulder, "
+                 "profile, from behind). A single frame, no panel borders, no text, no handwriting, no captions, no arrows, "
+                 f"no speech bubbles, no watermark. {finish} "),
+        "refs": ("The attached images are the project's official character designs — take from them only what identifies "
+                 "each character (hairstyle, costume shape, build, signature props); do not copy their rendering style, "
+                 f"colors or facial detail — draw everyone in the {refs_manner} described above. The location is described "
+                 "in text only and is drawn as simple shapes."),
+        "text_only": (f"One {intro} drawing filling the whole page, {look}. It is a single moment from a film, seen through "
+                      f"the camera once, drawn as one picture. FIGURES FIRST: {figures}; each figure holds exactly the body "
+                      f"position the shot describes. The environment is {env_plain}. The framing shows the stated camera "
+                      f"angle, camera height and lens. {finish_plain} " + SKETCH_TEXT_ONLY_TAIL),
+        "negative": negative + SKETCH_NEGATIVE_PEOPLE_TAIL,
+        "grid_head": ("A page of " + intro + " panels: a strict {cols}x{rows} grid of {n} equal-size panels on one white "
+                      "page, {cols} columns and {rows} rows, separated only by thin straight black gutter lines, panels read "
+                      "left to right, top to bottom, every panel filling its cell edge to edge with the same {aspect} framing. "
+                      f"Every panel: {look}. FIGURES FIRST in every panel: {figures}; pose every figure exactly as that panel "
+                      "states (standing, sitting, kneeling, crouching, lying down, running, swinging, dodging…). ENVIRONMENT "
+                      f"in every panel {env}. Each panel must show its camera angle, height and lens exactly as described. "
+                      f"{finish} No text, no handwriting, no numbers, no captions, no arrows, no speech bubbles, no watermark "
+                      "inside the panels. {refs}{blank}"),
+        "grid_refs": ("The attached images are the project's official character designs — take from them only what identifies "
+                      "each character (hairstyle, costume shape, build, signature props) and keep it consistent in every "
+                      f"panel; do not copy their rendering style, colors or facial detail — use the {refs_manner}. Locations "
+                      "are described in text only and are drawn as simple shapes."),
+        "grid_negative": grid_negative,
+    }
+
+
+_INK_PACK = _style_pack(
+    intro="live-action action-movie storyboard",
+    look=("drawn by a veteran Hollywood storyboard artist in black pencil and felt-tip pen on white paper: fast, "
+          "aggressive, angular gestural strokes that overshoot their contours, bold heavy blacks built from dense diagonal "
+          "and cross hatching, strong contrast, realistic adult proportions, faces rendered in a few confident strokes, "
+          "energetic and cinematic"),
+    env=("DRAWN WITH ENERGY BUT SPATIALLY CORRECT: strong perspective matching the stated camera height and lens, sets and "
+         "machinery indicated with quick hard strokes and dark hatched masses, depth read through contrast"),
+    env_plain=("drawn with energy and spatially correct: strong perspective matching the stated camera height and lens, "
+               "sets indicated with quick hard strokes and dark hatched masses"),
+    finish=("Pure black line and hatching on white, no grey wash, no color; a raw professional storyboard drawing, not a "
+            "finished illustration, manga or anime."),
+    finish_plain="Pure black pencil and ink line with hatching on white, raw professional storyboard energy.",
+    refs_manner="realistic proportions and rough ink storyboard manner",
+    negative=("color, colorful, grey wash, soft shading, photo, photorealistic, 3d render, cgi, painting, manga, anime, "
+              "anime eyes, chibi, finished illustration, clean vector lineart, screentone, text, letters, handwriting, "
+              "numbers, caption, watermark, logo, speech bubble, arrows, comic panel grid, multiple panels, border, "
+              "frame lines, interior design"),
+    grid_negative=("color, colorful, grey wash, soft shading, photo, photorealistic, 3d render, cgi, painting, manga, anime, "
+                   "anime eyes, chibi, finished illustration, clean vector lineart, screentone, text, letters, handwriting, "
+                   "numbers, caption, watermark, logo, speech bubble, arrows, uneven panels, overlapping panels, panels of "
+                   "different sizes, decorative border"),
+)
+_DIGITAL_PACK = _style_pack(
+    intro="digital film storyboard sketch",
+    look=("drawn by a film storyboard artist on a tablet: loose dark-grey digital pencil lines, flat grey marker tones in "
+          "two or three values, simplified cartoon-like figures with minimal faces (dot eyes, a single line for the mouth) "
+          "whose poses and gestures read instantly, and exactly one accent color used only on the single story-critical "
+          "element of the shot (a key prop, liquid, fire, blood or light), everything else greyscale"),
+    env=("SIMPLE BUT SPATIALLY CORRECT: walls, doorways, floors and furniture as flat grey planes with clean perspective "
+         "matching the stated camera height and lens, depth readable at a glance"),
+    env_plain=("simple and spatially correct: walls, doorways and floors as flat grey planes with clean perspective "
+               "matching the stated camera height and lens"),
+    finish=("Greyscale with that single accent color only; a clean, readable digital storyboard, not a painting or a "
+            "finished illustration."),
+    finish_plain="Greyscale drawing with that single accent color, clean and readable digital storyboard.",
+    refs_manner="simplified digital storyboard manner",
+    negative=("full color, colorful, multiple accent colors, rainbow colors, photo, photorealistic, 3d render, cgi, "
+              "painting, detailed rendering, anime eyes, manga, screentone, text, letters, handwriting, numbers, caption, "
+              "watermark, logo, speech bubble, arrows, comic panel grid, multiple panels, border, frame lines, "
+              "cluttered environment"),
+    grid_negative=("full color, colorful, multiple accent colors, rainbow colors, photo, photorealistic, 3d render, cgi, "
+                   "painting, detailed rendering, anime eyes, manga, screentone, text, letters, handwriting, numbers, "
+                   "caption, watermark, logo, speech bubble, arrows, uneven panels, overlapping panels, panels of "
+                   "different sizes, decorative border"),
+)
+
+STYLE_PACKS = {
+    "film": {"head": SKETCH_STYLE_PROMPT, "refs": SKETCH_REFS_SENTENCE, "text_only": SKETCH_STYLE_PROMPT_TEXT_ONLY,
+             "negative": SKETCH_NEGATIVE, "grid_head": GRID_STYLE_PROMPT, "grid_refs": GRID_REFS_SENTENCE,
+             "grid_negative": GRID_NEGATIVE},
+    "konte": {"head": KONTE_STYLE_PROMPT, "refs": KONTE_REFS_SENTENCE, "text_only": KONTE_STYLE_PROMPT_TEXT_ONLY,
+              "negative": KONTE_NEGATIVE, "grid_head": KONTE_GRID_STYLE_PROMPT, "grid_refs": KONTE_GRID_REFS_SENTENCE,
+              "grid_negative": KONTE_GRID_NEGATIVE},
+    "ink": _INK_PACK,
+    "digital": _DIGITAL_PACK,
+}
+
+
+def normalize_sketch_style(v) -> str:
+    v = str(v or "").strip().lower()
+    return v if v in SKETCH_STYLES else DEFAULT_SKETCH_STYLE
+
+
+def resolve_sketch_style(base: Path) -> str:
+    """项目草图画风(settings.json output.sketch_style);缺省/非法 = film。"""
+    cfg = _read_json(base / "settings.json") or {}
+    return normalize_sketch_style((cfg.get("output") or {}).get("sketch_style"))
+
+
 _REF_RE = re.compile(r"^(.+?)(?:/shots_draft)?/order:(\d+)(?:/split:[^/]+)?$")
 _DLG_RE = re.compile(r"^\s*(?:S\d+[A-Za-z]?\s*[/·:\-]\s*)?(CHAR-\d+|NARRATOR|[^:：/·「」]{1,12})\s*[:：]\s*(.+?)\s*$")
 
@@ -1313,18 +1497,20 @@ def _shot_parts(shot: dict, names: dict, clip: dict | None = None, grid: bool = 
 
 def build_prompt(scene: dict, shot: dict, names: dict, note: str = "", with_refs: bool = True,
                  plain_style: bool = False, ref_names: list[str] | None = None,
-                 layout: bool = False, whitebox_legend: list[tuple[str, str]] | None = None) -> tuple[str, str]:
+                 layout: bool = False, whitebox_legend: list[tuple[str, str]] | None = None,
+                 style: str = DEFAULT_SKETCH_STYLE) -> tuple[str, str]:
     """单镜提示词:风格句 →(构图底句)→ 逐镜描述(_shot_parts:景别规则/机位+地平线/焦段/出场/姿态/画面/神态/群众)
     → 本场轴线 → 地点短提示 → 修改意见。
     with_refs=False(comfyui 纯文生图)时整句风格提示换成 SKETCH_STYLE_PROMPT_TEXT_ONLY(不列举姿态、无否定句、人物按文字画)。
     layout=True:最后一张参考图是构图底——whitebox_legend 不为 None 时是白模机位首帧(彩色假人逐个点名),否则是手绘稿。"""
     # plain_style(comfyui / agentics,2026-09-19)带参考图:正向风格句 + 逐张点名的参考图句,不用含否定句/姿态列举的 SKETCH_STYLE_PROMPT
+    pack = STYLE_PACKS[normalize_sketch_style(style)]      # 画风包(2026-09-30):film / konte
     if not with_refs:
-        parts = [SKETCH_STYLE_PROMPT_TEXT_ONLY]
+        parts = [pack["text_only"]]
     elif plain_style:
-        parts = [SKETCH_STYLE_PROMPT_TEXT_ONLY[:-len(SKETCH_TEXT_ONLY_TAIL)] + ref_sentence_plain(ref_names or [])]
+        parts = [pack["text_only"][:-len(SKETCH_TEXT_ONLY_TAIL)] + ref_sentence_plain(ref_names or [])]
     else:
-        parts = [SKETCH_STYLE_PROMPT + SKETCH_REFS_SENTENCE]
+        parts = [pack["head"] + pack["refs"]]
     if layout:      # 构图底是最后一张参考图(调用方保证已挂)
         parts.append(whitebox_sentence(whitebox_legend) if whitebox_legend is not None else SKETCH_LAYOUT_SENTENCE)
     parts += _shot_parts(shot, names)
@@ -1337,7 +1523,7 @@ def build_prompt(scene: dict, shot: dict, names: dict, note: str = "", with_refs
         parts.append(f"Location (draw as simple shapes): {space}.")
     if note and note.strip():
         parts.append(f"Revision instruction (takes priority): {note.strip()}")
-    negative = SKETCH_NEGATIVE if shot.get("cast") else SKETCH_NEGATIVE.replace(SKETCH_NEGATIVE_PEOPLE_TAIL, "")
+    negative = pack["negative"] if shot.get("cast") else pack["negative"].replace(SKETCH_NEGATIVE_PEOPLE_TAIL, "")
     return " ".join(parts), negative
 
 
@@ -1478,7 +1664,8 @@ _GRID_CLIPS = ({"content": 260, "action": 160, "sketch": 200, "note": 160, "pane
 
 def build_grid_prompt(panels: list[tuple[dict, dict]], names: dict, cols: int, rows: int, aspect: str = "16:9",
                       max_chars: int = GRID_PROMPT_MAX, with_refs: bool = True,
-                      whitebox_legend: list[tuple[str, str]] | None = None) -> tuple[str, str]:
+                      whitebox_legend: list[tuple[str, str]] | None = None,
+                      style: str = DEFAULT_SKETCH_STYLE) -> tuple[str, str]:
     """宫格提示词:风格总句 +(白模构图底句)+ 各场地点短提示与轴线一次 + 逐格「Panel k (row r, col c)」逐镜描述(_shot_parts)。
     panels = [(scene, shot)],≤ cols*rows;格数不满时说明剩余格留白(切分时只取前 n 格)。
     总长超 max_chars 时按 _GRID_CLIPS 逐档收紧画面散文。
@@ -1487,8 +1674,9 @@ def build_grid_prompt(panels: list[tuple[dict, dict]], names: dict, cols: int, r
     n = len(panels)
     cells = cols * rows
     blank = f" The last {cells - n} cell(s) of the grid stay blank white." if n < cells else ""
-    head = GRID_STYLE_PROMPT.format(cols=cols, rows=rows, n=cells, aspect=aspect or "16:9", blank=blank,
-                                    refs=GRID_REFS_SENTENCE if with_refs else GRID_TEXT_ONLY_SENTENCE)
+    pack = STYLE_PACKS[normalize_sketch_style(style)]
+    head = pack["grid_head"].format(cols=cols, rows=rows, n=cells, aspect=aspect or "16:9", blank=blank,
+                                    refs=pack["grid_refs"] if with_refs else GRID_TEXT_ONLY_SENTENCE)
     if whitebox_legend is not None:
         head += " " + whitebox_sentence(whitebox_legend, grid=f", laid out as the same {cols}x{rows} grid with cells "
                                         "matching the panels one to one (a plain white cell has no blocking: draw that "
@@ -1519,7 +1707,7 @@ def build_grid_prompt(panels: list[tuple[dict, dict]], names: dict, cols: int, r
         prompt = " ".join(parts)
         if len(prompt) <= max_chars:
             break
-    return prompt, GRID_NEGATIVE
+    return prompt, pack["grid_negative"]
 
 
 def collect_grid_refs(base: Path, ep: str, panels: list[tuple[dict, dict]], catalog: dict,

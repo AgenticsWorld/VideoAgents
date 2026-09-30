@@ -198,6 +198,7 @@ td.c .ln.un .v{color:var(--yellow);white-space:pre-wrap}
   <h1>📋 故事板</h1>
   <div class="spacer"></div>
   <span class="skm" id="skm" title="草图用的图像渠道/模型(与全局「生成模型」设置分开,草图一般用便宜模型即可;空=跟随全局)"></span>
+  <span class="skm" id="sks" title="草图画风(按项目保存,只影响之后出的草图):铅笔灰马克 = 实拍电影分镜的铅笔+灰马克笔;铅笔彩铅 = 日式动画分镜的铅笔快线+竖向排线+少量茶色彩铅;粗犷线稿 = 好莱坞动作片的黑笔硬朗线+密集排线重黑;灰调重点色 = 平板速写的平涂灰调+一处重点色"><span>🎨 画风</span><select id="sks-sel"><option value="film">铅笔灰马克</option><option value="konte">铅笔彩铅</option><option value="ink">粗犷线稿</option><option value="digital">灰调重点色</option></select></span>
   <input type="hidden" id="project">
   <select id="pvnav" title="切换预览页"></select>
   <button id="reload">刷新</button>
@@ -650,6 +651,21 @@ $('#sd').addEventListener('click',e=>{if(e.target.id==='sd'||e.target.closest('.
 const SKM=mountImageModelPicker({kind:'sketch',host:'#skm',label:'🖊 草图模型'});
 function skmValue(){return SKM.value()}
 
+/* ---------- 草图画风(2026-09-30,顶栏模型选择后面;按项目存 settings.json output.sketch_style,默认 film) ---------- */
+const SKS_API=()=>`/api/v1/projects/${encodeURIComponent($('#project').value.trim()||'demo')}/board-sketch-style`;
+async function loadSketchStyle(){
+  try{const r=await fetch(SKS_API());if(r.ok){const j=await r.json();$('#sks-sel').value=j.style||'film'}}catch(_){}
+}
+$('#sks-sel').addEventListener('change',async e=>{
+  const style=e.target.value;
+  try{
+    const r=await fetch(SKS_API(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({style})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(j.detail||j.error||r.status);
+    JumpAnchor.toast(I18N.f('✅ 草图画风已切换为「{s}」,之后出的草图按此画风',{s:e.target.selectedOptions[0].textContent}));
+  }catch(err){JumpAnchor.toast(t('画风保存失败:')+err.message);loadSketchStyle()}
+});
+
 // 集行:≤12 集逐集按钮(带分镜状态角标),更多时收成一行下拉(/static/ep-picker.js,2026-09-12)
 function renderEps(episodes){
   const glyph=e=>(e.has_storyboard?'✅':e.has_plan?'⚠':'–')+(e.sketches?' 🖊'+e.sketches:'');
@@ -703,6 +719,7 @@ const _q=new URLSearchParams(location.search);
 $('#project').value=_q.get('project')||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';
 EP=_q.get('ep')||localStorage.getItem('board-ep:'+$('#project').value.trim())||'';
 load();
+loadSketchStyle();
 
 // 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)
 const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/characters','\u{1F464} 人物预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/script','\u{1F4DC} 剧本预览'],['/preview/board','\u{1F4CB} 故事板'],['/preview/storyboard','\u{1F3A6} 分镜预览'],['/preview/director','\u{1F4FA} 导演台'],['/preview/post','\u{1F39A}\uFE0F 后期处理'],['/preview/videos','\u{1F39E}️ 成片发布']];

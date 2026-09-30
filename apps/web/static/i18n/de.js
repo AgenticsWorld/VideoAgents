@@ -3985,4 +3985,12 @@ window.I18N_DICT = {
 "写下你对这里的想法:情节走向、人物动机、台词语气、节奏、必须保留或避免的处理…(Shift+Enter 保存)": "Notiere hier deine Gedanken: Handlungsrichtung, Motivation der Figuren, Ton der Dialoge, Tempo, was erhalten bleiben oder vermieden werden muss… (Shift+Enter speichert)",
 "注释存到 story/episodes/<ep>/script_notes.json;点分集行右侧「📨 提交注释」把本集全部注释一次性发给修改师处理": "Notizen werden in story/episodes/<ep>/script_notes.json gespeichert; 「📨 Notizen senden」 rechts in der Episodenzeile schickt alle Notizen dieser Episode auf einmal an den Reviser",
 "对这一块加注释:存到 story/episodes/<ep>/script_notes.json,点分集行右侧「📨 提交注释」整集一次性发给修改师": "Hier eine Notiz anlegen: gespeichert in story/episodes/<ep>/script_notes.json; 「📨 Notizen senden」 rechts in der Episodenzeile schickt alle Notizen der Episode auf einmal an den Reviser",
+"🎨 画风": "🎨 Stil",
+"✅ 草图画风已切换为「{s}」,之后出的草图按此画风": "✅ Skizzenstil auf „{s}“ umgestellt; neue Skizzen verwenden ihn",
+"画风保存失败:": "Stil konnte nicht gespeichert werden: ",
+"铅笔灰马克": "Bleistift & grauer Marker",
+"铅笔彩铅": "Bleistift & Sepia",
+"粗犷线稿": "Raue Tusche",
+"灰调重点色": "Grau + Akzentfarbe",
+"草图画风(按项目保存,只影响之后出的草图):铅笔灰马克 = 实拍电影分镜的铅笔+灰马克笔;铅笔彩铅 = 日式动画分镜的铅笔快线+竖向排线+少量茶色彩铅;粗犷线稿 = 好莱坞动作片的黑笔硬朗线+密集排线重黑;灰调重点色 = 平板速写的平涂灰调+一处重点色": "Skizzenstil (pro Projekt, gilt für neue Skizzen): Bleistift & grauer Marker = Realfilm-Storyboard; Bleistift & Sepia = japanisches Animations-Storyboard mit schnellen Linien, senkrechter Schraffur und etwas Sepia; Raue Tusche = schwarzer Stift wie im Hollywood-Actionfilm, harte Striche und dichte Schraffur; Grau + Akzentfarbe = Tablet-Skizze mit flachen Grautönen und einer Akzentfarbe",
 };

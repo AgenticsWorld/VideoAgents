@@ -991,6 +991,10 @@ DEFAULT_GENCONFIG = {
     #   (机检 scene_layout_pack_ok/blocking_map_present/layout_map_bound/whitebox_ref_bound/shot_plate_bound);关=沿用单张场景概念图流程
     #   (environment-concept 只出主视角图+变体,不写 blocking_map,prompt 场景锚挂概念图,相关机检跳过)
     "output": {"aspect_preset": "youtube", "aspect_custom": "", "language": "English",
+               # sketch_style=故事板草图画风(2026-09-30,故事板页顶栏「画风」下拉):film 铅笔灰马克(默认)/ konte 铅笔彩铅
+               #   / ink 粗犷线稿 / digital 灰调重点色,
+               #   modules/storyboard_board.STYLE_PACKS;草图 CLI code/storyboard_sketch.py 按此出图(--style 可临时覆盖)
+               "sketch_style": "film",
                "draft_resolution": "480p", "final_resolution": "480p",
                "subtitle_burn_in": False, "caption_enabled": False,
                # caption_mode / caption_types=花字策略(2026-09-24,后期处理页「花字」板块):auto(默认)=花字 Agent 按题材从
@@ -2055,6 +2059,10 @@ def _validate_output(o: dict):
         raise ServiceError(400, "output.spatial_blocking must be a boolean")
     if "scene_plates" in o and o["scene_plates"] not in SCENE_PLATES_MODES:
         raise ServiceError(400, f"output.scene_plates must be one of {SCENE_PLATES_MODES}")
+    if "sketch_style" in o:
+        from modules.storyboard_board import SKETCH_STYLES as _sk_styles
+        if o["sketch_style"] not in _sk_styles:
+            raise ServiceError(400, f"output.sketch_style must be one of {_sk_styles}")
     if "plate_mode" in o and o["plate_mode"] not in PLATE_MODES:
         raise ServiceError(400, f"output.plate_mode must be one of {PLATE_MODES}")
     if "dialogue_tts" in o and not isinstance(o["dialogue_tts"], bool):
@@ -9712,6 +9720,33 @@ async def api_board_sketch_start(project: str, ep: str, body: dict):
     HUB.publish({"type": "board_sketch", "project": base.name, "ep": ep, "scene": scene, "key": "",
                  "status": "running", "keys": [k for k, _ in targets]})
     return {"ok": True, "queued": len(targets), "skipped": len(shots) - len(targets), "job": jobkey}
+
+
+async def api_board_sketch_style_get(project: str):
+    """故事板页顶栏「画风」(2026-09-30):项目 settings.json output.sketch_style,film(默认)/ konte。"""
+    from modules import storyboard_board as sbb
+    base = _proj_base(project)
+    return {"project": base.name, "style": sbb.resolve_sketch_style(base), "styles": list(sbb.SKETCH_STYLES)}
+
+
+async def api_board_sketch_style_set(project: str, body: dict):
+    """只改 output.sketch_style 一项并落盘;画风只影响之后出的草图,不走 api_projconfig_set(免得每次切换都知会总制片派 LLM 会话)。"""
+    from modules import storyboard_board as sbb
+    base = _proj_base(project)
+    style = str((body or {}).get("style") or "").strip().lower()
+    if style not in sbb.SKETCH_STYLES:
+        raise ServiceError(400, f"style must be one of {sbb.SKETCH_STYLES}")
+    path = base / "settings.json"
+    try:
+        saved = json.loads(path.read_text())
+    except Exception:
+        saved = {}
+    saved.setdefault("output", {})
+    if not isinstance(saved["output"], dict):
+        saved["output"] = {}
+    saved["output"]["sketch_style"] = style
+    atomic_write_json(path, saved)
+    return {"ok": True, "project": base.name, "style": style}
 
 
 def _project_media_tokens(base: Path):

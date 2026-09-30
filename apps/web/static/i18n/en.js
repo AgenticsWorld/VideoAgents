@@ -3996,4 +3996,12 @@ window.I18N_DICT = {
 "写下你对这里的想法:情节走向、人物动机、台词语气、节奏、必须保留或避免的处理…(Shift+Enter 保存)": "Write down your thoughts here: plot direction, character motivation, tone of the lines, pacing, what must be kept or avoided… (Shift+Enter to save)",
 "注释存到 story/episodes/<ep>/script_notes.json;点分集行右侧「📨 提交注释」把本集全部注释一次性发给修改师处理": "Notes are saved to story/episodes/<ep>/script_notes.json; click 「📨 Submit notes」 at the right of the episode row to send all of this episode's notes to the reviser in one go",
 "对这一块加注释:存到 story/episodes/<ep>/script_notes.json,点分集行右侧「📨 提交注释」整集一次性发给修改师": "Add a note here: saved to story/episodes/<ep>/script_notes.json; 「📨 Submit notes」 at the right of the episode row sends the whole episode's notes to the reviser in one go",
+"🎨 画风": "🎨 Style",
+"✅ 草图画风已切换为「{s}」,之后出的草图按此画风": "✅ Sketch style switched to 「{s}」; new sketches will use it",
+"画风保存失败:": "Failed to save style: ",
+"铅笔灰马克": "Pencil & grey marker",
+"铅笔彩铅": "Pencil & sepia",
+"粗犷线稿": "Rough ink",
+"灰调重点色": "Grey + accent color",
+"草图画风(按项目保存,只影响之后出的草图):铅笔灰马克 = 实拍电影分镜的铅笔+灰马克笔;铅笔彩铅 = 日式动画分镜的铅笔快线+竖向排线+少量茶色彩铅;粗犷线稿 = 好莱坞动作片的黑笔硬朗线+密集排线重黑;灰调重点色 = 平板速写的平涂灰调+一处重点色": "Sketch style (saved per project, only affects sketches drawn from now on): Pencil & grey marker = live-action film storyboard pencil + grey marker; Pencil & sepia = Japanese animation storyboard with quick pencil lines, vertical hatching and a little sepia pencil; Rough ink = Hollywood action-movie black pen with hard strokes and dense hatched blacks; Grey + accent color = tablet sketch with flat grey tones and one accent color",
 };
