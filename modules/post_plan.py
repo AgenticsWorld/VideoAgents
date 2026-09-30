@@ -500,7 +500,7 @@ def register_version(plan: dict, base: Path, ep: str, gid: str, rel_file: str, r
 
 # ---------------------------------------------------------------- 版本的时长编辑(timemap,2026-09-17)
 def version_time_ops(plan: dict, gid: str, v: int) -> list[dict]:
-    """版本 v 相对**其基准版本**的时长编辑表(插黑/定格/删段登记在版本条目 time_ops;换段不改时长)。"""
+    """版本 v 相对**其基准版本**的时长编辑表(插黑/定格/删段/插段登记在版本条目 time_ops)。"""
     if v <= 0:
         return []
     for ver in group_versions(plan, gid):

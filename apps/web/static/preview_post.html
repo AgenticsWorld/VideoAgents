@@ -153,6 +153,7 @@ body.masking .frame .maskpad{display:block}
 .cutp .row{min-width:0}
 .cutp select,.cutp input{max-width:100%}
 .cutp .seg span{white-space:nowrap}
+.seg span.now{padding:0;color:inherit;background:none}
 #cut-mode{flex-wrap:wrap}
 .cutp .row .lb.wrap{white-space:normal;flex:1 1 100%;font-size:10.5px}
 .cutp table{border-collapse:collapse;width:100%;font:11px var(--mono)}
@@ -452,7 +453,7 @@ function render(keep){
   if(!keep||!$('#left')){
     $('#work').innerHTML=`<div class="col" id="left"></div><div class="col" id="mid"></div><div class="col" id="right">
       <div class="pendbar" id="pendbar"></div>
-      <div class="cutsec closed" id="cutsec"><div class="col-h" id="cut-h" title="${esc(t('分镜剪辑,四个模块:① 删段——选中的时间段直接删除,剩余拼成新版本;② 换段——切掉的时间段用本组另一版本同段替代;③ 插黑 / 定格——在当前时刻或组边界插入定格帧 + 黑场控制切换节奏;④ 派单剪辑师——输入指令发给剪辑师工位,产物登记为新版本'))}"><span class="car">▸</span>✂ ${esc(t('分镜剪辑'))} <span class="lite" id="cut-gid"></span><span class="sp"></span><span class="lite" id="cut-sum"></span></div><div class="cutp" id="cutpanel" style="display:none"></div></div>
+      <div class="cutsec closed" id="cutsec"><div class="col-h" id="cut-h" title="${esc(t('分镜剪辑,四个模块:① 删段——选中的时间段直接删除,剩余拼成新版本;② 插段——把导入的另一版本整段插到最前面 / 最后面 / 当前时刻;③ 插黑 / 定格——在当前时刻或组边界插入定格帧 + 黑场控制切换节奏;④ 派单剪辑师——输入指令发给剪辑师工位,产物登记为新版本'))}"><span class="car">▸</span>✂ ${esc(t('分镜剪辑'))} <span class="lite" id="cut-gid"></span><span class="sp"></span><span class="lite" id="cut-sum"></span></div><div class="cutp" id="cutpanel" style="display:none"></div></div>
       <div id="rbody"></div></div>`;
     $('#cut-h').onclick=toggleCut;
     renderMonitorShell();
@@ -603,7 +604,7 @@ function renderMonitorShell(){
 function versionsOf(gid){const g=grpById(gid);return g?g.versions.filter(v=>v.url):[]}
 // 待确认的新版本(2026-09-23):分镜剪辑 / 导入 / 插黑定格产出、比当前指针新、文件还在的版本——它们不走处方「采纳」,只能「设为当前」
 // 2026-09-24 扩展:处方出片版本(调色/填充等,不论用户手动还是工位自动开的单)同样算待确认——其处方仍停在「已出片」,确认=提交这些处方(指针随之挪过去)
-const CUT_KINDS=['splice','import','cutout','edit','pad'];
+const CUT_KINDS=['splice','insert','import','cutout','edit','pad'];
 function pendRecipes(v){const ids=v.recipes||[];if(!ids.length)return [];return ids.map(id=>(D.plan.recipes||[]).find(r=>r.id===id)).filter(r=>r&&r.status==='applied')}
 function pendingVersions(gid){const g=grpById(gid);if(!g)return [];const cur=g.current||0;return g.versions.filter(v=>v.url&&!v.cleaned&&v.v>cur&&(CUT_KINDS.includes(v.created_by)||pendRecipes(v).length)).sort((a,b)=>a.v-b.v)}
 function pendDesc(v){
@@ -709,6 +710,7 @@ function onTime(){
   if(MODE==='episode')epAudioSync();
   stemSync();
   updateSubtitle(abs);
+  if(CUT_ON)$$('#cutpanel span[data-p="here"] .now').forEach(e=>e.textContent=tc(tcur));
   if(CUT_ON){$$('#xtl s.cut').forEach(e=>{const l=parseFloat(e.style.left)/100*d,w=parseFloat(e.style.width)/100*d;e.classList.toggle('on',tcur>=l&&tcur<=l+w)})}
 }
 /* 整集连播 */
@@ -838,9 +840,9 @@ function drawCuts(){
   const tl=$('#xtl'),tcur=$('#va').currentTime||0;
   cutNorm().forEach(c=>{const e=document.createElement('s');e.className='cut'+(tcur>=c.t0&&tcur<=c.t1?' on':'');e.style.left=(c.t0/d*100)+'%';e.style.width=(Math.max(0.002,(c.t1-c.t0)/d)*100)+'%';e.title=tc(c.t0)+' – '+tc(c.t1);tl.appendChild(e)});
 }
-const CUT_MODES=[['delete','✂','删段'],['replace','🔁','换段'],['pad','⬛','插黑 / 定格'],['dispatch','📨','派单剪辑师']];
+const CUT_MODES=[['delete','✂','删段'],['insert','➕','插段'],['pad','⬛','插黑 / 定格'],['dispatch','📨','派单剪辑师']];
 const CUT_HINT={delete:'把选中的时间段直接删掉,剩下的内容按原顺序拼成本组新版本(时长变短,出成片时外挂声轨/字幕按时间映射表自动同步)',
-  replace:'导入本组另一版本作替换源,A 上标出的时间段换成替换源同一时间段的画面,其余保留,拼成新版本(时长不变)',
+  insert:'导入本组另一版本作插入源,整段插到 A 的最前面、最后面或当前时刻,拼成本组新版本(时长变长,出成片时外挂声轨/字幕按时间映射表自动平移)',
   pad:'控制切换节奏:在当前时刻插入「前一帧定格 + 黑场」生成本组新版本;或放在本组开头 / 结尾的组边界,写成组间转场处方(提交即回写 shot_list,出成片时插帧)。成片按插入量变长,外挂声轨与字幕按同一张时间映射表自动平移;黑场声音可延续前段、淡出或静音',
   dispatch:'用一句话把剪辑要求发给剪辑师工位(10-editing/edit);可附上标好的时间段供指令引用,剪辑师产物会登记为本组新版本'};
 function padTargets(){
@@ -868,18 +870,29 @@ function renderCut(){
   const alts=vs.filter(v=>v.v!==baseV);
   if(CUT_ALT==null||!alts.some(v=>v.v===CUT_ALT))CUT_ALT=alts.length?alts[alts.length-1].v:null;
   const cuts=cutNorm(),d=$('#va').duration||(g||{}).duration||0,cutLen=cuts.reduce((a,c)=>a+(c.t1-c.t0),0);
-  $('#cut-sum').textContent=(CUT_MODES.find(m=>m[0]===M)||[])[1]+(cuts.length?' '+I18N.f('切 {n} 段',{n:cuts.length}):'');
+  $('#cut-sum').textContent=(CUT_MODES.find(m=>m[0]===M)||[])[1]+(cuts.length&&M!=='insert'&&M!=='pad'?' '+I18N.f('切 {n} 段',{n:cuts.length}):'');
   const padLen=fr2s(PAD.freeze)+fr2s(PAD.hold);
-  const stat=M==='delete'?I18N.f('删 {n} 段 · -{s}s → 剩 {r}s',{n:cuts.length,s:num(cutLen,2),r:num(Math.max(0,d-cutLen),2)}):M==='pad'?I18N.f('+{s}s → {r}s',{s:num(padLen,2),r:num(d+(PAD.pos==='here'?padLen:0),2)}):I18N.f('切 {n} 段 · {s}s / {d}s',{n:cuts.length,s:num(cutLen,2),d:num(d,2)});
+  const insV=alts.find(v=>v.v===CUT_ALT),insLen=insV?+(insV.duration||(insV.source||{}).duration||0):0;
+  const stat=M==='delete'?I18N.f('删 {n} 段 · -{s}s → 剩 {r}s',{n:cuts.length,s:num(cutLen,2),r:num(Math.max(0,d-cutLen),2)}):M==='pad'?I18N.f('+{s}s → {r}s',{s:num(padLen,2),r:num(d+(PAD.pos==='here'?padLen:0),2)}):M==='insert'?(insV?I18N.f('+{s}s → {r}s',{s:num(insLen,2),r:num(d+insLen,2)}):''):I18N.f('切 {n} 段 · {s}s / {d}s',{n:cuts.length,s:num(cutLen,2),d:num(d,2)});
   /* ① 模块切换 + 基准版本 */
   let h=`<div class="row"><span class="seg" id="cut-mode">${CUT_MODES.map(([k,ic,l])=>`<span data-m="${k}" class="${M===k?'on':''}" title="${esc(t(CUT_HINT[k]))}">${ic} ${esc(t(l))}</span>`).join('')}</span>
     <span class="lb">${esc(t('基准 A'))}</span><b style="font-family:var(--mono)">v${baseV}</b><span class="sp"></span><span class="lb">${esc(stat)}</span></div>`;
   h+=`<div class="empty2" style="padding:0 2px">${esc(t(CUT_HINT[M]))}</div>`;
-  /* ② 换段模块:替换源 */
-  if(M==='replace'){
-    h+=`<div class="row"><span class="lb">${esc(t('替换源'))}</span><select id="cut-alt" ${alts.length?'':'disabled'}>${alts.length?alts.map(v=>`<option value="${v.v}" ${v.v===CUT_ALT?'selected':''}>${verLabel(v)}</option>`).join(''):`<option>${esc(t('还没有其他版本'))}</option>`}</select>
+  /* ② 插段模块:插入源 + 位置 */
+  if(M==='insert'){
+    const tcur=$('#va').currentTime||0;
+    h+=`<div class="row"><span class="lb">${esc(t('插入源'))}</span><select id="cut-alt" ${alts.length?'':'disabled'}>${alts.length?alts.map(v=>`<option value="${v.v}" ${v.v===CUT_ALT?'selected':''}>${verLabel(v)}</option>`).join(''):`<option>${esc(t('还没有其他版本'))}</option>`}</select>
       <button class="xs" id="cut-pick" title="${esc(t('用本机文件对话框选另一版本视频(默认打开本组视频所在目录),导入为本组新版本'))}">📂 ${esc(t('导入另一版本…'))}</button><input type="file" id="cut-file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.mkv,.m4v" style="display:none">
-      <button class="xs" id="cut-ab" ${CUT_ALT==null?'disabled':''} title="${esc(t('把替换源放到 B 画面,切到 A|B 分屏比对'))}">A|B</button></div>`;
+      <button class="xs" id="cut-ab" ${CUT_ALT==null?'disabled':''} title="${esc(t('把插入源放到 B 画面,切到 A|B 分屏比对'))}">A|B</button></div>`;
+    h+=`<div class="row"><span class="lb">${esc(t('位置'))}</span><span class="seg" id="ins-pos" style="flex-wrap:wrap">`+
+      `<span data-p="start" class="${INS.pos==='start'?'on':''}" title="${esc(t('插到 A 的开头'))}">${esc(t('最前面'))}</span>`+
+      `<span data-p="end" class="${INS.pos==='end'?'on':''}" title="${esc(t('接到 A 的结尾'))}">${esc(t('最后面'))}</span>`+
+      `<span data-p="here" class="${INS.pos==='here'?'on':''}" title="${esc(t('在 A 的当前播放时刻插入'))}">${esc(t('当前时刻'))} <span class="now" data-no-i18n>${esc(tc(tcur))}</span></span></span></div>`;
+    if(CUT_ALT!=null)h+=insProbeHtml(SEL,baseV,CUT_ALT);
+    const AUD=[['fade','淡出','淡出(插入段处外挂声轨淡至静音,之后淡入)'],['mute','静音','静音'],['sustain','延续','延续(循环插入点前一秒)']];
+    h+=`<div class="row"><span class="lb">${esc(t('外挂声轨'))}</span><select id="ins-audio">${AUD.map(([k,l,tt])=>`<option value="${k}" title="${esc(t(tt))}" ${INS.audio===k?'selected':''}>${esc(t(l))}</option>`).join('')}</select><span class="lb wrap">${esc(t((AUD.find(x=>x[0]===INS.audio)||AUD[0])[2]))}</span></div>`;
+    const bvv=vs.find(v=>v.v===baseV);
+    if(bvv&&(bvv.time_ops||[]).length)h+=`<div class="empty2" style="padding:0 2px">${esc(I18N.f('基准 v{v} 已含 {n} 处时长编辑,新插入将叠加',{v:baseV,n:bvv.time_ops.length}))}</div>`;
   }
   /* 插黑 / 定格模块 */
   if(M==='pad'){
@@ -889,7 +902,7 @@ function renderCut(){
     const curTin=tgt?((grpById(tgt.gid)||{}).transition_in||null):null;
     const draft=tgt?(D.plan.recipes||[]).find(r=>r.kind==='transition'&&r.scope.group_id===tgt.gid&&['draft','applied'].includes(r.status)):null;
     h+=`<div class="row"><span class="lb">${esc(t('位置'))}</span><span class="seg" id="pad-pos" style="flex-wrap:wrap">`+
-      `<span data-p="here" class="${PAD.pos==='here'?'on':''}" title="${esc(t('在 A 的当前播放时刻插入,生成本组新版本'))}">${esc(t('当前时刻'))} ${esc(tc(tcur))}</span>`+
+      `<span data-p="here" class="${PAD.pos==='here'?'on':''}" title="${esc(t('在 A 的当前播放时刻插入,生成本组新版本'))}">${esc(t('当前时刻'))} <span class="now" data-no-i18n>${esc(tc(tcur))}</span></span>`+
       `<span data-p="in" class="${PAD.pos==='in'?'on':''} ${tg.in?'':'dis'}" ${tg.in?'':'style="opacity:.4"'} title="${esc(tg.in?I18N.f('{a} → {b} 的组边界:前组尾定格 / 黑场后进入本组(写入本组的组间转场处方)',{a:tg.in.prev,b:tg.in.gid}):t('本组是首组,没有前组'))}">${esc(t('本组开头'))}</span>`+
       `<span data-p="out" class="${PAD.pos==='out'?'on':''}" ${tg.out?'':'style="opacity:.4"'} title="${esc(tg.out?I18N.f('{a} → {b} 的组边界:本组尾定格 / 黑场后进入下组(写入下组的组间转场处方)',{a:tg.out.prev,b:tg.out.gid}):t('本组是末组,没有下组'))}">${esc(t('本组结尾'))}</span></span></div>`;
     h+=`<div class="row"><span class="lb">${esc(t('定格'))}</span><input type="number" id="pad-freeze" min="0" max="72" step="1" value="${PAD.freeze}" style="width:56px" title="${esc(t('前一帧(边界 = 前组末帧)冻结的帧数,24fps;0 = 不定格'))}"> <span class="lb">${esc(I18N.f('帧 = {s}s',{s:num(fr2s(PAD.freeze),2)}))}</span>
@@ -908,20 +921,20 @@ function renderCut(){
       if(bvv&&(bvv.time_ops||[]).length)h+=`<div class="empty2" style="padding:0 2px">${esc(I18N.f('基准 v{v} 已含 {n} 处时长编辑,新插入将叠加',{v:baseV,n:bvv.time_ops.length}))}</div>`;
     }
   }
-  /* 时间段列表(删段 / 换段 / 派单共用;派单时可选) */
-  const lbl=M==='delete'?t('要删除的时间段(A 的时间线)'):M==='replace'?t('切掉的时间段(A 的时间线,换成替换源同段)'):t('时间段(可选,随指令一起发给剪辑师供引用)');
-  if(M!=='pad')h+=`<div class="row"><span class="lb">${esc(lbl)}</span><span class="sp"></span>
+  /* 时间段列表(删段 / 派单共用;派单时可选) */
+  const lbl=M==='delete'?t('要删除的时间段(A 的时间线)'):t('时间段(可选,随指令一起发给剪辑师供引用)');
+  if(M!=='pad'&&M!=='insert')h+=`<div class="row"><span class="lb">${esc(lbl)}</span><span class="sp"></span>
     <button class="xs" id="cut-addr" ${RANGE&&RANGE.t1!=null?'':'disabled'} title="${esc(t('把走带条上「标记时间段」得到的段加入列表;剪辑面板打开时标记完成会自动加入'))}">＋ ${esc(t('加入标记段'))}</button>
     <button class="xs" id="cut-addp" title="${esc(t('从当前时刻起加一段 1 秒的切段,再在表里改起止'))}">＋ ${esc(t('当前时刻'))}</button>
     <button class="xs" id="cut-clear" ${CUTS.length?'':'disabled'}>${esc(t('清空'))}</button></div>`;
-  if(M==='pad'){}
+  if(M==='pad'||M==='insert'){}
   else if(cuts.length){
     h+=`<table><tr><th>#</th><th>${esc(t('起点'))}</th><th>${esc(t('终点'))}</th><th>${esc(t('时长'))}</th><th></th></tr>`;
     const tcur=$('#va').currentTime||0;
     cuts.forEach((c,i)=>{h+=`<tr class="${tcur>=c.t0&&tcur<=c.t1?'on':''}" data-i="${i}"><td>${i+1}</td><td><input type="number" step="0.04" min="0" value="${c.t0}" data-k="t0"></td><td><input type="number" step="0.04" min="0" value="${c.t1}" data-k="t1"></td><td>${num(c.t1-c.t0,2)}s</td>
       <td><button class="xs" data-go="${c.t0}" title="${esc(t('跳到起点'))+' '+tc(c.t0)}">⏵</button> <button class="xs" data-go="${c.t1}" title="${esc(t('跳到终点'))+' '+tc(c.t1)}">⏵</button> <button class="xs" data-del="${i}">✕</button></td></tr>`});
     h+=`</table>`;
-  }else h+=`<div class="empty2">${esc(M==='dispatch'?t('没有时间段也能派单;要让剪辑师精确到秒,先在走带条上「标记时间段」'):M==='delete'?t('还没有要删的段:播放 A 找到要删掉的部分,点「标记时间段」设起点、再点一次设终点,即加入列表;可标多段'):t('还没有切段:播放 A 找到要换掉的部分,点「标记时间段」设起点、再点一次设终点,即加入列表;可标多段'))}</div>`;
+  }else h+=`<div class="empty2">${esc(M==='dispatch'?t('没有时间段也能派单;要让剪辑师精确到秒,先在走带条上「标记时间段」'):t('还没有要删的段:播放 A 找到要删掉的部分,点「标记时间段」设起点、再点一次设终点,即加入列表;可标多段'))}</div>`;
   /* ③ 派单模块:指令 + 本组近期工单 */
   if(M==='dispatch'){
     h+=`<textarea id="cut-instr" rows="3" style="width:100%;resize:vertical;font-size:12px" placeholder="${esc(t('给剪辑师的指令,例如:第 1 段太拖,砍到 1.5 秒;结尾定格 0.5 秒后再切'))}">${esc(CUT_INSTR)}</textarea>`;
@@ -933,12 +946,17 @@ function renderCut(){
   /* 底栏:提示 + 设为当前 + 主按钮 */
   const bv=vs.find(v=>v.v===baseV),curV=(g||{}).current||0;
   const padOk=(PAD.freeze>0||PAD.hold>0)&&!(PAD.pos==='here'&&PAD.freeze>0&&($('#va').currentTime||0)<1/FPS);
-  const canGo=!CUT_BUSY&&(M==='delete'?cuts.length>0:M==='replace'?cuts.length>0&&CUT_ALT!=null:M==='pad'?padOk:CUT_INSTR.trim().length>0);
-  const goLbl=CUT_BUSY?'<span class="spin">⟳</span> '+esc(M==='dispatch'?t('派单中…'):M==='pad'&&PAD.pos!=='here'?t('写入中…'):t('生成中…')):M==='delete'?'🎞 '+esc(t('删除并生成新版本')):M==='replace'?'🎞 '+esc(t('生成新版本')):M==='pad'?(PAD.pos==='here'?'⬛ '+esc(t('插入并生成新版本')):'⬛ '+esc(PAD.adopt?t('写入转场处方并提交'):t('写入转场处方(草稿)'))):'📨 '+esc(t('发送给剪辑师'));
-  h+=`<div class="row"><span class="msg" id="cut-msg"></span><span class="sp"></span>${bv&&bv.v!==curV&&['splice','import','cutout','edit'].includes(bv.created_by)?`<button class="sm" id="cut-adopt" title="${esc(t('把当前指针挪到 A 这个版本(出成片用它)'))}">★ ${esc(I18N.f('v{v} 设为当前',{v:baseV}))}</button>`:''}<button class="pri sm" id="cut-go" ${canGo?'':'disabled'}>${goLbl}</button></div>`;
+  const canGo=!CUT_BUSY&&(M==='delete'?cuts.length>0:M==='insert'?CUT_ALT!=null:M==='pad'?padOk:CUT_INSTR.trim().length>0);
+  const goLbl=CUT_BUSY?'<span class="spin">⟳</span> '+esc(M==='dispatch'?t('派单中…'):M==='pad'&&PAD.pos!=='here'?t('写入中…'):t('生成中…')):M==='delete'?'🎞 '+esc(t('删除并生成新版本')):M==='insert'?'➕ '+esc(t('插入并生成新版本')):M==='pad'?(PAD.pos==='here'?'⬛ '+esc(t('插入并生成新版本')):'⬛ '+esc(PAD.adopt?t('写入转场处方并提交'):t('写入转场处方(草稿)'))):'📨 '+esc(t('发送给剪辑师'));
+  h+=`<div class="row"><span class="msg" id="cut-msg"></span><span class="sp"></span>${bv&&bv.v!==curV&&['splice','insert','import','cutout','edit','pad'].includes(bv.created_by)?`<button class="sm" id="cut-adopt" title="${esc(t('把当前指针挪到 A 这个版本(出成片用它)'))}">★ ${esc(I18N.f('v{v} 设为当前',{v:baseV}))}</button>`:''}<button class="pri sm" id="cut-go" ${canGo?'':'disabled'}>${goLbl}</button></div>`;
   box.innerHTML=h;
-  $$('#cut-mode span').forEach(x=>x.onclick=()=>{CUT_MODE=x.dataset.m;renderCut()});
-  if(M==='replace'){
+  if(CUT_LAST&&CUT_LAST.g===SEL&&CUT_LAST.M===M){const el=$('#cut-msg');el.textContent=CUT_LAST.m;el.className='msg '+(CUT_LAST.cls||'')}
+  $$('#cut-mode span').forEach(x=>x.onclick=()=>{CUT_MODE=x.dataset.m;CUT_LAST=null;renderCut()});
+  if(M==='insert'){
+    $$('#ins-pos span[data-p]').forEach(x=>x.onclick=()=>{INS.pos=x.dataset.p;renderCut()});
+    $('#ins-audio').onchange=e=>{INS.audio=e.target.value;renderCut()};
+    $$('#ins-fit span[data-f]').forEach(x=>x.onclick=()=>{INS.fit=x.dataset.f;renderCut()});
+    const up=$('#ins-upscale');if(up)up.onclick=e=>{e.preventDefault();window.open('/models?project='+encodeURIComponent(proj())+'#card-upscale','_blank')};
     $('#cut-alt').onchange=e=>{CUT_ALT=+e.target.value;renderCut()};
     $('#cut-pick').onclick=cutPickFile;
     $('#cut-file').onchange=cutUploadFile;
@@ -956,7 +974,7 @@ function renderCut(){
     const pt=$('#pad-type');if(pt)pt.onchange=e=>{PAD.type=e.target.value;renderCut()};
     const pd=$('#pad-dur');if(pd)pd.onchange=e=>{PAD.dur=Math.max(0.3,Math.min(1.5,+e.target.value||0.6))};
     const pa=$('#pad-adopt');if(pa)pa.onchange=e=>{PAD.adopt=e.target.checked};
-  }else{
+  }else if(M!=='insert'){
   $('#cut-addr').onclick=()=>{if(RANGE&&RANGE.t1!=null){addCut(RANGE.t0,RANGE.t1);RANGE=null;drawRange()}};
   $('#cut-addp').onclick=()=>{const va=$('#va'),t0=va.currentTime||0;addCut(t0,Math.min(va.duration||t0+1,t0+1))};
   $('#cut-clear').onclick=()=>{CUTS=[];renderCut();drawCuts()};
@@ -964,10 +982,11 @@ function renderCut(){
   $$('#cutpanel input[data-k]').forEach(inp=>inp.onchange=()=>{const i=+inp.closest('tr').dataset.i;const c=cutNorm()[i];if(!c)return;c[inp.dataset.k]=+(+inp.value).toFixed(2);if(c.t1<=c.t0){alert(t('终点须晚于起点'));renderCut();return}CUTS=cutNorm();CUTS[i]=c;CUTS=cutNorm();renderCut();drawCuts()});
   $$('#cutpanel [data-go]').forEach(b=>b.onclick=()=>{$('#va').pause();seekTo(+b.dataset.go)});
   $$('#cutpanel [data-del]').forEach(b=>b.onclick=()=>{CUTS=cutNorm();CUTS.splice(+b.dataset.del,1);renderCut();drawCuts()});
-  $('#cut-go').onclick=M==='delete'?cutOut:M==='replace'?cutSplice:M==='pad'?(PAD.pos==='here'?cutPadInsert:cutPadBoundary):cutDispatch;
+  $('#cut-go').onclick=M==='delete'?cutOut:M==='insert'?cutInsert:M==='pad'?(PAD.pos==='here'?cutPadInsert:cutPadBoundary):cutDispatch;
   const ad=$('#cut-adopt');if(ad)ad.onclick=async()=>{ad.disabled=true;try{await J(api('/rollback'),'POST',{group_id:SEL,to:baseV});await load(true);setMonitor(true);toast(I18N.f('{g} 当前指针 → v{v}',{g:SEL,v:baseV}))}catch(e){alert(e.message);ad.disabled=false}};
 }
-function cutMsg(m,cls){const el=$('#cut-msg');if(el){el.textContent=m||'';el.className='msg '+(cls||'')}}
+let CUT_LAST=null; // 最近一条面板消息:面板重绘(如插段预检回来)后恢复,切模块 / 切组时清掉
+function cutMsg(m,cls){CUT_LAST=m?{m,cls,g:SEL,M:CUT_MODE}:null;const el=$('#cut-msg');if(el){el.textContent=m||'';el.className='msg '+(cls||'')}}
 async function cutImported(j){
   toast(I18N.f('已导入为 {g} v{v}',{g:j.group_id,v:j.v}));
   await load(true);
@@ -1013,20 +1032,47 @@ async function cutOut(){
     cutMsg(I18N.f('v{v} 已入版本链(A 画面),时长 {d}s;满意就点「设为当前」',{v:j.v,d:num(j.duration,2)}),'ok');
   }catch(e){CUT_BUSY=false;renderCut();cutMsg(e.message,'err');alert(I18N.f('剪辑失败:{e}',{e:e.message}))}
 }
-/* ② 换段:切掉段换成替换源同段 */
-async function cutSplice(){
-  const cuts=cutNorm(),baseV=VA??((grpById(SEL)||{}).current||0);
-  if(!cuts.length||CUT_ALT==null||CUT_BUSY)return;
-  if(!confirm(I18N.f('以 v{a} 为基准,把 {n} 段换成 v{b} 的同一时间段,生成 {g} 的新版本?',{a:baseV,n:cuts.length,b:CUT_ALT,g:SEL})))return;
+/* ② 插段预检(2026-09-30):选好插入源即取两版本分辨率 / 帧率,生成前提示缩放、黑边与放大发虚;宽高比不同时给填充方式 */
+const INS_PROBE={};
+function insProbeHtml(gid,bv,iv){
+  const key=gid+'|'+bv+'|'+iv,p=INS_PROBE[key];
+  if(p===undefined){
+    INS_PROBE[key]=null;
+    J(api('/insert-probe')+'?group_id='+encodeURIComponent(gid)+'&base_v='+bv+'&ins_v='+iv).then(j=>{INS_PROBE[key]=j}).catch(e=>{INS_PROBE[key]={err:e.message}}).finally(()=>{if(CUT_MODE==='insert'&&SEL===gid)renderCut()});
+  }
+  if(!p)return `<div class="empty2" style="padding:0 2px"><span class="spin">⟳</span> ${esc(t('读取分辨率…'))}</div>`;
+  if(p.err)return `<div class="empty2" style="padding:0 2px;color:var(--red)">${esc(I18N.f('读取分辨率失败:{e}',{e:p.err}))}</div>`;
+  const b=p.base,n=p.ins,wh=x=>x.width+'×'+x.height;
+  const warn=[],info=[];
+  if(b.width===n.width&&b.height===n.height)info.push(t('分辨率一致'));
+  else if(!p.aspect_differs)info.push(I18N.f('同比例,将缩放到 {r}',{r:wh(b)}));
+  else warn.push(t('宽高比不同,需选择填充方式'));
+  if(Math.abs((n.fps||0)-(b.fps||0))>0.01)info.push(I18N.f('帧率 {a} → {b}',{a:num(n.fps,2),b:num(b.fps,2)}));
+  const fit=p.aspect_differs?INS.fit:'pad',k=(p.upscale||{})[fit]||1;
+  let h=`<div class="row"><span class="lb">${esc(t('分辨率'))}</span><span data-no-i18n style="font-family:var(--mono)">${esc(I18N.f('插入源 {a} · A {b}',{a:wh(n),b:wh(b)}))}</span><span class="lb wrap">${esc(info.join(' · '))}</span></div>`;
+  if(p.aspect_differs){
+    const FITS=[['pad','补黑边','画面完整,不足处补黑边'],['crop','放大裁切','铺满画面无黑边,边缘会被裁掉'],['blur','模糊背景','同画面放大模糊垫底,原画完整居中(竖屏进横屏常用)']];
+    h+=`<div class="row"><span class="lb" style="color:var(--yellow)">⚠ ${esc(warn[0])}</span></div>`;
+    h+=`<div class="row"><span class="lb">${esc(t('填充方式'))}</span><span class="seg" id="ins-fit" style="flex-wrap:wrap">${FITS.map(([f,l,tt])=>`<span data-f="${f}" class="${INS.fit===f?'on':''}" title="${esc(t(tt))}">${esc(t(l))}</span>`).join('')}</span><span class="lb wrap">${esc(t((FITS.find(x=>x[0]===INS.fit)||FITS[0])[2]))}</span></div>`;
+  }
+  if(k>1.1)h+=`<div class="row"><span class="lb wrap" style="color:var(--yellow)">⚠ ${esc(I18N.f('插入源需放大 {k} 倍,画面会发虚;可先到生成模型页「超分」处理后再导入',{k:num(k,2)}))}</span> <a href="#" id="ins-upscale" class="lb">${esc(t('打开超分设置'))}</a></div>`;
+  return h;
+}
+/* ② 插段:插入源整段插到 A 的最前面 / 最后面 / 当前时刻,生成本组新版本(时长变长) */
+async function cutInsert(){
+  const baseV=VA??((grpById(SEL)||{}).current||0),tcur=$('#va').currentTime||0;
+  if(CUT_ALT==null||CUT_BUSY)return;
+  const where=INS.pos==='start'?t('最前面'):INS.pos==='end'?t('最后面'):tc(tcur);
+  if(!confirm(I18N.f('以 v{a} 为基准,在 {p} 插入整段 v{b},生成 {g} 的新版本?',{a:baseV,p:where,b:CUT_ALT,g:SEL})))return;
   CUT_BUSY=true;renderCut();cutMsg(t('ffmpeg 拼接中…'));
   try{
-    const j=await J(api('/splice'),'POST',{group_id:SEL,base_v:baseV,alt_v:CUT_ALT,cuts});
-    CUT_BUSY=false;CUTS=[];
+    const j=await J(api('/insert-clip'),'POST',{group_id:SEL,base_v:baseV,ins_v:CUT_ALT,pos:INS.pos,t:tcur,audio:INS.audio,fit:INS.fit});
+    CUT_BUSY=false;
     toast(I18N.f('已生成 {g} v{v}({s}s)',{g:j.group_id,v:j.v,s:j.seconds}));
     await load(true);
     VA=j.v;VB=baseV;AB='split';$$('#ab span').forEach(x=>x.classList.toggle('on',x.dataset.ab==='split'));setMonitor();
-    cutMsg((j.notes||[]).length?j.notes.join(';'):I18N.f('v{v} 已入版本链(A 画面);满意就点「设为当前」',{v:j.v}),'ok');
-  }catch(e){CUT_BUSY=false;renderCut();cutMsg(e.message,'err');alert(I18N.f('剪辑失败:{e}',{e:e.message}))}
+    cutMsg((j.notes||[]).join(';')||I18N.f('v{v} 已入版本链(A 画面),时长 {d}s;满意就点「设为当前」',{v:j.v,d:num(j.duration,2)}),'ok');
+  }catch(e){CUT_BUSY=false;renderCut();cutMsg(e.message,'err');alert(I18N.f('插段失败:{e}',{e:e.message}))}
 }
 /* ③ 插黑 / 定格 · 当前时刻:在 A 的播放时刻插入定格帧 + 黑场,生成本组新版本(时长变长) */
 async function cutPadInsert(){
@@ -1086,9 +1132,9 @@ async function captureFrame(){
   b.disabled=false;
 }
 let LAST_FRAME=null;
-/* 分镜剪辑(2026-09-14;09-15 移到右栏修改单上方,默认折叠;09-16 按功能分三模块):CUT_ON 区块展开开关;CUT_MODE=delete 删段|replace 换段|dispatch 派单剪辑师;
-   CUTS=[{t0,t1}] 时间段(基准 A 的时间线,三模块共用);CUT_ALT=换段的替换源版本号;CUT_INSTR=派单指令草稿;CUT_BUSY=生成/派单中 */
-let CUT_ON=false,CUT_MODE='delete',CUTS=[],CUT_ALT=null,CUT_INSTR='',CUT_BUSY=false;
+/* 分镜剪辑(2026-09-14;09-15 移到右栏修改单上方,默认折叠;09-16 按功能分三模块):CUT_ON 区块展开开关;CUT_MODE=delete 删段|insert 插段(2026-09-30 取代换段)|pad 插黑定格|dispatch 派单剪辑师;
+   CUTS=[{t0,t1}] 时间段(基准 A 的时间线,三模块共用);CUT_ALT=插段的插入源版本号;INS={pos:start|end|here, audio:插入块处外挂声轨策略, fit:宽高比不同时的填充方式 pad|crop|blur};INS_PROBE=插段预检缓存(键 组|基准|插入源)CUT_INSTR=派单指令草稿;CUT_BUSY=生成/派单中 */
+let CUT_ON=false,CUT_MODE='delete',CUTS=[],CUT_ALT=null,CUT_INSTR='',CUT_BUSY=false,INS={pos:'end',audio:'fade',fit:'pad'};
 /* 插黑 / 定格(2026-09-17):pos=here 当前时刻(生成本组新版本)| in 本组开头(前组→本组边界,写转场处方)| out 本组结尾(本组→下组边界);
    freeze/hold 以帧计(24fps);audio=黑场声音 sustain 延续|fade 淡出|mute 静音;type/dur=边界的转场类型与时长;adopt=写处方后立即提交 */
 let PAD={pos:'here',freeze:0,hold:12,audio:'sustain',type:'hard_cut',dur:0.6,adopt:true};

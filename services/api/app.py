@@ -385,10 +385,16 @@ async def post_import_upload(project: str, ep: str, request: Request, group_id: 
     return _artifact_urls(await core.api_post_import_upload(project, ep, group_id, data, filename), project)
 
 
-@api.post("/projects/{project}/post/{ep}/splice", tags=["artifacts"])
-async def post_splice(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
-    """分镜剪辑·换段:{group_id, base_v, alt_v, cuts:[{t0,t1}]} → 切掉段换成 alt_v 同段,拼成新版本。"""
-    return _artifact_urls(await core.api_post_splice(project, ep, body), project)
+@api.get("/projects/{project}/post/{ep}/insert-probe", tags=["artifacts"])
+async def post_insert_probe(project: str, ep: str, group_id: str = "", base_v: int = 0, ins_v: int = 0) -> dict[str, Any]:
+    """分镜剪辑·插段预检:两个版本的分辨率 / 帧率 / 时长 + 宽高比是否不同 + 各填充方式放大倍数。"""
+    return await core.api_post_insert_probe(project, ep, group_id, base_v, ins_v)
+
+
+@api.post("/projects/{project}/post/{ep}/insert-clip", tags=["artifacts"])
+async def post_insert_clip(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
+    """分镜剪辑·插段:{group_id, base_v, ins_v, pos:start|end|here, t?, audio?, fit?} → ins_v 整段插入 base_v,拼成新版本(时长变长)。"""
+    return _artifact_urls(await core.api_post_insert_clip(project, ep, body), project)
 
 
 @api.post("/projects/{project}/post/{ep}/cutout", tags=["artifacts"])

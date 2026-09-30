@@ -10301,7 +10301,7 @@ def _post_groups(base: Path, ep: str, plan: dict) -> tuple[list[dict], dict]:
                              "file": ver.get("file"), "recipes": ver.get("recipes") or [], "adopted_at": ver.get("adopted_at"),
                              "cleaned": bool(ver.get("cleaned")), "created_at": ver.get("created_at") or "",
                              "created_by": ver.get("created_by") or "", "note": ver.get("note") or "",
-                             "base_v": int(ver.get("base_v") or 0), "splice": ver.get("splice"),
+                             "base_v": int(ver.get("base_v") or 0), "splice": ver.get("splice"), "insert": ver.get("insert"), "duration": (ver.get("source") or {}).get("duration"),
                              "time_ops": ver.get("time_ops") or [], "pad": ver.get("pad"),
                              "label": f"v{ver.get('v')}"})
         thumb = base / "assets" / "clips" / ep / f"{gid}.last_frame.png"
@@ -11095,9 +11095,33 @@ async def api_post_import_upload(project: str, ep: str, gid: str, data: bytes, f
     return await asyncio.to_thread(_do)
 
 
-async def api_post_splice(project: str, ep: str, body: dict):
-    """分镜剪辑出新版本:{group_id, base_v, alt_v, cuts:[{t0,t1}]};
-    base_v 时间线上 cuts 各段换成 alt_v 同段,其余保留,ffmpeg 一次编码到 assets/post/epNN/<grp>/vN.mp4 并登记版本(不动指针)。"""
+async def api_post_insert_probe(project: str, ep: str, gid: str, base_v: int, ins_v: int):
+    """插段预检:基准 / 插入源两个版本的分辨率、帧率、时长,以及宽高比是否不同、各填充方式下的放大倍数(生成前提示用)。"""
+    def _do():
+        from modules import post_fx
+        pp, base, ep2, plan = _post_load(project, ep)
+        g = _post_group_guard(gid)
+        out = {}
+        for key, v in (("base", base_v), ("ins", ins_v)):
+            f = pp.version_file(base, ep2, g, int(v), plan)
+            if not f:
+                raise ServiceError(404, f"{g} v{v} 没有视频文件")
+            i = post_fx.probe(f)
+            out[key] = {"v": int(v), "width": i["width"], "height": i["height"], "fps": round(i["fps"] or 0, 3),
+                        "duration": round(i["duration"], 3), "has_audio": i["has_audio"]}
+        b, n = out["base"], out["ins"]
+        out["aspect_differs"] = post_fx.aspect_differs(n["width"], n["height"], b["width"], b["height"])
+        out["upscale"] = {fit: round(post_fx.upscale_factor(n["width"], n["height"], b["width"], b["height"], fit), 3)
+                          for fit in post_fx.INSERT_FITS}
+        out["ok"] = True
+        return out
+    return await asyncio.to_thread(_do)
+
+
+async def api_post_insert_clip(project: str, ep: str, body: dict):
+    """分镜剪辑·插段(2026-09-30,取代换段):{group_id, base_v, ins_v, pos:start|end|here, t?, audio?, fit?:pad|crop|blur};
+    把 ins_v 整段插到 base_v 的最前面 / 最后面 / t 秒处,ffmpeg 一次编码到 assets/post/epNN/<grp>/vN.mp4 并登记(不动指针);
+    时长变长,版本条目记 time_ops,出成片时外挂声轨/字幕按 timemap 平移(audio = 插入块处外挂声轨策略,缺省淡出)。"""
     def _do():
         from modules import post_fx
         pp, base, ep2, plan = _post_load(project, ep)
@@ -11105,29 +11129,35 @@ async def api_post_splice(project: str, ep: str, body: dict):
         job = POST_JOBS.get(f"{base.name}/{ep2}") or {}
         if job.get("status") == "running":
             raise ServiceError(409, f"本集有后期作业在跑({job.get('kind')}),请等它结束再剪")
+        base_v, _ = _post_cut_args(pp, plan, gid, body)
         try:
-            base_v = int(body.get("base_v") if body.get("base_v") is not None else pp.current_version(plan, gid))
-            alt_v = int(body.get("alt_v"))
+            ins_v = int(body.get("ins_v"))
         except (TypeError, ValueError):
-            raise ServiceError(400, "base_v / alt_v 须为版本号") from None
-        if base_v == alt_v:
-            raise ServiceError(400, "基准版本与替换版本不能相同")
-        cuts = body.get("cuts") or []
-        if not isinstance(cuts, list) or not cuts:
-            raise ServiceError(400, "至少标一个要切掉的时间段")
+            raise ServiceError(400, "ins_v 须为版本号") from None
+        pos = str(body.get("pos") or "here")
+        if pos not in ("start", "end", "here"):
+            raise ServiceError(400, "pos 须为 start / end / here")
+        try:
+            t = 0.0 if pos == "start" else 1e9 if pos == "end" else max(0.0, float(body.get("t") or 0.0))
+        except (TypeError, ValueError):
+            raise ServiceError(400, "t 须为秒数") from None
+        audio = str(body.get("audio") or "fade")
+        fit = str(body.get("fit") or "pad")
+        if fit not in post_fx.INSERT_FITS:
+            raise ServiceError(400, "fit 须为 pad / crop / blur")
         src_a = pp.version_file(base, ep2, gid, base_v, plan)
-        src_b = pp.version_file(base, ep2, gid, alt_v, plan)
+        src_b = pp.version_file(base, ep2, gid, ins_v, plan)
         if not src_a:
             raise ServiceError(404, f"{gid} v{base_v} 没有视频文件")
         if not src_b:
-            raise ServiceError(404, f"{gid} v{alt_v} 没有视频文件")
+            raise ServiceError(404, f"{gid} v{ins_v} 没有视频文件")
         v = pp.next_version_no(plan, gid)
         dst = pp.post_dir(base, ep2) / gid / f"v{v}.mp4"
         t0 = time.time()
         try:
-            res = post_fx.splice(src_a, src_b, dst, cuts)
+            res = post_fx.insert_clip(src_a, src_b, dst, t, audio, fit)
         except Exception as e:  # noqa: BLE001
-            raise ServiceError(500, f"剪辑失败:{str(e)[-400:]}") from None
+            raise ServiceError(500, f"插段失败:{str(e)[-400:]}") from None
         # 拼接期间台账可能被别的操作改过(如导入),重读后再登记
         plan2 = pp.load_plan(base, ep2)
         if pp.next_version_no(plan2, gid) != v:
@@ -11135,12 +11165,17 @@ async def api_post_splice(project: str, ep: str, body: dict):
             dst2 = dst.with_name(f"v{v2}.mp4")
             dst.rename(dst2)
             dst, v = dst2, v2
-        ver = pp.register_version(plan2, base, ep2, gid, str(dst.relative_to(base)), [], base_v, by="splice")
-        ver["splice"] = {"base_v": base_v, "alt_v": alt_v, "cuts": res["cuts"], "notes": res["notes"]}
-        ver["note"] = f"剪辑 v{base_v} · {len(res['cuts'])} 段换 v{alt_v}"
+        ver = pp.register_version(plan2, base, ep2, gid, str(dst.relative_to(base)), [], base_v, by="insert")
+        ver["insert"] = {"base_v": base_v, "ins_v": ins_v, "pos": pos, "t": res["t"], "inserted": res["inserted"],
+                         "audio": res["audio"], "fit": res["fit"], "duration": res["new_duration"], "notes": res["notes"]}
+        ver["time_ops"] = res["time_ops"]
+        where = {"start": "最前面", "end": "最后面"}.get(pos) or f"@{res['t']:.2f}s"
+        ver["note"] = f"插段 v{base_v} · {where}插入 v{ins_v}(+{res['inserted']:.2f}s)"
+        ver["source"] = {"kind": "insert", "duration": res["new_duration"]}
         pp.save_plan(base, ep2, plan2)
         return {"ok": True, "group_id": gid, "v": ver["v"], "file": ver["file"], "url": _post_url(base, ver["file"]),
-                "base_v": base_v, "alt_v": alt_v, "cuts": res["cuts"], "segments": res["segments"], "notes": res["notes"],
+                "base_v": base_v, "ins_v": ins_v, "pos": pos, "t": res["t"], "inserted": res["inserted"], "fit": res["fit"],
+                "duration": res["new_duration"], "time_ops": res["time_ops"], "notes": res["notes"],
                 "seconds": round(time.time() - t0, 1)}
     return await asyncio.to_thread(_do)
 
@@ -11321,7 +11356,7 @@ async def api_post_edit_dispatch(project: str, ep: str, body: dict):
         lines.append("用户在基准版本时间线上标出的时间段(组内秒,供指令引用):")
         lines += [f"- 第 {i + 1} 段 {a:.2f}s – {b:.2f}s({b - a:.2f}s)" for i, (a, b) in enumerate(ranges)]
     lines += ["用户指令:", instruction, "",
-              f"要求:只对本组这一条视频做剪辑(裁切/删段/换段/变速/接顺等,用 ffmpeg 或本工位技能),画幅与帧率与源一致;"
+              f"要求:只对本组这一条视频做剪辑(裁切/删段/插段/变速/接顺等,用 ffmpeg 或本工位技能),画幅与帧率与源一致;"
               f"产物写到 {out},然后登记为本组新版本(不动当前指针):",
               f"python3 code/post_apply.py register --project {base.name} --ep {ep2} --group {gid} --file {out} --note '{oid}'",
               "完成后回执写明做了什么、产物时长;无法执行时回执说明原因,不要改母本、不要动 post_plan.json 其它字段。"]

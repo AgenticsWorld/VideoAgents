@@ -424,7 +424,7 @@ def concat_segments(files: list[Path], dst: Path) -> None:
         tmp.unlink(missing_ok=True)
 
 
-# ---------------------------------------------------------------- 分镜剪辑(换段:两个版本按时间段拼接)
+# ---------------------------------------------------------------- 分镜剪辑·时间段工具(删段共用)
 def merge_ranges(cuts: list[dict], duration: float, fps: float) -> list[tuple[float, float]]:
     """时间段规范化:裁到 [0,duration]、按帧对齐、排序、合并重叠/相邻;过短(<1 帧)的丢弃。"""
     step = 1.0 / max(1.0, fps)
@@ -460,56 +460,104 @@ def splice_plan(cuts: list[tuple[float, float]], duration: float) -> list[dict]:
     return segs
 
 
-def splice(base_src: Path, alt_src: Path, dst: Path, cuts: list[dict]) -> dict:
-    """分镜剪辑:以 base 版本为时间线,cuts 里的时间段换成 alt 版本同一时间段的画面(与声音),
-    其余保留 base;各段归一到 base 的 w×h/fps 后 concat 一次编码出 dst。
-    alt 比 base 短、时间段超出 alt 尾部时,末帧克隆补齐(notes 里说明)。返回 {segments, duration, notes}。"""
+# ---------------------------------------------------------------- 分镜剪辑(插段:整段插入另一版本,时长变长)
+INSERT_FITS = ("pad", "crop", "blur")
+
+
+def aspect_differs(w1: int, h1: int, w2: int, h2: int, tol: float = 0.01) -> bool:
+    """宽高比相差超过 tol(相对)即视为不同比例。"""
+    if not (w1 and h1 and w2 and h2):
+        return False
+    a1, a2 = w1 / h1, w2 / h2
+    return abs(a1 - a2) / a2 > tol
+
+
+def fit_filter(w: int, h: int, fit: str, src: str, out: str) -> str:
+    """把 src 标签的画面适配到 w×h(只做几何,不含 fps/format):
+    pad 等比缩放 + 黑边;crop 等比放大铺满后居中裁切;blur 同画面放大铺满模糊垫底 + 等比缩放原画居中叠加。"""
+    if fit == "crop":
+        return f"{src}scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1{out}"
+    if fit == "blur":
+        k = out.strip("[]")
+        return (f"{src}split=2[{k}_bg0][{k}_fg0];"
+                f"[{k}_bg0]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},gblur=sigma=40,eq=brightness=-0.08[{k}_bg];"
+                f"[{k}_fg0]scale={w}:{h}:force_original_aspect_ratio=decrease[{k}_fg];"
+                f"[{k}_bg][{k}_fg]overlay=(W-w)/2:(H-h)/2,setsar=1{out}")
+    return f"{src}scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:black,setsar=1{out}"
+
+
+def upscale_factor(iw: int, ih: int, w: int, h: int, fit: str = "pad") -> float:
+    """插入段主画面的实际缩放倍数(>1 = 放大):pad/blur 取 min(完整放进),crop 取 max(铺满)。"""
+    if not (iw and ih):
+        return 1.0
+    return (max if fit == "crop" else min)(w / iw, h / ih)
+
+
+def insert_clip(base_src: Path, ins_src: Path, dst: Path, t: float, audio: str = "fade", fit: str = "pad") -> dict:
+    """插段(2026-09-30,取代换段):在 base 的 t 秒处(0 = 最前面,>= 时长 = 最后面)插入 ins 整段,
+    ins 归一到 base 的 w×h/fps;各段按帧量化后一次编码出 dst(时长变长)。版本自带声轨:base 两段 + ins 自带声
+    (无声轨则静音)。audio 是写进 time_ops 的**外挂声轨**策略(出成片时 timemap 在插入块处 sustain/fade/mute)。
+    fit = 插入段宽高比与 base 不同时的填充方式(pad 黑边 / crop 放大裁切 / blur 模糊背景,见 fit_filter)。
+    返回 {t, inserted, fit, duration, new_duration, time_ops(组内秒,基准 = base), notes}。"""
     require_tools("ffmpeg", "ffprobe")
-    bi, ai = probe(base_src), probe(alt_src)
+    bi, ii = probe(base_src), probe(ins_src)
     w, h, fps = bi["width"], bi["height"], bi["fps"] or 24.0
     if not w or not h or not bi["duration"]:
         raise FxError(f"基准版本无法解析:{base_src.name}")
-    if not ai["width"] or not ai["duration"]:
-        raise FxError(f"替换版本无法解析:{alt_src.name}")
-    ranges = merge_ranges(cuts, bi["duration"], fps)
-    if not ranges:
-        raise FxError("没有有效的剪切时间段")
-    segs = splice_plan(ranges, bi["duration"])
+    if not ii["width"] or not ii["duration"]:
+        raise FxError(f"插入版本无法解析:{ins_src.name}")
+    total_f = int(round(bi["duration"] * fps))
+    tf = max(0, min(total_f, int(round(float(t) * fps))))
+    ins_f = max(1, int(round(ii["duration"] * fps)))
+    t_q, ins_len = tf / fps, ins_f / fps
+    audio = audio if audio in ("sustain", "fade", "mute") else "fade"
+    fit = fit if fit in INSERT_FITS else "pad"
     notes: list[str] = []
-    audio = bool(bi["has_audio"])
-    if audio and not ai["has_audio"]:
-        notes.append("替换版本无声轨,替换段用静音")
-    if ai["duration"] + 0.05 < max(r[1] for r in ranges):
-        notes.append(f"替换版本时长 {ai['duration']:.2f}s 短于剪切段末尾,超出部分用替换版本末帧补齐")
-    if (ai["width"], ai["height"]) != (w, h):
-        notes.append(f"替换版本分辨率 {ai['width']}×{ai['height']} 已归一到 {w}×{h}")
-    parts, vlabels, alabels = [], [], []
-    for i, s in enumerate(segs):
-        idx = 0 if s["src"] == "base" else 1
-        info = bi if idx == 0 else ai
-        length = s["t1"] - s["t0"]
-        n = max(1, int(round(length * fps)))
-        t_end = min(s["t1"], info["duration"]) if idx == 1 else s["t1"]
-        parts.append(f"[{idx}:v]trim=start={s['t0']:.6f}:end={max(t_end, s['t0'] + 1e-3):.6f},setpts=PTS-STARTPTS,"
-                     f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:black,"
-                     f"setsar=1,fps={fps:g},format=yuv420p,tpad=stop=-1:stop_mode=clone,trim=end_frame={n},setpts=PTS-STARTPTS[v{i}]")
-        vlabels.append(f"[v{i}]")
-        if audio:
-            if info["has_audio"]:
-                parts.append(f"[{idx}:a]atrim=start={s['t0']:.6f}:end={max(t_end, s['t0'] + 1e-3):.6f},asetpts=PTS-STARTPTS,"
-                             f"aformat=sample_rates=48000:channel_layouts=stereo,apad=whole_dur={length:.6f},atrim=end={length:.6f},asetpts=PTS-STARTPTS[a{i}]")
-            else:
-                parts.append(f"anullsrc=r=48000:cl=stereo:d={length:.6f}[a{i}]")
-            alabels.append(f"[a{i}]")
-    if audio:
-        parts.append("".join(v + a for v, a in zip(vlabels, alabels)) + f"concat=n={len(segs)}:v=1:a=1[vo][ao]")
+    if (ii["width"], ii["height"]) != (w, h):
+        notes.append(f"插入版本分辨率 {ii['width']}×{ii['height']} 已归一到 {w}×{h}")
+    if aspect_differs(ii["width"], ii["height"], w, h):
+        notes.append("宽高比不同,填充方式:" + {"pad": "补黑边", "crop": "放大裁切", "blur": "模糊背景"}[fit])
     else:
-        parts.append("".join(vlabels) + f"concat=n={len(segs)}:v=1:a=0[vo]")
+        fit = "pad"                     # 同比例时三种方式等价(纯缩放),统一记 pad
+    k = upscale_factor(ii["width"], ii["height"], w, h, fit)
+    if k > 1.1:
+        notes.append(f"插入版本需放大 {k:.2f} 倍,画面会发虚")
+    if abs((ii["fps"] or fps) - fps) > 0.01:
+        notes.append(f"插入版本帧率 {ii['fps']:g} 已归一到 {fps:g}")
+    has_audio = bool(bi["has_audio"] or ii["has_audio"])
+    if has_audio and not ii["has_audio"]:
+        notes.append("插入版本无声轨,插入段用静音")
+    tail = f"fps={fps:g},format=yuv420p,settb=AVTB"
+    afmt = "aformat=sample_rates=48000:channel_layouts=stereo"
+    segs = []  # (输入序号, 起帧, 止帧)
+    if tf > 0:
+        segs.append((0, 0, tf))
+    segs.append((1, 0, ins_f))
+    if tf < total_f:
+        segs.append((0, tf, total_f))
+    parts, labels = [], []
+    for i, (idx, f0, f1) in enumerate(segs):
+        n = f1 - f0
+        info = bi if idx == 0 else ii
+        vtrim = f"trim=start_frame={f0}:end_frame={f1}," if idx == 0 else ""
+        parts.append(fit_filter(w, h, fit if idx == 1 else "pad", f"[{idx}:v]{vtrim}setpts=PTS-STARTPTS,", f"[g{i}]"))
+        parts.append(f"[g{i}]{tail},tpad=stop=-1:stop_mode=clone,trim=end_frame={n},setpts=N/({fps:g}*TB)[v{i}]")
+        labels.append(f"[v{i}]")
+        if has_audio:
+            ln = n / fps
+            if info["has_audio"]:
+                parts.append(f"[{idx}:a]atrim=start={f0 / fps:.6f}:end={f1 / fps:.6f},asetpts=PTS-STARTPTS,{afmt},"
+                             f"apad=whole_dur={ln:.6f},atrim=end={ln:.6f},asetpts=PTS-STARTPTS[a{i}]")
+            else:
+                parts.append(f"anullsrc=r=48000:cl=stereo,atrim=end={ln:.6f},asetpts=PTS-STARTPTS[a{i}]")
+            labels.append(f"[a{i}]")
+    parts.append("".join(labels) + f"concat=n={len(segs)}:v=1:a={1 if has_audio else 0}" + ("[vc][ao]" if has_audio else "[vc]"))
+    parts.append(f"[vc]setpts=N/({fps:g}*TB)[vo]")
     dst.parent.mkdir(parents=True, exist_ok=True)
     tmp = dst.with_name(dst.stem + ".rendering" + dst.suffix)
-    cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(base_src), "-i", str(alt_src),
-           "-filter_complex", ";".join(parts), "-map", "[vo]"]
-    if audio:
+    cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(base_src), "-i", str(ins_src),
+           "-filter_complex", ";".join(parts), "-map", "[vo]", "-frames:v", str(total_f + ins_f)]
+    if has_audio:
         cmd += ["-map", "[ao]", "-c:a", "aac", "-b:a", "192k"]
     cmd += ENC_VIDEO + [str(tmp)]
     try:
@@ -519,8 +567,12 @@ def splice(base_src: Path, alt_src: Path, dst: Path, cuts: list[dict]) -> dict:
         tmp.rename(dst)
     finally:
         tmp.unlink(missing_ok=True)
-    return {"segments": segs, "cuts": [{"t0": round(a, 3), "t1": round(b, 3)} for a, b in ranges],
-            "duration": round(bi["duration"], 3), "notes": notes}
+    new_dur = probe(dst)["duration"]
+    ops = [{"src_t0": round(t_q, 6), "src_t1": round(t_q, 6), "out_len": round(ins_len, 6), "audio": audio,
+            "kind": "insert_clip"}]
+    notes.append(f"时长 {bi['duration']:.2f}s → {new_dur:.2f}s;出成片时外挂声轨/字幕按 timemap 自动平移")
+    return {"t": round(t_q, 3), "inserted": round(ins_len, 3), "audio": audio, "fit": fit, "duration": round(bi["duration"], 3),
+            "new_duration": round(new_dur, 3), "time_ops": ops, "notes": notes}
 
 
 # ---------------------------------------------------------------- 分镜剪辑(删段:切掉的时间段直接删除,其余按序拼接)
