@@ -50,6 +50,8 @@ main{flex:1;display:flex;min-height:0}
 .item .id{display:block;color:var(--dim);font-size:11px;line-height:1.4;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .badge{font-size:10px;line-height:14px;height:16px;box-sizing:border-box;display:inline-flex;align-items:center;gap:1px;border:1px solid var(--purple);color:var(--purple);border-radius:4px;padding:0 5px;flex:none}
 .badge.pic{border-color:var(--green);color:var(--green)}
+/* 列表行标签限宽:过长标签截断加省略号,不挤掉名字(完整文本见 title) */
+.item .row1 .badge{display:inline-block;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #detail{flex:1;overflow-y:auto;padding:22px 26px}
 .empty{color:var(--dim);text-align:center;margin-top:60px}
 h2.title{font-size:20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -173,7 +175,7 @@ function renderList(){
       d.className='item'+(CUR===c.id?' active':'');
       d.innerHTML=`<div class="row1"><span class="nm">${c.narrator?'🎙 ':''}${esc(c.narrator?t(c.name):c.name)}</span>`
         +(c.narrator&&(c.voices||[]).some(v=>v.url)?`<span class="badge pic" title="${esc(t('旁白声线'))}">🔊</span>`:'')
-        +(c.meta.tier?`<span class="badge">${esc(c.meta.tier)}</span>`:'')
+        +(c.meta.tier?`<span class="badge" title="${esc(c.meta.tier)}">${esc(c.meta.tier)}</span>`:'')
         +(c.images.length?`<span class="badge pic" title="${esc(I18N.f('图{n}',{n:c.images.length}))}">🖼${c.images.length}</span>`:'')
         +((c.costumes||[]).length?`<span class="badge cosb" title="${esc(t('服装 sheet:已出图/总套数'))}">👕${(c.costumes||[]).filter(x=>x.url).length}/${c.costumes.length}</span>`:'')
         +`</div><span class="id">${esc(c.id)}</span>`;

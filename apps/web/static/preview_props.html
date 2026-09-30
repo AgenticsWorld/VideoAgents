@@ -50,6 +50,8 @@ main{flex:1;display:flex;min-height:0}
 .item .id{display:block;color:var(--dim);font-size:11px;line-height:1.4;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .badge{font-size:10px;line-height:14px;height:16px;box-sizing:border-box;display:inline-flex;align-items:center;gap:1px;border:1px solid var(--purple);color:var(--purple);border-radius:4px;padding:0 5px;flex:none}
 .badge.pic{border-color:var(--green);color:var(--green)}
+/* 列表行标签限宽:过长标签截断加省略号,不挤掉名字(完整文本见 title) */
+.item .row1 .badge{display:inline-block;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .badge.key{border-color:var(--yellow);color:var(--yellow)}
 #detail{flex:1;overflow-y:auto;padding:22px 26px}
 .empty{color:var(--dim);text-align:center;margin-top:60px}
