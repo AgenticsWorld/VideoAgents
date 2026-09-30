@@ -707,6 +707,30 @@ def get_config(kind: str, provider_override: str = "", model_override: str = "")
             # Keep the common model field aligned so existing group-level video
             # overrides can target another Agentics profile without a special path.
             pc["model"] = pc["profile_code"]
+    elif provider == "rhapi":
+        # RunningHub 标准模型 API:站点 ai/cn 账号与 Key 不互通,Key 按站点分存(api_key_ai/api_key_cn);
+        # 图像/视频两段任一段填过同站点的 Key 即共用;环境变量 RUNNINGHUB_API_KEY 兜底
+        from modules import rh_models
+        site = rh_models.site_of(pc.get("site"))
+        pc["site"] = site
+        key = rh_models.api_key(pc, site)
+        if not key:
+            allcfg = json.loads(CONFIG_PATH.read_text())
+            key = next((rh_models.api_key((allcfg.get(k) or {}).get("rhapi") or {}, site)
+                        for k in ("image", "video") if k != kind
+                        and rh_models.api_key((allcfg.get(k) or {}).get("rhapi") or {}, site)), "")
+        pc["api_key"] = key or os.environ.get("RUNNINGHUB_API_KEY", "")
+        if not pc["api_key"]:
+            raise RuntimeError(f"{kind} 渠道 RH 未配置 {rh_models.SITES[site]['label']} 的 API Key"
+                               "(「🎨 生成模型」页 RH 标签页填入,或设环境变量 RUNNINGHUB_API_KEY)")
+        if kind == "image":
+            pc["t2i"] = str(pc.get("t2i") or "").strip()
+            pc["i2i"] = str(pc.get("i2i") or "").strip()
+            pc["model"] = ov_model or ""
+        else:
+            pc["model"] = ov_model or str(pc.get("model") or "").strip()
+            if not pc["model"]:
+                raise RuntimeError(f"{kind} 渠道 RH 未选择模型")
     elif provider != "comfyui":
         if provider == "openrouter":
             base_url, key, uses_wrapper = _openrouter_connection(pc.get("api_key") or "")
@@ -1780,6 +1804,59 @@ def _image_fal(cfg, prompt, negative, refs, width, height, seed, output):
     if not url:
         raise RuntimeError(f"Fal 任务成功但无图像 URL:{json.dumps(res, ensure_ascii=False)[:400]}")
     return _decode_data_url(url)
+
+
+# ---------------- RH:RunningHub 标准模型 API(图像/视频,见 modules/rh_models.py) ----------------
+
+def _rh_api_run(cfg, entry: dict, body: dict, notes: list[str], output: str, timeout: int,
+                want: str) -> tuple[bytes, dict]:
+    from modules import rh_models
+    for n in notes:
+        print(f"[genmedia] RH {entry['id']}:{n}", file=sys.stderr, flush=True)
+    task_id = rh_models.submit(cfg["site"], cfg["api_key"], entry["id"], body)
+    print(f"[genmedia] RH({rh_models.SITES[cfg['site']]['label']})建任务 {task_id} 模型 {entry['id']} "
+          f"→ {Path(output).name}", file=sys.stderr, flush=True)
+    resp = rh_models.wait(cfg["site"], cfg["api_key"], task_id, timeout, label=Path(output).name)
+    usage = rh_models.usage_note(resp)
+    if usage:
+        print(f"[genmedia] RH 任务 {task_id} 用量 {usage}", file=sys.stderr, flush=True)
+    return rh_models.download(rh_models.result_url(resp, want)), resp
+
+
+def _image_rhapi(cfg, prompt, negative, refs, width, height, seed, output, aspect=""):
+    from modules import rh_models
+    mid = str(cfg.get("model") or (cfg.get("i2i") if refs else cfg.get("t2i")) or "").strip()
+    if not mid:
+        raise RuntimeError("image 渠道 RH 未选择" + ("图生图" if refs else "文生图")
+                           + "模型(「🎨 生成模型」页图像 › RH)")
+    entry = rh_models.find_entry(cfg["site"], mid)
+    urls = [rh_models.upload(cfg["site"], cfg["api_key"], r) for r in (refs or [])]
+    body, notes = rh_models.build_body(entry, prompt=prompt, negative=negative, image_urls=urls,
+                                       width=width, height=height,
+                                       aspect=aspect or _closest_aspect(width, height), seed=seed)
+    data, _ = _rh_api_run(cfg, entry, body, notes, output, IMAGE_TIMEOUT, "image")
+    return data
+
+
+def _video_rhapi(cfg, prompt, first, last, duration, resolution, aspect, seed, output,
+                 refs=None, audio_refs=None, gen_audio=None, return_last_frame="",
+                 video_refs=None):
+    from modules import rh_models
+    refs, audio_refs, video_refs = list(refs or []), list(audio_refs or []), list(video_refs or [])
+    entry = rh_models.pick_video_entry(cfg["site"], cfg["model"], bool(first), bool(last),
+                                       len(refs), len(video_refs), len(audio_refs))
+    up = lambda p: rh_models.upload(cfg["site"], cfg["api_key"], p)   # noqa: E731
+    body, notes = rh_models.build_body(
+        entry, prompt=prompt, image_urls=[up(p) for p in refs],
+        first_url=up(first) if first else "", last_url=up(last) if last else "",
+        video_urls=[up(p) for p in video_refs], audio_urls=[up(p) for p in audio_refs],
+        duration=duration, resolution=resolution, aspect=aspect, seed=seed, gen_audio=gen_audio)
+    data, _ = _rh_api_run(cfg, entry, body, notes, output, VIDEO_TIMEOUT, "video")
+    saved = _save(data, output)
+    if return_last_frame:
+        # 各端点的 returnLastFrame 口径不一,续接锚统一从成片本地抽取
+        _extract_last_frame(saved, return_last_frame)
+    return saved
 
 
 # ---------------- MiniMax 云端通用(图像/视频/音乐/TTS 共用) ----------------
@@ -6352,6 +6429,8 @@ def _generate_image_with(cfg: dict, prompt: str, output: str, negative: str = ""
         return _save(_image_minimax(cfg, prompt, negative, refs, width, height, seed), output)
     if cfg["provider"] == "fal":
         return _save(_image_fal(cfg, prompt, negative, refs, width, height, seed, output), output)
+    if cfg["provider"] == "rhapi":
+        return _save(_image_rhapi(cfg, prompt, negative, refs, width, height, seed, output, aspect), output)
     return _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output)
 
 
@@ -6474,6 +6553,11 @@ def _generate_video_with(cfg: dict, prompt: str, output: str, first_frame: str, 
                           resolution, aspect, seed, output,
                           refs, audio_refs, generate_audio, return_last_frame,
                           video_refs)
+    if cfg["provider"] == "rhapi":
+        return _video_rhapi(cfg, prompt, first_frame, last_frame, duration,
+                            resolution, aspect, seed, output,
+                            refs, audio_refs, generate_audio, return_last_frame,
+                            video_refs)
     if cfg["provider"] == "comfyui" and (_is_h3_ref2va_workflow(cfg)
                                          or _seedance_cloud_workflow_gen(cfg)
                                          or _is_ltx25_workflow(cfg)):

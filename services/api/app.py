@@ -846,6 +846,11 @@ async def avatar_assets_ready() -> dict[str, Any]:
     return await core.api_avatar_ready()
 
 
+@api.get("/providers/rhapi/models", tags=["providers"])
+async def rhapi_models(site: str = "ai", kind: str = "video", refresh: bool = False) -> dict[str, Any]:
+    return await core.api_rhapi_models(site, kind, refresh)
+
+
 @api.post("/providers/minimax/voices", tags=["providers"])
 async def minimax_voices(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_minimax_voices(body.model_dump())

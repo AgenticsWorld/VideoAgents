@@ -749,6 +749,11 @@ DEFAULT_GENCONFIG = {
         "minimax": {"api_key_io": "", "api_key_cn": "",
                     "api_base": "https://api.minimax.io",
                     "model": "image-01", "custom_model": ""},
+        # RH = RunningHub 标准模型 API(modules/rh_models.py;与 ComfyUI 渠道的 RunningHub 工作流运行方式无关):
+        # site ai|cn 两站账号与 Key 不互通,api_key_ai/api_key_cn 按站点分存、与视频段同站 Key 互相兜底;
+        # 模型 id = 端点路径(目录从官方文档站自动拉取),同 Agentics 分文生图 t2i / 图生图 i2i,按有无参考图自动选
+        "rhapi": {"site": "ai", "api_key_ai": "", "api_key_cn": "",
+                  "t2i": "seedream-v5-lite/text-to-image", "i2i": "seedream-v5-lite/image-to-image"},
         # mode: local | cloud(Comfy Cloud)| rh_cn / rh_ai(RunningHub 国内/国际站,
         # 账号与 Key 不互通,rh_api_key_cn/rh_api_key_ai 按站点分别保存,按 mode 取用);
         # rh_workflows 为工作区工作流收藏 [{id, note, site}];
@@ -778,6 +783,9 @@ DEFAULT_GENCONFIG = {
         "minimax": {"api_key_io": "", "api_key_cn": "",
                     "api_base": "https://api.minimax.io",
                     "model": "MiniMax-H3", "custom_model": ""},
+        # RH 标准模型 API:model 存端点路径;genmedia 按本次输入(首尾帧/参考素材/纯文本)在同系列端点间自动切换
+        "rhapi": {"site": "ai", "api_key_ai": "", "api_key_cn": "",
+                  "model": "rhart-video/sparkvideo-2.0/multimodal-video"},
         "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
                     "workflow": "", "checkpoint": "",
                     "rh_api_key_cn": "", "rh_api_key_ai": "",
@@ -5441,6 +5449,13 @@ VIDEO_PROVIDER_ENV_KEYS = {"openrouter": "OPENROUTER_API_KEY", "volcengine": "AR
                            "byteplus": "BYTEPLUS_API_KEY", "minimax": "MINIMAX_API_KEY", "fal": "FAL_KEY"}
 
 
+def rhapi_configured(cfg: dict, kind: str) -> bool:
+    """RH 渠道(RunningHub 标准模型 API)是否有当前站点的 Key:本段或另一段同站点 Key 均可(genmedia 同口径)。"""
+    site = "cn" if str(((cfg.get(kind) or {}).get("rhapi") or {}).get("site") or "") == "cn" else "ai"
+    return bool(any(str(((cfg.get(k) or {}).get("rhapi") or {}).get(f"api_key_{site}") or "").strip()
+                    for k in ("image", "video")) or os.environ.get("RUNNINGHUB_API_KEY"))
+
+
 def video_provider_configured(cfg: dict, provider: str) -> bool:
     """该视频渠道在「生成模型」页(或环境变量)是否配了 Key——集级切换渠道只列/只收已配置的渠道
     (与 genmedia.get_config 的取 Key 口径一致:minimax 双区域 Key 任一,fal 与图像段共用)。"""
@@ -5456,6 +5471,8 @@ def video_provider_configured(cfg: dict, provider: str) -> bool:
     if provider == "fal":
         return bool(pc.get("api_key") or ((cfg.get("image") or {}).get("fal") or {}).get("api_key")
                     or os.environ.get("FAL_KEY"))
+    if provider == "rhapi":
+        return rhapi_configured(cfg, "video")
     return bool(pc.get("api_key") or os.environ.get(VIDEO_PROVIDER_ENV_KEYS.get(provider, ""), ""))
 
 
@@ -8874,7 +8891,7 @@ async def api_script_notes_submit(project: str, ep: str, body: dict | None = Non
 # 台账 assets/storyboard/<ep>/index.json;草图修改由 07-directing/storyboard-sketch 处理,其余修改发总制片。
 BOARD_SKETCH_JOBS: dict[str, dict] = {}      # "<project>/<ep>/<scene>" -> {status, keys, done, failed, error, started_at};整集九宫格批量的 scene 段为 "*"
 BOARD_GRID_BATCH = 4                         # 整集批量:每 4 镜出一张 2×2 宫格图再切分(code/storyboard_sketch.py --grid --keys;2026-09-12 由 9/3×3 降下来)
-IMAGE_PROVIDERS = ("agentics", "openrouter", "volcengine", "byteplus", "fal", "minimax", "comfyui")
+IMAGE_PROVIDERS = ("agentics", "openrouter", "volcengine", "byteplus", "fal", "minimax", "rhapi", "comfyui")
 _BOARD_REDRAW_RE = re.compile(r"\[草图\s+(ep[\w\-]*)/([\w\-]+)\]")
 
 
@@ -8902,6 +8919,10 @@ def _image_channels() -> list[dict]:
         elif pid == "minimax":
             configured = bool(pc.get("api_key_io") or pc.get("api_key_cn") or pc.get("api_key"))
             model = str(pc.get("custom_model") or pc.get("model") or "")
+        elif pid == "rhapi":
+            # 同 Agentics:文生图/图生图两个模型由「生成模型」页定,出图时按有无参考图自动选
+            configured = rhapi_configured(load_genconfig(), "image")
+            model = str(pc.get("t2i") or "")
         elif pid == "fal":
             vf = ((load_genconfig().get("video") or {}).get("fal") or {})
             configured = bool(pc.get("api_key") or vf.get("api_key"))
@@ -13283,6 +13304,19 @@ async def avatar_auto_manage_for_run(run: dict, message: str):
 # ---------------- MiniMax 音色(设置页 TTS → MiniMax 用) ----------------
 
 _MINIMAX_BASES = ("https://api.minimax.io", "https://api.minimaxi.com")
+
+
+async def api_rhapi_models(site: str, kind: str, refresh: bool = False) -> dict:
+    """RH 渠道(RunningHub 标准模型 API)模型目录:从官方文档站解析,首次约 1 分钟,之后缓存 24h。"""
+    from modules import rh_models
+    if kind not in ("image", "video"):
+        raise ServiceError(400, "kind must be image or video")
+    site = rh_models.site_of(site)
+    try:
+        models = await asyncio.to_thread(rh_models.list_models, site, kind, refresh)
+    except RuntimeError as e:
+        raise ServiceError(502, str(e)[:500]) from e
+    return {"site": site, "kind": kind, "keys_url": rh_models.SITES[site]["keys_url"], "models": models}
 
 
 async def api_minimax_voices(body: dict):

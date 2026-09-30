@@ -74,6 +74,13 @@ def video_caps(model, provider, cfg=None):
             return comfy_h3_ref_video_caps(cfg if cfg is not None else get_config('video'))
         except (RuntimeError, KeyError, ValueError, OSError):
             return None
+    if provider == 'rhapi':   # RunningHub 标准模型 API:按所选端点(或同系列)参数表的 videoUrls 上限
+        from modules import rh_models
+        try:
+            c = rh_models.find_entry(rh_models.site_of((cfg or {}).get('site')), model)['caps']
+        except (RuntimeError, KeyError, ValueError, OSError):
+            return None
+        return (int(c['videos']), 15.) if c.get('videos') else None
     if provider == 'openrouter':   # OpenRouter 仅 Seedance 2.x 与 MiniMax H3 接了参考视频(input_references)
         if m.startswith('minimax/hailuo-3') and not m.startswith('minimax/hailuo-3-max'):
             return 3, 15.

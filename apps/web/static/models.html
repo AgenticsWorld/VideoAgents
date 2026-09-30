@@ -365,6 +365,7 @@ const PROVIDER_META={
   byteplus:{label:'BytePlus'},
   fal:{label:'Fal'},
   minimax:{label:'MiniMax'},
+  rhapi:{label:'RH'},
   comfyui:{label:'ComfyUI'},
   elevenlabs:{label:'ElevenLabs'},
 };
@@ -376,8 +377,8 @@ const SECOND_WF={
   tts:{mainRh:'云端 Voice Clone 工作流',rh:'云端 Voice Design 工作流',mainApi:'Voice Clone API',api:'Voice Design API',
        rhField:'rh_design_workflow_id',wfField:'design_workflow'}};
 const SECTIONS={
-  image:{providers:['agentics','openrouter','volcengine','byteplus','fal','minimax','comfyui']},
-  video:{providers:['agentics','openrouter','volcengine','byteplus','fal','minimax','comfyui']},
+  image:{providers:['agentics','openrouter','volcengine','byteplus','fal','minimax','rhapi','comfyui']},
+  video:{providers:['agentics','openrouter','volcengine','byteplus','fal','minimax','rhapi','comfyui']},
   music:{providers:['agentics','openrouter','elevenlabs','comfyui']},
   tts:{providers:['agentics','openrouter','volcengine','elevenlabs','minimax','comfyui']},
 };
@@ -479,6 +480,94 @@ function mmKey(kind){
    (rh_api_key_cn/rh_api_key_ai),按「运行方式」取用对应站点的输入框 */
 function rhKey(kind){
   return $(`#${kind}-comfy-rhkey-${$(`#${kind}-comfy-mode`).value==='rh_ai'?'ai':'cn'}`).value.trim();
+}
+
+/* RH = RunningHub 标准模型 API(图像/视频;与 ComfyUI 渠道的 RunningHub 工作流运行方式无关)。
+   runninghub.ai / runninghub.cn 两站账号与 Key 不互通,Key 按站点分存(api_key_ai/api_key_cn);
+   模型下拉由服务端解析官方文档目录自动获取(首次约 1 分钟,之后缓存 24h),切到 RH 标签页时才拉取;
+   图像分文生图/图生图两个模型(按有无参考图自动选),视频一个模型(按输入在同系列端点间自动切换) */
+const RH_SITES=[['ai','runninghub.ai'],['cn','runninghub.cn']];
+const RH_KEYS_URL={ai:'https://www.runninghub.ai/call-api/bill-task?tab=keys',
+                   cn:'https://www.runninghub.cn/call-api/bill-task?tab=keys'};
+const RH_SIDES={image:[['t2i','文生图模型'],['i2i','图生图模型']],video:[['model','模型']]};
+const RH_TASKS={image:{t2i:['text-to-image'],i2i:['image-to-image','reference-to-image']},
+                video:{model:['reference-to-video','image-to-video','text-to-video']}};
+const RH_TASK_LABELS={'text-to-image':'文生图','image-to-image':'图生图','reference-to-image':'参考生图',
+                      'reference-to-video':'多模态参考生视频','image-to-video':'图生视频','text-to-video':'文生视频'};
+const RH_STATE={};   // `${kind}:${site}` -> {loading, models}
+function buildRhApiPanel(d,kind){
+  const sr=el('div',{className:'row'});
+  sr.appendChild(el('label',{},'渠道'));
+  const sel=el('select',{id:`${kind}-rh-site`});
+  RH_SITES.forEach(([v,l])=>sel.appendChild(el('option',{value:v,textContent:l})));
+  sel.onchange=()=>{rhSiteUI(kind);rhLoadModels(kind,false)};
+  sr.appendChild(sel);d.appendChild(sr);
+  RH_SITES.forEach(([s,l])=>{
+    const r=keyRow(`${kind}-rh-key-${s}`,`API Key (${l})`);
+    r.id=`${kind}-rh-key-${s}-row`;d.appendChild(r);
+  });
+  RH_SIDES[kind].forEach(([side,label],i)=>{
+    const r=el('div',{className:'row'});
+    r.appendChild(el('label',{},label));
+    r.appendChild(el('select',{id:`${kind}-rh-${side}`}));
+    if(i===0){
+      const b=el('button',{id:`${kind}-rh-refresh`},'刷新模型列表');
+      b.onclick=()=>rhLoadModels(kind,true);
+      r.appendChild(b);
+    }
+    d.appendChild(r);
+  });
+  d.appendChild(el('div',{className:'status',id:`${kind}-rh-status`}));
+  const h=el('div',{className:'hint'});
+  h.appendChild(el('span',{},kind==='image'
+    ?'RunningHub 模型 API(Seedream、Nano Banana、GPT Image、Qwen Image、Wan 等);无参考图用文生图模型、带参考图自动用图生图模型;尺寸/画幅/分辨率/参考图上限按所选模型参数表自动映射。'
+    :'RunningHub 模型 API(Seedance、Kling、Vidu、Wan、Veo、MiniMax H3 等);按本次输入(首尾帧/参考素材/纯文本)在同系列端点间自动切换;时长/分辨率/画幅取所选模型支持的最接近值。'));
+  h.appendChild(el('span',{},' API Key 在 '));
+  h.appendChild(el('a',{id:`${kind}-rh-keylink`,target:'_blank',textContent:'RunningHub 控制台「API Key」'}));
+  h.appendChild(el('span',{},' 创建(模型 API 仅支持企业共享 API Key;两站账号与 Key 不互通,「渠道」须与 Key 来源一致)'));
+  d.appendChild(h);
+}
+function rhSite(kind){return $(`#${kind}-rh-site`).value==='cn'?'cn':'ai'}
+function rhSiteUI(kind){
+  const site=rhSite(kind);
+  RH_SITES.forEach(([s])=>{$(`#${kind}-rh-key-${s}-row`).style.display=s===site?'':'none'});
+  $(`#${kind}-rh-keylink`).href=RH_KEYS_URL[site];
+}
+/* 下拉填充:按任务分组;已保存但不在目录里的模型保留在首位(目录拉取失败时也不丢配置) */
+function rhFillSelect(kind,side,models,value){
+  const sel=$(`#${kind}-rh-${side}`);
+  const cur=value!==undefined?value:(sel.value||sel.dataset.saved);
+  sel.innerHTML='';
+  const tasks=RH_TASKS[kind][side];
+  const rows=(models||[]).filter(m=>tasks.includes(m.task));
+  if(cur&&!rows.some(m=>m.id===cur))sel.appendChild(el('option',{value:cur,textContent:cur}));
+  tasks.forEach(tk=>{
+    const g=rows.filter(m=>m.task===tk);
+    if(!g.length)return;
+    const og=el('optgroup',{label:t(RH_TASK_LABELS[tk]||tk)});
+    g.forEach(m=>og.appendChild(el('option',{value:m.id,textContent:`${m.name} · ${m.id}`})));
+    sel.appendChild(og);
+  });
+  if(cur)sel.value=cur;
+  sel.dataset.saved=sel.value;
+}
+async function rhLoadModels(kind,refresh){
+  const site=rhSite(kind), key=`${kind}:${site}`, st=RH_STATE[key]||(RH_STATE[key]={});
+  const status=$(`#${kind}-rh-status`);
+  if(st.models&&!refresh){RH_SIDES[kind].forEach(([side])=>rhFillSelect(kind,side,st.models));return}
+  if(st.loading)return;
+  st.loading=true;
+  status.className='status';status.textContent=t('正在获取模型列表…(首次约 1 分钟)');
+  try{
+    const r=await api(`/api/v1/providers/rhapi/models?site=${site}&kind=${kind}${refresh?'&refresh=true':''}`);
+    st.models=r.models||[];
+    if(rhSite(kind)===site){
+      RH_SIDES[kind].forEach(([side])=>rhFillSelect(kind,side,st.models));
+      status.className='status ok';status.textContent=`${t('已获取模型')} ${st.models.length}`;
+    }
+  }catch(e){
+    status.className='status err';status.textContent=`${t('获取模型列表失败')}: ${e.message||e}`;
+  }finally{st.loading=false}
 }
 
 function fillSelect(sel,options,value,customValue){
@@ -659,6 +748,8 @@ function buildPanel(kind,p){
     d.appendChild(el('div',{className:'hint'},kind==='image'
       ?'BytePlus ModelArk 图片生成 API(海外区,Seedream 系列);Key 在 <a href="https://console.byteplus.com/ark" target="_blank">ModelArk 控制台</a> 生成;更新的模型可选「自定义…」填 Model ID,也可填「推理接入点 ep-…」'
       :'BytePlus ModelArk 视频生成 API(海外区,Seedance 系列);Key 在 <a href="https://console.byteplus.com/ark" target="_blank">ModelArk 控制台</a> 生成;模型 ID 也可填「推理接入点 ep-…」'));
+  }else if(p==='rhapi'){
+    buildRhApiPanel(d,kind);
   }else if(p==='fal'){
     d.appendChild(keyRow(`${kind}-fal-key`,'Fal API Key'));
     d.appendChild(modelRow(`${kind}-fal-model`,`${kind}-fal-custom`));
@@ -1157,6 +1248,7 @@ function showTextPanel(p){
 
 function showPanel(kind,p){
   SEL_PROVIDER[kind]=p;
+  if(p==='rhapi')rhLoadModels(kind,false);
   SECTIONS[kind].providers.forEach(x=>{
     const tb=$(`#tab-${kind}-${x}`);
     tb.classList.toggle('active',x===p);
@@ -1579,6 +1671,13 @@ function loadIntoForm(){
       if(kind==='music')$('#music-mm-instr').checked=c.minimax.force_instrumental!==false;
       if(kind==='tts')$('#tts-mm-voice').value=c.minimax.voice||'';
     }
+    if(SECTIONS[kind].providers.includes('rhapi')){
+      const r=c.rhapi||{};
+      $(`#${kind}-rh-site`).value=r.site==='cn'?'cn':'ai';
+      RH_SITES.forEach(([s])=>{$(`#${kind}-rh-key-${s}`).value=r[`api_key_${s}`]||''});
+      rhSiteUI(kind);
+      RH_SIDES[kind].forEach(([side])=>rhFillSelect(kind,side,null,r[side]||''));
+    }
     if(SECTIONS[kind].providers.includes('comfyui')&&c.comfyui)loadComfyForm(kind,c.comfyui);
     if(kind==='music'){
       const elm=c.elevenlabs||{};
@@ -1720,6 +1819,11 @@ function collect(){
     if(SECTIONS[kind].providers.includes('fal'))
       c.fal={api_key:$(`#${kind}-fal-key`).value.trim(),
         ...pickModel(`#${kind}-fal-model`,`#${kind}-fal-custom`)};
+    if(SECTIONS[kind].providers.includes('rhapi')){
+      c.rhapi={site:rhSite(kind)};
+      RH_SITES.forEach(([s])=>{c.rhapi[`api_key_${s}`]=$(`#${kind}-rh-key-${s}`).value.trim()});
+      RH_SIDES[kind].forEach(([side])=>{c.rhapi[side]=$(`#${kind}-rh-${side}`).value||''});
+    }
     if(SECTIONS[kind].providers.includes('minimax')){
       c.minimax={api_key_io:$(`#${kind}-mm-key-io`).value.trim(),
         api_key_cn:$(`#${kind}-mm-key-cn`).value.trim(),
