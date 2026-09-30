@@ -2218,7 +2218,13 @@ def apply_prompt(prompt: dict, plan: dict, v25: bool = False, h3: bool = False, 
             for shot_no in sorted({p['shot_no'] for p in indexed}):
                 head = re.compile(r'Shot\s*%d\s*(?:[:：]|[｜|][^。.\n]*[。.])' % shot_no).search(vp, after)
                 if head:
-                    vp = vp[:head.end()] + (activation_line(indexed, shot_no) if zh else activation_line_en(indexed, shot_no)) + vp[head.end():]
+                    # 段头紧跟的时间段标签(sync_shot_timing 写入的 `0-2秒：`)须留在段头后,激活句插在标签之后(issue #89/#90:两 sync 结果与调用顺序无关)
+                    from modules.shot_timing import TAG_RE
+                    at, sep = head.end(), ''
+                    tag = TAG_RE.match(vp, at + len(vp[at:]) - len(vp[at:].lstrip(' \t')))
+                    if tag:
+                        at, sep = tag.end(), ('' if tag.group(0).endswith('：') else ' ')
+                    vp = vp[:at] + sep + (activation_line(indexed, shot_no) if zh else activation_line_en(indexed, shot_no)) + vp[at:]
     vp = paragraphize(re.sub(r'[ \t]{2,}', ' ', vp))
     out['refs'] = new
     out['video_prompt'] = vp

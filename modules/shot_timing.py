@@ -300,6 +300,8 @@ def check_prompt(vp: str, durations, total, kind: str, gid: str) -> tuple[list[s
             errs.append(f'{gid}: Shot {k} 段有 {len(ms)} 个时间段标签,只能一个')
         if ms:
             m = ms[0]
+            if bodies[k][:m.start()].strip():
+                warns.append(f'{gid}: Shot {k} 时间段标签未紧跟段头(前有「{bodies[k][:m.start()].strip()[:20]}…」;跑 code/sync_shot_timing.py --write 复位)')
             found.append((k, int(m.group(1)), int(m.group(2)), m.group(3), m.group(4), m.group(5)))
     if not found:
         exp = '；'.join(segment_tag(s, e, ids[0] + 1, ids[-1] + 1, True).rstrip('：') for s, e, ids in plan_segments(durs, total))
