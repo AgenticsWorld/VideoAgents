@@ -1396,9 +1396,16 @@ def do_preview(proj, ep, src_path, targets, force=False, log=print):
 # ---------------------------------------------------------------- check
 
 def _gray_frame(path, t, w, h):
-    """t 秒处一帧灰度字节(缩放到 w×h)。"""
-    return _run(["ffmpeg", "-v", "error", "-ss", f"{max(0.0, t):.6f}", "-i", str(path), "-frames:v", "1",
-                 "-vf", f"scale={w}:{h}", "-f", "rawvideo", "-pix_fmt", "gray", "-"], timeout=120, binary=True)
+    """t 秒处一帧灰度字节(缩放到 w×h)。末帧处 -ss 常因时间基取整落到末帧之后而抽空(issue #88),
+    抽空时逐级回退(≈半帧/一帧/0.1s)重取;仍空返回 b"",调用方须按「取帧失败」处理而非比对差值。"""
+    for back in (0.0, 0.02, 0.04, 0.1):
+        if back and t - back < 0:
+            break
+        b = _run(["ffmpeg", "-v", "error", "-ss", f"{max(0.0, t - back):.6f}", "-i", str(path), "-frames:v", "1",
+                  "-vf", f"scale={w}:{h}", "-f", "rawvideo", "-pix_fmt", "gray", "-"], timeout=120, binary=True)
+        if b:
+            return b
+    return b""
 
 
 def _mean(b):
@@ -1593,7 +1600,9 @@ def do_check(proj, ep, src_path, out_path, write=True):
                         # 源末内容帧按视频流帧数定位(容器时长常被更长的声轨撑大,-ss 到声轨末会抽不到帧)
                         ref = _gray_frame(src_path, _file_frames(src_path) / fps - step, w, h)
                         x = _gray_frame(out_path, black_at - step, w, h)
-                        if _mad(x, ref) > SAME_TOL + 4:
+                        if not ref or not x:
+                            problems.append(f"{e['at_shot']} {ty} 末内容帧取帧失败({'源片' if not ref else '成片'} t={_file_frames(src_path) / fps - step if not ref else black_at - step:.3f}s 抽不到帧)")
+                        elif _mad(x, ref) > SAME_TOL + 4:
                             problems.append(f"{e['at_shot']} {ty} 末内容帧与源末帧差 {_mad(x, ref):.1f}(切黑前画面被改动)")
                 whitelist.append({"at_shot": e["at_shot"], "type": ty, "start_s": round(max(0.0, black_at - d), 3), "end_s": round(od, 3)})
                 verified += 1
@@ -1625,9 +1634,11 @@ def do_check(proj, ep, src_path, out_path, write=True):
                         if x.get("kind") == "bridge":
                             a0 = _gray_frame(Path(r["file"]), 0.0, w, h)
                             b1 = _gray_frame(Path(r["file"]), max(0.0, nf / fps - step), w, h)
-                            m0 = _mad(a0, _gray_frame(src_path, t - step, w, h))
-                            m1 = _mad(b1, _gray_frame(src_path, t, w, h))
-                            if m0 > 40 or m1 > 40:
+                            sa, sb = _gray_frame(src_path, t - step, w, h), _gray_frame(src_path, t, w, h)
+                            m0, m1 = _mad(a0, sa), _mad(b1, sb)
+                            if not (a0 and b1 and sa and sb):
+                                ins_issues.append(f"{e['at_shot']} 桥接首/末帧或前组尾/本组首取帧失败")
+                            elif m0 > 40 or m1 > 40:
                                 ins_issues.append(f"{e['at_shot']} 桥接首/末帧与前组尾/本组首差 {m0:.0f}/{m1:.0f}(模型未贴合首尾帧)")
                         ins_verified += 1
                     else:
