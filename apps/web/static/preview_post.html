@@ -137,6 +137,7 @@ body.masking .frame .maskpad{display:block}
 .xport .tc{font:11px var(--mono);color:var(--text);min-width:92px;text-align:center}
 .xport .tl s.cut{background:rgba(248,113,113,.55);border-left:1px solid var(--red);border-right:1px solid var(--red)}
 .xport .tl s.cut.on{background:rgba(248,113,113,.85)}
+.xport .tl u{position:absolute;top:-2px;bottom:-2px;width:1px;background:rgba(255,255,255,.55);pointer-events:none}
 /* 整集连播时的黑场垫片预览(2026-09-17):盖住监视器,右下角小字标时长 */
 .padov{position:absolute;inset:0;background:#000;z-index:6;display:flex;align-items:flex-end;justify-content:flex-end;padding:8px 10px;font:10.5px var(--mono);color:#666;pointer-events:none}
 /* 分镜剪辑面板(右栏,修改单上方,默认折叠,点标题展开) */
@@ -558,7 +559,7 @@ function renderMonitorShell(){
     <span id="xgid" style="font-family:var(--mono)"></span>
     <div class="tl" id="xtl"><s id="xrange" style="display:none"></s><i id="xfill"></i><b id="xph"></b></div>
     <span class="tc" id="xtc">00:00.00 / 00:00.00</span>
-    <button class="sm" id="b-range" title="${esc(t('把当前时刻设为时间段起点/终点(组内时间段作用域)'))}">◇ ${esc(t('标记时间段'))}</button>
+    <button class="sm" id="b-range" title="${esc(t('把当前时刻设为时间段起点/终点(组内时间段作用域);离镜头切点(走带条上的白色竖线)0.3 秒内自动吸附到切点,按住 ⌥/Alt 点击不吸附'))}">◇ ${esc(t('标记时间段'))}</button>
     <button class="sm" id="b-frame" title="${esc(t('把 A 画面当前帧存为参考帧(供参考帧匹配/重打光/重绘)'))}">📷 ${esc(t('取参考帧'))}</button>
     <button class="sm" id="b-mute" title="${esc(t('B 画面始终静音;此按钮切 A 的声音'))}">🔊</button>
   </div>
@@ -645,7 +646,7 @@ function setMonitor(keepTime){
   const t0=keepTime?va.currentTime:0;
   epPadCancel();
   $('#fhint').style.display='none';
-  if(MODE!=='group'){CUT_ON=false;renderCut();drawCuts()}
+  if(MODE!=='group'){CUT_ON=false;renderCut();drawCuts();drawShotCuts()}
   if(MODE==='final'){
     const u=(D.finals||{}).final;
     $('#selA').innerHTML='';$('#selB').innerHTML='';vb.style.display='none';$('#split').style.display='none';$('#knob').style.display='none';$('#tagB').style.display='none';
@@ -670,13 +671,14 @@ function setMonitor(keepTime){
   $('#selA').innerHTML=opt(VA);$('#selB').innerHTML=opt(VB);
   const fa=vs.find(v=>v.v===VA),fb=vs.find(v=>v.v===VB);
   if(va.dataset.src!==fa.url){va.src=fa.url;va.dataset.src=fa.url}
+  loadShotCuts(SEL,VA);
   if(vb.dataset.src!==fb.url){vb.src=fb.url;vb.dataset.src=fb.url}
   va.muted=!LAYERS.sound;vb.muted=true;
   $('#tagA').textContent='A · '+(VA===0?'v0 母本':'v'+VA)+(VA===cur?' ★':'');
   $('#tagB').textContent='B · '+(VB===0?'v0 母本':'v'+VB)+(VB===cur?' ★':'');
   $('#xgid').textContent=SEL;
-  va.addEventListener('loadedmetadata',()=>{if(keepTime)seekTo(t0);renderWaves();drawRange();drawCuts()},{once:true});
-  applyAB();refreshMonitorMeta();drawMask();drawRange();renderWaves();renderCut();drawCuts();stemSync();
+  va.addEventListener('loadedmetadata',()=>{if(keepTime)seekTo(t0);renderWaves();drawRange();drawCuts();drawShotCuts()},{once:true});
+  applyAB();refreshMonitorMeta();drawMask();drawRange();renderWaves();renderCut();drawCuts();drawShotCuts();stemSync();
 }
 function refreshMonitorMeta(){
   const g=grpById(SEL);if(!g||MODE!=='group')return;
@@ -818,10 +820,30 @@ function drawMask(){
   b.style.display='block';b.style.left=(MASK.x*100)+'%';b.style.top=(MASK.y*100)+'%';b.style.width=(MASK.w*100)+'%';b.style.height=(MASK.h*100)+'%';
   $('#masklbl').textContent=`mask ${(MASK.x*100).toFixed(0)},${(MASK.y*100).toFixed(0)} ${(MASK.w*100).toFixed(0)}×${(MASK.h*100).toFixed(0)}%`;
 }
-function markRange(){
-  const va=$('#va'),tcur=va.currentTime||0;
-  if(!RANGE||RANGE.t1!=null){RANGE={t0:+tcur.toFixed(2),t1:null};$('#b-range').textContent='◇ '+t('设为终点');}
-  else{if(tcur<=RANGE.t0){alert(t('终点须晚于起点'));return}RANGE.t1=+tcur.toFixed(2);$('#b-range').textContent='◇ '+t('标记时间段');SCOPE='range';renderRight();if(CUT_ON){addCut(RANGE.t0,RANGE.t1);RANGE=null}}
+/* 镜头切点吸附:切点 c = 新镜首帧 pts;标记值取 c−¼帧,起点含新镜首帧、终点止于上一镜末帧
+   (删段 trim 左闭右开 + 后端按帧取整,enable=between 同样落在正确一侧) */
+const SNAP_S=0.3;let SHOTCUTS={};
+function loadShotCuts(gid,v){
+  const k=gid+'|'+v;if(SHOTCUTS[k])return;SHOTCUTS[k]={cuts:[],fps:24,loading:true};
+  J(api('/cuts')+'?group_id='+encodeURIComponent(gid)+'&v='+v).then(j=>{SHOTCUTS[k]={cuts:j.cuts||[],fps:j.fps||24}}).catch(()=>{SHOTCUTS[k]={cuts:[],fps:24,err:true}}).finally(()=>{if(SEL===gid&&VA===v)drawShotCuts()});
+}
+const curShotCuts=()=>MODE==='group'?SHOTCUTS[SEL+'|'+VA]||null:null;
+function snapToCut(tcur){
+  const sc=curShotCuts();if(!sc||!sc.cuts.length)return null;
+  let best=null;for(const c of sc.cuts){const d=Math.abs(c-tcur);if(d<=SNAP_S&&(!best||d<Math.abs(best-tcur)))best=c}
+  return best==null?null:{c:best,t:Math.max(0,best-0.25/(sc.fps||24))};
+}
+function drawShotCuts(){
+  $$('#xtl u').forEach(e=>e.remove());
+  const sc=curShotCuts(),d=$('#va').duration||0;if(!sc||!d)return;
+  const tl=$('#xtl');sc.cuts.forEach(c=>{const e=document.createElement('u');e.style.left=(c/d*100)+'%';tl.appendChild(e)});
+}
+function markRange(e){
+  const va=$('#va');let tcur=va.currentTime||0;
+  const sn=MODE==='group'&&!(e&&e.altKey)?snapToCut(tcur):null;
+  if(sn){if(Math.abs(sn.c-tcur)>0.5/((curShotCuts()||{}).fps||24))toast(I18N.f('已吸附到镜头切点 {t}',{t:tc(sn.c)}));tcur=sn.t}
+  if(!RANGE||RANGE.t1!=null){RANGE={t0:+tcur.toFixed(3),t1:null};$('#b-range').textContent='◇ '+t('设为终点');}
+  else{if(tcur<=RANGE.t0){alert(t('终点须晚于起点'));return}RANGE.t1=+tcur.toFixed(3);$('#b-range').textContent='◇ '+t('标记时间段');SCOPE='range';renderRight();if(CUT_ON){addCut(RANGE.t0,RANGE.t1);RANGE=null}}
   drawRange();
 }
 function drawRange(){const s=$('#xrange');const d=$('#va').duration||0;if(!RANGE||!d){s.style.display='none';return}s.style.display='block';s.style.left=(RANGE.t0/d*100)+'%';s.style.width=(((RANGE.t1??RANGE.t0+0.2)-RANGE.t0)/d*100)+'%'}
@@ -833,7 +855,7 @@ function cutNorm(){
   for(const c of rows){if(out.length&&c.t0<=out[out.length-1].t1+1e-6)out[out.length-1].t1=Math.max(out[out.length-1].t1,c.t1);else out.push({...c})}
   return out;
 }
-function addCut(t0,t1){CUTS.push({t0:+(+t0).toFixed(2),t1:+(+t1).toFixed(2)});CUTS=cutNorm();renderCut();drawCuts()}
+function addCut(t0,t1){CUTS.push({t0:+(+t0).toFixed(3),t1:+(+t1).toFixed(3)});CUTS=cutNorm();renderCut();drawCuts()}
 function drawCuts(){
   $$('#xtl s.cut').forEach(e=>e.remove());
   const d=$('#va').duration||0;if(!CUT_ON||!d||MODE!=='group')return;

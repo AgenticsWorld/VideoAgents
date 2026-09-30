@@ -2575,6 +2575,8 @@ window.I18N_DICT = {
 "在画面上拖一个矩形,作为遮标/局部重绘/特效范围的蒙版": "Seret persegi di gambar sebagai mask untuk hapus logo / repaint lokal / area VFX",
 "画蒙版": "Gambar mask",
 "把当前时刻设为时间段起点/终点(组内时间段作用域)": "Jadikan waktu saat ini sebagai awal/akhir rentang (cakupan rentang dalam grup)",
+"把当前时刻设为时间段起点/终点(组内时间段作用域);离镜头切点(走带条上的白色竖线)0.3 秒内自动吸附到切点,按住 ⌥/Alt 点击不吸附": "Jadikan waktu saat ini sebagai awal/akhir rentang (cakupan rentang dalam grup). Dalam 0,3 dtk dari titik potong shot (garis putih di bilah transport) akan menempel ke titik potong; tahan ⌥/Alt saat klik agar tidak menempel",
+"已吸附到镜头切点 {t}": "Menempel ke titik potong shot {t}",
 "标记时间段": "Tandai rentang",
 "把 A 画面当前帧存为参考帧(供参考帧匹配/重打光/重绘)": "Simpan frame saat ini dari A sebagai frame referensi (untuk pencocokan referensi / relight / repaint)",
 "取参考帧": "Ambil frame referensi",

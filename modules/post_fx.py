@@ -121,6 +121,39 @@ def extract_frame(src: Path, t: float, dst: Path) -> Path:
     return dst
 
 
+_CUTS_CACHE: dict[tuple[str, int, int], list[float]] = {}
+
+
+def detect_cuts(src: Path, threshold: float = 8.0, min_gap: float = 0.25) -> list[float]:
+    """组视频内的镜头切点(秒,= 新镜第一帧的 pts,按帧对齐):ffmpeg scdet 在 320 宽缩略流上检测,
+    min_gap 内的连击只留得分最高者(运动/闪光常在真切点旁多报一帧)。按 (路径, mtime, size) 进程内缓存。
+    供后期页「标记时间段」吸附到镜头边界:起点吸到切点 = 含新镜首帧,终点吸到切点 = 止于上一镜末帧(删段 trim 为左闭右开)。"""
+    require_tools("ffmpeg", "ffprobe")
+    st = src.stat()
+    key = (str(src), int(st.st_mtime_ns), st.st_size)
+    if key in _CUTS_CACHE:
+        return _CUTS_CACHE[key]
+    fps = probe(src)["fps"] or 24.0
+    p = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(src), "-an",
+                        "-vf", f"scale=320:-2,scdet=threshold={threshold:g}:sc_pass=1", "-f", "null", "-"],
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=600)
+    if p.returncode != 0:
+        raise FxError(f"切点检测失败:{(p.stderr or b'').decode('utf-8', 'replace')[-800:]}")
+    hits = [(float(t), float(s)) for s, t in
+            re.findall(r"lavfi\.scd\.score: ([\d.]+), lavfi\.scd\.time: ([\d.]+)", p.stderr.decode("utf-8", "replace"))]
+    picked: list[tuple[float, float]] = []
+    for t, s in sorted(hits):
+        if picked and t - picked[-1][0] < min_gap:
+            if s > picked[-1][1]:
+                picked[-1] = (t, s)
+            continue
+        picked.append((t, s))
+    step = 1.0 / fps
+    out = [round(round(t / step) * step, 4) for t, _ in picked if t > step / 2]
+    _CUTS_CACHE[key] = out
+    return out
+
+
 def _esc_path(p: str) -> str:
     return str(p).replace("\\", "/").replace("'", r"\'").replace(":", r"\:")
 

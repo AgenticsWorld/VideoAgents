@@ -2577,6 +2577,8 @@ window.I18N_DICT = {
 "在画面上拖一个矩形,作为遮标/局部重绘/特效范围的蒙版": "Arrastra un rectángulo sobre la imagen como máscara para quitar logos / repintado local / rango de VFX",
 "画蒙版": "Dibujar máscara",
 "把当前时刻设为时间段起点/终点(组内时间段作用域)": "Fijar el instante actual como inicio/fin del tramo (ámbito de tramo dentro del grupo)",
+"把当前时刻设为时间段起点/终点(组内时间段作用域);离镜头切点(走带条上的白色竖线)0.3 秒内自动吸附到切点,按住 ⌥/Alt 点击不吸附": "Fijar el instante actual como inicio/fin del tramo (ámbito de tramo dentro del grupo). A menos de 0,3 s de un corte de plano (marca blanca en la barra) se ajusta al corte; mantén ⌥/Alt al hacer clic para no ajustar",
+"已吸附到镜头切点 {t}": "Ajustado al corte de plano {t}",
 "标记时间段": "Marcar tramo",
 "把 A 画面当前帧存为参考帧(供参考帧匹配/重打光/重绘)": "Guardar el fotograma actual de A como referencia (para igualar referencia / reiluminar / repintar)",
 "取参考帧": "Capturar referencia",

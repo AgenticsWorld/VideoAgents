@@ -2577,6 +2577,8 @@ window.I18N_DICT = {
 "在画面上拖一个矩形,作为遮标/局部重绘/特效范围的蒙版": "Tracez un rectangle sur l’image comme masque pour la suppression de logo / la retouche locale / la zone VFX",
 "画蒙版": "Dessiner un masque",
 "把当前时刻设为时间段起点/终点(组内时间段作用域)": "Définir l’instant courant comme début/fin de plage (portée de plage dans le groupe)",
+"把当前时刻设为时间段起点/终点(组内时间段作用域);离镜头切点(走带条上的白色竖线)0.3 秒内自动吸附到切点,按住 ⌥/Alt 点击不吸附": "Définir l’instant courant comme début/fin de plage (portée de plage dans le groupe). À moins de 0,3 s d’une coupe de plan (trait blanc sur la barre), le point s’aimante sur la coupe ; maintenez ⌥/Alt en cliquant pour ne pas aimanter",
+"已吸附到镜头切点 {t}": "Aimanté sur la coupe {t}",
 "标记时间段": "Marquer la plage",
 "把 A 画面当前帧存为参考帧(供参考帧匹配/重打光/重绘)": "Enregistrer l’image courante de A comme image de référence (pour l’appariement / le rééclairage / la retouche)",
 "取参考帧": "Capturer la référence",

@@ -385,6 +385,12 @@ async def post_import_upload(project: str, ep: str, request: Request, group_id: 
     return _artifact_urls(await core.api_post_import_upload(project, ep, group_id, data, filename), project)
 
 
+@api.get("/projects/{project}/post/{ep}/cuts", tags=["artifacts"])
+async def post_cuts(project: str, ep: str, group_id: str = "", v: int = 0) -> dict[str, Any]:
+    """某组某版本的镜头切点(秒);后期页「标记时间段」据此吸附到镜头边界。"""
+    return await core.api_post_cuts(project, ep, group_id, v)
+
+
 @api.get("/projects/{project}/post/{ep}/insert-probe", tags=["artifacts"])
 async def post_insert_probe(project: str, ep: str, group_id: str = "", base_v: int = 0, ins_v: int = 0) -> dict[str, Any]:
     """分镜剪辑·插段预检:两个版本的分辨率 / 帧率 / 时长 + 宽高比是否不同 + 各填充方式放大倍数。"""

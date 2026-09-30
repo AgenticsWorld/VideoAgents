@@ -2575,6 +2575,8 @@ window.I18N_DICT = {
 "在画面上拖一个矩形,作为遮标/局部重绘/特效范围的蒙版": "Ein Rechteck auf dem Bild aufziehen – als Maske für Logo-Entfernung / lokales Neuzeichnen / VFX-Bereich",
 "画蒙版": "Maske zeichnen",
 "把当前时刻设为时间段起点/终点(组内时间段作用域)": "Aktuelle Zeit als Anfang/Ende des Abschnitts setzen (Abschnittsbereich innerhalb der Gruppe)",
+"把当前时刻设为时间段起点/终点(组内时间段作用域);离镜头切点(走带条上的白色竖线)0.3 秒内自动吸附到切点,按住 ⌥/Alt 点击不吸附": "Aktuelle Zeit als Anfang/Ende des Abschnitts setzen (Abschnittsbereich innerhalb der Gruppe). Innerhalb von 0,3 s an einem Schnitt (weißer Strich auf der Leiste) wird am Schnitt eingerastet; ⌥/Alt gedrückt halten, um das Einrasten zu umgehen",
+"已吸附到镜头切点 {t}": "Am Schnitt eingerastet {t}",
 "标记时间段": "Abschnitt markieren",
 "把 A 画面当前帧存为参考帧(供参考帧匹配/重打光/重绘)": "Aktuelles Bild von A als Referenzframe speichern (für Referenzabgleich / Relighting / Neuzeichnen)",
 "取参考帧": "Referenzframe holen",

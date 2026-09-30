@@ -2575,6 +2575,8 @@ window.I18N_DICT = {
 "在画面上拖一个矩形,作为遮标/局部重绘/特效范围的蒙版": "Kéo một hình chữ nhật trên hình làm mặt nạ cho xóa logo / vẽ lại cục bộ / phạm vi VFX",
 "画蒙版": "Vẽ mặt nạ",
 "把当前时刻设为时间段起点/终点(组内时间段作用域)": "Đặt thời điểm hiện tại làm điểm đầu/cuối của đoạn (phạm vi đoạn trong nhóm)",
+"把当前时刻设为时间段起点/终点(组内时间段作用域);离镜头切点(走带条上的白色竖线)0.3 秒内自动吸附到切点,按住 ⌥/Alt 点击不吸附": "Đặt thời điểm hiện tại làm điểm đầu/cuối của đoạn (phạm vi đoạn trong nhóm); trong vòng 0,3 giây quanh điểm cắt cảnh (vạch trắng trên thanh phát) sẽ tự hút vào điểm cắt, giữ ⌥/Alt khi bấm để không hút",
+"已吸附到镜头切点 {t}": "Đã hút vào điểm cắt cảnh {t}",
 "标记时间段": "Đánh dấu đoạn",
 "把 A 画面当前帧存为参考帧(供参考帧匹配/重打光/重绘)": "Lưu khung hình hiện tại của A làm khung tham chiếu (cho khớp tham chiếu / chiếu sáng lại / vẽ lại)",
 "取参考帧": "Lấy khung tham chiếu",

@@ -11118,6 +11118,23 @@ async def api_post_import_upload(project: str, ep: str, gid: str, data: bytes, f
     return await asyncio.to_thread(_do)
 
 
+async def api_post_cuts(project: str, ep: str, gid: str, v: int):
+    """某组某版本的镜头切点(秒),供「标记时间段」吸附到镜头边界。"""
+    def _do():
+        from modules import post_fx
+        pp, base, ep2, plan = _post_load(project, ep)
+        g = _post_group_guard(gid)
+        f = pp.version_file(base, ep2, g, int(v), plan)
+        if not f:
+            raise ServiceError(404, f"{g} v{v} 没有视频文件")
+        try:
+            cuts = post_fx.detect_cuts(f)
+        except Exception as e:  # noqa: BLE001
+            raise ServiceError(500, str(e)[-300:]) from None
+        return {"ok": True, "group_id": g, "v": int(v), "cuts": cuts, "fps": round(post_fx.probe(f)["fps"] or 0, 3)}
+    return await asyncio.to_thread(_do)
+
+
 async def api_post_insert_probe(project: str, ep: str, gid: str, base_v: int, ins_v: int):
     """插段预检:基准 / 插入源两个版本的分辨率、帧率、时长,以及宽高比是否不同、各填充方式下的放大倍数(生成前提示用)。"""
     def _do():

@@ -2680,6 +2680,8 @@ window.I18N_DICT = {
 "在画面上拖一个矩形,作为遮标/局部重绘/特效范围的蒙版": "Drag a rectangle on the picture as a mask for logo removal / local repaint / VFX range",
 "画蒙版": "Draw mask",
 "把当前时刻设为时间段起点/终点(组内时间段作用域)": "Set the current time as the range start/end (in-group range scope)",
+"把当前时刻设为时间段起点/终点(组内时间段作用域);离镜头切点(走带条上的白色竖线)0.3 秒内自动吸附到切点,按住 ⌥/Alt 点击不吸附": "Set the current time as the range start/end (in-group range scope). Within 0.3 s of a shot cut (white tick on the transport bar) it snaps to the cut; hold ⌥/Alt while clicking to skip snapping",
+"已吸附到镜头切点 {t}": "Snapped to shot cut {t}",
 "标记时间段": "Mark range",
 "把 A 画面当前帧存为参考帧(供参考帧匹配/重打光/重绘)": "Save the current frame of picture A as a reference frame (for reference matching / relighting / repaint)",
 "取参考帧": "Grab reference frame",
