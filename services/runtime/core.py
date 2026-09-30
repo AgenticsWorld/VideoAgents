@@ -5528,6 +5528,9 @@ def video_provider_options(cfg: dict) -> list[dict]:
                 "default_model": str((v.get("agentics") or {}).get("profile_code") or "") or (arows[0]["id"] if arows else ""),
                 "models": arows})
     for pid, rows in VIDEO_MODEL_CATALOG.items():
+        if pid == "comfyui":
+            # 目录里的 comfyui 条目只供直播页选模型;集级/NSFW 下拉的 ComfyUI 行在下面按运行方式单独追加
+            continue
         pc = v.get(pid) or {}
         dm = str(pc.get("custom_model") or pc.get("model") or "") or (rows[0][0] if rows else "")
         out.append({"id": pid, "configured": video_provider_configured(cfg, pid), "default_model": dm,
