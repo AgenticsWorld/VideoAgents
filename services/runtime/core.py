@@ -985,7 +985,7 @@ DEFAULT_GENCONFIG = {
     #   narration 系列机检跳过(报 skipped: narration off;WORKFLOW.md §7D/§8B)
     # spatial_blocking=人物精确空间位置/白模(默认关;2026-09-16 起存量项目缺键=关,此前缺键回退=开)——2026-09-07 起含义=「用白模摄影机视角视频给视频生成定位人物」:
     #   开=场景布局包流程(每场景俯视空间布局图+layout.json;九宫格 2026-09-09 退役,分镜组登记人物起点/动线/终点
-    #   blocking_map)+ 白模链(p4-scene-model / p6-whitebox),导出的 camera.mp4(2026-09-08 起仅摄影机视角,不出俯视 top.mp4)自动接成组视频生成的
+    #   blocking_map)+ 白模链(p6-scene-model / p6-whitebox),导出的 camera.mp4(2026-09-08 起仅摄影机视角,不出俯视 top.mp4)自动接成组视频生成的
     #   参考视频(video_refs + Whitebox reference/legend 固定段,code/sync_whitebox_refs.py);白模签字 H3W 后导出视频、再出分镜背景图
     #   (code/render_shot_plates.py → 组 refs,机检 shot_plate_bound);俯视图只供预览不进 refs,prompt 逐字注入 route_en
     #   (机检 scene_layout_pack_ok/blocking_map_present/layout_map_bound/whitebox_ref_bound/shot_plate_bound);关=沿用单张场景概念图流程
@@ -3115,14 +3115,14 @@ def build_role_prompt(agent_id: str, project: str,
     scene_plates_mode = out.get("scene_plates") if out.get("scene_plates") in SCENE_PLATES_MODES else "auto"
     plate_mode = out.get("plate_mode") if out.get("plate_mode") in PLATE_MODES else "grid"
     spatial_line = (
-        "**开启 —— 用白模摄影机视角视频给视频生成定位人物(2026-09-07 起该开关的含义),配套场景布局包 + 组级人物动线数据流程**:Phase 4 environment-concept 每场景出俯视空间布局图 "
+        "**开启 —— 用白模摄影机视角视频给视频生成定位人物(2026-09-07 起该开关的含义),配套场景布局包 + 组级人物动线数据流程**:Phase 6 每集开头 environment-concept 为本集用到且库里还没有的场景出俯视空间布局图(p6-env-concept,2026-09-30 起不再在 Phase 4 全量出) "
         "`layout_top.png` + `layout.json`(机检 scene_layout_pack_ok,§6A 按此判缺口;**2026-09-09 起九宫格 grid_9views.png 退役:不再生成、不进视频参考图**);"
         "Phase 6 storyboard 每组写 `scene_refs`+`blocking_map`(逐角色起点/动线/终点引地标 + `route_en`)、每镜 `view_tile`,"
         "shot-planning 继承(每角色 `label` 收口为短规范名、全集同角色同词,机检 label_ok)并跑宿主 CLI `code/blocking_map_check.py` 机检"
         "(blocking_map_present;**2026-09-07 起不再渲染 `directing/epNN/blocking_maps/grpNNN.png` 动线标注图**——人物在场景中的空间位置与动线由 3D 白模参考视频承担,"
         "禁止自绘动线图或复制/改写宿主脚本),blocking 每镜站位落在组级动线上(blocking_on_map,站位片段=场景地标关系 + 屏侧方位 + 朝向);Phase 7 prompt refs **不挂**俯视图/九宫格(2026-09-09:俯视图只供分镜预览页与 storyboard/shot_list `scene_refs` 查看,不进视频参考图;场景空间由白模摄影机视频 + 分镜背景图承担)、"
         "逐字注入 route_en、主体定义句用 blocking_map `label`(机检 layout_map_bound,"
-        "`code/layout_map_bound_check.py`);**白模链同开(workflow.yaml whitebox_requested = 本开关)**:Phase 4 每场景 scene-modeling 出 `bible/scenes/<sid>/whitebox.json`,Phase 6 whitebox-staging 写 `whitebox_plans/` 并用 `code/render_whitebox.py --compile-only` 只编译落盘供预览页审看(不导出视频),**用户在闸门 g6w「H3W-白模确认」签字后**由 07-directing/whitebox-staging 接导出工单(p6-whitebox-export)用 `code/render_whitebox.py` 导出 `assets/whitebox/<ep>/<grp>/camera.mp4`(仅摄影机视角),导出完成后 p6-shot-plates(08-video-gen/shot-plates)跑 `code/render_shot_plates.py` 生成分镜背景图(按机位指纹入库复用、运镜分档出镜首/镜尾、长边 1920,自动 `code/sync_shot_plates.py --write` 接进组 refs,机检 shot_plate_bound,2026-09-09),"
+        "`code/layout_map_bound_check.py`);**白模链同开(workflow.yaml whitebox_requested = 本开关)**:Phase 6 每集开头为本集用到且尚未建模的场景 scene-modeling(p6-scene-model)出 `bible/scenes/<sid>/whitebox.json`,Phase 6 whitebox-staging 写 `whitebox_plans/` 并用 `code/render_whitebox.py --compile-only` 只编译落盘供预览页审看(不导出视频),**用户在闸门 g6w「H3W-白模确认」签字后**由 07-directing/whitebox-staging 接导出工单(p6-whitebox-export)用 `code/render_whitebox.py` 导出 `assets/whitebox/<ep>/<grp>/camera.mp4`(仅摄影机视角),导出完成后 p6-shot-plates(08-video-gen/shot-plates)跑 `code/render_shot_plates.py` 生成分镜背景图(按机位指纹入库复用、运镜分档出镜首/镜尾、长边 1920,自动 `code/sync_shot_plates.py --write` 接进组 refs,机检 shot_plate_bound,2026-09-09),"
         "导出即自动接成该组视频生成的参考视频(`code/sync_whitebox_refs.py --write`:组 prompt `video_refs`=camera.mp4 + `Shot 1:` 前固定段 `Whitebox reference:`(视频作用)/`Whitebox legend:`(颜色↔人物、眼睛鼻尖=朝向)+ Global constraints 禁白模外观句;"
         "**白模人物参考图规约(2026-09-09)**:组 refs 只准挂在本组白模摄影机视频里实际出现的人物/生物的参考图(宿主 appearing_cast 判定:presence/关键帧 visible/visible_actor_ids/画幅几何),镜头外在场、已离场、缺席/远程人物不挂图不绑定——sync_scene_cast 只为出现者补图,sync_whitebox_refs --write 把多余人物图移出并重排 [Image N],机检 whitebox_cast_ref/whitebox_ref_bound 按违规报,正文仍引用被移除图时须先改正文;"
         "prompt 工位写完必跑两个 sync 的 `--write`(sync_whitebox_refs / sync_shot_plates),机检 whitebox_ref_bound / shot_plate_bound;video-generation 按 video_refs 顺序传 `--ref-video`,方舟/MiniMax 参考视频须公网 URL——「设置 → 文件托管」未配置即报错),video-generation 开跑前复核——以上 SOUL.md/WORKFLOW.md 标注 2026-08-19 / 2026-09-07 的条款全部生效。"
@@ -3134,9 +3134,9 @@ def build_role_prompt(agent_id: str, project: str,
         "拆成 9 张背景图入库,每镜按白模机位自动从九格里选最合适的一格(日志逐镜打印选格依据);宫格整图只作台账不进视频 refs,Agent 不得手工拆图、不得自绘宫格、不得用退役的 grid_9views.png 代替;"
         "layout.json 缺 views(tile 1..9)时脚本报 Grid9LayoutError,先派 environment-concept 补布局包"
         if spatial_on else
-        "**关闭(默认)—— 走「场景图(正向/反向)」流程(A 方案,docs/scene_plates.md,2026-09-17),不建白模、不接参考视频**(p4-scene-model / p6-whitebox / p6-whitebox-export / p6-shot-plates 不派发,组 prompt 不写 video_refs / Whitebox reference 段,whitebox_ref_bound / shot_plate_bound 报 skipped):"
+        "**关闭(默认)—— 走「场景图(正向/反向)」流程(A 方案,docs/scene_plates.md,2026-09-17),不建白模、不接参考视频**(p6-scene-model / p6-whitebox / p6-whitebox-export / p6-shot-plates 不派发,组 prompt 不写 video_refs / Whitebox reference 段,whitebox_ref_bound / shot_plate_bound 报 skipped):"
         f"本项目「场景图」设置 = **{scene_plates_mode}**(auto=正向必出、反向按分镜 plate_view 按需;single=只出正向;pair=每场景正反两张;场景级可在场景预览页覆盖)。"
-        "Phase 4 environment-concept 每场景出**正向场景图** `main_01.png`(站在入口往内看的主视角,整间主体陈设一次入画,无人)并登记 `assets/concepts/scenes/<sid>/scene_plates.json`"
+        "Phase 6 每集开头 environment-concept(p6-env-concept)为本集用到且库里还没有的场景出**正向场景图** `main_01.png`(站在入口往内看的主视角,整间主体陈设一次入画,无人)并登记 `assets/concepts/scenes/<sid>/scene_plates.json`"
         "(front 的站位 standing_en / 看向 looking_en / 画内清单 in_frame_en / 身后不入画 behind_en;pair 模式同时用宿主 `code/render_scene_plates.py --scene <sid>` 出反向图);不出 layout_top/layout.json、九宫格;"
         "storyboard/shot-planning 每镜写 `plate_view: front|reverse`(本镜机位看的是正向图那一面还是回望入口那一面;语义判定,不写坐标),不写 scene_refs/blocking_map/view_tile、不跑 blocking_map_check.py;"
         "blocking 不受 blocking_on_map 约束(space_fragment_en 地标词按场景空间描述自拟);"

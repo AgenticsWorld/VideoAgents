@@ -3,16 +3,17 @@
 # 约定:
 #   for_each: 声明扇出维度(episode=每集一个任务实例, shot=每镜, character=每角色, scene=每场景, platform=每平台,
 #             creature=每生物——实例来自 bible/creatures/index.json creatures[](CRE-*,登记为空即零实例,2026-08-26),
-#             chapter_batch=每章节批——p0 解析扇出,批清单来自 story/chapter_manifest.json)
+#             chapter_batch=每章节批——p0 解析扇出,批清单来自 story/chapter_manifest.json,
+#             episode_scene / episode_creature=本集用到且概念图库里还没有的场景 / 生物——p6 按集出图扇出,已出过的跨集复用不再实例化,2026-09-30)
 #   validation.auto      机器校验(schema/指标),不过直接退回
 #   validation.rubric    evaluation Agent 的评分表,阈值默认 80
 #   validation.qa        专项 QA Agent 会签
 #   gate: 闸门任务,全部依赖通过才放行;human: true 表示需用户签字
 #   scene_plates_requested: = NOT whitebox_requested(白模关闭,2026-09-17)——白模关闭项目的场景一致性走「场景图(正向/反向)」A 方案(docs/scene_plates.md):
-#     p4 environment-concept 出正向图 main_01.png 并登记 scene_plates.json;分镜每镜写 plate_view;p6-scene-plates 按项目 output.scene_plates(auto|single|pair,场景级可覆盖)
+#     p6-env-concept(每集开头,本集用到的场景;2026-09-30 前在 p4)出正向图 main_01.png 并登记 scene_plates.json;分镜每镜写 plate_view;p6-scene-plates 按项目 output.scene_plates(auto|single|pair,场景级可覆盖)
 #     以正向图为母版补反向图 reverse_01.png(code/render_scene_plates.py);prompt 由 code/sync_scene_plates.py --write 挂图并逐镜点名(机检 scene_plate_bound)。白模开启时该节点不实例化、机检报 skipped
 #   whitebox_requested: = 项目输出设置 output.spatial_blocking(「白模/人物精确空间位置」,默认关;2026-09-16 起未配置过的存量项目也视为关)——2026-09-07 起该开关的含义即
-#     「用白模摄影机视角视频给视频生成定位人物」:开启时实例化 p4-scene-model / p6-whitebox / g6w / p6-whitebox-export / p6-shot-plates,
+#     「用白模摄影机视角视频给视频生成定位人物」:开启时实例化 p6-scene-model / p6-whitebox / g6w / p6-whitebox-export / p6-shot-plates,
 #     白模视频自动接成组视频生成的参考视频,分镜背景图自动接成组参考图;
 #     2026-09-09 顺序:p6-whitebox 只编译(--compile-only)供预览页审看 → 用户签字 g6w「H3W-白模确认」→ p6-whitebox-export 导出 camera.mp4(2026-09-10 起同派 whitebox-staging,原 whitebox-export 工位已并入)
 #     → p6-shot-plates 生成分镜背景图(code/render_shot_plates.py)→ g6「H3A-分镜确认」;
@@ -172,25 +173,14 @@ phases:
           # 分龄/异体时期无基准 sheet_<tag>.png 的套装记 blocked_on 回派 character-concept,不拿现有 sheet 硬当锚
           outputs: ["assets/concepts/characters/{id}/costume_sheets.json"],
           validation: { auto: [costume_sheet_coverage, costume_visual_en_in_prompt, costume_sheet_identity_ref], qa: [11-qa/visual-qa, 11-qa/character-consistency-qa] } }
-      - { id: p4-env-concept, agent: 06-art/environment-concept, for_each: scene, depends_on: [p4-style],
-          # 场景布局包(2026-08-19;2026-09-09 改版):俯视空间布局图 layout_top.png + layout.json(地标坐标/机位语义),替代单张主视角概念图;
-          # 九宫格 grid_9views.png 自 2026-09-09 退役——不再生成、不进视频参考图(场景多角度参考由分镜背景图 p6-shot-plates 承担)
-          # 受项目输出设置 output.spatial_blocking(白模,默认关)控制:关闭时走「场景图(正向/反向)」流程(2026-09-17):只出正向图 main_01.png + 登记 scene_plates.json(pair 模式同时出反向图),不出布局包;scene_layout_pack_ok/blocking_map_present/blocking_on_map/layout_map_bound/shot_plate_bound 五项机检脚本自动 skipped
-          outputs: ["assets/concepts/scenes/{id}/"],
-          validation: { auto: [scene_layout_pack_ok], qa: [11-qa/visual-qa] } }   # code/blocking_map_check.py --scene <id>
-      - { id: p4-scene-model, agent: 05-scenes/scene-modeling, for_each: scene,
-          condition: whitebox_requested, depends_on: [p4-env-concept],
-          outputs: ["bible/scenes/{id}/whitebox.json"],
-          validation: { qa: [11-qa/visual-qa] } } # 已有分镜时，更新场景后逐相关集运行 render_whitebox.py --scene <id>；自动刷新引用本场景的两路 MP4。首次建模无分镜则交接 p6-whitebox。
+      # 2026-09-30 按集出图:场景 / 道具 / 生物三类在 Phase 4 只做设定(场景设定 = p3 environment/architecture/lighting,生物设定 = p3 creature/mount,
+      # 道具设定 = 本阶段 p4-prop 只写 bible/props.json 文字卡),**不出任何图**;出图挪到 Phase 6 每集开头,只出本集用到且库里还没有的
+      # (p6-env-concept / p6-scene-model / p6-prop-concept / p6-creature-concept)。原因:首集做完常改风格,全书一次出齐的场景/道具/生物图会整批作废。
+      # 角色人设图 / 服装 sheet 仍在本阶段出(H2 风格锁定靠它们看效果)。
       - { id: p4-prop, agent: 06-art/prop, depends_on: [p4-style], outputs: [bible/props.json],
-          # 剧情道具 scale 三字段(canonical_size/relative_anchor/prompt_token)+比例锚图 scale_ref(与无人参照物同框)
-          # 道具图无人物红线(2026-08-18):道具全部参考图不出现人物/身体局部,--ref 禁传角色/服装概念图(审核风险+信息稀释)
-          validation: { auto: [plot_props_coverage_100, prop_scale_defined, prop_image_no_person, no_unknown_placeholder] } }
-      - { id: p4-creature-concept, agent: 06-art/creature-concept, for_each: creature, depends_on: [p4-style],
-          # 生物/坐骑形象参考图(2026-08-26):整版三视图 sheet.png + 按 creature.json forms[] / mount.json endurance_state_log 的阶段变体 sheet_<stage>.png
-          # 坐骑图无骑手红线(同道具无人物红线):人-兽尺度靠 selection.json scale.prompt_token 文字锚;目录键用 CRE-*(index.json 权威),不用 MNT-*
-          outputs: ["assets/concepts/creatures/{id}/"],
-          validation: { auto: [creature_identifiers_match, creature_image_no_person, creature_stage_variants_ok], qa: [11-qa/visual-qa] } }
+          # 只写设定卡:剧情道具 scale 三字段(canonical_size/relative_anchor/prompt_token)、readable_face 三子字段等文字字段定值;
+          # 样式图 main_01.png / 比例锚图 scale_ref_01.png 本阶段不出,由 p6-prop-concept 按集出(2026-09-30)
+          validation: { auto: [plot_props_coverage_100, prop_scale_fields_defined, no_unknown_placeholder] } }
       - { id: p4-costume, agent: 06-art/costume, depends_on: [p4-style], outputs: [bible/costumes.json],
           validation: { auto: [no_unknown_placeholder] } }
       - { id: p4-color-script, agent: 06-art/color-script, depends_on: [p4-style, p5-episode-plan],
@@ -198,7 +188,7 @@ phases:
       - { id: p4-aspect, agent: 06-art/aspect-ratio, outputs: [bible/aspect_ratio.json],
           validation: { auto: [platform_spec_match] } }
       - { id: g4, gate: true, human: true, checkpoint: H2-美术风格锁定,
-          depends_on: [p4-char-concept, p4-costume-sheet, p4-env-concept, p4-prop, p4-creature-concept, p4-costume, p4-color-script, p4-aspect] }
+          depends_on: [p4-char-concept, p4-costume-sheet, p4-prop, p4-costume, p4-color-script, p4-aspect] }   # 场景/道具/生物概念图不在本闸门(2026-09-30 改按集出,见 p6-*-concept)
 
   - id: p5
     name: 剧本改编          # 与 p4 并行,均依赖 g3
@@ -230,9 +220,31 @@ phases:
     depends_on: [g4, g5]
     for_each: episode          # 整个 phase 按集实例化;首集先行(pilot 策略)
     tasks:
+      # ── 按集出图(2026-09-30):场景 / 道具 / 生物概念图只出「本集用到且库里还没有」的,已出过的跨集直接复用(不重出、不改)──
+      #   本集用到的实体:场景 = story/episodes/{ep}/script_breakdown.json scenes[].scene_id(缺则取 screenplay.md 场头 SCN-*);
+      #   道具 / 生物 = 定稿 shot_list(每镜 props / creatures[]、组 creatures_union),所以排在 p6-shots 之后。
+      #   库里已有 = assets/concepts/{scenes,props,creatures}/<id>/ 主目录已有该实体所需视图(判定口径同 §6A ①,candidates/ 不算);
+      #   本集零缺口 = 零实例:orchestrator 不实例化该节点,下游对它的依赖视同满足(同 creature 登记为空即零实例的惯例)。
+      - { id: p6-env-concept, agent: 06-art/environment-concept, for_each: episode_scene,   # 实例 = 本集场景 − 库里已有布局包/正向图的场景
+          outputs: ["assets/concepts/scenes/{id}/"],
+          # 产物形态同原 p4-env-concept:白模开启 → 布局包 layout_top.png + layout.json;关闭 → 正向图 main_01.png + scene_plates.json(pair 模式同出反向图)
+          validation: { auto: [scene_layout_pack_ok], qa: [11-qa/visual-qa] } }   # code/blocking_map_check.py --scene <id>(白模关闭时 skipped,改核 scene_plates_complete)
+      - { id: p6-scene-model, agent: 05-scenes/scene-modeling, for_each: episode_scene,
+          condition: whitebox_requested, depends_on: [p6-env-concept],   # 实例 = 本集场景 − 已有 bible/scenes/{id}/whitebox.json 的场景
+          outputs: ["bible/scenes/{id}/whitebox.json"],
+          validation: { qa: [11-qa/visual-qa] } }
+      - { id: p6-prop-concept, agent: 06-art/prop, depends_on: [p6-shots],   # 本集 shot_list 出场剧情道具 − 库里已有样式图+比例锚图的道具
+          outputs: ["assets/concepts/props/{id}/", bible/props.json],   # 按 props.json 设定卡出样式图 main_01.png + 比例锚图 scale_ref_01.png,回写图路径;设定卡缺条目的先补卡
+          # 道具图无人物红线(2026-08-18):道具全部参考图不出现人物/身体局部,--ref 禁传角色/服装概念图
+          validation: { auto: [prop_scale_defined, prop_image_no_person, prop_readable_face_defined], qa: [11-qa/visual-qa] } }
+      - { id: p6-creature-concept, agent: 06-art/creature-concept, for_each: episode_creature, depends_on: [p6-shots],
+          # 实例 = 本集 shot_list creatures_union 的 CRE-* − 库里已有 sheet.png 且本集所需阶段变体 sheet_<stage>.png 也在的生物
+          # 坐骑图无骑手红线;目录键用 CRE-*;只补本集用到的阶段变体,其余阶段等用到的集再出
+          outputs: ["assets/concepts/creatures/{id}/"],
+          validation: { auto: [creature_identifiers_match, creature_image_no_person, creature_stage_variants_ok], qa: [11-qa/visual-qa] } }
       - { id: p6-plan, agent: 07-directing/director, outputs: ["directing/{ep}/directing_plan.md"],
           validation: { rubric: creative_v1, qa: [06-art/art-director] } }
-      - { id: p6-storyboard, agent: 07-directing/storyboard, depends_on: [p6-plan],
+      - { id: p6-storyboard, agent: 07-directing/storyboard, depends_on: [p6-plan, p6-env-concept],   # 白模开启时 blocking_map 引用本集场景 layout.json 地标,须等本集场景布局包出齐
           outputs: ["directing/{ep}/storyboard.json"],   # 含 groups_draft(生成组草案)、每组 scene_refs/blocking_map(人物起点/动线/终点标注,引用场景 layout.json 地标)、每组 costumes(角色→COS-id,2026-08-26)、每镜 view_tile
           validation: { auto: [scene_coverage_100, every_shot_in_group, blocking_map_present, creature_refs_valid,
                                costume_refs_valid, transition_ok], rubric: visual_plan_v1 } }   # transition_ok:每组按导演转场清单登记 transition_in(受控枚举)/narrative_block(闪回等块成对),WORKFLOW.md §9C(2026-08-28)   # costume_refs_valid:每组每个出场角色有 costumes[CHAR]=合法 COS-id(属该角色);换装点不得落在组内(2026-08-26)   # blocking_map_present:code/blocking_map_check.py --source storyboard --strict(2026-09-07 起只机检、不再渲染动线草图)
@@ -278,7 +290,7 @@ phases:
                                transition_anchor_consistent],   # group_transitions 镜像 shot_list transition_in;可渲染转场边界 anchor=none,match_cut 核构图对位(§9C,2026-08-28)
                         qa: [11-qa/timeline-qa] } }
       - { id: p6-whitebox, agent: 07-directing/whitebox-staging, condition: whitebox_requested,
-          depends_on: [p4-scene-model, p6-shots, p6-camera, p6-blocking, p6-continuity],
+          depends_on: [p6-scene-model, p6-shots, p6-camera, p6-blocking, p6-continuity],
           outputs: ["directing/{ep}/whitebox_plans/", "directing/{ep}/whitebox/episode.json"],
           validation: { qa: [11-qa/visual-qa] } } # 2026-09-09:只写调度计划并 render_whitebox.py --compile-only 编译落盘 episode.json 供分镜预览页 3D 审看,不导出视频;禁止只交付 --check-only。
       - { id: g6w, gate: true, human: true, checkpoint: H3W-白模确认, condition: whitebox_requested, depends_on: [p6-whitebox] }   # 用户在「分镜设定」预览页逐组审看 3D 白模(机位/走位/朝向/穿模)后签字;签字后才导出 camera.mp4、再生成分镜背景图(有出图费用);签字卡自动带白模待决项摘要,阻断级未清宿主拒签、建议级签字即接受默认取舍(docs/whitebox.md「待决项与用户裁决」)
@@ -292,7 +304,7 @@ phases:
       - { id: p6-scene-plates, agent: 06-art/environment-concept, condition: scene_plates_requested, depends_on: [p6-shots, p6-camera],
           outputs: ["assets/concepts/scenes/{id}/scene_plates.json"],   # 场景图(正向/反向,2026-09-17,白模关闭项目):分镜定稿后按 shot_list 每镜 plate_view 与项目/场景模式,用 code/render_scene_plates.py --ep epNN 以正向图为母版补出需要的反向图并自动 sync_scene_plates --write
           validation: { auto: [scene_plates_complete], qa: [11-qa/visual-qa] } }   # scene_plates_complete = render_scene_plates.py --status:每场景正向图在、需要反向图的场景反向图在(验收以此为准,不采信自述)
-      - { id: p6-concept-audit, agent: 06-art/art-director, depends_on: [p6-shots],
+      - { id: p6-concept-audit, agent: 06-art/art-director, depends_on: [p6-shots, p6-env-concept, p6-prop-concept, p6-creature-concept],   # 2026-09-30 起按集出图节点先出,本审计只兜底核对 + 补漏
           outputs: ["directing/{ep}/concept_coverage.json"],   # 每实体:所需视图/现货路径/缺口状态 covered|dispatched|filled(WORKFLOW.md §6A)
           validation: { auto: [concept_coverage_ok],           # 本集 shot_list 出场实体×所需视图 100% 有现货方可发起 H3A;未过不派本集任何 p7-*
                         qa: [11-qa/visual-qa, 11-qa/character-consistency-qa] } }   # 缺口回派 06-art/character-concept·costume-concept(本集各组 costumes_by_char 所指非默认服装的 sheet_<COS-id>.png)·environment-concept·prop·creature-concept 补齐,补出概念图过常规打分入库(与 Phase 4 同标准)

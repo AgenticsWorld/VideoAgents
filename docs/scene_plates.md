@@ -31,7 +31,7 @@ offer ep02 grp003/grp004 的俯视布局图被当成场景渲进成片（8 月�
 
 ## 流程位置（workflow.yaml）
 
-`p4-env-concept`（出正向图 + 登记；pair 模式同时出反向）→ `p6-shots`/`p6-camera`（每镜 plate_view）→ **`p6-scene-plates`**（`condition: scene_plates_requested` = 白模关闭；`06-art/environment-concept` 跑 `render_scene_plates.py --ep epNN`，机检 `scene_plates_complete` = `--status`）→ `g6` → `p7-prompt`（写完必跑 `sync_scene_plates.py --write`，机检 `scene_plate_bound`）→ video-generation 开跑前复核。
+`p6-env-concept`（每集开头，只为本集用到且库里还没有的场景出正向图 + 登记；pair 模式同时出反向；2026-09-30 前在 p4 全量出）→ `p6-shots`/`p6-camera`（每镜 plate_view）→ **`p6-scene-plates`**（`condition: scene_plates_requested` = 白模关闭；`06-art/environment-concept` 跑 `render_scene_plates.py --ep epNN`，机检 `scene_plates_complete` = `--status`）→ `g6` → `p7-prompt`（写完必跑 `sync_scene_plates.py --write`，机检 `scene_plate_bound`）→ video-generation 开跑前复核。
 
 ## 脚本
 

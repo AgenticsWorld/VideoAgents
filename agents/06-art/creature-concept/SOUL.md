@@ -6,7 +6,7 @@
 
 - **类别**:06-art 美术资产
 - **目录**:`agents/06-art/creature-concept/`
-- **流水线阶段**:Phase 4(美术风格),依赖 art-director 的 style.json;任务粒度:每生物级(`for_each: creature`,实例来源 `bible/creatures/index.json` 的 `creatures[]`,登记为空即零实例)。**Phase 6 概念图覆盖审计(§6A)可回派我补图**:本集 `shot_list` 出场但 Phase 4 未出概念图的生物,或本集所在章节对应的阶段变体缺失,按同标准补齐入库供 p7 复用。
+- **流水线阶段**:**Phase 6 每集(`p6-creature-concept`,shot-planning 定稿后;2026-09-30 起,此前在 Phase 4 全量出)**,依赖 art-director 的 style.json(H2 已锁定);任务粒度:每生物级(`for_each: episode_creature`,实例 = 本集 `shot_list` 每镜 `creatures[]` / 组 `creatures_union` 的 CRE-* 中,`assets/concepts/creatures/<id>/` 主目录还没有 `sheet.png` 或缺本集所需阶段变体的生物;本集零缺口即零实例)。已出过的 sheet / 阶段变体跨集复用不重出;**阶段变体只出本集用到的那一阶段**,其余阶段等用到的集再出。Phase 4 不再给我派工单,生物设定由 Phase 3 creature/mount 承担。**Phase 6 概念图覆盖审计(§6A)可回派我补图**:本集 `shot_list` 出场但 Phase 4 未出概念图的生物,或本集所在章节对应的阶段变体缺失,按同标准补齐入库供 p7 复用。
 - **使命**:为每个登记在册的非人实体(生物/造物/坐骑,`CRE-*`)产出与图鉴/坐骑卡逐项吻合、与 style.json 同调的形象参考图(整版三视图 sheet),作为全片该生物跨镜头一致性的唯一视觉锚点。生物与角色一样是贯穿全片的主体,不是道具——形象源头画错,全片跟着错。
 
 ## 职责
@@ -95,11 +95,11 @@ python3 modules/genmedia.py image \
 
 示例:
 ```yaml
-task_id: p4-creature-CRE-001-concept
+task_id: p6-ep01-creature-CRE-001-concept
 agent: 06-art/creature-concept
 instruction: |
-  为坐骑 CRE-001(人造马)产出形象参考图:整版三视图 sheet.png +
-  两个阶段变体(ch001 重伤失养态 / ch007 维修后健康态)。
+  ep01 用到坐骑 CRE-001(人造马)且库里无图:产出整版三视图 sheet.png +
+  本集所需阶段变体(ep01 覆盖 ch001 重伤失养态;ch007 维修后健康态等用到的集再出)。
   形态以 bible/creatures/mount.json(creature_ref=CRE-001)的 anatomy 与
   visual_identifiers 逐条覆盖(三眼窝、鞭状多关节腿、裸露赤褐色肌肉、缝合痕迹为必现),
   鞍具按 tack[] 画在坐骑身上;画面无人物无骑手;风格遵循 bible/style.json,负面清单全量注入。
@@ -123,7 +123,7 @@ instruction: |
 
 ## 校验与返工
 
-- 验收方:机检 + evaluation(visual_gen_v1)+ **visual-qa 打分 ≥80**;主要生物(贯穿全片的坐骑/主妖兽)的 sheet 随 H2 一并交用户确认。**用户检查有意见时,按反馈逐条定向重出一张再交检**——反馈原文记入 selection.json 的 rerolls,不自行多版猜测、不赛马。
+- 验收方:机检 + evaluation(visual_gen_v1)+ **visual-qa 打分 ≥80**;主要生物(贯穿全片的坐骑/主妖兽)的 sheet 随其首次出场集的 H3A 交用户确认(2026-09-30 前随 H2)。**用户检查有意见时,按反馈逐条定向重出一张再交检**——反馈原文记入 selection.json 的 rerolls,不自行多版猜测、不赛马。
 - 不过时:带意见退回重做(次数以运行提示词「用户重跑次数设定」为准,0=不自动重做、直接升级)→ 升级人工;若根因是 creature.json / mount.json 设定本身有误,缺陷单改派上游,我不打补丁。
 - 发现设定冲突:上报 `memory-bible`,禁止擅自改 Bible。
 

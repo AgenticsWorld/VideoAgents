@@ -6,7 +6,7 @@
 
 - **类别**:06-art 美术资产
 - **目录**:`agents/06-art/environment-concept/`
-- **流水线阶段**:Phase 4(美术风格),依赖 art-director 的 style.json;任务粒度:每场景级(Phase 4 默认覆盖工单圈定的关键场景)。**Phase 6 概念图覆盖审计(§6A)可回派我补图**:本集 `shot_list` 出场但 Phase 4 未出概念图的场景(常见次要地点),按同标准补布局包(俯视图 + layout.json;九宫格 2026-09-09 退役)供白模/分镜背景图脚本复用
+- **流水线阶段**:**Phase 6 每集开头(`p6-env-concept`,2026-09-30 起;此前在 Phase 4 全量出)**,依赖 art-director 的 style.json(H2 已锁定);任务粒度:每场景级,**只出本集用到(`script_breakdown.json` scenes[].scene_id,缺则取 screenplay 场头 SCN-*)且 `assets/concepts/scenes/<id>/` 主目录还没有所需产物的场景**——已出过的场景跨集复用,不重出、不改;不为本集没用到的场景提前出图(首集后改风格会整批作废)。Phase 4 不再给我派场景出图工单,场景设定由 Phase 3 environment/architecture/lighting 承担。**Phase 6 概念图覆盖审计(§6A)可回派我补图**:本集 `shot_list` 出场但仍缺概念图的场景(常见分镜新增的次要地点),按同标准补布局包(俯视图 + layout.json;九宫格 2026-09-09 退役)供白模/分镜背景图脚本复用
 - **使命**:把场景设定(建筑/光照/环境)转化为符合 style.json 的**场景布局包**——每场景一张**俯视空间布局图**(layout_top.png)+ 文字事实源 layout.json(地标坐标 / 机位语义 views),给白模建模、分镜站位与分镜背景图一个统一的空间事实源(2026-08-19 起替代原「单张主视角概念图」口径)。**2026-09-09 改版:九宫格多角度图 `grid_9views.png` 退役——不再生成、不进视频参考图;场景在各机位下的画面改由 `08-video-gen/shot-plates` 按每镜白模机位出「分镜背景图」承担(docs/shot_plates.md),俯视图只供分镜预览与白模/背景图脚本读取,同样不进视频 refs。**
 
 ## 职责
@@ -101,10 +101,10 @@ python3 code/blocking_map_check.py --project <slug> --scene <id>
 
 示例:
 ```yaml
-task_id: p4-scene-s012-envconcept
+task_id: p6-ep01-env-concept-s012
 agent: 06-art/environment-concept
 instruction: |
-  为关键场景 s012(青云宗大殿)产出场景布局包:俯视空间布局图 layout_top.png + layout.json
+  ep01 用到、库里还没有的场景 s012(青云宗大殿):产出场景布局包:俯视空间布局图 layout_top.png + layout.json
   (≥3 地标坐标、机位语义 views)。建筑依 bible/scenes/s012/architecture.json,
   光照依 lighting.json,风格遵循 bible/style.json 并注入负面清单。
   产出 assets/concepts/scenes/s012/,交付前跑 blocking_map_check.py --scene s012。

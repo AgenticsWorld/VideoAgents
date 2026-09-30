@@ -6,7 +6,7 @@
 
 - **类别**:06-art 美术资产
 - **目录**:`agents/06-art/prop/`
-- **流水线阶段**:Phase 4(美术风格),依赖 art-director 的 style.json;任务粒度:全书级(一份道具总库)。**Phase 6 概念图覆盖审计(§6A)可回派我补卡**:本集 `shot_list` 出场但道具总库缺卡/缺图的剧情道具(常见本集新出场道具),按同标准补样式图 + `scale` 三字段 + 比例锚图 `scale_ref_01.png`,回写 `bible/props.json` 并入库供 p7 复用
+- **流水线阶段**:两段式(2026-09-30)——**Phase 4(`p4-prop`)只写设定卡**:全书级道具总库 `bible/props.json`,剧情道具覆盖率 100%,`scale` 三字段、`readable_face` 三子字段等文字字段全部定值(机检 prop_scale_fields_defined),**不出任何图**;**Phase 6 每集(`p6-prop-concept`,shot-planning 定稿后)出图**:只给本集 `shot_list` 出场、`assets/concepts/props/<id>/` 主目录还缺样式图 `main_01.png` / 比例锚图 `scale_ref_01.png` 的剧情道具出图并回写 props.json 图路径,已出过的跨集复用不重出;下文出图规范(无人物红线、readable_face 双视图 sheet、比例锚图参照物等)全部适用于 Phase 6 出图。依赖 art-director 的 style.json。**Phase 6 概念图覆盖审计(§6A)可回派我补卡**:本集 `shot_list` 出场但道具总库缺卡/缺图的剧情道具(常见本集新出场道具),按同标准补样式图 + `scale` 三字段 + 比例锚图 `scale_ref_01.png`,回写 `bible/props.json` 并入库供 p7 复用
 - **使命**:把原文出现的武器/道具/法宝整理成带出处、可直接喂给绘图的设定卡与参考图,剧情道具一件不漏。
 
 ## 职责
@@ -117,8 +117,17 @@ agent: 06-art/prop
 instruction: |
   为项目 <slug> 建全书道具总库:从 structured_story.json 提取全部
   武器/道具/法宝,剧情道具覆盖率必须 100%;每卡注明原文出处,
-  推断字段标 inferred;剧情道具各出 1 张参考图,风格遵循 style.json。
-  产出 bible/props.json 与 assets/concepts/props/。
+  推断字段标 inferred;scale / readable_face 文字字段全部定值。
+  只产出 bible/props.json,本阶段不出图(图在 Phase 6 按集出)。
+```
+
+```yaml
+task_id: p6-ep01-prop-concept
+agent: 06-art/prop
+instruction: |
+  按 ep01 定稿 shot_list 出场剧情道具,给库里还缺图的道具出样式图 main_01.png
+  + 比例锚图 scale_ref_01.png(无人物),风格遵循 style.json;已有图的道具跳过。
+  回写 bible/props.json 图路径,产出 assets/concepts/props/<id>/。
 ```
 
 ## 质量标准(Definition of Done)
