@@ -115,7 +115,99 @@ def _task_of(category: str, path: str) -> str:
         return "image-to-image"
     if last.startswith(("multimodal-video", "multimodal-to-video")):
         return "reference-to-video"
+    # RH 自家 H3 插件流端点(minimax-h3-rh-enhanced/…、minimax-h3-oss/…)用缩写命名,
+    # 文档还可能挂在 audio-to-video 分类下
+    if last in ("ref2va", "r2va") or last.startswith(("ref2va-", "r2va-")):
+        return "reference-to-video"
+    if last in ("i2va", "fl2va") or last.startswith(("i2va-", "fl2va-")):
+        return "image-to-video"
+    if last in ("t2va",) or last.startswith("t2va-"):
+        return "text-to-video"
     return ""
+
+
+# 部分端点(RH 自家插件流/工作流封装,如 rhart-video/minimax-h3-*、rhart-image/f-2-*)的参数名是
+# 「节点号##字段」(84##value、204##image…),语义只写在 description 首行(prompt / imageUrl / 参考图1 /
+# 时长(秒)…)。_normalize 按字段名+描述把它们归一成标准参数名,多个同类槽位(参考图1..9)合成虚拟数组,
+# build_body 组完再按 keymap 展开回真实参数名。识别不了的(lora、输出格式、提示词增强模型…)保持文档默认。
+_SLOT_RE = re.compile(r"(\d+)")
+
+
+def _role(key: str, spec: dict) -> tuple[str, int] | None:
+    """「节点号##字段」参数 → (标准名, 槽位序号);标准名以 [] 结尾表示多槽位数组。"""
+    field = key.split("##", 1)[1].lower()
+    desc = str((spec or {}).get("description") or "").strip().split("\n")[0].strip()
+    d = desc.lower().replace(" ", "")
+    m = _SLOT_RE.search(desc)
+    n = int(m.group(1)) if m else 0
+    if field in ("image", "file", "video", "audio"):
+        if d in ("firstframeurl", "firstimageurl", "首帧"):
+            return "firstFrameUrl", 0
+        if d in ("lastframeurl", "lastimageurl", "尾帧"):
+            return "lastFrameUrl", 0
+        if field == "image":
+            if d == "imageurl":
+                return "imageUrl", 0
+            if re.match(r"^(imageurl|image)\d+$", d) or d.startswith("参考图") or d == "uploadimage":
+                return "imageUrls[]", n
+            return None
+        if re.match(r"^video\d+$", d) or re.match(r"^参考视频\d+$", d):
+            return "videoUrls[]", n
+        if field == "audio" and (re.match(r"^audio\d+$", d) or d.startswith("音色参考")):
+            return "audioUrls[]", n
+        return None   # 驱动口型音频、参考视频伴音等:不自动填
+    if field in ("positive_prompt",) or d in ("prompt", "positivepromptwords", "正向提示词"):
+        return "prompt", 0
+    if field == "negative_prompt" or "negative" in d:
+        return "negativePrompt", 0
+    if field == "aspect_ratio" or d.startswith("aspectratio") or "画面比例" in d:
+        return "aspectRatio", 0
+    if field == "megapixels" or d == "resolution" or "输出分辨率" in d:
+        return "resolution", 0
+    if d.startswith("duration") or d.startswith("时长"):
+        return "duration", 0
+    if d == "customwidth":
+        return "width", 0
+    if d in ("customhight", "customheight"):
+        return "height", 0
+    if d.startswith("thesizeofthegeneratedmedia"):
+        return "aspectRatio", 0   # 实为画幅选项(1:1/16:9/…/Custom),值是序号,标签在 x-option-metadata
+    return None
+
+
+def _normalize(schema: dict) -> tuple[dict, set, dict]:
+    """→ (标准名参数表, 标准名必填集, keymap{标准名: [真实参数名…]})。无「##」参数的端点原样返回。"""
+    props, req = schema["properties"], set(schema["required"])
+    if not any("##" in k for k in props):
+        return props, req, {}
+    out, keymap, required, slots = {}, {}, set(), {}
+    for k, spec in props.items():
+        role = _role(k, spec) if "##" in k else (k, 0)
+        if role is None:
+            out[k], keymap[k] = spec, [k]
+            if k in req:
+                required.add(k)
+            continue
+        name, n = role
+        if name.endswith("[]"):
+            slots.setdefault(name[:-2], []).append((n, k))
+            continue
+        if name in out:      # 同一语义出现两次:只填第一个,其余保持默认
+            out[k], keymap[k] = spec, [k]
+            if k in req:
+                required.add(k)
+            continue
+        out[name], keymap[name] = spec, [k]
+        if k in req:
+            required.add(name)
+    for name, items in slots.items():
+        if name in out:
+            continue
+        items.sort()
+        keys = [k for _, k in items]
+        out[name] = {"type": "array", "maxItems": len(keys)}
+        keymap[name] = keys
+    return out, required, keymap
 
 
 def _caps(props: dict) -> dict:
@@ -172,7 +264,8 @@ def _fetch_catalog(site: str) -> list[dict]:
             continue
         cat = m.group("cat")
         top = cat.split(" > ")[0].strip()
-        if top not in ("Standard Model API", "模型API"):
+        # 顶层分类名文档站会改(国内站 2026-09-30「模型API」→「标准模型API」):按关键词认
+        if "模型API" not in top.replace(" ", "") and "model api" not in top.lower():
             continue
         rows.append({"doc": m.group("doc"), "name": m.group("name").strip(),
                      "category": " > ".join(x.strip() for x in cat.split(" > ")[1:])})
@@ -191,7 +284,7 @@ def _fetch_catalog(site: str) -> list[dict]:
             return None
         kind = "image" if task in IMAGE_TASKS else "video"
         return {**row, "id": path, "task": task, "kind": kind, "schema": schema,
-                "caps": _caps(schema["properties"])}
+                "caps": _caps(_normalize(schema)[0])}
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=16) as ex:
         out = [r for r in ex.map(load, rows) if r]
@@ -217,18 +310,24 @@ def catalog(site: str, refresh: bool = False) -> list[dict]:
         except ValueError:
             cached = None
     if cached and not refresh and time.time() - float(cached.get("fetched_at") or 0) < CACHE_TTL:
-        return cached["models"]
+        return _with_caps(cached["models"])
     try:
         models = _fetch_catalog(site)
     except RuntimeError:
         if cached:
-            return cached["models"]
+            return _with_caps(cached["models"])
         raise
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     tmp = cache.with_suffix(".tmp")
     tmp.write_text(json.dumps({"fetched_at": time.time(), "models": models},
                               ensure_ascii=False), encoding="utf-8")
     tmp.replace(cache)
+    return models
+
+
+def _with_caps(models: list[dict]) -> list[dict]:
+    for m in models:
+        m["caps"] = _caps(_normalize(m["schema"])[0])
     return models
 
 
@@ -253,8 +352,7 @@ def find_entry(site: str, model_id: str) -> dict:
 def _need(entry: dict, first: bool, last: bool, refs: int, videos: int, audios: int) -> str:
     """该端点收不下本次输入时返回原因,收得下返回空串。"""
     c = entry["caps"]
-    props = entry["schema"]["properties"]
-    req = set(entry["schema"]["required"])
+    props, req, _ = _normalize(entry["schema"])
     if first and not (c.get("first") or c.get("image_single") or (c.get("images") and not refs)):
         return "不支持首帧图"
     if last and not c.get("last"):
@@ -321,7 +419,7 @@ def _num(v):
 
 
 def _ratio(s) -> float | None:
-    m = re.match(r"^\s*(\d+(?:\.\d+)?)\s*[:x*×]\s*(\d+(?:\.\d+)?)\s*$", str(s))
+    m = re.match(r"^\s*(\d+(?:\.\d+)?)\s*[:x*×]\s*(\d+(?:\.\d+)?)(?:\s*\(.*\))?\s*$", str(s))
     if not m or float(m.group(2)) == 0:
         return None
     return float(m.group(1)) / float(m.group(2))
@@ -454,8 +552,7 @@ def build_body(entry: dict, *, prompt: str, negative: str = "", image_urls=None,
                width: int = 0, height: int = 0, seed: int | None = None,
                gen_audio: bool | None = None) -> tuple[dict, list[str]]:
     """按端点参数表组请求体;返回 (body, notes)。notes = 未能生效的输入,供 stderr 如实记录。"""
-    props = entry["schema"]["properties"]
-    required = set(entry["schema"]["required"])
+    props, required, keymap = _normalize(entry["schema"])
     image_urls = list(image_urls or [])
     video_urls = list(video_urls or [])
     audio_urls = list(audio_urls or [])
@@ -523,8 +620,24 @@ def build_body(entry: dict, *, prompt: str, negative: str = "", image_urls=None,
             # 有宽高位时 resolution 会覆盖宽高(Seedream 文档口径):非必填就不填,按宽高出图
             if enum and not (wh_keys and k not in required):
                 val = _pick_resolution(enum, target_short, target_ratio)
+                if val is None:
+                    # 枚举值本身读不出档位(如 megapixels 0.346…):按 x-option-metadata 的 480p/768p 标签选
+                    labels = {str(o.get("description")): o.get("value")
+                              for o in (spec.get("x-option-metadata") or []) if isinstance(o, dict)}
+                    lab = _pick_resolution(list(labels), target_short, target_ratio) if labels else None
+                    val = labels.get(lab) if lab is not None else None
         elif k in ("aspectRatio", "ratio"):
-            if aspect and enum:
+            labels = {str(o.get("description")).strip(): o.get("value")
+                      for o in (spec.get("x-option-metadata") or []) if isinstance(o, dict)}
+            if enum and labels and not any(_ratio(v) for v in enum):
+                # 枚举值是序号(1..9),画幅写在选项标签里;给了宽高且有自定义宽高位时选 Custom
+                custom = next((v for lab, v in labels.items() if lab.lower() == "custom"), None)
+                if custom is not None and wh_keys and fit:
+                    val = custom
+                elif aspect:
+                    lab = _pick_ratio(list(labels), aspect, adaptive_ok=False)
+                    val = labels.get(lab) if lab is not None else None
+            elif aspect and enum:
                 # 首帧图生视频画幅随首帧图:能 adaptive 就 adaptive,免得裁切
                 val = _pick_ratio(enum, aspect, adaptive_ok=bool(first_url) and not image_urls)
             elif aspect:
@@ -597,6 +710,18 @@ def build_body(entry: dict, *, prompt: str, negative: str = "", image_urls=None,
         if not used[key]:
             raise RuntimeError(f"RunningHub 模型 {entry['id']} 没有可接{label}的参数,"
                                "请换模型或去掉该输入")
+    if keymap:
+        # 标准名 → 真实「节点号##字段」参数名;多槽位数组按序拆到各槽(参考图1..N)
+        real = {}
+        for k, v in body.items():
+            keys = keymap.get(k, [k])
+            if isinstance(v, list) and len(keys) > 1 or (isinstance(v, list) and props.get(k, {}).get("maxItems")
+                                                        and keys != [k]):
+                for rk, item in zip(keys, v):
+                    real[rk] = item
+            else:
+                real[keys[0]] = v
+        body = real
     return body, notes
 
 
