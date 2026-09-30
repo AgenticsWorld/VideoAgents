@@ -4347,8 +4347,8 @@ def _video_ark(cfg, prompt, first, last, duration, resolution, aspect, seed, out
         tid = task.get("id")
     except urllib.error.HTTPError:
         raise                     # 4xx/5xx 是明确失败(审核/参数/配额),不查重,照常抛出
-    except (urllib.error.URLError, TimeoutError, OSError) as e:
-        # 网络层异常:任务可能已在方舟建成,先查重再定失败,避免上层重试重复计费
+    except (_TransportError, urllib.error.URLError, TimeoutError, OSError) as e:
+        # 网络层异常(_request 包装为 _TransportError):任务可能已在方舟建成,先查重再定失败,避免上层重试重复计费
         print(f"[genmedia] 提交响应异常({e}),查任务列表核对是否已建成…",
               file=sys.stderr, flush=True)
         tid = _find_recent_ark_task(tasks_url, headers, submit_ts, duration,
