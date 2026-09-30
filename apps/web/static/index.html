@@ -2508,7 +2508,7 @@ $('#voice-dl').onclick=async()=>{
 /* ---------- NSFW 模式弹窗(设置菜单「高级」;开关 + 三类备用模型 + 兜底开关,即选即存 state.json#nsfw;
    服务端 core.nsfw_settings / genmedia.nsfw_settings 同读) ---------- */
 let NSFW=null;
-const NSFW_PROV_NAMES={volcengine:'火山引擎',byteplus:'BytePlus',fal:'Fal',minimax:'MiniMax',openrouter:'OpenRouter',comfyui:'ComfyUI',agentics:'Agentics'};
+const NSFW_PROV_NAMES={volcengine:'火山引擎',byteplus:'BytePlus',fal:'Fal',minimax:'MiniMax',rhapi:'RH',openrouter:'OpenRouter',comfyui:'ComfyUI',agentics:'Agentics'};
 function nsfwOpt(sel,rows,value,unsetLabel){   // rows: [{id,label,disabled,title}]
   sel.innerHTML='';
   const o0=document.createElement('option');o0.value='';o0.textContent=unsetLabel;sel.appendChild(o0);
@@ -2526,7 +2526,7 @@ function nsfwTextModelRows(engine){
 function nsfwImageModelRows(prov){
   if(!prov)return [];
   const ch=(NSFW.image_channels||[]).find(c=>c.id===prov)||{};
-  if(prov==='agentics')return [];   // 文生图/图生图 profile 由「生成模型」页决定
+  if(prov==='agentics'||prov==='rhapi')return [];   // 文生图/图生图 profile/模型由「生成模型」页决定
   if(prov==='comfyui')return (ch.modes||[]).map(m=>({id:m.id,label:t(m.label||m.id),disabled:!m.configured,title:m.configured?'':t('该运行方式未配置')}));
   const rows=((window.IMAGE_MODEL_LISTS||{})[prov]||[]).map(([id,l])=>({id,label:id+' · '+l.split('·')[0].trim()}));
   if(ch.model&&!rows.some(r=>r.id===ch.model))rows.unshift({id:ch.model,label:ch.model+' · '+t('生成模型页当前所选')});
@@ -2557,8 +2557,9 @@ function nsfwRender(d){
   $('#nsfw-st').textContent=d.enabled?t('✓ 已开启:标记 NSFW 的工单/分镜组改走备用模型'):t('已关闭:全部按主模型执行');
   $('#nsfw-body').style.opacity=d.enabled?'1':'.55';
   nsfwOpt($('#nsfw-t-engine'),(d.engines||[]).map(e=>({id:e,label:e==='claude'?'claudecode':e==='kimi'?'kimicode':e})),d.text.engine,t('不设置'));
-  nsfwOpt($('#nsfw-i-prov'),(d.image_channels||[]).map(c=>({id:c.id,label:t(NSFW_PROV_NAMES[c.id]||c.id)+(c.configured?'':' '+t('(未配 Key)')),disabled:!c.configured})),d.image.provider,t('不设置'));
-  nsfwOpt($('#nsfw-v-prov'),(d.video_providers||[]).map(c=>({id:c.id,label:t(NSFW_PROV_NAMES[c.id]||c.id)+(c.configured?'':' '+t(c.id==='agentics'?'(未登录)':'(未配 Key)')),disabled:!c.configured})),d.video.provider,t('不设置'));
+  // MiniMax 界面隐藏(2026-09-30,同「生成模型」页):已选中的仍显示
+  nsfwOpt($('#nsfw-i-prov'),(d.image_channels||[]).filter(c=>c.id!=='minimax'||d.image.provider==='minimax').map(c=>({id:c.id,label:t(NSFW_PROV_NAMES[c.id]||c.id)+(c.configured?'':' '+t('(未配 Key)')),disabled:!c.configured})),d.image.provider,t('不设置'));
+  nsfwOpt($('#nsfw-v-prov'),(d.video_providers||[]).filter(c=>c.id!=='minimax'||d.video.provider==='minimax').map(c=>({id:c.id,label:t(NSFW_PROV_NAMES[c.id]||c.id)+(c.configured?'':' '+t(c.id==='agentics'?'(未登录)':'(未配 Key)')),disabled:!c.configured})),d.video.provider,t('不设置'));
   ['t','i','v'].forEach(nsfwRenderModels);
 }
 async function nsfwLoad(){

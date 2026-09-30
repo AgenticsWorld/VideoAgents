@@ -8930,7 +8930,7 @@ def _image_channels() -> list[dict]:
         elif pid == "rhapi":
             # 同 Agentics:文生图/图生图两个模型由「生成模型」页定,出图时按有无参考图自动选
             configured = rhapi_configured(load_genconfig(), "image")
-            model = str(pc.get("t2i") or "")
+            model = agentics_image_model_label(pc)
         elif pid == "fal":
             vf = ((load_genconfig().get("video") or {}).get("fal") or {})
             configured = bool(pc.get("api_key") or vf.get("api_key"))
@@ -9028,7 +9028,7 @@ def agentics_image_model_label(pc: dict | None) -> str:
 def active_image_model() -> str:
     img = (load_genconfig().get("image") or {})
     pc = img.get(img.get("provider") or "") or {}
-    if img.get("provider") == "agentics":
+    if img.get("provider") in ("agentics", "rhapi"):
         return agentics_image_model_label(pc)
     return str(pc.get("custom_model") or pc.get("model") or pc.get("profile_code") or "") if isinstance(pc, dict) else ""
 
@@ -16457,7 +16457,7 @@ async def api_nsfw_set(body: dict):
         model = str(body["image"].get("model") or "").strip()
         if provider and provider not in IMAGE_PROVIDERS:
             raise ServiceError(400, f"image.provider must be one of {IMAGE_PROVIDERS}")
-        if provider == "agentics":
+        if provider in ("agentics", "rhapi"):   # 文生图/图生图由「生成模型」页定,按有无参考图自动选
             model = ""
         if provider == "comfyui":
             model = model or comfy_global_mode((load_genconfig().get("image") or {}).get("comfyui"))

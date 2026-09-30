@@ -1131,7 +1131,7 @@ try{
 // 未配置的方式置灰;全局渠道就是 ComfyUI 时二级下拉同样可为本集切换运行方式(mode_switchable)。
 // Agentics(2026-09-18):渠道下拉可选 Agentics(未登录桌面端时置灰),二级下拉 = 登录账号的视频 profile(服务端目录),
 // 值走 video_model 槽(profile_code);全局渠道就是 Agentics 时二级下拉同样可为本集换 profile,组卡「🎛 模型」亦可。
-const PROVIDER_NAMES={volcengine:'火山引擎',byteplus:'BytePlus',fal:'Fal',minimax:'MiniMax',openrouter:'OpenRouter',comfyui:'ComfyUI',runninghub:'RunningHub',agentics:'Agentics'};
+const PROVIDER_NAMES={volcengine:'火山引擎',byteplus:'BytePlus',fal:'Fal',minimax:'MiniMax',rhapi:'RH',openrouter:'OpenRouter',comfyui:'ComfyUI',runninghub:'RunningHub',agentics:'Agentics'};
 const provName=p=>t(PROVIDER_NAMES[p]||p||'');
 let PS_STATE=null;   // 当前集级存盘配置(三下拉共享;任一改动即整份 POST)
 function psRender(d){
@@ -1142,7 +1142,8 @@ function psRender(d){
   const follow=s=>s+'('+t('跟随全局')+')';
   const opt=(v,txt,sel,dis)=>`<option value="${esc(v)}"${sel?' selected':''}${dis?' disabled':''}>${esc(txt)}</option>`;
   // ① 渠道:跟随全局(全局渠道名)+ 目录内其它渠道(未配 Key 的置灰)
-  const provs=(es.providers||[]).filter(p=>p.id!==vm.global_provider);
+  // MiniMax 界面隐藏(2026-09-30,同「生成模型」页):本集已选中的仍显示
+  const provs=(es.providers||[]).filter(p=>p.id!==vm.global_provider&&(p.id!=='minimax'||PS_STATE.provider==='minimax'));
   const provSel=provs.length?`<select id="ps-prov" class="${vm.provider_source==='episode'?'ov':''}">`
       +opt('',follow(provName(vm.global_provider)),!PS_STATE.provider)
       +provs.map(p=>opt(p.id,provName(p.id)+(p.configured?'':'('+t(p.id==='agentics'?'未登录':'未配 Key')+')'),PS_STATE.provider===p.id,!p.configured)).join('')

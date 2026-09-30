@@ -13,7 +13,9 @@
  *      二级下拉只有「跟随全局」一项(model 存空),title 列出两个 profile(channels[].t2i / i2i)。 */
 (function(){
   'use strict';
-  const PROV_NAMES={agentics:'Agentics',openrouter:'OpenRouter',volcengine:'火山引擎',byteplus:'BytePlus',fal:'Fal',minimax:'MiniMax',comfyui:'ComfyUI'};
+  const PROV_NAMES={agentics:'Agentics',openrouter:'OpenRouter',volcengine:'火山引擎',byteplus:'BytePlus',fal:'Fal',minimax:'MiniMax',rhapi:'RH',comfyui:'ComfyUI'};
+  // 界面隐藏的渠道(2026-09-30,同「生成模型」页):已选中的仍显示,免得当前值看不见
+  const HIDDEN_PROVS=['minimax'];
   const COMFY_MODE_NAMES={local:'本地',cloud:'云端(Comfy Cloud)',rh_cn:'RunningHub 国内(.cn)',rh_ai:'RunningHub 国际(.ai)'};
   const tt=s=>(window.t?window.t(s):s);
   const ff=(s,p)=>(window.I18N&&window.I18N.f?window.I18N.f(s,p):s);
@@ -50,7 +52,7 @@
       const p=effProv();sm.innerHTML='';
       const ch=(D.channels||[]).find(c=>c.id===p)||{};
       if(!p){sm.hidden=true;ci.hidden=true;return}
-      if(p==='agentics'){  // 二级只有「跟随全局」:文生图/图生图 profile 按「生成模型」页设置,出图时按有无参考图自动选
+      if(p==='agentics'||p==='rhapi'){  // 二级只有「跟随全局」(RH 同理:文生图/图生图模型在「生成模型」页定):文生图/图生图 profile 按「生成模型」页设置,出图时按有无参考图自动选
         ci.hidden=true;sm.hidden=false;
         const o=document.createElement('option');o.value='';o.textContent=tt('跟随全局');
         o.title=ff('文生图 {t} · 图生图 {i}',{t:ch.t2i||'—',i:ch.i2i||'—'});sm.appendChild(o);sm.value='';sm.title=o.title;
@@ -83,7 +85,7 @@
       const gfull=ff('跟随全局({p} · {m})',{p:tt(PROV_NAMES[g.provider]||g.provider||'—'),m:clip(gm,28)});
       o0.textContent=opt.compact?tt('跟随全局'):gfull;o0.title=gfull;sp.appendChild(o0);
       if(opt.compact)sp.title=gfull;
-      (D.channels||[]).forEach(c=>{const o=document.createElement('option');o.value=c.id;
+      (D.channels||[]).filter(c=>!HIDDEN_PROVS.includes(c.id)||c.id===D.provider).forEach(c=>{const o=document.createElement('option');o.value=c.id;
         o.textContent=tt(PROV_NAMES[c.id]||c.id)+(c.configured?'':' ('+tt('未配置')+')');o.disabled=!c.configured;sp.appendChild(o)});
       sp.value=(D.channels||[]).some(c=>c.id===D.provider&&c.configured)?D.provider:'';
       fillModels(D.model||'');
