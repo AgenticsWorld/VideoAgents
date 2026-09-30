@@ -1574,6 +1574,7 @@ window.I18N_DICT = {
 "问题只写机制,内容已脱敏(路径、项目名、密钥),不含剧情、提示词与项目内容。": "Issues beschreiben nur Mechanismen; der Inhalt wurde bereinigt (Pfade, Projektnamen, Schlüssel) und enthält keine Handlung, Prompts oder Projektinhalte.",
 "✓ 已提交": "✓ Eingereicht",
 "暂无待提交的问题": "Noch keine einzureichenden Probleme",
+"已处理的问题": "Bearbeitete Probleme",
 "查看": "Ansehen",
 "Debug 模式": "Debug-Modus",
 "默认关。开启后控制台每个 Agent 面板显示「SOUL.md」按钮,可查看该 Agent 的身份原文;关闭时若正在看 SOUL.md 原文会自动退回对话。全局设置,保存后立即生效,不影响任何 Agent 的运行。": "Standardmäßig aus. Wenn aktiviert, zeigt jedes Agent-Panel in der Konsole eine Schaltfläche „SOUL.md“, um den Identitätstext dieses Agents anzusehen; wird es ausgeschaltet, während SOUL.md offen ist, geht es zurück zur Konversation. Globale Einstellung, wirkt sofort nach dem Speichern und beeinflusst keinen Agent-Lauf.",

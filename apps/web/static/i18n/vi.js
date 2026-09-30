@@ -1574,6 +1574,7 @@ window.I18N_DICT = {
 "问题只写机制,内容已脱敏(路径、项目名、密钥),不含剧情、提示词与项目内容。": "Issue chỉ mô tả cơ chế; nội dung đã được ẩn danh (đường dẫn, tên dự án, khóa) và không chứa cốt truyện, prompt hay nội dung dự án.",
 "✓ 已提交": "✓ Đã gửi",
 "暂无待提交的问题": "Chưa có vấn đề nào chờ gửi",
+"已处理的问题": "Vấn đề đã xử lý",
 "查看": "Xem",
 "Debug 模式": "Chế độ Debug",
 "默认关。开启后控制台每个 Agent 面板显示「SOUL.md」按钮,可查看该 Agent 的身份原文;关闭时若正在看 SOUL.md 原文会自动退回对话。全局设置,保存后立即生效,不影响任何 Agent 的运行。": "Mặc định tắt. Khi bật, mỗi bảng Agent trong bảng điều khiển hiển thị nút \"SOUL.md\" để xem văn bản định danh gốc của Agent đó; nếu tắt trong lúc đang xem SOUL.md sẽ quay về hội thoại. Cài đặt toàn cục, có hiệu lực ngay khi lưu và không ảnh hưởng đến bất kỳ lần chạy Agent nào.",

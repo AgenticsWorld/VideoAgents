@@ -16391,8 +16391,11 @@ def _issue_public(r: dict) -> dict:
 async def api_issue_feedback_get():
     """设置页:开关、凭据来源(env|空=浏览器提交)与最近登记的 issue。"""
     from modules import issue_feedback as fb
-    auth, items = await asyncio.gather(asyncio.to_thread(fb.auth_source),
-                                       asyncio.to_thread(fb.list_issues, 30))
+    auth, recs = await asyncio.gather(asyncio.to_thread(fb.auth_source),
+                                      asyncio.to_thread(fb.list_issues, 10 ** 6))
+    # 未提交(pending/failed)全列,不受条数截断;已处理的只带最近 30 条(弹窗底部折叠区)
+    todo = [r for r in recs if r.get("state") in ("pending", "failed")]
+    items = todo + [r for r in recs if r.get("state") not in ("pending", "failed")][:30]
     return {**await api_diagnostics_flags(), "auth": auth, "repo_url": fb.ISSUES_URL,
             "items": [_issue_public(r) for r in items]}
 

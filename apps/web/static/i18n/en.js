@@ -1613,6 +1613,7 @@ window.I18N_DICT = {
 "问题只写机制,内容已脱敏(路径、项目名、密钥),不含剧情、提示词与项目内容。": "Issues describe mechanisms only; the content has been scrubbed (paths, project names, keys) and contains no story, prompts or project content.",
 "✓ 已提交": "✓ Submitted",
 "暂无待提交的问题": "No issues to submit yet",
+"已处理的问题": "Handled issues",
 "查看": "View",
 "Debug 模式": "Debug mode",
 "默认关。开启后控制台每个 Agent 面板显示「SOUL.md」按钮,可查看该 Agent 的身份原文;关闭时若正在看 SOUL.md 原文会自动退回对话。全局设置,保存后立即生效,不影响任何 Agent 的运行。": "Off by default. When on, every Agent panel in the console shows a \"SOUL.md\" button to view that Agent's identity text; turning it off while viewing SOUL.md returns to the conversation. Global setting, takes effect immediately on save and does not affect any Agent run.",
