@@ -428,12 +428,12 @@ a.hdr-icon:hover{border-color:var(--accent)}
           <div class="rhythm-detail" id="np-rhythm-season-detail" style="display:none"></div>
           <textarea id="np-rhythm-season-custom" style="flex:none;height:56px;display:none" placeholder="自定义跨集节拍链,如:每集留钩子 → 每 3 集一次回收"></textarea>
         </div></div>
-      <div class="row"><label>每集时长(分钟)</label><input type="number" id="npd-ep" min="0.5" step="0.5" value="10">
+      <div class="row"><label>每集时长(分钟)</label><input type="number" id="npd-ep" min="0.5" step="0.5" value="5">
         <label style="width:auto;flex:none;display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px" title="勾选后不设固定每集时长,由剧本结构自动决定分集与每集时长"><input type="checkbox" id="npd-ep-auto" style="flex:none">根据剧本自动</label></div>
       <div class="row"><label>分镜时长(秒)</label>
-        <input type="number" id="npd-smin" min="1" step="0.5" value="1" title="下限">
+        <input type="number" id="npd-smin" min="0.5" step="0.5" value="0.5" title="下限">
         <span style="color:var(--dim)">—</span>
-        <input type="number" id="npd-smax" min="1" step="0.5" value="10" title="上限">
+        <input type="number" id="npd-smax" min="0.5" step="0.5" value="15" title="上限">
       </div>
       <div class="row"><label>长镜头</label>
         <input type="checkbox" id="npd-longtake" style="flex:none">
@@ -678,9 +678,9 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="row"><label>每集时长(分钟)</label><input type="number" id="dur-ep" min="0.5" step="0.5" placeholder="10">
       <label style="width:auto;flex:none;display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px" title="勾选后不设固定每集时长,由剧本结构自动决定分集与每集时长"><input type="checkbox" id="dur-ep-auto" style="flex:none">根据剧本自动</label></div>
     <div class="row"><label>分镜时长(秒)</label>
-      <input type="number" id="dur-smin" min="1" step="0.5" placeholder="1" title="下限">
+      <input type="number" id="dur-smin" min="0.5" step="0.5" placeholder="1" title="下限">
       <span style="color:var(--dim)">—</span>
-      <input type="number" id="dur-smax" min="1" step="0.5" placeholder="10" title="上限">
+      <input type="number" id="dur-smax" min="0.5" step="0.5" placeholder="10" title="上限">
     </div>
     <div class="row"><label>长镜头</label>
       <input type="checkbox" id="dur-longtake" style="flex:none">
@@ -1460,8 +1460,8 @@ function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置�
   $('#npo-dialogue-voice').value='native';   // 花字/内嵌字幕开关 2026-09-13 移到后期处理页,新建默认关由服务端兜底
   $('#npo-dialogue-tts').checked=false;syncDialogueTtsLock('npo');   // 生成对白语音默认关(2026-09-13);后期配音时锁死为开
   $('#npo-narration').checked=false;   // 新建项目旁白默认关闭(2026-09-01 用户拍板);存量项目缺省仍为开
-  $('#npd-ep').value=10;$('#npd-ep-auto').checked=false;$('#npd-ep').disabled=false;
-  $('#npd-smin').value=1;$('#npd-smax').value=10;
+  $('#npd-ep').value=5;$('#npd-ep-auto').checked=false;$('#npd-ep').disabled=false;
+  $('#npd-smin').value=0.5;$('#npd-smax').value=15;
   $('#npd-longtake').checked=false;$('#npd-longtake-mode').value='last_frame';npdLongtakeWarn();   // 长镜头默认关闭,连接方式默认尾帧图片
   sgApplyPreset('npsg','sd25');   // 分镜组默认按 Seedance 2.5 口径(30s/30图/10视频/10音频,2026-09-09);同时按模型联动白模开关
 }

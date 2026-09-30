@@ -29,9 +29,9 @@ class ProjectCreate(ApiModel):
     brief: str = ""
     style: str = ""
     # "auto" = 每集时长由剧本结构自动决定(不设固定预算)
-    episode_minutes: Annotated[float, Field(gt=0, le=240)] | Literal["auto"] = 10
-    shot_min_s: float = Field(default=1, gt=0, le=60)
-    shot_max_s: float = Field(default=10, gt=0, le=60)
+    episode_minutes: Annotated[float, Field(gt=0, le=240)] | Literal["auto"] = 5
+    shot_min_s: float = Field(default=0.5, gt=0, le=60)
+    shot_max_s: float = Field(default=15, gt=0, le=60)
 
 
 class ProjectDelete(ApiModel):
