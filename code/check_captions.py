@@ -30,6 +30,9 @@
    6b. caption_types_allowed     花字策略=手动(settings.json output.caption_mode=manual)时,
                                   每条 type 必在用户勾选集合 output.caption_types 内
                                   (目录 modules/caption_catalog.json;auto 模式 SKIP)
+   6d. caption_types_covered     手动策略下每个勾选类型要么至少出一条,要么在 captions.json 顶层
+                                  type_skips.<type> 写明不出的原因(本项目不可用类型不计;
+                                  「缺模版」不算理由;auto 模式 SKIP;2026-09-30)
    6c. caption_policy_fresh      captions.json 顶层 caption_policy 盖章 == 当前设置
                                   (manual 缺章即 FAIL;auto 缺章按 auto 兼容存量;
                                   改了勾选集合而设计未重跑即 FAIL)
@@ -221,8 +224,11 @@ def main():
         if policy["mode"] == "manual":
             check("caption_types_allowed", not allowed_bad,
                   (f"允许 {policy['types']};" if allowed_bad else "") + "; ".join(allowed_bad[:3]))
+            cov_bad = ccat.coverage_issues(data, policy, proj)
+            check("caption_types_covered", not cov_bad, "; ".join(cov_bad[:3]))
         else:
             skip("caption_types_allowed", "花字策略=自动(output.caption_mode=auto)")
+            skip("caption_types_covered", "花字策略=自动(output.caption_mode=auto)")
         check("caption_policy_fresh", not fresh_bad, "; ".join(fresh_bad[:2]))
         bad = [str(p) for p in (cj, proj / "assets" / "clips_caption" / ep)
                if p.exists() and p.name != p.name.encode("ascii", "ignore").decode()]

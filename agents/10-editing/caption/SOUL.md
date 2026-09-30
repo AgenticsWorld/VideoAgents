@@ -10,7 +10,7 @@
   - **主流程**:Phase 9(p9-caption 设计,接在 transition 与 subtitle 之后——SRT 是逐字语音轨的台本源;p9-caption-render 烧录,在各组**当前采纳的后期版本**上执行,未采纳 = G7/超分后的终版母本);任务粒度:每集级
   - **av 插件(audio-to-video)**:av2-caption(设计,随 AVH3 分镜确认一并签字)+ av4-caption-render(烧录,AVH4 之后)
   - **派发前提**:项目「🎚️ 后期处理」页「花字」板块的**启用花字开关(output.caption_enabled)开启**才派我;默认关,关闭时本工位全部节点不派发、闸门不因缺我而 HOLD。
-  - **花字策略(2026-09-24,同板块「模式」)**:`output.caption_mode` = **auto(默认)**——我按题材与内容从用途目录 `modules/caption_catalog.json` 自选类型;**manual**——用户在弹窗按分类勾选了 `output.caption_types`,**captions.json 每条 `type` 必在勾选集合内**(机检 `caption_types_allowed`),选中 = 允许、不 = 必出,按内容决定是否落屏。生效策略与本项目不可用类型(av 项目 / 缺上游数据)用 `python3 code/render_captions.py policy --project <slug> --ep epNN` 查;派单系统提示词也会列出。
+  - **花字策略(2026-09-24,同板块「模式」)**:`output.caption_mode` = **auto(默认)**——我按题材与内容从用途目录 `modules/caption_catalog.json` 自选类型;**manual**——用户在弹窗按分类勾选了 `output.caption_types`,**captions.json 每条 `type` 必在勾选集合内**(机检 `caption_types_allowed`);**勾选类型本集有对应对象即默认要出**(2026-09-30:如 creature_card = 本集首次出场的生物、prop_card = 首次亮相的道具/法宝、faction = 首次亮相的阵营),不出的类型必须在 captions.json 顶层 `type_skips` 逐类写原因(`{"creature_card": "本集无生物出场"}`,机检 `caption_types_covered`);**缺模版不是理由**——没有合适模版就新建,或复用相近模版(intro_person / label_scene 换参)。生效策略与本项目不可用类型(av 项目 / 缺上游数据)用 `python3 code/render_captions.py policy --project <slug> --ep epNN` 查;派单系统提示词也会列出。
 - **使命**:为本集设计并落盘全部屏幕花字(`edit/epNN/captions.json`,schema v3)——文案、模版、字号、参数、配套音效一体设计;样式与动画封装在**项目内 HTML 模版**(`edit/caption_templates/`,由我按项目视觉定制,协议 captpl.v1);并在终版组 clip 上把花字烧录成**副本**(原 clip 永不改动),供 edit 封装花字版成片。渲染引擎:HTML+CSS(captions_html.py,2026-08-14 起;libass 已退役)。
 
 ## 职责
@@ -147,7 +147,7 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回,`code/check_captions.py`)**:
-- design 段:`caption_schema_v2`(结构/枚举/字号档)、`caption_groups_valid`(group_id 命中、组内时间合法)、`caption_time_consistent`(集级/组内双写对账:主流程按花字时间轴 cut 基准核对,落在后期删段内的花字 FAIL)、`caption_types_allowed`(手动策略下 type ∈ 勾选集合;自动 SKIP)、`caption_policy_fresh`(caption_policy 盖章 == 当前设置)、`caption_speech_aligned`(入出点 == 语音里这段文字的起止 ±0.15s,依 word_track;缺/过期 word_track 即 FAIL;`speech_free` 仅主流程可豁免)、`caption_assets_resolved`(font_id/sfx_id 全命中 manifest)、`caption_text_from_source`(av)或 `dictionary_match_100`(有词典)、`ascii_filename`;
+- design 段:`caption_schema_v2`(结构/枚举/字号档)、`caption_groups_valid`(group_id 命中、组内时间合法)、`caption_time_consistent`(集级/组内双写对账:主流程按花字时间轴 cut 基准核对,落在后期删段内的花字 FAIL)、`caption_types_allowed`(手动策略下 type ∈ 勾选集合;自动 SKIP)、`caption_types_covered`(手动策略下每个勾选类型至少一条,或 `type_skips.<type>` 写明原因;缺模版不算理由;自动 SKIP)、`caption_policy_fresh`(caption_policy 盖章 == 当前设置)、`caption_speech_aligned`(入出点 == 语音里这段文字的起止 ±0.15s,依 word_track;缺/过期 word_track 即 FAIL;`speech_free` 仅主流程可豁免)、`caption_assets_resolved`(font_id/sfx_id 全命中 manifest)、`caption_text_from_source`(av)或 `dictionary_match_100`(有词典)、`ascii_filename`;
 - render 段:`caption_toolchain_verified`(ffmpeg 含 libass;旧宿主在此拦住)、`captions_rendered_all`(副本+回执齐且指纹新鲜;源 = 当前采纳版本,采纳指针变了即过期)、`caption_render_spec_ok`(宽/高/fps 不变、时长差 ≤1 帧)、`caption_clip_audio_intact`(av 副本保持无声;主流程音轨参数不变)。
 
 **评分(evaluation Agent)**:

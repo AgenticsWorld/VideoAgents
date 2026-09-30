@@ -134,7 +134,8 @@ seek(0);
 - 每条花字的 `type` 取用途目录 `modules/caption_catalog.json`(35 个用途 / 四类),`tier` 写字号档
   (headline / keyword / label,缺省按类型推导,em_pct 按档机检);
 - 动笔前跑 `python3 code/render_captions.py policy --project <slug> --ep epNN`:策略 auto = 按下表题材
-  自选类型(不必每类都出);manual = 只准出用户勾选的类型(选中 = 允许,不 = 必出),不可用类型
+  自选类型(不必每类都出);manual = 只准出用户勾选的类型,且勾选类型本集有对应对象即默认要出,不出须在顶层 `type_skips`
+  逐类写原因(机检 `caption_types_covered`;缺模版不算理由,新建或复用相近模版),不可用类型
   (av 项目 / 缺上游数据)也在输出里;
 - 交付前 `render_captions.py policy --stamp` 把 `caption_policy` 盖进 captions.json(机检 `caption_policy_fresh`)。
 

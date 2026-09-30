@@ -6,8 +6,9 @@
 - 字号档(tier):headline/keyword/label,captions.json 缺 `tier` 时按类型 default_tier 推导,
   em_pct 按档校验;
 - 项目级策略(settings.json `output.caption_mode` + `output.caption_types`):
-  auto(默认)= 花字 Agent 按题材自选任意类型;manual = 只准出用户勾选的类型
-  (选中 = 允许,不 = 必出);
+  auto(默认)= 花字 Agent 按题材自选任意类型;manual = 只准出用户勾选的类型,
+  且勾选类型本集有对应对象即默认要出(2026-09-30),不出须在 captions.json 顶层
+  `type_skips` 逐类写原因(机检 caption_types_covered;缺模版不算理由);
 - 策略盖章:captions.json 顶层 `caption_policy`({mode, types}),机检 caption_policy_fresh
   与当前设置比对——改了勾选集合而设计未重跑即 FAIL;auto 模式下缺章按 auto 兼容(存量项目)。
 
@@ -22,6 +23,7 @@ CATALOG_PATH = Path(__file__).resolve().parent / "caption_catalog.json"
 CAPTION_MODES = ("auto", "manual")
 DEFAULT_MODE = "auto"
 POLICY_KEY = "caption_policy"
+SKIP_KEY = "type_skips"      # manual 模式勾选却未出的类型 → 原因(2026-09-30)
 
 _CACHE: dict | None = None
 
@@ -154,6 +156,35 @@ def policy_issues(data: dict, policy: dict) -> tuple[list[str], list[str]]:
     return allowed_bad, fresh_bad
 
 
+def coverage_issues(data: dict, policy: dict, proj_root: Path | None = None) -> list[str]:
+    """caption_types_covered(2026-09-30):manual 模式下每个勾选类型要么至少出一条,
+    要么在顶层 `type_skips` 写明不出的原因;本项目不可用的类型(availability)不计。
+    缺模版不构成理由——没有合适模版就新建或复用相近模版。auto 模式返回空。"""
+    if policy.get("mode", DEFAULT_MODE) != "manual":
+        return []
+    issues: list[str] = []
+    skips = data.get(SKIP_KEY)
+    if skips is None:
+        skips = {}
+    elif not isinstance(skips, dict):
+        return [f"{SKIP_KEY} 须为对象 {{type: 原因}}"]
+    unavailable = ({a["id"] for a in availability(proj_root) if not a["available"]}
+                   if proj_root else set())
+    used = {c.get("type") for c in data.get("captions", [])}
+    for t in sorted(policy.get("types") or []):
+        if t in used or t in unavailable:
+            continue
+        why = skips.get(t)
+        if not isinstance(why, str) or len(why.strip()) < 4:
+            issues.append(f"勾选了 {t} 却一条未出,也没在 {SKIP_KEY}.{t} 写原因"
+                          "(本集有对应对象就要出;确实没有就写明原因)")
+        elif any(k in why for k in ("模版", "模板")) and \
+                any(k in why for k in ("无", "缺", "没有", "暂无")):
+            issues.append(f"{SKIP_KEY}.{t}「{why.strip()[:40]}」:缺模版不构成理由,"
+                          "新建模版或复用相近模版(如 intro_person / label_scene)")
+    return issues
+
+
 def stamp(data: dict, policy: dict) -> dict:
     data[POLICY_KEY] = {"mode": policy.get("mode", DEFAULT_MODE),
                         "types": sorted(policy.get("types") or [])}
@@ -188,7 +219,11 @@ def prompt_block(policy: dict, proj_root: Path | None = None) -> str:
     if policy.get("mode") == "manual":
         ids = list(policy.get("types") or [])
         head = ("- **花字策略:手动(manual)** —— 用户只允许出下列类型,captions.json 每条 `type` "
-                "必在此集合内(机检 `caption_types_allowed`);选中 = 允许,不 = 必出,按内容决定是否落屏:")
+                "必在此集合内(机检 `caption_types_allowed`);**勾选类型本集有对应对象即默认要出**"
+                "(如 creature_card:本集首次出场的生物;prop_card:首次亮相的道具/法宝),"
+                f"不出的类型须在 captions.json 顶层 `{SKIP_KEY}` 逐类写原因"
+                "(如 {\"creature_card\": \"本集无生物出场\"};机检 `caption_types_covered`),"
+                "缺模版不算理由——新建或复用相近模版:")
     else:
         ids = list(type_ids())
         head = ("- **花字策略:自动(auto)** —— 按题材与内容从目录自选类型(caption-styling skill 题材表),"

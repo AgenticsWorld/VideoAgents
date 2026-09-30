@@ -995,7 +995,7 @@ DEFAULT_GENCONFIG = {
                "subtitle_burn_in": False, "caption_enabled": False,
                # caption_mode / caption_types=花字策略(2026-09-24,后期处理页「花字」板块):auto(默认)=花字 Agent 按题材从
                #   modules/caption_catalog.json 目录自选用途类型;manual=只准出 caption_types 勾选的类型(选中=允许,不=必出,
-               #   manual 至少勾一项);机检 caption_types_allowed / caption_policy_fresh(captions.json 顶层 caption_policy 盖章)
+               #   manual 至少勾一项);机检 caption_types_allowed / caption_types_covered / caption_policy_fresh(captions.json 顶层 caption_policy 盖章)
                "caption_mode": "auto", "caption_types": [],
                "narration_enabled": False,
                "dialogue_voice": "native",
