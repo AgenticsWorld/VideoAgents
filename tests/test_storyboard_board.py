@@ -349,7 +349,7 @@ def test_sketch_style_packs_ink_digital():
     ink, ink_neg = sbb.build_prompt({}, shot, {}, style="ink")
     dig, dig_neg = sbb.build_prompt({}, shot, {}, style="digital")
     assert ink.startswith("live-action action-movie storyboard panel") and "cross hatching" in ink and "grey wash" in ink_neg
-    assert "exactly one accent color" in dig and "multiple accent colors" in dig_neg
+    assert "at most one accent color" in dig and "Accent color: none" in dig and "multiple accent colors" in dig_neg
     for st in ("ink", "digital"):
         t_only, _ = sbb.build_prompt({}, shot, {}, with_refs=False, style=st)
         head = t_only[:-len(sbb.SKETCH_TEXT_ONLY_TAIL)]
@@ -357,3 +357,29 @@ def test_sketch_style_packs_ink_digital():
         grid, _ = sbb.build_grid_prompt([({"scene_no": "S01"}, shot), ({"scene_no": "S01"}, {})], {}, 2, 2, style=st)
         assert "strict 2x2 grid" in grid
     assert set(sbb.SKETCH_STYLE_LABELS) == set(sbb.SKETCH_STYLES) == {"film", "konte", "ink", "digital"}
+
+
+def test_screen_direction_drops_motion_not_in_shot():
+    scene = {"screen_direction": "R1:红线自画左→画右斜穿、从画右偏上出画(T1 前半);西面开口在画右"}
+    look = {"content": "哪吒探身出开口去看——什么都没有了。", "cast": ["CHAR-1"]}
+    arrow = {"content": "一道红线自画左向画右斜穿,从画右偏上出画"}
+    assert sbb.screen_direction(scene, [look], {"CHAR-1": "哪吒"}) == "西面开口在画右"
+    assert "从画右偏上出画" in sbb.screen_direction(scene, [arrow]) and "红线" in sbb.screen_direction(scene, [arrow])
+    assert "红线" in sbb.screen_direction(scene)          # 不传 shots = 原文
+    p, _ = sbb.build_prompt(scene, look, {"CHAR-1": "哪吒"})
+    assert "红线" not in p and "西面开口在画右" in p
+    g, _ = sbb.build_grid_prompt([(dict(scene, scene_no="S02"), look), (dict(scene, scene_no="S02"), arrow)], {}, 2, 2)
+    assert "红线" in g                                    # 宫格按本场各格并集
+
+
+def test_digital_accent_per_shot():
+    shot = {"content": "哪吒张望"}
+    p, _ = sbb.build_prompt({}, shot, {}, style="digital")
+    assert "Accent color: none" in p and "exactly one accent color" not in p
+    p, _ = sbb.build_prompt({}, dict(shot, accent={"element": "the arrow streak", "color": "red"}), {}, style="digital")
+    assert "Accent color: red, used only on the arrow streak" in p
+    assert sbb.accent_of({"accent": "none"}) is None and sbb.accent_of({"accent": "箭光|red"}) == ("箭光", "red")
+    g, _ = sbb.build_grid_prompt([({"scene_no": "S01"}, shot), ({"scene_no": "S01"}, {})], {}, 2, 2, style="digital")
+    assert "Accent: none" in g
+    film, _ = sbb.build_prompt({}, shot, {})
+    assert "Accent" not in film

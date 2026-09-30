@@ -255,7 +255,7 @@ KONTE_GRID_NEGATIVE = ("full color, saturated colors, color painting, photo, pho
 
 
 def _style_pack(intro: str, look: str, env: str, env_plain: str, finish: str, finish_plain: str,
-                refs_manner: str, negative: str, grid_negative: str) -> dict:
+                refs_manner: str, negative: str, grid_negative: str, accent: bool = False) -> dict:
     """按「画法 look / 环境 env / 收尾 finish」拼一套画风包(单张/纯文生图/宫格三种风格句 + 两种参考图句 + 负面词)。
     纯文生图版(text_only)只用正向句 env_plain / finish_plain(cfg=1 蒸馏模型不吃否定句)。"""
     figures = ("correct figure size and body cropping for the stated shot size, clear eye lines and body gestures")
@@ -288,6 +288,7 @@ def _style_pack(intro: str, look: str, env: str, env_plain: str, finish: str, fi
                       f"panel; do not copy their rendering style, colors or facial detail — use the {refs_manner}. Locations "
                       "are described in text only and are drawn as simple shapes."),
         "grid_negative": grid_negative,
+        "accent": accent,       # 逐镜重点色(灰调重点色画风):每镜/每格另拼 accent_sentence
     }
 
 
@@ -318,15 +319,15 @@ _DIGITAL_PACK = _style_pack(
     intro="digital film storyboard sketch",
     look=("drawn by a film storyboard artist on a tablet: loose dark-grey digital pencil lines, flat grey marker tones in "
           "two or three values, simplified cartoon-like figures with minimal faces (dot eyes, a single line for the mouth) "
-          "whose poses and gestures read instantly, and exactly one accent color used only on the single story-critical "
-          "element of the shot (a key prop, liquid, fire, blood or light), everything else greyscale"),
+          "whose poses and gestures read instantly, everything greyscale except at most one accent color placed only on "
+          "the element the shot's Accent line names"),
     env=("SIMPLE BUT SPATIALLY CORRECT: walls, doorways, floors and furniture as flat grey planes with clean perspective "
          "matching the stated camera height and lens, depth readable at a glance"),
     env_plain=("simple and spatially correct: walls, doorways and floors as flat grey planes with clean perspective "
                "matching the stated camera height and lens"),
-    finish=("Greyscale with that single accent color only; a clean, readable digital storyboard, not a painting or a "
+    finish=("Greyscale apart from the stated accent; a clean, readable digital storyboard, not a painting or a "
             "finished illustration."),
-    finish_plain="Greyscale drawing with that single accent color, clean and readable digital storyboard.",
+    finish_plain="Greyscale drawing apart from the stated accent, clean and readable digital storyboard.",
     refs_manner="simplified digital storyboard manner",
     negative=("full color, colorful, multiple accent colors, rainbow colors, photo, photorealistic, 3d render, cgi, "
               "painting, detailed rendering, anime eyes, manga, screentone, text, letters, handwriting, numbers, caption, "
@@ -336,6 +337,7 @@ _DIGITAL_PACK = _style_pack(
                    "painting, detailed rendering, anime eyes, manga, screentone, text, letters, handwriting, numbers, "
                    "caption, watermark, logo, speech bubble, arrows, uneven panels, overlapping panels, panels of "
                    "different sizes, decorative border"),
+    accent=True,
 )
 
 STYLE_PACKS = {
@@ -790,6 +792,7 @@ def load_board(base: Path, ep: str, catalog: dict | None = None) -> dict:
                 "poses": normalize_poses(_first(d, "poses", "figure_states", default=None)),
                 "extras": str(_first(d, "extras", default="")),
                 "panel_en": str(_first(d, "panel_en", default="") or ""),
+                "accent": d.get("accent"),
                 "dialogue": dialogue,
                 "narration_ref": [str(x) for x in _as_list(_first(d, "narration_ref", "narration_refs", "narrator_ref", default=[]))],
                 "beat": str(_first(d, "beat", default="")),
@@ -1391,9 +1394,86 @@ def horizon_rule(cam: str) -> str:
     return ""
 
 
-def screen_direction(scene: dict) -> str:
-    """本场轴线/画面方向(storyboard.json scenes[].screen_direction_en / axis_note),各镜共用,保证跨镜画左画右一致。"""
-    return clean_prose(scene.get("screen_direction") or "")
+# 本场轴线里的运动分句(「红线自画左→画右斜穿」)只在本镜也拍到那个运动主体时才进草图提示词(2026-09-30 用户拍板):
+# 前科 fengshen3 ep07 S02-04「什么都没有了」的张望镜被整场的「红线…斜穿」画出一条红色对角线。静态布局分句(谁/什么在画左画右)照留。
+_SD_MOTION_RE = re.compile(r"→|->|入画|出画|斜穿|穿过|扑|滚|走|跑|追|冲|飞|射|退|甩|劈|砍|刺|掠|落向|坠|逃|奔|自画|由画|从画|向画|朝画"
+                           r"|\b(?:enter|exit|mov|fl[iy]|run|walk|cross|travel|charg|lung|chas|pass|com|go|head|leav|fall|shoot|swing)",
+                           re.I)
+_SD_SUBJ_CUT_RE = re.compile(r"自|由|从|向|朝|顺|沿|被|第一次|→|->|\b(?:enter|exit|move|fl[iy]|run|walk|cross|travel|charge|lunge|chase"
+                             r"|pass|come|go|head|leave|fall|shoot|swing|from|to|toward|is|are)\w*\b", re.I)
+_SD_PREFIX_RE = re.compile(r"^\s*(?:R\d+[^:：]{0,12}[:：]|末镜|首镜|本场|全场)\s*")
+_SD_STOP = {"画左", "画右", "画面", "画内", "画外", "左侧", "右侧", "screen", "left", "right", "frame", "the", "a", "an"}
+
+
+def _sd_subject_tokens(clause: str) -> list[str]:
+    """运动分句的主体词:去掉 R1:/末镜 前缀,取第一个运动/方向标记之前的部分;中文拆二字组,英文拆词(去方位虚词)。"""
+    c = _SD_PREFIX_RE.sub("", clause)
+    m = _SD_SUBJ_CUT_RE.search(c)
+    head = re.sub(r"画[左右中面内外上下]|[左右]侧|[上下]方", " ", (c[:m.start()] if m else c)).strip(" ,，、:：")
+    toks = [w.lower() for w in re.findall(r"[A-Za-z]{3,}", head) if w.lower() not in _SD_STOP]
+    for run in re.findall(r"[\u4e00-\u9fff]+", head):
+        toks += [run[i:i + 2] for i in range(len(run) - 1) if run[i:i + 2] not in _SD_STOP] or [run]
+        if len(run) == 2:       # 「斧劈」这类二字主语:首字也算(斧子/斧刃)
+            toks.append(run[0])
+    return toks
+
+
+def _shot_text(shot: dict, names: dict | None = None) -> str:
+    """本镜全部可画文字(画面/动作/构图/panel_en/姿态/出场人名),供轴线运动分句判断主体是否在本镜。"""
+    bits = [shot.get(k) or "" for k in ("_panel", "panel_en", "content", "action", "sketch", "extras", "_note")]
+    for cid, p in (shot.get("poses") or {}).items():
+        bits.append(str((p or {}).get("action") or "") if isinstance(p, dict) else str(p))
+    bits += [str((names or {}).get(c, c)) for c in shot.get("cast") or []]
+    return " ".join(str(b) for b in bits).lower()
+
+
+def screen_direction(scene: dict, shots: list[dict] | None = None, names: dict | None = None) -> str:
+    """本场轴线/画面方向(storyboard.json scenes[].screen_direction_en / axis_note),各镜共用,保证跨镜画左画右一致。
+    shots 给出时(单镜 [shot] / 宫格本场各格)按分句过滤:运动分句的主体不在这些镜的文字里 → 删掉,静态布局分句照留。"""
+    sd = clean_prose(scene.get("screen_direction") or "")
+    if not sd or shots is None:
+        return sd
+    text = " ".join(_shot_text(s, names) for s in shots)
+    keep, last = [], True       # last:上一运动分句是否保留——省略主语的续句(「、从画右偏上出画」)跟着它走
+    for c in re.split(r"(?<=[;；。，,、])|(?<=\.)\s", sd):
+        body = c.strip(" ;；。，,、.")
+        if not body:
+            continue
+        if _SD_MOTION_RE.search(body):
+            toks = _sd_subject_tokens(body)
+            last = any(t in text for t in toks) if toks else last
+            if not last:
+                continue
+        keep.append(c)
+    return re.sub(r"[;；，,、\s]+$", "", "".join(keep)).strip()
+
+
+# 灰调重点色画风的逐镜重点色(2026-09-30 用户拍板):分镜层 shots_draft[].accent = {"element": "…", "color": "red"}
+# 或 "none";没写 = 本镜纯灰度——不让模型自己挑(前科:ep07 S02-04 模型把「灯点」画成一排红点)。
+_ACCENT_NONE = {"", "none", "no", "null", "无", "没有", "-", "—"}
+
+
+def accent_of(shot: dict) -> tuple[str, str] | None:
+    """(element, color) 或 None(纯灰度)。也收字符串「元素|颜色」。"""
+    a = shot.get("_accent") if shot.get("_accent") is not None else shot.get("accent")
+    if isinstance(a, dict):
+        el = str(a.get("element_en") or a.get("element") or "").strip()
+        col = str(a.get("color_en") or a.get("color") or "").strip()
+    elif isinstance(a, str) and "|" in a:
+        el, col = (x.strip() for x in a.split("|", 1))
+    else:
+        return None
+    if el.lower() in _ACCENT_NONE or not col:
+        return None
+    return el, col
+
+
+def accent_sentence(shot: dict, grid: bool = False) -> str:
+    ac = accent_of(shot)
+    if ac:
+        return (f"Accent: {ac[1]} on {ac[0]} only." if grid else
+                f"Accent color: {ac[1]}, used only on {ac[0]}; everything else stays greyscale.")
+    return "Accent: none, pure greyscale." if grid else "Accent color: none — the whole frame is pure greyscale."
 
 
 def _space_hint(scene: dict, max_chars: int = 60) -> str:
@@ -1514,7 +1594,9 @@ def build_prompt(scene: dict, shot: dict, names: dict, note: str = "", with_refs
     if layout:      # 构图底是最后一张参考图(调用方保证已挂)
         parts.append(whitebox_sentence(whitebox_legend) if whitebox_legend is not None else SKETCH_LAYOUT_SENTENCE)
     parts += _shot_parts(shot, names)
-    sd = screen_direction(scene)
+    if pack.get("accent"):
+        parts.append(accent_sentence(shot))
+    sd = screen_direction(scene, [shot], names)
     if sd:
         parts.append(f"Screen direction for this scene (keep left/right consistent): {sd}.")
     # 场景只靠文字(2026-09-11 用户拍板);只留一句短地点提示,放最后,不拼场景卡描述
@@ -1690,7 +1772,8 @@ def build_grid_prompt(panels: list[tuple[dict, dict]], names: dict, cols: int, r
             if key in seen:
                 continue
             seen.append(key)
-            loc, sd = _space_hint(sc), screen_direction(sc)
+            loc = _space_hint(sc)
+            sd = screen_direction(sc, [sh for s_, sh in panels if s_.get("scene_no") == key], names)
             if loc or sd:
                 parts.append(f"Location {key} (draw as simple shapes): {loc or '-'}."
                              + (f" Screen direction (keep left/right consistent): {_short(sd, 200)}." if sd else ""))
@@ -1700,6 +1783,8 @@ def build_grid_prompt(panels: list[tuple[dict, dict]], names: dict, cols: int, r
             if len(seen) > 1:
                 seg.append(f"Location {sc.get('scene_no')}.")
             seg += _shot_parts(shot, names, clip=clip, grid=True)
+            if pack.get("accent"):
+                seg.append(accent_sentence(shot, grid=True))
             note = str(shot.get("_note") or "").strip()
             if note:
                 seg.append("Revision instruction: " + _short(note, clip["note"]))
