@@ -381,6 +381,8 @@ const SECTIONS={
   music:{providers:['agentics','openrouter','elevenlabs','comfyui']},
   tts:{providers:['agentics','openrouter','volcengine','elevenlabs','minimax','comfyui']},
 };
+/* 界面隐藏的渠道标签(面板仍构建、配置照常读写;已生效的渠道仍显示,免得选中项看不见) */
+const HIDDEN_TABS={image:['minimax'],video:['minimax']};
 /* Eleven Music(POST /v1/music):BGM 配乐渠道,时长可指定(3–600s)或模型自定 */
 const EL_MUSIC_MODELS=[
   ['music_v1','Eleven Music v1(官方默认)'],
@@ -1160,6 +1162,7 @@ function showPanel(kind,p){
     tb.classList.toggle('active',x===p);
     // ✅ = 生效渠道(保存后),与文件托管存储渠道一致
     tb.textContent=(x===p?'✅ ':'')+window.t(PROVIDER_META[x].label);
+    tb.style.display=(HIDDEN_TABS[kind]||[]).includes(x)&&x!==p?'none':'';
     $(`#panel-${kind}-${x}`).classList.toggle('show',x===p);
   });
 }
