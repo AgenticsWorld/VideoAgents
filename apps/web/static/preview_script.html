@@ -11,6 +11,7 @@
 <script src="/static/preview-stickbar.js?v=20260913" defer></script>
 <script src="/static/preview-nav.js?v=20260913" defer></script>
 <script src="/static/edit-popup.js?v=20260927a-reviser"></script>
+<script src="/static/print-page.js?v=20261001b"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -153,6 +154,9 @@ tr.sh td.l .schd>div{min-width:0;flex:1}
 .editbtn.sm{font-size:10.5px;padding:0 5px;opacity:.75}
 .issues{font-size:12px;color:var(--yellow)}
 .issues .info{color:var(--dim)}
+/* 🖨️ 打印(2026-10-01,同故事板页):内容区右下角悬浮按钮(让出右侧定位栏与滚动条) */
+#printbtn{position:absolute;right:26px;bottom:16px;z-index:21;width:40px;height:40px;padding:0;border-radius:50%;font-size:19px;line-height:1;box-shadow:0 4px 14px #0008;opacity:.85}
+#printbtn:hover{opacity:1}
 .legend{font-size:11.5px;color:var(--dim);margin:8px 2px 0;display:flex;gap:14px;flex-wrap:wrap}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:4px}
 @media(max-width:800px){table.sc td.l{width:60%}table.sc td.r{font-size:12px}tr.blk td.l{font-size:14px}}
@@ -170,7 +174,7 @@ tr.sh td.l .schd>div{min-width:0;flex:1}
 </header>
 <div id="eps"></div>
 <div id="main">
-  <div id="cwrap"><div id="stickbar" hidden data-no-i18n></div><div id="content"><div class="empty">加载中…</div></div></div>
+  <div id="cwrap"><div id="stickbar" hidden data-no-i18n></div><div id="content"><div class="empty">加载中…</div></div><button id="printbtn" hidden title="打印剧本:生成只含剧本、相关信息两列的表格页,并打开系统打印界面(可打印或存为 PDF)">🖨️</button></div>
   <nav id="nav"></nav>
 </div>
 <div id="lb"><img alt=""><div class="cap"></div></div>
@@ -307,6 +311,7 @@ const clip=(s,n)=>{s=String(s||'').replace(/\s+/g,' ');return s.length>n?s.slice
 
 function render(d){
   LAST=d;NOTES=d.notes||{};
+  $('#printbtn').hidden=!(d.ep&&d.breakdown);
   renderEps(d.episodes||[]);
   const box=$('#content');
   const bd=d.breakdown,ep=d.ep,A=d.agents||{};
@@ -444,6 +449,72 @@ function fallbackBlocks(sc){
   if(sc.transition)out.push({type:'transition',text:sc.transition});
   return out;
 }
+
+/* ---------- 🖨️ 打印(2026-10-01):右下角按钮 → 单独的简洁表格页(只留 剧本 / 相关信息 两列)→ 系统打印界面(打印或存 PDF)。
+   出页 / 分页 / 桌面端回退都在 /static/print-page.js;表行直接取页面上已渲染的主表(含界面语言译文与关键点高亮),
+   去掉第三列与格内的按钮、缩略图、用户注释;页眉 = 本集信息(每页重复);
+   各行都是纯文字,允许跨页,场次头也不强贴下一行(实测整行不拆 / 强贴都会在长动作段、信息多的场次头前留半页空白) ---------- */
+const PRINT_CSS=`
+:root{--text:#111;--dim:#555;--border:#bbb;--panel:#fff;--panel2:#fff;--accent:#1d4ed8;--purple:#6b21a8;--green:#15803d;--red:#b91c1c;--yellow:#a16207;--c-dlg:#d97706;--c-narr:#9333ea;--c-silent:#ddd}
+col.r{width:38%}
+tr{break-inside:auto;page-break-inside:auto}
+td.l{line-height:1.7}
+td.r{color:#555;font-size:8.5pt;line-height:1.55;overflow-wrap:anywhere}
+tr.ep td{background:#f4f4f4}
+tr.sh td{background:#eaeef5;border-top:1.5px solid #666}
+tr.sh td.l{font-weight:600}
+tr.sh .no{margin-right:2mm}
+tr.sh .meta{font-weight:400;color:#555;font-size:9pt;margin-left:2mm}
+tr.sh .cast{display:block;margin-top:1mm;font-weight:400}
+.act{white-space:pre-wrap}
+.snd{color:#555;font-style:italic;white-space:pre-wrap}
+.trn{color:#555;font-size:9pt}
+.trn::before{content:'⤵ '}
+.nar{color:var(--purple);white-space:pre-wrap}
+.nar .nid{font-weight:600;margin-right:2mm}
+.cand{color:#777}
+.dl{display:flex;gap:2mm;align-items:baseline;margin:.3mm 0}
+.dl .spk{flex:none;font-weight:600;white-space:nowrap}
+.dl .spk i,.chip i{display:inline-block;width:2mm;height:2mm;border-radius:50%;margin-right:1mm}
+.dl .par{color:#555;font-size:9pt;flex:none}
+.rl{display:flex;gap:2mm;align-items:baseline;margin:.3mm 0}
+.rl .i{flex:none;width:1.8em;text-align:right}
+.rl .em{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.rl .es{flex:none;color:#111;white-space:nowrap}
+.rl .sh{flex:none;color:var(--green)}
+.info{display:flex;flex-direction:column;gap:.5mm}
+.info .ln{display:flex;gap:1.5mm;align-items:baseline}
+.info .ln .k{flex:none;width:1.4em;text-align:center}
+.info .ln .v{min-width:0;flex:1}
+.info .ln .v b{color:#111}
+.chip{display:inline-flex;align-items:center;font-size:8.5pt;border:1px solid #bbb;border-radius:8px;padding:0 1.5mm;margin:.3mm 1mm .3mm 0;white-space:nowrap}
+.chip .cid{color:#777;font-size:7.5pt;margin-left:1mm}
+.bar{display:inline-block;width:22mm;height:2mm;border-radius:1mm;background:#ddd;vertical-align:middle;overflow:hidden}
+.bar>i{display:block;height:100%;float:left}
+.bar>i.d{background:var(--c-dlg)}.bar>i.n{background:var(--c-narr)}
+.ib{display:inline-block;width:12mm;height:1.8mm;border-radius:1mm;background:#ddd;overflow:hidden;vertical-align:middle;margin:0 1mm}
+.ib>i{display:block;height:100%;background:#1d4ed8}
+.ib>i.hi{background:#b91c1c}.ib>i.mid{background:#d97706}
+.issues{color:#a16207}.issues .info{color:#555}
+mark{background:#ffe9a8;color:inherit}
+mark.kp-detail{background:#cfe8ff}
+`;
+$('#printbtn').onclick=()=>{
+  const d=LAST,bd=d&&d.breakdown,tb=document.querySelector('#content table.sc tbody');if(!bd||!tb)return;
+  const epi=(d.episodes||[]).find(e=>e.ep===d.ep)||{},title=(d.ep+' '+(bd.title||epi.title||'')).trim();
+  const sub=`⏱ ${bd.total_est_s==null?'—':num(bd.total_est_s)} / ${bd.duration_budget_s==null?'—':num(bd.duration_budget_s)} s · `+I18N.f('{n} 场 · {l} 句台词 · {m} 条旁白',{n:(bd.scenes||[]).length,l:(bd.totals||{}).lines??0,m:(bd.totals||{}).narration_items??0});
+  const cell=td=>{
+    if(!td)return '';
+    const c=td.cloneNode(true);
+    c.querySelectorAll('.chip img').forEach(im=>{const i=document.createElement('i');i.style.background=im.style.borderColor||'#5b6478';im.replaceWith(i)});   // 头像换回台词配色色点
+    c.querySelectorAll('button,img,.un,.jumps').forEach(x=>x.remove());
+    return c.innerHTML;
+  };
+  const rows=[...tb.rows].map(tr=>`<tr class="${tr.classList.contains('sh')?'sh':tr.classList.contains('ep')?'ep':'blk'}"><td class="l">${cell(tr.querySelector('td.l'))}</td><td class="r">${cell(tr.querySelector('td.r'))}</td></tr>`).join('');
+  PrintPage.open({title:t('剧本')+' '+title,lang:I18N.lang,css:PRINT_CSS,rows,
+    head:`${esc(title)}<span class="sub">${esc(sub)}</span>`,
+    cols:[{label:t('剧本')},{label:t('相关信息'),cls:'r'}]});
+};
 
 // 集行:≤12 集逐集按钮(带拆解状态角标),更多时收成一行下拉(/static/ep-picker.js,2026-09-12)
 function renderEps(episodes){

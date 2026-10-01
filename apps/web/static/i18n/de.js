@@ -4003,4 +4003,5 @@ window.I18N_DICT = {
 "打印分镜表:生成只含分镜画面截图、画面信息两列的表格页,并打开系统打印界面(可打印或存为 PDF)": "Clip-Tabelle drucken: erzeugt eine Tabellenseite mit nur zwei Spalten (Clip-Screenshot, Bildnotizen) und öffnet den Druckdialog des Systems (drucken oder als PDF speichern)",
 "分镜画面截图": "Clip-Screenshot",
 "画面信息": "Bildnotizen",
+"打印剧本:生成只含剧本、相关信息两列的表格页,并打开系统打印界面(可打印或存为 PDF)": "Drehbuch drucken: erzeugt eine Tabellenseite mit nur zwei Spalten (Drehbuch, zugehörige Infos) und öffnet den Druckdialog des Systems (drucken oder als PDF speichern)",
 };

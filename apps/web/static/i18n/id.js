@@ -4003,4 +4003,5 @@ window.I18N_DICT = {
 "打印分镜表:生成只含分镜画面截图、画面信息两列的表格页,并打开系统打印界面(可打印或存为 PDF)": "Cetak tabel klip: membuat halaman tabel dengan hanya dua kolom (tangkapan layar klip, catatan visual) dan membuka dialog cetak sistem (cetak atau simpan sebagai PDF)",
 "分镜画面截图": "Tangkapan layar klip",
 "画面信息": "Catatan visual",
+"打印剧本:生成只含剧本、相关信息两列的表格页,并打开系统打印界面(可打印或存为 PDF)": "Cetak naskah: membuat halaman tabel dengan hanya dua kolom (naskah, info terkait) dan membuka dialog cetak sistem (cetak atau simpan sebagai PDF)",
 };

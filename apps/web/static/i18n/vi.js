@@ -4003,4 +4003,5 @@ window.I18N_DICT = {
 "打印分镜表:生成只含分镜画面截图、画面信息两列的表格页,并打开系统打印界面(可打印或存为 PDF)": "In bảng clip: tạo trang bảng chỉ gồm hai cột (ảnh chụp khung hình clip, ghi chú hình ảnh) và mở hộp thoại in của hệ thống (in hoặc lưu thành PDF)",
 "分镜画面截图": "Ảnh chụp khung hình clip",
 "画面信息": "Ghi chú hình ảnh",
+"打印剧本:生成只含剧本、相关信息两列的表格页,并打开系统打印界面(可打印或存为 PDF)": "In kịch bản: tạo trang bảng chỉ gồm hai cột (kịch bản, thông tin liên quan) và mở hộp thoại in của hệ thống (in hoặc lưu thành PDF)",
 };

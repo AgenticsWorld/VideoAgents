@@ -4014,4 +4014,5 @@ window.I18N_DICT = {
 "打印分镜表:生成只含分镜画面截图、画面信息两列的表格页,并打开系统打印界面(可打印或存为 PDF)": "Print clip sheet: builds a table page with only two columns (clip screenshot, visual notes) and opens the system print dialog (print or save as PDF)",
 "分镜画面截图": "Clip screenshot",
 "画面信息": "Visual notes",
+"打印剧本:生成只含剧本、相关信息两列的表格页,并打开系统打印界面(可打印或存为 PDF)": "Print script: builds a table page with only two columns (script, related info) and opens the system print dialog (print or save as PDF)",
 };

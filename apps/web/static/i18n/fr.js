@@ -4005,4 +4005,5 @@ window.I18N_DICT = {
 "打印分镜表:生成只含分镜画面截图、画面信息两列的表格页,并打开系统打印界面(可打印或存为 PDF)": "Imprimer le tableau des clips : génère une page de tableau avec seulement deux colonnes (capture du clip, notes visuelles) et ouvre la boîte de dialogue d'impression du système (imprimer ou enregistrer en PDF)",
 "分镜画面截图": "Capture du clip",
 "画面信息": "Notes visuelles",
+"打印剧本:生成只含剧本、相关信息两列的表格页,并打开系统打印界面(可打印或存为 PDF)": "Imprimer le scénario : génère une page de tableau avec seulement deux colonnes (scénario, informations associées) et ouvre la boîte de dialogue d'impression du système (imprimer ou enregistrer en PDF)",
 };
