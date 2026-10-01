@@ -156,7 +156,7 @@ def main() -> None:
     run(str(python), "-m", "playwright", "install", "chromium", env=browser_env)
     # Validate after the final internal relocation.
     run(str(python), "-c",
-        "import cv2,fastapi,fontTools,faster_whisper,lark_oapi,numpy,PIL,playwright,qrcode,scenedetect,scipy,tos,uvicorn,yaml,yt_dlp",
+        "import cv2,fastapi,fontTools,faster_whisper,lark_oapi,numpy,onnxruntime,PIL,playwright,qrcode,scenedetect,scipy,tos,uvicorn,yaml,yt_dlp",
         env=env)
     # deepagents 引擎(桌面版默认引擎):运行时自带,core.deepagents_python() 回落到当前解释器
     run(str(python), "-c",

@@ -25,6 +25,7 @@ dependencies = [
   "fonttools>=4.47,<5",   # 花字:字体 manifest 扫描(name 表 family + cmap CJK 覆盖判定)
   "lark-oapi>=1.4,<2",
   "numpy>=1.24,<3",
+  "onnxruntime>=1.17,<2", # 后期页去人声 / 去环境声:本机 MDX-Net 分离模型(modules/audio_separation.py;faster-whisper 也依赖它)
   "Pillow>=10,<12",       # 素材库:分镜联系图拼图(modules/footage_library.py)
   "playwright>=1.60,<2",  # 花字:HTML 渲染引擎(captions_html.py;首次需 python3 -m playwright install chromium)
   "PyYAML>=6,<7",

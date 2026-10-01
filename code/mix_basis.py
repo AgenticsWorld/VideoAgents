@@ -14,6 +14,7 @@ BGM cue 与旁白挂点按剪后时间线(cum_start_s)摆位;交付时盖章记�
 
 sources 输出的每组字段:
   src            本组混音取源(项目相对路径;v>0 = 后期采纳版本,v0 = 母本)
+  sound_v        原生声轨内容所在版本(后期页去人声 / 去环境声改过才 > 0,2026-10-01);盖章后它变了 = check FAIL,须重混
   duration_s     该文件实测时长;cum_start_s = 混音时间线上的组起点(按 src 实测累计 **+ 本组前的组边界层**,BGM / 旁白摆位用这个)
   boundary_before_s 本组前组边界占时(定格 + 黑场停留 + 插入段,过场设计 2026-09-24):原生轨在此留白(按 boundaries[].audio:
                  mute 静音 / sustain 延续前段房间声),BGM / 旁白照常跨过去铺——跨越边界的 cue 不断;cum_start_groups_s = 不含边界层的组累计

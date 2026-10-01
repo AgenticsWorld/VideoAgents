@@ -10229,7 +10229,9 @@ POST_GATE_ID = "g9p"
 POST_JOBS: dict[str, dict] = {}     # "<project>/<ep>" -> {status, kind, started_at, finished_at, error, log, recipe_ids}
 POST_RECORD_AGENTS = {"level": "09-audio/audio-mixing", "mix_target": "09-audio/audio-mixing", "ambience": "09-audio/audio-mixing",
                       "bgm_segment": "09-audio/music", "caption": "10-editing/caption", "subtitle_style": "10-editing/subtitle",
-                      "transition": "10-editing/transition"}
+                      "transition": "10-editing/transition",
+                      # 人声分离类(宿主已出片并提交)改了原生声轨 → 「派单重混」发混音工位
+                      "remove_vocals": "09-audio/audio-mixing", "remove_ambience": "09-audio/audio-mixing"}
 POST_SFX_AGENT = "09-audio/sound-effect"
 POST_EDIT_AGENT = "10-editing/edit"          # 分镜剪辑「派单剪辑师」模块的收件工位
 
@@ -10721,7 +10723,7 @@ async def api_post_recipe_create(project: str, ep: str, body: dict):
                                body.get("refs") or {}, str(body.get("note") or ""))
         except ValueError as e:
             raise ServiceError(400, str(e)) from None
-        r["cost"]["estimate"] = "ffmpeg 本机 · ¥0" if r["exec"] == "ffmpeg" else ("按渠道计费" if r["exec"] == "agent" else "成片时生效 · ¥0")
+        r["cost"]["estimate"] = pp.cost_estimate(r)
         note = _post_transition_hold_resolve(base, ep2, plan, r)
         plan["recipes"].append(r)
         adopted = False
@@ -10746,7 +10748,7 @@ async def api_post_recipe_update(project: str, ep: str, rid: str, body: dict):
         if not r:
             raise ServiceError(404, "recipe not found")
         if r.get("status") in ("dispatched",):
-            raise ServiceError(409, "派单中的修改单不能改;等回来或先弃用")
+            raise ServiceError(409, "派单中的调整不能改;等回来或先弃用")
         kind = pp.KIND_BY_ID[r["kind"]]
         try:
             if "scope" in body:
@@ -10761,7 +10763,7 @@ async def api_post_recipe_update(project: str, ep: str, rid: str, body: dict):
                 r["refs"] = {k: v for k, v in (body["refs"] or {}).items() if v is not None}
             if "note" in body:
                 if not str(body["note"]).strip():
-                    raise ValueError("修改单指令(note)必填")
+                    raise ValueError("调整指令(note)必填")
                 r["note"] = str(body["note"]).strip()[:2000]
         except ValueError as e:
             raise ServiceError(400, str(e)) from None
@@ -10781,9 +10783,9 @@ async def api_post_recipe_delete(project: str, ep: str, rid: str):
         if not r:
             raise ServiceError(404, "recipe not found")
         if r.get("status") == "adopted":
-            raise ServiceError(409, "已提交的修改单先「弃用」再删除")
+            raise ServiceError(409, "已提交的调整先「弃用」再删除")
         if r.get("status") == "dispatched":
-            raise ServiceError(409, "派单中的修改单不能删除")
+            raise ServiceError(409, "派单中的调整不能删除")
         plan["recipes"] = [x for x in plan["recipes"] if x.get("id") != rid]
         pp.save_plan(base, ep2, plan)
         return {"ok": True, "summary": pp.summary(plan)}
@@ -10881,6 +10883,13 @@ def _post_agent_message(base: Path, ep: str, plan: dict, r: dict, groups: list[d
                          "无法表达或渠道不支持 = 回执说明原因,不要改台账其它字段、不要自写 ffmpeg 改母本。")
         return pp.AGENT_ID, "\n".join(lines)
     agent = POST_RECORD_AGENTS.get(r["kind"], pp.AGENT_ID)
+    if r["kind"] in pp.SEPARATION_KINDS:
+        # 去人声 / 去环境声:宿主已出片、用户已提交,作用域内各组当前采纳版本的原生声轨换过了 → 只需重混
+        lines = head + [f"这条处方已由宿主出片并提交:作用域内各组当前采纳版本的原生声轨已换成「{kind['label']}」后的声轨(画面未动、时长未变)。",
+                        f"请重跑本集混音:先 python3 code/mix_basis.py sources --project {base.name} --ep {ep} 取各组当前版本的原生轨,"
+                        f"重混 → assets/audio/final/{ep}.wav(LUFS/TP 达标,BGM / 旁白 / 音效摆位不变),交付前 python3 code/mix_basis.py stamp 盖章。",
+                        "不要自己再做人声分离、不要改组视频文件;完成后回执写明改了哪些文件,不要动 post_plan.json。"]
+        return agent, "\n".join(lines)
     lines = head + ["这是后期处理页记入台账(edit/%s/post_plan.json)的「记录类」处方,请按本工位规约把它落地到对应产物" % ep]
     if r["kind"] in ("level", "mix_target", "ambience"):
         lines.append(f"(重跑混音 → assets/audio/final/{ep}.wav,LUFS/TP 达标;只改台账要求的段落/组,其余保持)。")
@@ -10921,7 +10930,7 @@ async def api_post_recipe_action(project: str, ep: str, rid: str, action: str, b
             alive = _post_run_alive(r.get("run_id"))
             job = POST_JOBS.get(f"{base.name}/{ep2}") or {}
             if alive or (r.get("run_id") == "host" and job.get("status") == "running" and rid in (job.get("recipe_ids") or [])):
-                raise ServiceError(409, "修改单还在派单运行中,等结束再重置")
+                raise ServiceError(409, "调整还在派单运行中,等结束再重置")
         pp.set_status(r, "draft", error="")
         pp.save_plan(base, ep2, plan)
         return {"ok": True, "recipe": _post_recipe_public(base, ep2, r)}
@@ -10954,7 +10963,7 @@ async def api_post_recipe_action(project: str, ep: str, rid: str, action: str, b
         return {"ok": True, "created": made, "summary": pp.summary(plan)}
     if action in ("apply", "preview"):
         if r.get("exec") != "ffmpeg":
-            raise ServiceError(400, "只有 ffmpeg 类修改单能直接出片/预览;agent 类请「派单」")
+            raise ServiceError(400, "只有立即出片类调整能直接出片/预览;派单类请「派单出片」")
         if action == "apply" and r.get("status") == "dispatched":
             raise ServiceError(409, "已在派单中")
         extra = [str(x) for x in (body.get("with") or []) if pp.find_recipe(plan, str(x)) and (pp.find_recipe(plan, str(x)) or {}).get("exec") == "ffmpeg"]
@@ -10985,7 +10994,10 @@ async def api_post_recipe_action(project: str, ep: str, rid: str, action: str, b
         return {"ok": True, "job": job, "recipe": _post_recipe_public(base, ep2, r)}
     if action == "dispatch":
         if r.get("exec") == "ffmpeg":
-            raise ServiceError(400, "ffmpeg 类修改单用「出片」,不派 agent")
+            if r.get("kind") not in pp.SEPARATION_KINDS:
+                raise ServiceError(400, "立即出片类调整用「出片」,不派 agent")
+            if r.get("status") != "adopted":
+                raise ServiceError(400, "先出片并提交,再派单重混")
         if r.get("status") == "dispatched":
             raise ServiceError(409, "已在派单中")
         groups, _ = _post_groups(base, ep2, plan)
@@ -11579,7 +11591,7 @@ def _post_precheck_sync(project: str, ep: str, run_check: bool = True) -> dict:
     job = POST_JOBS.get(f"{base.name}/{ep2}") or {}
     blockers = []
     if s.get("dispatched"):
-        blockers.append(f"派单中 {s['dispatched']} 条修改单")
+        blockers.append(f"派单中 {s['dispatched']} 条调整")
     if fails:
         blockers.append("机检 FAIL:" + ", ".join(i["name"] for i in fails))
     if job.get("status") == "running":

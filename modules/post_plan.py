@@ -7,7 +7,8 @@
 字段与状态机,差别只在 kind 的参数表。
 
 三种执行方式(exec):
-  ffmpeg  宿主 CLI code/post_apply.py 直接出片(分镜组母本永不覆盖,产物按版本另存 assets/post/)
+  ffmpeg  宿主 CLI code/post_apply.py 直接出片(分镜组母本永不覆盖,产物按版本另存 assets/post/);
+          含本机模型类做法(engine=separation:去人声 / 去环境声,modules/audio_separation.py,画面流拷贝只换声轨)
   agent   派单 10-editing/post-finishing,agent 出片后用 post_apply.py register 登记版本
   record  只记台账,出成片时由拼装/混音工序按台账生效(包装层、声音层)
 
@@ -64,7 +65,7 @@ LUT_PRESETS = [
 # 处方目录:params 的 type ∈ number|range|select|text|bool|palette|asset;
 # refs ∈ frame(参考帧)|mask(蒙版)|asset(素材);preview=True 表示可快速预览(仅 ffmpeg 类)
 KINDS: list[dict] = [
-    # ---- 画面修补(2026-09-23 由「细节填充」改名;局部重绘排首位作新修改单默认做法) ----
+    # ---- 画面修补(2026-09-23 由「细节填充」改名;局部重绘排首位作新调整默认做法) ----
     {"id": "local_repaint", "section": "fill", "label": "局部重绘", "exec": "agent", "scopes": ["group", "range"],
      "refs": ["mask", "frame"],
      "params": [{"key": "strength", "label": "改动幅度", "type": "range", "min": 0.1, "max": 1, "step": 0.1, "default": 0.5}],
@@ -170,7 +171,7 @@ KINDS: list[dict] = [
                 {"key": "hold_audio", "label": "黑场声音", "type": "select", "options": ["sustain", "fade", "mute"], "default": "sustain"}],
      "hint": "提交即写回 shot_list.generation_groups[].transition_in,出成片时 render_transitions 重渲;定格/黑场停留会插入帧使成片变长,"
              "外挂声轨与字幕由 finalize_episode 按同一张 timemap 平移(黑场停留只配 hard_cut/dip_black/fade_black);"
-             "字卡 / 定场空镜 / 时光流转等插入段请到分镜预览页「过场卡」设计(本处方提交会保留该组已有的插入段设计)"},
+             "字卡 / 定场空镜 / 时光流转等插入段请到分镜预览页「过场卡」设计(本调整提交会保留该组已有的插入段设计)"},
     # ---- 音效与声音 ----
     {"id": "ambience", "section": "sound", "label": "环境声", "exec": "record", "scopes": ["scene", "episode"],
      "params": [{"key": "desc", "label": "描述", "type": "text", "default": ""},
@@ -190,9 +191,22 @@ KINDS: list[dict] = [
      "params": [{"key": "lufs", "label": "响度 LUFS", "type": "range", "min": -18, "max": -12, "step": 0.5, "default": -14},
                 {"key": "tp", "label": "真峰 dBTP", "type": "range", "min": -2, "max": -0.5, "step": 0.1, "default": -1}],
      "hint": "整集响度目标,派混音工位重跑"},
+    # 人声分离(2026-10-01):本机 ONNX 模型把原生声轨拆成「人声」与「音效 / 环境声 / 配乐」,产出只换声轨的新版本;
+    # keep_db ≤ -60 = 完全去掉。混音按采纳版本取原生轨,所以提交后必须重跑 p8-mix(机检 mix_basis_current 会 FAIL 提醒)
+    {"id": "remove_vocals", "section": "sound", "label": "去人声", "exec": "ffmpeg", "engine": "separation",
+     "scopes": ["group", "range", "block", "scene", "episode"],
+     "params": [{"key": "keep_db", "label": "人声保留 dB", "type": "range", "min": -60, "max": -6, "step": 1, "default": -60}],
+     "hint": "用本机人声分离模型把对白 / 人声从原生声轨里去掉,保留音效、环境声和配乐;画面不重编码。"
+             "人声保留 -60 = 完全去掉,调高 = 只压低。首次使用自动下载模型(约 64 MB);提交后要重跑混音才进成片"},
+    {"id": "remove_ambience", "section": "sound", "label": "去环境声", "exec": "ffmpeg", "engine": "separation",
+     "scopes": ["group", "range", "block", "scene", "episode"],
+     "params": [{"key": "keep_db", "label": "环境声保留 dB", "type": "range", "min": -60, "max": -6, "step": 1, "default": -60}],
+     "hint": "只留人声:用本机人声分离模型把音效、环境声和配乐从原生声轨里去掉;画面不重编码。"
+             "环境声保留 -60 = 完全去掉,调高 = 只压低。首次使用自动下载模型(约 64 MB);提交后要重跑混音才进成片"},
 ]
 KIND_BY_ID = {k["id"]: k for k in KINDS}
 RETIME_KINDS = {k["id"] for k in KINDS if k.get("retime")}      # 会改组时长的做法(慢动作)
+SEPARATION_KINDS = {k["id"] for k in KINDS if k.get("engine") == "separation"}   # 只改声轨的本机模型类做法
 SECTION_BY_ID = {s["id"]: s for s in SECTIONS}
 # block = 叙事块(shot_list.generation_groups[].narrative_block.id,闪回/梦境/蒙太奇/想象段;2026-09-17):
 # 同一场景常被现实段与闪回段共用,按 scene 开处方会误伤现实段,故叙事块单列一级
@@ -353,12 +367,18 @@ def make_recipe(kind_id: str, scope: dict, params: dict | None = None, refs: dic
     if scope["level"] not in kind.get("scopes", []):
         raise ValueError(f"{kind['label']} 不支持作用域 {scope['level']}")
     if not str(note or "").strip():
-        raise ValueError("修改单指令(note)必填:执行侧能力不足时退化为给 agent 的自然语言指令")
+        raise ValueError("调整指令(note)必填:执行侧能力不足时退化为给 agent 的自然语言指令")
     sec = SECTION_BY_ID[kind["section"]]
     return {"id": new_id(), "scope": scope, "layer": sec["layer"], "section": kind["section"], "kind": kind_id,
             "exec": kind["exec"], "params": coerce_params(kind, params), "refs": dict(refs or {}),
             "note": str(note).strip()[:2000], "status": "draft", "created_at": _now(), "updated_at": _now(),
             "created_by": by, "run_id": None, "output": None, "cost": {"estimate": "", "actual": ""}, "error": ""}
+
+
+def cost_estimate(recipe: dict) -> str:
+    if recipe.get("kind") in SEPARATION_KINDS:
+        return "本机模型 · ¥0"
+    return "ffmpeg 本机 · ¥0" if recipe.get("exec") == "ffmpeg" else ("按渠道计费" if recipe.get("exec") == "agent" else "成片时生效 · ¥0")
 
 
 def find_recipe(plan: dict, rid: str) -> dict | None:
@@ -412,7 +432,7 @@ def propose_recipe(plan: dict, kind_id: str, scope: dict, params: dict | None, r
             r["params"], r["refs"], r["note"] = fresh["params"], fresh["refs"], fresh["note"]
             set_status(r, "draft", error="")
             return r, "updated"
-    fresh["cost"]["estimate"] = "ffmpeg 本机 · ¥0" if fresh["exec"] == "ffmpeg" else ("按渠道计费" if fresh["exec"] == "agent" else "成片时生效 · ¥0")
+    fresh["cost"]["estimate"] = cost_estimate(fresh)
     plan.setdefault("recipes", []).append(fresh)
     return fresh, "created"
 
@@ -489,13 +509,30 @@ def next_version_no(plan: dict, gid: str) -> int:
 
 
 def register_version(plan: dict, base: Path, ep: str, gid: str, rel_file: str, recipe_ids: list[str],
-                     base_v: int, by: str = "post_apply") -> dict:
+                     base_v: int, by: str = "post_apply", sound: bool = False) -> dict:
     v = next_version_no(plan, gid)
     ver = {"v": v, "file": rel_file, "recipes": list(recipe_ids), "base_v": int(base_v),
            "fingerprint": file_fingerprint(base / rel_file), "created_at": _now(), "created_by": by,
            "adopted_at": None, "cleaned": False}
+    if sound:
+        ver["sound"] = True       # 本版本改了原生声轨的内容(去人声 / 去环境声);混音基准据此判「须重混」
     group_versions(plan, gid).append(ver)
     return ver
+
+
+def sound_version(plan: dict, gid: str, v: int | None = None) -> int:
+    """版本 v(缺省 = 当前指针)的原生声轨来自哪个版本:沿 base_v 链回溯到最近一个改过声轨内容的版本,没有 = 0(母本原声)。"""
+    v = current_version(plan, gid) if v is None else int(v)
+    seen = set()
+    while v > 0 and v not in seen:
+        seen.add(v)
+        ver = next((x for x in group_versions(plan, gid) if int(x.get("v") or 0) == v), None)
+        if not ver:
+            break
+        if ver.get("sound"):
+            return v
+        v = int(ver.get("base_v") or 0)
+    return 0
 
 
 # ---------------------------------------------------------------- 版本的时长编辑(timemap,2026-09-17)
@@ -589,7 +626,7 @@ def adopt_recipe(base: Path, ep: str, plan: dict, recipe: dict) -> dict:
     """采纳:ffmpeg/agent 类把产物版本设为当前指针;record 类直接记台账;转场类回写 shot_list.transition_in。"""
     if recipe.get("exec") in ("ffmpeg", "agent"):
         if recipe.get("status") != "applied" or not (recipe.get("output") or {}).get("versions"):
-            raise ValueError("只有「已出片」的修改单才能提交")
+            raise ValueError("只有「已出片」的调整才能提交")
         for gid, info in recipe["output"]["versions"].items():
             adopt_version(plan, gid, int(info.get("v") or 0))
     elif recipe.get("kind") == "transition":
@@ -616,7 +653,7 @@ def write_transition_in(base: Path, ep: str, recipe: dict, remove: bool = False)
     sl_path = base / "directing" / ep / "shot_list.json"
     sl = read_json(sl_path)
     if not isinstance(sl, dict):
-        raise ValueError("shot_list.json 不存在,转场修改单无处回写")
+        raise ValueError("shot_list.json 不存在,转场调整无处回写")
     gid = recipe["scope"].get("group_id")
     hit = False
     for g in sl.get("generation_groups", []) or []:

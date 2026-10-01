@@ -87,6 +87,7 @@ def current_basis(proj: Path, ep: str, plan: dict | None = None, groups: list[st
     for gid in (groups if groups is not None else group_order(proj, ep)):
         f = pp.current_file(proj, ep, gid, plan)
         rows.append({"group_id": gid, "v": pp.current_version(plan, gid),
+                     "sound_v": pp.sound_version(plan, gid),      # 原生声轨内容所在版本(去人声 / 去环境声改过才 > 0)
                      "src": str(f.relative_to(proj)) if f else None,
                      "time_ops": timemap.normalize_ops(pp.effective_time_ops(plan, gid))})
     return rows
@@ -275,7 +276,7 @@ def compare(proj: Path, ep: str, plan: dict | None = None) -> dict:
            "cur_boundary_fp": boundary_fingerprint(cur_b), "cur_boundary_delta_s": boundary_delta(cur_b),
            "cur_boundary_has_inserts": boundary_has_inserts(cur_b), "mix_boundary_fp": None, "mix_boundary_delta_s": 0.0,
            "boundary_status": BND_NONE if not cur_b else BND_ABSENT,
-           "audio_present": audio_path(proj, ep) is not None, "changed_groups": [], "detail": ""}
+           "audio_present": audio_path(proj, ep) is not None, "changed_groups": [], "sound_changed": [], "detail": ""}
     man = load_manifest(proj, ep)
     if not man:
         res["detail"] = ("本集尚无混音产物" if not res["audio_present"] else
@@ -299,6 +300,9 @@ def compare(proj: Path, ep: str, plan: dict | None = None) -> dict:
         elif int(m.get("v") or 0) != int(r.get("v") or 0):
             changed.append(f"{r['group_id']} v{int(m.get('v') or 0)}→v{r['v']}(仅版本号)")
     res["changed_groups"] = changed
+    # 原生声轨内容变了(后期页去人声 / 去环境声,或其弃用回退):时轴没变也必须重混,否则成片里还是旧声音
+    res["sound_changed"] = [r["group_id"] for r in cur
+                            if r["group_id"] in m_by and int(m_by[r["group_id"]].get("sound_v") or 0) != int(r.get("sound_v") or 0)]
     if res["cur_ops_fp"] == man.get("ops_fingerprint"):
         if versions_fingerprint(cur) == man.get("versions_fingerprint"):
             res["status"] = STATUS_CURRENT
@@ -332,15 +336,20 @@ def compare(proj: Path, ep: str, plan: dict | None = None) -> dict:
     elif res["boundary_status"] == BND_ABSENT:
         res["detail"] += (";混音清单不含组边界层(旧口径)而当前 shot_list 有边界插入 Δ{:+.3f}s:出成片时声轨按 timemap 切开"
                           "{}").format(res["cur_boundary_delta_s"], ",字卡/定场处 BGM 会断,须重跑 p8-mix" if res["cur_boundary_has_inserts"] else "(仅定格/黑场,可接受)")
+    if res["sound_changed"]:
+        res["detail"] += (";{} 组的原生声轨在混音后改过(去人声 / 去环境声):{}{},须重跑 p8-mix,否则成片仍是旧声音"
+                          ).format(len(res["sound_changed"]), ", ".join(res["sound_changed"][:6]), "…" if len(res["sound_changed"]) > 6 else "")
     if res.get("audio_fingerprint_ok") is False:
         res["detail"] += ";⚠ 混音文件在盖章后被改动(指纹不符)"
     return res
 
 
 def check_row(res: dict) -> tuple[str, str]:
-    """机检口径:(PASS|WARN|FAIL, detail)。stale 且混音带后期时轴 = FAIL;其余失配只 WARN。"""
+    """机检口径:(PASS|WARN|FAIL, detail)。stale 且混音带后期时轴 = FAIL;原生声轨内容改过 = FAIL;其余失配只 WARN。"""
     st = res.get("status")
     bst = res.get("boundary_status")
+    if res.get("sound_changed"):
+        return "FAIL", res.get("detail", "")
     if bst == BND_STALE and (res.get("cur_boundary_has_inserts") or float(res.get("mix_boundary_delta_s") or 0) > 0):
         return "FAIL", res.get("detail", "")
     if bst == BND_ABSENT and res.get("cur_boundary_has_inserts"):

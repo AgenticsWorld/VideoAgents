@@ -16,7 +16,10 @@ assets/clips/epNN/grpNNN.mp4 永不覆盖,产物按版本另存 assets/post/epNN
                未裁决的就地更新并退回草稿,不堆重复;只开处方,不出片、不采纳(出片用 apply,采纳归用户 H3P)
   apply        --recipe <id>[ --recipe <id2>...] [--group grpNNN] [--preview]
                对处方作用域内的每个组,在当前版本之上施加 ffmpeg 滤镜链出新版本(多条处方=同一版本一次链上);
-               --preview 只出前 4 秒 480p 低清到 assets/post/epNN/<grp>/refs/preview_<id>.mp4,不进版本链
+               --preview 只出前 4 秒 480p 低清到 assets/post/epNN/<grp>/refs/preview_<id>.mp4,不进版本链;
+               人声分离类做法(去人声 remove_vocals / 去环境声 remove_ambience,2026-10-01)也走这里:本机 ONNX 模型
+               (modules/audio_separation.py,首次使用下载到 data/models/audio-separation/)重做原生声轨,画面流拷贝不重编码,
+               版本条目标 sound=true——混音基准据此判须重跑 p8-mix;可与画面类处方同一次 apply 叠在同一版本上
   register     --recipe <id> --file <路径> [--group grpNNN] [--time-ops '<JSON>']
                agent 类处方把外部产物登记为新版本(状态→已出片)。时长核对(2026-09-23,agent 处方**可以**改时长):
                改时长类做法(慢动作)按处方参数推导 time_ops,产物须 = 源 + Σ变长 ±1 帧,否则拒登记;其他做法产物与源
@@ -69,6 +72,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import parse_args, REPO_ROOT, DATA_DIR  # noqa: E402  副作用:modules/ 入 sys.path
 
+import audio_separation as asep  # noqa: E402
 import color_script  # noqa: E402
 import mix_manifest  # noqa: E402
 import post_fx as fx  # noqa: E402
@@ -159,6 +163,9 @@ def do_apply(proj: Path, ep: str, recipe_ids: list[str], only_group: str | None,
     if preview:
         targets = targets[:1]
     luts = lut_files(proj)
+    # 人声分离类(只改声轨)与画面滤镜类分开走:前者不进 filter_complex
+    a_recipes = [r for r in recipes if r["kind"] in pp.SEPARATION_KINDS]
+    v_recipes = [r for r in recipes if r["kind"] not in pp.SEPARATION_KINDS]
     ok_all = True
     outputs: dict[str, dict] = {}
     for g in targets:
@@ -174,21 +181,30 @@ def do_apply(proj: Path, ep: str, recipe_ids: list[str], only_group: str | None,
             if r["kind"] == "scene_palette" and not r["params"].get("palette"):
                 r["params"]["palette"] = scene_palette_from_script(proj, ep, g.get("scene_no") or "", g.get("scene_id") or "")
         try:
+            if a_recipes and not info.get("has_audio"):
+                raise fx.FxError(f"{gid} 当前版本没有声轨,无法{' / '.join(pp.KIND_BY_ID[r['kind']]['label'] for r in a_recipes)}")
             tail = fx.preview_scale_tail() if preview else ""
-            graph = fx.build_graph(recipes, ctx, tail)
+            graph = fx.build_graph(v_recipes, ctx, tail)
             base_v = pp.current_version(plan, gid)
             if preview:
                 dst = pp.post_dir(proj, ep) / gid / "refs" / f"preview_{recipes[0]['id']}.mp4"
                 t0 = float(recipes[0]["scope"].get("t0") or 0) if recipes[0]["scope"].get("level") == "range" else 0.0
                 fx.apply_graph(src, dst, graph, ctx, preview=True, preview_from=t0)
+                if a_recipes:
+                    _separate_into(proj, src, dst, a_recipes, gid, window=(t0, fx.PREVIEW_SECONDS))
                 _log("DONE", f"{gid} 预览 {dst.relative_to(proj)}(基于 v{base_v}){' · ' + '; '.join(ctx.notes) if ctx.notes else ''}")
                 print(json.dumps({"preview": str(dst.relative_to(proj)), "group_id": gid, "base_v": base_v, "notes": ctx.notes}, ensure_ascii=False))
                 continue
             v = pp.next_version_no(plan, gid)
             dst = pp.post_dir(proj, ep) / gid / f"v{v}.mp4"
             t_start = time.time()
-            fx.apply_graph(src, dst, graph, ctx, preview=False)
-            ver = pp.register_version(plan, proj, ep, gid, str(dst.relative_to(proj)), [r["id"] for r in recipes], base_v)
+            if v_recipes:
+                fx.apply_graph(src, dst, graph, ctx, preview=False)
+            if a_recipes:
+                # 没有画面类处方时画面直接取源(流拷贝,不重编码);有则取刚出的滤镜链结果
+                ctx.notes.append(_separate_into(proj, src, dst, a_recipes, gid, video=dst if v_recipes else src))
+            ver = pp.register_version(plan, proj, ep, gid, str(dst.relative_to(proj)), [r["id"] for r in recipes], base_v,
+                                      sound=bool(a_recipes))
             outputs[gid] = {"v": ver["v"], "file": ver["file"]}
             _log("DONE", f"{gid} v{ver['v']} ← v{base_v} {dst.relative_to(proj)} {time.time() - t_start:.0f}s{' · ' + '; '.join(ctx.notes) if ctx.notes else ''}")
         except Exception as e:  # noqa: BLE001
@@ -204,9 +220,25 @@ def do_apply(proj: Path, ep: str, recipe_ids: list[str], only_group: str | None,
         prev = (r.get("output") or {}).get("versions") or {}
         merged = {**prev, **outputs}
         pp.set_status(r, "applied", output={"versions": merged}, error="", applied_at=pp._now())
-        r["cost"]["actual"] = f"ffmpeg 本机 · {len(outputs)} 组"
+        r["cost"]["actual"] = f"{'本机模型' if r['kind'] in pp.SEPARATION_KINDS else 'ffmpeg 本机'} · {len(outputs)} 组"
     pp.save_plan(proj, ep, plan)
     return 0 if ok_all else 1
+
+
+def _separate_into(proj: Path, src: Path, dst: Path, a_recipes: list[dict], gid: str,
+                   video: Path | None = None, window: tuple[float, float] | None = None) -> str:
+    """人声分离类处方:src 的原生声轨按处方重做后换进 dst。window 给了 = 预览(只处理这一段,dst 已是缩小的预览画面);
+    否则画面取 video(流拷贝)。输出声轨还原成源的采样率 / 声道数。返回一句电平说明。"""
+    sr, ch = asep.audio_format(src)
+    wav = dst.with_name(dst.stem + ".sep.wav")
+    wav.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        st = asep.process(src, a_recipes, wav, DATA_DIR, window=window, log=lambda m: _log("RUN", m))
+        asep.replace_audio(dst if window else (video or src), wav, dst, sample_rate=sr, channels=ch)
+    finally:
+        wav.unlink(missing_ok=True)
+    names = " + ".join(pp.KIND_BY_ID[r["kind"]]["label"] for r in a_recipes)
+    return f"{names}:声轨 {st['mix_db']} → {st['out_db']} dB(人声 {st['voice_db']} dB / 其余 {st['bed_db']} dB)"
 
 
 def do_propose(proj: Path, ep: str, kind: str, scope: dict, params_json: str, note: str, by: str) -> int:
