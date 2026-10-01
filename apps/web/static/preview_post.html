@@ -510,12 +510,12 @@ function renderLeft(){
   }
   h+=`</div>`;
   $('#left').innerHTML=h;
-  $('#multi').onchange=e=>{document.body.classList.toggle('multi',e.target.checked);if(!e.target.checked){MULTI.clear();renderLeft()}};
+  $('#multi').onchange=e=>{document.body.classList.toggle('multi',e.target.checked);if(!e.target.checked){MULTI.clear();renderLeft();multiCount()}};
   $$('#left .flt span').forEach(s=>s.onclick=()=>{FILTER=s.dataset.f;renderLeft()});
   $$('#left .scn').forEach(s=>s.onclick=()=>{const id=s.dataset.scn;OPEN_SCN.has(id)?OPEN_SCN.delete(id):OPEN_SCN.add(id);posSave({open:[...OPEN_SCN]});renderLeft()});
   $$('#left .grp').forEach(el=>{
     el.onclick=e=>{
-      if(e.target.classList.contains('chk')){e.target.checked?MULTI.add(el.dataset.g):MULTI.delete(el.dataset.g);return}
+      if(e.target.classList.contains('chk')){e.target.checked?MULTI.add(el.dataset.g):MULTI.delete(el.dataset.g);multiCount();return}
       selectGroup(el.dataset.g);
     };
   });
@@ -1285,12 +1285,14 @@ function waveSelEdit(){
 }
 
 /* ---------- 右栏 ---------- */
+// 标题行右侧的多选计数:勾选 / 取消多选时就地更新,不重绘整个右栏(保住列表滚动位置)
+function multiCount(){const el=$('#multi-n');if(el)el.textContent=MULTI.size?I18N.f('已选 {n} 组',{n:MULTI.size}):''}
 function renderRight(){
   renderPend();
   const g=grpById(SEL);
   if(SCOPE==='block'&&!(g&&g.block_id))SCOPE='group';
   const scopes=[['episode',t('整集')],['scene',g?g.scene_id:''],...(g&&g.block_id?[['block',t('叙事块 ')+g.block_id]]:[]),['group',SEL],['range',RANGE&&RANGE.t1!=null?`${num(RANGE.t0)}–${num(RANGE.t1)}s`:t('时间段')]];
-  let h=`<div class="col-h" id="rec-h"><span class="car">${REC_ON?'▾':'▸'}</span>🎨 ${esc(t('后期调整'))} <span class="lite" id="rc"></span><span class="sp"></span>${MULTI.size?`<span class="lite">${esc(I18N.f('已选 {n} 组',{n:MULTI.size}))}</span>`:''}</div>`;
+  let h=`<div class="col-h" id="rec-h"><span class="car">${REC_ON?'▾':'▸'}</span>🎨 ${esc(t('后期调整'))} <span class="lite" id="rc"></span><span class="sp"></span><span class="lite" id="multi-n">${MULTI.size?esc(I18N.f('已选 {n} 组',{n:MULTI.size})):''}</span></div>`;
   h+=`<div class="scope">${esc(t('作用域'))} <span class="seg">${scopes.map(([k,l])=>`<span data-s="${k}" class="${SCOPE===k?'on':''}" ${k==='range'&&!(RANGE&&RANGE.t1!=null)?'style="opacity:.5"':''}>${esc(l)}</span>`).join('')}</span></div>`;
   h+=`<div class="scroll" id="rlist">`;
   const all=g?effective(SEL):[];
