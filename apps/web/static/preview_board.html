@@ -187,6 +187,9 @@ td.c .ln.un .v{color:var(--yellow);white-space:pre-wrap}
 #lb .cap{color:var(--dim);font-size:12.5px;max-width:92vw;text-align:center}
 #lb .cap a{color:var(--link);text-decoration:none;cursor:pointer;padding:2px 6px}
 #lb .cap a:hover{text-decoration:underline}
+/* 🖨️ 打印(2026-10-01):内容区右下角悬浮按钮(让出右侧定位栏与滚动条) */
+#printbtn{position:absolute;right:26px;bottom:16px;z-index:21;width:40px;height:40px;padding:0;border-radius:50%;font-size:19px;line-height:1;box-shadow:0 4px 14px #0008;opacity:.85}
+#printbtn:hover{opacity:1}
 .legend{font-size:11.5px;color:var(--dim);margin:8px 2px 0;display:flex;gap:14px;flex-wrap:wrap}
 @media(max-width:900px){td.s{width:234px}.skbox{width:210px}td.no{width:90px}}
 </style>
@@ -205,7 +208,7 @@ td.c .ln.un .v{color:var(--yellow);white-space:pre-wrap}
 </header>
 <div id="eps"></div>
 <div id="main">
-  <div id="cwrap"><div id="stickbar" hidden data-no-i18n></div><div id="content"><div class="empty">加载中…</div></div></div>
+  <div id="cwrap"><div id="stickbar" hidden data-no-i18n></div><div id="content"><div class="empty">加载中…</div></div><button id="printbtn" hidden title="打印故事板:生成只含草图、内容、编号三列的表格页,并打开系统打印界面(可打印或存为 PDF)">🖨️</button></div>
   <nav id="nav"></nav>
 </div>
 <div id="lb"><img alt=""><div class="cap"></div></div>
@@ -335,6 +338,7 @@ document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if($('#lb').s
 /* ---------- 渲染 ---------- */
 function render(d){
   LAST=d;SK=d.sketches||{};JOBS=d.jobs||{};REDRAW=mergeRedraw(d.redraw_runs||{});ANIM=d.animatic||{};GATE=d.gate||{};NOTES=d.notes||{};
+  $('#printbtn').hidden=!(d.ep&&d.has_storyboard);
   PORTRAIT=aspectPortrait(d.aspect);
   renderEps(d.episodes||[]);
   const box=$('#content'),ep=d.ep;
@@ -484,12 +488,15 @@ function sceneCard(sc,d){
   return h+`</tbody></table></div>`;
 }
 
-function shotRow(sc,sh,ep){
+function shotNoHtml(sh){
   let no=`<b>#${sh.order}</b>`;
   if(sh.size_hint)no+=` <span class="badge">${esc(sh.size_hint)}</span>`;
   if(sh.duration_hint_s!=null)no+=`<div>⏱ ${secs(sh.duration_hint_s)}</div>`;
   if(sh.shot_id)no+=`<div title="${esc(t('分镜草案镜号'))}">${esc(sh.shot_id)}</div>`;
   (sh.final||[]).forEach(f=>{no+=`<div class="fin" title="${esc(t('镜头表(shot_list.json)定稿镜号 · 时长 · 景别'))}">${esc(f.shot_id||'')}${f.duration_s!=null?' · '+secs(f.duration_s):''}${f.size?' · '+esc(f.size):''}${f.group?` <span class="grp">${esc(f.group)}</span>`:''}</div>`});
+  return no;
+}
+function shotContentHtml(sh,full){   // full = 打印页:备注不截断
   let c=`<div class="ct">${esc(sh.content)}</div>`;
   if(sh.action&&!(sh.content||'').includes(sh.action))c+=`<div class="ln"><span class="k">🎬</span><span class="v">${esc(sh.action)}</span></div>`;
   (sh.dialogue||[]).forEach(l=>{
@@ -508,8 +515,12 @@ function shotRow(sc,sh,ep){
   const PZ=sh.poses||{},pk=Object.keys(PZ);   // 分镜层结构化姿态/动作(2026-09-14;2026-09-15 移到 👤 人物下方):每角色 体位·动作
   if(pk.length)c+=`<div class="ln"><span class="k">🧍</span><span class="v">${pk.map(id=>{const r=PZ[id]||{};const pz=POSE_ZH[r.pose]?t(POSE_ZH[r.pose]):(r.pose||'');return esc([cname(id),[pz,r.action].filter(Boolean).join('·')].filter(Boolean).join(' '))}).join('；')}</span></div>`;
   if(sh.beat)c+=`<div class="ln"><span class="k">🎯</span><span class="v dim">${esc(sh.beat)}</span></div>`;
-  if(sh.notes)c+=`<div class="ln"><span class="k">📝</span><span class="v dim" title="${esc(sh.notes)}">${esc(clip(sh.notes,160))}</span></div>`;
+  if(sh.notes)c+=`<div class="ln"><span class="k">📝</span><span class="v dim" title="${esc(sh.notes)}">${esc(full?sh.notes:clip(sh.notes,160))}</span></div>`;
   if(NOTES[sh.key])c+=`<div class="ln un"><span class="k">🗒</span><span class="v">${esc(NOTES[sh.key].text)}</span></div>`;   // 用户注释(2026-09-15)
+  return c;
+}
+function shotRow(sc,sh,ep){
+  const no=shotNoHtml(sh),c=shotContentHtml(sh);
   const loc=I18N.f('故事板 {ep} 场次 {no} 第 {o} 镜「{txt}」(文件 directing/{ep}/storyboard.json scenes[{no}].shots_draft[order:{o}])',{ep,no:sc.scene_no,o:sh.order,txt:clip(sh.content,24)});
   // 镜行右侧:每个定稿镜号一个 🎦(拆镜时一行草案对多镜,tooltip 带镜号区分)
   const proj0=$('#project').value.trim()||'demo';
@@ -698,6 +709,96 @@ async function submitNotes(){
     load(true);
   }catch(err){JumpAnchor.toast(t('提交失败:')+err.message);refreshNotesSubmit()}
 }
+
+/* ---------- 🖨️ 打印(2026-10-01):右下角按钮 → 单独的简洁表格页(只留 草图 / 内容 / 编号 三列)→ 系统打印界面(打印或存 PDF)。
+   整集一张表:thead(本集信息 + 列名)每页重复作页眉;镜行 break-inside:avoid 不让草图被分页切断;场次行贴住下一镜。
+   浏览器开新标签页;桌面端(Electron 拒绝 window.open)退回隐藏 iframe,直接弹打印界面 ---------- */
+const PRINT_CSS=`
+@page{margin:12mm 10mm}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{background:#fff;color:#111;font:10.5pt/1.55 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+.hint{color:#888;font-size:9pt;padding:8px 12mm}
+table{width:100%;border-collapse:collapse;table-layout:fixed}
+thead{display:table-header-group}
+th,td{border:1px solid #bbb;padding:2mm 2.5mm;vertical-align:top;text-align:left}
+tr{break-inside:avoid;page-break-inside:avoid}
+th.eph{border:0;border-bottom:1.5px solid #111;padding:0 0 2mm;font-size:13pt;font-weight:700}
+th.eph .sub{font-weight:400;font-size:9.5pt;color:#444;margin-left:3mm}
+th.col{background:#eee;font-size:9pt;font-weight:600;color:#333;padding:1mm 2.5mm}
+col.s{width:68mm}col.s.portrait{width:42mm}col.no{width:25mm}
+tr.sc{break-after:avoid;page-break-after:avoid}
+tr.sc td{background:#f4f4f4;font-size:10pt;padding:1.2mm 2.5mm}
+tr.sc b{margin-right:2mm}
+tr.sc .m{color:#555;font-size:9pt;margin-left:3mm}
+.sk{width:100%;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;overflow:hidden;color:#999;font-size:9pt}
+.sk img{width:100%;height:100%;object-fit:cover;display:block}
+td.c .ct{white-space:pre-wrap}
+td.c .ln{display:flex;gap:1.5mm;align-items:baseline;margin-top:.6mm}
+td.c .ln .k{flex:none;width:1.5em;text-align:center}
+td.c .ln .v{min-width:0;flex:1}
+td.c .ln.un .v{white-space:pre-wrap}
+td.c .spk,td.c .nid{font-weight:600}
+td.c .nid{margin-right:1.5mm}
+td.c .dim,td.c .cast{color:#555;font-size:9.5pt}
+td.c .es{color:#777;font-size:8.5pt;margin-left:1.5mm}
+td.c .nsrc{display:none}
+td.no{font-size:9pt;color:#444;line-height:1.5;word-break:break-all}
+td.no b{font-size:12pt;color:#111}
+td.no .badge{display:inline-block;border:1px solid #999;border-radius:3px;padding:0 1.2mm;font-size:8.5pt;color:#111}
+td.no .grp{color:#777}
+@media screen{body{max-width:210mm;margin:0 auto;padding:8mm 10mm 20mm}.hint{padding:0 0 3mm}}
+@media print{.hint{display:none}}
+`;
+// 打印页自带脚本:load(草图全部加载完或失败)后先把草图缩到打印够用的宽度并转 JPEG(原图 PNG 逐张 ~0.8 MB,整集存 PDF 会上百 MB),再弹打印界面
+const PRINT_JS=`addEventListener('load',async function(){
+  for(const im of document.images){
+    try{
+      if(!im.naturalWidth)continue;
+      const k=Math.min(1,900/im.naturalWidth),c=document.createElement('canvas');
+      c.width=Math.round(im.naturalWidth*k);c.height=Math.round(im.naturalHeight*k);
+      const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(im,0,0,c.width,c.height);
+      im.src=c.toDataURL('image/jpeg',.85);await im.decode();
+    }catch(e){}
+  }
+  setTimeout(function(){focus();print()},200);
+});`;
+function printHtml(){
+  const d=LAST,ep=d.ep,T=d.totals||{},epi=(d.episodes||[]).find(e=>e.ep===ep)||{};
+  const title=(ep+' '+(d.title||epi.title||'')).trim();
+  const sub=I18N.f('{n} 场 · {m} 镜草案 · {g} 组草案 · 草案 Σ {d}s',{n:T.scenes??0,m:T.shots??0,g:T.groups??0,d:num(T.draft_sum_s,1)});
+  const abs=u=>new URL(u,location.href).href;   // 新开页是 about:blank,草图地址一律写绝对
+  const ar=aspectCss(d.aspect);
+  let rows='';
+  (d.scenes||[]).forEach(sc=>{
+    const nm=sc.location||sc.scene_name||'';
+    rows+=`<tr class="sc"><td colspan="3"><b>${esc(sc.scene_no)}</b>${esc(nm)}<span class="m">${sc.time_of_day?esc(sc.time_of_day)+' · ':''}${esc(I18N.f('{n} 镜',{n:sc.shots.length}))}</span></td></tr>`;
+    sc.shots.forEach(sh=>{
+      const r=SK[sh.key]||{};
+      rows+=`<tr><td class="s"><div class="sk" style="aspect-ratio:${ar}">${r.url?`<img src="${esc(abs(r.url))}" alt="">`:esc(t('未出草图'))}</div></td><td class="c">${shotContentHtml(sh,true)}</td><td class="no">${shotNoHtml(sh)}</td></tr>`;
+    });
+  });
+  return `<!DOCTYPE html><html lang="${esc(I18N.lang||'zh')}"><head><meta charset="utf-8"><title>${esc(t('故事板'))} ${esc(title)}</title><style>${PRINT_CSS}</style></head><body>`
+    +`<div class="hint">${esc(t('草图加载完后自动弹出打印界面(可打印或存为 PDF)…'))}</div>`
+    +`<table><colgroup><col class="s ${PORTRAIT?'portrait':''}"><col><col class="no"></colgroup>`
+    +`<thead><tr><th class="eph" colspan="3">${esc(title)}<span class="sub">${esc(sub)}</span></th></tr>`
+    +`<tr><th class="col">${esc(t('草图'))}</th><th class="col">${esc(t('内容'))}</th><th class="col">${esc(t('编号'))}</th></tr></thead>`
+    +`<tbody>${rows}</tbody></table>`
+    +`<script>${PRINT_JS}<\/script></body></html>`;
+}
+$('#printbtn').onclick=()=>{
+  if(!LAST||!LAST.has_storyboard)return;
+  const html=printHtml();
+  let w=null;try{w=window.open('','_blank')}catch(_){}
+  if(w){w.document.open();w.document.write(html);w.document.close();return}
+  // 桌面端 / 弹窗被拦:隐藏 iframe 里渲染同一份页面,只打印 iframe
+  const old=$('#printframe');if(old)old.remove();
+  const f=document.createElement('iframe');f.id='printframe';
+  f.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+  f.onload=()=>{try{f.contentWindow.onafterprint=()=>f.remove()}catch(_){}};
+  f.srcdoc=html;document.body.appendChild(f);
+  JumpAnchor.toast(t('草图加载完后自动弹出打印界面(可打印或存为 PDF)…'));
+};
 
 async function load(keep){
   const proj=$('#project').value.trim()||'demo';

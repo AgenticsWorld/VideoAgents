@@ -3998,4 +3998,6 @@ window.I18N_DICT = {
 "粗犷线稿": "Mực thô",
 "灰调重点色": "Xám + màu nhấn",
 "草图画风(按项目保存,只影响之后出的草图):铅笔灰马克 = 实拍电影分镜的铅笔+灰马克笔;铅笔彩铅 = 日式动画分镜的铅笔快线+竖向排线+少量茶色彩铅;粗犷线稿 = 好莱坞动作片的黑笔硬朗线+密集排线重黑;灰调重点色 = 平板速写的平涂灰调+一处重点色": "Phong cách phác thảo (theo dự án, chỉ áp dụng phác thảo mới): Chì & bút dạ xám = storyboard phim người đóng; Chì & sepia = storyboard hoạt hình Nhật, nét chì nhanh, gạch dọc, chút sepia; Mực thô = bút đen kiểu phim hành động Hollywood, nét cứng và gạch dày; Xám + màu nhấn = phác thảo máy tính bảng với xám phẳng và một màu nhấn",
+"打印故事板:生成只含草图、内容、编号三列的表格页,并打开系统打印界面(可打印或存为 PDF)": "In bảng phân cảnh: tạo trang bảng chỉ gồm ba cột (phác thảo, nội dung, số) và mở hộp thoại in của hệ thống (in hoặc lưu thành PDF)",
+"草图加载完后自动弹出打印界面(可打印或存为 PDF)…": "Hộp thoại in sẽ tự mở sau khi tải xong các phác thảo (in hoặc lưu thành PDF)…",
 };

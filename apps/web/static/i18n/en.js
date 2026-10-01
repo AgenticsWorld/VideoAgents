@@ -4009,4 +4009,6 @@ window.I18N_DICT = {
 "粗犷线稿": "Rough ink",
 "灰调重点色": "Grey + accent color",
 "草图画风(按项目保存,只影响之后出的草图):铅笔灰马克 = 实拍电影分镜的铅笔+灰马克笔;铅笔彩铅 = 日式动画分镜的铅笔快线+竖向排线+少量茶色彩铅;粗犷线稿 = 好莱坞动作片的黑笔硬朗线+密集排线重黑;灰调重点色 = 平板速写的平涂灰调+一处重点色": "Sketch style (saved per project, only affects sketches drawn from now on): Pencil & grey marker = live-action film storyboard pencil + grey marker; Pencil & sepia = Japanese animation storyboard with quick pencil lines, vertical hatching and a little sepia pencil; Rough ink = Hollywood action-movie black pen with hard strokes and dense hatched blacks; Grey + accent color = tablet sketch with flat grey tones and one accent color",
+"打印故事板:生成只含草图、内容、编号三列的表格页,并打开系统打印界面(可打印或存为 PDF)": "Print storyboard: builds a table page with only three columns (sketch, content, no.) and opens the system print dialog (print or save as PDF)",
+"草图加载完后自动弹出打印界面(可打印或存为 PDF)…": "The print dialog opens automatically once the sketches have loaded (print or save as PDF)…",
 };
