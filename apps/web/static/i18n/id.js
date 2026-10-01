@@ -3999,5 +3999,8 @@ window.I18N_DICT = {
 "灰调重点色": "Abu-abu + warna aksen",
 "草图画风(按项目保存,只影响之后出的草图):铅笔灰马克 = 实拍电影分镜的铅笔+灰马克笔;铅笔彩铅 = 日式动画分镜的铅笔快线+竖向排线+少量茶色彩铅;粗犷线稿 = 好莱坞动作片的黑笔硬朗线+密集排线重黑;灰调重点色 = 平板速写的平涂灰调+一处重点色": "Gaya sketsa (per proyek, hanya untuk sketsa baru): Pensil & spidol abu-abu = storyboard film live-action; Pensil & sepia = storyboard animasi Jepang dengan garis cepat, arsiran vertikal, sedikit sepia; Tinta kasar = pena hitam ala film aksi Hollywood, goresan keras dan arsiran rapat; Abu-abu + warna aksen = sketsa tablet dengan abu-abu datar dan satu warna aksen",
 "打印故事板:生成只含草图、内容、编号三列的表格页,并打开系统打印界面(可打印或存为 PDF)": "Cetak storyboard: membuat halaman tabel dengan hanya tiga kolom (sketsa, isi, nomor) dan membuka dialog cetak sistem (cetak atau simpan sebagai PDF)",
-"草图加载完后自动弹出打印界面(可打印或存为 PDF)…": "Dialog cetak terbuka otomatis setelah sketsa selesai dimuat (cetak atau simpan sebagai PDF)…",
+"图片加载完后自动弹出打印界面(可打印或存为 PDF)…": "Dialog cetak terbuka otomatis setelah gambar selesai dimuat (cetak atau simpan sebagai PDF)…",
+"打印分镜表:生成只含分镜画面截图、画面信息两列的表格页,并打开系统打印界面(可打印或存为 PDF)": "Cetak tabel klip: membuat halaman tabel dengan hanya dua kolom (tangkapan layar klip, catatan visual) dan membuka dialog cetak sistem (cetak atau simpan sebagai PDF)",
+"分镜画面截图": "Tangkapan layar klip",
+"画面信息": "Catatan visual",
 };

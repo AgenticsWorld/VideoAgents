@@ -3999,5 +3999,8 @@ window.I18N_DICT = {
 "灰调重点色": "Grau + Akzentfarbe",
 "草图画风(按项目保存,只影响之后出的草图):铅笔灰马克 = 实拍电影分镜的铅笔+灰马克笔;铅笔彩铅 = 日式动画分镜的铅笔快线+竖向排线+少量茶色彩铅;粗犷线稿 = 好莱坞动作片的黑笔硬朗线+密集排线重黑;灰调重点色 = 平板速写的平涂灰调+一处重点色": "Skizzenstil (pro Projekt, gilt für neue Skizzen): Bleistift & grauer Marker = Realfilm-Storyboard; Bleistift & Sepia = japanisches Animations-Storyboard mit schnellen Linien, senkrechter Schraffur und etwas Sepia; Raue Tusche = schwarzer Stift wie im Hollywood-Actionfilm, harte Striche und dichte Schraffur; Grau + Akzentfarbe = Tablet-Skizze mit flachen Grautönen und einer Akzentfarbe",
 "打印故事板:生成只含草图、内容、编号三列的表格页,并打开系统打印界面(可打印或存为 PDF)": "Storyboard drucken: erzeugt eine Tabellenseite mit nur drei Spalten (Skizze, Inhalt, Nr.) und öffnet den Druckdialog des Systems (drucken oder als PDF speichern)",
-"草图加载完后自动弹出打印界面(可打印或存为 PDF)…": "Der Druckdialog öffnet sich automatisch, sobald die Skizzen geladen sind (drucken oder als PDF speichern)…",
+"图片加载完后自动弹出打印界面(可打印或存为 PDF)…": "Der Druckdialog öffnet sich automatisch, sobald die Bilder geladen sind (drucken oder als PDF speichern)…",
+"打印分镜表:生成只含分镜画面截图、画面信息两列的表格页,并打开系统打印界面(可打印或存为 PDF)": "Clip-Tabelle drucken: erzeugt eine Tabellenseite mit nur zwei Spalten (Clip-Screenshot, Bildnotizen) und öffnet den Druckdialog des Systems (drucken oder als PDF speichern)",
+"分镜画面截图": "Clip-Screenshot",
+"画面信息": "Bildnotizen",
 };

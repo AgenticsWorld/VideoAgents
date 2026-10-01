@@ -14,6 +14,7 @@
 <script src="/static/mini-md.js?v=20260911"></script>
 <script src="/static/image-models.js?v=20260911"></script>
 <script src="/static/image-model-picker.js?v=20260912"></script>
+<script src="/static/print-page.js?v=20261001b"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -711,28 +712,11 @@ async function submitNotes(){
 }
 
 /* ---------- 🖨️ 打印(2026-10-01):右下角按钮 → 单独的简洁表格页(只留 草图 / 内容 / 编号 三列)→ 系统打印界面(打印或存 PDF)。
-   整集一张表:thead(本集信息 + 列名)每页重复作页眉;镜行 break-inside:avoid 不让草图被分页切断;场次行贴住下一镜。
-   浏览器开新标签页;桌面端(Electron 拒绝 window.open)退回隐藏 iframe,直接弹打印界面 ---------- */
+   出页 / 分页 / 缩图 / 桌面端回退都在 /static/print-page.js;这里只拼页眉(本集信息)与表行,场次行(tr.sec)贴住下一镜 ---------- */
 const PRINT_CSS=`
-@page{margin:12mm 10mm}
-*{box-sizing:border-box;margin:0;padding:0}
-html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-body{background:#fff;color:#111;font:10.5pt/1.55 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
-.hint{color:#888;font-size:9pt;padding:8px 12mm}
-table{width:100%;border-collapse:collapse;table-layout:fixed}
-thead{display:table-header-group}
-th,td{border:1px solid #bbb;padding:2mm 2.5mm;vertical-align:top;text-align:left}
-tr{break-inside:avoid;page-break-inside:avoid}
-th.eph{border:0;border-bottom:1.5px solid #111;padding:0 0 2mm;font-size:13pt;font-weight:700}
-th.eph .sub{font-weight:400;font-size:9.5pt;color:#444;margin-left:3mm}
-th.col{background:#eee;font-size:9pt;font-weight:600;color:#333;padding:1mm 2.5mm}
 col.s{width:68mm}col.s.portrait{width:42mm}col.no{width:25mm}
-tr.sc{break-after:avoid;page-break-after:avoid}
-tr.sc td{background:#f4f4f4;font-size:10pt;padding:1.2mm 2.5mm}
-tr.sc b{margin-right:2mm}
-tr.sc .m{color:#555;font-size:9pt;margin-left:3mm}
-.sk{width:100%;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;overflow:hidden;color:#999;font-size:9pt}
-.sk img{width:100%;height:100%;object-fit:cover;display:block}
+tr.sec b{margin-right:2mm}
+tr.sec .m{color:#555;font-size:9pt;margin-left:3mm}
 td.c .ct{white-space:pre-wrap}
 td.c .ln{display:flex;gap:1.5mm;align-items:baseline;margin-top:.6mm}
 td.c .ln .k{flex:none;width:1.5em;text-align:center}
@@ -747,57 +731,27 @@ td.no{font-size:9pt;color:#444;line-height:1.5;word-break:break-all}
 td.no b{font-size:12pt;color:#111}
 td.no .badge{display:inline-block;border:1px solid #999;border-radius:3px;padding:0 1.2mm;font-size:8.5pt;color:#111}
 td.no .grp{color:#777}
-@media screen{body{max-width:210mm;margin:0 auto;padding:8mm 10mm 20mm}.hint{padding:0 0 3mm}}
-@media print{.hint{display:none}}
 `;
-// 打印页自带脚本:load(草图全部加载完或失败)后先把草图缩到打印够用的宽度并转 JPEG(原图 PNG 逐张 ~0.8 MB,整集存 PDF 会上百 MB),再弹打印界面
-const PRINT_JS=`addEventListener('load',async function(){
-  for(const im of document.images){
-    try{
-      if(!im.naturalWidth)continue;
-      const k=Math.min(1,900/im.naturalWidth),c=document.createElement('canvas');
-      c.width=Math.round(im.naturalWidth*k);c.height=Math.round(im.naturalHeight*k);
-      const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(im,0,0,c.width,c.height);
-      im.src=c.toDataURL('image/jpeg',.85);await im.decode();
-    }catch(e){}
-  }
-  setTimeout(function(){focus();print()},200);
-});`;
-function printHtml(){
+$('#printbtn').onclick=()=>{
+  if(!LAST||!LAST.has_storyboard)return;
   const d=LAST,ep=d.ep,T=d.totals||{},epi=(d.episodes||[]).find(e=>e.ep===ep)||{};
   const title=(ep+' '+(d.title||epi.title||'')).trim();
   const sub=I18N.f('{n} 场 · {m} 镜草案 · {g} 组草案 · 草案 Σ {d}s',{n:T.scenes??0,m:T.shots??0,g:T.groups??0,d:num(T.draft_sum_s,1)});
-  const abs=u=>new URL(u,location.href).href;   // 新开页是 about:blank,草图地址一律写绝对
   const ar=aspectCss(d.aspect);
   let rows='';
   (d.scenes||[]).forEach(sc=>{
     const nm=sc.location||sc.scene_name||'';
-    rows+=`<tr class="sc"><td colspan="3"><b>${esc(sc.scene_no)}</b>${esc(nm)}<span class="m">${sc.time_of_day?esc(sc.time_of_day)+' · ':''}${esc(I18N.f('{n} 镜',{n:sc.shots.length}))}</span></td></tr>`;
+    rows+=`<tr class="sec"><td colspan="3"><b>${esc(sc.scene_no)}</b>${esc(nm)}<span class="m">${sc.time_of_day?esc(sc.time_of_day)+' · ':''}${esc(I18N.f('{n} 镜',{n:sc.shots.length}))}</span></td></tr>`;
     sc.shots.forEach(sh=>{
       const r=SK[sh.key]||{};
-      rows+=`<tr><td class="s"><div class="sk" style="aspect-ratio:${ar}">${r.url?`<img src="${esc(abs(r.url))}" alt="">`:esc(t('未出草图'))}</div></td><td class="c">${shotContentHtml(sh,true)}</td><td class="no">${shotNoHtml(sh)}</td></tr>`;
+      rows+=`<tr><td><div class="shot" style="aspect-ratio:${ar}">${r.url?`<img src="${esc(PrintPage.abs(r.url))}" alt="">`:esc(t('未出草图'))}</div></td><td class="c">${shotContentHtml(sh,true)}</td><td class="no">${shotNoHtml(sh)}</td></tr>`;
     });
   });
-  return `<!DOCTYPE html><html lang="${esc(I18N.lang||'zh')}"><head><meta charset="utf-8"><title>${esc(t('故事板'))} ${esc(title)}</title><style>${PRINT_CSS}</style></head><body>`
-    +`<div class="hint">${esc(t('草图加载完后自动弹出打印界面(可打印或存为 PDF)…'))}</div>`
-    +`<table><colgroup><col class="s ${PORTRAIT?'portrait':''}"><col><col class="no"></colgroup>`
-    +`<thead><tr><th class="eph" colspan="3">${esc(title)}<span class="sub">${esc(sub)}</span></th></tr>`
-    +`<tr><th class="col">${esc(t('草图'))}</th><th class="col">${esc(t('内容'))}</th><th class="col">${esc(t('编号'))}</th></tr></thead>`
-    +`<tbody>${rows}</tbody></table>`
-    +`<script>${PRINT_JS}<\/script></body></html>`;
-}
-$('#printbtn').onclick=()=>{
-  if(!LAST||!LAST.has_storyboard)return;
-  const html=printHtml();
-  let w=null;try{w=window.open('','_blank')}catch(_){}
-  if(w){w.document.open();w.document.write(html);w.document.close();return}
-  // 桌面端 / 弹窗被拦:隐藏 iframe 里渲染同一份页面,只打印 iframe
-  const old=$('#printframe');if(old)old.remove();
-  const f=document.createElement('iframe');f.id='printframe';
-  f.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
-  f.onload=()=>{try{f.contentWindow.onafterprint=()=>f.remove()}catch(_){}};
-  f.srcdoc=html;document.body.appendChild(f);
-  JumpAnchor.toast(t('草图加载完后自动弹出打印界面(可打印或存为 PDF)…'));
+  const hint=t('图片加载完后自动弹出打印界面(可打印或存为 PDF)…');
+  const how=PrintPage.open({title:t('故事板')+' '+title,lang:I18N.lang,hint,css:PRINT_CSS,rows,
+    head:`${esc(title)}<span class="sub">${esc(sub)}</span>`,
+    cols:[{label:t('草图'),cls:'s'+(PORTRAIT?' portrait':'')},{label:t('内容')},{label:t('编号'),cls:'no'}]});
+  if(how==='iframe')JumpAnchor.toast(hint);
 };
 
 async function load(keep){

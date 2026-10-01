@@ -4001,5 +4001,8 @@ window.I18N_DICT = {
 "灰调重点色": "Gris + couleur d'accent",
 "草图画风(按项目保存,只影响之后出的草图):铅笔灰马克 = 实拍电影分镜的铅笔+灰马克笔;铅笔彩铅 = 日式动画分镜的铅笔快线+竖向排线+少量茶色彩铅;粗犷线稿 = 好莱坞动作片的黑笔硬朗线+密集排线重黑;灰调重点色 = 平板速写的平涂灰调+一处重点色": "Style des croquis (par projet, s'applique aux nouveaux croquis) : Crayon et feutre gris = storyboard de film en prises de vues réelles ; Crayon et sépia = storyboard d'animation japonaise, traits rapides, hachures verticales, un peu de sépia ; Encre brute = stylo noir de film d'action hollywoodien, traits durs et hachures denses ; Gris + couleur d'accent = croquis sur tablette, gris à plat et une seule couleur d'accent",
 "打印故事板:生成只含草图、内容、编号三列的表格页,并打开系统打印界面(可打印或存为 PDF)": "Imprimer le storyboard : génère une page de tableau avec seulement trois colonnes (croquis, contenu, n°) et ouvre la boîte de dialogue d'impression du système (imprimer ou enregistrer en PDF)",
-"草图加载完后自动弹出打印界面(可打印或存为 PDF)…": "La boîte de dialogue d'impression s'ouvre automatiquement une fois les croquis chargés (imprimer ou enregistrer en PDF)…",
+"图片加载完后自动弹出打印界面(可打印或存为 PDF)…": "La boîte de dialogue d'impression s'ouvre automatiquement une fois les images chargées (imprimer ou enregistrer en PDF)…",
+"打印分镜表:生成只含分镜画面截图、画面信息两列的表格页,并打开系统打印界面(可打印或存为 PDF)": "Imprimer le tableau des clips : génère une page de tableau avec seulement deux colonnes (capture du clip, notes visuelles) et ouvre la boîte de dialogue d'impression du système (imprimer ou enregistrer en PDF)",
+"分镜画面截图": "Capture du clip",
+"画面信息": "Notes visuelles",
 };

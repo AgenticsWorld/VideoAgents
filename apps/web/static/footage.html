@@ -6,6 +6,7 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎞%3C/text%3E%3C/svg%3E">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="/static/i18n/i18n.js"></script>
+<script src="/static/print-page.js?v=20261001b"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -140,6 +141,9 @@ textarea.info{min-height:96px}
 .prompt-box label .saved{color:var(--green);font-size:11px;opacity:0;transition:opacity .3s}
 .prompt-box label .saved.on{opacity:1}
 .prompt-box textarea{min-height:120px}
+/* 🖨️ 打印(2026-10-01):项目页右下角悬浮按钮 */
+#printbtn{position:fixed;right:24px;bottom:20px;z-index:6;width:40px;height:40px;padding:0;border-radius:50%;font-size:19px;line-height:1;box-shadow:0 4px 14px #0008;opacity:.85}
+#printbtn:hover{opacity:1}
 @media (max-width:760px){.clip{grid-template-columns:1fr}.clip .thumb{width:100%}}
 </style>
 </head>
@@ -250,6 +254,7 @@ textarea.info{min-height:96px}
     <div class="clips" id="clips"></div>
   </section>
 </main>
+<button id="printbtn" hidden title="打印分镜表:生成只含分镜画面截图、画面信息两列的表格页,并打开系统打印界面(可打印或存为 PDF)">🖨️</button>
 <script>
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -300,7 +305,7 @@ window.addEventListener('hashchange',route);
 
 /* ---------- 项目列表 ---------- */
 async function showList(){
-  stopPoll();CUR='';PROJ=null;
+  stopPoll();CUR='';PROJ=null;$('#printbtn').hidden=true;
   $('#proj-view').style.display='none';$('#list-view').style.display='';
   $('#list-box').innerHTML='<div class="empty">'+t('读取中…')+'</div>';
   try{
@@ -396,7 +401,7 @@ function stopPoll(){if(POLL){clearTimeout(POLL);POLL=null}}
 async function openProject(name){
   stopPoll();CUR=name;LAST_SIG='';
   $('#list-view').style.display='none';$('#proj-view').style.display='';
-  renderTitle({name,title:''});$('#clips').innerHTML='';$('#proj-err').textContent='';
+  renderTitle({name,title:''});$('#clips').innerHTML='';$('#proj-err').textContent='';$('#printbtn').hidden=true;
   await refresh(true);
 }
 $('#back-list').onclick=e=>{e.preventDefault();location.hash=''};
@@ -601,6 +606,7 @@ function clipCard(c){
 }
 function renderClips(clips){
   const box=$('#clips');
+  $('#printbtn').hidden=!clips.length;
   if(!clips.length){box.innerHTML=PROJ&&PROJ.source&&PROJ.source.file&&!RUNNING.has(PROJ.status)?'<div class="empty">'+t('还没有分镜 clip')+'</div>':'';return}
   box.innerHTML=clips.map(clipCard).join('');
   box.querySelectorAll('textarea').forEach(ta=>{
@@ -662,6 +668,28 @@ async function analyzeClip(id){
   }catch(e){err.textContent=t('AI 分析失败:')+e.message}
   finally{btn.disabled=false;btn.textContent=old}
 }
+
+/* ---------- 🖨️ 打印(2026-10-01):右下角按钮 → 单独的简洁表格页(只留 分镜画面截图 / 画面信息 两列)→ 系统打印界面(打印或存 PDF)。
+   出页 / 分页 / 桌面端回退都在 /static/print-page.js;这里只拼表行,不要标题行(项目来源信息,用户 2026-10-01 要求删除),每页只重复列名。
+   画面信息取信息框当前值(失焦保存不回写 PROJ.clips),截图下一行小字只留时长 ---------- */
+const PRINT_CSS=`
+col.s{width:66mm}
+.tc{font-size:8pt;color:#666;margin-top:1mm}
+td.info{white-space:pre-wrap;font-size:9.5pt}
+`;
+$('#printbtn').onclick=()=>{
+  const p=PROJ;if(!p||!(p.clips||[]).length)return;
+  const s=p.source||{},title=(p.title||'').trim()||p.name;
+  const ar=s.width&&s.height?`${+s.width}/${+s.height}`:'16/9';
+  const rows=p.clips.map(c=>{
+    const ta=document.querySelector('#clip-'+CSS.escape(c.id)+' textarea.info');
+    return `<tr><td><div class="shot" style="aspect-ratio:${ar}">${c.thumbnail?`<img src="${esc(PrintPage.abs(fileUrl(p.name,c.thumbnail)))}" alt="">`:''}</div><div class="tc">${(Number(c.duration_s)||0).toFixed(1)} s</div></td><td class="info">${esc(ta?ta.value:(c.info||''))}</td></tr>`;
+  }).join('');
+  const hint=t('图片加载完后自动弹出打印界面(可打印或存为 PDF)…');
+  const how=PrintPage.open({title:t('素材库')+' '+title,lang:I18N.lang,hint,css:PRINT_CSS,rows,
+    cols:[{label:t('分镜画面截图'),cls:'s'},{label:t('画面信息')}]});
+  if(how==='iframe')msg(hint,'ok');
+};
 
 route();
 </script>
