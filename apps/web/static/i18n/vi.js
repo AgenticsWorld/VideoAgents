@@ -2522,6 +2522,7 @@ window.I18N_DICT = {
 "模型下载中,可关闭本窗口,下载在后台继续": "Đang tải mô hình; có thể đóng cửa sổ, việc tải tiếp tục ở nền",
 "下载失败:{err}": "Tải thất bại: {err}",
 "模型未下载:点「下载模型」拉取到本机 data/models/faster-whisper/": "Chưa tải mô hình: nhấn 'Tải mô hình' để tải về data/models/faster-whisper/ trên máy",
+"这里选中的识别模型也是本机所有语音识别统一使用的模型:素材库对白识别、音频转文字(数字人等插件流程)、花字与混剪的语音对齐都用它,与上方开关无关(开关只控制输入框的麦克风按钮)。这些流程用到尚未下载的模型时会自动下载。": "Mô hình chọn ở đây cũng là mô hình dùng chung cho mọi tác vụ nhận dạng giọng nói trên máy: nhận dạng lời thoại của thư viện tư liệu, chuyển âm thanh thành văn bản (người số và các luồng plugin khác), căn chỉnh giọng nói cho chữ hiệu ứng và mashup — không phụ thuộc công tắc phía trên (công tắc chỉ điều khiển nút micro ở ô nhập). Nếu một luồng cần mô hình chưa tải, mô hình sẽ được tải tự động.",
 "未检测到 ffmpeg,录音无法解码": "Không tìm thấy ffmpeg, không thể giải mã bản ghi",
 "保存失败": "Lưu thất bại",
 "最快,精度最低": "nhanh nhất, kém chính xác nhất",

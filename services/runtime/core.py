@@ -3415,6 +3415,8 @@ def build_role_prompt(agent_id: str, project: str,
 - Skill 文件：{AUDIO_TRANSCRIPTION_SKILL}
 - 统一入口：`python3 modules/transcription.py transcribe ...`；缺少模型时会自动下载到
   `data/models/faster-whisper/`，不得在项目目录或插件目录另存模型，不得在工单里临时 pip install
+- 识别模型由宿主按「设置 → 高级 → 语音输入」选中的模型自动取用：不要传 `--model`（除非工单写明
+  用户明确要求换模型），不得自行换更大的模型重跑
 - 多人音频按 Skill 把自然语言转换成确定参数：显式时间边界优先；“第一/第二个出现”用
   `--speaker-order`；用户明确男/女声或低/高音映射时用 `--pitch-map`。不得逐行交替，不得从图片推断性别；
   `ready_for_digital_human=false` 时必须阻塞付费生成"""
@@ -16137,6 +16139,8 @@ async def api_agent_memory_set(body: dict):
 # 浏览器录音 → POST 音频字节 → ffmpeg 转 16k 单声道 WAV → 子进程 modules/voice_input.py
 # 用本机 faster-whisper 转写(重依赖不进 API 进程,与素材库 ASR 同一隔离约定)。
 # 开关与模型存 state.json#voice_input(全局,默认关);模型下载走后台子进程,
+# 选中的模型同时是全站 faster-whisper 的统一模型(voice_input.selected_model:素材库对白识别 /
+# transcription.py 插件流程 / speechalign 花字与混剪对齐),与 enabled 开关无关。
 # 进度文件 data/models/faster-whisper/.download-<model>.json 由 GET /voice-input 轮询回读。
 VOICE_INPUT_DEFAULT = {"enabled": False, "model": "small"}
 VOICE_DOWNLOADS: dict[str, subprocess.Popen] = {}     # model_id → 下载子进程(本进程生命周期内)

@@ -18,8 +18,9 @@ python3 modules/transcription.py transcribe --audio <音频> --output <文字稿
 ```
 
 缺少本地模型时命令会自动下载到宿主 `data/models/faster-whisper/`；不得下载到项目目录，不得在
-Agent 工单里运行 `pip install`。模型默认 `small`，只有工单明确指定或宿主环境变量
-`VIDEOAGENTS_ASR_MODEL` 配置时才换模型。模型下载/加载失败要保留真实错误上报，禁止伪造文字稿。
+Agent 工单里运行 `pip install`。识别模型统一取用户在「设置 → 高级 → 语音输入」选中的那个
+（宿主自动读取，与输入框语音输入、素材库对白识别同一个）：**不要传 `--model`**，只有工单写明
+用户明确要求换模型时才传；不得因为识别结果不理想自行换更大的模型重跑。模型下载/加载失败要保留真实错误上报，禁止伪造文字稿。
 
 ## 数字人专用规则
 

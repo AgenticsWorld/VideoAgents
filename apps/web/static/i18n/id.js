@@ -2522,6 +2522,7 @@ window.I18N_DICT = {
 "模型下载中,可关闭本窗口,下载在后台继续": "Model sedang diunduh; jendela boleh ditutup, unduhan berlanjut di latar belakang",
 "下载失败:{err}": "Unduhan gagal: {err}",
 "模型未下载:点「下载模型」拉取到本机 data/models/faster-whisper/": "Model belum diunduh: klik 'Unduh model' untuk mengambilnya ke data/models/faster-whisper/ di perangkat ini",
+"这里选中的识别模型也是本机所有语音识别统一使用的模型:素材库对白识别、音频转文字(数字人等插件流程)、花字与混剪的语音对齐都用它,与上方开关无关(开关只控制输入框的麦克风按钮)。这些流程用到尚未下载的模型时会自动下载。": "Model yang dipilih di sini juga dipakai oleh semua pengenalan suara lokal: pengenalan dialog pustaka footage, transkripsi audio (manusia digital dan alur plugin lainnya), serta penyelarasan ucapan untuk teks hias dan mashup — terlepas dari sakelar di atas (sakelar hanya mengatur tombol mikrofon di kotak input). Jika salah satu alur ini memerlukan model yang belum diunduh, model akan diunduh otomatis.",
 "未检测到 ffmpeg,录音无法解码": "ffmpeg tidak ditemukan; rekaman tidak dapat didekode",
 "保存失败": "Gagal menyimpan",
 "最快,精度最低": "tercepat, akurasi terendah",

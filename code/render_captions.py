@@ -44,7 +44,7 @@
                                      旧式封装(画面由别的路径产出时):a:0=声轨权威+SFX 预混,a:1=声轨权威流拷贝
                                      → edit/{ep}/final_caption.mp4;常规请用 final
   speech-align --project X --ep epNN [--backend auto|interp|whisper|import]
-                                     [--words-json <外部ASR逐词JSON>] [--whisper-model small]
+                                     [--words-json <外部ASR逐词JSON>] [--whisper-model <id>]
                                      建集级逐字语音时间轴 edit/{ep}/word_track.json(cut 基准)
                                      (台本:av beat_track / 主流程 subtitles.srt;声轨:母带/final)。
                                      auto = 装了 faster-whisper 用 whisper,否则 interp。
@@ -382,11 +382,12 @@ def cmd_speech_align(args, proj):
         if audio is None:
             raise SystemExit("[FAIL] whisper 后端需要声轨文件")
         prompt = "".join(s["text"] for s in segs)[:200]
-        asr = sa.run_whisper(audio, model_size=args.whisper_model,
+        asr_model = sa.asr_model(args.whisper_model)
+        asr = sa.run_whisper(audio, model_size=asr_model,
                              language=args.language or None, initial_prompt=prompt)
         words, stats = sa.align_asr_to_transcript(segs_a, asr, audio)
         source = "asr_align"
-        stats["asr"] = f"faster-whisper:{args.whisper_model}"
+        stats["asr"] = f"faster-whisper:{asr_model}"
     elif backend == "import":
         if not args.words_json:
             raise SystemExit("[FAIL] --backend import 需要 --words-json <外部ASR逐词JSON>")
@@ -559,7 +560,8 @@ def main():
         ap.add_argument("--backend", default="auto", choices=("auto", "interp", "whisper", "import"),
                         help="speech-align 后端(auto=有 faster-whisper 则 whisper,否则 interp)")
         ap.add_argument("--words-json", default=None, help="speech-align import:外部 ASR 逐词 JSON")
-        ap.add_argument("--whisper-model", default="small", help="speech-align whisper 模型尺寸")
+        ap.add_argument("--whisper-model", default=None,
+                        help="speech-align whisper 模型(缺省=设置→高级→语音输入选中的识别模型)")
         ap.add_argument("--language", default=None, help="speech-align whisper 语言代码(缺省自动)")
         ap.add_argument("--text", default=None, help="speech-lookup:要定位的花字文案")
         ap.add_argument("--near", type=float, default=None, help="speech-lookup:参考时刻(秒),多次出现时取最近")

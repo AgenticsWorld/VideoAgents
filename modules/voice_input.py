@@ -25,6 +25,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = Path(os.environ.get("VIDEOAGENTS_DATA_DIR", ROOT / "data")).expanduser().resolve()
 MODEL_ROOT = DATA_DIR / "models" / "faster-whisper"     # 与 modules/transcription.py 同一目录
+# 控制台 state.json(与 core.RUNTIME_DIR 同口径;子进程/CLI 直读同一份)
+STATE_PATH = Path(os.environ.get("VIDEOAGENTS_RUNTIME_DIR", DATA_DIR / ".videoagents")).expanduser().resolve() / "state.json"
 
 # 可选模型(id → HF 仓库、约占空间、界面提示键)。size_mb 只作展示与拿不到远端元数据时的进度分母。
 # 中文口语输入推荐 small 起步;large-v3-turbo 精度接近 large-v3 而速度快得多,Apple 芯片可用。
@@ -44,6 +46,19 @@ ALLOW_PATTERNS = ["config.json", "preprocessor_config.json", "model.bin", "token
 MAX_AUDIO_S = 120          # 单次语音输入上限(前端 60s 自动停,服务端再兜一层)
 # 中文提示句:让 whisper 稳定输出简体+标点(不给提示常出繁体/无标点)
 _ZH_PROMPT = "以下是普通话的句子,带标点。"
+
+
+def selected_model() -> str:
+    """全站统一的识别模型 = 设置 → 高级 → 语音输入 选中的那个(state.json#voice_input.model)。
+    输入框语音输入、modules/transcription.py(素材库对白识别 / 插件流程 / 转写工位)、
+    speechalign(花字逐字对齐 / 混剪对齐)都取这里;与「启用语音输入」开关无关。读不到或不在
+    CATALOG 里 → DEFAULT_MODEL。"""
+    try:
+        saved = (json.loads(STATE_PATH.read_text(encoding="utf-8")) or {}).get("voice_input")
+    except (OSError, ValueError, AttributeError):
+        saved = None
+    mid = saved.get("model") if isinstance(saved, dict) else None
+    return mid if mid in CATALOG_BY_ID else DEFAULT_MODEL
 
 
 def cache_dir(model_id: str) -> Path:
@@ -239,15 +254,16 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="语音输入:模型下载与本机转写(供 API 子进程调用)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     d = sub.add_parser("download")
-    d.add_argument("--model", default=DEFAULT_MODEL)
+    d.add_argument("--model", default=None, help="缺省=设置里选中的识别模型")
     t = sub.add_parser("transcribe")
     t.add_argument("--audio", required=True)
-    t.add_argument("--model", default=DEFAULT_MODEL)
+    t.add_argument("--model", default=None, help="缺省=设置里选中的识别模型")
     t.add_argument("--language", default="")
     a = ap.parse_args(argv)
+    model_id = a.model or selected_model()
     if a.cmd == "download":
-        return cmd_download(a.model)
-    return cmd_transcribe(a.audio, a.model, a.language or None)
+        return cmd_download(model_id)
+    return cmd_transcribe(a.audio, model_id, a.language or None)
 
 
 if __name__ == "__main__":

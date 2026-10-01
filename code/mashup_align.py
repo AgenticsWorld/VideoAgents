@@ -122,12 +122,13 @@ def cmd_build(args, proj: Path):
     asr_meta: dict = {}
     if backend == "asr":
         prompt = "".join(sentences)[:200]
-        print(f"[INFO ] faster-whisper({args.model}) 转写母带 {audio.name}"
+        asr_model = sa.asr_model(args.model)
+        print(f"[INFO ] faster-whisper({asr_model}) 转写母带 {audio.name}"
               f"({total_s:.1f}s,词级时间戳)…")
-        asr_words = sa.run_whisper(audio, model_size=args.model,
+        asr_words = sa.run_whisper(audio, model_size=asr_model,
                                    language=args.language or None, initial_prompt=prompt)
         bounds, srcs, stats = sa.beats_from_asr(sentences, asr_words, total_s, silences)
-        asr_meta = {"model": f"faster-whisper:{args.model}",
+        asr_meta = {"model": f"faster-whisper:{asr_model}",
                     "match_ratio": stats["match_ratio"], "anchored": stats["anchored"]}
         if stats["match_ratio"] < MATCH_RATIO_GATE:
             print(f"[WARN ] ASR 对齐命中率 {stats['match_ratio']} < {MATCH_RATIO_GATE},"
@@ -225,7 +226,8 @@ def main(argv=None) -> int:
         ap.add_argument("cmd", choices=["build"], help="build:产 beat_track + word_track 两件套")
         ap.add_argument("--transcript", required=True, help="文稿路径(项目内相对或绝对)")
         ap.add_argument("--backend", default="auto", choices=["auto", "asr", "char_rate"])
-        ap.add_argument("--model", default="small", help="faster-whisper 模型尺寸")
+        ap.add_argument("--model", default=None,
+                        help="faster-whisper 模型(缺省=设置→高级→语音输入选中的识别模型)")
         ap.add_argument("--language", default=None, help="whisper 语言代码(缺省自动)")
         ap.add_argument("--fps", type=int, default=24)
         ap.add_argument("--width", type=int, default=1920)

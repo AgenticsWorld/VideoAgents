@@ -5,6 +5,11 @@ The ASR model is loaded through faster-whisper.  Named models are downloaded on
 first use below ``data/models/faster-whisper/`` (or
 ``VIDEOAGENTS_DATA_DIR/models/faster-whisper``) and reused by later jobs.
 
+Which model: the one selected in 设置 → 高级 → 语音输入 (``state.json#voice_input.model``,
+read through ``voice_input.selected_model``) — the single switch shared by the chat
+voice input, the footage library, plugin flows and speech alignment.  ``--model`` /
+``model_name`` only override it for an explicit user request.
+
 This module deliberately does not alternate cast names.  A single speaker can
 be supplied with ``--speaker``; multi-speaker input can use explicit turns or a
 lightweight local acoustic clustering pass mapped by first appearance or pitch.
@@ -24,14 +29,15 @@ from scipy.fft import dct
 
 try:
     from modules.avsync import file_sha256, probe_duration
+    from modules.voice_input import selected_model
 except ModuleNotFoundError:  # python modules/transcription.py ...
     from avsync import file_sha256, probe_duration
+    from voice_input import selected_model
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = Path(os.environ.get("VIDEOAGENTS_DATA_DIR", ROOT / "data")).expanduser().resolve()
 MODEL_ROOT = DATA_DIR / "models" / "faster-whisper"
-DEFAULT_MODEL = os.environ.get("VIDEOAGENTS_ASR_MODEL", "small")
 DEFAULT_DIARIZATION_CONFIDENCE = 0.35
 _TURN_BREAK = re.compile(r"[。！？!?；;…]\s*$")
 
@@ -45,9 +51,18 @@ def format_timestamp(seconds: float) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d}.{millis:03d}"
 
 
-def load_model(model_name: str = DEFAULT_MODEL, device: str = "auto",
+def resolve_model(model_name: str | None = None) -> str:
+    """Explicit name/path wins; otherwise the model selected in the voice-input settings."""
+    return model_name or selected_model()
+
+
+def load_model(model_name: str | None = None, device: str = "auto",
                compute_type: str = "default"):
     """Load a model, downloading named checkpoints into ``MODEL_ROOT`` once."""
+    model_name = resolve_model(model_name)
+    # 与设置页下载同口径:hf_xet 经本机系统代理会在最后一块永久挂起,首次自动下载一律走纯 HTTP
+    # (须在 import huggingface_hub 之前设置)。
+    os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
     try:
         from faster_whisper import WhisperModel  # type: ignore
     except ImportError as exc:
@@ -72,7 +87,7 @@ def _word_dict(word) -> dict:
     }
 
 
-def run_asr(audio: Path, model_name: str = DEFAULT_MODEL, language: str | None = None,
+def run_asr(audio: Path, model_name: str | None = None, language: str | None = None,
             initial_prompt: str | None = None, device: str = "auto",
             compute_type: str = "default") -> tuple[list[dict], dict]:
     """Return faster-whisper segments plus detected-language metadata."""
@@ -550,7 +565,7 @@ def render_transcript(segments: Iterable[dict], include_speaker: bool) -> str:
 
 
 def transcribe(audio: str, output: str, json_output: str | None = None,
-               model_name: str = DEFAULT_MODEL, language: str | None = None,
+               model_name: str | None = None, language: str | None = None,
                initial_prompt: str | None = None, speaker: str | None = None,
                speaker_turns: str | None = None, digital_human: bool = False,
                device: str = "auto", compute_type: str = "default",
@@ -561,6 +576,7 @@ def transcribe(audio: str, output: str, json_output: str | None = None,
     audio_path, output_path = Path(audio).resolve(), Path(output).resolve()
     if not audio_path.is_file():
         raise FileNotFoundError(f"音频不存在：{audio_path}")
+    model_name = resolve_model(model_name)
     turns = load_speaker_turns(Path(speaker_turns).resolve()) if speaker_turns else None
     duration = probe_duration(str(audio_path))
     if speaker and turns:
@@ -623,8 +639,9 @@ def transcribe(audio: str, output: str, json_output: str | None = None,
     return payload
 
 
-def doctor(model_name: str = DEFAULT_MODEL, download: bool = False,
+def doctor(model_name: str | None = None, download: bool = False,
            device: str = "auto", compute_type: str = "default") -> dict:
+    model_name = resolve_model(model_name)
     try:
         import faster_whisper  # type: ignore
     except ImportError:
@@ -647,7 +664,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="本地音频转文字（模型缓存到 data/models/）")
     sub = parser.add_subparsers(dest="command", required=True)
     check = sub.add_parser("doctor")
-    check.add_argument("--model", default=DEFAULT_MODEL)
+    check.add_argument("--model", default=None,
+                       help="缺省=设置→高级→语音输入选中的识别模型；仅用户明确要求时才传")
     check.add_argument("--download", action="store_true", help="缺模型时立即下载并试加载")
     check.add_argument("--device", default="auto")
     check.add_argument("--compute-type", default="default")
@@ -655,7 +673,8 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--audio", required=True)
     run.add_argument("--output", required=True)
     run.add_argument("--json-output")
-    run.add_argument("--model", default=DEFAULT_MODEL)
+    run.add_argument("--model", default=None,
+                     help="缺省=设置→高级→语音输入选中的识别模型；仅用户明确要求时才传")
     run.add_argument("--language", help="语言代码，如 zh/en；缺省自动检测")
     run.add_argument("--initial-prompt")
     run.add_argument("--speaker", help="单说话人名称")

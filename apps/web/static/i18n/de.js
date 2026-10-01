@@ -2522,6 +2522,7 @@ window.I18N_DICT = {
 "模型下载中,可关闭本窗口,下载在后台继续": "Modell wird geladen; das Fenster kann geschlossen werden, der Download läuft im Hintergrund weiter",
 "下载失败:{err}": "Download fehlgeschlagen: {err}",
 "模型未下载:点「下载模型」拉取到本机 data/models/faster-whisper/": "Modell nicht geladen: „Modell laden“ klicken, um es nach data/models/faster-whisper/ auf diesem Rechner zu holen",
+"这里选中的识别模型也是本机所有语音识别统一使用的模型:素材库对白识别、音频转文字(数字人等插件流程)、花字与混剪的语音对齐都用它,与上方开关无关(开关只控制输入框的麦克风按钮)。这些流程用到尚未下载的模型时会自动下载。": "Das hier gewählte Modell wird auch von jeder lokalen Spracherkennung verwendet: Dialogerkennung der Footage-Bibliothek, Audiotranskription (Digital Human und andere Plugin-Abläufe) sowie Sprachausrichtung für Texteinblendungen und Mashups – unabhängig vom Schalter oben (er steuert nur die Mikrofontaste in Eingabefeldern). Benötigt einer dieser Abläufe ein noch nicht geladenes Modell, wird es automatisch heruntergeladen.",
 "未检测到 ffmpeg,录音无法解码": "ffmpeg nicht gefunden; Aufnahmen können nicht dekodiert werden",
 "保存失败": "Speichern fehlgeschlagen",
 "最快,精度最低": "am schnellsten, geringste Genauigkeit",

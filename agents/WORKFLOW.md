@@ -581,7 +581,8 @@ refs/
 
 `audio-transcription` 是宿主内置的按需服务工位，不固定插入小说→视频主 DAG。任一流程只有音频、
 没有可消费文字稿时，由 orchestrator 派单执行 `modules/transcription.py transcribe`，缺失的
-faster-whisper 模型自动下载到 `data/models/faster-whisper/` 并复用；产出 UTF-8 时间轴 TXT 与
+faster-whisper 模型自动下载到 `data/models/faster-whisper/` 并复用（识别模型统一取「设置 → 高级 →
+语音输入」选中的那个，全站所有语音识别同一个；成员不传 `--model`，除非用户明确要求）；产出 UTF-8 时间轴 TXT 与
 包含逐词时间、音频 SHA-256、模型信息的 JSON。数字人插件缺稿时必须自动展开
 `dh0-transcribe`：单人物按 cast 名称直接生成连续覆盖母带的标签稿；多人优先使用显式说话人时间
 边界，否则用本地 MFCC/音高聚类，并按用户指令映射“不同声纹第一次出现顺序”或“低音/高音”到

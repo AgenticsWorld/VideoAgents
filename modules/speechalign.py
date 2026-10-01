@@ -353,9 +353,18 @@ def align_asr_to_transcript(segs: list[dict], asr_words: list[dict],
     return base, stats
 
 
-def run_whisper(audio: Path, model_size: str = "small", language: str | None = None,
+def asr_model(model_size: str | None = None) -> str:
+    """本次 ASR 实际使用的模型:显式指定优先,缺省 = 设置 → 高级 → 语音输入 选中的识别模型。"""
+    try:
+        from modules.transcription import resolve_model
+    except ModuleNotFoundError:  # python code/render_captions.py ...
+        from transcription import resolve_model
+    return resolve_model(model_size)
+
+
+def run_whisper(audio: Path, model_size: str | None = None, language: str | None = None,
                 initial_prompt: str | None = None) -> list[dict]:
-    """faster-whisper 逐词时间戳。模型统一缓存到 ``data/models/``。"""
+    """faster-whisper 逐词时间戳。模型统一缓存到 ``data/models/``;model_size 缺省取设置里选中的识别模型。"""
     try:
         from modules.transcription import load_model
     except ModuleNotFoundError:  # python code/render_captions.py ...

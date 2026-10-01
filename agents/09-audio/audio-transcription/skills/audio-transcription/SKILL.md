@@ -9,6 +9,11 @@ Use the host command below. Do not install packages inside a project and do not 
 project assets. The host downloads a missing faster-whisper checkpoint once into
 `data/models/faster-whisper/` and reuses it.
 
+The recognition model is the one the user selected in Settings → Advanced → Voice input (the host
+reads it automatically; the same model serves the chat voice input and the footage library). Do not
+pass `--model` unless the work order says the user explicitly asked for a different model, and never
+switch to a larger model on your own to retry.
+
 ## 1. Check the backend
 
 ```bash
