@@ -457,6 +457,8 @@ window.I18N_DICT = {
 "整体画风/渲染质感/色调/构图参考": "Overall art style / rendering texture / palette / composition references",
 "角色形象参考;填子目录(角色名或 id)可定向到该角色": "Character look references; fill in a subfolder (character name or id) to target that character",
 "场景与世界观:建筑/地貌/氛围参考": "Scenes & worldbuilding: architecture / terrain / atmosphere references",
+"生物/坐骑/异兽参考;填子目录(生物名或 id)可定向到该生物": "Creature / mount / beast references; fill in a subfolder (creature name or id) to target that creature",
+"生物": "Creatures",
 "道具/法宝参考;服装可填 costumes 子目录": "Prop / artifact references; costumes can go in a costumes subfolder",
 "希望使用的音频文件(背景音轨,BGM 候选,配乐 Agent 优先选用)": "Audio files you want used (background audio track; BGM candidates; the music agent picks them first)",
 "封面参考:他人爆款封面的构图/版式/文字风格范例": "Thumbnail references: composition / layout / typography examples from popular covers",

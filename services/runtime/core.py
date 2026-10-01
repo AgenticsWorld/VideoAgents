@@ -337,6 +337,7 @@ REFS_README = """# refs/ — 用户参考目录
 - `style/`      整体视觉风格:画风/渲染质感/色调/构图
 - `characters/` 角色形象;按角色建子目录(如 characters/linzhao/)可定向到该角色
 - `scenes/`     场景与世界观:建筑/地貌/氛围
+- `creatures/`  生物/坐骑/异兽形象;按生物建子目录(如 creatures/baima/)可定向到该生物
 - `props/`      道具/法宝;服装放 props/costumes/
 - `music/`      希望使用的音频文件(背景音轨,BGM 候选,mp3/wav/flac 等);配乐 Agent 优先选用,并自动判断用在视频的合适位置
 - `video/`      参考视频:动作/运镜/节奏/转场范例(mp4/mov/webm),视频生成 Agent 优先参考(支持时经 --ref-video 注入)
@@ -382,8 +383,8 @@ def atomic_write_json(path: Path, obj):
 def ensure_project(project: str):
     """建项目目录 + 用户参考目录骨架。"""
     refs = PROJECTS_DIR / project / "refs"
-    for sub in ("style", "thumbnail", "characters", "scenes", "props", "music", "video",
-                "fonts", "text"):
+    for sub in ("style", "thumbnail", "characters", "scenes", "creatures", "props", "music",
+                "video", "fonts", "text"):
         (refs / sub).mkdir(parents=True, exist_ok=True)
     readme = refs / "README.md"
     if not readme.exists():
@@ -3576,7 +3577,7 @@ def build_role_prompt(agent_id: str, project: str,
 - 详细纪律见 agents/WORKFLOW.md §9;生成失败如实上报,严禁伪造或占位产物
 
 ## 用户参考素材(视觉/配乐工作前必查)
-用户通过 Web 客户端「参考文件」页把风格/封面/角色/场景/道具参考图、希望使用的音频、参考视频、字体与文本资料按分类上传到 {proj_rel}/refs/(style/ thumbnail/ characters/ scenes/ props/ music/ video/ fonts/ text/),并逐文件填写注释:
+用户通过 Web 客户端「参考文件」页把风格/封面/角色/场景/生物/道具参考图、希望使用的音频、参考视频、字体与文本资料按分类上传到 {proj_rel}/refs/(style/ thumbnail/ characters/ scenes/ creatures/ props/ music/ video/ fonts/ text/),并逐文件填写注释:
 - **注释必读**:{proj_rel}/refs/NOTES.md(自动汇总用户逐图/逐曲注释,机器可读版 refs/annotations.json)说明每个文件管什么、想用在哪——有则必读并按注释执行
 - 优先级:用户参考素材 > 你的自行发挥;与文字设定冲突时上报用户裁决,不擅自取舍
 - 命中的参考图经 genmedia --ref 注入生成,并把所用路径记入产物 meta/prompts.json 的 user_refs 字段
@@ -12382,8 +12383,8 @@ async def api_brief_set(body: dict):
 
 
 # ---------------- 参考文件页(refs/ 分类预览、上传、逐文件注释) ----------------
-REF_CATEGORIES = ("style", "thumbnail", "characters", "scenes", "props", "music", "video",
-                  "fonts", "text")
+REF_CATEGORIES = ("style", "thumbnail", "characters", "scenes", "creatures", "props", "music",
+                  "video", "fonts", "text")
 REF_FONT_EXTS = (".ttf", ".otf", ".ttc")      # 与花字引擎 modules/captions.py 扫描口径一致
 REF_SKIP_FILES = {"README.md", "NOTES.md", "annotations.json"}
 AUDIO_EXTS = (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg")
@@ -12459,7 +12460,7 @@ async def api_refs_upload(data: bytes, project: str = "demo",
                           category: str = "style", subdir: str = "",
                           filename: str = "ref"):
     """参考文件页上传:请求体即文件原始字节(避免 multipart 依赖)。
-    文件名按工作流纪律清洗为 ASCII;subdir 用于 characters/<角色>、props/costumes 等定向子目录。"""
+    文件名按工作流纪律清洗为 ASCII;subdir 用于 characters/<角色>、creatures/<生物>、props/costumes 等定向子目录。"""
     base = _proj_base(project)
     if category not in REF_CATEGORIES:
         raise ServiceError(400, f"category must be one of {REF_CATEGORIES}")

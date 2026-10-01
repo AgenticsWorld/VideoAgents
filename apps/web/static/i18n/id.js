@@ -430,6 +430,8 @@ window.I18N_DICT = {
 "整体画风/渲染质感/色调/构图参考": "Referensi gaya keseluruhan / tekstur render / palet warna / komposisi",
 "角色形象参考;填子目录(角色名或 id)可定向到该角色": "Referensi tampilan karakter; isi subfolder (nama atau id karakter) agar tertuju ke karakter itu",
 "场景与世界观:建筑/地貌/氛围参考": "Adegan & worldbuilding: arsitektur / medan / atmosfer",
+"生物/坐骑/异兽参考;填子目录(生物名或 id)可定向到该生物": "Referensi makhluk / tunggangan / binatang buas; isi subfolder (nama atau id makhluk) agar tertuju ke makhluk itu",
+"生物": "Makhluk",
 "道具/法宝参考;服装可填 costumes 子目录": "Referensi properti / pusaka; kostum bisa di subfolder costumes",
 "希望使用的音频文件(背景音轨,BGM 候选,配乐 Agent 优先选用)": "Berkas audio yang ingin dipakai (trek latar; kandidat BGM; Agent musik memprioritaskannya)",
 "封面参考:他人爆款封面的构图/版式/文字风格范例": "Referensi thumbnail: contoh komposisi / tata letak / tipografi cover populer",

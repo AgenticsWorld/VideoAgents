@@ -125,6 +125,7 @@ refs/
 ├── style/        # 整体视觉风格:画风/渲染质感/色调/构图(截图、画集、他人作品均可)
 ├── characters/   # 角色形象参考;按角色建子目录(refs/characters/<角色名或id>/)则定向生效
 ├── scenes/       # 场景与世界观:建筑/地貌/氛围参考
+├── creatures/    # 生物/坐骑/异兽形象参考;按生物建子目录(refs/creatures/<生物名或id>/)则定向生效
 ├── props/        # 道具/服装/法宝参考(服装可建 costumes/ 子目录)
 ├── music/        # 用户希望使用的音频文件(背景音轨,BGM 候选,mp3/wav/flac 等)
 ├── video/        # 参考视频:动作/运镜/节奏/转场范例(mp4/mov/webm),视频生成 Agent 优先参考
@@ -141,7 +142,7 @@ refs/
 2. **落痕迹**:凡参考了 refs/ 的产物,须在其 meta/prompts.json 里记录所用参考图路径(`user_refs` 字段);art-director 在 style.json 中写明每张风格参考图影响了哪些决策。
 3. **直接注入**:生成图像时把命中的参考图经 `genmedia --ref` 传入(见 §9);角色参考图同时作为 character-concept 三视图和 character-consistency 校正的形象锚点之一。
 4. **目录为空不阻塞**:照常自行设计;但 art-director 应在 H2 确认时提醒用户「可从预览菜单进入【参考文件】页上传参考图后重跑风格」。
-5. **匹配规则**:characters/ 下按子目录名对角色名/角色 id 做模糊匹配;散放在 refs/ 根目录的图一律视为整体风格参考。
+5. **匹配规则**:characters/ 下按子目录名对角色名/角色 id 做模糊匹配,creatures/ 下按子目录名对生物名/生物 id 做模糊匹配;散放在 refs/ 根目录的图一律视为整体风格参考。
 6. **用户音乐**:`refs/music/` 有文件时,配乐 Agent(`09-audio/music`)必须先逐曲试听分析(曲风/情绪/节奏/时长),再对照本集情绪曲线自行判断每首曲子适合用在视频的哪些位置(哪些场次/情绪段),优先选用用户音乐,不足的段落才生成补齐;NOTES.md 指定了用途的按指定执行。选用情况(含未选用及原因)写入 cue sheet,`license.source` 记 `user_provided` 并如实标注来源文件路径,版权仍由 `11-qa/copyright` 终审。
 7. **封面参考**:`refs/thumbnail/` 有图时,封面 Agent(`10-editing/thumbnail`)必须先逐图分析可借鉴点(构图/主体占比/文字位置与字重/色彩策略),作为 A/B 版设计的优先依据,并在送选清单 `user_refs` 字段落痕迹;NOTES.md 指定了用法的按指定执行。
 8. **参考视频**:`refs/video/` 有文件时,视频生成类 Agent(`08-video-gen/*`)必须先逐段查看分析可借鉴点(动作/运镜/节奏/转场),按 NOTES.md 注释对位到相应镜头/生成组;所选视频模型支持参考视频时经 `genmedia.py video --ref-video` 注入(Seedance 2.x 等,受该模型的数量/时长上限约束),不支持时作为提示词描述的依据;所用路径记入产物 meta/prompts.json 的 `user_refs` 字段。

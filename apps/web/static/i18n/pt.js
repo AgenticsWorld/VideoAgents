@@ -430,6 +430,8 @@ window.I18N_DICT = {
 "整体画风/渲染质感/色调/构图参考": "Referências de estilo geral / textura de render / paleta / composição",
 "角色形象参考;填子目录(角色名或 id)可定向到该角色": "Referências de visual de personagens; preencha uma subpasta (nome ou id do personagem) para direcioná-la a esse personagem",
 "场景与世界观:建筑/地貌/氛围参考": "Cenas e worldbuilding: arquitetura / terreno / atmosfera",
+"生物/坐骑/异兽参考;填子目录(生物名或 id)可定向到该生物": "Referências de criaturas / montarias / feras; preencha uma subpasta (nome ou id da criatura) para direcioná-la a essa criatura",
+"生物": "Criaturas",
 "道具/法宝参考;服装可填 costumes 子目录": "Referências de props / artefatos; figurinos podem ir na subpasta costumes",
 "希望使用的音频文件(背景音轨,BGM 候选,配乐 Agent 优先选用)": "Arquivos de áudio que você quer usar (trilha de fundo; candidatos a BGM; o Agent de música os prioriza)",
 "封面参考:他人爆款封面的构图/版式/文字风格范例": "Referências de miniaturas: exemplos de composição / layout / tipografia de capas populares",

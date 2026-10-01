@@ -430,6 +430,8 @@ window.I18N_DICT = {
 "整体画风/渲染质感/色调/构图参考": "Tham chiếu phong cách tổng thể / chất liệu render / tông màu / bố cục",
 "角色形象参考;填子目录(角色名或 id)可定向到该角色": "Tham chiếu ngoại hình nhân vật; điền thư mục con (tên hoặc id nhân vật) để nhắm đúng nhân vật đó",
 "场景与世界观:建筑/地貌/氛围参考": "Bối cảnh và thế giới quan: kiến trúc / địa hình / không khí",
+"生物/坐骑/异兽参考;填子目录(生物名或 id)可定向到该生物": "Tham chiếu sinh vật / thú cưỡi / dị thú; điền thư mục con (tên hoặc id sinh vật) để nhắm đúng sinh vật đó",
+"生物": "Sinh vật",
 "道具/法宝参考;服装可填 costumes 子目录": "Tham chiếu đạo cụ / pháp bảo; trang phục để trong thư mục con costumes",
 "希望使用的音频文件(背景音轨,BGM 候选,配乐 Agent 优先选用)": "Tệp âm thanh muốn dùng (nhạc nền, ứng viên BGM, Agent âm nhạc ưu tiên chọn)",
 "封面参考:他人爆款封面的构图/版式/文字风格范例": "Tham chiếu ảnh bìa: ví dụ bố cục / trình bày / kiểu chữ từ các bìa nổi tiếng",
