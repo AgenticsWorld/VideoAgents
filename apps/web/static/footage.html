@@ -671,10 +671,11 @@ async function analyzeClip(id){
 
 /* ---------- 🖨️ 打印(2026-10-01):右下角按钮 → 单独的简洁表格页(只留 分镜画面截图 / 画面信息 两列)→ 系统打印界面(打印或存 PDF)。
    出页 / 分页 / 桌面端回退都在 /static/print-page.js;这里只拼表行,不要标题行(项目来源信息,用户 2026-10-01 要求删除),每页只重复列名。
-   画面信息取信息框当前值(失焦保存不回写 PROJ.clips),截图下一行小字只留时长 ---------- */
+   画面信息 / 字幕取输入框当前值(失焦保存不回写 PROJ.clips);截图下一行小字只留时长,该分镜有字幕时再下一行放字幕 ---------- */
 const PRINT_CSS=`
 col.s{width:66mm}
 .tc{font-size:8pt;color:#666;margin-top:1mm}
+.subt{font-size:8.5pt;color:#222;margin-top:1mm;white-space:pre-wrap;overflow-wrap:anywhere}
 td.info{white-space:pre-wrap;font-size:9.5pt}
 `;
 $('#printbtn').onclick=()=>{
@@ -682,8 +683,9 @@ $('#printbtn').onclick=()=>{
   const s=p.source||{},title=(p.title||'').trim()||p.name;
   const ar=s.width&&s.height?`${+s.width}/${+s.height}`:'16/9';
   const rows=p.clips.map(c=>{
-    const ta=document.querySelector('#clip-'+CSS.escape(c.id)+' textarea.info');
-    return `<tr><td><div class="shot" style="aspect-ratio:${ar}">${c.thumbnail?`<img src="${esc(PrintPage.abs(fileUrl(p.name,c.thumbnail)))}" alt="">`:''}</div><div class="tc">${(Number(c.duration_s)||0).toFixed(1)} s</div></td><td class="info">${esc(ta?ta.value:(c.info||''))}</td></tr>`;
+    const card=document.getElementById('clip-'+c.id),ta=card&&card.querySelector('textarea.info'),st=card&&card.querySelector('textarea.sub');
+    const sub=String(st?st.value:(c.subtitle||'')).trim();
+    return `<tr><td><div class="shot" style="aspect-ratio:${ar}">${c.thumbnail?`<img src="${esc(PrintPage.abs(fileUrl(p.name,c.thumbnail)))}" alt="">`:''}</div><div class="tc">${(Number(c.duration_s)||0).toFixed(1)} s</div>${sub?`<div class="subt">${esc(sub)}</div>`:''}</td><td class="info">${esc(ta?ta.value:(c.info||''))}</td></tr>`;
   }).join('');
   const hint=t('图片加载完后自动弹出打印界面(可打印或存为 PDF)…');
   const how=PrintPage.open({title:t('素材库')+' '+title,lang:I18N.lang,hint,css:PRINT_CSS,rows,
