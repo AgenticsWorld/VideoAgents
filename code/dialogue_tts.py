@@ -9,6 +9,8 @@
   python3 code/dialogue_tts.py --project <slug> --ep ep01            # 同步(缺/过期才合成)
   python3 code/dialogue_tts.py --project <slug> --ep ep01 --status   # 只看现状(不合成),JSON
   python3 code/dialogue_tts.py --project <slug> --ep ep01 --plan     # 逐句计划(不合成)
+  python3 code/dialogue_tts.py --project <slug> --ep ep01 --variants # 各组说话人嗓音形态判定(多形态人物用哪个年龄形态、
+                                                                     #   依据是什么;不合成),见 modules/voice_variants.py
   python3 code/dialogue_tts.py --project <slug> --ep ep01 --force    # 全部重出
   python3 code/dialogue_tts.py ... --ignore-setting                  # 开关关闭也执行(验证/对拍用)
   python3 code/dialogue_tts.py ... --speed 1.2                       # 本次默认语速倍率(覆盖 output.dialogue_tts_speed;
@@ -34,6 +36,8 @@ def main() -> int:
     def configure(ap):
         ap.add_argument("--status", action="store_true", help="只输出现状 JSON,不合成")
         ap.add_argument("--plan", action="store_true", help="输出逐句计划 JSON,不合成")
+        ap.add_argument("--variants", action="store_true",
+                        help="只输出各组说话人的嗓音形态判定(形态/来源/问题)JSON,不合成")
         ap.add_argument("--force", action="store_true", help="忽略 key 全部重出")
         ap.add_argument("--ignore-setting", action="store_true", help="项目未开启「生成对白语音」也执行")
         ap.add_argument("--shots", default="", help="只同步这些镜(逗号分隔),其余沿用旧台账")
@@ -51,6 +55,19 @@ def main() -> int:
         return 2
     if args.status:
         print(json.dumps(dt.status(root, ep), ensure_ascii=False, indent=1))
+        return 0
+    if args.variants:
+        table, problems, warnings = {}, set(), set()
+        for e in dt.plan(root, ep, speed=args.speed)["lines"]:
+            if not e["speaker"]:
+                continue
+            table.setdefault(e["group_id"], {})[e["speaker"]] = {"variant": e["variant"], "source": e.get("variant_source", "")}
+            if e["status"] == "unbound":
+                problems.add(e["reason"])
+            if e.get("variant_warning"):
+                warnings.add(e["variant_warning"])
+        print(json.dumps({"groups": table, "problems": sorted(problems), "warnings": sorted(warnings)},
+                         ensure_ascii=False, indent=1))
         return 0
     if args.plan:
         p = dt.plan(root, ep, speed=args.speed)

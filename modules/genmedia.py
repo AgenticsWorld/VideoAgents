@@ -6012,6 +6012,14 @@ def _seedaudio_ref(character: str, variant: str, project: str, output: str):
                 return cand
         except OSError:
             continue
+    if character and not _is_voiceprint_sample(output):
+        # 多形态人物(2026-10-02):该人物有别的形态样本,但本次形态对不上任何样本 → 多半是 --variant 没传/传错,
+        # 出来的声音没有参考锚(逐句漂音色)且用的是另一个年龄的描述
+        others = sorted(f.name for f in refs.glob(f"{character}_*_voiceprint.mp3"))
+        if others:
+            print(f"[genmedia] WARN {character} 形态 {variant or 'default'} 没有对应嗓音样本,本次不挂参考音频;"
+                  f"该人物已有形态样本:{', '.join(others)}——多形态人物须传对 --variant",
+                  file=sys.stderr)
     return None
 
 

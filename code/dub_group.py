@@ -11,7 +11,8 @@
      按台词顺序对位(区间多则按最小间隙合并、少则按台词字数比例拆分);模型原生轨杂音重、自动检测
      不可靠时,Agent 目检/听审后用 --segments <json> 手工给定 [{"line":0,"start":1.2,"end":4.0},...];
   3. 逐句 TTS:按项目级 assets/audio/voice/casting.json 该角色×形态条目(tts_voice/speed;形态按组
-     audio_refs 样本文件名 <CHAR>_<variant>_voiceprint 推断,可 --variant CHAR=variant 覆盖),
+     audio_refs 样本文件名 <CHAR>_<variant>_voiceprint → 声纹卡章节范围 → 唯一已登记形态,modules/voice_variants.py;
+     可 --variant CHAR=variant 覆盖),
      走 modules/genmedia.generate_tts(云渠道传 casting 的 voice;ComfyUI 渠道传 --character/--variant 自动选型);
   4. 口型贴合:实测 TTS 时长与开口时段比对,先按比例重合成(--speed,受 --speed-min/--speed-max 约束,
      默认 0.75–1.25),残差用 atempo 微调(±10% 内),起点对齐开口起点;仍装不下的句子记 overflow 上报
@@ -213,17 +214,22 @@ def load_casting(proj: Path) -> dict:
     return out
 
 
-def infer_variants(proj: Path, ep: str, gid: str) -> dict:
-    """从组 prompt 的 audio_refs 样本文件名推断说话人形态:<CHAR>[_<variant>]_voiceprint.*"""
-    p = proj / "assets" / "prompts" / ep / f"{gid}.json"
-    res = {}
-    try:
-        for ref in json.loads(p.read_text(encoding="utf-8")).get("audio_refs") or []:
-            m = re.match(r"(CHAR-\d+)(?:_([A-Za-z0-9-]+))?_voiceprint", Path(ref).name)
-            if m:
-                res[m.group(1)] = m.group(2) or "default"
-    except Exception:
-        pass
+def infer_variants(proj: Path, ep: str, gid: str, speakers, casting: dict | None = None) -> dict:
+    """本组各说话人的嗓音形态(modules/voice_variants.py,与对白语音库同一口径):组 prompt audio_refs 样本名
+    → 声纹卡章节范围 → 本集其它组 → 唯一已登记形态 → default。判不出/该形态未登记的人物不进返回表,
+    另列在 '_problems'(调用方报错,由 --variant 显式指定)。"""
+    from modules.voice_variants import Resolver
+    resolver = Resolver(proj, ep, casting)
+    res, problems = {}, {}
+    for ch in dict.fromkeys(speakers):
+        vr = resolver.resolve(gid, ch)
+        if vr["problem"]:
+            problems[ch] = vr["problem"]
+        else:
+            res[ch] = vr["variant"]
+        if vr["warning"]:
+            print(f"[dub] WARN {vr['warning']}", file=sys.stderr)
+    res["_problems"] = problems
     return res
 
 
@@ -308,10 +314,15 @@ def main(argv=None):
             raise SystemExit(f"第 {i} 句时段非法 [{a},{b}](clip {total:.2f}s)")
 
     casting = load_casting(proj)
-    variants = infer_variants(proj, ep, gid)
+    variants = infer_variants(proj, ep, gid, [ln["speaker"] for ln in lines], casting)
+    problems = variants.pop("_problems")
     for ov in args.variant:
         k, _, v = ov.partition("=")
         variants[k] = v or "default"
+        problems.pop(k, None)
+    if problems:
+        raise SystemExit("说话人嗓音形态未定(dub_speaker_casting_bound):" + ";".join(problems.values())
+                         + ";或用 --variant CHAR=形态 显式指定")
     try:
         from genmedia import get_config, generate_tts
         tts_cfg = get_config("tts")

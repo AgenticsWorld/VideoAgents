@@ -15,7 +15,7 @@
 2. **性别硬约束(2026-07-20)**:声纹卡必须回填 `gender`(照抄 appearance.json,不得自定),timbre/pitch/reference_style 与 gender 一致——男角配女声或反之(无易装设定依据)= 机检退回,不靠文字描述碰运气。角色有 `presented_gender` 时:常态声线按对外呈现口径设定(如女扮男装压低音区),须在 `reference_style` 写明伪装处理方式,并在 `emotion_range` 或备注中给出「身份揭露/独处」场景的真声偏移口径。
 3. 给出可检索的参考声线描述(声线标签,供 TTS 选型),不绑定具体真人音源——音源版权由 `11-qa/copyright` 审。**声学字段即生成指令(2026-08-31)**:TTS 走火山 seed-audio-1.0 描述定制嗓音时,`gender/pitch/timbre/accent`(含 age_variants 分版同名字段)会被逐字拼进「按描述生成嗓音」的 prompt——这四个字段只写**纯声学描述**,剧情叙述/出处考据只落 `reference_style` 与 note(不进 prompt);字段写得含糊=生成的嗓子含糊。
 4. 标注情绪态偏移范围:常态/激动/低语时语速与音高的允许偏移区间,供逐句配音按剧本情绪标签调用。
-5. 跨龄角色对齐 `age_versions.json`:分龄声线(童声 → 成年声)按相同时间轴区间切版本——**每个 age_variant 都会被 voice-generation 合成一段独立 voiceprint 样本**(不同年龄阶段嗓音不同,组生成按时间线选对应形态样本挂锚,§8A),分版描述必须足以区分选型。
+5. 跨龄角色对齐 `age_versions.json`:分龄声线(童声 → 成年声)按相同时间轴区间切版本——**每个 age_variant 都会被 voice-generation 合成一段独立 voiceprint 样本**(不同年龄阶段嗓音不同,组生成按时间线选对应形态样本挂锚,§8A),分版描述必须足以区分选型。**有 age_variants 时每个分版必写 `variant`(形态键,即样本文件名 `<CHAR>_<variant>_voiceprint` 与 casting 条目用的同一个词)与 `chapter_range: {from, to}`(原著章节区间,如 `ch012`–`ch013`)**——宿主按这两个字段判定每集每组该人物用哪个形态出声(WORKFLOW §8A「形态判定唯一口径」),缺了就只能靠组 prompt 挂的样本名,样片阶段还没有 prompt 时会判不出。
 6. 覆盖清单以 structured_story 的对白说话人为准:工单批次内有台词角色 100% 有 voice.json,漏配即机检不过。
 
 ## 不做什么(边界)
@@ -50,7 +50,8 @@
   "accent": "官话标准音,无方言",
   "reference_style": "青年剑客,克制少起伏",
   "emotion_range": { "激动": { "speed_delta": "+20%", "pitch_delta": "+2semi" } },
-  "age_variants": [{ "timeline_range": { "from": "T-001", "to": "T-018" }, "timbre": "童声清亮" }],
+  "age_variants": [{ "variant": "child", "chapter_range": { "from": "ch001", "to": "ch006" },
+                    "timeline_range": { "from": "T-001", "to": "T-018" }, "timbre": "童声清亮" }],
   "source_chapter": 15
 }
 ```
@@ -75,7 +76,7 @@ instruction: |
 - 字段齐:**gender** / timbre / pitch / speed_cpm / accent / reference_style 必填;`gender` 与 appearance.json 一致(gender_match,2026-07-20),音色性别与之匹配(有 presented_gender 的按呈现口径核对);
 - `character_id` 在 index.json 中合法(G3);
 - 原文有嗓音描写的,卡内取值不得与之冲突(有 source_chapter 佐证);
-- 有 age_versions 的角色,age_variants 区间与其一致。
+- 有 age_versions 的角色,age_variants 区间与其一致;每个分版有 `variant` 与 `chapter_range`,各分版章节区间互不重叠。
 
 **评分(evaluation Agent)**:
 - WORKFLOW.md 未为本工序单独挂 rubric,验收以机检 + QA 为主;若工单 `acceptance.eval_rubric` 指定,按阈值 80 执行。

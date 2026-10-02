@@ -12,6 +12,9 @@
 - 惰性同步:每句一个 key = sha256(speaker, variant, text, emotion, casting 条目的 model/voice/speed/desc,
   voiceprint 样本 sha256, TTS 渠道/模型);消费方调用前 sync() 一次,只补合成 key 变了或文件缺失的句子,
   台词删掉的句子文件移到 _prev/。同一集加文件锁,动态样片与白模样片同时触发也不会重复合成。
+- 说话人形态(2026-10-02):多形态人物(声纹卡 age_variants)每句用哪个形态由 modules/voice_variants.py 判定
+  (组 prompt 样本名 → 声纹卡章节范围 → 本集其它组 → 唯一已登记形态 → default),来源记入每句 variant_source;
+  判不出或该形态未登记 → status=unbound 跳过并 WARN,不拿别的年龄形态硬出声。
 - 嗓音模板:走 modules/genmedia.generate_tts(character/variant/project 三参数),与 dub_group 同一套——
   seed-audio 按声纹卡描述+项目 voiceprint 样本锚定,ComfyUI 自动选参考音频,云渠道用 casting.json 的音色 ID。
   speaker 不是 CHAR-/CRE- 编号、或云渠道缺 casting 条目 → 该句 status=unbound 跳过并 WARN(样片照出、不阻断)。
@@ -43,7 +46,6 @@ SCHEMA = "dialogue_tts/v1"
 MANIFEST = "tts_manifest.json"
 LIB_REL = "assets/audio/voice/{ep}/tts"
 _ID_RE = re.compile(r"^(CHAR|CRE)-\d+$")
-_VP_RE = re.compile(r"(CHAR-\d+)(?:_([A-Za-z0-9-]+))?_voiceprint")
 EST_TOLERANCE = 0.30      # 实测/估时偏差超过该比例记 WARN
 RAW_DIR = "_raw"          # 合成原声(未修剪)存放子目录
 TRIM_NOISE_DB = -35.0     # 静音判定阈值
@@ -229,23 +231,14 @@ def load_casting(base: Path) -> dict[tuple[str, str], dict]:
     return out
 
 
-def infer_variants(base: Path, ep: str) -> dict[str, dict[str, str]]:
-    """各组说话人形态:{group_id: {CHAR: variant}},按组 prompt audio_refs 样本文件名 <CHAR>[_<variant>]_voiceprint 推断
-    (与 dub_group.infer_variants 同一规则)。"""
-    out: dict[str, dict[str, str]] = {}
-    pdir = Path(base) / "assets" / "prompts" / ep
-    if not pdir.is_dir():
-        return out
-    for p in sorted(pdir.glob("grp*.json")):
-        d = _read(p) or {}
-        res = {}
-        for ref in d.get("audio_refs") or []:
-            m = _VP_RE.match(Path(str(ref)).name)
-            if m:
-                res[m.group(1)] = m.group(2) or "default"
-        if res:
-            out[p.stem] = res
-    return out
+def _variant_resolver(base: Path, ep: str, casting: dict | None = None):
+    """说话人形态判定(modules/voice_variants.py,与 dub_group 同一口径):组 prompt 样本名 → 声纹卡章节范围
+    → 本集其它组 → 唯一已登记形态 → default。"""
+    try:
+        from modules.voice_variants import Resolver
+    except ImportError:                               # 脚本直跑时无包前缀
+        from voice_variants import Resolver
+    return Resolver(base, ep, casting)
 
 
 def voiceprint_path(base: Path, character: str, variant: str) -> Path | None:
@@ -286,7 +279,7 @@ def plan(base: Path, ep: str, shot_list: dict | None = None, channel: tuple[str,
     desc = _desc_mode(provider, model)
     base_speed = num_speed(speed) or default_speed(base)
     casting = load_casting(base)
-    variants = infer_variants(base, ep)
+    resolver = _variant_resolver(base, ep, casting)
     old = load_manifest(base, ep) or {}
     old_by_file = {e.get("file"): e for e in old.get("lines") or [] if isinstance(e, dict) and e.get("file")}
     ldir = lib_dir(base, ep)
@@ -294,10 +287,19 @@ def plan(base: Path, ep: str, shot_list: dict | None = None, channel: tuple[str,
     lines = []
     for ln in collect_lines(base, ep, shot_list):
         ch = ln["speaker"]
-        var = (variants.get(ln["group_id"]) or {}).get(ch, "default") if ch else "default"
-        entry = dict(ln, variant=var, reason="", tts_voice="", tts_model="", speed=base_speed, key="", file="")
+        vr = resolver.resolve(ln["group_id"], ch) if ch else {"variant": "default", "source": "default", "problem": "", "warning": ""}
+        var = vr["variant"]
+        entry = dict(ln, variant=var, variant_source=vr["source"], reason="", tts_voice="", tts_model="",
+                     speed=base_speed, key="", file="")
+        if vr["warning"]:
+            entry["variant_warning"] = vr["warning"]
         if not ch:
             entry.update(status="unbound", reason=f"speaker 不是人物/生物编号:{ln['speaker_raw'] or '(空)'}")
+            lines.append(entry)
+            continue
+        if vr["problem"]:
+            # 多形态人物的形态没判出来/没登记:不拿另一个年龄的描述硬出声(出了也挂不上样本,逐句漂音色)
+            entry.update(status="unbound", reason=vr["problem"])
             lines.append(entry)
             continue
         c = casting.get((ch, var)) or casting.get((ch, "default")) or {}
@@ -305,6 +307,7 @@ def plan(base: Path, ep: str, shot_list: dict | None = None, channel: tuple[str,
             entry.update(tts_voice=str(c.get("tts_voice") or ""), tts_model=str(c.get("tts_model") or ""),
                          speed=num_speed(c.get("speed")) or base_speed)
         vp = voiceprint_path(base, ch, var)
+        entry["anchored"] = bool(vp)
         if not c and not (desc or provider == "comfyui"):
             # 云渠道按音色 ID 合成,没有选角条目就没有该角色的嗓音;不用默认音色顶替(会全员同声)
             entry.update(status="unbound", reason=f"casting.json 无 {ch}/{var} 条目(云渠道 {provider or '?'} 需先选角)")
@@ -330,6 +333,14 @@ def plan(base: Path, ep: str, shot_list: dict | None = None, channel: tuple[str,
     wanted = {e["file"] for e in lines if e.get("file")}
     removed = [f for f in old_by_file if f not in wanted]
     return {"lines": lines, "manifest": old, "provider": provider, "model": model, "speed": base_speed, "removed": removed}
+
+
+def _speaker_variants(lines: list[dict]) -> dict[str, dict[str, str]]:
+    out: dict[str, dict[str, str]] = {}
+    for e in lines:
+        if e.get("speaker") and e.get("variant_source"):
+            out.setdefault(e["speaker"], {})[e["variant"]] = e["variant_source"]
+    return out
 
 
 def status(base: Path, ep: str) -> dict:
@@ -691,7 +702,14 @@ def sync(base: Path, ep: str, *, force: bool = False, tts=None, probe=None, log=
             "checks": {"dialogue_tts_all_bound": all(e["status"] == "ok" for e in done),
                        "unbound_lines": [f"{e['shot_id']}/l{e['idx']:02d}" for e in done if e["status"] == "unbound"],
                        "failed_lines": [f"{e['shot_id']}/l{e['idx']:02d}" for e in done if e["status"] == "failed"],
-                       "est_vs_actual": est_warn},
+                       "est_vs_actual": est_warn,
+                       # 形态判定(modules/voice_variants.py):逐人物 {形态: 判定来源};prompt 与章节范围不一致的告警;
+                       # 没挂参考样本(纯描述出声,句与句之间嗓子会漂)的说话人
+                       "speaker_variants": _speaker_variants(done),
+                       "variant_warnings": sorted({e["variant_warning"] for e in done if e.get("variant_warning")}),
+                       "unanchored_speakers": sorted({e["speaker"] for e in done
+                                                      if e["status"] == "ok" and e.get("anchored") is False})
+                       if _desc_mode(provider, model) or provider == "comfyui" else []},
         }
         ldir.mkdir(parents=True, exist_ok=True)
         tmp = ldir / (MANIFEST + ".tmp")

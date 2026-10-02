@@ -637,6 +637,14 @@ cast 人物。严禁逐行交替或从人物图片推断性别；`ready_for_digi
 > `refs/NARRATOR_voiceprint.mp3` 作锚——2026-09-01 起卡与样本由 voice-generation 预先设计冻结)。
 > **同一角色不同年龄阶段嗓音不同**:voice.json 的 age_variants 有分版的,逐 variant 出样本;
 > 组生成挂锚时按该组时间线选对应形态的样本。
+> **形态判定唯一口径(2026-10-02,`modules/voice_variants.py`;对白语音库与 `dub_group.py` 共用)**:
+> 仅对声纹卡有 age_variants 的多形态人物起作用,单形态人物恒为 default。顺序=① 本组 prompt
+> audio_refs 挂的该人物样本名 → ② 声纹卡 `age_variants[].chapter_range` 与本集章节
+> (`story/episode_plan.json`)相交的形态恰好一个 → ③ 本集其它组 prompt 挂的形态恰好一种 →
+> ④ 唯一已登记形态 → ⑤ default。判不出、或判出的形态既无样本/选角条目又无基础样本可回退 →
+> 该句不合成并告警(对白语音库记 unbound、`dub_group.py` 退出并要求 `--variant`)。拿不准某组该挂
+> 哪个形态样本时先查 `python3 code/dialogue_tts.py --project <slug> --ep <ep> --variants`
+> (各组说话人形态+依据+问题,不合成)。①与②不一致只告警(闪回组合法)。
 > **对白组挂逐角色 Voice 锚(2026-07-20,废止组级干声)**:~~每组一条台词干声轨
 > `lines/grpNNN_dialogue.mp3`~~ 不再产出——单干声只含一个人的嗓音,多说话人组第二人音色
 > 失控(手测实证:tothemoon ep01 grp012)。现行做法:组 audio_refs = **组内每个说话角色各自的
@@ -679,8 +687,9 @@ cast 人物。严禁逐行交替或从人物图片推断性别；`ready_for_digi
 > ① 台词事实源=`shot_list.json` 组内各镜 `dialogue_lines`(speaker/text,冻结版一字不改;
 >   `dialogue_tail_from` 反打镜不重复挂);② 开口时段=组 clip 原生轨语音区间(silencedetect,
 >   按台词顺序对位;区间多则合并、少则按台词字数比例拆;自动检测不可靠时 `--detect-only` 目检/
->   听审后 `--segments` 手工给定);③ 逐句 TTS 按 `casting.json` 该角色×形态条目(形态按组
->   audio_refs 样本名 `<CHAR>_<variant>_voiceprint` 推断,可 `--variant` 覆盖;缺条目=先登记再
+>   听审后 `--segments` 手工给定);③ 逐句 TTS 按 `casting.json` 该角色×形态条目(形态按 §8A「形态判定
+>   唯一口径」:组 audio_refs 样本名 `<CHAR>_<variant>_voiceprint` → 声纹卡章节范围 → 唯一已登记
+>   形态,可 `--variant` 覆盖;缺条目=先登记再
 >   合成,dub_speaker_casting_bound),ComfyUI 渠道传 `--character/--variant` 自动选型、云渠道传
 >   casting 的 voice;④ 口型贴合=语速 ±25% 重合成 + atempo ±10% 微调、起点对齐开口起点;
 >   **装不下的句子记 overflow 上报**(回派 dialogue-rewrite 改短→重配,或整组重生成),严禁
