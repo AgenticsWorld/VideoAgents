@@ -919,7 +919,8 @@ function buildPanel(kind,p){
       const rw2=el('div',{className:'row',id:`${kind}-comfy-rhrefwf-row`,style:'display:none'});
       rw2.appendChild(el('label',{},SECOND_WF[kind].rh));
       rw2.appendChild(el('select',{id:`${kind}-comfy-rhrefwf`}));
-      d.appendChild(rw2);
+      // TTS:Voice Design 排在 Voice Clone 上面(与其它渠道「先 Design 后 Clone」一致);图像仍是文生图在前
+      if(kind==='tts')d.insertBefore(rw2,rw);else d.appendChild(rw2);
     }
     const ar=el('div',{className:'row',id:`${kind}-comfy-rhadd-row`,style:'display:none'});
     ar.appendChild(el('label',{},'添加工作流'));
@@ -950,7 +951,8 @@ function buildPanel(kind,p){
     wr.id=`${kind}-comfy-wf-row`;d.appendChild(wr);
     if(SECOND_WF[kind]){
       const wr2=wfRow(kind,`${kind}-comfy-ref-wf`,SECOND_WF[kind].api);
-      wr2.id=`${kind}-comfy-ref-wf-row`;d.appendChild(wr2);
+      wr2.id=`${kind}-comfy-ref-wf-row`;
+      if(kind==='tts')d.insertBefore(wr2,wr);else d.appendChild(wr2);   // TTS 同上:Voice Design 在 Voice Clone 上面
     }
     // 数字人:本地/云端跑 InfiniteTalk API 工作流;RunningHub 工作流普通导出件按唯一 LoadImage/LoadAudio 自动绑定
     const dhWf='API 工作流使用 <code>{{IMAGE}}</code>、<code>{{AUDIO}}</code>、<code>{{PROMPT}}</code>、<code>{{SEED}}</code>、<code>{{FRAMES}}</code> 占位符';
