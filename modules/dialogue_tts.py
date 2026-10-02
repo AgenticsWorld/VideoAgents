@@ -16,8 +16,10 @@
   (组 prompt 样本名 → 声纹卡章节范围 → 本集其它组 → 唯一已登记形态 → default),来源记入每句 variant_source;
   判不出或该形态未登记 → status=unbound 跳过并 WARN,不拿别的年龄形态硬出声。
 - 嗓音模板:走 modules/genmedia.generate_tts(character/variant/project 三参数),与 dub_group 同一套——
-  seed-audio 按声纹卡描述+项目 voiceprint 样本锚定,ComfyUI 自动选参考音频,云渠道用 casting.json 的音色 ID。
-  speaker 不是 CHAR-/CRE- 编号、或云渠道缺 casting 条目 → 该句 status=unbound 跳过并 WARN(样片照出、不阻断)。
+  按生效渠道的语音模式(modules/voice_library.py,2026-10-02):音色设计=按声纹卡描述+项目 voiceprint 样本当参考;
+  音色库=用 casting.json 登记的音色(渠道音色 ID,或本地音色库的参考音频文件名——本地库没登记时生成层按人物自动选)。
+  speaker 不是 CHAR-/CRE- 编号、渠道音色库缺 casting 条目、音色设计模式缺样本(火山音频生成 1.0 除外)
+  → 该句 status=unbound 跳过并 WARN(样片照出、不阻断)。
 - 顺带机检:实测时长与 est_duration_s 偏差 >30% 记入 checks.est_vs_actual(WARN 级,给分镜规划做反馈)。
 - 语速(2026-09-15):每句 speed = casting 条目的数字 speed(倍率,如 1.15;描述文字视为未填)> 项目输出设置
   output.dialogue_tts_speed(默认 1.0;CLI --speed 临时覆盖该默认值)。speed 进 key,改了自动重出。
@@ -134,7 +136,31 @@ def tts_channel() -> tuple[str, str]:
     provider = str(cfg.get("provider") or "")
     pc = cfg.get(provider) if isinstance(cfg.get(provider), dict) else {}
     model = str((pc or {}).get("custom_model") or (pc or {}).get("model") or cfg.get("model") or "")
+    if provider == "volcengine":                      # 火山按语音模式定模型:音色设计=音频生成 1.0,音色库=Seed-TTS 档
+        model = _voice_library().effective_model(provider, pc)
     return provider, model
+
+
+def _voice_library():
+    try:
+        from modules import voice_library
+    except ImportError:                               # 脚本直跑时无包前缀
+        import voice_library
+    return voice_library
+
+
+def voice_mode(provider: str, model: str) -> tuple[str, str]:
+    """生效 TTS 渠道的语音模式(modules/voice_library.py)→ (design|library, 音色库种类 local|provider|'')。
+    音色设计:按声纹卡描述出样本、对白拿样本当参考,不看 casting 的音色;音色库:按 casting 登记的音色合成
+    (local=本地参考音频库,没登记时生成层按人物自动选;provider=渠道音色 ID,没登记就合成不了)。"""
+    vl = _voice_library()
+    if provider == "volcengine":
+        return ("design", "") if model == vl.SEEDAUDIO_MODEL else ("library", "provider")
+    if provider in vl.DESIGN_PROVIDERS:
+        pc = vl.load_tts_config().get(provider)
+        pc = pc if isinstance(pc, dict) else {}
+        return vl.voice_mode(provider, pc), vl.voice_library_kind(provider, pc)
+    return "library", "provider"
 
 
 def _name_index(base: Path) -> dict[str, str]:
@@ -263,10 +289,6 @@ def _sha_file(p: Path | None, cache: dict) -> str:
     return cache[k]
 
 
-def _desc_mode(provider: str, model: str) -> bool:
-    return provider == "volcengine" and model == "seed-audio-1.0"
-
-
 # ---------------------------------------------------------------- 计划(纯读,不合成)
 
 def plan(base: Path, ep: str, shot_list: dict | None = None, channel: tuple[str, str] | None = None,
@@ -276,7 +298,7 @@ def plan(base: Path, ep: str, shot_list: dict | None = None, channel: tuple[str,
     返回 {lines:[...], manifest, provider, model, speed, removed:[旧台账里已不在台词中的文件]}。"""
     base = Path(base)
     provider, model = channel if channel else tts_channel()
-    desc = _desc_mode(provider, model)
+    mode, library = voice_mode(provider, model)
     base_speed = num_speed(speed) or default_speed(base)
     casting = load_casting(base)
     resolver = _variant_resolver(base, ep, casting)
@@ -308,9 +330,14 @@ def plan(base: Path, ep: str, shot_list: dict | None = None, channel: tuple[str,
                          speed=num_speed(c.get("speed")) or base_speed)
         vp = voiceprint_path(base, ch, var)
         entry["anchored"] = bool(vp)
-        if not c and not (desc or provider == "comfyui"):
-            # 云渠道按音色 ID 合成,没有选角条目就没有该角色的嗓音;不用默认音色顶替(会全员同声)
-            entry.update(status="unbound", reason=f"casting.json 无 {ch}/{var} 条目(云渠道 {provider or '?'} 需先选角)")
+        if not c and library == "provider":
+            # 渠道音色库按音色 ID 合成,没有选角条目就没有该角色的嗓音;不用默认音色顶替(会全员同声)
+            entry.update(status="unbound", reason=f"casting.json 无 {ch}/{var} 条目(音色库模式 {provider or '?'} 需先选角)")
+            lines.append(entry)
+            continue
+        if mode == "design" and not vp and provider != "volcengine":
+            # 音色设计模式的 Voice Clone 模型必须拿嗓音样本当参考(火山音频生成 1.0 例外:没样本也能按描述出声)
+            entry.update(status="unbound", reason=f"{ch}/{var} 还没有嗓音样本(音色设计模式先出 {ch}_voiceprint 样本)")
             lines.append(entry)
             continue
         if not c and not vp and not (base / "bible" / "characters" / ch / "voice.json").is_file():
@@ -562,7 +589,7 @@ def sync(base: Path, ep: str, *, force: bool = False, tts=None, probe=None, log=
     with _Lock(ldir / ".lock"):
         p = plan(base, ep, speed=speed)
         provider, model = p["provider"], p["model"]
-        by_char = _desc_mode(provider, model) or provider == "comfyui"
+        by_char = voice_mode(provider, model)[0] == "design"   # 音色设计:不传 casting 的音色,生成层按人物取样本
         tts = tts or _default_tts(base)
         probe = probe or probe_duration
         old_lines = {e.get("file"): e for e in (p["manifest"] or {}).get("lines") or [] if isinstance(e, dict)}
@@ -709,7 +736,7 @@ def sync(base: Path, ep: str, *, force: bool = False, tts=None, probe=None, log=
                        "variant_warnings": sorted({e["variant_warning"] for e in done if e.get("variant_warning")}),
                        "unanchored_speakers": sorted({e["speaker"] for e in done
                                                       if e["status"] == "ok" and e.get("anchored") is False})
-                       if _desc_mode(provider, model) or provider == "comfyui" else []},
+                       if voice_mode(provider, model)[0] == "design" else []},
         }
         ldir.mkdir(parents=True, exist_ok=True)
         tmp = ldir / (MANIFEST + ".tmp")

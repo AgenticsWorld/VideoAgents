@@ -107,19 +107,22 @@ Python:
         / minimax(POST /v1/music_generation,Music 3.0/2.6;仅 .mp3/.wav,--duration 忽略;
         force_instrumental 由「生成模型」页配置,默认纯音乐,关闭时按 prompt 自动写词演唱)
         / comfyui(本地/云端,需配置 API 格式工作流 JSON;推荐 ACE-Step,见 comfy/music-ace-step-v1-api.md)
-  TTS : agentics(登录账号 + 后端 profile) / openrouter(POST /api/v1/audio/speech,原始字节流;.mp3 或 pcm 裸流;
-        Grok Voice / MAI-Voice-2 / Voxtral / Kokoro 等,音色名因模型而异)
+  TTS : 每个渠道有语音模式(2026-10-02,modules/voice_library.py):音色设计=Voice Design 模型按声纹卡描述出嗓音样本、
+        Voice Clone 模型拿样本当参考出对白/旁白;音色库=从音色库给每个人物选音色(登记 casting.json)再合成。音色库不在
+        界面设置,宿主自动拉取,候选见 `voices` 子命令;不带人物也没给音色的调用自动取旁白型音色。
+        agentics(登录账号 + 后端 profile;音色设计=design/clone 两个 profile,音色库=clone profile + 本地音色库
+        data/TimbreModel)/ openrouter(仅音色库;POST /api/v1/audio/speech,原始字节流;.mp3 或 pcm 裸流;
+        Grok Voice / MAI-Voice-2 / Voxtral / Kokoro 等,音色名因模型而异,取自模型目录 supported_voices)
         / volcengine(豆包语音;凭证=新版语音技术控制台「API Key 管理」的 API Key,
-        非方舟 ARK Key。模型 seed-tts-2.0/1.0 走 openspeech v3 单向流式,音色为
-        speaker 名(控制台「音色库」),S_ 开头的克隆音色自动切 seed-icl-2.0 资源;
-        模型 seed-audio-1.0(Doubao-音频生成 1.0)走非流式 /api/v3/tts/create
+        非方舟 ARK Key。音色库模式:模型 seed-tts-2.0/1.0 走 openspeech v3 单向流式,音色为
+        speaker 名(OpenAPI ListSpeakers 拉取,要账号 Access Key / Secret Key),S_ 开头的复刻音色自动切
+        seed-icl-2.0 资源;音色设计模式:seed-audio-1.0(Doubao-音频生成 1.0)走非流式 /api/v3/tts/create
         **描述定制嗓音**:不选音色,角色按项目声纹卡 voice.json 声学字段拼装声线
         描述,旁白用 --instructions 描述(缺省内置旁白声线),--voice 传入的音色库
         speaker 名会被忽略)
-        / minimax(POST /v1/t2a_v2,Speech 2.8 系列;音色为 voice_id,
-        可在「生成模型」页拉取音色库选择)
-        / elevenlabs(POST /v1/text-to-speech/{voice_id};音色为 voice_id,
-        可在「生成模型」页从 Voice Library 搜索并一键加入账号)
+        / minimax(仅音色库;POST /v1/t2a_v2,Speech 2.8 系列;音色为 voice_id,get_voice 拉取)
+        / elevenlabs(仅音色库;POST /v1/text-to-speech/{voice_id};音色为账号内 voice_id,公共 Voice Library
+        只搜索推荐,加入账号须显式 voices --add)
         / comfyui(本地/云端,需配置 API 格式工作流 JSON;推荐 IndexTTS-2;
         根据角色设定从内置音色目录自动选择参考音频,远端音频按需下载缓存)
 
@@ -161,9 +164,11 @@ import uuid
 from pathlib import Path
 
 try:
-    from modules.timbre_selector import select_timbre
+    from modules.timbre_selector import select_timbre, find_timbre
+    from modules import voice_library
 except ModuleNotFoundError:  # python modules/genmedia.py ...
-    from timbre_selector import select_timbre
+    from timbre_selector import select_timbre, find_timbre
+    import voice_library
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:  # direct CLI also uses package-based continuation helpers
@@ -761,6 +766,14 @@ def get_config(kind: str, provider_override: str = "", model_override: str = "")
             raise RuntimeError(f"{kind} 渠道 ComfyUI 的运行方式「{COMFY_MODE_LABELS[ov_model]}」未配置"
                                "(「🎨 生成模型」页 ComfyUI 渠道填写地址/Key/工作流)")
         pc = comfy_with_mode(pc, ov_model)
+    if kind == "tts":
+        # 语音模式(2026-10-02,modules/voice_library.py):design=音色设计 / library=音色库;火山按模式定模型
+        # (音色设计=音频生成 1.0,音色库=Seed-TTS 档),其余渠道模型不变
+        raw = cfg.get(provider) if isinstance(cfg.get(provider), dict) else {}
+        pc["voice_mode"] = voice_library.voice_mode(provider, raw)
+        pc["voice_library"] = voice_library.voice_library_kind(provider, raw)
+        if provider == "volcengine" and not ov_model:
+            pc["model"] = voice_library.effective_model(provider, raw)
     return {"provider": provider, **pc}
 
 
@@ -5891,8 +5904,11 @@ TTS_TIMEOUT = 300
 
 def _tts_openrouter(cfg, text, output, voice, speed, instructions):
     fmt = "mp3" if Path(output).suffix.lower() == ".mp3" else "pcm"
-    body = {"model": cfg["model"], "input": text,
-            "voice": voice or cfg.get("voice") or "eve",
+    vid = voice or voice_library.default_voice("openrouter", cfg, cfg["model"], text)
+    if not vid:
+        raise RuntimeError(f"OpenRouter TTS 未指定音色:--voice 传音色名(候选见 genmedia.py voices),"
+                           f"模型 {cfg['model']} 没有公开音色清单时无法自动选")
+    body = {"model": cfg["model"], "input": text, "voice": vid,
             "response_format": fmt}
     if speed:
         body["speed"] = speed
@@ -6133,10 +6149,11 @@ def _tts_volcengine(cfg, text, output, voice, speed, instructions,
     if (cfg.get("model") or "") == SEEDAUDIO_MODEL:
         return _tts_volc_seedaudio(cfg, text, output, voice, speed, instructions,
                                    character, variant, project)
-    speaker = voice or cfg.get("voice") or ""
+    speaker = voice or voice_library.default_voice("volcengine", cfg, cfg["model"] or "seed-tts-2.0", text)
     if not speaker:
-        raise RuntimeError("火山 TTS 未指定音色:--voice 传 speaker 名,"
-                           "或在「🎨 生成模型」页配置默认音色(见豆包语音「音色列表」文档)")
+        raise RuntimeError("火山 TTS(音色库模式)未指定音色:--voice 传 speaker 名(候选见 genmedia.py voices);"
+                           "自动取音色需要在「🎨 生成模型」页 TTS › 火山引擎 填 Access Key / Secret Key")
+    # S_ 开头=账号里的复刻音色(设置页已不再提供声音复刻档,存量选角表里登记过的仍可用)
     resource = "seed-icl-2.0" if speaker.startswith("S_") else (cfg["model"] or "seed-tts-2.0")
     audio_params = {"format": "mp3" if Path(output).suffix.lower() == ".mp3" else "pcm",
                     "sample_rate": 24000}
@@ -6180,10 +6197,9 @@ def _tts_volcengine(cfg, text, output, voice, speed, instructions,
 # instructions 不支持自由文本(官方仅 emotion 枚举,不做不可靠的自动映射)。
 
 def _tts_minimax(cfg, text, output, voice, speed, instructions):
-    vid = voice or cfg.get("voice") or ""
+    vid = voice or voice_library.default_voice("minimax", cfg, cfg["model"], text)
     if not vid:
-        raise RuntimeError("MiniMax TTS 未指定音色:--voice 传 voice_id,"
-                           "或在「🎨 生成模型」页拉取音色库设为默认")
+        raise RuntimeError("MiniMax TTS 未指定音色:--voice 传 voice_id(候选见 genmedia.py voices)")
     voice_setting = {"voice_id": vid}
     if speed and speed != 1.0:
         voice_setting["speed"] = max(0.5, min(2.0, float(speed)))
@@ -6210,10 +6226,9 @@ def _tts_minimax(cfg, text, output, voice, speed, instructions):
 # instructions 不支持(v3 系模型的情绪走文本内 [audio tag],由上游在 text 里写)。
 
 def _tts_elevenlabs(cfg, text, output, voice, speed, instructions):
-    vid = voice or cfg.get("voice") or ""
+    vid = voice or voice_library.default_voice("elevenlabs", cfg, cfg["model"], text)
     if not vid:
-        raise RuntimeError("ElevenLabs TTS 未指定音色:--voice 传 voice_id,"
-                           "或在「🎨 生成模型」页拉取/搜索音色后设为默认")
+        raise RuntimeError("ElevenLabs TTS 未指定音色:--voice 传 voice_id(候选见 genmedia.py voices)")
     fmt = "mp3_44100_128" if Path(output).suffix.lower() == ".mp3" else "pcm_24000"
     body = {"text": text, "model_id": cfg["model"]}
     if speed and speed != 1.0:
@@ -6249,6 +6264,13 @@ def _resolve_tts_reference(cfg, text, output, voice="", character="", variant=""
         if manual:
             return {"path": str(manual), "file": manual.name, "score": None,
                     "reason": "explicit local file", "character": character or "manual",
+                    "variant": variant or "default", "profile": {}}
+        # 本地音色库条目名(选角表 casting.json 的 tts_voice 登记的就是它):按登记的用,不再自动选
+        listed = find_timbre(voice, cfg.get("timbre_dir") or "data/TimbreModel",
+                             cfg.get("timbre_catalog") or "data/TimbreModel/catalog.json")
+        if listed:
+            return {"path": str(listed), "file": listed.name, "score": None,
+                    "reason": "casting 登记的本地音色", "character": character or "manual",
                     "variant": variant or "default", "profile": {}}
         print(f"[genmedia] 忽略非本地音频 --voice={voice!r},改用 TimbreModel 自动选型",
               file=sys.stderr)
@@ -6317,7 +6339,13 @@ def _tts_comfyui(cfg, text, output, voice, speed, instructions,
         if not (cfg.get("workflow") or "").strip():
             raise RuntimeError("ComfyUI TTS 必须在「🎨 生成模型」页配置工作流 JSON"
                                "(推荐 comfy/tts-indextts2-api.json)")
-    design_cfg = _comfy_tts_design_cfg(cfg)
+    # 语音模式(2026-10-02):音色设计=样本走 Voice Design、对白/旁白拿项目冻结样本克隆;
+    # 音色库=一律 Voice Clone,参考音频取本地音色库(casting 登记的条目,没登记按人物自动选)
+    design_mode = cfg.get("voice_mode") == "design"
+    design_cfg = _comfy_tts_design_cfg(cfg) if design_mode else None
+    if design_mode and not design_cfg:
+        raise RuntimeError("ComfyUI TTS 是音色设计模式,但没选 Voice Design 工作流"
+                           "(「🎨 生成模型」页 TTS › ComfyUI;不用音色设计就把模式切到「音色库」)")
     local_voice = bool(voice) and any(p.is_file() for p in (
         [Path(voice)] if Path(voice).is_absolute() else [Path.cwd() / voice, ROOT / voice]))
     if design_cfg and not local_voice and _is_voiceprint_sample(output):
@@ -6325,15 +6353,20 @@ def _tts_comfyui(cfg, text, output, voice, speed, instructions,
                                    character, variant, project)
     frozen = None if (local_voice or not design_cfg) else _seedaudio_ref(character, variant, project, output)
     if frozen:
-        # 两套工作流模式:对白/旁白按项目冻结的嗓音样本克隆(样本由 Voice Design 出),不再走 TimbreModel 选型
+        # 音色设计模式:对白/旁白按项目冻结的嗓音样本克隆(样本由 Voice Design 出)
         selection = {"path": str(frozen), "file": frozen.name, "score": None,
                      "reason": "project voiceprint sample", "character": character or "narrator",
                      "variant": variant or "default", "profile": {}}
+    elif design_cfg and not local_voice:
+        if character:
+            raise RuntimeError(f"音色设计模式:{character} 还没有嗓音样本"
+                               f"(assets/audio/voice/refs/{character}[_<形态>]_voiceprint.mp3),先出样本再合成对白")
+        # 旁白还没冻结样本:直接按声线描述出声(每段音色不保证一致,冻结旁白声线卡样本后即固定)
+        print("[genmedia] 旁白还没有冻结样本(refs/NARRATOR_voiceprint.mp3),本次按声线描述直接出声",
+              file=sys.stderr)
+        return _tts_comfyui_design(design_cfg, text, output, voice, instructions,
+                                   character, variant, project)
     else:
-        if design_cfg and not local_voice:
-            print(f"[genmedia] Voice Clone:项目里还没有 {character or 'NARRATOR'} 的嗓音样本"
-                  "(assets/audio/voice/refs/*_voiceprint.mp3),本次回退 TimbreModel 自动选型;"
-                  "先出该角色的嗓音样本(Voice Design)即可固定音色", file=sys.stderr)
         selection = _resolve_tts_reference(
             cfg, text, output, voice, character, variant, project, instructions)
     ref = selection["path"]
@@ -6752,7 +6785,13 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
         voice_file = bool(voice) and any(p.is_file() for p in (
             [Path(voice)] if Path(voice).is_absolute() else [Path.cwd() / voice, ROOT / voice]))
         design_code = str(cfg.get("design") or "").strip()
-        if not explicit and design_code and not voice_file and _is_voiceprint_sample(output):
+        # 语音模式(2026-10-02):音色库模式不用 Voice Design,一律 Voice Clone + 本地音色库参考音频;
+        # 音色设计模式下旁白还没冻结样本时也按描述直接出声
+        design_mode = cfg.get("voice_mode") != "library"
+        no_sample_narration = (design_mode and not character and not (voice or "").strip()
+                               and _seedaudio_ref("", "", project, output) is None)
+        if (not explicit and design_mode and design_code and not voice_file
+                and (_is_voiceprint_sample(output) or no_sample_narration)):
             profile = _agentics_profile("tts", design_code)
             declared = ((profile.get("token_schema") or {}).get("parameters") or {})
             desc_keys = [k for k in _AGENTICS_TTS_DESC_KEYS if k in declared]
@@ -6806,17 +6845,23 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
                     voice_path = str(voiceprint.resolve())
                     print(f"[genmedia] AgenticsLLM TTS 使用旁白声线卡冻结样本 {voiceprint.name}",
                           file=sys.stderr)
-            if not voice_path and character and not (voice or "").strip():
-                # 角色对白:优先用项目冻结的嗓音样本(Voice Design 出的 *_voiceprint),全片同一副嗓子
+            if not voice_path and design_mode and character and not (voice or "").strip():
+                # 音色设计模式的角色对白:用项目冻结的嗓音样本(Voice Design 出的 *_voiceprint),全片同一副嗓子
                 frozen = _seedaudio_ref(character, variant, project, output)
-                if frozen is not None:
-                    voice_path = str(frozen.resolve())
-                    print(f"[genmedia] AgenticsLLM TTS 使用项目嗓音样本 {frozen.name}", file=sys.stderr)
+                if frozen is None:
+                    raise RuntimeError(f"音色设计模式:{character} 还没有嗓音样本"
+                                       f"(assets/audio/voice/refs/{character}[_<形态>]_voiceprint.mp3),先出样本再合成对白")
+                voice_path = str(frozen.resolve())
+                print(f"[genmedia] AgenticsLLM TTS 使用项目嗓音样本 {frozen.name}", file=sys.stderr)
+            # 音色库模式:参考音频取本地音色库——casting 登记的条目(--voice 传文件名),没登记按人物自动选。
             # 必填文件必须补齐；可选参考音频仅在用户没有明确 voice ID 时自动附加。
-            if not voice_path and (requires_reference_audio or not (voice or "").strip()):
+            library_voice = "" if (design_mode or voice_is_local) else (voice or "").strip()
+            if not voice_path and (requires_reference_audio or library_voice or not (voice or "").strip()):
                 try:
                     selection = _resolve_tts_reference(
-                        cfg, text, output, "", character, variant, project, instructions)
+                        cfg, text, output, library_voice, character, variant, project, instructions)
+                    if library_voice and selection["reason"].startswith("casting"):
+                        voice_is_local = True          # 本地音色库条目名不是云端 voice_id,不随请求发出
                     voice_path = selection["path"]
                     print(f"[genmedia] AgenticsLLM TTS 自动参考音频:"
                           f" {selection['file']} (score={selection['score']}, {selection['reason']})",
@@ -6853,7 +6898,7 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
                           f"({NARRATOR_CARD_REL},不随渠道默认音色变)", file=sys.stderr)
                 else:
                     print(f"[genmedia] 警告:旁白声线卡冻结渠道 {card_prov} 与当前生效渠道"
-                          f" {prov} 不一致,冻结音色不可用——本次回退渠道默认音色,旁白声线可能"
+                          f" {prov} 不一致,冻结音色不可用——本次由宿主从音色库自动取旁白音色,旁白声线可能"
                           "漂移;请回派 09-audio/voice-generation 按新渠道重定旁白声线卡",
                           file=sys.stderr)
     fn = {"openrouter": _tts_openrouter, "volcengine": _tts_volcengine,
@@ -6964,6 +7009,9 @@ def _cmd_info(args):
                 sides = {"image": ("t2i", "i2i"), "tts": ("design", "clone")}.get(kind)
                 if sides:   # 两个 profile 按用途自动选,没有单一模型 id
                     desc = " ".join(f"{side}={cfg.get(side) or '—'}" for side in sides)
+            if kind == "tts":
+                desc += "  模式=" + ("音色设计" if cfg.get("voice_mode") == "design" else
+                                    "音色库(本地)" if cfg.get("voice_library") == "local" else "音色库")
             if cfg.get("_group_override"):
                 g = get_config("video")
                 desc += f"  (组 {group} {cfg.get('_override_scope') or '组级'}覆盖;全局 {g['provider']} model={g['model']})"
@@ -7154,10 +7202,42 @@ def _cmd_upload(args):
     print(_storage_upload_url(args.input))
 
 
+def _cmd_voices(args):
+    """音色库候选(音色库模式):按人物声纹卡给当前 TTS 渠道的音色打分排序,stdout 输出 JSON。
+    配音工位据此选音色、登记 casting.json 再合成;音色设计模式下只返回说明(不选音色)。"""
+    raw = voice_library.load_tts_config()
+    st = voice_library.tts_settings(raw)
+    if args.add:
+        if st["provider"] != "elevenlabs":
+            raise RuntimeError("--add 只用于 ElevenLabs(把公共音色库的音色加入账号)")
+        if not args.owner:
+            raise RuntimeError("--add 需要同时给 --owner <public_owner_id>(见 --scope library 的搜索结果)")
+        print(json.dumps(voice_library.elevenlabs_add(st["pc"], args.add, args.owner, args.name),
+                         ensure_ascii=False, indent=1))
+        return
+    if args.scope == "library":
+        if st["provider"] != "elevenlabs":
+            raise RuntimeError("--scope library 只用于 ElevenLabs 公共音色库;其余渠道的音色库就是默认列表")
+        found = voice_library.elevenlabs_search_library(st["pc"], args.search, args.top)
+        print(json.dumps({"provider": "elevenlabs", "scope": "library", "total": len(found), "candidates": found,
+                          "note": "公共音色库的音色须先 --add <voice_id> --owner <public_owner_id> 加入账号(占账号音色位)才能合成"},
+                         ensure_ascii=False, indent=1))
+        return
+    out = voice_library.recommend(args.character, args.variant, args.project, "", args.text, args.search,
+                                  args.top, args.refresh, raw, args.lang)
+    if out.get("stale"):
+        print(f"[genmedia] 音色库拉取失败,用的是本机旧缓存:{out['stale']}", file=sys.stderr)
+    print(json.dumps(out, ensure_ascii=False, indent=1))
+
+
 def _cmd_tts(args):
     if args.dry_run:
         cfg = get_config("tts")
-        voice = args.voice or cfg.get("voice") or "eve"
+        voice = args.voice
+        if not voice and cfg.get("voice_library") == "provider":
+            # 没给音色:与正式合成同一口径(存量默认音色 → 音色库里自动取旁白型音色)
+            voice = voice_library.default_voice(cfg["provider"], cfg, cfg.get("model") or "", args.text) \
+                or "(未取到音色)"
         # 旁白声线卡(narrator.json)在 dry-run 同样生效,预览与正式合成一致
         card, card_vp = ({}, None)
         if not args.character and not (args.voice or "").strip():
@@ -7277,15 +7357,32 @@ def main():
                                            or os.environ.get("WEBUI_PROJECT", "")),
                     help="项目名或项目目录;Agent 环境通常自动注入")
     pt.add_argument("--voice", default="",
-                    help="音色(云渠道:缺省用配置页默认,openrouter=音色名/火山=speaker 名/"
-                         "minimax=voice_id/elevenlabs=voice_id,角色配音按 casting 传;"
-                         "火山 seed-audio-1.0 描述定制模式:不要传,speaker 名会被忽略;"
-                         "ComfyUI:仅接受真实本地音频文件的兼容覆盖,通常不要传)")
+                    help="音色(仅音色库模式:角色配音按 casting.json 登记的传——openrouter=音色名/"
+                         "火山=speaker 名/minimax、elevenlabs=voice_id/本地音色库=条目文件名,候选见 voices 子命令;"
+                         "音色设计模式不要传)")
     pt.add_argument("--speed", type=float, default=None, help="语速倍率(可选)")
     pt.add_argument("--instructions", default="",
                     help="语气/情绪指令(OpenAI 系模型生效,火山注入情绪指令;"
                          "comfyui 参与音色自动匹配、不注入合成)")
     pt.add_argument("--dry-run", action="store_true")
+
+    pvo = sub.add_parser("voices", help="音色库候选(音色库模式):按人物声纹卡自动打分排序,输出 JSON;"
+                                        "选定后登记 casting.json 再合成")
+    pvo.add_argument("--character", default="", help="角色 ID(如 CHAR-0001);旁白留空")
+    pvo.add_argument("--variant", default="", help="年龄/形态版本(可选)")
+    pvo.add_argument("--project", default=(os.environ.get("VIDEOAGENTS_PROJECT")
+                                            or os.environ.get("WEBUI_PROJECT", "")),
+                     help="项目名或项目目录;Agent 环境通常自动注入")
+    pvo.add_argument("--search", default="", help="关键词过滤(空格分隔,全部命中:名称/ID/性别/年龄/语言/标签/描述)")
+    pvo.add_argument("--text", default="", help="要合成的文本样例(用来判断语言,可选)")
+    pvo.add_argument("--lang", default="", help="目标语言代码(zh/en/ja…;省略时按 --text 与声纹卡判断)")
+    pvo.add_argument("--top", type=int, default=8, help="返回前几名(默认 8)")
+    pvo.add_argument("--refresh", action="store_true", help="忽略本机缓存,重新拉取音色库")
+    pvo.add_argument("--scope", choices=("account", "library"), default="account",
+                     help="仅 ElevenLabs:account=账号内音色(默认,可直接合成);library=搜公共音色库(只推荐)")
+    pvo.add_argument("--add", default="", help="仅 ElevenLabs:把公共音色库的 voice_id 加入账号(占账号音色位)")
+    pvo.add_argument("--owner", default="", help="配合 --add:该音色的 public_owner_id")
+    pvo.add_argument("--name", default="", help="配合 --add:加入账号后的名字(可选)")
 
     pup = sub.add_parser("upload", help="上传本地文件到对象存储并打印预签名 URL"
                                         "(渠道按「设置 → 文件托管」;供需要公网 URL 的 API 使用)")
@@ -7306,7 +7403,7 @@ def main():
     try:
         {"info": _cmd_info, "image": _cmd_image, "video": _cmd_video,
          "reclaim": _cmd_reclaim, "upscale": _cmd_upscale, "music": _cmd_music,
-         "tts": _cmd_tts, "upload": _cmd_upload}[args.cmd](args)
+         "tts": _cmd_tts, "voices": _cmd_voices, "upload": _cmd_upload}[args.cmd](args)
     except RuntimeError as e:
         print(f"生成失败: {e}", file=sys.stderr)
         sys.exit(1)

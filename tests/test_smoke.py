@@ -682,9 +682,10 @@ def test_genconfig_migrates_legacy_agentics_tts_profile_and_empty_defaults():
 
     legacy = {"tts": {"agentics": {"profile_code": "old-tts"}}}
     core._migrate_genconfig(legacy)
-    assert legacy["tts"]["agentics"] == {"design": "old-tts", "clone": "old-tts"}
+    assert legacy["tts"]["agentics"] == {"design": "old-tts", "clone": "old-tts", "voice_mode": "design"}
 
     empty = {"tts": {"agentics": {"profile_code": "", "design": "", "clone": ""}}}
     core._migrate_genconfig(empty)
     merged = core._merge(core.DEFAULT_GENCONFIG, empty)
-    assert merged["tts"]["agentics"] == {"design": "qwen3tts-voicedesign", "clone": "qwen3tts-clone"}
+    assert merged["tts"]["agentics"] == {"design": "qwen3tts-voicedesign", "clone": "qwen3tts-clone",
+                                         "voice_mode": "design"}

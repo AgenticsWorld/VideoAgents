@@ -329,9 +329,9 @@ def main(argv=None):
         provider = tts_cfg.get("provider", "")
     except Exception as e:  # noqa: BLE001
         raise SystemExit(f"加载 genmedia 失败:{e}")
-    # 火山 seed-audio-1.0=描述定制嗓音:不传 casting 的 speaker 名(genmedia 按声纹卡
-    # 描述+项目 voiceprint 样本自动锚定同一副嗓子,逐句合成不漂音色)
-    desc_mode = provider == "volcengine" and tts_cfg.get("model") == "seed-audio-1.0"
+    # 语音模式(modules/voice_library.py):音色设计=不传 casting 的音色(genmedia 按声纹卡描述+项目 voiceprint
+    # 样本当参考,逐句合成不漂音色);音色库=传 casting 登记的音色(渠道音色 ID / 本地音色库文件名)
+    design_mode = tts_cfg.get("voice_mode") == "design"
 
     # 对白语音库(2026-09-13,输出设置「生成对白语音」):开着时先惰性同步本组各镜,首轮直接取库里自然语速音频,
     # 只有贴合需要改语速时才重新合成(重出仍落 dub 目录,不回写库)
@@ -358,7 +358,7 @@ def main(argv=None):
             raise SystemExit(f"casting.json 无 {ch}/{var} 条目——先登记再合成(dub_speaker_casting_bound)")
         # casting 数字 speed 优先;描述文字(「常态(未传 --speed)」)视为未填 → 项目 output.dialogue_tts_speed(默认 1.0)
         base_speed = dt.num_speed(c.get("speed")) or dt.default_speed(proj)
-        voice = "" if (provider == "comfyui" or desc_mode) else (c.get("tts_voice") or "")
+        voice = "" if design_mode else (c.get("tts_voice") or "")
         target = b - a
         raw_mp3 = dub_dir / f"l{i:02d}_{ch}.mp3"
         fit_wav = dub_dir / f"l{i:02d}_{ch}.fit.wav"

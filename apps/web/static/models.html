@@ -42,6 +42,7 @@ main{max-width:860px;margin:0 auto;padding:22px 18px 60px;display:flex;flex-dire
 .panel{display:none;padding:16px;flex-direction:column;gap:14px}
 .panel.show{display:flex}
 .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.rowgroup{display:contents}   /* 成组显隐的几行:不另起一层盒子,行距仍由面板的 gap 管 */
 .row label{width:110px;color:var(--dim);font-size:13px;flex:none}
 input[type=text],input[type=password],select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;flex:1;min-width:180px}
 input:focus,select:focus{outline:none;border-color:var(--accent)}
@@ -389,19 +390,17 @@ const EL_MUSIC_MODELS=[
   ['music_v1','Eleven Music v1(官方默认)'],
   ['music_v2','Eleven Music v2(最新)'],
 ];
-/* 新版豆包语音(X-Api-Key 单头鉴权):seed-tts 档 = openspeech v3 单向流式的
-   X-Api-Resource-Id,S_ 开头克隆音色自动切 seed-icl-2.0;seed-audio-1.0 =
-   Doubao-音频生成 1.0 描述定制嗓音(非流式 /tts/create,免选音色,置首=新配置默认,
-   选中即隐藏音色相关选项,见 volcTtsModeUI) */
+/* 新版豆包语音(X-Api-Key 单头鉴权)。音色库模式:Seed-TTS 档(openspeech v3 单向流式的 X-Api-Resource-Id);
+   音色设计模式:Voice Design / Voice Clone 两格目前都只有 Doubao-音频生成 1.0(非流式 /tts/create,
+   火山唯一能每次直接带参考音频的模型)。声音复刻 2.0 档已移除(2026-10-02) */
 const VOLC_TTS_MODELS=[
-  ['seed-audio-1.0','Doubao-音频生成 1.0(描述定制嗓音:按声纹卡/旁白描述直接生成,免选音色)'],
   ['seed-tts-2.0','Doubao-Seed-TTS 2.0(最新,深度语义理解/指令式情感控制)'],
   ['seed-tts-1.0','Doubao-Seed-TTS 1.0'],
-  ['seed-icl-2.0','声音复刻 2.0(克隆音色,speaker 为 S_ 开头)'],
 ];
+const VOLC_TTS_DESIGN_MODELS=[['seed-audio-1.0','Doubao-音频生成 1.0']];
 const EL_TTS_MODELS=[
-  ['eleven_multilingual_v2','Multilingual v2 · 29 语种,稳定(默认)'],
-  ['eleven_v3','Eleven v3 · 最新,情感表现力强(文内 [audio tag] 控情绪)'],
+  ['eleven_v3','Eleven v3 · 最新,情感表现力强(文内 [audio tag] 控情绪)(默认)'],
+  ['eleven_multilingual_v2','Multilingual v2 · 29 语种,稳定'],
   ['eleven_turbo_v2_5','Turbo v2.5 · 32 语种,低延迟'],
   ['eleven_flash_v2_5','Flash v2.5 · 最快/最省'],
 ];
@@ -637,7 +636,7 @@ function agenticsModelSelects(kind){
 }
 function agenticsModelRow(kind){
   const build=(id,label)=>{
-    const row=el('div',{className:'row'});
+    const row=el('div',{className:'row',id:id+'-row'});
     row.appendChild(el('label',{},label));
     row.appendChild(el('select',{id}));
     const refresh=el('button',{},'刷新列表');
@@ -651,6 +650,64 @@ function agenticsModelRow(kind){
   return frag;
 }
 
+/* ---------- TTS 语音模式(2026-10-02):每个渠道先选模式,再显示该模式要选的项 ----------
+   音色设计 = Voice Design 模型 + Voice Clone 模型;音色库 = 音色库 + 模型。音色库由系统自动拉取、按人物
+   自动选型,界面不设默认音色、不列音色、不试听。配置键 tts.<渠道>.voice_mode(comfyui 段的 mode 是运行方式) */
+const TTS_VOICE_MODES={agentics:['design','library'],comfyui:['design','library'],volcengine:['design','library'],
+                       openrouter:['library'],elevenlabs:['library'],minimax:['library']};
+const TTS_MODE_LABEL={design:'音色设计',library:'音色库'};
+const TTS_LIBRARY_LABEL={agentics:'本地(data/TimbreModel)',comfyui:'本地(data/TimbreModel)',
+  volcengine:'火山引擎音色库',openrouter:'所选模型自带的音色',elevenlabs:'ElevenLabs 账号内音色',minimax:'MiniMax 音色库'};
+const TTS_HINT_LIBRARY_LOCAL='音色库模式:系统按人物的声纹卡自动从本地音色库给每个人物选一段参考音频,模型拿它当参考生成对白和旁白;不需要在这里设置音色';
+const TTS_HINT_LIBRARY_CLOUD='音色库模式:系统自动拉取音色库,按人物的声纹卡给每个人物选音色并登记到项目选角表;不需要在这里设置音色';
+const TTS_HINT_DESIGN='Voice Design 模型按角色嗓音的文字描述生成嗓音样本(人物嗓音设计时用),Voice Clone 模型按嗓音样本 + 对白文字生成对白';
+function ttsModeRow(p){
+  const r=el('div',{className:'row'});
+  r.appendChild(el('label',{},'模式'));
+  const sel=el('select',{id:`tts-${p}-voicemode`});
+  TTS_VOICE_MODES[p].forEach(m=>sel.appendChild(el('option',{value:m,textContent:t(TTS_MODE_LABEL[m])})));
+  sel.onchange=()=>ttsModeUI(p);
+  r.appendChild(sel);
+  if(TTS_VOICE_MODES[p].length<2){
+    sel.disabled=true;
+    r.appendChild(el('span',{style:'color:var(--muted);font-size:12px'},'该渠道只支持音色库模式'));
+  }
+  return r;
+}
+function ttsLibraryRow(p){
+  const r=el('div',{className:'row',id:`tts-${p}-library-row`});
+  r.appendChild(el('label',{},'音色库'));
+  const sel=el('select',{id:`tts-${p}-library`});
+  sel.appendChild(el('option',{value:p==='agentics'||p==='comfyui'?'local':'provider',
+                               textContent:t(TTS_LIBRARY_LABEL[p])}));
+  r.appendChild(sel);
+  return r;
+}
+function ttsModeHints(p,library,design){
+  const frag=document.createDocumentFragment();
+  if(design)frag.appendChild(el('div',{className:'hint',id:`tts-${p}-hint-design`},design));
+  frag.appendChild(el('div',{className:'hint',id:`tts-${p}-hint-library`},library));
+  return frag;
+}
+function ttsVoiceMode(p){const sel=$(`#tts-${p}-voicemode`);return sel&&sel.value==='design'?'design':'library'}
+function ttsModeUI(p){
+  const design=ttsVoiceMode(p)==='design';
+  const show=(id,on)=>{const n=$(id);if(n)n.style.display=on?'':'none'};
+  show(`#tts-${p}-library-row`,!design);
+  show(`#tts-${p}-hint-design`,design);
+  show(`#tts-${p}-hint-library`,!design);
+  if(p==='agentics'){
+    show('#tts-agentics-model-design-row',design);
+    const lb=$('#tts-agentics-model-clone-row label');
+    if(lb)lb.textContent=t(design?'Voice Clone 模型':'模型');
+  }else if(p==='volcengine'){
+    show('#tts-volc-design-rows',design);
+    show('#tts-volc-library-rows',!design);
+  }else if(p==='comfyui'){
+    comfyModeUI('tts');   // 运行方式决定显示本地还是云端那一行,再按语音模式收起 Voice Design 工作流行
+  }
+}
+
 function buildPanel(kind,p){
   const d=el('div',{className:'panel',id:`panel-${kind}-${p}`});
   if(p==='agentics'){
@@ -660,13 +717,14 @@ function buildPanel(kind,p){
     const auth=el('button',{className:'agentics-auth'},t('登录'));
     auth.onclick=()=>agenticsAuth(auth);
     account.appendChild(auth);d.appendChild(account);
+    if(kind==='tts')d.appendChild(ttsModeRow('agentics'));
+    if(kind==='tts')d.appendChild(ttsLibraryRow('agentics'));
     d.appendChild(agenticsModelRow(kind));
     d.appendChild(el('div',{className:'hint',id:`${kind}-agentics-hint`},
       t('AgenticsLLM 使用已登录的桌面端账号请求 Agentics 服务')));
     if(kind==='image')d.appendChild(el('div',{className:'hint'},
       t('文生图模型用于无参考图出图,图生图模型用于带参考图出图')));
-    if(kind==='tts')d.appendChild(el('div',{className:'hint'},
-      t('Voice Design 模型按角色嗓音的文字描述生成嗓音样本(人物嗓音设计时用),Voice Clone 模型按嗓音样本 + 对白文字生成对白')));
+    if(kind==='tts')d.appendChild(ttsModeHints('agentics',t(TTS_HINT_LIBRARY_LOCAL),t(TTS_HINT_DESIGN)));
     if(kind==='digitalhuman')d.appendChild(el('div',{className:'hint'},
       t('数字人模型(如 infiniteTalk-1char 单人 / infiniteTalk-2char 双人):人物图片 + 对白音频生成说话片段')));
     if(kind==='scale')d.appendChild(el('div',{className:'hint'},
@@ -691,51 +749,41 @@ function buildPanel(kind,p){
     d.appendChild(el('div',{className:'hint',id:`${kind}-or-hint`},
       I18N.f('从 OpenRouter 拉取所有支持{kind}输出的模型;也可选「自定义…」手填模型 ID',{kind:t(KIND_LABEL[kind])})));
     if(kind==='tts'){
-      const vr2=el('div',{className:'row'});
-      vr2.appendChild(el('label',{},'默认音色'));
-      vr2.appendChild(el('input',{type:'text',id:'tts-or-voice',placeholder:'eve(各模型音色不同,见模型页)'}));
-      d.appendChild(vr2);
-      d.appendChild(el('div',{className:'hint'},
-        '音色因模型而异(Grok:eve/ara/rex/sal/leo;Kokoro 中文:zf_xiaoxiao/zm_yunxi;MAI:en-US-Harper:MAI-Voice-2);Agent 可用 --voice 按角色覆盖'));
+      d.insertBefore(ttsModeRow('openrouter'),mr);
+      d.insertBefore(ttsLibraryRow('openrouter'),mr);
+      d.appendChild(ttsModeHints('openrouter',
+        t(TTS_HINT_LIBRARY_CLOUD)+'<br>'+t('没有公开音色清单的模型(如 Fish Audio)不能用于音色库模式')));
     }
   }else if(p==='volcengine'&&kind==='tts'){
     d.appendChild(keyRow('tts-volc-key','新版控制台「API Key 管理」创建的 API Key'));
-    const mr=modelRow('tts-volc-model','tts-volc-custom');
-    mr.querySelector('select').addEventListener('change',volcTtsModeUI);
-    d.appendChild(mr);
-    // seed-audio-1.0(描述定制嗓音)时以下音色相关选项整体隐藏(volcTtsModeUI)
-    const vw=el('div',{id:'tts-volc-voicewrap'});
-    const vr=el('div',{className:'row'});
-    vr.appendChild(el('label',{},'默认音色'));
-    vr.appendChild(el('input',{type:'text',id:'tts-volc-voice',placeholder:'speaker 名,如 zh_female_…_bigtts / 克隆音色 S_…'}));
-    vw.appendChild(vr);
-    // 音色库:ListSpeakers 全量拉取 + 关键词过滤 + 试听 + 设为默认
-    const sr=el('div',{className:'row'});
-    sr.appendChild(el('label',{},'音色库'));
-    const fi=el('input',{type:'text',id:'tts-volc-search',placeholder:'关键词过滤(名称/性别/年龄/标签/语言)'});
-    fi.oninput=()=>{if(VOLC_LIB.length)volcRenderLib()};
-    sr.appendChild(fi);
-    const lb=el('button',{},'拉取音色库');
-    lb.onclick=volcLoadLib;
-    sr.appendChild(lb);vw.appendChild(sr);
-    const lr=el('div',{className:'row'});
-    lr.appendChild(el('label',{},''));
-    const lsel=el('select',{id:'tts-volc-lib'});
-    lr.appendChild(lsel);
-    const pb=el('button',{},'▶ 试听');
-    pb.onclick=volcPreviewLib;
-    const ab=el('button',{},'✓ 设为默认音色');
-    ab.onclick=volcSetDefault;
-    lr.appendChild(pb);lr.appendChild(ab);vw.appendChild(lr);
-    vw.appendChild(el('div',{className:'status',id:'tts-volc-status'}));
-    vw.appendChild(el('div',{className:'hint'},
-      'API Key 在新版语音技术控制台「<a href="https://console.volcengine.com/speech/new/setting/apikeys" target="_blank">API Key 管理</a>」;'
-      +'音色在控制台「<a href="https://console.volcengine.com/speech/new/voices" target="_blank">音色库</a>」试听/开通,克隆音色 S_ 开头自动切声音复刻 2.0'));
-    d.appendChild(vw);
-    const dmh=el('div',{className:'hint',id:'tts-volc-descmode-hint',style:'display:none'});
-    dmh.appendChild(document.createTextNode(t('描述定制嗓音:免选音色——角色配音按项目声纹卡(voice.json 声学字段)自动拼装声线描述,旁白按项目旁白声线卡冻结描述(无卡按工单 --instructions);项目已有冻结 voiceprint 样本时自动作参考锚,同一角色逐句/逐段合成不漂音色。')));
-    dmh.appendChild(el('span',{},' API Key 在新版语音技术控制台「<a href="https://console.volcengine.com/speech/new/setting/apikeys" target="_blank">API Key 管理</a>」'));
-    d.appendChild(dmh);
+    d.appendChild(ttsModeRow('volcengine'));
+    // 音色设计:Voice Design / Voice Clone 两格
+    const dw=el('div',{id:'tts-volc-design-rows',className:'rowgroup'});
+    [['tts-volc-design-model','Voice Design 模型'],['tts-volc-clone-model','Voice Clone 模型']].forEach(([id,label])=>{
+      const r=el('div',{className:'row'});
+      r.appendChild(el('label',{},label));
+      const sel=el('select',{id});
+      VOLC_TTS_DESIGN_MODELS.forEach(([v,l])=>sel.appendChild(el('option',{value:v,textContent:t(l)})));
+      r.appendChild(sel);dw.appendChild(r);
+    });
+    d.appendChild(dw);
+    // 音色库:音色库 + 模型 + 拉音色库用的账号 Access Key / Secret Key(只在这个模式下要填)
+    const lw=el('div',{id:'tts-volc-library-rows',className:'rowgroup'});
+    lw.appendChild(ttsLibraryRow('volcengine'));
+    lw.appendChild(modelRow('tts-volc-model','tts-volc-custom'));
+    [['tts-volc-ak','Access Key','火山引擎账号的 Access Key ID'],
+     ['tts-volc-sk','Secret Key','火山引擎账号的 Secret Access Key']].forEach(([id,label,ph])=>{
+      const r=keyRow(id,ph);
+      r.querySelector('label').textContent=label;
+      lw.appendChild(r);
+    });
+    d.appendChild(lw);
+    const apiKeyHint='API Key 在新版语音技术控制台「<a href="https://console.volcengine.com/speech/new/setting/apikeys" target="_blank">API Key 管理</a>」';
+    d.appendChild(ttsModeHints('volcengine',
+      t(TTS_HINT_LIBRARY_CLOUD)+'<br>'+apiKeyHint
+        +';音色库用的 Access Key / Secret Key 在火山引擎控制台「<a href="https://console.volcengine.com/iam/keymanage/" target="_blank">API 访问密钥</a>」创建',
+      t('描述定制嗓音:免选音色——角色配音按项目声纹卡(voice.json 声学字段)自动拼装声线描述,旁白按项目旁白声线卡冻结描述(无卡按工单 --instructions);项目已有冻结 voiceprint 样本时自动作参考锚,同一角色逐句/逐段合成不漂音色。')
+        +'<br>'+apiKeyHint));
   }else if(p==='volcengine'){
     d.appendChild(keyRow(`${kind}-volc-key`,'火山方舟 ARK API Key'));
     d.appendChild(modelRow(`${kind}-volc-model`,`${kind}-volc-custom`));
@@ -771,66 +819,20 @@ function buildPanel(kind,p){
       +'可用 --duration 指定配乐时长(3–600 秒,省略=模型按 prompt 自定);输出仅 .mp3/.opus'));
   }else if(p==='elevenlabs'){
     d.appendChild(keyRow('tts-el-key','ElevenLabs API Key(xi-api-key)'));
+    d.appendChild(ttsModeRow('elevenlabs'));
+    d.appendChild(ttsLibraryRow('elevenlabs'));
     d.appendChild(modelRow('tts-el-model','tts-el-custom'));
-    // 默认音色:账号内音色下拉(可拉取)+ 自定义 voice_id
-    const vr=el('div',{className:'row'});
-    vr.appendChild(el('label',{},'默认音色'));
-    const vsel=el('select',{id:'tts-el-voice'});
-    const vcustom=el('input',{type:'text',id:'tts-el-voice-custom',placeholder:'voice_id',style:'display:none'});
-    vsel.onchange=()=>{vcustom.style.display=vsel.value===CUSTOM?'':'none'};
-    vr.appendChild(vsel);vr.appendChild(vcustom);
-    const mb=el('button',{},'拉取我的音色');
-    mb.onclick=()=>elLoadMine(true);
-    vr.appendChild(mb);d.appendChild(vr);
-    // Voice Library 搜索 + 试听 + 加入账号
-    const sr=el('div',{className:'row'});
-    sr.appendChild(el('label',{},'音色库'));
-    sr.appendChild(el('input',{type:'text',id:'tts-el-search',placeholder:'关键词(名称/语言/风格,如 chinese calm female)'}));
-    const sb=el('button',{},'搜索音色库');
-    sb.onclick=elSearchLib;
-    sr.appendChild(sb);d.appendChild(sr);
-    const lr=el('div',{className:'row'});
-    lr.appendChild(el('label',{},''));
-    const lsel=el('select',{id:'tts-el-lib'});
-    lr.appendChild(lsel);
-    const pb=el('button',{},'▶ 试听');
-    pb.onclick=elPreviewLib;
-    const ab=el('button',{},'➕ 加入并设为默认');
-    ab.onclick=elAddLib;
-    lr.appendChild(pb);lr.appendChild(ab);d.appendChild(lr);
-    d.appendChild(el('div',{className:'status',id:'tts-el-status'}));
-    d.appendChild(el('div',{className:'hint'},
-      'Key 在 <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank">elevenlabs.io 控制台</a> 生成(音色库 API 免费档不可用);'
-      +'「默认音色」用账号内音色的 voice_id;<a href="https://elevenlabs.io/app/voice-library" target="_blank">Voice Library</a> 的公共音色须先「加入」到账号才能合成,'
-      +'上面搜索选中后点「➕ 加入并设为默认」一步完成;Agent 可用 --voice 按角色覆盖(传 voice_id)'));
+    d.appendChild(ttsModeHints('elevenlabs',
+      t(TTS_HINT_LIBRARY_CLOUD)+'<br>'+t('自动选型只用账号内已有的音色,公共音色库(Voice Library)的音色要先加入账号才能用')
+      +'<br>Key 在 <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank">elevenlabs.io 控制台</a>'));
   }else if(p==='minimax'&&kind==='tts'){
     d.appendChild(mmBaseRow('tts'));
     mmKeyRows('tts').forEach(r=>d.appendChild(r));
+    d.appendChild(ttsModeRow('minimax'));
+    d.appendChild(ttsLibraryRow('minimax'));
     d.appendChild(modelRow('tts-mm-model','tts-mm-custom'));
-    const vr=el('div',{className:'row'});
-    vr.appendChild(el('label',{},'默认音色'));
-    vr.appendChild(el('input',{type:'text',id:'tts-mm-voice',placeholder:'voice_id,如 Chinese (Mandarin)_Reliable_Executive'}));
-    d.appendChild(vr);
-    // 音色库:get_voice 拉取(系统+账号内克隆/生成音色)+ 关键词过滤 + 设为默认(接口无试听样本)
-    const sr=el('div',{className:'row'});
-    sr.appendChild(el('label',{},'音色库'));
-    const fi=el('input',{type:'text',id:'tts-mm-search',placeholder:'关键词过滤(名称/语言/voice_id)'});
-    fi.oninput=()=>{if(MM_LIB.length)mmRenderLib()};
-    sr.appendChild(fi);
-    const lb=el('button',{},'拉取音色库');
-    lb.onclick=mmLoadLib;
-    sr.appendChild(lb);d.appendChild(sr);
-    const lr=el('div',{className:'row'});
-    lr.appendChild(el('label',{},''));
-    const lsel=el('select',{id:'tts-mm-lib'});
-    lr.appendChild(lsel);
-    const ab=el('button',{},'✓ 设为默认音色');
-    ab.onclick=mmSetDefault;
-    lr.appendChild(ab);d.appendChild(lr);
-    d.appendChild(el('div',{className:'status',id:'tts-mm-status'}));
-    d.appendChild(el('div',{className:'hint'},
-      'Key 在 <a href="https://platform.minimax.io/console/access" target="_blank">MiniMax 开放平台</a>「API Keys」创建,国内主体用 <a href="https://platform.minimaxi.com/console/access" target="_blank">minimaxi.com</a>(两平台账号与 Key 不互通,「接口区域」须与 Key 来源一致);'
-      +'克隆音色需先在平台创建;Agent 可用 --voice 按角色覆盖(传 voice_id)'));
+    d.appendChild(ttsModeHints('minimax',
+      t(TTS_HINT_LIBRARY_CLOUD)+'<br>Key 在 <a href="https://platform.minimax.io/console/access" target="_blank">MiniMax 开放平台</a>「API Keys」创建,国内主体用 <a href="https://platform.minimaxi.com/console/access" target="_blank">minimaxi.com</a>(两平台账号与 Key 不互通,「接口区域」须与 Key 来源一致)'));
   }else if(p==='minimax'){
     d.appendChild(mmBaseRow(kind));
     mmKeyRows(kind).forEach(r=>d.appendChild(r));
@@ -903,6 +905,8 @@ function buildPanel(kind,p){
     rka.id=`${kind}-comfy-rhkey-ai-row`;rka.style.display='none';
     d.appendChild(rka);
     d.appendChild(el('div',{className:'status',id:`${kind}-comfy-status`}));
+    // TTS 语音模式与音色库:排在运行方式 / 服务地址 / API Key 之后、工作流之前
+    if(kind==='tts'){d.appendChild(ttsModeRow('comfyui'));d.appendChild(ttsLibraryRow('comfyui'))}
     // RunningHub 工作区无列表 OpenAPI:按 ID 验证后加入本地收藏,再从收藏下拉选用
     const rw=el('div',{className:'row',id:`${kind}-comfy-rhwf-row`,style:'display:none'});
     rw.appendChild(el('label',{},SECOND_WF[kind]?SECOND_WF[kind].mainRh:dh?'云端数字人工作流':sc?'云端超分工作流':'云端工作流'));
@@ -980,11 +984,9 @@ function buildPanel(kind,p){
         +' BGM 默认纯音乐 [Instrumental],支持 DURATION 时长'));
     }
     if(kind==='tts'){
-      d.appendChild(el('div',{className:'hint',id:'tts-comfy-hint-modes'},
-        'Voice Design:按角色嗓音的文字描述生成嗓音样本(人物嗓音设计时用);Voice Clone:按嗓音样本 + 对白文字生成对白。两者按用途自动选择;未配置 Voice Design 时一律走 Voice Clone'));
+      d.appendChild(ttsModeHints('comfyui',t(TTS_HINT_LIBRARY_LOCAL),t(TTS_HINT_DESIGN)));
       d.appendChild(el('div',{className:'hint',id:'tts-comfy-hint-extra'},
-        '推荐 <code>comfy/tts-indextts2-api.json</code> (IndexTTS-2);'
-        +' 角色声音会读取项目 voice/personality/appearance,自动从 <code>data/TimbreModel</code> 选择参考音频,无需手填音色'));
+        '推荐 <code>comfy/tts-indextts2-api.json</code> (IndexTTS-2)'));
     }
   }
   return d;
@@ -1005,8 +1007,10 @@ function comfyModeUI(kind){
   $(`#${kind}-comfy-rhinst-row`).style.display=rh?'':'none';
   $(`#${kind}-comfy-rhinst-hint`).style.display=rh?'':'none';
   if(SECOND_WF[kind]){
-    $(`#${kind}-comfy-rhrefwf-row`).style.display=rh?'':'none';
-    $(`#${kind}-comfy-ref-wf-row`).style.display=rh?'none':'';
+    // TTS 音色库模式只用 Voice Clone 工作流,Voice Design 那一行收起
+    const second=kind!=='tts'||ttsVoiceMode('comfyui')==='design';
+    $(`#${kind}-comfy-rhrefwf-row`).style.display=rh&&second?'':'none';
+    $(`#${kind}-comfy-ref-wf-row`).style.display=rh||!second?'none':'';
   }
   const hl=$(`#${kind}-comfy-hint-local`);if(hl)hl.style.display=m==='local'?'':'none';   // 超分板块无本地说明
   $(`#${kind}-comfy-hint-cloud`).style.display=cloud?'':'none';
@@ -1461,148 +1465,6 @@ async function loadOpenRouterModels(kind,refresh=false){
   }
 }
 
-/* ---------- ElevenLabs 音色(拉取账号音色 / 搜索 Voice Library / 加入账号) ---------- */
-let EL_LIB=[];  // 最近一次音色库搜索结果(试听/加入时按下标取)
-let EL_AUDIO=null;
-const elVoiceLabel=v=>[v.name,v.language,v.gender,v.descriptive||v.category].filter(Boolean).join(' · ');
-function elStatus(msg,ok){const st=$('#tts-el-status');st.className='status'+(ok===true?' ok':ok===false?' err':'');st.textContent=msg}
-function elKey(){return $('#tts-el-key').value.trim()}
-
-async function elLoadMine(report,selectId){
-  if(!elKey()){if(report)elStatus(t('✗ 先填 API Key'),false);return}
-  if(report)elStatus(t('拉取账号音色中…'));
-  try{
-    const r=await api('/api/v1/providers/elevenlabs/voices',{api_key:elKey(),scope:'mine'});
-    const saved=selectId||CFG.tts.elevenlabs?.voice||'';
-    fillSelect($('#tts-el-voice'),r.voices.map(v=>[v.voice_id,elVoiceLabel(v)]),saved,'');
-    if(report)elStatus(I18N.f('✓ 账号内 {n} 个音色',{n:r.voices.length}),true);
-  }catch(e){if(report)elStatus('✗ '+e.message,false)}
-}
-
-async function elSearchLib(){
-  if(!elKey())return elStatus(t('✗ 先填 API Key'),false);
-  elStatus(t('搜索音色库中…'));
-  try{
-    const r=await api('/api/v1/providers/elevenlabs/voices',{api_key:elKey(),scope:'library',
-      search:$('#tts-el-search').value.trim()});
-    EL_LIB=r.voices;
-    const sel=$('#tts-el-lib');sel.innerHTML='';
-    EL_LIB.forEach((v,i)=>sel.appendChild(el('option',{value:String(i),textContent:elVoiceLabel(v)})));
-    elStatus(EL_LIB.length?I18N.f('✓ 音色库命中 {n} 个(选中后可试听/加入)',{n:EL_LIB.length})
-                          :t('音色库无匹配,换个关键词试试'),!!EL_LIB.length);
-  }catch(e){elStatus('✗ '+e.message,false)}
-}
-
-function elPreviewLib(){
-  const v=EL_LIB[+$('#tts-el-lib').value];
-  if(!v)return elStatus(t('✗ 先搜索并选中一个音色'),false);
-  if(!v.preview_url)return elStatus(t('该音色无试听样本'),false);
-  if(EL_AUDIO){EL_AUDIO.pause();EL_AUDIO=null}
-  EL_AUDIO=new Audio(v.preview_url);EL_AUDIO.play();
-  elStatus(I18N.f('▶ 试听 {name}',{name:v.name}),true);
-}
-
-async function elAddLib(){
-  const v=EL_LIB[+$('#tts-el-lib').value];
-  if(!v)return elStatus(t('✗ 先搜索并选中一个音色'),false);
-  if(!v.public_owner_id)return elStatus(t('✗ 该音色缺 public_owner_id,无法加入'),false);
-  elStatus(t('加入账号中…'));
-  try{
-    const r=await api('/api/v1/providers/elevenlabs/voices/add',{api_key:elKey(),
-      public_owner_id:v.public_owner_id,voice_id:v.voice_id,name:v.name});
-    await elLoadMine(false,r.voice_id);
-    elStatus(I18N.f('✓ 已加入并设为默认音色:{name}(记得点「保存设置」)',{name:v.name}),true);
-  }catch(e){elStatus('✗ '+e.message,false)}
-}
-
-/* ---------- 火山豆包 音色库(ListSpeakers;AK/SK 绑定 ⚙️ 设置 → 文件托管 → 存储渠道「火山引擎 TOS」) ---------- */
-let VOLC_LIB=[];  // 最近一次拉取的音色库(试听/设默认时按下标取)
-let VOLC_AUDIO=null;
-const volcVoiceLabel=v=>[v.name,v.gender,v.age,...(v.labels||[]).slice(0,2),
-  (v.languages||[]).join('/'),v.voice_type].filter(Boolean).join(' · ');
-/* 火山 TTS 模型档 UI 联动:seed-audio-1.0=描述定制嗓音,音色相关选项整体隐藏 */
-function volcTtsModeUI(){
-  const m=$('#tts-volc-model');if(!m)return;
-  const desc=m.value==='seed-audio-1.0';
-  const w=$('#tts-volc-voicewrap');if(w)w.style.display=desc?'none':'';
-  const h=$('#tts-volc-descmode-hint');if(h)h.style.display=desc?'':'none';
-}
-function volcStatus(msg,ok){const st=$('#tts-volc-status');st.className='status'+(ok===true?' ok':ok===false?' err':'');st.textContent=msg}
-function volcRenderLib(){
-  const kw=$('#tts-volc-search').value.trim().toLowerCase();
-  const sel=$('#tts-volc-lib');sel.innerHTML='';
-  VOLC_LIB.forEach((v,i)=>{
-    const hay=[v.name,v.gender,v.age,v.description,v.voice_type,
-      ...(v.labels||[]),...(v.languages||[]),...(v.emotions||[])].join(' ').toLowerCase();
-    if(kw&&!kw.split(/\s+/).every(w=>hay.includes(w)))return;
-    sel.appendChild(el('option',{value:String(i),textContent:volcVoiceLabel(v)}));
-  });
-}
-async function volcLoadLib(){
-  volcStatus(t('拉取音色库中…'));
-  try{
-    const m=$('#tts-volc-model').value;
-    const r=await api('/api/v1/providers/volcengine/speakers',
-      {resource_id:m===CUSTOM?$('#tts-volc-custom').value.trim():m});
-    VOLC_LIB=r.speakers||[];
-    volcRenderLib();
-    volcStatus(VOLC_LIB.length
-      ?I18N.f('✓ 音色库共 {n} 个音色(可关键词过滤,选中后试听/设为默认)',{n:VOLC_LIB.length})
-      :t('音色库为空(先在控制台开通音色)'),!!VOLC_LIB.length);
-  }catch(e){volcStatus('✗ '+e.message,false)}
-}
-function volcSel(){return VOLC_LIB[+$('#tts-volc-lib').value]}
-function volcPreviewLib(){
-  const v=volcSel();
-  if(!v)return volcStatus(t('✗ 先拉取并选中一个音色'),false);
-  if(!v.trial_url)return volcStatus(t('该音色无试听样本'),false);
-  if(VOLC_AUDIO){VOLC_AUDIO.pause();VOLC_AUDIO=null}
-  VOLC_AUDIO=new Audio(v.trial_url);VOLC_AUDIO.play();
-  volcStatus(I18N.f('▶ 试听 {name}',{name:v.name}),true);
-}
-function volcSetDefault(){
-  const v=volcSel();
-  if(!v)return volcStatus(t('✗ 先拉取并选中一个音色'),false);
-  $('#tts-volc-voice').value=v.voice_type;
-  volcStatus(I18N.f('✓ 已设为默认音色:{name}(记得点「保存设置」)',
-    {name:v.name+' · '+v.voice_type}),true);
-}
-
-/* ---------- MiniMax 音色库(get_voice;系统+账号内克隆/生成音色,接口无试听样本) ---------- */
-let MM_LIB=[];  // 最近一次拉取的音色库(设默认时按下标取)
-const mmVoiceLabel=v=>[v.name,v.category,v.description].filter(Boolean).join(' · ')
-  +(v.voice_id&&v.voice_id!==v.name?' · '+v.voice_id:'');
-function mmStatus(msg,ok){const st=$('#tts-mm-status');st.className='status'+(ok===true?' ok':ok===false?' err':'');st.textContent=msg}
-function mmRenderLib(){
-  const kw=$('#tts-mm-search').value.trim().toLowerCase();
-  const sel=$('#tts-mm-lib');sel.innerHTML='';
-  MM_LIB.forEach((v,i)=>{
-    const hay=[v.name,v.voice_id,v.category,v.description].join(' ').toLowerCase();
-    if(kw&&!kw.split(/\s+/).every(w=>hay.includes(w)))return;
-    sel.appendChild(el('option',{value:String(i),textContent:mmVoiceLabel(v)}));
-  });
-}
-async function mmLoadLib(){
-  if(!mmKey('tts'))return mmStatus(t('✗ 先填 API Key'),false);
-  mmStatus(t('拉取音色库中…'));
-  try{
-    const r=await api('/api/v1/providers/minimax/voices',
-      {api_key:mmKey('tts'),api_base:$('#tts-mm-base').value});
-    MM_LIB=r.voices||[];
-    mmRenderLib();
-    mmStatus(MM_LIB.length
-      ?I18N.f('✓ 音色库共 {n} 个音色(可关键词过滤,选中后设为默认)',{n:MM_LIB.length})
-      :t('音色库为空(先在平台开通/创建音色)'),!!MM_LIB.length);
-  }catch(e){mmStatus('✗ '+e.message,false)}
-}
-function mmSetDefault(){
-  const v=MM_LIB[+$('#tts-mm-lib').value];
-  if(!v)return mmStatus(t('✗ 先拉取并选中一个音色'),false);
-  $('#tts-mm-voice').value=v.voice_id;
-  mmStatus(I18N.f('✓ 已设为默认音色:{name}(记得点「保存设置」)',
-    {name:v.name+' · '+v.voice_id}),true);
-}
-
 /* ---------- 装载 / 收集 ---------- */
 /* ComfyUI 段回填(图像/视频/音乐/TTS/数字人同构):运行方式、本地地址、Comfy Cloud Key、
    RunningHub 两站 Key/收藏/运行模式、工作流下拉 */
@@ -1644,9 +1506,11 @@ function loadIntoForm(){
       c.openrouter.model,c.openrouter.custom_model);
     if(c.volcengine){
       $(`#${kind}-volc-key`).value=c.volcengine.api_key||'';
+      // TTS 的模型下拉只管音色库模式的 Seed-TTS 档:旧版存在这里的音频生成 1.0 / 声音复刻 2.0 显示为默认的 2.0
+      const oldTts=kind==='tts'&&['seed-audio-1.0','seed-icl-2.0'].includes(c.volcengine.custom_model||c.volcengine.model);
       fillSelect($(`#${kind}-volc-model`),
                  kind==='image'?VOLC_IMAGE_MODELS:kind==='tts'?VOLC_TTS_MODELS:VOLC_MODELS,
-                 c.volcengine.model,c.volcengine.custom_model);
+                 oldTts?'seed-tts-2.0':c.volcengine.model,oldTts?'':c.volcengine.custom_model);
     }
     if(SECTIONS[kind].providers.includes('byteplus')&&c.byteplus){
       $(`#${kind}-bp-key`).value=c.byteplus.api_key||'';
@@ -1669,7 +1533,6 @@ function loadIntoForm(){
                  kind==='music'?MINIMAX_MUSIC_MODELS:MINIMAX_TTS_MODELS,
                  c.minimax.model,c.minimax.custom_model);
       if(kind==='music')$('#music-mm-instr').checked=c.minimax.force_instrumental!==false;
-      if(kind==='tts')$('#tts-mm-voice').value=c.minimax.voice||'';
     }
     if(SECTIONS[kind].providers.includes('rhapi')){
       const r=c.rhapi||{};
@@ -1686,13 +1549,23 @@ function loadIntoForm(){
       $('#music-el-instr').checked=elm.force_instrumental!==false;
     }
     if(kind==='tts'){
-      $('#tts-or-voice').value=c.openrouter.voice||'eve';
-      $('#tts-volc-voice').value=c.volcengine?.voice||'';
-      volcTtsModeUI();
       const elc=c.elevenlabs||{};
       $('#tts-el-key').value=elc.api_key||'';
       fillSelect($('#tts-el-model'),EL_TTS_MODELS,elc.model,elc.custom_model);
-      fillSelect($('#tts-el-voice'),elc.voice?[[elc.voice,elc.voice]]:[],elc.voice,'');
+      $('#tts-volc-ak').value=c.volcengine?.access_key||'';
+      $('#tts-volc-sk').value=c.volcengine?.secret_key||'';
+      // 语音模式:存过的值优先;没存过的按旧行为推断(与 modules/voice_library.voice_mode 同口径:火山选的是
+      // 音频生成 1.0、ComfyUI 配了 Voice Design 工作流 → 音色设计);只支持音色库的渠道固定为音色库
+      const legacyMode={
+        agentics:()=>'design',
+        volcengine:pc=>(pc.custom_model||pc.model)==='seed-audio-1.0'?'design':'library',
+        comfyui:pc=>(String(pc.mode||'').startsWith('rh_')?pc.rh_design_workflow_id:pc.design_workflow)?'design':'library'};
+      Object.keys(TTS_VOICE_MODES).forEach(p=>{
+        const pc=c[p]||{};
+        $(`#tts-${p}-voicemode`).value=TTS_VOICE_MODES[p].includes(pc.voice_mode)?pc.voice_mode
+          :legacyMode[p]?legacyMode[p](pc):'library';
+        ttsModeUI(p);
+      });
     }
     const eff=c.provider&&SECTIONS[kind].providers.includes(c.provider)?c.provider:SECTIONS[kind].providers[0];
     showPanel(kind,eff);
@@ -1794,7 +1667,8 @@ function collect(){
   const out={};
   for(const kind of Object.keys(SECTIONS)){
     const c={agentics:AGENTICS_SIDES[kind]
-        ?Object.fromEntries(agenticsModelSelects(kind).map(([side,sel])=>[side,sel.value||'']))
+        ?{...Object.fromEntries(agenticsModelSelects(kind).map(([side,sel])=>[side,sel.value||''])),
+          ...(kind==='tts'?{voice_mode:ttsVoiceMode('agentics')}:{})}
         :{profile_code:$(`#${kind}-agentics-model`).value||''},
       openrouter:{api_key:$(`#${kind}-or-key`).value.trim(),
                   ...pickModel(`#${kind}-or-model`,`#${kind}-or-custom`)}};
@@ -1806,6 +1680,7 @@ function collect(){
                  negative_mode:CFG.image.comfyui.negative_mode||'conditioning'}:{}),
                ...(kind==='music'?{lyrics:CFG.music.comfyui?.lyrics||'[Instrumental]'}:{}),
                ...(kind==='tts'?{voice:'',ref_audio:'',
+                 voice_mode:ttsVoiceMode('comfyui'),
                  design_workflow:pickWf('tts-comfy-ref-wf'),
                  rh_design_workflow_id:$('#tts-comfy-rhrefwf').value,
                  timbre_dir:'data/TimbreModel',
@@ -1830,20 +1705,18 @@ function collect(){
         api_base:$(`#${kind}-mm-base`).value,
         ...pickModel(`#${kind}-mm-model`,`#${kind}-mm-custom`)};
       if(kind==='music')c.minimax.force_instrumental=$('#music-mm-instr').checked;
-      if(kind==='tts')c.minimax.voice=$('#tts-mm-voice').value.trim();
     }
     if(kind==='music')
       c.elevenlabs={api_key:$('#music-el-key').value.trim(),
         ...pickModel('#music-el-model','#music-el-custom'),
         force_instrumental:$('#music-el-instr').checked};
     if(kind==='tts'){
-      c.openrouter.voice=$('#tts-or-voice').value.trim()||'eve';
       c.volcengine.app_id='';   // 旧版控制台凭证字段,保存即清掉存量
-      c.volcengine.voice=$('#tts-volc-voice').value.trim();
-      const ev=$('#tts-el-voice').value;
+      Object.assign(c.volcengine,{voice_mode:ttsVoiceMode('volcengine'),
+        design_model:$('#tts-volc-design-model').value,clone_model:$('#tts-volc-clone-model').value,
+        access_key:$('#tts-volc-ak').value.trim(),secret_key:$('#tts-volc-sk').value.trim()});
       c.elevenlabs={api_key:$('#tts-el-key').value.trim(),
-        ...pickModel('#tts-el-model','#tts-el-custom'),
-        voice:ev===CUSTOM?$('#tts-el-voice-custom').value.trim():ev};
+        ...pickModel('#tts-el-model','#tts-el-custom')};
     }
     // 生效渠道 = 当前选中的标签页(✅)
     c.provider=SEL_PROVIDER[kind];

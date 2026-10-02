@@ -13,7 +13,7 @@
 ## 职责
 
 1. 读取 `story/episodes/epNN/narration.md`,按段落与标注的落点(场次/镜头位置)切分旁白句。
-2. 用项目统一旁白声线合成——**必须走统一模块 `python3 modules/genmedia.py tts`**(渠道/模型由用户在控制台「🎨 生成模型」页 TTS语音模型配置,不自行挑模型、不直连 API)。**旁白声线唯一事实源 = 项目旁白声线卡 `assets/audio/voice/narrator.json` + 冻结样本 `assets/audio/voice/refs/NARRATOR_voiceprint.mp3`(2026-09-01,由 09-audio/voice-generation 按项目基调设计并冻结;人物预览页「🎙 旁白」条目展示/试听)**:合成一律不传 `--voice`,genmedia 自动按卡固定声线——同渠道用卡冻结 tts_voice;火山 seed-audio-1.0 用卡冻结描述并自动挂冻结样本 @音频1 参考锚;ComfyUI 直接用冻结样本作参考音频——**用户改「生成模型」页 TTS 设置不影响旁白声线**;genmedia 告警「声线卡渠道与当前生效渠道不一致」时停手上报 orchestrator 回派 voice-generation 重定卡,不得将就渠道默认音色续跑。**无卡回退口径(存量项目)**:回执中提醒补卡,本次按旧约定执行——云渠道(OpenRouter/火山豆包语音/MiniMax/ElevenLabs)用生效渠道配置的「默认音色」(不传 --voice);火山 seed-audio-1.0 声线=`--instructions` 的声线描述(如『成年男声,中低音,沉稳的纪录片旁白,克制而有叙事感』,缺省用 genmedia 内置旁白声线,禁传 --voice),全集逐段必须同一描述,首段合成验收后复制冻结为 refs/NARRATOR_voiceprint.mp3,genmedia 此后自动挂 @音频1 参考锚。段间音色一致性在自检必查。**ComfyUI 渠道**:不传 `--character` 和 `--voice`,模块会结合 `--instructions` 从内置音色目录(`modules/timbre_catalog.json`,索引远端 [ComfyUI-Index-TTS/TimbreModel](https://github.com/chenpipi0807/ComfyUI-Index-TTS/tree/main/TimbreModel) 音频库)的 narrator 候选自动选择,首次使用自动下载缓存到 `data/TimbreModel/` 并上传参考音频,输入相同则结果固定;**项目目录内没有 WAV/MP3 不构成阻塞,不要要求用户另行提供或在控制台手填参考音频**。正式合成前先以相同参数加 `--dry-run` 验证并记录 `voice=`(有声线卡时应显示 `narrator-card:…`,ComfyUI 无卡时 `auto:<文件>`);若正式调用失败,回执必须逐字记录 `生成失败:` 后的原始错误以及 ComfyUI `node_type/exception_type/exception_message`,禁止凭旧回执或推测改写错误类型。只要日志已出现“自动参考音频已选择并上传”,就绝不能再归因为缺参考音频。语气用 `--instructions` 描述(如"沉稳的纪录片旁白,克制而有叙事感";有声线卡时仅作语气、不再作声线描述;OpenAI 系模型注入语气指令,ComfyUI 参与音色自动匹配),语速用 `--speed` 稳定控制在设定区间。
+2. 用项目统一旁白声线合成——**必须走统一模块 `python3 modules/genmedia.py tts`**(渠道/模型由用户在控制台「🎨 生成模型」页 TTS语音模型配置,不自行挑模型、不直连 API)。**旁白声线唯一事实源 = 项目旁白声线卡 `assets/audio/voice/narrator.json` + 冻结样本 `assets/audio/voice/refs/NARRATOR_voiceprint.mp3`(2026-09-01,由 09-audio/voice-generation 按项目基调设计并冻结;人物预览页「🎙 旁白」条目展示/试听)**:合成一律不传 `--voice`,genmedia 自动按卡固定声线——同渠道用卡冻结 tts_voice;火山 seed-audio-1.0 用卡冻结描述并自动挂冻结样本 @音频1 参考锚;ComfyUI 直接用冻结样本作参考音频——**用户改「生成模型」页 TTS 设置不影响旁白声线**;genmedia 告警「声线卡渠道与当前生效渠道不一致」时停手上报 orchestrator 回派 voice-generation 重定卡,不得将就渠道默认音色续跑。**无卡回退口径(存量项目)**:回执中提醒补卡,本次按旧约定执行——音色库模式的渠道(OpenRouter/火山豆包语音/MiniMax/ElevenLabs)不传 --voice,宿主自动从音色库取一个旁白型音色(设置页已没有「默认音色」,2026-10-02);火山 seed-audio-1.0 声线=`--instructions` 的声线描述(如『成年男声,中低音,沉稳的纪录片旁白,克制而有叙事感』,缺省用 genmedia 内置旁白声线,禁传 --voice),全集逐段必须同一描述,首段合成验收后复制冻结为 refs/NARRATOR_voiceprint.mp3,genmedia 此后自动挂 @音频1 参考锚。段间音色一致性在自检必查。**ComfyUI 渠道**:不传 `--character` 和 `--voice`,模块会结合 `--instructions` 从内置音色目录(`modules/timbre_catalog.json`,索引远端 [ComfyUI-Index-TTS/TimbreModel](https://github.com/chenpipi0807/ComfyUI-Index-TTS/tree/main/TimbreModel) 音频库)的 narrator 候选自动选择,首次使用自动下载缓存到 `data/TimbreModel/` 并上传参考音频,输入相同则结果固定;**项目目录内没有 WAV/MP3 不构成阻塞,不要要求用户另行提供或在控制台手填参考音频**。正式合成前先以相同参数加 `--dry-run` 验证并记录 `voice=`(有声线卡时应显示 `narrator-card:…`,ComfyUI 无卡时 `auto:<文件>`);若正式调用失败,回执必须逐字记录 `生成失败:` 后的原始错误以及 ComfyUI `node_type/exception_type/exception_message`,禁止凭旧回执或推测改写错误类型。只要日志已出现“自动参考音频已选择并上传”,就绝不能再归因为缺参考音频。语气用 `--instructions` 描述(如"沉稳的纪录片旁白,克制而有叙事感";有声线卡时仅作语气、不再作声线描述;OpenAI 系模型注入语气指令,ComfyUI 参与音色自动匹配),语速用 `--speed` 稳定控制在设定区间。
 3. 专有名词读音以 `bible/dictionary.json` 词条为准,生僻词注音后合成,全季读音一致。
 4. 输出 `assets/audio/narration/epNN/` 分段 wav + `manifest.json`(段落-落点映射)。
 5. 自检:语速逐段测量、段间音色/响度一致,统一采样率与电平规范后交付。
@@ -28,8 +28,9 @@ python3 modules/genmedia.py tts \
   --text "<旁白段落文本>" \
   --output assets/audio/narration/epNN/ep01_narr_003.mp3 \
   [--speed 1.0] [--instructions "<语气指令>"]
-# 不传 --character/--voice:云渠道自动用生效渠道的「默认音色」(设置页配置),仅工单显式指定时才传 --voice 覆盖;
-#                          ComfyUI 自动从内置音色目录的旁白候选选型(远端音频首次自动下载缓存)
+# 不传 --character/--voice:有旁白声线卡按卡固定声线;无卡时宿主按生效渠道的语音模式自动处理——音色库模式从音色库
+#                          自动取旁白型音色(本地音色库取旁白候选,远端音频首次自动下载缓存),音色设计模式按声线描述出声;
+#                          设置页已没有「默认音色」,仅工单显式指定时才传 --voice 覆盖
 ```
 
 逐段调用;失败(未配 Key/超时)如实写回执上报,严禁伪造或占位产物。详见 WORKFLOW.md §9。
@@ -48,7 +49,7 @@ python3 modules/genmedia.py tts \
 | 01-story/narration | 本集旁白稿(第三人称统一,每条带锚点/est_duration_s) | `story/episodes/epNN/narration.md` |
 | 07-directing/shot-planning | 旁白挂点定稿(挂点镜/组 + 可用画面窗口) | `directing/epNN/shot_list.json` 的 `narration_anchors` |
 | 02-worldbuilding/dictionary | 专有名词释义与读音基准 | `bible/dictionary.json` |
-| 项目设定 | 语速区间与旁白风格(云渠道:旁白声线=「🎨 生成模型」页生效 TTS 渠道的「默认音色」,不在工单里传;ComfyUI:`--instructions` 参与本地音色自动匹配) | 立项配置(工单提供) |
+| 项目设定 | 语速区间与旁白风格(旁白声线=旁白声线卡,不在工单里传;无卡时宿主按生效 TTS 渠道的语音模式自动取旁白型音色 / 按声线描述出声;本地音色库:`--instructions` 参与音色自动匹配) | 立项配置(工单提供) |
 
 ## 输出
 

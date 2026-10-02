@@ -41,6 +41,7 @@ from modules import skill_records
 from modules.prompt_layout import paragraphize
 from modules import caption_catalog as _ccat
 from modules import id_scheme
+from modules import voice_library as _voice_library
 from services.runtime import rhythm as narrative_rhythm
 
 # ---------------- 配置 ----------------
@@ -818,29 +819,36 @@ DEFAULT_GENCONFIG = {
     },
     "tts": {
         "provider": "agentics",   # agentics | openrouter | volcengine(豆包语音) | minimax | elevenlabs
-        # Agentics TTS 分 Voice Design / Voice Clone 两个 profile(2026-09-20,同 ComfyUI TTS 两套工作流、同图像 t2i/i2i):
-        # genmedia 出嗓音样本(*_voiceprint.*)用 design(按嗓音文字描述出声),其余对白/旁白用 clone(嗓音样本 + 台词)。
+        # 语音模式(2026-10-02,modules/voice_library.py):每个渠道的 voice_mode = design(音色设计:Voice Design
+        # 模型按声纹卡描述出嗓音样本,Voice Clone 模型拿样本当参考出对白/旁白)| library(音色库:从音色库给每个人物
+        # 选一个音色登记 casting.json 再合成)。agentics / comfyui / volcengine 两种都支持,其余渠道只有音色库。
+        # 音色库不在界面设置,由宿主自动拉取并按人物选型(genmedia.py voices);各渠道的 voice 键是旧版「默认音色」,
+        # 界面不再显示,只作不带人物调用的兜底。
+        # Agentics:design / clone 两个 profile;音色库模式=clone profile + 本地音色库(data/TimbreModel)参考音频。
         # 旧字段 profile_code 由 _migrate_genconfig 迁入两侧
-        "agentics": {"design": "qwen3tts-voicedesign", "clone": "qwen3tts-clone"},
+        "agentics": {"voice_mode": "design", "design": "qwen3tts-voicedesign", "clone": "qwen3tts-clone"},
         "openrouter": {"api_key": "", "model": "x-ai/grok-voice-tts-1.0",
-                       "custom_model": "", "voice": "eve"},
-        # 豆包语音 openspeech v3(Doubao-Seed-TTS 2.0):凭证=新版语音技术控制台
-        # 「API Key 管理」的 API Key(X-Api-Key 单头鉴权,非方舟 ARK Key;旧版
-        # App ID + Access Token 已废弃);model 即 X-Api-Resource-Id 档位
-        "volcengine": {"api_key": "", "model": "seed-tts-2.0",
                        "custom_model": "", "voice": ""},
-        # MiniMax Speech:voice 存 voice_id(设置页可拉取音色库选择)
+        # 豆包语音:凭证=新版语音技术控制台「API Key 管理」的 API Key(X-Api-Key 单头鉴权,非方舟 ARK Key)。
+        # 音色设计=Doubao-音频生成 1.0(design_model / clone_model 两格目前只有它);音色库=model(Seed-TTS 档,
+        # 即 X-Api-Resource-Id),音色库清单走 OpenAPI ListSpeakers,要账号的 access_key / secret_key
+        "volcengine": {"voice_mode": "design", "api_key": "", "model": "seed-tts-2.0",
+                       "design_model": "seed-audio-1.0", "clone_model": "seed-audio-1.0",
+                       "access_key": "", "secret_key": "",
+                       "custom_model": "", "voice": ""},
+        # MiniMax Speech(仅音色库):音色=voice_id
         "minimax": {"api_key_io": "", "api_key_cn": "",
                     "api_base": "https://api.minimax.io",
                     "model": "speech-2.8-hd", "custom_model": "", "voice": ""},
-        # ElevenLabs:voice 存 voice_id;Voice Library 音色须先加入账号(设置页一键加入)
-        "elevenlabs": {"api_key": "", "model": "eleven_multilingual_v2",
+        # ElevenLabs(仅音色库):音色=账号内 voice_id;公共 Voice Library 音色须先加入账号
+        "elevenlabs": {"api_key": "", "model": "eleven_v3",
                        "custom_model": "", "voice": ""},
-        # ComfyUI:本地 TTS,按角色内容自动选本地参考音频;工作流由用户选择。
+        # ComfyUI:工作流由用户选择。
         "comfyui": {"mode": "local", "url": "http://127.0.0.1:8188", "cloud_api_key": "",
-                    # 两套工作流(2026-09-20,同图像的文生图/图生图):workflow / rh_workflow_id = Voice Clone
-                    # (嗓音样本 + 台词出对白);design_workflow / rh_design_workflow_id = Voice Design
-                    # (按角色嗓音文字描述出嗓音样本)。genmedia 按用途自动选,未配 Voice Design 时一律 Clone
+                    # voice_mode(mode 是运行方式,不是它):design=两套工作流,workflow / rh_workflow_id = Voice Clone
+                    # (嗓音样本 + 台词出对白),design_workflow / rh_design_workflow_id = Voice Design(按嗓音文字描述
+                    # 出嗓音样本);library=只用 Voice Clone 工作流,参考音频取本地音色库 timbre_dir
+                    "voice_mode": "library",
                     "workflow": "", "design_workflow": "",
                     "checkpoint": "", "timbre_dir": "data/TimbreModel",
                     "timbre_catalog": "data/TimbreModel/catalog.json",
@@ -1227,6 +1235,25 @@ def _migrate_genconfig(config: dict) -> None:
                 ia.pop(side, None)
                 if legacy:
                     ia[side] = legacy
+    tts = config.get("tts")
+    if isinstance(tts, dict):
+        # 语音模式(2026-10-02):没存过 voice_mode 的渠道段按旧行为定模式(火山选的是音频生成 1.0、ComfyUI 配了
+        # Voice Design 工作流 → 音色设计),免得合并默认值时被默认模式盖掉
+        for prov in _voice_library.DESIGN_PROVIDERS:
+            pc = tts.get(prov)
+            if isinstance(pc, dict) and pc.get("voice_mode") not in _voice_library.MODES:
+                pc["voice_mode"] = _voice_library.voice_mode(prov, pc)
+        tv = tts.get("volcengine")
+        if isinstance(tv, dict):
+            # model 只存音色库模式的 Seed-TTS 档;旧版存在这里的音频生成 1.0 / 声音复刻 2.0 回落 2.0
+            if (tv.get("custom_model") or tv.get("model")) in (_voice_library.SEEDAUDIO_MODEL, "seed-icl-2.0"):
+                tv["model"], tv["custom_model"] = _voice_library.VOLC_LIBRARY_MODELS[0], ""
+            # 音色库的 Access Key / Secret Key 以前借用「文件托管 › 火山引擎 TOS」那对,现在归 TTS › 火山引擎自己填;
+            # 存量安装把那对带过来,免得音色库突然拉不到
+            tos = (config.get("storage") or {}).get("tos") if isinstance(config.get("storage"), dict) else None
+            if isinstance(tos, dict) and not (tv.get("access_key") or tv.get("secret_key")):
+                if tos.get("access_key") and tos.get("secret_key"):
+                    tv["access_key"], tv["secret_key"] = tos["access_key"], tos["secret_key"]
     ta = (config.get("tts") or {}).get("agentics") if isinstance(config.get("tts"), dict) else None
     if isinstance(ta, dict):
         # 旧版单一 profile_code → Voice Design / Voice Clone 两侧(保留原选择);空值视为未选,回落默认
@@ -3573,7 +3600,7 @@ def build_role_prompt(agent_id: str, project: str,
 - 生成视频(组级多镜头,默认路径):`python3 modules/genmedia.py video --prompt "<Shot 1:/Shot 2: 分镜结构>" --output <路径.mp4> --ref 锚点图... [--ref-video 组 json video_refs 的白模 camera.mp4 等,按序] [--audio-ref 音色样本...] [--generate-audio on] [--return-last-frame tail.png] --duration <组Σ,4–{sg_max}整数> [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`
 - 生成视频(单镜首尾帧,兜底路径):`python3 modules/genmedia.py video --prompt "..." --output <路径.mp4> [--first-frame a.png] [--last-frame b.png] [--duration 4] [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`(--ref 与首尾帧互斥)
 - 生成音乐(BGM,仅音乐类工位):`python3 modules/genmedia.py music --prompt "<英文音乐描述:风格/情绪/乐器/节奏>" --output <路径.mp3> [--duration <秒>]`(渠道/模型由「🎨 生成模型」页音乐生成配置;OpenRouter:Lyria 3 Pro 完整歌曲、Lyria 3 Clip 30s 片段/Loop;ElevenLabs Eleven Music:--duration 3–600s 按 cue 精确出段;ComfyUI:ACE-Step 本地工作流、--duration 1–240s;默认纯音乐)
-- TTS 旁白/音色样本(narrator/voice 类工位):`python3 modules/genmedia.py tts --text "<文本>" --output <路径.mp3> [--character CHAR-0001] [--variant child] [--voice <音色;仅云渠道>] [--speed 1.0] [--instructions "<语气/情绪指令>"]`(渠道/模型/默认音色由「🎨 生成模型」页 TTS语音模型配置,渠道可选 OpenRouter/火山豆包语音/ElevenLabs/ComfyUI。**旁白一律不传 --voice**——项目有旁白声线卡 `assets/audio/voice/narrator.json`(由 voice-generation 设计冻结,旁白声线唯一事实源)时 genmedia 自动按卡固定声线:同渠道用卡冻结 tts_voice、seed-audio 用卡冻结描述+冻结样本参考锚、ComfyUI 直接用冻结样本作参考音频,**用户改 TTS 设置不影响旁白声线**(渠道与卡不一致时 genmedia 告警回退并提示重定卡,如实上报);无卡才回退生效渠道配置的「默认音色」。角色配音按 casting 传 --voice 覆盖,语义随渠道:OpenRouter=音色名、火山=speaker 名、ElevenLabs=voice_id。**火山模型为 seed-audio-1.0(Doubao-音频生成 1.0)= 描述定制嗓音**:免选音色——角色配音传 `--character`(+`--variant`),声线描述由声纹卡 voice.json 声学字段自动拼装;旁白声线=旁白声线卡冻结描述(无卡按 `--instructions` 描述,缺省内置旁白声线);均不传 --voice(speaker 名会被忽略);项目已有冻结 voiceprint 样本时自动作 @音频1 参考锚,逐句/逐段合成不漂音色。ComfyUI:根据项目 voice/personality/appearance 从内置音色目录(远端 ComfyUI-Index-TTS/TimbreModel 音频库,首次使用自动下载缓存到 `data/TimbreModel/`)自动选参考音频,角色传 `--character`,旁白留空,禁止手填 `--voice`。instructions:OpenRouter 仅 OpenAI 系模型生效,火山注入情绪指令,ElevenLabs 忽略,ComfyUI 参与音色自动匹配、不注入合成)
+- TTS 旁白/音色样本(narrator/voice 类工位):`python3 modules/genmedia.py tts --text "<文本>" --output <路径.mp3> [--character CHAR-0001] [--variant child] [--voice <音色;仅音色库模式>] [--speed 1.0] [--instructions "<语气/情绪指令>"]`(渠道/模式/模型由「🎨 生成模型」页 TTS语音模型配置;**每个渠道有语音模式,`genmedia.py info` 的 tts 行回显「模式=音色设计 / 音色库 / 音色库(本地)」,以回显为准**:音色设计=不选音色,按声纹卡描述出嗓音样本、对白拿样本当参考,一律不传 --voice;音色库=先 `python3 modules/genmedia.py voices --character <CHAR-ID> [--variant <形态>]` 取宿主自动拉取并打分的候选,选定登记 casting.json 后按 casting 传 --voice(本地音色库传条目文件名);设置页没有「默认音色」也不列音色,不带人物也没给音色时宿主自动取旁白型音色。**旁白一律不传 --voice**——项目有旁白声线卡 `assets/audio/voice/narrator.json`(由 voice-generation 设计冻结,旁白声线唯一事实源)时 genmedia 自动按卡固定声线:同渠道用卡冻结 tts_voice、seed-audio 用卡冻结描述+冻结样本参考锚、ComfyUI 直接用冻结样本作参考音频,**用户改 TTS 设置不影响旁白声线**(渠道与卡不一致时 genmedia 告警回退并提示重定卡,如实上报);无卡时宿主按语音模式自动处理(音色库模式从音色库取旁白型音色,音色设计模式按声线描述出声)。音色库模式下角色配音按 casting 传 --voice,语义随渠道:OpenRouter=音色名、火山=speaker 名、MiniMax / ElevenLabs=voice_id、本地音色库=条目文件名。**火山音色设计模式(Doubao-音频生成 1.0)= 描述定制嗓音**:免选音色——角色配音传 `--character`(+`--variant`),声线描述由声纹卡 voice.json 声学字段自动拼装;旁白声线=旁白声线卡冻结描述(无卡按 `--instructions` 描述,缺省内置旁白声线);均不传 --voice(speaker 名会被忽略);项目已有冻结 voiceprint 样本时自动作 @音频1 参考锚,逐句/逐段合成不漂音色。ComfyUI:根据项目 voice/personality/appearance 从内置音色目录(远端 ComfyUI-Index-TTS/TimbreModel 音频库,首次使用自动下载缓存到 `data/TimbreModel/`)自动选参考音频,角色传 `--character`,旁白留空,禁止手填 `--voice`。instructions:OpenRouter 仅 OpenAI 系模型生效,火山注入情绪指令,ElevenLabs 忽略,ComfyUI 参与音色自动匹配、不注入合成)
 - 详细纪律见 agents/WORKFLOW.md §9;生成失败如实上报,严禁伪造或占位产物
 
 ## 用户参考素材(视觉/配乐工作前必查)
@@ -3592,7 +3619,8 @@ def build_role_prompt(agent_id: str, project: str,
 ## 你的调度权(团队中仅调度型 Agent 拥有)
 媒体工单配置认知:
 - ComfyUI/IndexTTS2 的参考音频由 `modules/genmedia.py tts` 按内置音色目录 `modules/timbre_catalog.json`(索引远端 ComfyUI-Index-TTS/TimbreModel 音频库,首次使用自动下载缓存到 `data/TimbreModel/`)自动选择并上传,项目目录内没有 WAV/MP3 **不是阻塞条件**,不得要求用户手填默认参考音频
-- voice-generation 工单必须调用 `genmedia.py tts --character <CHAR-ID> [--variant ...]`,narrator 工单不传 `--character`;两者均禁止传 `--voice`(ComfyUI 纪律;火山渠道模型为 seed-audio-1.0 描述定制嗓音时同样禁止 --voice——描述由声纹卡自动拼装、旁白靠 --instructions;其余云渠道角色配音按 casting.json 传 --voice)
+- TTS 每个渠道有语音模式(`genmedia.py info` 的 tts 行回显):音色设计=按声纹卡描述出样本、对白拿样本当参考;音色库=宿主自动拉取音色库,voice-generation 用 `genmedia.py voices --character <CHAR-ID>` 取候选选角后登记 casting.json。设置页不设默认音色、不列音色,**不得要求用户去界面上选音色或填默认音色**
+- voice-generation 工单必须调用 `genmedia.py tts --character <CHAR-ID> [--variant ...]`,narrator 工单不传 `--character`;音色设计模式两者均禁止传 `--voice`(描述由声纹卡自动拼装、旁白靠旁白声线卡 / --instructions);音色库模式角色配音按 casting.json 登记的传 --voice(本地音色库只可传登记的条目文件名),旁白不传
 - TTS 从云渠道切到 ComfyUI 后,旧 casting 的 `eve`/`ara` 等云音色名不得传给 ComfyUI;派 voice-generation 自动重选并更新 casting。工单必须先用相同参数执行 `--dry-run` 记录自动选型,再正式合成；失败回执逐字保留 `node_type/exception_type/exception_message`,不得把 Python 依赖/模型/节点异常改写成缺参考音频。日志出现“自动参考音频已选择并上传”后严禁要求用户手填音色
 
 你可以把任务派给团队里任何其他 Agent,他们会以各自 SOUL.md 的身份在独立进程里工作:
@@ -12192,6 +12220,16 @@ async def api_genconfig_set(body: dict):
         allowed = set(DEFAULT_GENCONFIG[kind]) - {"provider"}
         if cfg.get(kind, {}).get("provider") not in allowed:
             raise ServiceError(400, f"{kind}.provider must be one of {sorted(allowed)}")
+    for prov, pc in (cfg.get("tts") or {}).items():
+        if not isinstance(pc, dict):
+            continue
+        if prov not in _voice_library.DESIGN_PROVIDERS:
+            pc.pop("voice_mode", None)          # 只有音色库模式的渠道不存这个键
+        elif pc.get("voice_mode") not in _voice_library.MODES:
+            raise ServiceError(400, f"tts.{prov}.voice_mode must be one of {list(_voice_library.MODES)}")
+    tv = (cfg.get("tts") or {}).get("volcengine") or {}
+    if (tv.get("custom_model") or tv.get("model")) in (_voice_library.SEEDAUDIO_MODEL, "seed-icl-2.0"):
+        tv["model"], tv["custom_model"] = _voice_library.VOLC_LIBRARY_MODELS[0], ""
     up = cfg.get("upscale") or {}
     up.pop("fallback", None)   # 降级开关已删(2026-09-23),旧客户端带上来也丢弃
     up_ff = up.get("ffmpeg") or {}
@@ -12820,18 +12858,17 @@ def _volc_list_speakers(ak: str, sk: str, resource_id: str) -> list[dict]:
 
 async def api_volc_speakers(body: dict):
     """新版豆包语音「音色库」列表(ListSpeakers,10 分钟缓存)。走火山 OpenAPI
-    AK/SK 签名(凭证绑定 ⚙️ 设置 → 文件托管 → 存储渠道「火山引擎 TOS」的
-    AccessKey/SecretKey,空时回退环境变量 TOS_ACCESS_KEY/TOS_SECRET_KEY),
-    非语音 API Key。"""
+    AK/SK 签名(凭证填在「生成模型」页 TTS › 火山引擎的音色库模式,见 modules/voice_library.volc_credentials;
+    空时回退环境变量 TOS_ACCESS_KEY/TOS_SECRET_KEY),非语音 API Key。设置页已不再显示音色库(2026-10-02,
+    音色由宿主自动拉取选型),此端点留给外部调用。"""
     resource_id = str((body or {}).get("resource_id") or "seed-tts-2.0").strip()
     if resource_id not in ("seed-tts-2.0", "seed-tts-1.0"):
         resource_id = "seed-tts-2.0"   # 克隆/自定义档没有公共音色库,回落 2.0
-    tos = (load_genconfig().get("storage") or {}).get("tos") or {}
-    ak = (tos.get("access_key") or os.environ.get("TOS_ACCESS_KEY", "")).strip()
-    sk = (tos.get("secret_key") or os.environ.get("TOS_SECRET_KEY", "")).strip()
+    ak, sk = _voice_library.volc_credentials((load_genconfig().get("tts") or {}).get("volcengine"))
+    ak = ak or os.environ.get("TOS_ACCESS_KEY", "").strip()
+    sk = sk or os.environ.get("TOS_SECRET_KEY", "").strip()
     if not (ak and sk):
-        raise ServiceError(400, "需先在 ⚙️ 设置 → 文件托管 → 存储渠道「火山引擎 TOS」"
-                                "配置 AccessKey/SecretKey")
+        raise ServiceError(400, "需先在「生成模型」页 TTS › 火山引擎(音色库模式)填 Access Key / Secret Key")
     ts, cached = _VOLC_SPEAKERS_CACHE.get(resource_id, (0, None))
     if cached is not None and time.time() - ts < _VOLC_SPEAKERS_TTL:
         return {"speakers": cached}
@@ -16851,7 +16888,7 @@ def _live_decorate(res: dict) -> dict:
     tts = load_genconfig().get("tts") or {}
     tts_provider = str(tts.get("provider") or "")
     tts_sub = tts.get(tts_provider) if isinstance(tts.get(tts_provider), dict) else {}
-    tts_model = str(tts_sub.get("custom_model") or tts_sub.get("model") or tts_sub.get("clone") or "")
+    tts_model = str(_voice_library.effective_model(tts_provider, tts_sub) or tts_sub.get("clone") or "")
     res = {**res, "tts_label": " · ".join(x for x in (tts_provider, tts_model) if x)}   # 对口型模式:台词用这套 TTS 合成
     return {**res, "models": [list(m) for m in VIDEO_MODEL_CATALOG.get(provider, [])],
             "model_catalogs": {p: [list(m) for m in rows] for p, rows in VIDEO_MODEL_CATALOG.items()

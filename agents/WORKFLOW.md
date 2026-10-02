@@ -624,8 +624,27 @@ cast 人物。严禁逐行交替或从人物图片推断性别；`ready_for_digi
 > 超限任务创建即 400 InvalidParameter(不计费)——早期 10–15s 规格两段配对必超
 > (tothemoon 实测 12.3s+11.8s=24.1s 被拒);≤5s/段则 3 段满配 ≤15s 恒过,嗓音特点 5s 足够锚定。
 > genmedia 提交前做 audioref_total_le_15s 硬校验(§7A),超限直接报错不发请求。
+> **语音模式(2026-10-02,`modules/voice_library.py`)——②③ 怎么做先看模式**:「🎨 生成模型」页 TTS
+> 每个渠道先选模式,`python3 modules/genmedia.py info` 的 tts 行回显「模式=音色设计 / 音色库 / 音色库(本地)」。
+> **以回显为准,不按渠道名猜;本段与下文各渠道分述冲突处以本段为准。**
+> - **音色设计**(Agentics / ComfyUI / 火山可选):不选音色。Voice Design 模型按 voice.json 声学字段出
+>   voiceprint 样本,Voice Clone 模型拿样本当参考出对白/旁白。合成一律
+>   `genmedia tts --character <CHAR> [--variant <形态>]`,禁传 `--voice`;casting 条目 `tts_voice` 留空、
+>   登记 `voice_desc`。Agentics / ComfyUI 下人物还没有样本就合成对白会报错(先出样本,不再回退本地音色库);
+>   火山两格都是 Doubao-音频生成 1.0,没样本也能按描述出声(但逐句会漂,样本先行)。
+> - **音色库**(所有渠道可选;OpenRouter / ElevenLabs / MiniMax 只有这个模式):② 先取候选
+>   `python3 modules/genmedia.py voices --character <CHAR> [--variant <形态>] [--top 8]`——宿主自动拉取
+>   该渠道音色库,按声纹卡做性别硬过滤、年龄 / 语言 / 声线词打分,已分给别的人物的排在最后;旁白不传
+>   `--character`。选定(无特别理由取第一名;理由栏标「性别未知,须听辨」的先试合成一句听辨,条目备注
+>   `gender_verified: true`)后登记 casting `tts_voice`,③ 再
+>   `genmedia tts --character <CHAR> --voice <tts_voice>` 出样本。**Agentics / ComfyUI 的音色库是本地音色库**
+>   (data/TimbreModel 的参考音频,配 Voice Clone 模型):`tts_voice` 登记条目文件名,`--voice` 只可传登记的
+>   文件名,不传时宿主按人物自动选。**ElevenLabs** 只在账号内已有音色里选;公共音色库只搜索推荐
+>   (`voices --scope library --search <关键词>`),把公共音色加入账号
+>   (`voices --add <voice_id> --owner <public_owner_id>`)会占账号音色位,**仅工单明确要求时执行**。
+> - 设置页没有「默认音色」:不带人物也没给音色的调用(无声线卡的旁白)由宿主从音色库自动取一个旁白型音色。
 > **嗓音模板可由 Doubao-音频生成 1.0 描述定制(2026-08-31)**:「🎨 生成模型」页 TTS 火山渠道
-> 模型选 `seed-audio-1.0`(列表首位,新配置默认)时,②③ 不再从「音色库」挑 speaker——
+> 选「音色设计」模式(Voice Design / Voice Clone 两格都是 Doubao-音频生成 1.0)时,②③ 不再从「音色库」挑 speaker——
 > **按 voice.json 声学字段(gender/presented_gender、pitch、timbre、accent;age_variants 逐
 > 形态覆盖)拼文字描述直接生成定制嗓音**(`genmedia tts --character` 自动拼装,禁传 --voice,
 > speaker 名会被忽略;reference_style 等剧情性文字不进描述)。casting.json 条目登记
@@ -1094,10 +1113,13 @@ python3 modules/genmedia.py tts \
   --text "<旁白/台词文本>" \
   --output assets/audio/narration/ep01/ep01_narr_003.mp3 \
   [--character <CHAR-ID;ComfyUI 角色音色样本必传,旁白不传>] [--variant <年龄形态>] \
-  [--voice <音色;云渠道角色配音按 casting 传(OpenRouter=音色名、火山=speaker 名、ElevenLabs=voice_id),旁白不传——自动用「生成模型」页生效渠道的「默认音色」;火山 seed-audio-1.0 描述定制:禁传,speaker 名会被忽略;ComfyUI 禁止手填>] \
+  [--voice <音色;仅音色库模式:角色配音按 casting 登记的传(OpenRouter=音色名、火山=speaker 名、MiniMax / ElevenLabs=voice_id、本地音色库=条目文件名),候选见 voices 子命令;旁白不传(按旁白声线卡,无卡时宿主自动取旁白型音色);音色设计模式禁传>] \
   [--speed 1.0] [--instructions "<语气/情绪指令;OpenAI 系模型生效,火山注入情绪指令,ComfyUI 参与音色匹配>"]
-# ComfyUI TTS 会读取项目角色设定并按内置音色目录 modules/timbre_catalog.json(索引远端 ComfyUI-Index-TTS/TimbreModel 音频库,首次使用自动下载缓存到 data/TimbreModel/)自动选取、上传参考音频,禁止手填 --voice；项目目录内没有 WAV/MP3 不构成阻塞。旧云渠道 casting 的 eve/ara 等音色名不能传给 ComfyUI,切换渠道后须自动重选并更新 casting。
-# **仅当** ComfyUI TTS 渠道同时配置了 Voice Design 工作流时(「生成模型」页 TTS › ComfyUI 两个下拉都已选;未配则上一行旧行为不变):输出文件名以 `_voiceprint` 结尾(出角色/旁白嗓音样本)= 宿主自动走 Voice Design,按 voice.json 声学字段(旁白按声线卡/--instructions)拼嗓音文字描述出声,不用参考音频;其余合成(对白/旁白)= 自动走 Voice Clone,参考音频取项目冻结样本 `assets/audio/voice/refs/<CHAR>[_<variant>]_voiceprint.mp3`(旁白 NARRATOR_voiceprint.mp3),样本缺失才回退 TimbreModel 选型并在 stderr 提醒。调用方式不变(照传 --character/--variant,禁手填 --voice);casting 的 tts_voice 此时登记为该冻结样本文件名。
+# 音色库候选(仅音色库模式;宿主自动拉取音色库并按人物声纹卡打分,输出 JSON;音色设计模式下只返回说明):
+#   python3 modules/genmedia.py voices --character <CHAR-ID> [--variant <形态>] [--search <关键词>] [--top 8] [--refresh]
+#   ElevenLabs 另有 --scope library --search <词>(搜公共音色库,只推荐)与 --add <voice_id> --owner <public_owner_id>(加入账号,占音色位,仅工单明确要求时用)
+# 本地音色库(Agentics / ComfyUI 的音色库模式):读取项目角色设定并按内置音色目录 modules/timbre_catalog.json(索引远端 ComfyUI-Index-TTS/TimbreModel 音频库,首次使用自动下载缓存到 data/TimbreModel/)自动选取、上传参考音频;--voice 只可传 casting 登记的条目文件名；项目目录内没有 WAV/MP3 不构成阻塞。旧云渠道 casting 的 eve/ara 等音色名不能传给 ComfyUI,切换渠道后须自动重选并更新 casting。
+# **仅当** Agentics / ComfyUI TTS 渠道是音色设计模式时(`genmedia.py info` 回显「模式=音色设计」;音色库模式按上一行):输出文件名以 `_voiceprint` 结尾(出角色/旁白嗓音样本)= 宿主自动走 Voice Design,按 voice.json 声学字段(旁白按声线卡/--instructions)拼嗓音文字描述出声,不用参考音频;其余合成(对白/旁白)= 自动走 Voice Clone,参考音频取项目冻结样本 `assets/audio/voice/refs/<CHAR>[_<variant>]_voiceprint.mp3`(旁白 NARRATOR_voiceprint.mp3);人物样本缺失直接报错(先出样本),旁白样本缺失则按声线描述直接出声并在 stderr 提醒。调用方式不变(照传 --character/--variant,禁手填 --voice);casting 的 tts_voice 此时登记为该冻结样本文件名。
 # **仅当** TTS 生效渠道为 Agentics 时(「生成模型」页 TTS › Agentics 分 Voice Design 模型 / Voice Clone 模型两个下拉,默认 qwen3tts-voicedesign / qwen3tts-clone):同上一条口径——输出文件名以 `_voiceprint` 结尾 = 宿主自动用 Voice Design 模型按嗓音文字描述出样本(描述来源同上);其余合成 = 自动用 Voice Clone 模型,参考音频优先取项目冻结样本,样本缺失才回退 TimbreModel 选型。Voice Design 模型在服务端未声明嗓音描述参数(`instruct`,与 RunningHub 工作流节点输入位同名)时,宿主在 stderr 提醒并改按 Voice Clone 处理。调用方式不变。
 # 火山渠道模型为 seed-audio-1.0(Doubao-音频生成 1.0,描述定制嗓音)时同 ComfyUI 纪律:角色传 --character、旁白靠 --instructions 描述声线,禁传 --voice;声线描述由 voice.json 声学字段自动拼装,项目已有冻结 voiceprint 样本时自动作 @音频1 参考锚(逐句/逐段合成不漂音色,§8A)。
 ```

@@ -206,9 +206,26 @@ def _ensure_audio(entry: dict) -> Path:
     return path
 
 
-def select_timbre(text: str, output: str, character: str = "", variant: str = "",
-                   project: str = "", instructions: str = "",
-                   timbre_dir: str | Path = "", catalog_path: str | Path = "") -> dict:
+def find_timbre(name: str, timbre_dir: str | Path = "", catalog_path: str | Path = "") -> Path | None:
+    """按目录条目文件名取参考音频(选角表 casting.json 登记的本地音色库音色;首次使用自动下载)。
+    不在目录里返回 None。"""
+    wanted = Path(str(name or "")).name.casefold()
+    if not wanted:
+        return None
+    try:
+        _, entries = load_catalog(timbre_dir, catalog_path)
+    except RuntimeError:
+        return None
+    for entry in entries:
+        if str(entry["file"]).casefold() == wanted:
+            return _ensure_audio(entry)
+    return None
+
+
+def rank_timbres(text: str, output: str, character: str = "", variant: str = "",
+                 project: str = "", instructions: str = "",
+                 timbre_dir: str | Path = "", catalog_path: str | Path = "") -> tuple[dict, list]:
+    """本地音色库按人物内容打分排序 → (人物画像, [(分数, 条目, 理由列表)] 高分在前)。"""
     character = _normalize_character(character) or infer_character(output)
     project_root = _resolve_project(project, output)
     profile = _profile(project_root, character, variant, text, instructions)
@@ -266,7 +283,18 @@ def select_timbre(text: str, output: str, character: str = "", variant: str = ""
 
     if not ranked:
         raise RuntimeError(f"TimbreModel 中没有匹配性别的音色(character={character or 'narrator'})")
-    score, _, selected, reasons = sorted(ranked, key=lambda row: (-row[0], row[1]))[0]
+    profile["character"] = character
+    return profile, [(score, entry, reasons)
+                     for score, _, entry, reasons in sorted(ranked, key=lambda row: (-row[0], row[1]))]
+
+
+def select_timbre(text: str, output: str, character: str = "", variant: str = "",
+                   project: str = "", instructions: str = "",
+                   timbre_dir: str | Path = "", catalog_path: str | Path = "") -> dict:
+    profile, ranked = rank_timbres(text, output, character, variant, project, instructions,
+                                   timbre_dir, catalog_path)
+    character = profile["character"]
+    score, selected, reasons = ranked[0]
     return {
         "path": str(_ensure_audio(selected)),
         "file": selected["file"],
