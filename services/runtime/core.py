@@ -3205,7 +3205,12 @@ def build_role_prompt(agent_id: str, project: str,
         "用人物嗓音模板 casting.json/声纹卡/voiceprint 样本经 genmedia tts 合成的自然语速语音 + tts_manifest.json;台词/音色变了"
         "在使用时惰性补合成,宿主 CLI `python3 code/dialogue_tts.py --project <slug> --ep epNN [--status]`);消费方三处自动取用:"
         "故事板动态样片、分镜白模样片挂对白轨,后期配音 dub_group 先取库里音频再贴合。未选角(casting 缺条目/speaker 非人物编号)的句子"
-        "库里记 unbound 跳过并 WARN,不阻断样片;voice-generation 看到 unbound 清单应补选角。**该库仅供样片与后期配音,"
+        "库里记 unbound 跳过并 WARN,不阻断样片;voice-generation 看到 unbound 清单应补选角。"
+        "**台词演法(2026-10-02)**:每集 `p6-dialogue-fit` 通过后派 `p6-dialogue-direction`(07-directing/dialogue-direction):"
+        "宿主 CLI `python3 code/dialogue_direction.py plan → apply --file → check`,逐句把演法(状态 + 怎么演 + 语速 / 音量 / 停顿)、"
+        "场景与对象、语速档写进 shot_list 的 dialogue_lines[].delivery,宿主算目标时长并按镜长收口;对白语音按它合成"
+        "(火山 Doubao-音频生成 1.0 走导演式提示词并按目标时长出声),机检 dialogue_direction_bound;任何工位不得直接编辑 shot_list 写演法。"
+        "**该库仅供样片与后期配音,"
         "视频原声模式下仍严禁把库音频混进成片对白(§8A 红线不变)**"
         if (out.get("dialogue_tts") is True or dubbing) else
         "关闭(默认)—— 不维护对白语音库;动态样片/白模样片不挂对白轨")
@@ -9669,6 +9674,71 @@ async def api_dialogue_tts_get(project: str, ep: str):
     base = _proj_base(project)
     ep = re.sub(r"[^\w\-]", "", ep)
     return _dialogue_tts_status(base, ep)
+
+
+def _dialogue_direction_rows(base: Path, ep: str) -> dict:
+    """「对白语音」面板的逐句清单:台词 + 剧本情绪 + 演法(modules/dialogue_direction.py)+ 库里这句的音频与状态。"""
+    from modules import dialogue_direction as dd
+    from modules import dialogue_tts as dt
+    rows = dd.context(base, ep)
+    try:
+        plan = {(e["shot_id"], e["idx"]): e for e in dt.plan(base, ep)["lines"]}
+        provider, model = dt.tts_channel()
+    except Exception:  # noqa: BLE001
+        plan, provider, model = {}, "", ""
+    ldir = dt.lib_dir(base, ep)
+    out = []
+    for r in rows:
+        e = plan.get((r["shot_id"], r["idx"])) or {}
+        f = ldir / e["file"] if e.get("file") else None
+        d = r.get("delivery") or {}
+        out.append({k: r[k] for k in ("shot_id", "idx", "group_id", "speaker", "speaker_name", "text", "emotion", "status",
+                                      "shot_duration_s", "est_duration_s", "limit_s", "min_s", "max_s", "pace_seconds")}
+                   | {"direction": d.get("direction") or "", "scene": d.get("scene") or "", "pace": d.get("pace") or "",
+                      "target_s": d.get("target_s"), "by": d.get("by") or "",
+                      "audio": _audio_url(base, f) if f else None, "audio_status": e.get("status") or "",
+                      "duration_s": e.get("duration_s")})
+    chk = dd.check(base, ep)
+    return {"ep": ep, "lines": out, "total": chk["total"], "bound": chk["bound"], "warns": chk["warns"][:20],
+            # 只有火山 Doubao-音频生成 1.0 能把场景与目标时长也用上;其余渠道演法只当语气指令
+            "timed": provider == "volcengine" and model == _voice_library.SEEDAUDIO_MODEL,
+            "provider": provider, "model": model}
+
+
+async def api_dialogue_direction_get(project: str, ep: str):
+    base = _proj_base(project)
+    ep = re.sub(r"[^\w\-]", "", ep)
+    if not (base / "directing" / ep / "shot_list.json").is_file():
+        raise ServiceError(404, f"directing/{ep}/shot_list.json not found")
+    return _dialogue_direction_rows(base, ep)
+
+
+async def api_dialogue_direction_set(project: str, ep: str, body: dict):
+    """「对白语音」面板逐句改演法:{shot_id, idx?, direction, scene?, pace?|target_s?};direction 为空 = 摘掉这句的演法。
+    只经 modules/dialogue_direction 写分镜表的 dialogue_lines[].delivery;改完该句在对白语音库里变「过期」,刷新后重出。"""
+    from modules import dialogue_direction as dd
+    base = _proj_base(project)
+    ep = re.sub(r"[^\w\-]", "", ep)
+    if not (base / "directing" / ep / "shot_list.json").is_file():
+        raise ServiceError(404, f"directing/{ep}/shot_list.json not found")
+    body = body or {}
+    shot_id = re.sub(r"[^\w\-]", "", str(body.get("shot_id") or ""))
+    try:
+        idx = int(body.get("idx") or 0)
+    except (TypeError, ValueError):
+        raise ServiceError(400, "idx must be an integer")
+    if not shot_id:
+        raise ServiceError(400, "shot_id is required")
+    if not str(body.get("direction") or "").strip():
+        dd.clear(base, ep, shot_id, idx)
+        return {"ok": True, "cleared": True, **_dialogue_direction_rows(base, ep)}
+    res = dd.apply(base, ep, [{"shot_id": shot_id, "idx": idx, "direction": body.get("direction"),
+                               "scene": body.get("scene"), "pace": body.get("pace"), "target_s": body.get("target_s")}],
+                   by="user")
+    if res.get("errors"):
+        raise ServiceError(400, ";".join(res["errors"]))
+    HUB.publish({"type": "dialogue_tts", "project": base.name, "ep": ep, "status": "direction"})
+    return {"ok": True, "notes": res.get("notes") or [], **_dialogue_direction_rows(base, ep)}
 
 
 async def api_dialogue_tts_sync(project: str, ep: str, body: dict):

@@ -12,6 +12,9 @@
 - 惰性同步:每句一个 key = sha256(speaker, variant, text, emotion, casting 条目的 model/voice/speed/desc,
   voiceprint 样本 sha256, TTS 渠道/模型);消费方调用前 sync() 一次,只补合成 key 变了或文件缺失的句子,
   台词删掉的句子文件移到 _prev/。同一集加文件锁,动态样片与白模样片同时触发也不会重复合成。
+- 台词演法(2026-10-02,modules/dialogue_direction.py):对白行带有效 delivery(演法 / 场景 / 目标时长)时,合成改走
+  「导演式提示词」(火山 Doubao-音频生成 1.0 整套用上、时长按目标出;其余渠道只把演法当语气指令),演法进 key;
+  没写演法的句子照旧。节奏贴合与估时偏差对有演法的句子以目标时长为准。
 - 说话人形态(2026-10-02):多形态人物(声纹卡 age_variants)每句用哪个形态由 modules/voice_variants.py 判定
   (组 prompt 样本名 → 声纹卡章节范围 → 本集其它组 → 唯一已登记形态 → default),来源记入每句 variant_source;
   判不出或该形态未登记 → status=unbound 跳过并 WARN,不拿别的年龄形态硬出声。
@@ -230,13 +233,25 @@ def collect_lines(base: Path, ep: str, shot_list: dict | None = None) -> list[di
             if not text:
                 continue
             speaker, raw = resolve_speaker(ln, names)
-            out.append({"seq": seq, "shot_id": s["shot_id"], "idx": idx, "group_id": group_of.get(s["shot_id"], ""),
-                        "speaker": speaker, "speaker_raw": raw, "text": text,
-                        "emotion": str(ln.get("emotion") or ln.get("tone") or "").strip(),
-                        "est_duration_s": _f(ln.get("est_duration_s"))})
+            item = {"seq": seq, "shot_id": s["shot_id"], "idx": idx, "group_id": group_of.get(s["shot_id"], ""),
+                    "speaker": speaker, "speaker_raw": raw, "text": text,
+                    "emotion": str(ln.get("emotion") or ln.get("tone") or "").strip(),
+                    "est_duration_s": _f(ln.get("est_duration_s"))}
+            delivery = _direction().line_delivery(ln)     # 台词演法(仍有效的才算;台词改过的作废)
+            if delivery:
+                item.update(direction=delivery["direction"], scene=delivery["scene"], target_s=delivery["target_s"])
+            out.append(item)
             idx += 1
             seq += 1
     return out
+
+
+def _direction():
+    try:
+        from modules import dialogue_direction
+    except ImportError:                               # 脚本直跑时无包前缀
+        import dialogue_direction
+    return dialogue_direction
 
 
 def _f(v) -> float | None:
@@ -346,6 +361,9 @@ def plan(base: Path, ep: str, shot_list: dict | None = None, channel: tuple[str,
             continue
         payload = "|".join([ch, var, ln["text"], ln["emotion"], entry["tts_model"], entry["tts_voice"],
                             f"{entry['speed']:.3f}", str(c.get("voice_desc") or ""), provider, model, _sha_file(vp, sha_cache)])
+        if ln.get("direction"):
+            # 有演法的句子:演法 / 场景 / 目标时长进 key(改了就重出);没演法的句子 key 口径不变,存量库不会集体过期
+            payload += "|D:" + "|".join([ln["direction"], ln.get("scene") or "", f"{ln.get('target_s') or 0:.2f}"])
         entry["key"] = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
         entry["file"] = f"{ln['shot_id']}_l{ln['idx']:02d}_{ch}.mp3"
         prev = old_by_file.get(entry["file"])
@@ -541,7 +559,8 @@ def _default_tts(base: Path):
     def run(entry: dict, out: Path):
         var = entry["variant"] if entry["variant"] != "default" else ""
         voice = "" if entry.get("_voice_by_character") else entry["tts_voice"]
-        generate_tts(entry["text"], str(out), voice, entry["speed"], entry["emotion"], entry["speaker"], var, str(base))
+        generate_tts(entry["text"], str(out), voice, entry["speed"], entry["emotion"], entry["speaker"], var, str(base),
+                     entry.get("direction") or "", entry.get("scene") or "", entry.get("target_s"))
     return run
 
 
@@ -599,7 +618,7 @@ def sync(base: Path, ep: str, *, force: bool = False, tts=None, probe=None, log=
         def pace(e: dict, prev: dict, changed: bool) -> None:
             """节奏贴合版:自然时长超出估时的句子才出;参数与上次一致且文件在就沿用。失败只 WARN,样片退回自然语速。"""
             nonlocal paced
-            target, dur = e.get("est_duration_s"), e.get("duration_s")
+            target, dur = e.get("target_s") or e.get("est_duration_s"), e.get("duration_s")   # 有演法的句子贴目标时长
             dst = pdir / e["file"]
             e["pace"] = None
             if max_tempo <= 1.0 or not target or not dur or dur <= target * (1 + PACE_TOLERANCE) or not shutil.which("ffmpeg"):
@@ -708,7 +727,7 @@ def sync(base: Path, ep: str, *, force: bool = False, tts=None, probe=None, log=
                 (pdir / f).unlink(missing_ok=True)
         est_warn = []
         for e in done:
-            est, act = e.get("est_duration_s"), e.get("duration_s")
+            est, act = e.get("target_s") or e.get("est_duration_s"), e.get("duration_s")
             if e["status"] == "ok" and est and act and abs(act - est) / est > EST_TOLERANCE:
                 est_warn.append({"shot_id": e["shot_id"], "idx": e["idx"], "speaker": e["speaker"],
                                  "est_duration_s": est, "actual_s": act, "ratio": round(act / est, 2)})
@@ -734,6 +753,9 @@ def sync(base: Path, ep: str, *, force: bool = False, tts=None, probe=None, log=
                        # 没挂参考样本(纯描述出声,句与句之间嗓子会漂)的说话人
                        "speaker_variants": _speaker_variants(done),
                        "variant_warnings": sorted({e["variant_warning"] for e in done if e.get("variant_warning")}),
+                       # 台词演法(modules/dialogue_direction.py):没写演法的句子仍按旧写法(只带情绪标签)合成
+                       "undirected_lines": [f"{e['shot_id']}/l{e['idx']:02d}" for e in done
+                                            if e["status"] == "ok" and not e.get("direction")],
                        "unanchored_speakers": sorted({e["speaker"] for e in done
                                                       if e["status"] == "ok" and e.get("anchored") is False})
                        if voice_mode(provider, model)[0] == "design" else []},

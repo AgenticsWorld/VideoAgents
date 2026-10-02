@@ -196,7 +196,8 @@ def load_group(proj: Path, ep: str, gid: str):
                 continue
             lines.append({"shot_id": sid, "idx": idx, "speaker": ln.get("speaker") or ln.get("character_id"),
                           "text": text, "est_duration_s": ln.get("est_duration_s"),
-                          "emotion": ln.get("emotion") or ln.get("tone") or ""})
+                          "emotion": ln.get("emotion") or ln.get("tone") or "",
+                          "delivery": ln.get("delivery")})   # 台词演法(modules/dialogue_direction.py)
             idx += 1
     return g, lines
 
@@ -336,6 +337,7 @@ def main(argv=None):
     # 对白语音库(2026-09-13,输出设置「生成对白语音」):开着时先惰性同步本组各镜,首轮直接取库里自然语速音频,
     # 只有贴合需要改语速时才重新合成(重出仍落 dub 目录,不回写库)
     from modules import dialogue_tts as dt
+    from modules import dialogue_direction as dd
     lib_audio = {}
     if dt.enabled(proj) and not args.dry_run:
         lib = dt.ensure(proj, ep, only_shots=set(group.get("shots") or []))
@@ -371,21 +373,29 @@ def main(argv=None):
             entry.update({"status": "planned"})
             manifest["lines"].append(entry)
             continue
+        # 台词演法:有演法的句子把演法带进合成;火山 Doubao-音频生成 1.0 能按目标时长出声,直接把开口时段当目标时长,
+        # 不再靠改语速重合成去贴(其余渠道演法只当语气指令,仍走语速贴合)
+        dv = dd.line_delivery({"text": ln["text"], "delivery": ln.get("delivery")}) or {}
+        timed = bool(dv) and design_mode and provider == "volcengine"
+
+        def synth(speed):
+            generate_tts(ln["text"], str(raw_mp3), voice, None if timed else speed, ln.get("emotion") or "",
+                         ch, var if var != "default" else "", str(proj),
+                         dv.get("direction") or "", dv.get("scene") or "", round(target, 2) if timed else None)
         lib_entry = lib_audio.get((ln["shot_id"], ln["idx"]))
         if lib_entry and lib_entry.get("variant", "default") == var and abs(float(lib_entry.get("speed") or 1.0) - base_speed) <= 0.02:
             shutil.copyfile(lib_entry["path"], raw_mp3)
             entry["source"] = f"dialogue_tts:{lib_entry['file']}"
         else:
-            generate_tts(ln["text"], str(raw_mp3), voice, base_speed, ln.get("emotion") or "",
-                         ch, var if var != "default" else "", str(proj))
+            synth(base_speed)
             entry["source"] = "tts"
         d1 = probe_duration(raw_mp3)
         fit = plan_fit(d1, target, base_speed, args.speed_min, args.speed_max)
         used_speed = base_speed
         if abs(fit["speed"] - base_speed) > 0.02:
-            generate_tts(ln["text"], str(raw_mp3), voice, fit["speed"], ln.get("emotion") or "",
-                         ch, var if var != "default" else "", str(proj))
-            used_speed = fit["speed"]
+            synth(fit["speed"])
+            used_speed = base_speed if timed else fit["speed"]
+            entry["source"] = "tts"
             d1 = probe_duration(raw_mp3)
         atempo = fit["atempo"]
         # 残差 atempo 按实测重算(重合成后的真实时长)

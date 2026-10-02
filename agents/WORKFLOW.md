@@ -190,6 +190,7 @@ refs/
         按集出图:本集用到且库里还没有的场景(environment-concept/scene-modeling)
         ‖ director → storyboard → shot-planning → 本集道具/生物出图(prop/creature-concept)‖
         (camera-movement/composition/cinematography/blocking 每镜并行)
+        → dialogue-direction(台词演法,开启对白语音时;p6-dialogue-fit 之后)
         → continuity-planning → transition-design(过场设计,模式≠极简)
                                [G6 闸门 + H3A 分镜确认(每集签字;签字即接受剩余过场建议)]
                              │
@@ -388,6 +389,7 @@ refs/
 | cinematography | 本集镜头语言规范(镜头焦段习惯、色温倾向、景深策略) | directing_plan、style | `epNN/cinematography.json` | QA:art-director 会签 |
 | blocking(每镜) | 人物调度(站位、走位、动作节拍;**每入画角色附站位片段 `space_fragment_en`(内容语言随界面语言,2026-08-24;句内地标词逐字取 layout.json `name_en`,其语言亦随界面语言——2026-08-24 二订)——场景地标关系 + 屏侧方位 + 朝向,简短(≤25 英文词或 ≤40 字),下游 prompt 逐字拼入不翻译,2026-07-23**;**本镜站位必须落在所属组 blocking_map 的动线上(组首镜=start、组尾镜=end、中间镜沿 path),地标词逐字取场景 layout.json `name_en`,2026-08-19,仅「人物精确空间位置」开启时**;**对白镜(`is_dialogue=true`)每说话角色附表演意图层节拍 `performance`(2026-08-26):goal / arc_from→arc_to / trigger{line_ref, word=冻结台词原文子串} / forbidden_early[] / end_state(≤40 字可见静止状态,禁 AU 编码与抽象情绪词,下游 prompt 逐字拼入);非对白镜仅情绪峰值场建议填**) | shot_list(含组 blocking_map)、scene、场景 layout.json、relationship | `shots/<id>/blocking.json` | 机检:人物在场合法性(该时间点该人物必须在该地点,查 story_timeline);**space_fragment_present:每角色必含非空 `space_fragment_en`(语言随界面语言,2026-08-24),含地标/屏侧词,无数值坐标与运镜词(2026-07-23)**;**blocking_on_map:与组级 blocking_map 位置一致、地标词在 layout.json 存在(2026-08-19)**;**performance_present:对白镜每说话角色 `performance` 六字段非空、trigger.word 为台词原文子串、end_state 合规(2026-08-26,仅对白镜)** |
 | continuity-planning | 跨镜头连续性检查表:轴线、光线方向、服装/道具状态;**group_transitions 镜像 shot_list `transition_in`,可渲染转场边界 anchor 必须 none、match_cut 边界核首尾构图对位(transition_anchor_consistent,2026-08-28)**;组间衔接检查(组边界轴线/光线/服装、尾帧锚链完整;**边界两侧镜角色集合比对标 cast_change,阵容变化边界核首镜与前组尾镜构图显著不同——景别/机位/站位至少一项明显变化,2026-07-23**);**lighting_chain 逐条挂 time_of_day/lighting_scheme_id,核 key_light 与 scheme 昼夜相容、跨组时段跳变有 story_timeline 依据(2026-07-20)** | shot_list + 各镜头设计 + scenes lighting.json | `epNN/continuity_plan.json` | 机检:轴线跳变清单为空或有豁免说明;组衔接表覆盖全部相邻组;**boundary_cast_framing:cast_change 边界首镜与前组尾镜同景别同机位近似构图=FAIL(2026-07-23,前科 grp018→grp019 汤米瞬现)**;**时段链:lighting_chain 时段字段与 shot_list 一致、光照描述与 scheme 昼夜相容、无依据的昼夜跳变=FAIL**;QA:timeline-qa 会签 |
+| dialogue-direction(`p6-dialogue-direction`,每集,2026-10-02;**仅项目开启「生成对白语音」或对白配音=后期配音、且本集有对白时派发**——否则不派发、g6 不 HOLD) | **台词演法(§8A「台词演法」)**:对白定稿后逐句写演法(状态 + 怎么演 + 语速 / 音量 / 停顿)、场景与对象、语速档,宿主算目标时长并按镜长收口;对白语音库 / 后期配音按它合成。只走宿主 CLI `code/dialogue_direction.py plan → apply --file → check`,不直接编辑 shot_list、不合成语音、不重写已有有效演法 | 定稿 shot_list(经 `plan`)、screenplay 对应场次、script_breakdown 情绪标注 | `shot_list.json` 的 `dialogue_lines[].delivery`(CLI 写)、`runs/<task_id>/directions.json` | 机检 `dialogue_direction_bound`(每句有说话人编号的对白都有有效演法;目标时长超镜长只 WARN,回执 overflow 由 orchestrator 回派对白精简 / 调镜长) |
 | transition-design(`p6-transition-design`,每集,2026-09-26;**仅生效过场模式 ≠ 极简时派发**——极简不派发、g6 不 HOLD) | **过场设计二期(§9C「过场设计」,docs/transition_design.md)**:分镜定稿后逐组边界出过场建议——只跑宿主 CLI `code/transition_design.py`:`propose`(按项目 / 集级「过场模式」直出主设计 + 候选;导演清单已定的非硬切转场记 accepted 不动)→ 逐边界复核:对照导演阐述「转场清单」与剧本场尾「转场:」句核诊断 `class`(换场景 / 跳时间 / 进出叙事块 / 同场景),核字卡 / 叠字文字(推定时间词与剧情不符用 `card --lines` 改,语言随剧本),按本组首镜景别 / 定场素材可用性 / 插入预算在候选间取舍(`design --boundary … --alt N` 或 `--design '<json>' --note 理由`;**只改主设计、状态仍 proposed,不 accept、不 apply**);模式允许生成式过场时定场空镜为 i2v(首帧静帧 `clips --prepare` 先渲出供用户在过场卡预览),不允许时不得硬塞 i2v / bridge;`check` 全无 FAIL 才交付。已由用户 / 导演清单裁决的边界不改,异议走 `--boundary … feedback` | shot_list.json(generation_groups / transition_in)、directing_plan.md「转场清单」、screenplay.md 场次头 / 转场句、continuity_plan.json、scenes index、全景 / 分镜背景图 / 场景图现货 | `directing/epNN/transition_design.json`(设计表;`shot_list.transition_in` 由用户裁决或 H3A 签字后经宿主 apply 写回) | 机检 `transition_design_ok`(`transition_design.py check`:设计表在、契约合法、换场景/跳时间/叙事块边界 100% 归类且 proposed/none/accepted、已接受与 shot_list 一致、`transition_design_generative_allowed`;proposed = WARN 由 H3A 收口) |
 | concept-coverage-audit(art-director,每集) | 汇总 shot_list 本集出场实体(角色/场景/剧情道具/生物 CRE-*)× 所需视图,比对 `concepts/` 与 `props.json` 现货,列缺口清单并回派 character-concept/costume-concept/environment-concept/prop/creature-concept 补齐(§6A) | shot_list、`assets/concepts/`、`bible/props.json`、`bible/creatures/`、appearance/environment/props/creature 设定 | `directing/epNN/concept_coverage.json` | 机检 `concept_coverage_ok`:出场实体 × 所需视图 100% 有现货;补出概念图过 visual-qa + character-consistency-qa 常规打分入库 |
 
@@ -699,6 +701,17 @@ cast 人物。严禁逐行交替或从人物图片推断性别；`ready_for_digi
 > **前置不变**:分镜/prompt/组生成与视频原声模式完全一致——对白组照写 `{}` 台词、照挂逐角色
 > voiceprint 音色锚、人物开口表演由模型原生生成(原生对白语音就是**开口时段的时间依据**,也是
 > 说话人对位的参照);§7D 对白估时闸门、speakers_le_3、audioref_bound 等全部照旧。
+> **台词演法(2026-10-02,`modules/dialogue_direction.py`;仅「生成对白语音」开启或对白配音=后期配音时)**:对白语音只带一个情绪
+>   标签逐句孤立合成,语气平、时长靠事后变速去贴镜长。对白定稿(`p6-dialogue-fit`)后由 `07-directing/dialogue-direction`
+>   (`p6-dialogue-direction`,每集)逐句写**演法**存进 `shot_list.json` 的 `dialogue_lines[].delivery`:`direction`
+>   (状态 + 怎么演 + 语速 / 音量 / 停顿,点出重音字、句尾怎么收)、`scene`(在哪、对谁说、刚发生了什么;转述不引整句话)、
+>   `pace`(fast / medium / slow)。只走宿主 CLI:`python3 code/dialogue_direction.py plan|apply|set|clear|check --project <slug> --ep epNN`
+>   ——`plan` 给逐句上下文(剧本情绪、画面、动作、上一句、镜长、各档秒数),`apply --file` 批量写入并由宿主按字数算
+>   `target_s`、按本镜可用时长收口,同时把分镜表里缺的 `emotion` 按剧本补回;机检 `dialogue_direction_bound`。
+>   台词之后再改,该句演法按台词指纹作废(机检 FAIL,重跑节点)。**合成**:带有效演法的句子,火山 Doubao-音频生成 1.0 走
+>   「导演式提示词」(音色只取声纹卡一句话 + 演法 + 场景 + 目标时长,样本只取音色)并按目标时长出声;其余渠道只把演法
+>   当语气指令(支持指令的才生效),场景与目标时长用不上。没写演法的句子照旧。用户可在分镜预览页「对白语音」面板
+>   逐句试听、改演法 / 语速档 / 目标时长,保存后刷新对白语音重出该句。
 > **对白语音库(2026-09-13,输出设置「生成对白语音」)**:开启时 `dub_group.py` 先惰性同步本组各镜的库(`assets/audio/voice/epNN/tts/`,
 >   自然语速、同一套 casting/声纹卡/voiceprint 嗓音模板),首轮直接取库音频、只在贴合需要改语速时才重新合成(重出仍落 dub 目录不回写库);
 >   关闭时行为不变(逐句自行合成)。

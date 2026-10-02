@@ -5997,6 +5997,57 @@ def _seedaudio_char_desc(character: str, variant: str, project: str, output: str
     return ",".join(parts)
 
 
+def _seedaudio_char_brief(character: str, variant: str, project: str, output: str) -> tuple[str, str]:
+    """导演式提示词用的(称呼, 一句话音色):称呼取人物规范名(旁白=「旁白」);音色只取声纹卡 timbre 的头一句
+    加音高档位——整段声学规格(基频多少 Hz、鼻腔胸腔比、句读习惯)会压过表演指示,有的还和情绪打架。"""
+    try:
+        from modules.timbre_selector import _resolve_project
+    except ImportError:                               # 脚本直跑时无包前缀
+        from timbre_selector import _resolve_project
+    root = _resolve_project(project, output)
+    if not character:
+        card = _narrator_card(project, output)[0] if root else {}
+        desc = re.split(r"[。;;]", str(card.get("description") or SEEDAUDIO_NARRATOR_DESC))[0]
+        return "旁白", desc.strip()
+    name, v, sel = character, {}, {}
+    if root:
+        try:
+            v = json.loads((root / "bible" / "characters" / character / "voice.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            v = {}
+        name = str(v.get("canonical_name") or "").strip() or character
+        if variant:
+            sel = next((item for item in v.get("age_variants") or [] if isinstance(item, dict) and variant.casefold() in
+                        " ".join(str(item.get(k) or "") for k in ("version_id", "id", "name", "variant", "label")).casefold()), {})
+    timbre = re.split(r"[。::;;]", str(sel.get("timbre") or v.get("timbre") or "").strip())[0].strip()
+    if not timbre or "同本卡" in timbre:              # 形态分版写「同本卡 timbre 主字段」的取主字段
+        timbre = re.split(r"[。::;;]", str(v.get("timbre") or "").strip())[0].strip()
+    pitch_raw = str(sel.get("pitch") or "")
+    pitch = re.split(r"[。,,;;]", (pitch_raw if pitch_raw and "同本卡" not in pitch_raw else str(v.get("pitch") or "")).strip())[0].strip()
+    gender = {"男": "男声", "女": "女声", "male": "男声", "female": "女声"}.get(
+        str(v.get("presented_gender") or v.get("gender") or "").strip().casefold(), "")
+    parts = [timbre or gender]
+    if pitch and len(pitch) <= 8 and pitch not in parts[0]:
+        parts.append(f"音高{pitch}")
+    return name, ",".join(x for x in parts if x)
+
+
+def _seedaudio_direct_prompt(text, direction, scene, target_s, name, brief, has_ref) -> str:
+    """导演式提示词(2026-10-02,modules/dialogue_direction.py 的演法):音色一句话 + 状态与演法 + 场景与对象 + 目标时长。
+    fengshen3 ep07 六句对照实测:比「用××的语气说道」情绪明显到位,时长基本落在目标上。"""
+    lines = []
+    if has_ref:
+        lines.append(f"@音频1 是{name}的嗓音参考:只取音色。它是一段平静的念白,语气、力度、语速不要照搬它,按下面的要求来演。")
+    lines.append("生成一段纯人声干声:只有这一个人说话,无背景音乐、无环境音、无混响、无音效。")
+    if scene:
+        lines.append(f"场景:{scene}")
+    who = f"{name}({brief}{',与@音频1 同一副嗓子' if has_ref else ''})" if brief else name
+    lines.append(f"{who}{direction.rstrip('。.;;,, ')},说道:“{text}”")
+    if target_s:
+        lines.append(f"全长约 {float(target_s):g} 秒。")
+    return "\n".join(lines)
+
+
 def _seedaudio_ref(character: str, variant: str, project: str, output: str):
     """描述定制模式的自动参考锚:返回项目冻结样本路径(无则 None)。
     角色:refs/<CHAR>_<variant>_voiceprint.mp3 → refs/<CHAR>_voiceprint.mp3;
@@ -6098,21 +6149,31 @@ def _seedaudio_desc(voice, instructions, character, variant, project, output):
 
 
 def _tts_volc_seedaudio(cfg, text, output, voice, speed, instructions,
-                        character="", variant="", project=""):
+                        character="", variant="", project="", direction="", scene="", target_s=None):
     api_key = str(cfg.get("api_key") or "").strip()
-    desc, tone = _seedaudio_desc(voice, instructions, character, variant,
-                                 project, output)
     ref = _seedaudio_ref(character, variant, project, output)
     references = []
     if ref is not None:
         references.append({"audio_data": base64.b64encode(ref.read_bytes()).decode()})
-        text_prompt = ("@音频1 是说话人的嗓音参考(仅音色,非本段台词的朗读)。"
-                       "生成一段纯人声语音:无背景音乐、无环境音、无混响、无附加音效。"
-                       f"说话人(与@音频1 同一副嗓子;{desc})"
-                       f"用{tone}的语气说道:“{text}”")
+    direction = (direction or "").strip()
+    if direction:
+        # 带演法 = 导演式提示词;目标时长写进提示词(模型按它出声),语速倍率折进目标时长而不另传 speech_rate
+        name, brief = _seedaudio_char_brief(character, variant, project, output)
+        if target_s and speed and speed != 1.0:
+            target_s = round(float(target_s) / float(speed), 2)
+        desc, tone = brief, direction
+        text_prompt = _seedaudio_direct_prompt(text, direction, (scene or "").strip(), target_s, name, brief, ref is not None)
+        speed = None
     else:
-        text_prompt = ("生成一段纯人声语音:无背景音乐、无环境音、无混响、无附加音效。"
-                       f"说话人({desc})用{tone}的语气说道:“{text}”")
+        desc, tone = _seedaudio_desc(voice, instructions, character, variant, project, output)
+        if ref is not None:
+            text_prompt = ("@音频1 是说话人的嗓音参考(仅音色,非本段台词的朗读)。"
+                           "生成一段纯人声语音:无背景音乐、无环境音、无混响、无附加音效。"
+                           f"说话人(与@音频1 同一副嗓子;{desc})"
+                           f"用{tone}的语气说道:“{text}”")
+        else:
+            text_prompt = ("生成一段纯人声语音:无背景音乐、无环境音、无混响、无附加音效。"
+                           f"说话人({desc})用{tone}的语气说道:“{text}”")
     if len(text_prompt) > 3000:
         raise RuntimeError(f"seed-audio text_prompt 超 3000 字符上限"
                            f"({len(text_prompt)}):文本过长,分段合成后拼接")
@@ -6134,21 +6195,22 @@ def _tts_volc_seedaudio(cfg, text, output, voice, speed, instructions,
     if not audio_b64:
         raise RuntimeError(f"火山音频生成(seed-audio)返回空音频"
                            f"(code={resp.get('code')}):{resp.get('message') or json.dumps(resp, ensure_ascii=False)[:300]}")
-    print(f"[genmedia] seed-audio 描述定制嗓音:desc={desc!r} tone={tone!r}"
+    print(f"[genmedia] seed-audio {'导演式' if direction else '描述定制嗓音'}:desc={desc!r} tone={tone!r}"
           f" ref={ref.name if ref is not None else '无(纯描述)'}"
-          f" dur={resp.get('original_duration')}s", file=sys.stderr)
+          + (f" target={float(target_s):g}s" if direction and target_s else "")
+          + f" dur={resp.get('original_duration')}s", file=sys.stderr)
     return _save(base64.b64decode(audio_b64), output)
 
 
 def _tts_volcengine(cfg, text, output, voice, speed, instructions,
-                    character="", variant="", project=""):
+                    character="", variant="", project="", direction="", scene="", target_s=None):
     api_key = str(cfg.get("api_key") or "").strip()
     if not api_key:
         raise RuntimeError("火山 TTS 未配置 API Key(新版语音技术控制台「API Key 管理」"
                            "创建,「🎨 生成模型」页 TTS → 火山引擎 填入)")
     if (cfg.get("model") or "") == SEEDAUDIO_MODEL:
         return _tts_volc_seedaudio(cfg, text, output, voice, speed, instructions,
-                                   character, variant, project)
+                                   character, variant, project, direction, scene, target_s)
     speaker = voice or voice_library.default_voice("volcengine", cfg, cfg["model"] or "seed-tts-2.0", text)
     if not speaker:
         raise RuntimeError("火山 TTS(音色库模式)未指定音色:--voice 传 speaker 名(候选见 genmedia.py voices);"
@@ -6756,8 +6818,13 @@ def generate_upscale(input_video: str = "", output: str = "", prompt: str = "",
 
 def generate_tts(text: str, output: str, voice: str = "", speed: float | None = None,
                  instructions: str = "", character: str = "", variant: str = "",
-                 project: str = "") -> str:
+                 project: str = "", direction: str = "", scene: str = "",
+                 target_s: float | None = None) -> str:
     """TTS 旁白/语音合成,返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json 的 tts 段。
+
+    direction / scene / target_s(2026-10-02,台词演法 modules/dialogue_direction.py):演法(状态 + 怎么演 + 语速 /
+    音量 / 停顿)、场景与对象、目标时长。火山 Doubao-音频生成 1.0 按「导演式提示词」整套用上(时长也按目标出);
+    其余渠道只能把演法当语气指令传(支持指令的才生效),场景与目标时长用不上。不传 = 原来的写法。
 
     输出 .mp3 为 mp3,其余扩展名为 pcm(24kHz 裸流,需自行封装)。云渠道 voice 缺省用
     配置页默认音色(openrouter=音色名 / volcengine=speaker 名 /
@@ -6779,6 +6846,11 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
     """
     _forbid_dispatch_layer("TTS 语音")
     cfg = get_config("tts")
+    direction = (direction or "").strip()
+    seedaudio = cfg["provider"] == "volcengine" and cfg.get("model") == SEEDAUDIO_MODEL
+    if direction and not seedaudio:
+        # 不支持导演式提示词的渠道:演法降级成语气指令(火山 Seed-TTS 2.0、OpenAI 系生效;其余渠道照旧忽略)
+        instructions = direction
     if cfg["provider"] == "agentics":
         # 显式模型优先;否则出嗓音样本(*_voiceprint.*,且未显式给本地参考音频)走 Voice Design profile,其余走 Voice Clone
         explicit = str(cfg.get("model") or cfg.get("profile_code") or "").strip()
@@ -6907,7 +6979,10 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
     if not fn:
         raise RuntimeError(f"TTS 不支持渠道 {cfg['provider']}"
                            "(可选 agentics / openrouter / volcengine / minimax / elevenlabs / comfyui)")
-    if cfg["provider"] in ("comfyui", "volcengine"):
+    if cfg["provider"] == "volcengine":
+        return fn(cfg, text, output, voice, speed, instructions,
+                  character, variant, project, direction, scene, target_s)
+    if cfg["provider"] == "comfyui":
         return fn(cfg, text, output, voice, speed, instructions,
                   character, variant, project)
     return fn(cfg, text, output, voice, speed, instructions)
@@ -7253,6 +7328,12 @@ def _cmd_tts(args):
                     cfg, args.text, args.output, args.voice, args.character,
                     args.variant, args.project, args.instructions)
                 voice = f"auto:{selected['file']} ({selected['reason']})"
+        elif cfg["provider"] == "volcengine" and cfg.get("model") == SEEDAUDIO_MODEL and args.direction.strip():
+            name, brief = _seedaudio_char_brief(args.character, args.variant, args.project, args.output)
+            ref = _seedaudio_ref(args.character, args.variant, args.project, args.output)
+            print("[dry-run] 导演式提示词:\n" + _seedaudio_direct_prompt(
+                args.text, args.direction.strip(), args.scene.strip(), args.target_duration, name, brief, ref is not None))
+            voice = f"direct:{name}({brief});参考锚:{ref.name if ref is not None else '无'}"
         elif cfg["provider"] == "volcengine" and cfg.get("model") == SEEDAUDIO_MODEL:
             desc, tone = _seedaudio_desc(args.voice, args.instructions, args.character,
                                          args.variant, args.project, args.output)
@@ -7266,7 +7347,8 @@ def _cmd_tts(args):
               f" format={'mp3' if Path(args.output).suffix.lower()=='.mp3' else 'pcm'} → {args.output}")
         return
     out = generate_tts(args.text, args.output, args.voice, args.speed, args.instructions,
-                       args.character, args.variant, args.project)
+                       args.character, args.variant, args.project,
+                       args.direction, args.scene, args.target_duration)
     print(f"已生成: {out}")
 
 
@@ -7364,6 +7446,12 @@ def main():
     pt.add_argument("--instructions", default="",
                     help="语气/情绪指令(OpenAI 系模型生效,火山注入情绪指令;"
                          "comfyui 参与音色自动匹配、不注入合成)")
+    pt.add_argument("--direction", default="",
+                    help="演法(台词表演指示:状态 + 怎么演 + 语速 / 音量 / 停顿);火山 Doubao-音频生成 1.0 走导演式提示词,"
+                         "其余渠道降级成语气指令。对白语音库自动从分镜表带入,一般不用手传")
+    pt.add_argument("--scene", default="", help="配合 --direction:场景与对象(在哪、对谁说、刚发生了什么)")
+    pt.add_argument("--target-duration", type=float, default=None,
+                    help="配合 --direction:目标时长(秒),写进提示词让模型按它出声(仅火山 Doubao-音频生成 1.0)")
     pt.add_argument("--dry-run", action="store_true")
 
     pvo = sub.add_parser("voices", help="音色库候选(音色库模式):按人物声纹卡自动打分排序,输出 JSON;"

@@ -21,6 +21,9 @@
 #   transition_design_enabled: = 本集生效「过场模式」≠ minimal(settings.json#transitions.mode,集级 episode.json#transitions_mode 覆盖;
 #     `python3 code/transition_design.py mode --project <slug> --ep epNN` 的 mode)——开启时实例化 p6-transition-design(07-directing/transition-design)
 #     并加进 g6 依赖;极简 = 不实例化、g6 不因缺它而 HOLD(2026-09-26,docs/transition_design.md)
+#   dialogue_direction_enabled: = 项目输出设置 output.dialogue_tts 开启(或 output.dialogue_voice=dubbing)且本集 shot_list 有对白——
+#     开启时实例化 p6-dialogue-direction(07-directing/dialogue-direction)并加进 g6 依赖;否则不实例化、g6 不因缺它而 HOLD
+#     (2026-10-02,WORKFLOW.md §8A「台词演法」)
 #   transition_clips_requested: = H3A 定稿的 shot_list 里含需视频生成的过场插入段(establishing source.mode=i2v / bridge;
 #     `python3 code/transition_design.py clips --project <slug> --ep epNN` 列出非空)——只在模式允许生成式过场(电影感 / 自定义勾选)时可能为真;
 #     真时实例化 p7-transition-clips(08-video-gen/video-generation,每集)并加进 g7 依赖;假 = 不实例化、g7 不因缺它而 HOLD
@@ -276,6 +279,13 @@ phases:
                                lines_text_match_source,   # 以上 5 项 code/check_dialogue_fit.py --project --ep 全批执行,退出码 0 为 PASS
                                style_hit_rate_gte_80, non_dialogue_layer_diff_zero],   # 精简后风格命中率不降、非对白层零改动
                         qa: [11-qa/logic-qa] } }   # 仅精简发生时会签:改短不得引入逻辑断裂
+      # 台词演法(2026-10-02,WORKFLOW.md §8A):对白定稿后逐句写「导演式」演法 + 语速档,宿主算目标时长并按镜长收口,存进 shot_list
+      # dialogue_lines[].delivery;对白语音库 / 后期配音按它合成(情绪到位、时长落在镜长内)。只走宿主 CLI code/dialogue_direction.py
+      # (plan → apply → check),工位不直接编辑 shot_list、不合成语音。用户可在分镜预览页「对白语音」面板逐句改。
+      - { id: p6-dialogue-direction, agent: 07-directing/dialogue-direction, condition: dialogue_direction_enabled,
+          depends_on: [p6-shots, p6-dialogue-fit],   # 台词再改 = 演法作废(text_sha 不符),需重跑本节点
+          outputs: ["directing/{ep}/shot_list.json"],   # 只动 dialogue_lines[].emotion / delivery
+          validation: { auto: [dialogue_direction_bound] } }   # code/dialogue_direction.py check:每句有说话人编号的对白都有有效演法;目标时长超镜长只 WARN
       - { id: p6-camera, agent: 07-directing/camera-movement, for_each: shot, depends_on: [p6-shots],
           outputs: ["directing/{ep}/shots/{shot}/camera.json"], validation: { auto: [movement_supported] } }
       - { id: p6-composition, agent: 07-directing/composition, for_each: shot, depends_on: [p6-shots],
@@ -321,7 +331,7 @@ phases:
           depends_on: [p6-shots, p6-continuity, p6-shot-plates, p6-scene-plates],   # 条件节点缺席时按惯例解除对应依赖
           outputs: ["directing/{ep}/transition_design.json"],
           validation: { auto: [transition_design_ok] } }   # code/transition_design.py check:设计表在、契约合法、换场景/跳时间/叙事块边界 100% 归类且有建议或 none、已接受与 shot_list 一致、生成式插入段只在模式允许时出;proposed 只 WARN(用户裁决 / H3A 接受)
-      - { id: g6, gate: true, human: true, checkpoint: H3A-分镜确认, depends_on: [p6-continuity, p6-cinematography, p6-concept-audit, p6-dialogue-fit, p6-shot-plates, p6-scene-plates, p6-transition-design] }   # 每集(签字弹窗同时确认本项目「视频提示词技能」:auto 按生效视频模型解析/手选/跳过,签字即冻结快照 settings.json#prompt_skill.effective,§7F 2026-08-28):用户在「分镜设定」预览页审看分镜/组划分/旁白挂点(含估时适配)/逐组音频形态与无声组判定/概念图覆盖审计(§6A)后签字,未签字不派 p7;§6A concept_coverage_ok 与 §7D ① 估时级机检(挂点适配+audio_plan+无声组判定)未过不得发起签字
+      - { id: g6, gate: true, human: true, checkpoint: H3A-分镜确认, depends_on: [p6-continuity, p6-cinematography, p6-concept-audit, p6-dialogue-fit, p6-dialogue-direction, p6-shot-plates, p6-scene-plates, p6-transition-design] }   # 每集(签字弹窗同时确认本项目「视频提示词技能」:auto 按生效视频模型解析/手选/跳过,签字即冻结快照 settings.json#prompt_skill.effective,§7F 2026-08-28):用户在「分镜设定」预览页审看分镜/组划分/旁白挂点(含估时适配)/逐组音频形态与无声组判定/概念图覆盖审计(§6A)后签字,未签字不派 p7;§6A concept_coverage_ok 与 §7D ① 估时级机检(挂点适配+audio_plan+无声组判定)未过不得发起签字
 
   - id: p7
     name: 视觉生成                # 生成组范式:一组同场景相邻镜头一次 Seedance 多镜头生成(WORKFLOW.md §7A)

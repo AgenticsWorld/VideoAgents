@@ -329,6 +329,18 @@ async def dialogue_tts_get(project: str, ep: str) -> dict[str, Any]:
     return await core.api_dialogue_tts_get(project, ep)
 
 
+@api.get("/projects/{project}/episodes/{ep}/dialogue-direction", tags=["artifacts"])
+async def dialogue_direction_get(project: str, ep: str) -> dict[str, Any]:
+    """台词演法逐句清单(2026-10-02):台词 / 剧本情绪 / 演法 / 目标时长 + 对白语音库里这句的音频与状态。"""
+    return _artifact_urls(await core.api_dialogue_direction_get(project, ep), project)
+
+
+@api.post("/projects/{project}/episodes/{ep}/dialogue-direction", tags=["artifacts"])
+async def dialogue_direction_set(project: str, ep: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    """改一句的演法:{shot_id, idx?, direction, scene?, pace?|target_s?};direction 为空 = 摘掉。写分镜表 dialogue_lines[].delivery。"""
+    return _artifact_urls(await core.api_dialogue_direction_set(project, ep, body or {}), project)
+
+
 @api.post("/projects/{project}/episodes/{ep}/dialogue-tts/sync", tags=["artifacts"])
 async def dialogue_tts_sync(project: str, ep: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
     """「刷新对白语音」:{force?} 宿主后台跑 code/dialogue_tts.py 惰性同步,结束发 SSE dialogue_tts。"""
