@@ -11,7 +11,7 @@
 | 文件 | 谁写 | 内容 |
 |---|---|---|
 | `directing/epNN/transition_design.json` | 宿主 CLI `code/transition_design.py`(propose / design / card / accept / reject / apply) | 每集一张设计表 `schema transition_design.v1`:逐边界 `id B-grpA-grpB` / 诊断(换场景 / 跳时段 / 阵容 / 光线 / 叙事块进出、剧本转场句、导演声明、continuity 判定、字卡文字候选、定场素材可用性)/ `design` / `alternatives[]` / `status`(proposed / accepted / rejected / none)/ `source`(mode / agent / user / shot_list / post_plan)/ `feedback[]` |
-| `directing/epNN/shot_list.json#generation_groups[].transition_in` | 只由 `apply` 投影写回 | **唯一定稿字段**。一期扩展:`join.style`(dissolve 的 xfade 风格族)、`inserts[]`(`title_card` / `establishing` / `timelapse` / `bridge`,单段 0.5–4 s、单边界 Σ ≤ 6 s、首组不得)、`overlay_card`(叠字幕,不变长)、`audio_lead_s` |
+| `directing/epNN/shot_list.json#generation_groups[].transition_in` | 只由 `apply` 投影写回 | **唯一定稿字段**。一期扩展:`join.style`(dissolve 的 xfade 风格族)、`inserts[]`(`title_card` / `establishing` / `timelapse` / `bridge`,单段 0.5–4 s、单边界 Σ ≤ 6 s、首组不得)、`overlay_card`(叠字幕,不变长)、`sound_bridge {kind, s, carry}`(四期声桥,2026-10-03 改版;存量 `audio_lead_s` 读入时自动归一为 `{j, s, bed}`) |
 | `assets/transitions/epNN/<B-id>.establishing.mp4` + `.still.jpg` | video-generation(clip)/ 宿主 `clips --prepare`(首帧静帧) | 二期:生成式定场空镜 clip 与其首帧 |
 | `assets/transitions/epNN/<B-id>.bridge.mp4` | video-generation | 生成式桥接 clip(首尾帧贴前组尾 / 本组首) |
 | `edit/epNN/transitions/<B-id>/` | `render_transitions.py build` | 渲好的插入段 `ins{k}.mp4`、字卡 / 叠字 PNG、预览小片、`meta.json`(指纹) |
@@ -93,7 +93,8 @@ python3 code/render_transitions.py plan|build|preview|render|check --project <sl
 | `transition_ok`(transition_type_valid / transition_reason_required / transition_pad_valid / transition_join_valid / transition_insert_valid / transition_insert_budget / transition_close_valid / narrative_block_paired) | check_generation_groups.py | shot_list `transition_in` 契约不合法;i2v 缺 `source.file` |
 | `transition_design_ok`(present / contract / coverage / applied / generative_allowed / transition_ok;clips_ready WARN) | transition_design.py check | 设计表缺(非极简)、契约不合法、有变化边界缺条目、已裁决未同步、模式不允许却出了 i2v / bridge |
 | `transition_clips_ready`(+ `transition_clip_stills` WARN) | transition_design.py clips --check | 定稿的 i2v / bridge clip 缺文件或时长不足 |
-| `motion_pair_valid` / `transition_audio_lead_valid`(入 transition_ok) | check_generation_groups.py | 配对不合法 / 与 inserts 并用 / 首组 / 缺 reason;音先入 >1 s / 配了插入段或黑场 |
+| `motion_pair_valid` / `transition_sound_bridge_valid`(入 transition_ok) | check_generation_groups.py | 配对不合法 / 与 inserts 并用 / 首组 / 缺 reason;声桥 s ∉ (0,1.5] / 配了插入段或黑场 / type 非 hard_cut·dissolve / `carry: line` 但切点旁无画外句或声画分离关 |
+| `sound_bridge_built`(p8-mix 验收) | code/sound_bridge.py check / mix_basis check | 有声桥的边界缺底床片段或构建指纹落后于取源版本 / 设计 |
 | `motion_pair_bound` | sync_motion_pairs.py | 两侧组 prompt 缺运镜对接句、句子不在正确 Shot 段、残留过期句 |
 | `transition_render_ok`(… inserts_built / insert_frames_verified / insert_budget_ok) | render_transitions.py check | 生成式 clip 缺失、段文件缺、指纹过期、预算超 |
 
@@ -108,20 +109,22 @@ python3 code/render_transitions.py plan|build|preview|render|check --project <sl
 **成对运镜 `motion_pair`**
 
 - 字段:`transition_in.motion_pair {"out": <前组尾镜运镜>, "in": <本组首镜运镜>, "speed": slow|medium|fast}`;合法配对 `MOTION_PAIRS`(check_generation_groups.py):`pan_left/right`、`tilt_up/down`、`whip_pan_left/right`、`dolly_left/right` 同向延续,`push_in ↔ pull_out` 互补。机检 `motion_pair_valid`:配对合法、type ∈ hard_cut/dissolve、与 inserts 互斥、首组不得、须写 reason。
-- 出处:电影感模式下换场景 / 跳时间边界的候选「成对运镜 + 音先入」(默认 pan_right→pan_right medium;工位按两侧构图 `design --design` 改方向);自定义 `custom_map` 选 `motion_pair` 为主设计。
+- 出处:电影感模式下换场景 / 跳时间边界的候选「成对运镜 + 声先入」(默认 pan_right→pan_right medium;工位按两侧构图 `design --design` 改方向);自定义 `custom_map` 选 `motion_pair` 为主设计。
 - 落地:不是插入段,而是**两侧组 prompt 各一句**。宿主 `code/sync_motion_pairs.py --project <slug> --ep epNN [grp…] --write`(`modules/motion_pairs.py`):前组**最后一个** `Shot N:` 段末追加「【运镜对接】本镜结尾以中速向右横摇带出画面,收尾时主体已移出画外,运镜不停、不减速;下一组从同一向右横摇接入。」,本组 **`Shot 1:`** 段末追加「【运镜对接】本镜开头延续上一组的中速向右横摇接入,前 0.5 秒画面仍在向右横摇中,随后稳定到本镜构图;开头不切镜、不叠化。」(非中文界面 `Motion pair:` 英文句);幂等(先剔旧标记句),设计撤了只剔除,原 prompt 首次备份到 `directing/epNN/whitebox/prompt_backups/`。机检 `motion_pair_bound`(p7-prompt 验收项):两侧句子在、落在正确 Shot 段、无残留过期句;组 prompt 未写 = skipped;无 motion_pair 的集 PASS。
 - 页面:过场卡接缝标签显示「成对运镜 out→in」。
 
-### 四期(2026-09-26):音先入 `audio_lead_s`(J-cut)
+### 四期(2026-09-26 立,2026-10-03 改版):声桥 `sound_bridge`(J-cut / L-cut)
 
-- 字段:`transition_in.audio_lead_s` ∈ (0, 1](默认 0.5)——本组原生声轨比画面早这么多秒进入,压在前组尾画面上。机检 `transition_audio_lead_valid`:只配无 inserts / 无 hold_s 的 hard_cut / dissolve、首组不得、须写 reason。
-- 出处:电影感模式下换场景的「只叠地点字幕(不变长)」方案与「成对运镜」候选默认带 0.5 s;出块边界给「硬切 + 音先入」候选;自定义 `custom_map` 选 `j_cut`。经典 / 极简不出。
-- 落地在混音,不在画面:`render_transitions` 不处理它(cut_v2 自带声轨不是成片声轨),timemap 不变。`mix_basis.py sources` 的 `boundaries[]` 也列出 `total_s=0` 但 `audio_lead_s>0` 的边界(`LEAD` 行打印起点),边界指纹在 lead>0 时追加第 4 项(无音先入的项目指纹与旧口径一致);audio-mixing 把该组原生轨从 `cum_start_s − audio_lead_s` 起铺、重叠段前组渐弱 / 本组渐强,BGM / 旁白 / wav 总长不变。改了 lead = 边界指纹变 = `mix_basis_current` 报 stale(占时未变的专用文案)须重跑 p8-mix。
-- 页面:过场卡接缝标签显示「音先入 0.5s」。
+- **旧语义作废**:四期原字段 `audio_lead_s` 的落法是「本组原生轨从 cum_start_s − lead 起铺」= 整条原生轨提前 lead 秒,对白组整组口型错位,不是 J-cut。改版后字段消失:宿主 `transition_of()` 把存量 `audio_lead_s` 自动归一为 `sound_bridge {kind: j, s, carry: bed}`,边界指纹随之变 → `mix_basis_current` 报 stale,重混一次即可;不加兼容开关。
+- 字段:`transition_in.sound_bridge = {kind: j|l, s ∈ (0, 1.5], carry: bed|line}`。`j` 声先入 = 下组声音压在本组尾画面上;`l` 声延续 = 本组声音拖过切点压在下组首画面上;`carry: bed` = 去人声的底床预滚 / 延续,`carry: line` = 一句画外台词跨切点(**仅项目「声画分离」≠ 关且切点旁有画外句**:J 要下组首镜 `heard_in` 含首镜的 os/vo 句,L 要前组末镜 `heard_in` 含末镜的 os/vo 句;否则退 bed;docs/sound_split.md)。机检 `transition_sound_bridge_valid`:s 区间、只配无 inserts / 无 hold_s 的 hard_cut / dissolve、首组不得、须写 reason、carry line 的画外句存在性。
+- 设置:`settings.json#transitions.sound_bridge_s`(0.1–1.5,默认 0.5)、`transitions.sound_bridge_carry`(bed 默认 / line),所有模式都存(视频节奏设置「声桥默认」两项)。生效:极简 / 经典不出声桥候选;电影感换场景 / 跳时段边界 propose 自动给 J(carry bed)主设计,前组尾镜无画内对白且下组首镜定场 / 远景或无对白时另给 L 候选;自定义 `custom_map` 选 `j_cut`(声先入)/ `l_cut`(声延续)为主设计。
+- 落地在混音,不在画面:`render_transitions` 不处理它(cut_v2 自带声轨不是成片声轨),timemap 不变。① 宿主 `python3 code/sound_bridge.py build|check --project <slug> --ep epNN [--force]`(audio-mixing 在 `mix_basis.py sources` 之后、铺轨之前必跑):按 `sources` 各组取源文件(当前采纳版本)出底床片段 `edit/epNN/sound_bridges/<B-id>.j.wav|.l.wav` + `manifest.json`——J bed = 下组取源音频开头 s 秒去人声、s 秒渐强;L bed = 前组取源音频结尾 ≤1 s 去人声循环延续到 s 秒、两端 40 ms 淡化、s 秒渐弱;去人声走 `modules/audio_separation`,模型不可用回落低通 4 kHz + −6 dB 并 WARN;`carry: line` 不出文件;幂等,构建指纹 = 取源文件 + kind/s/carry。② 摆位:`mix_basis.py sources` 的 `boundaries[]` 也列出 `total_s=0` 但带 `sound_bridge {kind, s, carry, file, status}` 的边界(`BRIDGE` 行打印),边界指纹追加声桥项;audio-mixing 四种摆位——**J bed**:file 从 `cum_start_s(B) − s` 起铺(渐强),前组原生轨不变、**本组原生轨仍从 cum_start_s 同步起**;**J line**:无文件,下组首句画外句由 `offscreen_lines[]` 的 t0(可 < cum_start_s)承担;**L bed**:file 从 `cum_start_s(B)` 起铺 s 秒(渐弱),本组原生轨前 s 秒从 −12 dB 渐强到 0;**L line**:前组末句画外句 t0 + duration 越过切点,本组原生轨同样前 s 秒渐强。BGM / 旁白 / wav 总长不变。stamp 盖边界指纹(含声桥)+ sound_bridge 构建指纹;改了声桥或未 build = `mix_basis_current` FAIL / `sound_bridge_built` FAIL,重跑 p8-mix。
+- 与声画分离联动:`carry: line` 时 offscreen_lines 窗口放宽——J:下组首镜 heard_in 的画外句 `offset_s` 可为负(≥ −s,缺省 −s);L:前组末镜 heard_in 的画外句窗口 end + s。
+- 页面:过场卡接缝标签显示「声先入 0.5s」/「声延续 0.5s」(carry line 加「·画外台词」);新「声桥」行(无 / J / L + 秒数 + 承载)经 `decide {action: design}` 写回设计。
 
 ## 未做 / 后续
 
 - 机检 `establishing_on_scene_change`(电影感 / 自定义「新场景首镜必须定场」时新场景首镜景别 ≥ 全景且无近景人物)未落地。
-- 音先入只在成片混音里体现,过场卡「▶ 出预览」小片仍是静音,听不到 J-cut。
+- 声桥只在成片混音里体现,过场卡「▶ 出预览」小片仍是静音,听不到 J/L-cut;底床片段真跑(去人声模型)未在真项目验证。
 - 成对运镜只写 prompt,不回写 `shots/<id>/camera.json`;运镜工位 / 白模不知道这一对。
 - 真项目未跑二至四期节点;服务须重启后 H3A 签字接受 / 提示词「过场模式」段才生效。

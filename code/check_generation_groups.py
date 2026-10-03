@@ -43,8 +43,10 @@
                                        overlay_card(叠字幕,不变长)duration_s ≤ 6s;bridge / i2v 定场须给 clip 文件路径(assets/transitions/)
   11f. motion_pair_valid              三期(2026-09-26):成对运镜 motion_pair {out, in, speed}:out/in 在 MOTION_PAIRS 配对表内且互为配对,
                                        type ∈ hard_cut/dissolve,与 inserts / bridge 互斥,首组不得,须写 reason(写进两侧组 prompt:code/sync_motion_pairs.py)
-  11g. transition_audio_lead_valid    四期(2026-09-26):音先入 audio_lead_s ∈ (0,1],只配无 inserts / 无 hold_s 的 hard_cut/dissolve,首组不得,须写 reason
-                                       (由 audio-mixing 按 mix_basis sources boundaries[].audio_lead_s 摆位,画面与 timemap 不动)
+  11g. transition_sound_bridge_valid  四期(2026-09-26 音先入;2026-10-03 改版为声桥 sound_bridge {kind j|l, s ∈ (0,1.5], carry bed|line}):
+                                       只配无 inserts / 无 hold_s 的 hard_cut/dissolve,首组不得,须写 reason;carry=line 须切点旁有画外句
+                                       (声画分离 ≠ 关);存量 audio_lead_s 自动归一为 {kind:j, carry:bed}。由 audio-mixing 按 mix_basis sources
+                                       boundaries[].sound_bridge 摆位(J bed 预滚 / L bed 延续,本组原生轨不提前),画面与 timemap 不动
   11e. transition_close_valid         集尾收束(2026-09-25,§9C):shot_list 顶层可选 episode_close {type: hard_cut|fade_black|fade_white|cut_black|cut_white,
                                        duration_s ∈ [0.3,3](淡出类), hold_s ∈ [0,3](淡出后黑/白场停留;切黑类须 >0), hold_audio ∈ fade|mute};缺省 = 项目设置
                                        settings.json#transitions.episode_close(默认淡出到黑 1.0s + 黑场 0.5s);hard_cut = 显式不处理(停在末帧)
@@ -137,9 +139,14 @@ MOTION_PAIRS = {
     "push_in": "pull_out", "pull_out": "push_in",               # 推进 ↔ 拉出互补
 }
 MOTION_SPEEDS = ("slow", "medium", "fast")
-# —— 四期(2026-09-26):音先入 audio_lead_s(J-cut)——本组原生声轨比画面早 0–1 s 进入,由 audio-mixing 按 mix_basis sources 的
-#    boundaries[].audio_lead_s 摆位(render_transitions 不动画面、不动 timemap);只配无插入段、无黑场停留的 hard_cut / dissolve 边界
+# —— 四期:声桥 sound_bridge(2026-10-03 改版;原「音先入 audio_lead_s」语义=整条原生轨提前 lead 秒,对白组会整组口型错位,已作废)——
+#    {kind: j 声先入(下组声音压在本组尾画面上)| l 声延续(本组声音拖过切点压在下组首画面上), s ∈ (0,1.5], carry: bed 底床预滚/延续 | line 画外台词跨切点}
+#    由 audio-mixing 按 mix_basis sources 的 boundaries[].sound_bridge 摆位(render_transitions 不动画面、不动 timemap;本组原生轨仍从切点同步起);
+#    只配无插入段、无黑场停留的 hard_cut / dissolve 边界;存量 audio_lead_s 由 transition_of 归一为 {kind:j, s, carry:bed}
 AUDIO_LEAD_TYPES = ("hard_cut", "dissolve")
+SOUND_BRIDGE_KINDS = ("j", "l")
+SOUND_BRIDGE_CARRIES = ("bed", "line")
+SOUND_BRIDGE_MAX_S = 1.5
 INSERT_MIN_S, INSERT_MAX_S = 0.5, 4.0          # 单段
 BOUNDARY_INSERT_MAX_S = 6.0                    # 单边界 Σinserts
 INSERT_JOINS = ("hard_cut", "dissolve", "dip_black", "dip_white", "fade_black", "fade_white")   # 插入段 → 下一段的接缝
@@ -149,7 +156,7 @@ CARD_BG = ("black", "white", "color", "blur_prev")
 ESTABLISHING_MODES = ("pano_sweep", "plate_kenburns", "i2v")
 OVERLAY_POSITIONS = ("bottom_left", "bottom_right", "center", "top_left", "top_right")
 OVERLAY_MAX_S = 6.0
-AUDIO_LEAD_MAX_S = 1.0
+AUDIO_LEAD_MAX_S = 1.0                         # 旧字段上限(归一时 >1.5 的也会被 SOUND_BRIDGE_MAX_S 拦)
 INSERT_BUDGET_DEFAULT_PCT = 8.0               # 读不到项目「过场模式」时的兜底(经典档)
 BLOCK_KINDS = ("flashback", "dream", "montage", "imagination")
 BLOCK_ROLES = ("start", "middle", "end", "single")
@@ -546,6 +553,27 @@ def check_7d(shot_list: dict, narration_md: str | None,
     return errors
 
 
+def sound_bridge_of(t: dict) -> dict | None:
+    """transition_in 的声桥(规范化):sound_bridge 对象优先,否则存量 audio_lead_s → {kind: j, s, carry: bed};s ≤0 / 非法 kind = None。
+    不在此处判上限与适用条件(交 check_transitions 报 transition_sound_bridge_valid)。"""
+    raw = t.get("sound_bridge") if isinstance(t, dict) else None
+    if isinstance(raw, dict) and raw:
+        kind = str(raw.get("kind") or "j").strip().lower()
+        try:
+            s = float(raw.get("s") if raw.get("s") is not None else raw.get("duration_s") or 0.0)
+        except (TypeError, ValueError):
+            s = 0.0
+        carry = str(raw.get("carry") or "bed").strip().lower()
+        if s <= 0:
+            return None
+        return {"kind": kind, "s": round(s, 3), "carry": carry}
+    try:
+        al = float((t or {}).get("audio_lead_s") or 0.0)
+    except (TypeError, ValueError):
+        al = 0.0
+    return {"kind": "j", "s": round(al, 3), "carry": "bed"} if al > 0 else None
+
+
 def transition_of(group: dict) -> dict:
     """组入口转场,规范化:缺省 / None / 空对象 = hard_cut;垫片字段 hold_s / freeze_s 数值化(缺省 0)。"""
     t = group.get("transition_in")
@@ -601,14 +629,13 @@ def transition_of(group: dict) -> dict:
         t["overlay_card"] = oc
     else:
         t.pop("overlay_card", None)
-    try:
-        al = float(t.get("audio_lead_s") or 0.0)
-    except (TypeError, ValueError):
-        al = 0.0
-    if al > 0:
-        t["audio_lead_s"] = al
+    # 四期(2026-10-03 改版):声桥 sound_bridge 规范化;存量 audio_lead_s → {kind: j, s, carry: bed}(旧键消失)
+    sb = sound_bridge_of(t)
+    t.pop("audio_lead_s", None)
+    if sb:
+        t["sound_bridge"] = sb
     else:
-        t.pop("audio_lead_s", None)
+        t.pop("sound_bridge", None)
     # 三期(2026-09-26):成对运镜 motion_pair 规范化——非对象 / 缺 out 即丢弃;speed 缺省 medium
     mp = t.get("motion_pair")
     if isinstance(mp, dict) and mp.get("out"):
@@ -817,11 +844,34 @@ def _check_inserts(gid: str, t: dict, is_first: bool) -> tuple[list[str], float]
     return errs, total
 
 
-def check_transitions(shot_list: dict, insert_budget_pct: float | None = None) -> list[str]:
+def _bridge_line_exists(prev_g: dict, g: dict, shots_by_id: dict, kind: str) -> bool:
+    """carry=line 的前提:J → 下组首镜有 heard_in 含首镜的画外句;L → 前组末镜有 heard_in 含末镜的画外句(声画分离一期契约)。"""
+    if kind == "j":
+        ids = [x for x in g.get("shots") or [] if isinstance(x, str)]
+        target = ids[0] if ids else None
+        scan = ids
+    else:
+        ids = [x for x in prev_g.get("shots") or [] if isinstance(x, str)]
+        target = ids[-1] if ids else None
+        scan = ids
+    if not target:
+        return False
+    for sid in scan:
+        for ln in (shots_by_id.get(sid) or {}).get("dialogue_lines") or []:
+            if isinstance(ln, dict) and line_placement(ln) != "on":
+                heard = ln.get("heard_in") if isinstance(ln.get("heard_in"), list) and ln.get("heard_in") else [sid]
+                if target in heard:
+                    return True
+    return False
+
+
+def check_transitions(shot_list: dict, insert_budget_pct: float | None = None, sound_split: str | None = None) -> list[str]:
     """transition_ok(2026-08-28):组入口转场 transition_in + 叙事块 narrative_block 机检。
-    insert_budget_pct:插入段预算(% 集预算,过场设计 2026-09-24);None = 按经典档 INSERT_BUDGET_DEFAULT_PCT。"""
+    insert_budget_pct:插入段预算(% 集预算,过场设计 2026-09-24);None = 按经典档 INSERT_BUDGET_DEFAULT_PCT。
+    sound_split:项目声画分离模式(2026-10-03,声桥 carry=line 的前提);None = 不按 off 拦。"""
     errors = []
     groups = shot_list.get("generation_groups") or []
+    shots_by_id = {x.get("shot_id"): x for x in (shot_list.get("shots") or []) if isinstance(x, dict) and x.get("shot_id")}
     budget = shot_list.get("budget_s") or shot_list.get("total_duration_s") \
         or sum(g.get("total_duration_s") or 0 for g in groups)
     render_total = 0.0
@@ -895,19 +945,29 @@ def check_transitions(shot_list: dict, insert_budget_pct: float | None = None) -
                 errors.append(f"{gid} transition_insert_valid: overlay_card.duration_s={oc.get('duration_s')} ∉ (0,{OVERLAY_MAX_S:g}]")
             if oc.get("position") not in OVERLAY_POSITIONS:
                 errors.append(f"{gid} transition_insert_valid: overlay_card.position={oc.get('position')!r} 不在枚举 {list(OVERLAY_POSITIONS)}")
-        if t.get("audio_lead_s"):
-            # 四期(2026-09-26):音先入只配无插入段 / 无黑场停留的 hard_cut / dissolve 边界;首组无前组不得先入
-            al = float(t["audio_lead_s"])
-            if al > AUDIO_LEAD_MAX_S + 1e-9:
-                errors.append(f"{gid} transition_audio_lead_valid: audio_lead_s={t['audio_lead_s']} > {AUDIO_LEAD_MAX_S:g}")
+        sb = t.get("sound_bridge")
+        if sb:
+            # 四期(2026-10-03 改版):声桥只配无插入段 / 无黑场停留的 hard_cut / dissolve 边界;首组无前组不得;carry=line 须切点旁有画外句
+            if sb["kind"] not in SOUND_BRIDGE_KINDS:
+                errors.append(f"{gid} transition_sound_bridge_valid: sound_bridge.kind={sb['kind']!r} 不在 {list(SOUND_BRIDGE_KINDS)}(j 声先入 / l 声延续)")
+            if sb["carry"] not in SOUND_BRIDGE_CARRIES:
+                errors.append(f"{gid} transition_sound_bridge_valid: sound_bridge.carry={sb['carry']!r} 不在 {list(SOUND_BRIDGE_CARRIES)}")
+            if sb["s"] > SOUND_BRIDGE_MAX_S + 1e-9:
+                errors.append(f"{gid} transition_sound_bridge_valid: sound_bridge.s={sb['s']} > {SOUND_BRIDGE_MAX_S:g}")
             if ty not in AUDIO_LEAD_TYPES:
-                errors.append(f"{gid} transition_audio_lead_valid: audio_lead_s 只配 {list(AUDIO_LEAD_TYPES)}(音先入压在前组尾画面上),得到 {ty}")
+                errors.append(f"{gid} transition_sound_bridge_valid: 声桥只配 {list(AUDIO_LEAD_TYPES)}(声音压在另一侧画面上),得到 {ty}")
             if inserts_of(t) or hold_s:
-                errors.append(f"{gid} transition_audio_lead_valid: audio_lead_s 不得与 inserts / hold_s 并用(先入声无处可压)")
+                errors.append(f"{gid} transition_sound_bridge_valid: 声桥不得与 inserts / hold_s 并用(桥声无处可压)")
             if i == 0:
-                errors.append(f"{gid} transition_audio_lead_valid: 首组无前组,不得 audio_lead_s")
+                errors.append(f"{gid} transition_sound_bridge_valid: 首组无前组,不得 sound_bridge")
             if not str(t.get("reason") or "").strip():
-                errors.append(f"{gid} transition_audio_lead_valid: 带 audio_lead_s 须写 reason")
+                errors.append(f"{gid} transition_sound_bridge_valid: 带 sound_bridge 须写 reason")
+            if sb["carry"] == "line" and i > 0:
+                if sound_split == "off":
+                    errors.append(f"{gid} transition_sound_bridge_valid: carry=line 需项目「声画分离」开启(现为 off),改 carry=bed")
+                elif not _bridge_line_exists(groups[i - 1], g, shots_by_id, sb["kind"]):
+                    side = "下组首镜" if sb["kind"] == "j" else "前组末镜"
+                    errors.append(f"{gid} transition_sound_bridge_valid: carry=line 但{side}没有 heard_in 含该镜的画外句(os/vo),改 carry=bed 或先把那句转画外")
         errors += _check_motion_pair(gid, t, i == 0)
     if budget and insert_total > float(budget) * insert_budget_pct / 100.0 + 1e-9:
         errors.append(f"transition_insert_budget: Σ插入段 {insert_total:g}s > 集预算 {budget}s × {insert_budget_pct:g}%"
@@ -1025,7 +1085,7 @@ def main():
         print("[placement] skipped: sound_split off(项目「声画分离」已关闭,全部台词画内)")
     errors += check_placement(path, data, ss_mode)
     if not args.skip_transition:
-        errors += check_transitions(data, project_insert_budget_pct(Path(args.shot_list)))
+        errors += check_transitions(data, project_insert_budget_pct(Path(args.shot_list)), project_sound_split(Path(args.shot_list)))
     if errors:
         print(f"机检未通过({len(errors)} 项):")
         for e in errors:

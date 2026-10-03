@@ -37,6 +37,45 @@ except ImportError:  # 服务端以 modules.* 包路径导入时
     from modules import post_plan as pp
     from modules import timemap
 
+
+def _sound_bridge():
+    try:
+        import sound_bridge as sbm
+    except ImportError:
+        from modules import sound_bridge as sbm
+    return sbm
+
+
+def sound_bridge_fingerprint(proj: Path, ep: str) -> str | None:
+    """已构建声桥台账的指纹(edit/<ep>/sound_bridges/manifest.json;无 = None)。"""
+    try:
+        sbm = _sound_bridge()
+        return sbm.fingerprint(sbm.load_manifest(proj, ep))
+    except Exception:
+        return None
+
+
+def sound_bridge_rows(proj: Path, ep: str, bounds: list[dict]) -> list[dict]:
+    """boundaries[] 并进声桥文件状态(sound_bridge.rows_for_sources);模块不可用原样返回。"""
+    try:
+        return _sound_bridge().rows_for_sources(proj, ep, bounds)
+    except Exception:
+        return bounds
+
+
+def _sound_bridge_of(t: dict):
+    """transition_in 的声桥(规范化,含存量 audio_lead_s 归一):委托 code/check_generation_groups.sound_bridge_of(唯一口径);
+    服务端进程里 code/ 未必在 sys.path,按仓库根补一次。"""
+    try:
+        from check_generation_groups import sound_bridge_of
+    except ImportError:
+        import sys
+        code_dir = Path(__file__).resolve().parents[1] / "code"
+        if str(code_dir) not in sys.path:
+            sys.path.insert(0, str(code_dir))
+        from check_generation_groups import sound_bridge_of
+    return sound_bridge_of(t)
+
 SCHEMA = "mix_basis/1.0"
 MANIFEST_SUFFIX = ".mix.json"
 CHECK_NAME = "mix_basis_current"
@@ -254,9 +293,20 @@ def boundary_layer(proj: Path, ep: str, rows: list[dict], fps: float | None = No
         ins_rows = [{"kind": x.get("kind"), "duration_s": max(2.0 / fps, _q(x.get("duration_s"), fps)) if float(x.get("duration_s") or 0) > 0 else 0.0} for x in ins]
         ins_s = round(sum(x["duration_s"] for x in ins_rows), 6)
         total = round(fz + hd + ins_s, 6)
-        # 四期(2026-09-26):音先入 audio_lead_s(J-cut)——本组原生轨比画面早 lead 秒进入,压在前组尾画面上;不占时、不进 timemap,
-        # 只影响混音摆位,故边界层也列出 total_s=0 但 audio_lead_s>0 的边界,并进指纹(改了 lead = 须重混)
-        lead = min(1.0, _q(t.get("audio_lead_s"), fps)) if float(t.get("audio_lead_s") or 0) > 0 and not ins_rows and not hd else 0.0
+        # 四期(2026-10-03 改版):声桥 sound_bridge {kind j|l, s, carry bed|line}(原音先入 audio_lead_s 由 sound_bridge_of 归一为 j/bed)——
+        # 不占时、不进 timemap,只影响混音摆位,故边界层也列出 total_s=0 但有声桥的边界,并进指纹(改了声桥 = 须重混);
+        # 配了插入段 / 黑场停留的边界不出声桥(桥声无处可压,与 transition_sound_bridge_valid 同口径)
+        sb = None
+        if not ins_rows and not hd:
+            try:
+                sb = _sound_bridge_of(t)
+            except Exception:
+                sb = None
+            if sb:
+                sb = {"kind": sb["kind"], "s": round(min(1.5, _q(sb["s"], fps)), 3), "carry": sb["carry"]}
+                if sb["s"] <= 0:
+                    sb = None
+        lead = sb["s"] if sb else 0.0
         if total <= 0 and lead <= 0:
             continue
         if hd:
@@ -268,28 +318,34 @@ def boundary_layer(proj: Path, ep: str, rows: list[dict], fps: float | None = No
             audio = str(t.get("hold_audio") or "sustain")
         out.append({"from_group": a["group_id"], "to_group": b["group_id"], "freeze_s": fz, "hold_s": hd, "insert_s": ins_s,
                     "total_s": total, "audio": audio, "type": str(t.get("type") or "hard_cut"), "inserts": ins_rows,
-                    "audio_lead_s": lead})
+                    "sound_bridge": sb})
     return out
 
 
 def boundary_fingerprint(bounds: list[dict]) -> str:
-    """边界层指纹:看 (from, to, 占时 ms[, 音先入 ms]),占时部分与 transitions_render.json#timemap.ops 的 (from_group, to_group, out_len) 同口径;
-    音先入(四期)只在 >0 时追加第 4 项,无音先入的项目指纹与旧口径完全一致。"""
+    """边界层指纹:看 (from, to, 占时 ms[, 声桥 kind, s ms, carry]),占时部分与 transitions_render.json#timemap.ops 的 (from_group, to_group, out_len)
+    同口径;声桥(四期,2026-10-03 改版)只在有时追加后三项,无声桥的项目指纹与旧口径完全一致;存量「音先入」项目因第 4 项从 lead ms 变成
+    三元组而指纹改变 → mix_basis_current 报 stale,按新语义重混一次即可(旧语义=整轨提前,本就该重混)。"""
     slim = []
     for b in bounds:
         total = float(b.get("total_s", b.get("out_len")) or 0.0)
-        lead = float(b.get("audio_lead_s") or 0.0)
-        if total <= 0 and lead <= 0:
+        sb = b.get("sound_bridge") if isinstance(b.get("sound_bridge"), dict) else None
+        if total <= 0 and not sb:
             continue
         row = [b.get("from_group"), b.get("to_group"), int(round(total * 1000))]
-        if lead > 0:
-            row.append(int(round(lead * 1000)))
+        if sb:
+            row += [sb.get("kind"), int(round(float(sb.get("s") or 0) * 1000)), sb.get("carry")]
         slim.append(row)
     return hashlib.sha256(json.dumps(slim, sort_keys=False).encode("utf-8")).hexdigest()[:16]
 
 
 def boundary_has_leads(bounds: list[dict]) -> bool:
-    return any(float(b.get("audio_lead_s") or 0.0) > 0 for b in bounds)
+    """有声桥的边界(旧名沿用:boundary_has_leads)。"""
+    return any(isinstance(b.get("sound_bridge"), dict) for b in bounds)
+
+
+def boundary_bridges(bounds: list[dict]) -> list[dict]:
+    return [b for b in bounds if isinstance(b.get("sound_bridge"), dict)]
 
 
 def boundary_delta(bounds: list[dict]) -> float:
@@ -367,6 +423,9 @@ def write_manifest(proj: Path, ep: str, task_id: str, cli: str = "code/mix_basis
            "offscreen": {"source": f"assets/audio/voice/{ep}/offscreen/offscreen_manifest.json",
                          "fingerprint": offscreen_fingerprint(proj, ep),
                          "count": len(offscreen_rows(proj, ep, rows))},
+           # 声桥(四期 2026-10-03 改版):已构建底床文件台账的指纹;声桥参数进 boundaries.fingerprint,文件构建进这里
+           "sound_bridge": {"source": f"edit/{ep}/sound_bridges/manifest.json", "fingerprint": sound_bridge_fingerprint(proj, ep),
+                            "count": len(boundary_bridges(bounds))},
            "audio": {"file": str(audio.relative_to(proj)) if audio.is_relative_to(proj) else str(audio),
                      "duration_s": a_dur, "fingerprint": pp.file_fingerprint(audio)}}
     pp.write_json(manifest_path(proj, ep), man)
@@ -389,6 +448,8 @@ def compare(proj: Path, ep: str, plan: dict | None = None) -> dict:
            "dub_changed": [], "dub_stale_versions": [r["group_id"] for r in cur if r.get("dub_predates_version")],
            # 画外对白轨(声画分离 2026-10-03):当前台账指纹 vs 盖章指纹;None == None 视为一致(本集没有画外句)
            "cur_offscreen_fp": offscreen_fingerprint(proj, ep), "mix_offscreen_fp": None, "offscreen_changed": False,
+           # 声桥(2026-10-03):构建台账指纹 vs 盖章;None == None 一致
+           "cur_bridge_fp": sound_bridge_fingerprint(proj, ep), "mix_bridge_fp": None, "sound_bridge_changed": False,
            "detail": ""}
     man = load_manifest(proj, ep)
     stale_dub_note = ((";{} 组当前采纳的后期版本建于配音之前(从旧母本派生,文件里没有配音):{}{},须在后期页回滚到母本或重做该版本,再重混"
@@ -448,7 +509,7 @@ def compare(proj: Path, ep: str, plan: dict | None = None) -> dict:
     if res["boundary_status"] == BND_STALE:
         res["status"] = STATUS_STALE
         if abs(res["mix_boundary_delta_s"] - res["cur_boundary_delta_s"]) < 1e-6:
-            res["detail"] += ";组边界层已变(占时未变:过场的音先入 audio_lead_s 或边界归属与混音时不同),须重跑 p8-mix 让声轨按新的先入摆位"
+            res["detail"] += ";组边界层已变(占时未变:过场的声桥 sound_bridge 或边界归属与混音时不同),须重跑 p8-mix 让声轨按新的声桥摆位"
         else:
             res["detail"] += (";组边界层已变(混音 Δ{:+.3f}s → 当前 Δ{:+.3f}s:过场的定格/黑场/字卡等插入段与混音时不同),"
                               "须重跑 p8-mix,否则过场处声轨按 timemap 切开、BGM 会断").format(res["mix_boundary_delta_s"], res["cur_boundary_delta_s"])
@@ -467,6 +528,11 @@ def compare(proj: Path, ep: str, plan: dict | None = None) -> dict:
     res["offscreen_changed"] = (res["mix_offscreen_fp"] or None) != (res["cur_offscreen_fp"] or None)
     if res["offscreen_changed"]:
         res["detail"] += ";画外对白轨已变(新增/改位/重合成),须重跑 p8-mix"
+    mbr = man.get("sound_bridge") if isinstance(man.get("sound_bridge"), dict) else {}
+    res["mix_bridge_fp"] = mbr.get("fingerprint") or None
+    res["sound_bridge_changed"] = (res["mix_bridge_fp"] or None) != (res["cur_bridge_fp"] or None)
+    if res["sound_bridge_changed"]:
+        res["detail"] += ";声桥底床已变(重建 / 改参数 / 取源版本变),须重跑 p8-mix"
     res["detail"] += stale_dub_note
     if res.get("audio_fingerprint_ok") is False:
         res["detail"] += ";⚠ 混音文件在盖章后被改动(指纹不符)"
@@ -478,7 +544,8 @@ def check_row(res: dict) -> tuple[str, str]:
     画外对白轨改过(声画分离 2026-10-03)= FAIL;其余失配只 WARN。"""
     st = res.get("status")
     bst = res.get("boundary_status")
-    if res.get("sound_changed") or res.get("dub_changed") or res.get("dub_stale_versions") or res.get("offscreen_changed"):
+    if res.get("sound_changed") or res.get("dub_changed") or res.get("dub_stale_versions") or res.get("offscreen_changed") \
+            or res.get("sound_bridge_changed"):
         return "FAIL", res.get("detail", "")
     if bst == BND_STALE and (res.get("cur_boundary_has_inserts") or float(res.get("mix_boundary_delta_s") or 0) > 0):
         return "FAIL", res.get("detail", "")

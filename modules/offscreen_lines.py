@@ -130,9 +130,50 @@ def source_fx(ln) -> str:
     return v if v in SOURCE_FX else DEFAULT_FX[p]
 
 
-def offset_s(ln) -> float:
+def offset_s(ln, floor: float = 0.0, default: float | None = None) -> float:
+    """起点偏移:缺省 DEFAULT_OFFSET_S(或 default);floor<0 时允许负值(声桥 carry=line 的 J 边界:下组首镜画外句可在切点前 s 秒起)。"""
     v = _f(ln.get("offset_s")) if isinstance(ln, dict) else None
-    return round(v, 3) if v is not None and v >= 0 else DEFAULT_OFFSET_S
+    if v is None:
+        return DEFAULT_OFFSET_S if default is None else round(default, 3)
+    return round(max(floor, v), 3) if v >= floor else (DEFAULT_OFFSET_S if default is None else round(default, 3))
+
+
+def _sound_bridge_of(t):
+    try:
+        from check_generation_groups import sound_bridge_of
+    except ImportError:
+        import sys
+        code_dir = Path(__file__).resolve().parents[1] / "code"
+        if str(code_dir) not in sys.path:
+            sys.path.insert(0, str(code_dir))
+        try:
+            from check_generation_groups import sound_bridge_of
+        except ImportError:
+            return None
+    try:
+        return sound_bridge_of(t if isinstance(t, dict) else {})
+    except Exception:
+        return None
+
+
+def bridge_allowances(sl: dict) -> dict[str, dict]:
+    """声桥 carry=line 给画外句的窗口放宽(2026-10-03 四期改版):{group_id: {lead_s, tail_s, first_shot, last_shot}}——
+    lead_s = 本组 transition_in.sound_bridge 为 J/line 时的 s(下组首镜画外句可在切点前起,offset_s 可为负);
+    tail_s = 下一组 transition_in.sound_bridge 为 L/line 时的 s(本组末镜画外句可越过切点)。"""
+    groups = [g for g in sl.get("generation_groups") or [] if isinstance(g, dict) and g.get("group_id")]
+    out: dict[str, dict] = {}
+    for i, g in enumerate(groups):
+        ids = [x for x in g.get("shots") or [] if isinstance(x, str)]
+        rec = {"lead_s": 0.0, "tail_s": 0.0, "first_shot": ids[0] if ids else None, "last_shot": ids[-1] if ids else None}
+        sb = _sound_bridge_of(g.get("transition_in")) if i > 0 else None
+        if sb and sb.get("kind") == "j" and sb.get("carry") == "line":
+            rec["lead_s"] = float(sb["s"])
+        if i + 1 < len(groups):
+            nb = _sound_bridge_of(groups[i + 1].get("transition_in"))
+            if nb and nb.get("kind") == "l" and nb.get("carry") == "line":
+                rec["tail_s"] = float(nb["s"])
+        out[g["group_id"]] = rec
+    return out
 
 
 def line_text(ln) -> str:
@@ -259,6 +300,7 @@ def collect(base: Path, ep: str, shot_list: dict | None = None, durations: dict 
     except Exception:
         cpms = {}
     anchors = [a for a in sl.get("narration_anchors") or [] if isinstance(a, dict)]
+    allow = bridge_allowances(sl)
     # 画内句占时按镜累计(扣窗口用)
     on_by_shot: dict[str, float] = {}
     for sid, s in shots_by_id.items():
@@ -287,23 +329,30 @@ def collect(base: Path, ep: str, shot_list: dict | None = None, durations: dict 
                 good = [sid] if sid in info else []
             ws = min((info[h]["start_s"] for h in good), default=0.0)
             we = max((info[h]["end_s"] for h in good), default=0.0)
+            al = allow.get(gid) or {}
+            lead = float(al.get("lead_s") or 0.0) if al.get("first_shot") in good else 0.0
+            tail = float(al.get("tail_s") or 0.0) if al.get("last_shot") in good else 0.0
+            ws -= lead          # 声桥 J/line:切点前 lead 秒也算窗口(画外句先到)
+            we += tail          # 声桥 L/line:越过切点 tail 秒
             on_s = round(sum(on_by_shot.get(h, 0.0) for h in good), 2)
             narr = 0.0
             for a in anchors:
                 ash = [x for x in a.get("anchor_shots") or [] if isinstance(x, str)]
                 if (ash and set(ash) & set(good)) or (not ash and a.get("anchor_group") == gid and gid):
                     narr += _f(a.get("est_duration_s"), 0.0) or 0.0
-            off = offset_s(ln)
+            off = offset_s(ln, floor=-lead, default=(-lead if lead > 0 else None))
             est = _line_est(base, ln, spk, cpms)
             reason = ln.get("placement_reason") if isinstance(ln.get("placement_reason"), dict) else None
             out.append({
                 "shot_id": sid, "idx": idx, "group_id": gid, "speaker": spk,
                 "speaker_raw": str(ln.get("speaker") or ln.get("char") or ""), "text": line_text(ln),
                 "placement": placement(ln), "heard_in": good or hi, "source_fx": source_fx(ln), "offset_s": off,
+                "raw_offset_s": _f(ln.get("offset_s")),
                 "reason": reason, "source": str(ln.get("placement_source") or "").strip().lower(),
                 "emotion": str(ln.get("emotion") or ln.get("tone") or ""), "est_s": est,
                 "window": {"start_s": round(ws, 3), "end_s": round(we, 3), "span_s": round(we - ws, 3),
-                           "on_s": on_s, "narration_s": round(narr, 2), "available_s": 0.0},
+                           "on_s": on_s, "narration_s": round(narr, 2), "available_s": 0.0,
+                           "bridge_lead_s": round(lead, 3), "bridge_tail_s": round(tail, 3)},
                 "t_in_group_s": 0.0, "issues": issues,
             })
     # 同一组内按窗口起点 / 镜序 / 句序顺延摆位;可用窗口 = 跨度 − 画内 − 旁白 − 偏移 − 同窗前面句的占用
@@ -312,7 +361,7 @@ def collect(base: Path, ep: str, shot_list: dict | None = None, durations: dict 
     for r in out:
         key = (r["group_id"], tuple(r["heard_in"]))
         w = r["window"]
-        t0 = max(w["start_s"] + r["offset_s"], cursor.get(key, -1.0))
+        t0 = max(w["start_s"] + w.get("bridge_lead_s", 0.0) + r["offset_s"], cursor.get(key, -99.0))   # 偏移以切点(首镜起点)为 0
         dur = (durations or {}).get((r["shot_id"], r["idx"]))
         used = round(dur if dur else r["est_s"], 3)
         r["t_in_group_s"] = round(t0, 3)
@@ -376,6 +425,12 @@ def validate(base: Path, ep: str, shot_list: dict | None = None) -> list[str]:
             errs.append(f"{tag} placement_valid: 仅剧本标记模式下分镜层不得自行转画外(placement_source=directing / {trig or '-'})")
         for i in r["issues"]:
             errs.append(f"{tag} placement_valid: {i}")
+        ro, lead = r.get("raw_offset_s"), r["window"].get("bridge_lead_s", 0.0)
+        if ro is not None and ro < 0:
+            if lead <= 0:
+                errs.append(f"{tag} placement_valid: offset_s={ro:g} 为负只允许在声桥 J/line 边界的下组首镜画外句上(现无该声桥,按缺省 {DEFAULT_OFFSET_S} 摆)")
+            elif ro < -lead - 1e-9:
+                errs.append(f"{tag} placement_valid: offset_s={ro:g} 早于声桥时长 −{lead:g}s(已截到 −{lead:g})")
         if not r["speaker"]:
             errs.append(f"{tag} placement_speaker_is_cast: 画外句说话人不是人物 / 生物编号:{r['speaker_raw'] or '(空)'}(旁白走 narration.md,不借人物 V.O.)")
         elif reg and r["speaker"] not in reg:
@@ -826,8 +881,8 @@ def set_line(base: Path, ep: str, shot_id: str, idx: int, *, placement: str | No
         ln["source_fx"] = DEFAULT_FX[pl]
     if offset_s is not None:
         v = _f(offset_s)
-        if v is None or v < 0:
-            raise ValueError("offset_s 须为 ≥0 的秒数")
+        if v is None or v < -1.5:
+            raise ValueError("offset_s 须为 ≥0 的秒数(声桥 J/line 边界的下组首镜画外句可为负,≥ −1.5)")
         ln["offset_s"] = round(v, 3)
     elif ln.get("offset_s") is None:
         ln["offset_s"] = DEFAULT_OFFSET_S

@@ -21,14 +21,14 @@ sources 输出的每组字段:
   duration_s     该文件实测时长;cum_start_s = 混音时间线上的组起点(按 src 实测累计 **+ 本组前的组边界层**,BGM / 旁白摆位用这个)
   boundary_before_s 本组前组边界占时(定格 + 黑场停留 + 插入段,过场设计 2026-09-24):原生轨在此留白(按 boundaries[].audio:
                  mute 静音 / sustain 延续前段房间声),BGM / 旁白照常跨过去铺——跨越边界的 cue 不断;cum_start_groups_s = 不含边界层的组累计
-顶层 boundaries[]:每个有占时或有音先入的边界 {from_group, to_group, freeze_s, hold_s, insert_s, total_s, audio, type, inserts[], audio_lead_s};
+顶层 boundaries[]:每个有占时或有声桥的边界 {from_group, to_group, freeze_s, hold_s, insert_s, total_s, audio, type, inserts[], sound_bridge};
   boundary_delta_s = Σ占时;混音 wav 总长应 = Σ组时长 + boundary_delta_s(stamp 核对)
-  audio_lead_s(四期 2026-09-26,J-cut):>0 时本组原生轨要比 cum_start_s 早这么多秒进入,压在前组尾画面上(前组原生轨在重叠段渐弱、
-                 本组在重叠段渐强,各 ≤ lead;BGM / 旁白不受影响);不占时、不进 timemap、不改 wav 总长;改了 = 边界指纹变 = 须重混
-顶层 offscreen_lines[](声画分离 2026-10-03,modules/offscreen_lines):画外 O.S. / V.O. 句的集级独立声轨,逐句
-  {group_id, shot_id, idx, speaker, placement, source_fx, t0, duration_s, file, gain_db},t0 = 混音时间线绝对秒(已含组起点
-  cum_start_s 与组内 time_ops 映射),混音按 t0 铺入(不占时、不改 wav 总长;与旁白同待遇,互斥不重叠);
-  offscreen_fingerprint = 台账指纹,盖进清单 offscreen.fingerprint,之后变了 = check FAIL(offscreen_changed),须重混
+  sound_bridge(四期 2026-10-03 改版,modules/sound_bridge.py;原 audio_lead_s「整轨提前」语义作废):{kind j|l, s, carry bed|line, file, status[, duck_db]}
+                 J 声先入:carry=bed 时 file(下组底床镜像预滚)从 cum_start_s − s 起铺、渐强;**本组与下组原生轨都不提前、不错位**;
+                 carry=line 无文件,下组首句画外句经 offscreen_lines[] 的 t0(< cum_start_s)先到。
+                 L 声延续:carry=bed 时 file(本组底床镜像延续)从 cum_start_s 起铺 s 秒、渐弱,下组原生轨前 s 秒从 duck_db 渐强到 0;
+                 carry=line 时前组末句画外句 t0+duration 越过切点。status missing/stale = 先跑 code/sound_bridge.py build。
+                 不占时、不进 timemap、不改 wav 总长;参数进边界指纹、文件进 sound_bridge 指纹,改了 = 须重混
   cum_start_v0_s 母本基准起点(只用于换算旧口径的 meta boundary_map:组内时刻经 time_ops 映射 = timemap.map_time)
   time_ops       该版本相对母本的组内时长编辑(删段 out_len=0 / 变速 / 插入);boundary_map、对白开口时段都是母本
                  基准,落在删除区间内的事件在本版本里已不存在,不得再往上铺声音
@@ -59,6 +59,7 @@ def do_sources(proj: Path, ep: str, as_json: bool) -> int:
     if not rows:
         _log("FAIL", "没有分镜组(timeline / shot_list 都为空)")
         return 1
+    bounds = mb.sound_bridge_rows(proj, ep, bounds)     # 声桥(2026-10-03):并进底床文件状态
     pending = {}
     for r in rows:
         latest = max([int(x.get("v") or 0) for x in pp.group_versions(plan, r["group_id"])] or [0])
@@ -77,6 +78,7 @@ def do_sources(proj: Path, ep: str, as_json: bool) -> int:
            "groups_on_post_version": sum(1 for r in rows if int(r["v"]) > 0),
            "ops_fingerprint": mb.ops_fingerprint(rows), "plan_fingerprint": pp.plan_fingerprint(plan),
            "boundaries": bounds, "boundary_delta_s": mb.boundary_delta(bounds), "boundary_fingerprint": mb.boundary_fingerprint(bounds),
+           "sound_bridge_fingerprint": mb.sound_bridge_fingerprint(proj, ep),
            "offscreen_lines": off_rows, "offscreen_fingerprint": off_fp,
            "unadopted_newer_versions": pending}
     missing = [r["group_id"] for r in rows if not r.get("src")]
@@ -94,9 +96,18 @@ def do_sources(proj: Path, ep: str, as_json: bool) -> int:
                 parts = ([f"定格 {b['freeze_s']:g}s"] if b["freeze_s"] else []) + ([f"黑场 {b['hold_s']:g}s"] if b["hold_s"] else []) \
                     + [f"{x['kind']} {x['duration_s']:g}s" for x in b["inserts"]]
                 _log("BND ", f"{b['from_group']}→{b['to_group']} 组边界 +{b['total_s']:.3f}s({' + '.join(parts)};原生轨 {b['audio']},BGM/旁白连续铺过)")
-            if b and float(b.get("audio_lead_s") or 0) > 0:
-                _log("LEAD", f"{b['from_group']}→{b['to_group']} 音先入 {b['audio_lead_s']:g}s:本组原生轨从 {r['cum_start_s'] - b['audio_lead_s']:.3f}s 起进入(J-cut),"
-                             f"重叠段前组渐弱 / 本组渐强;不占时、不改 wav 总长")
+            sb = (b or {}).get("sound_bridge") if b else None
+            if sb:
+                if sb["kind"] == "j":
+                    how = (f"底床预滚 {sb.get('file') or '(未构建)'} 从 {r['cum_start_s'] - sb['s']:.3f}s 起铺、{sb['s']:g}s 渐强" if sb["carry"] == "bed"
+                           else "下组首句画外句经 offscreen_lines[] 先到")
+                    _log("BRIDGE", f"{b['from_group']}→{b['to_group']} 声先入 J {sb['s']:g}s:{how};本组原生轨仍从 {r['cum_start_s']:.3f}s 同步起,不提前")
+                else:
+                    how = (f"底床延续 {sb.get('file') or '(未构建)'} 从 {r['cum_start_s']:.3f}s 起铺 {sb['s']:g}s 渐弱" if sb["carry"] == "bed"
+                           else "前组末句画外句越过切点")
+                    _log("BRIDGE", f"{b['from_group']}→{b['to_group']} 声延续 L {sb['s']:g}s:{how};本组原生轨前 {sb['s']:g}s 从 {sb.get('duck_db', -12):g} dB 渐强")
+                if sb["carry"] == "bed" and sb.get("status") in ("missing", "stale", "failed", None):
+                    _log("WARN", f"{b['from_group']}→{b['to_group']} 声桥底床未构建 / 已过期({sb.get('status')}):先 python3 code/sound_bridge.py build 再开混")
             _log("SRC ", f"{r['group_id']} v{r['v']} {r.get('src') or '(无文件)'} {r['duration_s']:.3f}s @{r['cum_start_s']:.3f}s"
                          + (f"  [{ops}]" if ops else "") + (f"  dub={r['dub_fp']}" if r.get("dub_fp") else ""))
             if r.get("dub_predates_version"):

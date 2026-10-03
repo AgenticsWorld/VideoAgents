@@ -474,7 +474,9 @@ phases:
           # 铺旁白前必跑 code/check_narration_sync.py(只检):指纹失配=shot_list 挂点已改版,停手上报
           # 回派 narrator 重签/重合成,严禁按旧 narration_track 人工连续铺排(§8B ②,前科 DEF-ep05-audio-0005)
           # 旁白开关关闭时:无旁白轨,两路混音(原生轨+BGM),narration_anchor_sync 自动跳过(skipped: narration off)
-          validation: { auto: [narration_anchor_sync, mix_basis_current, lufs_-14_pm1, true_peak_lte_-1dBTP, no_clipping], qa: [11-qa/audio-qa] } }
+          # 声桥(2026-10-03,§9C 四期改版 sound_bridge):sources 之后、铺轨之前必跑 code/sound_bridge.py build 出底床片段(edit/{ep}/sound_bridges/),
+          # 按 boundaries[].sound_bridge J/L × bed/line 摆位;本组原生轨一律从 cum_start_s 同步起,严禁整轨提前(旧 audio_lead_s 口径作废)
+          validation: { auto: [narration_anchor_sync, mix_basis_current, sound_bridge_built, lufs_-14_pm1, true_peak_lte_-1dBTP, no_clipping], qa: [11-qa/audio-qa] } }
       - { id: g8, gate: true, depends_on: [p8-mix] }
 
   - id: p9

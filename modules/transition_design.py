@@ -47,9 +47,13 @@ CUSTOM_DEFAULTS = {"allow_cards": True, "insert_budget_pct": 8.0, "allow_generat
 BOUNDARY_CLASSES = ("scene_change", "time_jump", "block_enter", "block_exit", "same_scene", "episode_open")
 CUSTOM_OPTIONS = ("director", "hard_cut", "dissolve", "dip_black", "dip_white", "title_card", "overlay_card",
                   "establishing", "establishing_overlay", "timelapse", "bridge",
-                  "motion_pair", "j_cut")     # 三期 成对运镜 / 四期 音先入(2026-09-26)
+                  "motion_pair", "j_cut", "l_cut")     # 三期 成对运镜 / 四期 声桥 j_cut 声先入 · l_cut 声延续(2026-10-03 改版)
 BRIDGE_S = 2.0            # 生成式桥接默认时长(前组尾帧 → 本组首帧的形变过渡)
-AUDIO_LEAD_S = 0.5        # 音先入默认(J-cut:本组声轨提前 0.5 s 压在前组尾画面上)
+# 四期声桥(2026-10-03 改版,modules/sound_bridge.py):transition_in.sound_bridge {kind j|l, s, carry bed|line};原 audio_lead_s(整轨提前)作废
+SOUND_BRIDGE_S = 0.5       # 声桥默认时长(settings.transitions.sound_bridge_s 覆盖)
+SOUND_BRIDGE_RANGE = (0.1, 1.5)
+SOUND_BRIDGE_CARRIES = ("bed", "line")
+AUDIO_LEAD_S = SOUND_BRIDGE_S   # 旧名(2026-09-26 四期),保留给外部引用
 MOTION_DEFAULT = ("pan_right", "pan_right", "medium")
 CUSTOM_MAP_DEFAULT = {"scene_change": "establishing", "time_jump": "title_card", "block_enter": "dip_white",
                       "block_exit": "director", "same_scene": "hard_cut", "episode_open": "director"}
@@ -99,6 +103,21 @@ def normalize_settings(raw: dict | None) -> dict:
         out["card_font"] = cf
     # 集尾收束(2026-09-25):所有模式都有;缺 = 默认淡出到黑 1.0s + 黑场 0.5s;hard_cut = 不处理(停在末帧,即 2026-09-25 前的行为)
     out["episode_close"] = normalize_close_setting(raw.get("episode_close"))
+    # 声桥默认(2026-10-03 四期改版):所有模式都存;极简 / 经典不出声桥候选,电影感 / 自定义按它出 J/L 的时长与承载
+    if raw.get("sound_bridge_s") not in (None, ""):
+        try:
+            sbs = float(raw.get("sound_bridge_s"))
+        except (TypeError, ValueError):
+            raise ValueError("transitions.sound_bridge_s must be a number") from None
+        if not (SOUND_BRIDGE_RANGE[0] - 1e-9 <= sbs <= SOUND_BRIDGE_RANGE[1] + 1e-9):
+            raise ValueError(f"transitions.sound_bridge_s must be {SOUND_BRIDGE_RANGE[0]}-{SOUND_BRIDGE_RANGE[1]}")
+        out["sound_bridge_s"] = round(sbs, 3)
+    else:
+        out["sound_bridge_s"] = SOUND_BRIDGE_S
+    carry = str(raw.get("sound_bridge_carry") or "bed")
+    if carry not in SOUND_BRIDGE_CARRIES:
+        raise ValueError(f"transitions.sound_bridge_carry must be one of {list(SOUND_BRIDGE_CARRIES)}")
+    out["sound_bridge_carry"] = carry
     if mode == "custom":
         out["allow_cards"] = bool(raw.get("allow_cards", CUSTOM_DEFAULTS["allow_cards"]))
         try:
@@ -227,6 +246,10 @@ def effective(base: Path, ep: str | None = None) -> dict:
             else:
                 out = {**proj_eff, "mode": ov, **MODE_TABLE[ov], "custom_map": None, "project_mode": proj_eff["mode"]}
             out["mode_source"] = "episode"
+    # 声画分离模式(2026-10-03):声桥 carry=line 的前提;设置页读 settings.json#output.sound_split(缺省 auto)
+    st = _read(base / "settings.json", {}) or {}
+    ss = (st.get("output") or {}).get("sound_split") if isinstance(st.get("output"), dict) else None
+    out["sound_split"] = ss if ss in ("off", "script_only", "auto") else "auto"
     return out
 
 
@@ -340,6 +363,38 @@ def _panos_index(base: Path, sid: str) -> dict:
 def _block(g: dict) -> dict:
     nb = g.get("narrative_block")
     return nb if isinstance(nb, dict) and nb.get("id") else {}
+
+
+def _last_shot(g: dict, shots: dict) -> dict:
+    ids = [x for x in (g.get("shots") or []) if isinstance(x, str)]
+    return shots.get(ids[-1]) if ids else {}
+
+
+def _line_placement(ln) -> str:
+    try:
+        from check_generation_groups import line_placement  # noqa: E402
+        return line_placement(ln)
+    except Exception:
+        v = str((ln or {}).get("placement") or "").strip().lower() if isinstance(ln, dict) else ""
+        return v if v in ("on", "os", "vo") else "on"
+
+
+def _has_onscreen_dialogue(shot: dict | None) -> bool:
+    return any(isinstance(ln, dict) and str(ln.get("text") or ln.get("line") or "").strip() and _line_placement(ln) == "on"
+               for ln in ((shot or {}).get("dialogue_lines") or []))
+
+
+def _offscreen_line_heard(g: dict, shots: dict, target: str | None) -> bool:
+    """组内是否有 heard_in 含 target 镜的画外句(声画分离一期)——声桥 carry=line 的前提。"""
+    if not target:
+        return False
+    for sid in g.get("shots") or []:
+        for ln in ((shots.get(sid) or {}).get("dialogue_lines") or []):
+            if isinstance(ln, dict) and str(ln.get("text") or ln.get("line") or "").strip() and _line_placement(ln) != "on":
+                heard = ln.get("heard_in") if isinstance(ln.get("heard_in"), list) and ln.get("heard_in") else [sid]
+                if target in heard:
+                    return True
+    return False
 
 
 def _first_shot(g: dict, shots: dict) -> dict:
@@ -503,6 +558,11 @@ def diagnose(base: Path, ep: str) -> list[dict]:
                 "continuity": {k: ct.get(k) for k in ("id", "anchor", "boundary_type", "cast_change", "framing_change_ok")} if ct else None,
                 "first_shot_wide": _is_wide(fb), "first_shot_size": fb.get("size"),
                 "has_change": bool(sc or tj or cast or light or edge in ("enter", "exit")),
+                # 四期声桥(2026-10-03):切点两侧的台词事实——L 候选条件(前组末镜无画内对白 + 下组首镜定场 / 无对白)与 carry=line 前提
+                "last_shot_has_dialogue": _has_onscreen_dialogue(_last_shot(a, shots)),
+                "first_shot_has_dialogue": _has_onscreen_dialogue(fb),
+                "last_shot_offscreen_line": _offscreen_line_heard(a, shots, (a.get("shots") or [None])[-1]),
+                "first_shot_offscreen_line": _offscreen_line_heard(b, shots, (b.get("shots") or [None])[0]),
             },
             "card_lines": lines, "card_sources": srcs,
             "establishing": estab, "timelapse": tl,
@@ -722,25 +782,50 @@ def _designs_for(b: dict, eff: dict) -> tuple[dict | None, list[dict]]:
             t["overlay_card"] = _overlay(lines, srcs, dur=2.5)
         return t
 
-    def j_cut(base_design=None):
-        """音先入:在无插入段 / 无黑场的 hard_cut / dissolve 设计上加 audio_lead_s。"""
+    sb_s = float(eff.get("sound_bridge_s") or SOUND_BRIDGE_S)
+    sb_carry_pref = str(eff.get("sound_bridge_carry") or "bed")
+    sound_split_on = str(eff.get("sound_split") or "auto") != "off"
+
+    def _carry(kind: str) -> str:
+        """承载:项目默认 line 且声画分离开着且切点旁有画外句(J 看下组首镜,L 看前组末镜)才 line,否则 bed。"""
+        if sb_carry_pref == "line" and sound_split_on:
+            if (kind == "j" and d.get("first_shot_offscreen_line")) or (kind == "l" and d.get("last_shot_offscreen_line")):
+                return "line"
+        return "bed"
+
+    def sound_bridge(kind: str, base_design=None):
+        """声桥:在无插入段 / 无黑场的 hard_cut / dissolve 设计上加 sound_bridge {kind, s, carry}(2026-10-03 改版,替代 audio_lead_s)。"""
         t = dict(base_design or keep_hard())
         if t.get("type") not in ("hard_cut", "dissolve") or t.get("inserts") or t.get("hold_s"):
             return None
-        t["audio_lead_s"] = AUDIO_LEAD_S
-        t["reason"] = str(t.get("reason") or _reason(d, "音先入")).rstrip("。") + f";音先入 {AUDIO_LEAD_S:g}s(本组声轨压前组尾画面,J-cut)"
+        t.pop("audio_lead_s", None)
+        carry = _carry(kind)
+        t["sound_bridge"] = {"kind": kind, "s": sb_s, "carry": carry}
+        what = "声先入(J-cut:下组声音先到,压在本组尾画面上)" if kind == "j" else "声延续(L-cut:本组声音拖过切点,压在下组首画面上)"
+        t["reason"] = str(t.get("reason") or _reason(d, what)).rstrip("。") + f";声桥 {kind.upper()} {sb_s:g}s " + \
+            ("画外台词跨切点" if carry == "line" else "底床" + ("预滚" if kind == "j" else "延续")) + ("(J-cut)" if kind == "j" else "(L-cut)")
         return t
 
+    def j_cut(base_design=None):
+        return sound_bridge("j", base_design)
+
+    def l_cut(base_design=None):
+        return sound_bridge("l", base_design)
+
+    def l_cut_fits() -> bool:
+        """L 候选条件:前组末镜无画内对白(有可延续的环境 / 音乐感收尾)且下组首镜是定场 / 远景或无对白。"""
+        return (not d.get("last_shot_has_dialogue")) and (bool(d.get("first_shot_wide")) or not d.get("first_shot_has_dialogue"))
+
     def motion_pair_design(with_overlay=True, lead=True):
-        """成对运镜:前组尾镜 out 运镜带出、本组首镜 in 运镜接入(写进两侧 prompt,sync_motion_pairs);默认再配音先入。"""
+        """成对运镜:前组尾镜 out 运镜带出、本组首镜 in 运镜接入(写进两侧 prompt,sync_motion_pairs);默认再配声先入。"""
         out, inn, speed = MOTION_DEFAULT
         t = {"type": "hard_cut", "intent": intent, "reason": _reason(d, f"成对运镜 {out}→{inn}"), "source": "transition_design",
              "motion_pair": {"out": out, "in": inn, "speed": speed}}
         if with_overlay and have_lines and allow_cards:
             t["overlay_card"] = _overlay(lines, srcs)
         if lead:
-            t["audio_lead_s"] = AUDIO_LEAD_S
-            t["reason"] += f";音先入 {AUDIO_LEAD_S:g}s"
+            t["sound_bridge"] = {"kind": "j", "s": sb_s, "carry": _carry("j")}
+            t["reason"] += f";声桥 J {sb_s:g}s"
         return t
 
     cls = d["class"]
@@ -761,7 +846,8 @@ def _designs_for(b: dict, eff: dict) -> tuple[dict | None, list[dict]]:
             # 三期:生成式桥接只在勾选「生成式过场」时可出;否则退硬切(候选里仍不给 bridge,机检 generative_allowed 会拦)
             "bridge": lambda: bridge_design(True) if generative else keep_hard(),
             "motion_pair": lambda: motion_pair_design(True, lead=True),
-            "j_cut": lambda: j_cut(),   # 四期:硬切 + 音先入
+            "j_cut": lambda: j_cut(),   # 四期:硬切 + 声先入(J)
+            "l_cut": lambda: l_cut(),   # 四期(2026-10-03):硬切 + 声延续(L)
         }
         design = table.get(opt, lambda: None)()
         if design is not None:
@@ -789,7 +875,7 @@ def _designs_for(b: dict, eff: dict) -> tuple[dict | None, list[dict]]:
             alts.append({"label": "生成式桥接回到当下", "transition_in": bridge_design(False)})
         jc = j_cut(design) if mode == "cinematic" else None
         if jc:
-            alts.append({"label": "硬切 + 音先入(J-cut)", "transition_in": jc})
+            alts.append({"label": "硬切 + 声先入(J-cut)", "transition_in": jc})
     elif cls == "time_jump":
         if have_lines and allow_cards:
             design = card_plus_estab() if (mode == "cinematic" and estab and not d.get("first_shot_wide")) else card_only()
@@ -805,7 +891,9 @@ def _designs_for(b: dict, eff: dict) -> tuple[dict | None, list[dict]]:
         else:
             design = {"type": "dip_black", "duration_s": 0.8, "intent": intent, "reason": _reason(d, "黑场(无字卡/定场素材)"), "source": "transition_design"}
         if mode == "cinematic":
-            alts.append({"label": "成对运镜 + 音先入", "transition_in": motion_pair_design(have_lines and allow_cards, lead=True)})
+            alts.append({"label": "成对运镜 + 声先入", "transition_in": motion_pair_design(have_lines and allow_cards, lead=True)})
+            if l_cut_fits():
+                alts.append({"label": "硬切 + 声延续(L-cut)", "transition_in": l_cut()})
     elif cls == "scene_change":
         overlay_ok = have_lines and allow_cards
         if estab and not d.get("first_shot_wide"):
@@ -813,7 +901,7 @@ def _designs_for(b: dict, eff: dict) -> tuple[dict | None, list[dict]]:
             if overlay_ok:
                 # 四期:不变长的叠字方案在电影感下默认带音先入(J-cut)
                 ov = overlay_only()
-                alts.append({"label": "只叠地点字幕(不变长)" + (" + 音先入" if mode == "cinematic" else ""), "transition_in": (j_cut(ov) if mode == "cinematic" else None) or ov})
+                alts.append({"label": "只叠地点字幕(不变长)" + (" + 声先入" if mode == "cinematic" else ""), "transition_in": (j_cut(ov) if mode == "cinematic" else None) or ov})
                 alts.append({"label": "定场+叠字" if mode != "cinematic" else "只定场", "transition_in": estab_only(mode != "cinematic")})
         elif overlay_ok:
             design = overlay_only()
@@ -829,7 +917,10 @@ def _designs_for(b: dict, eff: dict) -> tuple[dict | None, list[dict]]:
                 design = j_cut(design) or design
         if mode == "cinematic":
             # 三期:成对运镜(前组尾镜横摇带出、本组首镜同向横摇接入)作候选;方向由工位按两侧构图改(design --design)
-            alts.append({"label": "成对运镜 + 音先入", "transition_in": motion_pair_design(overlay_ok, lead=True)})
+            alts.append({"label": "成对运镜 + 声先入", "transition_in": motion_pair_design(overlay_ok, lead=True)})
+            # 四期(2026-10-03):前组尾无画内对白 + 下组首镜定场 / 无对白 → 声延续候选
+            if l_cut_fits():
+                alts.append({"label": "硬切 + 声延续(L-cut)", "transition_in": l_cut()})
     else:   # same_scene
         if not d.get("has_change"):
             return None, []
@@ -892,7 +983,8 @@ def propose(base: Path, ep: str, *, force: bool = False) -> dict:
             entry["source"] = "mode"
         rows.append(entry)
     data = {"schema": SCHEMA, "episode": ep, "mode": eff["mode"], "mode_source": eff["mode_source"],
-            "settings": {k: eff.get(k) for k in ("allow_cards", "insert_budget_pct", "allow_generative", "establishing_first_shot")},
+            "settings": {k: eff.get(k) for k in ("allow_cards", "insert_budget_pct", "allow_generative", "establishing_first_shot",
+                                                 "sound_bridge_s", "sound_bridge_carry")},
             "written_at": dt.datetime.now().isoformat(timespec="seconds"), "boundaries": rows}
     _write(design_path(base, ep), data)
     return data

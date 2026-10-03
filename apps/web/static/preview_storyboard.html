@@ -1530,7 +1530,7 @@ const TR_MODES={minimal:'极简',classic:'经典',cinematic:'电影感',custom:'
 const TR_CLOSE={fade_black:'淡出到黑',fade_white:'淡出到白',cut_black:'切黑(突然黑屏)',cut_white:'切白',hard_cut:'不处理(停在末帧)'};
 const TR_JOIN_STYLE={wipe:'划像',blur_through:'模糊穿越',zoom_through:'推进穿越',iris:'圈入圈出',pixelize:'像素化',fadegrays:'去色叠化'};
 const TR_SRC={screenplay:'剧本',continuity:'连戏表',scenes_index:'场景库',derived:'推定',user:'用户'};
-let TR_BY_TO={};
+let TR_BY_TO={},TR_BY_ID={};   // TR_BY_ID / TRANSITIONS_SETTINGS:声桥行用(2026-10-03)
 function trJoinLabel(tr){
   if(!tr)return t('硬切');
   const ty=tr.type||'hard_cut';
@@ -1540,8 +1540,22 @@ function trJoinLabel(tr){
   const pads=[];if(tr.freeze_s)pads.push(t('定格')+' '+tr.freeze_s+'s');if(tr.hold_s)pads.push(t('黑场')+' '+tr.hold_s+'s');
   // 三期成对运镜 / 四期音先入(2026-09-26)
   if(tr.motion_pair&&tr.motion_pair.out)pads.push(t('成对运镜')+' '+tr.motion_pair.out+'→'+(tr.motion_pair.in||''));
-  if(tr.audio_lead_s)pads.push(t('音先入')+' '+tr.audio_lead_s+'s');
+  // 声桥 J/L(2026-10-03):sound_bridge {kind j|l, s, carry bed|line};旧 audio_lead_s 视为 J·底床
+  const sb=trBridgeOf(tr);
+  if(sb)pads.push(t(sb.kind==='l'?'声延续':'声先入')+' '+sb.s+'s'+(sb.carry==='line'?'·'+t('画外台词'):''));
   return s+(pads.length?' + '+pads.join(' + '):'');
+}
+function trBridgeOf(tr){   // 规范化读边界的声桥;无 = null
+  if(!tr)return null;
+  const b=tr.sound_bridge;
+  if(b&&typeof b==='object'&&(b.kind==='j'||b.kind==='l')&&parseFloat(b.s)>0)return {kind:b.kind,s:parseFloat(b.s),carry:b.carry==='line'?'line':'bed'};
+  if(parseFloat(tr.audio_lead_s)>0)return {kind:'j',s:parseFloat(tr.audio_lead_s),carry:'bed'};
+  return null;
+}
+function trBridgeAllowed(tr){   // 声桥只配无插入段 / 无黑场的硬切或叠化
+  if(!tr)return true;
+  const ty=tr.type||'hard_cut';
+  return (ty==='hard_cut'||ty==='dissolve')&&!(tr.inserts||[]).length&&!(parseFloat(tr.hold_s)>0);
 }
 function trInsertSeg(x,tr,idx){
   const th=tr.thumbs||{};
@@ -1599,6 +1613,22 @@ function trDiagHtml(tr){
   if(d.continuity&&d.continuity.id)lines.push(`⛓ ${esc(d.continuity.id)} anchor=${esc(d.continuity.anchor||'')}${d.continuity.framing_change_ok===false?' · <span class="tag warn">framing</span>':''}`);
   return `<div class="trdiag">${bits.join(' ')}${lines.length?'<br>'+lines.join('<br>'):''}</div>`;
 }
+function trBridgeRow(tr,shown){   // 声桥 J/L 行(2026-10-03):选类型 / 时长 / 承载后「应用声桥」走 decide action=design
+  const sb=trBridgeOf(shown),ok=trBridgeAllowed(shown),dis=ok?'':' disabled';
+  const T=window.TRANSITIONS_SETTINGS||{};
+  const defS=sb?sb.s:(parseFloat(T.sound_bridge_s)>0?parseFloat(T.sound_bridge_s):0.5);
+  const defC=sb?sb.carry:(T.sound_bridge_carry==='line'?'line':'bed');
+  const kind=sb?sb.kind:'';
+  const inp='font-size:11.5px;padding:1px 4px';
+  return `<div class="trbridge" data-bid="${esc(tr.id)}" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:11.5px;color:var(--dim);margin:4px 0">
+    <span>${t('声桥')}</span>
+    <select class="trbridge" style="${inp}"${dis}><option value=""${kind?'':' selected'}>${t('无')}</option><option value="j"${kind==='j'?' selected':''}>${t('声先入')} J</option><option value="l"${kind==='l'?' selected':''}>${t('声延续')} L</option></select>
+    <input class="trbridges" type="number" min="0.1" max="1.5" step="0.1" value="${defS}" style="${inp};width:56px"${dis}><span>s</span>
+    <select class="trbridgecarry" style="${inp}"${dis}><option value="bed"${defC==='bed'?' selected':''}>${t('底床')}</option><option value="line"${defC==='line'?' selected':''}>${t('画外台词')}</option></select>
+    <button class="editbtn trbtn" data-act="bridge" data-bid="${esc(tr.id)}"${dis} title="${t('把声桥写进本边界的设计(decide action=design),机检 transition_sound_bridge_valid')}">${t('应用声桥')}</button>
+    ${ok?`<span class="trbridgehint" style="display:${defC==='line'?'':'none'}">${t('需声画分离开启且切点旁有画外句')}</span>`:`<span>${t('声桥只配无插入段/无黑场的硬切或叠化')}</span>`}
+  </div>`;
+}
 function transCard(tr){
   const d=tr.diagnosis||{},cur=tr.current||{type:'hard_cut'};
   const nonHard=cur.type!=='hard_cut'||(cur.inserts||[]).length||cur.overlay_card||cur.freeze_s||cur.hold_s;
@@ -1626,6 +1656,7 @@ function transCard(tr){
       <span class="tag" title="${esc(shown.reason||'')}">${esc(decided?t('当前定稿'):t('建议'))}:${esc(trJoinLabel(shown))}${(shown.inserts||[]).map(x=>' + '+t(TR_KIND[x.kind]||x.kind)+' '+x.duration_s+'s').join('')}${shown.overlay_card?' + '+t('叠字'):''}</span></div>
     ${trDiagHtml(tr)}
     ${trChainHtml(tr,shown)}
+    ${trBridgeRow(tr,shown)}
     ${prev}
     <div class="tracts">
       ${altSel}
@@ -1703,6 +1734,10 @@ async function trApi(path,body){
   if(!r.ok)throw new Error(j.detail||r.status);
   return j;
 }
+document.addEventListener('change',e=>{   // 声桥承载=画外台词时提示前置条件(2026-10-03)
+  const c=e.target.closest('.trbridgecarry');if(!c)return;
+  const h=c.closest('.trbridge[data-bid]')?.querySelector('.trbridgehint');if(h)h.style.display=c.value==='line'?'':'none';
+});
 document.addEventListener('change',async e=>{
   const sel=e.target.closest('#tr-mode');if(!sel)return;
   sel.disabled=true;
@@ -1734,6 +1769,17 @@ document.addEventListener('click',async e=>{
     }else if(act==='preview'){
       setMsg(t('渲染预览中…(约 10–40 秒)'));
       r=await trApi('/'+encodeURIComponent(bid)+'/preview',{});
+    }else if(act==='bridge'){   // 声桥 J/L(2026-10-03):以当前展示设计为底,设 / 删 sound_bridge 后整体写回
+      const row=card.querySelector('.trbridge[data-bid]'),kind=row.querySelector('select.trbridge').value;
+      const sv=parseFloat(row.querySelector('.trbridges').value),carry=row.querySelector('.trbridgecarry').value==='line'?'line':'bed';
+      if(kind&&!(sv>=0.1&&sv<=1.5)){setMsg(t('声桥时长需在 0.1–1.5 秒之间'));card.querySelectorAll('.trbtn,.tralt').forEach(x=>x.disabled=false);return}
+      const tr=TR_BY_ID[bid]||{},cur=tr.current||{type:'hard_cut'},decided=tr.status==='accepted'||tr.status==='rejected';
+      const design=JSON.parse(JSON.stringify(decided?cur:(tr.design||cur)));
+      delete design.audio_lead_s;
+      if(kind)design.sound_bridge={kind,s:Math.round(sv*10)/10,carry};else delete design.sound_bridge;
+      design.reason=String(design.reason||'').replace(/[;;]\s*声桥[^;;]*$/,'')+(kind?`;声桥 ${kind==='l'?'声延续':'声先入'} ${Math.round(sv*10)/10}s(${carry==='line'?'画外台词':'底床'})`:'');
+      if(!design.type)design.type='hard_cut';
+      r=await trApi('/'+encodeURIComponent(bid)+'/decide',{action:'design',transition_in:design});
     }
     if(r&&r.check&&r.check.ok===false)JumpAnchor.toast(t('已写回,但机检 transition_ok 有异常:')+(r.check.errors||[]).slice(0,2).join(';'));
     KEEP_SCROLL=true;load(true);
@@ -1919,7 +1965,7 @@ function render(d){
     h+=`</div>`;
   }
   // 过场(2026-09-24):顶部汇总条 + 每个接收组卡前一张过场卡(按 to_group 索引)
-  TR_BY_TO={};((d.transitions||{}).boundaries||[]).forEach(b=>{TR_BY_TO[b.to_group]=b});
+  TR_BY_TO={};TR_BY_ID={};((d.transitions||{}).boundaries||[]).forEach(b=>{TR_BY_TO[b.to_group]=b;TR_BY_ID[b.id]=b});window.TRANSITIONS_SETTINGS=(d.transitions||{}).settings||{};
   if(ggroups.length&&d.transitions)h+=trSummaryHtml(d.transitions);
   // 白模样片(2026-09-11):顶部折叠块,整集摄影机视角白模视频 + 对白/旁白字幕;「人物精确空间位置」关闭的项目不显示
   if(WB_ON&&d.whitebox_reel&&!d.whitebox_reel.disabled)h+=`<div id="wbreelbox">${wbReelHtml(d.whitebox_reel,d.ep)}</div>`;

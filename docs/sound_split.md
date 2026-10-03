@@ -31,7 +31,7 @@ V.O.(内心独白、读信、回忆声)没有通道——旁白链只限旁白�
 | `placement` | `on` / `os` / `vo` | 缺省 on。os=说话人在本场但不入画(电话另一端、隔门、出画仍说、反打只拍听者);vo=非本时空声源(内心独白、读信、回忆中的话、幻听传音) |
 | `heard_in` | `[shot_id…]` | os/vo 必填(缺省=本镜);**必须与本句所在镜同一生成组**(画外句只能压在同组画面上) |
 | `source_fx` | `plain` / `phone` / `door` / `distance` / `inner` / `memory` | 声处理预设(`modules/offscreen_lines.SOURCE_FX`,ffmpeg 滤镜链);缺省 os→plain、vo→inner |
-| `offset_s` | ≥0 | 相对 heard_in 首镜起点,缺省 0.4;同一窗口多句按顺序顺延(间隔 0.3 s) |
+| `offset_s` | ≥0 | 相对 heard_in 首镜起点,缺省 0.4;同一窗口多句按顺序顺延(间隔 0.3 s)。**例外(二期声桥 `carry: line`,2026-10-03)**:本组 `transition_in.sound_bridge` 为 J 时,heard_in 含首镜的画外句 offset_s 可为负(≥ −s,缺省 −s,先于切点出声);下一组为 L 时,heard_in 含末镜的画外句窗口 end + s(越过切点) |
 | `placement_reason` | `{trigger, evidence}` | 触发 id 见下;分镜层 D1–D5 须写 evidence |
 | `placement_source` | `script` / `directing` / `user` | 谁定的 |
 
@@ -136,11 +136,16 @@ plan → synth → check,不手摆音频;overflow 回执上报,orchestrator 回�
 vo 的 speaker 必须是本集 cast 的人物编号(`placement_speaker_is_cast`),文本须是人物口吻(叙述体伪装旁白由 logic-qa 审)。audio-mixing 不再按
 旁白开关硬编码路数,按 `sources` 列出的轨道混:原生 + BGM + 旁白(开关开才列)+ 画外对白(有就列)。字幕:os/vo 归对白字幕,不看旁白开关。
 
-## 未做(二期 / 三期)
+## 二期(2026-10-03):组边界声桥 `sound_bridge` 已落地
 
-- 组边界声桥 `transition_in.sound_bridge {kind: j|l, s, carry: bed|line}`:J 的 `carry: bed` = 下组去人声底床预滚;L = 本组底床 sustain。
-  **待裁决**:现行 `audio_lead_s` 规约写的是「本组原生轨从 cum_start_s − lead 起铺」= 整条原生轨提前 lead 秒,对白组会整组口型错位;
-  建议改为底床预滚语义。
+规则细节见 `docs/transition_design.md` 四期改版、WORKFLOW §9C。摘要:
+- 旧 `transition_in.audio_lead_s`(「本组原生轨从 cum_start_s − lead 起铺」= 整轨提前、口型错位)**作废**,宿主自动归一为 `sound_bridge {kind: j, s, carry: bed}`;边界指纹变 → 重混一次。不加兼容开关。
+- 新契约 `sound_bridge = {kind: j|l, s ∈ (0,1.5], carry: bed|line}`;设置 `transitions.sound_bridge_s`(默认 0.5)/ `sound_bridge_carry`(默认 bed);极简 / 经典不出,电影感换场景 / 跳时段自动给 J(bed),满足条件另给 L 候选;自定义 `custom_map` 加 `l_cut`。机检 `transition_sound_bridge_valid`、`sound_bridge_built`。
+- `carry: bed` 由宿主 `code/sound_bridge.py build` 出去人声底床片段(`edit/epNN/sound_bridges/`),audio-mixing 按 `mix_basis sources.boundaries[].sound_bridge` 摆位,**本组原生轨仍从 cum_start_s 同步起**。
+- `carry: line` 与本文档联动:只在声画分离 ≠ 关且切点旁有画外句时可写(J:下组首镜 heard_in 含首镜的 os/vo 句;L:前组末镜 heard_in 含末镜的 os/vo 句),由 `offscreen_lines[]` 的 t0 跨切点承担(窗口放宽见契约表 `offset_s` 例外);否则退 bed。
+
+## 未做(三期)
+
 - 组内原生 L/J(Seedance 2.x 多镜头「对白账本」画外位置):须真跑 A/B 验证模型不画出说话人、不重说;过了再开放 `placement: os_native`。
 
 ## 实现位置
