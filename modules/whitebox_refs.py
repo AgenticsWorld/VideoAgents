@@ -249,7 +249,7 @@ def cast_hidden_reason(cast, cid):
 
 MENTION_MIN_LABEL = 2   # 单字 label(如「婢」)太易误报,只按 id 查
 # 句内出现这些词=「明令不出现」的否定句(SOUL §7A 既有做法:前组人物本组不该在时明令 must not appear),不算把人写进画面
-ABSENCE_WORDS = ('不出现', '不出场', '不在场', '不入画', '不入镜', '不进画', '未入场', '未入画', '未出场', '已离场', '已退场', '离场后',
+ABSENCE_WORDS = ('不出现', '不出场', '不在场', '不入画', '不入镜', '不进画', '不在画内', '未入场', '未入画', '未出场', '已离场', '已退场', '离场后',
                  '不得出现', '不得生成', '不生成', '不在画面', '不在本组', '缺席', '不再出现',
                  'must not appear', 'does not appear', 'do not appear', 'not appear', 'never appears', 'not present',
                  'absent', 'off-screen', 'offscreen', 'no longer in')

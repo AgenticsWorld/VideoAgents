@@ -299,6 +299,14 @@ def check_placement(shot_list_path: Path, shot_list: dict, mode: str) -> list[st
         errors += [str(m) for m in (_osl.validate(root, ep, shot_list) or [])]
     except Exception as exc:  # 校验器自身异常不吞:记为机检项
         errors.append(f"placement_valid: offscreen_lines.validate 执行失败:{exc}")
+    # 原生先入(三期 2026-10-03):native_lead_valid 委托 modules/native_lead.validate(P1–P8);模块不可用 = skipped
+    try:
+        from modules import native_lead as _nl
+        errors += [str(m) for m in (_nl.validate(root, ep, shot_list) or [])]
+    except ImportError:
+        print("[native_lead] skipped: modules/native_lead 不可用")
+    except Exception as exc:
+        errors.append(f"native_lead_valid: native_lead.validate 执行失败:{exc}")
     return errors
 
 

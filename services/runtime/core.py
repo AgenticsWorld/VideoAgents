@@ -7101,22 +7101,25 @@ def _shot_dialogue_lines(s: dict, draft: dict, idx: dict[str, dict]) -> list[dic
     lines: list[dict] = []
     seen: set[str] = set()
 
-    def _add(ref, speaker, text, placement="on"):
+    def _add(ref, speaker, text, placement="on", native_lead=False):
         key = ref or text
         if not key or key in seen:
             return
         seen.add(key)
-        # placement(声画分离,2026-10-03):on 画内 / os 画外 / vo V.O.;缺键或非法视同画内
+        # placement(声画分离,2026-10-03):on 画内 / os 画外 / vo V.O.;缺键或非法视同画内;native_lead(三期)=原生先入
         lines.append({"ref": ref, "speaker": speaker, "text": text,
-                      "placement": placement if placement in ("on", "os", "vo") else "on"})
+                      "placement": placement if placement in ("on", "os", "vo") else "on",
+                      "native_lead": bool(native_lead)})
 
     for emb in (s.get("dialogue"), s.get("dialogue_lines")):
         for d in (emb if isinstance(emb, list) else [emb]):
             # 规约键 text;有的出稿把正文写成 line(liaozhai2 ep08,2026-09-04),与 check_dialogue_fit 同样兼容
             txt = d.get("text") or d.get("line") if isinstance(d, dict) else None
             if txt:
+                nl = d.get("native_lead")
                 _add(d.get("ref") or d.get("line_id") or d.get("id"), d.get("speaker"), str(txt).strip(),
-                     str(d.get("placement") or "on").strip().lower())
+                     str(d.get("placement") or "on").strip().lower(),
+                     isinstance(nl, dict) and bool(nl.get("shot")))
     refs = []
     srcs = [s.get("dialogue_refs"), s.get("dialogue_ref")]
     if not _shot_has_own_dialogue(s):
@@ -9742,6 +9745,20 @@ def _dialogue_direction_rows(base: Path, ep: str) -> dict:
     except Exception:  # noqa: BLE001
         plan, provider, model = {}, "", ""
     ldir = dt.lib_dir(base, ep)
+    # 原生先入(声画分离三期,2026-10-03):画内句上的 native_lead 直接从 shot_list 按 (shot_id, idx) 读(context / plan 不透传)
+    leads: dict = {}
+    nl_ok, nl_why = True, ""
+    try:
+        from modules import native_lead as _nl
+        sl_nl = json.loads((base / "directing" / ep / "shot_list.json").read_text(encoding="utf-8"))
+        for s_ in sl_nl.get("shots") or []:
+            if not isinstance(s_, dict) or not s_.get("shot_id"):
+                continue
+            for i_, ln_ in enumerate(_nl.dialogue_lines(s_)):
+                leads[(s_["shot_id"], i_)] = _nl.native_lead(ln_)
+        nl_ok, nl_why = _nl.mode_ok(base)
+    except Exception:  # noqa: BLE001
+        leads, nl_ok, nl_why = {}, False, "modules/native_lead 不可用"
     out = []
     for r in rows:
         e = plan.get((r["shot_id"], r["idx"])) or {}
@@ -9760,9 +9777,11 @@ def _dialogue_direction_rows(base: Path, ep: str) -> dict:
                       "source_fx": r.get("source_fx") or e.get("source_fx") or "",
                       "offset_s": r.get("offset_s") if r.get("offset_s") is not None else e.get("offset_s"),
                       "placement_reason": r.get("placement_reason") or e.get("placement_reason") or None,
-                      "placement_source": r.get("placement_source") or e.get("placement_source") or ""})
+                      "placement_source": r.get("placement_source") or e.get("placement_source") or "",
+                      "native_lead": leads.get((r["shot_id"], r["idx"]))})
     chk = dd.check(base, ep)
     return {"ep": ep, "lines": out, "total": chk["total"], "bound": chk["bound"], "warns": chk["warns"][:20],
+            "native_lead_ok": bool(nl_ok), "native_lead_why": nl_why or "",
             # 只有火山 Doubao-音频生成 1.0 能把场景与目标时长也用上;其余渠道演法只当语气指令
             "timed": provider == "volcengine" and model == _voice_library.SEEDAUDIO_MODEL,
             "provider": provider, "model": model}
@@ -9807,18 +9826,33 @@ async def api_dialogue_direction_set(project: str, ep: str, body: dict):
         except ValueError as e:
             raise ServiceError(400, str(e))
         placed = True
+    # 原生先入(声画分离三期,2026-10-03):native_lead = true/false 或 {s?, evidence?},经 modules/native_lead.set_line 写进画内句
+    # (前一镜由时间线推导;前提不满足 ValueError → 400);只带 native_lead、不带 direction 的请求同样不摘演法
+    led = False
+    if "native_lead" in body:
+        from modules import native_lead as _nl
+        v = body.get("native_lead")
+        on = bool(v) if not isinstance(v, dict) else bool(v.get("on", True))
+        obj = v if isinstance(v, dict) else {}
+        try:
+            _nl.set_line(base, ep, shot_id, idx, on=on, s=obj.get("s"),
+                         reason={"trigger": "U", "evidence": str(obj.get("evidence") or "")}, source="user")
+        except ValueError as e:
+            raise ServiceError(400, str(e))
+        led = True
     if not str(body.get("direction") or "").strip():
-        if "direction" in body or not placed:
+        if "direction" in body or not (placed or led):
             dd.clear(base, ep, shot_id, idx)
         HUB.publish({"type": "dialogue_tts", "project": base.name, "ep": ep, "status": "direction"})
-        return {"ok": True, "cleared": "direction" in body or not placed, "placed": placed, **_dialogue_direction_rows(base, ep)}
+        return {"ok": True, "cleared": "direction" in body or not (placed or led), "placed": placed, "led": led,
+                **_dialogue_direction_rows(base, ep)}
     res = dd.apply(base, ep, [{"shot_id": shot_id, "idx": idx, "direction": body.get("direction"),
                                "scene": body.get("scene"), "pace": body.get("pace"), "target_s": body.get("target_s")}],
                    by="user")
     if res.get("errors"):
         raise ServiceError(400, ";".join(res["errors"]))
     HUB.publish({"type": "dialogue_tts", "project": base.name, "ep": ep, "status": "direction"})
-    return {"ok": True, "notes": res.get("notes") or [], "placed": placed, **_dialogue_direction_rows(base, ep)}
+    return {"ok": True, "notes": res.get("notes") or [], "placed": placed, "led": led, **_dialogue_direction_rows(base, ep)}
 
 
 OFFSCREEN_JOBS: dict[str, dict] = {}     # "<project>/<ep>" -> {status, started_at, error, log, finished_at}(画外对白合成)

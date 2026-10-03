@@ -18,6 +18,7 @@
    - 音效:对照 sound-effect 的 audio_cues 核关键动作实际出声率(cue 有而片中无声即"漏做");
    - 环境声:对照 ambience_cues 核场景符合度与**组间接缝连贯性**;
    - **违禁项:片中不得出现任何 BGM/配乐**(音乐一律后期)——出现即 blocker 退回 prompt 排查 `（）`/音乐字样。
+   - **原生先入核验(三期 2026-10-03,§8D ⑨;仅组内有 `dialogue_lines[].native_lead` 的组)**:对照 video-generation 回执里 `code/sync_native_leads.py audible` 的结果(人声起点落在前一镜窗口 ≥0.3 s = PASS,否则 WARN「先入未生效」),逐条记入 `audio.json`;**WARN 是记录项不是缺陷**——画面仍成立、台词仍在本镜,不开缺陷单、不要求重 roll;先入段里若听到说话人之外的嗓音、或前一镜画面里出现了说话人(应由 visual-qa 核),才按常规缺陷单处理。
    另抽检音色样本 `assets/audio/voice/epNN/refs/` 与 voice.json 设定相符,`assets/audio/narration/epNN/` 旁白语速在设定区间。
 3. **情绪匹配审(Phase 8)**:审 `assets/audio/bgm/epNN/` 配乐与 `bible/color_script.json` 情绪曲线、剧本情绪标签的匹配度,标注入出点是否压对白。
 4. **混音终审(Phase 8/G8)**:对 `assets/audio/final/epNN.wav` 做指标终审,为 G8 闸门出结论。

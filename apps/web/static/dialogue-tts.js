@@ -58,9 +58,15 @@
     const placeOpts=PLACES.map(([v,l])=>`<option value="${v}"${pl===v?' selected':''}>${esc(t(l))}</option>`).join('');
     const fxCur=r.source_fx||(pl==='vo'?'inner':'plain');
     const fxOpts=FXS.map(([v,l])=>`<option value="${v}"${fxCur===v?' selected':''}>${esc(t(l))}</option>`).join('');
+    // 原生先入(声画分离三期,2026-10-03):画内句可勾「原生先入」= 说话人在同组前一镜就在画外开口(Seedance 2.5 原生 J-cut);
+    // 需声画分离=自动且视频原声(NL_OK 来自 GET 顶层 native_lead_ok),前提不满足由服务端 400 回报
+    const nl=r.native_lead&&r.native_lead.shot?r.native_lead:null;
+    const nlInfo=nl?`<span class="dttsleadinfo" style="color:var(--dim);font-size:11px" title="${esc((nl.reason&&nl.reason.evidence)||'')}">← ${esc(nl.shot)} · ${esc(String(nl.s))}s · ${esc((nl.reason&&nl.reason.trigger)||'')}</span>`:'';
+    const nlDis=NL_OK===false&&!nl;
+    const leadWrap=`<label class="dttsleadwrap" style="display:${pl==='on'?'inline-flex':'none'};gap:4px;align-items:center;cursor:pointer" title="${esc(nlDis?t('需声画分离=自动且视频原声'):t('说话人在同组前一镜就在画外开口,切过来后接着说完(Seedance 2.5 原生)'))}"><input type="checkbox" class="dttslead" data-orig="${nl?'1':'0'}"${nl?' checked':''}${nlDis?' disabled':''}><span>${esc(t('原生先入'))}</span></label>${nlInfo}`;
     const placeRow=`<div class="dttsplacerow" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;font-size:12px"><span style="color:var(--dim)">${esc(t('声源'))}</span><select class="dttsplace" data-orig="${pl}" style="${inp}">${placeOpts}</select>
         <span class="dttsfxwrap" style="display:${pl==='on'?'none':'inline-flex'};gap:6px;align-items:center"><span style="color:var(--dim)">${esc(t('声源效果'))}</span><select class="dttsfx" style="${inp}">${fxOpts}</select>
-        <span style="color:var(--dim)">${esc(t('偏移(s)'))}</span><input class="dttsoffset" type="number" step="0.1" min="0" value="${r.offset_s??''}" placeholder="0.4" style="${inp};width:64px"></span>${trig}</div>`;
+        <span style="color:var(--dim)">${esc(t('偏移(s)'))}</span><input class="dttsoffset" type="number" step="0.1" min="0" value="${r.offset_s??''}" placeholder="0.4" style="${inp};width:64px"></span>${trig}${leadWrap}</div>`;
     return `<div class="dttsline" data-shot="${esc(r.shot_id)}" data-idx="${r.idx}" data-pace='${esc(JSON.stringify(r.pace_seconds))}' data-limit="${r.limit_s??''}" style="border-top:1px solid var(--border);padding:8px 0">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>${esc(r.shot_id)}</b>${badge}<span>${esc(r.speaker_name)}</span>${r.emotion?`<span style="color:var(--yellow);font-size:12px">${esc(r.emotion)}</span>`:''}<span>「${esc(r.text)}」</span></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0;font-size:12px;color:var(--dim)">${r.audio?`<audio controls preload="none" src="${esc(r.audio)}" style="height:28px;max-width:260px"></audio>`:''}<span>${esc(lib)}</span><span>${esc(tr('镜长 {s}s',{s:r.shot_duration_s??'?'}))}</span>${warn}</div>
@@ -70,6 +76,7 @@
         <button class="editbtn dttssave">${esc(t('保存'))}</button><span class="dttsmsg" style="font-size:12px"></span></div>${placeRow}</div>`;
   }
   const PLACES=[['on','画内'],['os','画外 O.S.'],['vo','V.O.']];
+  let NL_OK=null;   // 原生先入是否可用(GET /dialogue-direction 顶层 native_lead_ok)
   const FXS=[['plain','原声'],['phone','电话'],['door','隔门'],['distance','远处'],['inner','内心'],['memory','回忆']];
   function headHtml(d){
     const hint=d.timed?t('逐句演法与目标时长,对白语音按它合成;改完保存,再点「刷新对白语音」重出这一句')
@@ -77,6 +84,7 @@
     return `<b>${esc(t('台词演法'))}</b> <span style="color:var(--dim);font-size:12px">${esc(tr('{b}/{n} 句已写',{b:d.bound,n:d.total}))} · ${esc(hint)}</span>`;
   }
   function drawLines(box,d){
+    if(typeof d.native_lead_ok==='boolean')NL_OK=d.native_lead_ok;
     box.innerHTML=`<div class="dttshead" style="margin:10px 0 2px;font-size:13px">${headHtml(d)}</div>`
       +(d.lines||[]).filter(r=>r.speaker).map(lineHtml).join('');
     box.dataset.loaded='1';
@@ -95,6 +103,7 @@
   document.addEventListener('change',e=>{                   // 声源切到画外/V.O. 才露出声源效果与偏移
     const sel=e.target.closest('.dttsplace');if(!sel)return;
     const w=sel.closest('.dttsline').querySelector('.dttsfxwrap');if(w)w.style.display=sel.value==='on'?'none':'inline-flex';
+    const lw=sel.closest('.dttsline').querySelector('.dttsleadwrap');if(lw)lw.style.display=sel.value==='on'?'inline-flex':'none';
   });
   document.addEventListener('change',e=>{                   // 选语速档:按字数算出的秒数填进目标时长(不超过本镜可用)
     const sel=e.target.closest('.dttspace');if(!sel||!sel.value)return;
@@ -113,11 +122,14 @@
       body.placement=ps.value;
       if(ps.value!=='on'){body.source_fx=row.querySelector('.dttsfx').value;const off=row.querySelector('.dttsoffset').value;if(off!=='')body.offset_s=+off}
     }
+    const lc=row.querySelector('.dttslead');
+    if(lc&&!lc.disabled&&(lc.checked?'1':'0')!==lc.dataset.orig&&(!ps||ps.value==='on'))body.native_lead=lc.checked;   // 原生先入只在改了时随包发(走 native_lead.set_line)
     try{
       const r=await fetch(durl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       const j=await r.json().catch(()=>({}));
       if(!r.ok)throw new Error(j.detail||j.error||r.status);
       // 只重绘这一句和标题计数:别的句子里没保存的输入不动
+      if(typeof j.native_lead_ok==='boolean')NL_OK=j.native_lead_ok;
       const cur=(j.lines||[]).find(r=>r.shot_id===row.dataset.shot&&r.idx===+row.dataset.idx);
       const head=document.querySelector('#dttsbox .dttshead');if(head)head.innerHTML=headHtml(j);
       let fresh=row;

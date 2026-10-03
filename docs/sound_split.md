@@ -9,7 +9,7 @@ V.O.(内心独白、读信、回忆声)没有通道——旁白链只限旁白�
 1. 一个字段解耦声与画:`dialogue_lines[].placement ∈ on | os | vo`(缺省 on,存量零影响)+ `heard_in`(在哪几镜听见)。
 2. **os/vo 句一律后期合成,不进 `{}`**:§8A「TTS 严禁配对白」红线的根因是画内口型,画外无嘴可对,视频原声模式同样成立;模型原生出
    画外音会把说话人画进来(白模 hidden 前科)且声线无保障;后期合成复用 dub_group / 对白语音库机制,时长可实测、可机检。
-3. 组内(同场景)的 J/L 型声画分离交给多镜头模型原生做属**三期实验**;组边界(换场)声桥属**二期**,一期不做。
+3. 组内(同场景)的 J 型声画分离交给多镜头模型原生做(**三期,只开放 J**,见下);组边界(换场)声桥属**二期**。
 4. 与旁白开关**正交**:旁白开关只管旁白者声线;人物 V.O. 归本项。
 
 ## 设置
@@ -144,9 +144,57 @@ vo 的 speaker 必须是本集 cast 的人物编号(`placement_speaker_is_cast`)
 - `carry: bed` 由宿主 `code/sound_bridge.py build` 出去人声底床片段(`edit/epNN/sound_bridges/`),audio-mixing 按 `mix_basis sources.boundaries[].sound_bridge` 摆位,**本组原生轨仍从 cum_start_s 同步起**。
 - `carry: line` 与本文档联动:只在声画分离 ≠ 关且切点旁有画外句时可写(J:下组首镜 heard_in 含首镜的 os/vo 句;L:前组末镜 heard_in 含末镜的 os/vo 句),由 `offscreen_lines[]` 的 t0 跨切点承担(窗口放宽见契约表 `offset_s` 例外);否则退 bed。
 
-## 未做(三期)
+## 三期(2026-10-03):原生先入 `native_lead` 已落地(只开放 J)
 
-- 组内原生 L/J(Seedance 2.x 多镜头「对白账本」画外位置):须真跑 A/B 验证模型不画出说话人、不重说;过了再开放 `placement: os_native`。
+**实验(fengshen3 ep07 grp008「白骨洞问罪」,Seedance 2.5 480p 25 s,2026-10-03;基线 = 正式 clip,全部画内)**:
+
+| 变体 | 设计 | 石矶那句的人声段 | 相对切点 | 不重说 | 说话人不入画 | 判定 |
+|---|---|---|---|---|---|---|
+| 基线 | 全句在 sh041(说话人近景) | 5.50–7.90 s 单段 | 起点在 sh041 起点后 0.125 s | — | — | 对照 |
+| B1 J-cut | 「你射死我门人,」写在 sh040(箭主观镜,无人物)画外,「还推不知?」在 sh041 接着说 | 4.30–6.05 + 6.85–7.70(中间是 prompt 要求的吸气停顿),合计 2.60 s(基线 2.40) | **先入 1.075 s**(从 sh040 第一帧起声) | ✅ | ✅(sh040 六帧只有箭) | **通过** |
+| B2 L-cut r1 | 「你射死我门人,」在 sh041,「还推不知?」写在 sh042(李靖捡箭特写)画外 | 4.90–7.50 单段 | 比 sh042 起点**早 0.29 s 说完**,sh042 无人声;反而在 sh040 提前 0.48 s 起声 | ✅ | ✅ | ❌ |
+| B2 L-cut r2 | 同上,Shot 4 彻底不提后半句、Shot 5 写「0 秒即在画外接着说」 | 4.80–7.40 单段 | 早 0.43 s 说完;sh040 提前 0.62 s 起声 | ✅ | ✅ | ❌ |
+
+结论:模型守「不把说话人画进来」,但倾向把台词**前置**并在说话人镜内收尾,不肯拖过切点。J 顺着这个倾向成功;L 逆着它两次失败。
+**三期只开放 J**;L 型需求继续走一期(整句转画外后期合成,D1)/ 二期(底床延续)。提示词只写「从本镜起即进声」,不指望按秒卡点(B1 把整个前镜都压上了声音)。嗓音:两段中值基频 232 / 254 Hz,与石矶其它句 246–262 Hz 一致,李靖 130 Hz。
+
+**契约**:画内句 `dialogue_lines[].native_lead {shot: 同组前一镜, s ∈ (0,1.0], reason {trigger N1|N2|N3|U, evidence}, source directing|user}`——这句**仍是画内句**(照写 `{}`、照挂 audio_ref、照数 speakers_le_3、估时照旧)。先入文本 = 第一个句读前的分句(lead),余句 rest;自动建议只给有句读的句子(按字数硬切会切在词中间)。
+
+**硬前提(机检 `native_lead_valid`,`modules/native_lead.validate`,已接进 `check_generation_groups.py`)**:
+
+| # | 条件 |
+|---|---|
+| P1 | `output.sound_split = auto` |
+| P2 | 对白配音 = 视频原声(后期配音模式下原生声会被 TTS 替换) |
+| P3 | 本组生效视频模型 = Seedance 2.5(`shot_timing.group_kind`;只验证过它) |
+| P4 | 前一镜与本镜同一生成组(本镜非组首镜;组边界先入走二期声桥) |
+| P5 | 前一镜说话人不在画内(`characters` 不含他)且前一镜无任何台词 / 画外句 / 旁白挂点 |
+| P6 | 本句是本镜第一句、说话人在本镜画内 |
+| P7 | 前镜 ≥0.6 s,`s = min(前镜时长, 1.0, 估时×40%)` |
+| P8 | 先入文本不含该人 blocking performance 触发词(performance_bound 要在本镜 `{}` 里找它) |
+
+**触发白名单(仅 auto;shot-planning 自动标,写 reason;不命中一律不加)**:`N1` 插入镜 / 主观镜起声(前镜无人物)、`N2` 听者先行(前镜只有听者)、`N3` 定场起声(前镜是组首定场 / 远景);`U` 用户在「对白语音」面板手标。
+
+**宿主 CLI**(Agent 只准调用):
+```
+python3 code/sync_native_leads.py plan    --project <slug> --ep epNN            # 已标 + 自动建议(满足 P3–P8 且命中 N1–N3)
+python3 code/sync_native_leads.py apply   --project <slug> --ep epNN            # 建议全部写进 shot_list(source=directing)
+python3 code/sync_native_leads.py set     --project <slug> --ep epNN --shot sh041 --idx 0 --reason "N1|依据"
+python3 code/sync_native_leads.py sync    --project <slug> --ep epNN [--groups grp…] --write   # 写进组 prompt
+python3 code/sync_native_leads.py check   --project <slug> --ep epNN            # native_lead_valid + native_lead_bound
+python3 code/sync_native_leads.py audible --project <slug> --ep epNN [--groups grp…]   # 出片后核验
+```
+`sync --write` 往组 prompt 写两句**固定标记句**(幂等、可清理;组 json 记 `native_leads[]` 还原信息,原 prompt 首次备份 `prompt_backups/`):
+- 前一镜段末:「【原生先入】本镜起即由<说话人>在画外开口:{<先入>}——说话人不在画内,画面不出现任何多出的人物,话未说完即切到下一镜。」
+- 本镜:`{全句}` → `{余句}`(prompt 工位已按句读拆成 `{先入}{余句}` 的只摘掉 `{先入}`),段末「【原生先入】本镜开场时<说话人>正说到一半,上一镜画外已说出的「…」不再重说,接着说完。」
+
+非中文界面写 `Native lead:` 英文句。prompt 工位**不手写**这两句、不自行拆句、不得把全句写进前镜。
+
+**机检**:`native_lead_bound`(p7-prompt 验收):两句都在、余句在、全句 / 先入文本不再出现在本镜 `{}`。出片后 `audible`:组 clip 人声起点(人声分离 + 有声段)落在前一镜窗口、先入 ≥0.3 s = PASS,否则 WARN「先入未生效」——画面仍成立,不阻断、不开缺陷单,QA 记录。`check_dialogue_audible` 对带 native_lead 的镜把窗口向前并入前一镜。白模 hidden 机检:标记句含「不在画内」属否定句,豁免。
+
+**分工**:同组内切点 J → 三期原生;L 或说话人全程不入画 → 一期画外句后期合成(D1 后半句压听者仍是一期);组边界 → 二期声桥。
+
+**界面**:分镜预览「对白语音」面板每句「原生先入」勾选(U);分镜页 🎧 先入 角标;H3A 预览可见。
 
 ## 实现位置
 
@@ -155,4 +203,4 @@ vo 的 speaker 必须是本集 cast 的人物编号(`placement_speaker_is_cast`)
 `code/performance_bound_check.py`、`modules/dialogue_direction.py`、`modules/script_breakdown.py`、`modules/dialogue_tts.py`、
 `code/dub_group.py`、`code/mix_basis.py` + `modules/mix_manifest.py`、`modules/dialogue_track.py`、`modules/whitebox_subtitles.py`、
 `services/runtime/core.py`(设置 / 提示注入 / API / 后期轨)、`apps/web/static/{index.html,dialogue-tts.js,preview_storyboard.html,preview_post.html}`
-+ 11 份词典;规约 WORKFLOW.md §8D 与各工位 SOUL。测试 `tests/test_offscreen_lines.py` 等(仅本机)。
++ 11 份词典;三期 `modules/native_lead.py` + `code/sync_native_leads.py`;规约 WORKFLOW.md §8D 与各工位 SOUL。测试 `tests/test_offscreen_lines.py` 等(仅本机)。

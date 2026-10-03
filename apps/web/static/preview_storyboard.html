@@ -1299,7 +1299,9 @@ function dlgHtml(s){
     if(!l.text)return `<div class="dlg dlg-unresolved" title="${esc(t('dialogue.md 中未找到该编号的台词'))}">💬 <span class="ref">${esc(l.ref||'')}</span></div>`;
     // 声画分离(2026-10-03):画外 O.S. / V.O. 句前加角标——这句不在画内开口,后期按人物声线合成
     const pl=l.placement==='os'||l.placement==='vo'?`<span class="tag" style="color:var(--accent)">${l.placement==='vo'?'👻 V.O.':'👻 O.S.'}</span> `:'';
-    return `<div class="dlg"${l.ref?` title="${esc(l.ref)}"`:''}>💬 ${pl}${spk?`<b>${esc(spk)}</b>:`:''}${esc(l.text)}</div>`;
+    // 原生先入(声画分离三期,2026-10-03):说话人在同组前一镜就在画外开口(Seedance 2.5 原生 J-cut)
+    const nl=l.native_lead?`<span class="tag" style="color:var(--accent)" title="${esc(t('说话人在同组前一镜就在画外开口,切过来后接着说完(Seedance 2.5 原生)'))}">${esc(t('🎧 先入'))}</span> `:'';
+    return `<div class="dlg"${l.ref?` title="${esc(l.ref)}"`:''}>💬 ${pl}${nl}${spk?`<b>${esc(spk)}</b>:`:''}${esc(l.text)}</div>`;
   }).join('');
 }
 // 组音频形态 audio_plan(§7D;2026-10-03 加 voice_over=无画内句但有旁白/画外句):dialogue 💬 / voice_over|narration_over 👻 / ambient_only 🔇

@@ -88,6 +88,10 @@ def main(argv=None):
             est = sum(float(l.get("est_duration_s") or 0) for l in on_lines)
             if est <= 0:
                 continue
+            # 原生先入(声画分离三期,2026-10-03):首句标了 native_lead 的镜,人声从前一镜起,窗口向前并入前一镜
+            nl = on_lines[0].get("native_lead") if isinstance(on_lines[0].get("native_lead"), dict) else None
+            if nl and nl.get("shot") in bmap:
+                a = min(a, bmap[nl["shot"]][0])
             longest = longest_in_window(runs, a - args.pad, b + args.pad)
             ratio = round(longest / est, 2)
             row = {"group_id": gid, "shot_id": sid, "window_s": [round(a, 2), round(b, 2)], "est_s": round(est, 2),

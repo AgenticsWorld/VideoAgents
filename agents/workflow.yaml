@@ -278,6 +278,7 @@ phases:
                                transition_ok,         # 组入口转场 transition_in:类型枚举/时长范围/非硬切必填 intent+reason/Σ可渲染 ≤ 集预算 1%/narrative_block 成对连续(code/check_generation_groups.py 内置,WORKFLOW.md §9C,2026-08-28)
                                speakers_le_3,         # §8A:dialogue 组画内说话人 ≤3(2026-10-03 起落成代码 code/check_generation_groups.py;placement=os|vo 的画外句不计,第四人插话可按 §8D D3 转画外)
                                placement_valid, placement_speaker_is_cast, placement_reason_valid, offscreen_fit, post_voice_no_overlap,   # 声画分离(2026-10-03,WORKFLOW.md §8D,code/offscreen_lines.py check):os/vo 句 heard_in 同组、speaker 为本集 cast 人物编号、分镜转画外须带白名单 trigger、画外句装进 heard_in 窗口(扣画内句 + 同窗旁白)且与旁白不同窗抢位;output.sound_split=off 时 skipped
+                               native_lead_valid,   # 原生先入(三期 2026-10-03,§8D ⑨,code/sync_native_leads.py check / 内置于 check_generation_groups):画内句 dialogue_lines[].native_lead 须满足 P1–P8(sound_split=auto、视频原声、Seedance 2.5、同组前一镜无说话人无台词、本镜首句、s ≤ min(前镜,1.0,估时×40%)、先入文本不含表演触发词);只开放 J
                                blocking_map_present] } }   # 继承 storyboard blocking_map/view_tile 并按定稿组重切(code/blocking_map_check.py --strict,2026-08-19;2026-09-07 起不再渲染 blocking_maps/*.png,人物空间位置由 p6-whitebox 白模参考视频承担)   # 旁白/对白估时级适配 + 无声组核查(WORKFLOW.md §7D ①,H3A 签字前;ambient_only 组必附 silent_rationale,讲不清叙事的回派 narration 补写并写回 narration.md;dialogue 组 Σ台词估时 ≤ 组时长×0.7,超限优先回派 dialogue-rewrite 改短台词——台词超长会迫使视频模型赶词提速)
       # 对白时长校验修正环节(2026-08-30,WORKFLOW.md §7D ①′):对白在 Phase 5 写完、镜头时长到 Phase 6 才定,长度必然漂移。
       # 定稿镜头表后固定跑 code/check_dialogue_fit.py:PASS 即关单(报告落盘);超限组按报告 trim_targets 由 dialogue-rewrite
@@ -365,6 +366,7 @@ phases:
                                shot_plate_bound,  # 分镜背景图已生成的组:refs 在角色/生物 sheet 之后按镜序挂各镜背景图(两张图的镜 start+end 都挂,不走首尾帧模式)+ 正文 Shot 1: 前固定段 Shot plates:(逐镜 [Image N] 说明句);背景图机位与当前白模不一致 WARN 过期(code/sync_shot_plates.py,2026-09-09;开关关闭 skipped)
                                nonspeech_group_prompt_ok,   # §7D ③:voice_over(旧名 narration_over)/ambient_only 组禁 {} 台词、必含无对白约束句;voice_over 组声明配后期人声(旁白或画外对白,通用句);只数画内说话人(2026-10-03)
                                offscreen_not_in_prompt,   # 声画分离(2026-10-03,§8D,code/offscreen_lines.py check):dialogue_lines[].placement=os|vo 的句不得出现在 {} 内、audio_refs 不得含只有画外句的说话人、正文不提其名(白模 hidden 规则不变);sound_split=off 时 skipped
+                               native_lead_bound,   # 原生先入(三期 2026-10-03,§8D ⑨,code/sync_native_leads.py sync --write 机器写入 / check):带 native_lead 的句,前镜段末有【原生先入】句 + {先入},本镜段 {全句}→{余句} + 接续句,全句 / 先入文本不再出现在本镜 {};prompt 工位不手写、不自行拆句;无 native_lead 的集 skipped
                                prompt_beats_bound,   # 时间尺(2026-10-03):每个 Shot 段顺序连接词数 ≤ blocking 节拍数 + 1,prompt 只把节拍写细不加顺序动作(code/check_time_budget.py --scope prompt)
                                prompt_skill_applied,   # §7F:组 json 回执 skill_applied 与项目「提示词技能」快照一致(id/sha256/checklist),code/prompt_skill_check.py
                                sd25_prompt_structure,   # 2026-09-09:套用 sd25-pe 的组正文必须按 2.5 官方结构(【人物】/【动作与声音】分组、每镜「使用/不采用」清单、【未采用素材】、【保持一致】;【场景】槽位由 sync_shot_plates 写),同脚本自动执行
@@ -384,6 +386,7 @@ phases:
       - { id: p7-video, agent: 08-video-gen/video-generation,
           depends_on: [p7-consistency, p7-video@prev_group, p8-voiceprints, p8-narrator],  # 组序串行:前组尾帧作续接锚(仅「长镜头」开启的项目;关闭时无续接链,prev_group 依赖可解除、组可并行,2026-09-01);对白组台词干声作 reference_audio 音色锚(仅锚音色,对白语音口型模型原生;TTS 严禁作配音,§8A 红线);旁白/对白实测适配 narration_fit、dialogue_fit 未过不派发(§7D ②);开跑前核对 refs 素材完备(剧情道具缺参考图=违规配置退回,prop_ref_attached)
           # 组 json 有 video_refs(白模 camera.mp4,2026-09-07;2026-09-08 起无 top.mp4)时按序传 --ref-video;方舟/MiniMax 参考视频须公网 URL(文件托管已配置)
+          # 原生先入(三期 2026-10-03,§8D ⑨):组有 native_lead 句时开跑前 code/sync_native_leads.py check 复核 native_lead_bound;交付后 code/sync_native_leads.py audible --groups {group}(人声起点落在前一镜窗口 ≥0.3s = PASS,否则 WARN「先入未生效」只记回执、不阻断、不开缺陷单)
           outputs: ["assets/clips/{ep}/{group}.mp4", "assets/clips/{ep}/{group}.meta.json"],
           validation: { auto: [group_duration_pm_1s, fps_ok, resolution_ok, audio_track_present, dialogue_audible,   # dialogue_audible(2026-10-03):对白镜计划时段 ±1.5s 窗内最长人声段 / 台词估时 <0.3 判疑似整句缺失(code/check_dialogue_audible.py,不转写);resolution_ok:画幅 16:9/9:16 只是大致比例——引擎原生输出近似比例(如 480p 档 864x496)即合规,不得因非严格 16:9/9:16 判失败或索要用户豁免(2026-08-03 Thedouble2 前科)
                                last_frame_saved, boundaries_detected],
