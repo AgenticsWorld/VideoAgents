@@ -170,26 +170,32 @@ body.masking .frame .maskpad{display:block}
 .cutp .msg{color:var(--dim);font-size:11px}
 .cutp .msg.err{color:var(--red)}
 .cutp .msg.ok{color:var(--green)}
-.waves{position:relative;display:grid;grid-template-columns:52px 1fr;font:10px var(--mono);border-top:1px solid var(--border);flex:none;background:var(--panel)}
-.waves .lb{padding:0 8px;color:var(--dim);border-bottom:1px solid var(--border);border-right:1px solid var(--border);display:flex;align-items:center;height:18px}
+/* 标签列 72px(2026-10-03:轨名后各带一个 🔊 按钮控制该轨声音);改宽度须同步 --wlb 与 waveHead()/拖动的 calc */
+.waves{--wlb:72px;position:relative;display:grid;grid-template-columns:var(--wlb) 1fr;font:10px var(--mono);border-top:1px solid var(--border);flex:none;background:var(--panel)}
+.waves .lb{padding:0 4px 0 8px;color:var(--dim);border-bottom:1px solid var(--border);border-right:1px solid var(--border);display:flex;align-items:center;gap:2px;height:18px;white-space:nowrap}
+.waves .lb span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.waves .lb .snd{flex:none;border:0;background:none;color:var(--text);font-size:11px;line-height:1;padding:0 2px;cursor:pointer;border-radius:3px;opacity:.9}
+.waves .lb .snd:hover{background:var(--panel3)}
+.waves .lb .snd.off{opacity:.4}
 .waves .tr{height:18px;border-bottom:1px solid var(--border);position:relative;background:repeating-linear-gradient(90deg,transparent 0 24px,#ffffff06 24px 25px);overflow:hidden}
 .waves .tr i{position:absolute;top:4px;height:10px;border-radius:2px;background:var(--panel3)}
-.waves .tr i.v{background:#5a6b8e}.waves .tr i.n{background:#7a6c9e}.waves .tr i.m{background:#3e6f6a}
+.waves .tr i.o{background:#8a7a4e}.waves .tr i.v{background:#5a6b8e}.waves .tr i.n{background:#7a6c9e}.waves .tr i.m{background:#3e6f6a}
+.waves .tr.off i{opacity:.4}
 .waves .tr i.cue{width:2px;background:var(--yellow);top:2px;height:14px;cursor:pointer}
 .waves .tr i.cue.miss{background:var(--red)}
-/* 四轨统一当前时间线(2026-09-16):贯穿对白/旁白/BGM/音效四轨,盖在轨道内容之上;left 由 waveHead() 按标签列 52px + 轨道宽度比例算 */
-.waves .wph{position:absolute;top:0;bottom:0;left:52px;width:1px;background:#fff;box-shadow:0 0 0 1px #0008;z-index:3;pointer-events:none}
+/* 五轨统一当前时间线(2026-09-16):贯穿原声/配音/旁白/BGM/音效五轨,盖在轨道内容之上;left 由 waveHead() 按标签列 --wlb + 轨道宽度比例算 */
+.waves .wph{position:absolute;top:0;bottom:0;left:var(--wlb);width:1px;background:#fff;box-shadow:0 0 0 1px #0008;z-index:3;pointer-events:none}
 .waves .wph::before{content:'';position:absolute;top:0;left:-3px;border:3.5px solid transparent;border-top:5px solid #fff;border-bottom:0}
 .waves .tr i.nofile{opacity:.35;outline:1px dashed #ffffff55}
 .waves .tr i.live{box-shadow:0 0 0 1px #fff;filter:brightness(1.45)}
-/* 轨道条目选中(2026-09-16):点一条对白/旁白/BGM/音效 → 高亮 + 下方出现选中条(定位 / ✏️ 发修改意见给修改师) */
+/* 轨道条目选中(2026-09-16):点一条原声/配音/旁白/BGM/音效 → 高亮 + 下方出现选中条(定位 / ✏️ 修改 给修改师;原声另有 去人声 / 去环境声) */
 .waves .tr{cursor:col-resize;touch-action:none}
 body.wscrub,body.wscrub *{cursor:col-resize!important;user-select:none!important}
 .waves .tr i[data-i]{cursor:pointer}
 .waves .tr i.sel{outline:2px solid var(--accent);outline-offset:1px;z-index:2}
 .waves .wsel{grid-column:1/-1;display:flex;gap:6px;align-items:center;padding:3px 8px;border-bottom:1px solid var(--border);font:11.5px var(--font,system-ui);color:var(--text);background:var(--panel2)}
 .waves .wsel .kd{padding:0 6px;border-radius:3px;font-family:var(--mono);font-size:10.5px;color:#0b1020}
-.waves .wsel .kd.v{background:#8fa3cf}.waves .wsel .kd.n{background:#b3a4d9}.waves .wsel .kd.m{background:#6fb3ac}.waves .wsel .kd.s{background:var(--yellow)}
+.waves .wsel .kd.o{background:#cdb77a}.waves .wsel .kd.v{background:#8fa3cf}.waves .wsel .kd.n{background:#b3a4d9}.waves .wsel .kd.m{background:#6fb3ac}.waves .wsel .kd.s{background:var(--yellow)}
 .waves .wsel .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .waves .wsel .tm{color:var(--dim);font-family:var(--mono);font-size:10.5px}
 /* 右栏 */
@@ -378,7 +384,7 @@ async function load(keep){
     // 同一 grp 多行(旧服务端按 timeline 逐镜切条出行)并成一行:时长累加,场景的组清单去重
     {const m=new Map();for(const g of d.groups||[]){const x=m.get(g.group_id);if(x)x.duration=Math.round((x.duration+(g.duration||0))*1000)/1000;else m.set(g.group_id,g)}d.groups=[...m.values()];
      for(const sc of d.scenes||[])sc.groups=[...new Set(sc.groups)]}
-    D=d;stemBuild();
+    D=d;if(first)trkInit();stemBuild();
     if(first||!grpById(SEL)){
       const pos=first?posLoad():{},blks=snBlocks(),open=(pos.open||[]).filter(id=>blks.some(x=>x.key===id));
       SEL=(pos.sel&&grpById(pos.sel)?pos.sel:(d.groups.find(g=>g.has_clip)||d.groups[0]||{}).group_id)||'';VA=null;VB=null;RANGE=null;MASK=null;
@@ -568,7 +574,6 @@ function renderMonitorShell(){
     <span class="tc" id="xtc">00:00.00 / 00:00.00</span>
     <button class="sm" id="b-range" title="${esc(t('把当前时刻设为时间段起点/终点(组内时间段作用域);离镜头切点(走带条上的白色竖线)0.3 秒内自动吸附到切点,按住 ⌥/Alt 点击不吸附'))}">◇ ${esc(t('标记时间段'))}</button>
     <button class="sm" id="b-frame" title="${esc(t('把 A 画面当前帧存为参考帧(供参考帧匹配/重打光/重绘)'))}">📷 ${esc(t('取参考帧'))}</button>
-    <button class="sm" id="b-mute" title="${esc(t('B 画面始终静音;此按钮切 A 的声音'))}">🔊</button>
   </div>
   <div class="waves" id="waves"></div>`;
   const va=$('#va'),vb=$('#vb');
@@ -581,7 +586,6 @@ function renderMonitorShell(){
   $('#b-fprev').onclick=()=>{va.pause();seekTo(Math.max(0,va.currentTime-1/24))};
   $('#b-fnext').onclick=()=>{va.pause();seekTo(va.currentTime+1/24)};
   $('#b-mask').onclick=()=>{document.body.classList.toggle('masking');$('#b-mask').classList.toggle('pri',document.body.classList.contains('masking'))};
-  $('#b-mute').onclick=()=>{va.muted=!va.muted;$('#b-mute').textContent=va.muted?'🔇':'🔊';if(EPA)EPA.muted=va.muted;stemSync()};
   $('#b-range').onclick=markRange;
   bindWaveScrub();
   $('#b-frame').onclick=captureFrame;
@@ -659,7 +663,7 @@ function setMonitor(keepTime){
     const u=(D.finals||{}).final;
     $('#selA').innerHTML='';$('#selB').innerHTML='';vb.style.display='none';$('#split').style.display='none';$('#knob').style.display='none';$('#tagB').style.display='none';
     if(!u){$('#fhint').style.display='flex';$('#fhint').textContent=t('还没有成片 final.mp4(点右上「出成片」)');va.removeAttribute('src');va.load();return}
-    va.src=u;va.muted=false;$('#tagA').textContent='final.mp4';$('#xgid').textContent=EP;$('#finfo').textContent='';epAudioStop();stemStop();renderWaves();return;
+    va.src=u;va.muted=!LAYERS.sound;$('#tagA').textContent='final.mp4';$('#xgid').textContent=EP;$('#finfo').textContent='';epAudioStop();stemStop();renderWaves();return;
   }
   if(!g){return}
   const vs=versionsOf(SEL);
@@ -681,7 +685,7 @@ function setMonitor(keepTime){
   if(va.dataset.src!==fa.url){va.src=fa.url;va.dataset.src=fa.url}
   loadShotCuts(SEL,VA);
   if(vb.dataset.src!==fb.url){vb.src=fb.url;vb.dataset.src=fb.url}
-  va.muted=!LAYERS.sound;vb.muted=true;
+  va.muted=!nativeOn();vb.muted=true;
   $('#tagA').textContent='A · '+(VA===0?'v0 母本':'v'+VA)+(VA===cur?' ★':'');
   $('#tagB').textContent='B · '+(VB===0?'v0 母本':'v'+VB)+(VB===cur?' ★':'');
   $('#xgid').textContent=SEL;
@@ -732,7 +736,7 @@ function epLoad(i,t0){
   const vs=versionsOf(g.group_id);const cur=vs.find(v=>v.v===(g.current||0))||vs[0];
   const va=$('#va');
   if(!cur){epNext();return}
-  va.src=cur.url;va.dataset.src=cur.url;va.muted=!!(D.finals||{}).final_audio||!LAYERS.sound;
+  va.src=cur.url;va.dataset.src=cur.url;va.muted=!!(D.finals||{}).final_audio||!nativeOn();
   $('#tagA').textContent=g.group_id+' · '+(cur.v?'v'+cur.v:'v0');$('#xgid').textContent=g.group_id;$('#finfo').textContent=t('整集连播')+' '+(i+1)+'/'+D.groups.length;
   renderLeft();renderRight();renderFoot();renderWaves();
   va.addEventListener('loadedmetadata',()=>{if(t0)va.currentTime=t0;if(PLAYING_EP)va.play().catch(()=>{})},{once:true});
@@ -763,16 +767,26 @@ function epAudioSync(start){
   if(start===true||(!va.paused&&EPA.paused)){PLAYING_EP=true;EPA.play().catch(()=>{})}
 }
 function epAudioStop(){if(EPA){EPA.pause()}}
-/* ---------- 分轨随播(2026-09-16):旁白 / BGM / 音效按集时间轴位置与 A 画面同步播放 ----------
-   单组:组视频原生轨(对白)+ 三路分轨叠放;整集连播:有混音成品 final_audio 就只放它(已含三路),没有则原生轨 + 分轨;看成片:只放 final.mp4 自带声音。
-   分轨条目来自 D.lanes(后端 _post_audio_lanes):file=可播放 URL,gain_db → 音量,BGM 另按 cue sheet 的 fade 做淡入淡出。 */
+/* ---------- 逐轨声音开关(2026-10-03):原声 / 配音 / 旁白 / BGM / 音效 五轨各一个 🔊 ----------
+   默认按项目「输出设置→对白配音」:视频原声 = 原声开、配音关;后期配音 = 原声关、配音开。原声 = 组视频 <video> 自带声轨;
+   其余四轨是分轨随播的外挂音频。只在逐轨分开出声的模式生效(单组;整集连播且没有混音成品);有混音成品 / 看成片时只放成品一条声轨,按钮灰显。 */
+let TRK={native:true,dialogue:false,narration:true,bgm:true,sfx:true};
+function trkInit(){const dub=(((D||{}).settings||{}).output||{}).dialogue_voice==='dubbing';TRK={native:!dub,dialogue:dub,narration:true,bgm:true,sfx:true}}
+const trkMixed=()=>MODE==='final'||(MODE==='episode'&&!!((D||{}).finals||{}).final_audio);
+const nativeOn=()=>LAYERS.sound&&(trkMixed()||TRK.native);
+function trkToggle(key){TRK[key]=!TRK[key];applyLayerAudio()}
+/* ---------- 分轨随播(2026-09-16):配音 / 旁白 / BGM / 音效按集时间轴位置与 A 画面同步播放 ----------
+   单组:组视频原生轨(原声)+ 四路分轨叠放;整集连播:有混音成品 final_audio 就只放它(已含各路),没有则原生轨 + 分轨;看成片:只放 final.mp4 自带声音。
+   分轨条目来自 D.lanes(后端 _post_audio_lanes):file=可播放 URL,gain_db → 音量,BGM 另按 cue sheet 的 fade 做淡入淡出。
+   配音轨(2026-10-03)= p7-dub 逐句贴合音频(dub_manifest)或对白语音库音频,有 file 才随播。 */
 const STEM={items:[],els:{},tick:null};
 const dbGain=db=>Math.min(1,Math.pow(10,(+db||0)/20));
 function stemBuild(){
   const L=(D&&D.lanes)||{},out=[];
-  (L.narration||[]).forEach((x,i)=>{if(x.file)out.push({id:'n'+i,t0:+x.t0,t1:x.t1>x.t0?+x.t1:null,url:x.file,gain:dbGain(x.gain_db)})});
-  (L.bgm||[]).forEach((x,i)=>{if(x.file)out.push({id:'m'+i,t0:+x.t0,t1:x.t1>x.t0?+x.t1:null,url:x.file,gain:dbGain(x.gain_db),fi:+x.fade_in||0,fo:+x.fade_out||0})});
-  (L.sfx||[]).forEach((x,i)=>{if(x.file&&x.t_abs!=null)out.push({id:'s'+i,t0:+x.t_abs,t1:null,url:x.file,gain:dbGain(x.gain_db)})});
+  (L.dialogue||[]).forEach((x,i)=>{if(x.file)out.push({id:'v'+i,lane:'dialogue',t0:+x.t0,t1:x.t1>x.t0?+x.t1:null,url:x.file,gain:dbGain(x.gain_db)})});
+  (L.narration||[]).forEach((x,i)=>{if(x.file)out.push({id:'n'+i,lane:'narration',t0:+x.t0,t1:x.t1>x.t0?+x.t1:null,url:x.file,gain:dbGain(x.gain_db)})});
+  (L.bgm||[]).forEach((x,i)=>{if(x.file)out.push({id:'m'+i,lane:'bgm',t0:+x.t0,t1:x.t1>x.t0?+x.t1:null,url:x.file,gain:dbGain(x.gain_db),fi:+x.fade_in||0,fo:+x.fade_out||0})});
+  (L.sfx||[]).forEach((x,i)=>{if(x.file&&x.t_abs!=null)out.push({id:'s'+i,lane:'sfx',t0:+x.t_abs,t1:null,url:x.file,gain:dbGain(x.gain_db)})});
   const keep=new Set(out.map(x=>x.id+'|'+x.url));
   for(const k in STEM.els){if(!keep.has(k)){STEM.els[k].pause();STEM.els[k].removeAttribute('src');STEM.els[k].load();delete STEM.els[k]}}
   STEM.items=out;
@@ -795,13 +809,13 @@ function stemSync(){
       a=new Audio(it.url);a.preload='auto';STEM.els[k]=a;
     }
     const dur=a.duration||0,len=it.t1!=null?it.t1-it.t0:Infinity,end=Math.min(len,dur||Infinity);
-    const active=playing&&local>=0&&local<end&&!(it.t1==null&&!dur&&local>5);
+    const active=playing&&TRK[it.lane]!==false&&local>=0&&local<end&&!(it.t1==null&&!dur&&local>5);
     if(!active){if(!a.paused)a.pause();continue}
     live.add(it.id);
     let g=it.gain;
     if(it.fi>0)g*=Math.min(1,local/it.fi);
     if(it.fo>0&&it.t1!=null)g*=Math.min(1,Math.max(0,(len-local)/it.fo));
-    a.volume=Math.max(0,Math.min(1,g));a.muted=va.muted;
+    a.volume=Math.max(0,Math.min(1,g));a.muted=false;
     if(Math.abs(a.currentTime-local)>0.3){try{a.currentTime=local}catch(_){}}
     if(a.paused)a.play().catch(()=>{});
   }
@@ -810,7 +824,7 @@ function stemSync(){
   else if(STEM.tick){clearInterval(STEM.tick);STEM.tick=null}
 }
 function stemStop(){for(const k in STEM.els)STEM.els[k].pause();if(STEM.tick){clearInterval(STEM.tick);STEM.tick=null}$$('#waves .live').forEach(e=>e.classList.remove('live'))}
-function applyLayerAudio(){const va=$('#va');if(!va)return;if(MODE==='group')va.muted=!LAYERS.sound;else if(MODE==='episode'){va.muted=!!(D.finals||{}).final_audio||!LAYERS.sound;epAudioSync()}renderWaves();stemSync()}
+function applyLayerAudio(){const va=$('#va');if(!va)return;if(MODE==='group')va.muted=!nativeOn();else if(MODE==='episode'){va.muted=!!(D.finals||{}).final_audio||!nativeOn();epAudioSync()}else if(MODE==='final')va.muted=!LAYERS.sound;renderWaves();stemSync()}
 function updateSubtitle(abs){
   // 字幕样式预览:按包装层 subtitle_style 后期调整实时渲染(内容只做样式示意:取本组对白说话人)
   const el=$('#subt');const ss=(D.plan.recipes||[]).find(r=>r.kind==='subtitle_style'&&r.status!=='discarded');
@@ -1191,7 +1205,7 @@ function waveAbsAt(clientX){
 function waveScrubTo(abs){
   // 整集连播拖动中跨到别的组:先只挪播放头,松手再切组(避免拖动途中连续换源)
   if(MODE==='episode'){const g=D.groups[EPIDX];if(!g||abs<(g.cum_start_s||0)||abs>=(g.cum_start_s||0)+(g.duration||0)){
-    WSCRUB.pending=abs;const ph=$('#waves .wph'),[w0,w1]=waveWindow();if(ph)ph.style.left=`calc(52px + (100% - 52px) * ${((abs-w0)/Math.max(0.01,w1-w0)).toFixed(4)})`;return}}
+    WSCRUB.pending=abs;const ph=$('#waves .wph'),[w0,w1]=waveWindow();if(ph)ph.style.left=`calc(var(--wlb) + (100% - var(--wlb)) * ${((abs-w0)/Math.max(0.01,w1-w0)).toFixed(4)})`;return}}
   WSCRUB.pending=null;waveSeekAbs(abs);
 }
 let WSCRUB_BOUND=false;
@@ -1226,34 +1240,41 @@ function waveHead(){
   // 位置一律按集时间轴(组起点 + 组内时间)算,与 waveWindow() 同口径;单组 / 整集连播都适用
   const ph=$('#waves .wph');if(!ph||!D)return;
   const abs=stemAbs(),[w0,w1]=waveWindow(),f=Math.max(0,Math.min(1,(abs-w0)/Math.max(0.01,w1-w0)));
-  ph.style.left=`calc(52px + (100% - 52px) * ${f.toFixed(4)})`;
+  ph.style.left=`calc(var(--wlb) + (100% - var(--wlb)) * ${f.toFixed(4)})`;
 }
 function renderWaves(){
   const [w0,w1]=waveWindow(),W=Math.max(0.01,w1-w0),L=D.lanes||{};
   const pos=(a,b)=>`left:${((a-w0)/W*100).toFixed(2)}%;width:${(Math.max(0.15,b-a)/W*100).toFixed(2)}%`;
   const inWin=x=>x.t1>w0&&x.t0<w1;
-  const LANE_KEY={v:'dialogue',n:'narration',m:'bgm',s:'sfx'};
+  const LANE_KEY={o:'native',v:'dialogue',n:'narration',m:'bgm',s:'sfx'};
   const isSel=(key,i)=>WSEL&&WSEL.lane===key&&WSEL.i===i;
-  const lane=(lb,items,cls)=>`<div class="lb" title="${cls==='v'?'':esc(I18N.f('{n} 条可随播',{n:items.filter(x=>x.file).length}))}">${esc(lb)}</div><div class="tr">${items.map((x,i)=>inWin(x)?`<i class="${cls}${'file' in x&&!x.file?' nofile':''}${isSel(LANE_KEY[cls],i)?' sel':''}" data-lane="${LANE_KEY[cls]}" data-i="${i}" data-stem="${cls}${i}" style="${pos(x.t0,x.t1)}" title="${esc(x.label||'')}${'file' in x&&!x.file?' · '+esc(t('无音频文件')):''} · ${esc(t('点击选中'))}"></i>`:'').join('')}</div>`;
-  let h=lane(t('对白'),L.dialogue||[],'v')+lane(t('旁白'),L.narration||[],'n')+lane(t('BGM'),L.bgm||[],'m');
-  h+=`<div class="lb">${esc(t('音效'))}</div><div class="tr">${(L.sfx||[]).map((x,i)=>x.t_abs>=w0&&x.t_abs<=w1?`<i class="cue ${x.resolved?'':'miss'}${x.resolved&&!x.file?' nofile':''}${isSel('sfx',i)?' sel':''}" style="left:${((x.t_abs-w0)/W*100).toFixed(2)}%" data-lane="sfx" data-i="${i}" data-sfx="${esc(x.id)}" data-stem="s${i}" title="${esc(x.label)}${x.resolved?(x.file?'':' · '+esc(t('无音频文件'))):' · '+esc(t('未落地'))} · ${esc(t('点击选中'))}"></i>`:'').join('')}</div>`;
+  // 轨名后的 🔊:切该轨声音;混音成品 / 成片只有一条声轨时灰显
+  const mixed=trkMixed();
+  const snd=key=>`<button class="snd${TRK[key]?'':' off'}" data-trk="${key}" ${mixed?'disabled':''} title="${esc(mixed?t('整集连播有混音成品 / 看成片时只放成品声轨,逐轨开关不生效'):TRK[key]?t('关闭这条轨道的声音'):t('打开这条轨道的声音'))}">${TRK[key]?'🔊':'🔇'}</button>`;
+  const lbl=(key,lb,tip)=>`<div class="lb" title="${esc(tip||'')}"><span>${esc(lb)}</span>${snd(key)}</div>`;
+  const lane=(lb,items,cls)=>{const key=LANE_KEY[cls];return lbl(key,lb,cls==='o'?t('组视频自带的声轨'):cls==='v'&&!items.some(x=>x.file)?'':I18N.f('{n} 条可随播',{n:items.filter(x=>x.file).length}))+`<div class="tr${TRK[key]?'':' off'}">${items.map((x,i)=>inWin(x)?`<i class="${cls}${'file' in x&&!x.file?' nofile':''}${isSel(key,i)?' sel':''}" data-lane="${key}" data-i="${i}" data-stem="${cls}${i}" style="${pos(x.t0,x.t1)}" title="${esc(x.label||'')}${'file' in x&&!x.file?' · '+esc(t('无音频文件')):''} · ${esc(t('点击选中'))}"></i>`:'').join('')}</div>`};
+  let h=lane(t('原声'),L.native||[],'o')+lane(t('配音'),L.dialogue||[],'v')+lane(t('旁白'),L.narration||[],'n')+lane(t('BGM'),L.bgm||[],'m');
+  h+=lbl('sfx',t('音效'))+`<div class="tr${TRK.sfx?'':' off'}">${(L.sfx||[]).map((x,i)=>x.t_abs>=w0&&x.t_abs<=w1?`<i class="cue ${x.resolved?'':'miss'}${x.resolved&&!x.file?' nofile':''}${isSel('sfx',i)?' sel':''}" style="left:${((x.t_abs-w0)/W*100).toFixed(2)}%" data-lane="sfx" data-i="${i}" data-sfx="${esc(x.id)}" data-stem="s${i}" title="${esc(x.label)}${x.resolved?(x.file?'':' · '+esc(t('无音频文件'))):' · '+esc(t('未落地'))} · ${esc(t('点击选中'))}"></i>`:'').join('')}</div>`;
   h+=waveSelHtml();
   $('#waves').innerHTML=LAYERS.sound?h+'<i class="wph"></i>':'';
   waveHead();
   $$('#waves .tr i[data-i]').forEach(el=>el.onclick=e=>{e.stopPropagation();const lane=el.dataset.lane,i=+el.dataset.i;WSEL=(WSEL&&WSEL.lane===lane&&WSEL.i===i)?null:{lane,i};renderWaves()});
+  $$('#waves .lb [data-trk]').forEach(b=>b.onclick=e=>{e.stopPropagation();trkToggle(b.dataset.trk)});
   bindWaveSel();
 }
-/* ---------- 轨道条目选中条:定位 / 打开点位表(音效)/ ✏️ 发修改意见给修改师 ---------- */
+/* ---------- 轨道条目选中条:定位 / 打开点位表(音效)/ 去人声・去环境声(原声)/ ✏️ 修改 给修改师 ---------- */
 function waveSelItem(){if(!WSEL||!D)return null;const x=((D.lanes||{})[WSEL.lane]||[])[WSEL.i];return x||null}
 function waveSelHtml(){
   const x=waveSelItem();if(!x)return '';
-  const cls={dialogue:'v',narration:'n',bgm:'m',sfx:'s'}[WSEL.lane],kd={dialogue:t('对白'),narration:t('旁白'),bgm:t('BGM'),sfx:t('音效')}[WSEL.lane];
+  const cls={native:'o',dialogue:'v',narration:'n',bgm:'m',sfx:'s'}[WSEL.lane],kd={native:t('原声'),dialogue:t('配音'),narration:t('旁白'),bgm:t('BGM'),sfx:t('音效')}[WSEL.lane];
   const tm=WSEL.lane==='sfx'?tc(x.t_abs):tc(x.t0)+'–'+tc(x.t1);
-  let nm=WSEL.lane==='dialogue'?`${x.group_id}${x.shot_id?' · '+x.shot_id:''}${x.label?' · '+x.label:''}`:WSEL.lane==='sfx'?`${x.id}${x.label?' · '+x.label:''} · ${x.group_id}`:x.label||'';
+  let nm=WSEL.lane==='dialogue'?`${x.group_id}${x.shot_id?' · '+x.shot_id:''}${x.label?' · '+x.label:''}`:WSEL.lane==='sfx'?`${x.id}${x.label?' · '+x.label:''} · ${x.group_id}`:WSEL.lane==='native'?`${x.group_id} · ${t('组视频自带的声轨')}`:x.label||'';
   return `<div class="wsel"><span class="kd ${cls}">${esc(kd)}</span><span class="nm" title="${esc(nm)}">${esc(nm)}</span><span class="tm">${esc(tm)}</span>`+
     `<button class="xs" data-ws="seek" title="${esc(t('把播放头定位到这一段起点'))}">⏵ ${esc(t('定位'))}</button>`+
     (WSEL.lane==='sfx'?`<button class="xs" data-ws="sfx">${esc(t('点位表'))}</button>`:'')+
-    `<button class="xs pri" data-ws="edit" title="${esc(t('对这一段提修改意见,发给修改师处理'))}">✏️ ${esc(t('发修改意见'))}</button><button class="xs" data-ws="close" title="${esc(t('清除选中(Esc)'))}">✕</button></div>`;
+    `<button class="xs pri" data-ws="edit" title="${esc(t('对这一段提修改意见,发给修改师处理'))}">✏️ ${esc(t('修改'))}</button>`+
+    (WSEL.lane==='native'?`<button class="xs" data-ws="sep" data-kind="remove_vocals" title="${esc(t('新增调整 · 音效与声音:用本机人声分离模型去掉原声里的人声(立即出片)'))}">${esc(t('去人声'))}</button><button class="xs" data-ws="sep" data-kind="remove_ambience" title="${esc(t('新增调整 · 音效与声音:只留人声,去掉原声里的音效 / 环境声 / 配乐(立即出片)'))}">${esc(t('去环境声'))}</button>`:'')+
+    `<button class="xs" data-ws="close" title="${esc(t('清除选中(Esc)'))}">✕</button></div>`;
 }
 function bindWaveSel(){
   const box=$('#waves .wsel');if(!box)return;
@@ -1261,16 +1282,24 @@ function bindWaveSel(){
   box.querySelector('[data-ws="seek"]').onclick=()=>{const x=waveSelItem();if(!x)return;const abs=WSEL.lane==='sfx'?x.t_abs:x.t0;const g=grpById(x.group_id)||D.groups.find(g=>abs>=g.cum_start_s&&abs<g.cum_start_s+g.duration);if(!g)return;if(g.group_id!==SEL){const keep=WSEL;selectGroup(g.group_id);WSEL=keep;renderWaves()}$('#va').pause();seekTo(Math.max(0,abs-g.cum_start_s))};
   const sb=box.querySelector('[data-ws="sfx"]');if(sb)sb.onclick=()=>openSfx(waveSelItem().id);
   box.querySelector('[data-ws="edit"]').onclick=waveSelEdit;
+  // 原声轨:去人声 / 去环境声 → 打开「新增调整 · 音效与声音」并选中对应做法(作用域跟右栏当前作用域;组不同先切到该组)
+  box.querySelectorAll('[data-ws="sep"]').forEach(b=>b.onclick=()=>{const x=waveSelItem();if(!x)return;if(x.group_id&&x.group_id!==SEL){const keep=WSEL;selectGroup(x.group_id);WSEL=keep;renderWaves()}openRecipe({section:'sound',kind:b.dataset.kind})});
 }
 const artPath=u=>u?decodeURIComponent(String(u).split('?')[0].replace(/^\/api\/v1\/projects\/([^/]+)\/artifacts\//,'data/projects/$1/').replace(/^\/projects\//,'data/projects/')):'';
 function waveSelEdit(){
   // 结构化定位 → 修改师(00-orchestration/reviser):服务端按 kind 附代行工位 SOUL(dialogue/narration_audio/bgm/sfx)
   const x=waveSelItem();if(!x||!window.EditPopup)return;
   const lane=WSEL.lane,files=[];let kind,id,loc;
-  if(lane==='dialogue'){
+  if(lane==='native'){
+    // 原声 = 组视频自带声轨(视频生成随画面出的对白 / 环境声 / 音效;后期配音模式下已是配音后的 clip)
     const g=grpById(x.group_id)||{},cur=versionsOf(x.group_id).find(v=>v.v===(g.current||0));if(cur&&cur.url)files.push(artPath(cur.url));
+    kind='group_media';id=x.group_id;
+    loc=I18N.f('原声 {ep}/{g}(组视频自带声轨;集时间 {c}–{d}s;组视频见 files,时长 {n}s)',{ep:EP,g:x.group_id,c:num(x.t0,2),d:num(x.t1,2),n:num(g.duration||0,2)});
+  }else if(lane==='dialogue'){
+    const g=grpById(x.group_id)||{},cur=versionsOf(x.group_id).find(v=>v.v===(g.current||0));if(cur&&cur.url)files.push(artPath(cur.url));
+    if(x.file)files.push(artPath(x.file));
     kind='dialogue';id=x.shot_id||x.group_id;
-    loc=I18N.f('对白 {ep}/{g}{sh}({sp};组内 {a}–{b}s,集时间 {c}–{d}s;数据 directing/{ep}/shot_list.json 镜 {shot} dialogue_lines,组视频见 files)',{ep:EP,g:x.group_id,sh:x.shot_id?'/'+x.shot_id:'',sp:x.label||'-',a:num(x.t0-(g.cum_start_s||0),2),b:num(x.t1-(g.cum_start_s||0),2),c:num(x.t0,2),d:num(x.t1,2),shot:x.shot_id||'-'});
+    loc=I18N.f('配音 {ep}/{g}{sh}({sp};组内 {a}–{b}s,集时间 {c}–{d}s;数据 directing/{ep}/shot_list.json 镜 {shot} dialogue_lines,{src};组视频见 files)',{ep:EP,g:x.group_id,sh:x.shot_id?'/'+x.shot_id:'',sp:x.label||'-',a:num(x.t0-(g.cum_start_s||0),2),b:num(x.t1-(g.cum_start_s||0),2),c:num(x.t0,2),d:num(x.t1,2),shot:x.shot_id||'-',src:x.source==='dub'?I18N.f('配音音频 assets/audio/voice/{ep}/dub/{g}/dub_manifest.json',{ep:EP,g:x.group_id}):x.source==='library'?I18N.f('对白语音库 assets/audio/voice/{ep}/tts/tts_manifest.json',{ep:EP}):t('尚无配音音频')});
   }else if(lane==='narration'){
     if(x.file)files.push(artPath(x.file));kind=x.file?'narration_audio':'narration';id=x.num||x.seg_id||x.label;
     loc=I18N.f('旁白 {ep}/{id}(挂点组 {g};集时间 {c}–{d}s;数据 assets/audio/narration/{ep}/manifest.json 段 {id},文稿 story/episodes/{ep}/narration.md 条目 {id})',{ep:EP,id,g:x.group_id,c:num(x.t0,2),d:num(x.t1,2)});
@@ -1403,7 +1432,9 @@ function openRecipe(opt){
   const r=opt.recipe||null;
   const section=r?r.section:opt.section;
   const scope=r?r.scope:defaultScope();
-  MR={id:r&&r.id||null,section,kind:r?r.kind:null,scope,params:r?{...r.params}:{},refs:r?{...r.refs}:{},note:r?r.note:''};
+  MR={id:r&&r.id||null,section,kind:r?r.kind:(opt.kind&&KIND(opt.kind)?opt.kind:null),scope,params:r?{...r.params}:{},refs:r?{...r.refs}:{},note:r?r.note:''};
+  // 指定做法进来(原声轨「去人声 / 去环境声」):当前作用域不在该做法支持范围时退回本组
+  if(!r&&MR.kind){const kk=KIND(MR.kind);if(!(kk.scopes||[]).includes(MR.scope.level))MR.scope=kk.scopes.includes('group')?{level:'group',group_id:SEL,scene_id:sceneOfGroup(SEL)}:kk.scopes.includes('episode')?{level:'episode'}:{level:'scene',scene_id:sceneOfGroup(SEL)}}
   if(!MR.kind&&section==='sound')MR.kind='__sfx';
   if(!MR.kind){const ks=D.catalog.kinds.filter(k=>k.section===section&&k.scopes.includes(scope.level));MR.kind=(ks[0]||D.catalog.kinds.find(k=>k.section===section)||{}).id}
   if(!r&&MR.kind==='scene_palette'){const sc=D.scenes.find(s=>s.scene_id===(scope.scene_id||sceneOfGroup(SEL)));MR.params.palette=(sc&&sc.palette)||D.episode_palette||[]}

@@ -10555,9 +10555,12 @@ def _post_sfx_file_url(base: Path, rel: str | None) -> str | None:
 
 
 def _post_audio_lanes(base: Path, ep: str, groups: list[dict], sfx: dict) -> dict:
-    """监视器下方四轨 + 随播分轨(2026-09-16):旁白/BGM/音效条目带 file(可播放 URL)、gain_db、fade,前端按集时间轴位置与视频同步播放。"""
+    """监视器下方五轨 + 随播分轨(2026-09-16):旁白/BGM/音效条目带 file(可播放 URL)、gain_db、fade,前端按集时间轴位置与视频同步播放。
+    2026-10-03:加 native(原声=组 clip 自带声轨,一组一条,声音由前端 <video> 出);dialogue 轨改为「配音」——
+    有 p7-dub 产物(assets/audio/voice/epNN/dub/grpNNN/dub_manifest.json)按逐句开口时段挂 fit 音频;否则有对白语音库
+    (tts_manifest.json)的镜按镜起点顺排库音频;都没有保持原来的镜级条目(无 file 键=只画段落不随播)。"""
     cum = {g["group_id"]: g["cum_start_s"] for g in groups}
-    lanes = {"dialogue": [], "narration": [], "bgm": [], "sfx": []}
+    lanes = {"native": [], "dialogue": [], "narration": [], "bgm": [], "sfx": []}
 
     def _f(v, default=0.0) -> float:
         try:
@@ -10565,10 +10568,39 @@ def _post_audio_lanes(base: Path, ep: str, groups: list[dict], sfx: dict) -> dic
         except (TypeError, ValueError):
             return default
 
+    lib_audio: dict = {}
+    try:
+        from modules import dialogue_tts as _dt
+        lib_audio = _dt.line_audio(base, ep) or {}
+    except Exception:
+        lib_audio = {}
     for g in groups:
+        gid, c0 = g["group_id"], g["cum_start_s"]
+        if g.get("has_clip"):
+            lanes["native"].append({"group_id": gid, "t0": round(c0, 3), "t1": round(c0 + _f(g.get("duration")), 3), "label": gid})
+        dub = _read_json_safe(base / "assets" / "audio" / "voice" / ep / "dub" / gid / "dub_manifest.json") or {}
+        dub_lines = [e for e in (dub.get("lines") or []) if isinstance(e, dict) and e.get("status") in ("ok", "overflow") and e.get("fit_file")]
+        if dub_lines:
+            for e in dub_lines:
+                seg = e.get("segment") if isinstance(e.get("segment"), dict) else {}
+                a, b = _f(seg.get("start")), _f(seg.get("end"))
+                lanes["dialogue"].append({"group_id": gid, "shot_id": e.get("shot_id") or "", "t0": round(c0 + a, 3), "t1": round(c0 + max(b, a), 3),
+                                          "label": e.get("speaker") or "", "file": _post_url(base, e["fit_file"]), "gain_db": 0.0, "source": "dub"})
+            continue
         for d in g.get("dialogue") or []:
-            lanes["dialogue"].append({"group_id": g["group_id"], "shot_id": d.get("shot_id") or "", "t0": round(g["cum_start_s"] + d["t0"], 3),
-                                      "t1": round(g["cum_start_s"] + (d["t1"] or d["t0"]), 3), "label": ",".join(x for x in d.get("speakers") or [] if x)})
+            sid = d.get("shot_id") or ""
+            lines = sorted(((idx, v) for (s, idx), v in lib_audio.items() if s == sid), key=lambda kv: kv[0])
+            if lines:
+                acc = c0 + _f(d["t0"])
+                for idx, v in lines:
+                    dur = _f(v.get("duration_s"))
+                    lanes["dialogue"].append({"group_id": gid, "shot_id": sid, "t0": round(acc, 3), "t1": round(acc + dur, 3),
+                                              "label": v.get("speaker") or "", "gain_db": 0.0, "source": "library",
+                                              "file": _post_url(base, f"assets/audio/voice/{ep}/tts/{v.get('file')}")})
+                    acc += dur
+                continue
+            lanes["dialogue"].append({"group_id": gid, "shot_id": sid, "t0": round(c0 + d["t0"], 3),
+                                      "t1": round(c0 + (d["t1"] or d["t0"]), 3), "label": ",".join(x for x in d.get("speakers") or [] if x)})
     ndir = base / "assets" / "audio" / "narration" / ep
     man = _read_json_safe(ndir / "manifest.json") or _read_json_safe(ndir / "narration_track.json") or {}
     for s in man.get("segments") or []:
@@ -10765,7 +10797,7 @@ def _preview_post(project: str, ep: str):
         "episode_duration": round(_post_episode_duration(tl, groups), 3),
         "settings": {"packaging": settings.get("packaging") or {}, "output": {k: (settings.get("output") or {}).get(k)
                                                                               for k in ("subtitle_burn_in", "caption_enabled", "caption_mode", "caption_types",
-                                                                                        "narration_enabled", "final_resolution")}},
+                                                                                        "narration_enabled", "final_resolution", "dialogue_voice")}},
         # 花字用途目录(modules/caption_catalog.json)+ 本项目逐类型可用性(av 项目 / 缺数据灰显)+ 当前策略
         "caption_catalog": {**{k: _ccat.load_catalog()[k] for k in ("tiers", "categories", "types", "excluded", "presets")},
                             "availability": _ccat.availability(base), "policy": _ccat.normalize_policy(settings.get("output") or {})},
