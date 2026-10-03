@@ -4086,6 +4086,7 @@ window.I18N_DICT = {
 "尚无配音音频": "aún sin audio de doblaje",
 "声画分离": "Separación sonido-imagen",
 "自动(默认)": "Automático (predeterminado)",
+"关(默认)": "Desactivado (predeterminado)",
 "仅剧本标记": "Solo marcas del guion",
 "关": "Apagado",
 "画内": "En pantalla",

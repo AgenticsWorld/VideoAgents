@@ -4084,6 +4084,7 @@ window.I18N_DICT = {
 "尚无配音音频": "belum ada audio sulih suara",
 "声画分离": "Pisah suara-gambar",
 "自动(默认)": "Otomatis (bawaan)",
+"关(默认)": "Mati (bawaan)",
 "仅剧本标记": "Hanya penanda naskah",
 "关": "Mati",
 "画内": "Dalam layar",

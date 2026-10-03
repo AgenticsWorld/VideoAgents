@@ -246,10 +246,10 @@ def effective(base: Path, ep: str | None = None) -> dict:
             else:
                 out = {**proj_eff, "mode": ov, **MODE_TABLE[ov], "custom_map": None, "project_mode": proj_eff["mode"]}
             out["mode_source"] = "episode"
-    # 声画分离模式(2026-10-03):声桥 carry=line 的前提;设置页读 settings.json#output.sound_split(缺省 auto)
+    # 声画分离模式(2026-10-03):声桥 carry=line 的前提;设置页读 settings.json#output.sound_split(缺省 off)
     st = _read(base / "settings.json", {}) or {}
     ss = (st.get("output") or {}).get("sound_split") if isinstance(st.get("output"), dict) else None
-    out["sound_split"] = ss if ss in ("off", "script_only", "auto") else "auto"
+    out["sound_split"] = ss if ss in ("off", "script_only", "auto") else "off"
     return out
 
 
@@ -784,7 +784,7 @@ def _designs_for(b: dict, eff: dict) -> tuple[dict | None, list[dict]]:
 
     sb_s = float(eff.get("sound_bridge_s") or SOUND_BRIDGE_S)
     sb_carry_pref = str(eff.get("sound_bridge_carry") or "bed")
-    sound_split_on = str(eff.get("sound_split") or "auto") != "off"
+    sound_split_on = str(eff.get("sound_split") or "off") != "off"
 
     def _carry(kind: str) -> str:
         """承载:项目默认 line 且声画分离开着且切点旁有画外句(J 看下组首镜,L 看前组末镜)才 line,否则 bed。"""

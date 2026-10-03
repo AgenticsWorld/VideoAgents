@@ -138,7 +138,7 @@ def line_placement(ln: dict) -> str:
 
 
 def sound_split_mode(proj_root: Path) -> str:
-    """项目输出设置 output.sound_split ∈ off|script_only|auto(默认 auto)。"""
+    """项目输出设置 output.sound_split ∈ off|script_only|auto(默认 off)。"""
     if osl is not None:
         try:
             return osl.mode(proj_root)
@@ -149,7 +149,7 @@ def sound_split_mode(proj_root: Path) -> str:
         m = (st.get("output") or {}).get("sound_split")
     except Exception:
         m = None
-    return m if m in ("off", "script_only", "auto") else "auto"
+    return m if m in ("off", "script_only", "auto") else "off"
 
 
 def speaker_id(who: str, names: dict | None = None):

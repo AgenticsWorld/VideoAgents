@@ -1032,10 +1032,10 @@ DEFAULT_GENCONFIG = {
                # sound_split=声画分离(2026-10-03,docs/sound_split.md):人物台词可以不在画内开口——画外 O.S.(说话人在场但不入画)/
                #   V.O.(内心独白、读信、回忆声等非本时空声源)。shot_list dialogue_lines[].placement ∈ on|os|vo,os/vo 句一律后期按人物
                #   选角 TTS 合成(code/offscreen_lines.py),不进组 prompt `{}`、不挂该人 audio_ref,作为独立「画外对白」声轨混入成片。
-               #   off=全关(全部台词画内开口,存量口径);script_only=只认剧本层 (O.S.)/(V.O.) 标记;auto(默认)=剧本标记 + 分镜层按
+               #   off(默认,2026-10-03 用户拍板)=全关(全部台词画内开口,存量口径);script_only=只认剧本层 (O.S.)/(V.O.) 标记;auto=剧本标记 + 分镜层按
                #   白名单自动转画外(反应镜承接 / 时间尺超限 / 群戏第四人 / 出画后续说 / 定场镜首句),每条须写 placement_reason。
                #   与旁白开关正交:旁白只管旁白者声线;人物 V.O. 归本项。
-               "sound_split": "auto",
+               "sound_split": "off",
                "spatial_blocking": False,
                # scene_plates=场景图(2026-09-17,仅白模关闭时生效;A 方案 docs/scene_plates.md):auto(默认)=每场景必出正向图(站在入口往内看的主视角图,
                #   environment-concept 登记 assets/concepts/scenes/<sid>/scene_plates.json),分镜定稿后各集 shot_list 有镜 plate_view=reverse 才由
@@ -1146,7 +1146,7 @@ UPSCALE_FFMPEG_FILTERS = ("lanczos", "bicubic", "spline", "bilinear")
 UPSCALE_FFMPEG_PRESETS = ("ultrafast", "fast", "medium", "slow", "veryslow")
 # 对白配音方式:native=视频原声(默认)/dubbing=后期配音(TTS 按画面开口时段贴合,workflow p7-dub)
 DIALOGUE_VOICE_MODES = ("native", "dubbing")
-SOUND_SPLIT_MODES = ("off", "script_only", "auto")   # 输出设置「声画分离」(2026-10-03,docs/sound_split.md):关 / 仅剧本标记 / 自动(默认)(与 modules.offscreen_lines.SOUND_SPLIT_MODES 同步)
+SOUND_SPLIT_MODES = ("off", "script_only", "auto")   # 输出设置「声画分离」(2026-10-03,docs/sound_split.md):关(默认)/ 仅剧本标记 / 自动(与 modules.offscreen_lines.SOUND_SPLIT_MODES 同步)
 SCENE_PLATES_MODES = ("auto", "single", "pair")   # 输出设置「场景图」(2026-09-17,仅白模关闭时生效):正向必出;反向按需 / 不出 / 全出
 PLATE_MODE_LABELS = {"pano": "全景图 pano", "world": "世界模型 world", "grid": "九宫格 grid"}
 PLATE_MODES = ("pano", "world", "grid")   # 输出设置「背景图模式」(2026-09-22,仅白模开启时生效):全景图 / 世界模型 / 九宫格(2026-09-25)(与 modules.shot_plates.PLATE_MODES 同步)
@@ -3229,7 +3229,7 @@ def build_role_prompt(agent_id: str, project: str,
         if (out.get("dialogue_tts") is True or dubbing) else
         "关闭(默认)—— 不维护对白语音库;动态样片/白模样片不挂对白轨")
     # 声画分离(2026-10-03,docs/sound_split.md):人物台词的画外 O.S. / V.O.;与旁白开关正交
-    sound_split = out.get("sound_split") if out.get("sound_split") in SOUND_SPLIT_MODES else "auto"
+    sound_split = out.get("sound_split") if out.get("sound_split") in SOUND_SPLIT_MODES else "off"
     _ss_common = (
         "画外句契约:shot_list `dialogue_lines[].placement ∈ on|os|vo`(缺省 on),os/vo 句必填 `heard_in`(听见的镜,须在本组内)、"
         "可填 `source_fx`(plain/phone/door/distance/inner/memory)、`offset_s`、`placement_reason{trigger,evidence}`;"
@@ -3241,7 +3241,7 @@ def build_role_prompt(agent_id: str, project: str,
         "(与旁白互斥不重叠,offscreen_fit / post_voice_no_overlap),不占说话人嘴时间;字幕照出。"
         "**旁白开关只管旁白者声线,人物 V.O. 归本项**:vo 的 speaker 必须是本集 cast 的人物编号、文本须是人物口吻,不得借人物 V.O. 伪装旁白")
     sound_split_line = (
-        "**自动(auto,默认)** —— " + _ss_common +
+        "**自动(auto)** —— " + _ss_common +
         ";**触发两层**:① 剧本层(screenplay / dialogue-rewrite)只在声源客观不在画内时在说话人括注写 `(O.S.)` / `(V.O.)`"
         "(电话 / 隔门隔墙 / 出画仍说 → O.S.;心理描写改台词 / 读信 / 回忆中的话 / 幻听传音 → V.O.),剧本写了下游不得改回画内;"
         "② 分镜层(storyboard / shot-planning)对本是画内的句子**只在**命中白名单之一时改 os 并写 placement_reason:"
@@ -3252,7 +3252,7 @@ def build_role_prompt(agent_id: str, project: str,
         "**仅剧本标记(script_only)** —— " + _ss_common +
         ";只认剧本层说话人括注 `(O.S.)` / `(V.O.)`(声源客观不在画内才写),分镜层不得自行把画内句改画外(白名单 D1–D5 不启用)"
         if sound_split == "script_only" else
-        "**关闭(off)** —— 全部台词画内开口(存量口径):剧本不写 `(O.S.)`/`(V.O.)`(声源不在画内的话改写成画内句或交旁白 / 剧本变更),"
+        "**关闭(off,默认)** —— 全部台词画内开口(存量口径):剧本不写 `(O.S.)`/`(V.O.)`(声源不在画内的话改写成画内句或交旁白 / 剧本变更),"
         "shot_list 不写 placement(视同 on),不派 offscreen_lines,offscreen 系列机检报 skipped: sound_split off;旁白开关逻辑不受影响")
     # 过场模式(2026-09-24 设置项;2026-09-26 二期工位):项目级 settings.json#transitions,集级 episode.json#transitions_mode 可覆盖
     try:

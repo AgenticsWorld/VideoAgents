@@ -4086,6 +4086,7 @@ window.I18N_DICT = {
 "尚无配音音频": "ainda sem áudio de dublagem",
 "声画分离": "Separação som-imagem",
 "自动(默认)": "Automático (padrão)",
+"关(默认)": "Desligado (padrão)",
 "仅剧本标记": "Só marcas do roteiro",
 "关": "Desligado",
 "画内": "Em quadro",

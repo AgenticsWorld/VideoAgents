@@ -57,7 +57,7 @@ def _settings(base: Path) -> dict:
 def mode_ok(base: Path) -> tuple[bool, str]:
     """P1 + P2:声画分离 = auto 且视频原声。"""
     out = (_settings(base).get("output") or {})
-    ss = out.get("sound_split") if out.get("sound_split") in ("off", "script_only", "auto") else "auto"
+    ss = out.get("sound_split") if out.get("sound_split") in ("off", "script_only", "auto") else "off"
     if ss != "auto":
         return False, f"声画分离={ss}(原生先入只在 auto 下)"
     if (out.get("dialogue_voice") or "native") != "native":

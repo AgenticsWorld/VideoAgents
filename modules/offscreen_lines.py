@@ -1,4 +1,4 @@
-"""声画分离——人物画外对白 O.S. / V.O.(2026-10-03,输出设置「声画分离」output.sound_split,默认 auto;docs/sound_split.md)。
+"""声画分离——人物画外对白 O.S. / V.O.(2026-10-03,输出设置「声画分离」output.sound_split,默认 off;docs/sound_split.md)。
 
 此前全链默认「声源 = 画内开口的人」:一句台词 = 说话人必然在本镜画内开口(prompt `{}`),分镜里出不来画外对白、
 人物 V.O.(内心独白 / 读信 / 回忆声)也没有通道(旁白链只限旁白者声线)。本模块给每句台词一个声源位置字段,并承担
@@ -86,10 +86,10 @@ def _f(v, default=None):
 
 
 def mode(base: Path) -> str:
-    """项目输出设置 output.sound_split(off / script_only / auto;缺省 auto)。"""
+    """项目输出设置 output.sound_split(off / script_only / auto;缺省 off,2026-10-03 用户拍板新建项目默认关)。"""
     st = _read(Path(base) / "settings.json") or {}
     v = (st.get("output") or {}).get("sound_split")
-    return v if v in SOUND_SPLIT_MODES else "auto"
+    return v if v in SOUND_SPLIT_MODES else "off"
 
 
 def enabled(base: Path) -> bool:

@@ -4095,6 +4095,7 @@ window.I18N_DICT = {
 "尚无配音音频": "no dub audio yet",
 "声画分离": "Sound-picture split",
 "自动(默认)": "Auto (default)",
+"关(默认)": "Off (default)",
 "仅剧本标记": "Script markers only",
 "关": "Off",
 "画内": "On camera",

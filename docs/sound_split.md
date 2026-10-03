@@ -18,9 +18,9 @@ V.O.(内心独白、读信、回忆声)没有通道——旁白链只限旁白�
 
 | 值 | 含义 |
 |---|---|
-| `auto`(默认) | 剧本层标记 + 分镜层按白名单自动转画外(每条须写 `placement_reason`) |
+| `off`(默认,2026-10-03 用户拍板;存量项目缺键同样视为关) | 全部台词画内开口(存量口径);shot_list 出现 os/vo 即 `placement_valid` FAIL;offscreen / native_lead 系列机检 `skipped: sound_split off`;声桥 carry=line 不可选 |
 | `script_only` | 只认剧本层说话人括注 `(O.S.)` / `(V.O.)`,分镜层不得自行转画外 |
-| `off` | 全部台词画内开口(存量口径);shot_list 出现 os/vo 即 `placement_valid` FAIL;offscreen 系列机检 `skipped: sound_split off` |
+| `auto` | 剧本层标记 + 分镜层按白名单自动转画外(每条须写 `placement_reason`)+ 三期原生先入自动建议 |
 
 ## 契约
 

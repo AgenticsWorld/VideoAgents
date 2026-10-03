@@ -4084,6 +4084,7 @@ window.I18N_DICT = {
 "尚无配音音频": "noch kein Synchronton",
 "声画分离": "Ton-Bild-Trennung",
 "自动(默认)": "Auto (Standard)",
+"关(默认)": "Aus (Standard)",
 "仅剧本标记": "Nur Drehbuchmarkierungen",
 "关": "Aus",
 "画内": "Im Bild",

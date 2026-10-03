@@ -4084,6 +4084,7 @@ window.I18N_DICT = {
 "尚无配音音频": "chưa có âm thanh lồng tiếng",
 "声画分离": "Tách âm-hình",
 "自动(默认)": "Tự động (mặc định)",
+"关(默认)": "Tắt (mặc định)",
 "仅剧本标记": "Chỉ đánh dấu kịch bản",
 "关": "Tắt",
 "画内": "Trong hình",

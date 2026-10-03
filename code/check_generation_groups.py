@@ -191,7 +191,7 @@ def project_root_of(shot_list_path: Path) -> Path:
 
 
 def project_sound_split(shot_list_path: Path) -> str:
-    """项目「📤 输出设置」声画分离 output.sound_split ∈ off|script_only|auto(默认 auto,2026-10-03)。"""
+    """项目「📤 输出设置」声画分离 output.sound_split ∈ off|script_only|auto(默认 off,2026-10-03)。"""
     if _osl is not None:
         try:
             return _osl.mode(project_root_of(shot_list_path))
@@ -200,9 +200,9 @@ def project_sound_split(shot_list_path: Path) -> str:
     try:
         st = json.loads((project_root_of(shot_list_path) / "settings.json").read_text())
         m = (st.get("output") or {}).get("sound_split")
-        return m if m in ("off", "script_only", "auto") else "auto"
+        return m if m in ("off", "script_only", "auto") else "off"
     except Exception:
-        return "auto"
+        return "off"
 
 
 def line_placement(ln) -> str:
