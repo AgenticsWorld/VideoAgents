@@ -26,6 +26,12 @@
                             改稿只改了一边 = 生成时念的不是定稿                                                              FAIL
   6. source_lines_covered   screenplay 对白层每句都落在某镜 dialogue_lines(漏排的台词)                                     WARN
   7. speaker_speed_unknown  说话人无语速设定                                                                                  WARN
+  8. placement_valid        声画分离(2026-10-03,docs/sound_split.md):项目 output.sound_split=off 时 shot_list 不得有 os/vo 句;
+                            script_only 时分镜层不得把剧本画内句自行转画外                                                   FAIL
+  9. placement_matches_source  剧本标了 (O.S.)/(V.O.) 的句分镜不得改回画内;剧本画内句转画外须写 placement_source
+                            (directing|user)+placement_reason.trigger                                                        FAIL
+ 10. audio_plan_mismatch    组 audio_plan 与台词事实不符(有画内句=dialogue;只有画外句/旁白挂点=voice_over;皆无=ambient_only)   WARN
+  画外 / V.O. 句(placement=os|vo)不占说话人嘴时间:1/2 项只累计画内句;其窗口由 offscreen_lines 的 offscreen_fit 另查。
 
 产出:directing/epNN/dialogue_fit.json(--report 改路径,--no-report 不写):逐组/逐镜/逐句估时、超限量、
 `trim_targets[]`(每个超限组:需削减秒数、按比例分摊到各句的 target_chars,供 dialogue-rewrite 逐句精简)。
@@ -53,6 +59,10 @@ from _common import parse_args  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from modules.dialogue_tts import name_index, resolve_speaker  # noqa: E402  与逐句语音库同一套说话人解析(#58)
 from modules import time_cost as tc  # noqa: E402  时间尺(2026-10-03)
+try:
+    from modules import offscreen_lines as osl  # noqa: E402  声画分离(2026-10-03):placement on|os|vo
+except Exception:  # pragma: no cover  模块缺失时全部台词视同画内
+    osl = None
 
 GROUP_RATIO = 0.7          # §7D ①:Σ台词估时 ≤ 组总时长 × 0.7
 SHOT_RATIO = 1.0           # 镜级:物理装不下即 FAIL
@@ -101,6 +111,45 @@ def meta_pace(body: str) -> str:
         return m.group(1).lower()
     e = _EMO_RE.search(body or "")
     return tc.guess_pace(e.group(1)) if e else ""
+
+
+_VO_MARK_RE = re.compile(r"V\.\s?O\.|画外音|内心|voice[- ]?over", re.I)
+_OS_MARK_RE = re.compile(r"O\.\s?[SC]\.|画外|off[- ]?screen", re.I)
+_PLACEMENT_SOURCES = ("script", "directing", "user")
+
+
+def source_placement(who: str, paren: str = "") -> str:
+    """剧本对白行说话人/括注里的画外标记 → placement(2026-10-03 声画分离):
+    `(V.O.)` / 画外音 / 内心 → vo;`(O.S.)` / `(O.C.)` / 画外 → os;其余 on。先判 vo(「画外音」含「画外」)。"""
+    s = f"{who or ''} {paren or ''}"
+    if _VO_MARK_RE.search(s):
+        return "vo"
+    if _OS_MARK_RE.search(s):
+        return "os"
+    return "on"
+
+
+def line_placement(ln: dict) -> str:
+    """shot_list 对白行 placement(缺省/非法 = on);有 offscreen_lines 模块时按它归一。"""
+    if osl is not None:
+        return osl.placement(ln)
+    p = str((ln or {}).get("placement") or "").strip().lower()
+    return p if p in ("on", "os", "vo") else "on"
+
+
+def sound_split_mode(proj_root: Path) -> str:
+    """项目输出设置 output.sound_split ∈ off|script_only|auto(默认 auto)。"""
+    if osl is not None:
+        try:
+            return osl.mode(proj_root)
+        except Exception:
+            pass
+    try:
+        st = json.loads((Path(proj_root) / "settings.json").read_text())
+        m = (st.get("output") or {}).get("sound_split")
+    except Exception:
+        m = None
+    return m if m in ("off", "script_only", "auto") else "auto"
 
 
 def speaker_id(who: str, names: dict | None = None):
@@ -155,9 +204,10 @@ def est_seconds(text: str, cpm: float, pace: str = "", legacy: bool = False) -> 
 
 # ---------------------------------------------------------------- 剧本对白层
 def parse_screenplay_lines(md_text: str) -> list:
-    """screenplay.md 【对白】小节内的对白行 → [{scene, speaker, who, text, est_recorded, lineno}]。"""
+    """screenplay.md 【对白】小节内的对白行 → [{scene, speaker, who, text, est_recorded, pace, placement, lineno}]。"""
     # 对白行可能出现在【对白】小节,也可能穿插在【画面/动作】小节里(前科:dzg5 ep01 S02 L76);
-    # 只排除【旁白】小节与 V.O. 说话人,其余带 `- **谁**:` 形态且能定位说话人的行都算对白。
+    # 只排除【旁白】小节(旁白者文本),其余带 `- **谁**:` 形态且能定位说话人的行都算对白。
+    # 2026-10-03 声画分离:人物的 (V.O.) / (O.S.) 句不再剔除,记 placement=vo/os(下游后期合成,仍须与 shot_list 对得上)。
     out, scene, in_narr = [], None, False
     for i, raw in enumerate(md_text.splitlines(), 1):
         s = raw.strip()
@@ -171,14 +221,18 @@ def parse_screenplay_lines(md_text: str) -> list:
         if in_narr:
             continue
         m = _SP_LINE_RE.match(raw)
-        if not m or "V.O." in m.group("who").upper().replace("V. O.", "V.O."):
+        if not m:
             continue
+        who = m.group("who").strip()
+        if re.search(r"旁白候选|NARRATION|narrator", who, re.I) or re.search(r"旁白|narrat", m.group("paren") or "", re.I):
+            continue                                   # 旁白候选 / 旁白者:不是人物台词
         body = m.group("body")
         text = strip_meta(body)
         if not text:
             continue
-        out.append({"scene": scene, "speaker": speaker_id(m.group("who")), "who": m.group("who").strip(),
-                    "text": text, "est_recorded": meta_est(body), "pace": meta_pace(body), "lineno": i})
+        out.append({"scene": scene, "speaker": speaker_id(who), "who": who,
+                    "text": text, "est_recorded": meta_est(body), "pace": meta_pace(body),
+                    "placement": source_placement(who, m.group("paren")), "lineno": i})
     return out
 
 
@@ -228,12 +282,13 @@ def parse_dialogue_md(md_text: str) -> tuple:
                 cur_id = None
             continue
         mb = _SP_LINE_RE.match(raw)
-        if mb and "V.O." not in mb.group("who"):
+        if mb and not re.search(r"旁白|NARRATION|narrator", mb.group("who"), re.I):
             body = mb.group("body")
             text = strip_meta(body)
             if text:
                 bullets.append({"speaker": speaker_id(mb.group("who")), "who": mb.group("who").strip(),
-                                "text": text, "est_recorded": meta_est(body), "pace": meta_pace(body), "lineno": i})
+                                "text": text, "est_recorded": meta_est(body), "pace": meta_pace(body),
+                                "placement": source_placement(mb.group("who"), mb.group("paren")), "lineno": i})
     return idx, bullets
 
 
@@ -246,18 +301,25 @@ def shot_lines(shot: dict, dlg_idx: dict, names: dict | None = None) -> list:
     out = []
     lines = shot.get("dialogue_lines")
     if isinstance(lines, list) and lines:
-        for ln in lines:
+        for raw_i, ln in enumerate(lines):
             if isinstance(ln, dict):
                 text = ln.get("text") or ln.get("line") or ""
                 if text:
                     sid, raw = resolve_speaker(ln, names or {})
+                    pr = ln.get("placement_reason") if isinstance(ln.get("placement_reason"), dict) else {}
                     out.append({"speaker": sid or raw or None, "speaker_name": raw or None, "text": text,
                                 "est_recorded": ln.get("est_duration_s"), "ref": ln.get("id") or ln.get("ref"),
-                                "pace": tc.norm_pace(ln.get("pace")) or tc.guess_pace(ln.get("emotion") or ln.get("tone") or "")})
+                                "pace": tc.norm_pace(ln.get("pace")) or tc.guess_pace(ln.get("emotion") or ln.get("tone") or ""),
+                                # 声画分离(2026-10-03):画外/旁白式台词不占说话人嘴时间,下游按 placement 分流
+                                "placement": line_placement(ln),
+                                "heard_in": [x for x in (ln.get("heard_in") or []) if isinstance(x, str)],
+                                "placement_source": str(ln.get("placement_source") or "").strip().lower(),
+                                "placement_trigger": str(pr.get("trigger") or "").strip(),
+                                "line_index": raw_i})
             elif isinstance(ln, str) and ln.strip():
                 mm = re.match(r"^(?:S\d+/)?(CHAR-\d+)\s*[:：]\s*(.+)$", ln.strip())
                 out.append({"speaker": mm.group(1) if mm else None, "text": mm.group(2) if mm else ln.strip(),
-                            "est_recorded": None, "ref": None})
+                            "est_recorded": None, "ref": None, "placement": "on"})
         return out
     refs = shot.get("dialogue_refs")
     if not refs and shot.get("dialogue_ref"):
@@ -384,6 +446,13 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
     covered_keys = set()
     g_checked = g_over = shot_over = shot_tight = lines_total = 0
     est_total = cap_total = 0.0
+    # 声画分离(2026-10-03):off = 全部台词画内(shot_list 出现 os/vo 即 FAIL);script_only = 只认剧本层标记;auto = 剧本 + 分镜白名单
+    ss_mode = sound_split_mode(proj_root)
+    report["sound_split"] = ss_mode
+    narr_anchor_groups = set()
+    for a in sl.get("narration_anchors") or []:
+        if isinstance(a, dict) and a.get("anchor_group"):
+            narr_anchor_groups.add(a["anchor_group"])
     for g in groups:
         gid = g.get("group_id")
         is_dlg = (g.get("audio_plan") == "dialogue") or bool(g.get("has_dialogue"))
@@ -392,6 +461,7 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
         grec = {"group_id": gid, "audio_plan": g.get("audio_plan"), "total_duration_s": total,
                 "capacity_s": cap, "est_s": 0.0, "over_s": 0.0, "ratio": 0.0, "status": "skipped", "shots": [], "lines": []}
         gest = 0.0
+        g_on = g_off = 0
         for sid in g.get("shots") or []:
             s = shots.get(sid)
             if not s:
@@ -405,6 +475,11 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
                 if ln.get("unresolved"):
                     errs.append(f"{gid}/{sid} lines_text_match_source: 对白编号 {ln.get('ref')} 在 dialogue.md 无法解析")
                     continue
+                pl = ln.get("placement") or "on"
+                if pl != "on" and ss_mode == "off":
+                    errs.append(f"{gid}/{sid} placement_valid: 「{ln['text'][:24]}」placement={pl},但项目「声画分离」已关闭"
+                                f"(改回画内或在输出设置开启)")
+                    pl = "on"
                 spk = speaker_id(ln.get("speaker") or "", names)
                 known = spk in speeds
                 cpm = cpm_of(spk)
@@ -413,9 +488,16 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
                     est = round(float(ln["est_recorded"]), 1)   # 无语速设定的说话人:信记录值,只报 WARN
                 chars = eff_chars(ln["text"])
                 lines_total += 1
-                sest += est
+                if pl == "on":
+                    sest += est          # 画外 / V.O. 句不占说话人嘴时间(窗口由 offscreen_fit 另查)
+                    g_on += 1
+                else:
+                    g_off += 1
                 lrec = {"shot_id": sid, "speaker": spk, "text": ln["text"], "chars": chars, "cpm": cpm,
-                        "est_s": est, "est_recorded_s": ln.get("est_recorded")}
+                        "est_s": est, "est_recorded_s": ln.get("est_recorded"), "placement": pl,
+                        "line_index": ln.get("line_index")}
+                if pl != "on":
+                    lrec["heard_in"] = ln.get("heard_in") or [sid]
                 srec["lines"].append(lrec)
                 grec["lines"].append(lrec)
                 key = (spk, norm_key(ln["text"]))
@@ -427,6 +509,23 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
                 if source_name:
                     if key in src_keys:
                         covered_keys.add(key)
+                        # 画外标记一致性(2026-10-03):剧本标了 (O.S.)/(V.O.) 的句分镜不得改回画内;
+                        # 剧本画内句被分镜转画外须注明来源(directing/user)与触发条款 placement_reason.trigger
+                        src_pl = src_keys[key][0].get("placement") or "on"
+                        psrc = ln.get("placement_source") or ""
+                        trig = ln.get("placement_trigger") or ""
+                        if not psrc and trig:
+                            psrc = "user" if trig.upper().startswith("U") else "directing" if trig.upper().startswith("D") else ""
+                        if src_pl != "on" and pl == "on" and ss_mode != "off":
+                            errs.append(f"{gid}/{sid} placement_matches_source: 「{ln['text'][:24]}」剧本标记画外({src_pl}),分镜改回画内"
+                                        f"(剧本层 (O.S.)/(V.O.) 对下游是绑定的)")
+                        elif src_pl == "on" and pl != "on":
+                            if ss_mode == "script_only":
+                                errs.append(f"{gid}/{sid} placement_valid: 「{ln['text'][:24]}」剧本为画内句,分镜转 {pl};"
+                                            f"项目「声画分离=仅剧本标记」不允许分镜层自行转画外")
+                            elif psrc not in ("directing", "user") or not trig:
+                                errs.append(f"{gid}/{sid} placement_matches_source: 「{ln['text'][:24]}」剧本为画内句,分镜转 {pl} 须写"
+                                            f" placement_source(directing|user)+placement_reason.trigger(D1–D5 / U)")
                     else:
                         # 同文不同说话人 → 明确提示说话人错位
                         alt = [k[0] for k in src_keys if k[1] == key[1]]
@@ -441,7 +540,8 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
             sest = round(sest, 1)
             srec["est_s"] = sest
             srec["ratio"] = round(sest / dur, 3) if dur else None
-            n_lines = len(srec["lines"])
+            n_lines = len([x for x in srec["lines"] if x.get("placement", "on") == "on"])   # 只数画内句
+            srec["onscreen_lines"] = n_lines
             margin = round(n_lines * (tc.PRE_SPEECH_S + tc.POST_SPEECH_S), 1) if n_lines else 0.0
             srec["margin_s"] = margin
             if not legacy and dur and n_lines and sest + margin > dur + 1e-9:
@@ -460,8 +560,11 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
                 shot_tight += 1
                 warns.append(f"{gid}/{sid} dialogue_fit_shot: Σ台词估时 {sest}s 占镜长 {dur:g}s 的 {sest / dur:.0%}(>{SHOT_TIGHT_RATIO:.0%},紧)")
             if write_est and lines and isinstance(s.get("dialogue_lines"), list):
-                for ln_obj, lrec in zip([x for x in s["dialogue_lines"] if isinstance(x, dict)], srec["lines"]):
-                    ln_obj["est_duration_s"] = lrec["est_s"]
+                # 按原数组下标回写(画外句也回写估时——窗口机检要用),不按位置 zip(2026-10-03)
+                for lrec in srec["lines"]:
+                    li = lrec.get("line_index")
+                    if isinstance(li, int) and 0 <= li < len(s["dialogue_lines"]) and isinstance(s["dialogue_lines"][li], dict):
+                        s["dialogue_lines"][li]["est_duration_s"] = lrec["est_s"]
                 s["dialogue_est_s"] = sest
                 if dur:
                     s["dialogue_ratio"] = round(sest / dur, 3)
@@ -470,6 +573,25 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
         gest = round(gest, 1)
         grec["est_s"] = gest
         grec["ratio"] = round(gest / total, 3) if total else None
+        grec["onscreen_lines"], grec["offscreen_lines"] = g_on, g_off
+        # 组音频形态与台词事实的一致性(2026-10-03):有画内句 = dialogue;只有画外句 / 旁白挂点 = voice_over(旧名 narration_over);
+        # 两者皆无 = ambient_only
+        expected = None
+        if osl is not None and hasattr(osl, "expected_audio_plan"):
+            try:
+                expected = osl.expected_audio_plan(g, shots, sl.get("narration_anchors") or [])
+            except Exception:
+                expected = None
+        if expected is None:
+            expected = "dialogue" if g_on else ("voice_over" if (g_off or gid in narr_anchor_groups) else "ambient_only")
+        ap = g.get("audio_plan")
+        ap_norm = "voice_over" if ap == "narration_over" else ap
+        if ap and ap_norm != expected and not (ap_norm == "voice_over" and expected == "ambient_only"):
+            # voice_over 但既无画外句也无挂点:旁白挂点可能在别处登记,不在这里判,留给 check_generation_groups
+            warns.append(f"{gid} audio_plan_mismatch: audio_plan={ap},按台词事实应为 {expected}"
+                         f"(画内 {g_on} 句 / 画外 {g_off} 句)")
+        elif not ap and grec["lines"]:
+            warns.append(f"{gid} audio_plan_mismatch: audio_plan 缺失,组内镜带 {len(grec['lines'])} 句台词(应为 {expected})")
         if is_dlg:
             g_checked += 1
             est_total += gest
@@ -488,8 +610,6 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
                 g["dialogue_capacity_s"] = cap
                 if total:
                     g["dialogue_ratio"] = round(gest / total, 3)
-        elif grec["lines"]:
-            warns.append(f"{gid} audio_plan_mismatch: audio_plan={g.get('audio_plan')} 但组内镜带 {len(grec['lines'])} 句台词")
         report["groups"].append(grec)
 
     if source_name and not groups_filter:
@@ -516,13 +636,14 @@ def _trim_target(grec: dict) -> dict:
     """超限组的精简目标:需削减秒数按各句估时占比分摊 → 每句 target_chars(按该句说话人语速换算)。"""
     cap, est = grec["capacity_s"], grec["est_s"]
     need = max(0.0, est - cap)
+    on_lines = [ln for ln in grec["lines"] if ln.get("placement", "on") == "on"]   # 画外句不占承载,不进精简目标
     # 短句(<6 有效字,应答/感叹)豁免;削减秒数按估时占比摊到其余句;长句不够摊时再摊到全部句
-    cands = [ln for ln in grec["lines"] if ln["chars"] >= 6]
+    cands = [ln for ln in on_lines if ln["chars"] >= 6]
     if sum(ln["est_s"] for ln in cands) <= need + 1e-9:
-        cands = list(grec["lines"])
+        cands = list(on_lines)
     pool = sum(ln["est_s"] for ln in cands) or 1.0
     lines = []
-    for ln in grec["lines"]:
+    for ln in on_lines:
         cut_s = need * ln["est_s"] / pool if ln in cands else 0.0
         tgt_chars = int(max(0.0, ln["est_s"] - cut_s) * ln["cpm"] / 60.0)  # 向下取整保证 Σ ≤ cap(新口径含余量,偏保守)
         tgt_chars = max(0, min(ln["chars"], tgt_chars))
@@ -561,7 +682,8 @@ def _finish(report, errs, warns, unknown_speakers, ddir, strict, fallback_cpm=DE
     if unknown_speakers:
         warns.append(f"speaker_speed_unknown: {sorted(unknown_speakers)} 无 voice.json#speed_cpm,按项目中位语速 {fallback_cpm:g} cpm 估")
     names = ["dialogue_fit_group", "dialogue_fit_shot", "line_le_cap", "line_est_consistent",
-             "lines_text_match_source", "source_lines_covered", "speaker_speed_unknown"]
+             "lines_text_match_source", "source_lines_covered", "speaker_speed_unknown",
+             "placement_valid", "placement_matches_source", "audio_plan_mismatch"]   # 后三项 2026-10-03 声画分离
     for n in names:
         if any(f" {n}:" in e or e.startswith(n) for e in errs):
             report["checks"][n] = "FAIL"

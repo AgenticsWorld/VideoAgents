@@ -145,6 +145,21 @@ def _tod(field: str) -> str | None:
     return None
 
 
+_PLACEMENT_VO_RE = re.compile(r"V\.\s?O\.?|\bVO\b|\bOV\b|画外音|内心|voice[- ]?over", re.I)
+_PLACEMENT_OS_RE = re.compile(r"O\.\s?[SC]\.?|\bOS\b|画外|off[- ]?screen", re.I)
+
+
+def _placement_mark(raw: str) -> str | None:
+    """说话人段 / 括注 / 〔kind〕里的人物画外标记(2026-10-03 声画分离):(V.O.)/画外音/内心 → vo;(O.S.)/(O.C.)/画外 → os;
+    没有标记 → None。「画外音」含「画外」,先判 vo。只对人物台词有意义,旁白者文本另走 narration_candidates。"""
+    raw = raw or ""
+    if _PLACEMENT_VO_RE.search(raw):
+        return "vo"
+    if _PLACEMENT_OS_RE.search(raw):
+        return "os"
+    return None
+
+
 def _speaker(raw: str) -> tuple[str | None, str | None, bool]:
     """说话人段 → (CHAR id, 名字, 是否画外/旁白)。"""
     raw = _strip_md(raw or "")
@@ -304,8 +319,18 @@ def _match_dialogue(line: str, known: set[str] | None = None) -> dict | None:
         if paren is None:
             pm = [x for x in re.findall(r"[（(][^()（）]*[)）]", spk) if not _CHAR_RE.search(x)]
             paren = pm[-1] if pm else None
-        return {"id": m.groupdict().get("id"), "speaker": cid or name, "speaker_id": cid, "speaker_name": name,
-                "vo": vo, "paren": paren.strip("（()）") if paren else None, "text": _clean_line(text), **fields}
+        out = {"id": m.groupdict().get("id"), "speaker": cid or name, "speaker_id": cid, "speaker_name": name,
+               "vo": vo, "paren": paren.strip("（()）") if paren else None, "text": _clean_line(text), **fields}
+        # 人物画外 / V.O.(2026-10-03 声画分离):带 CHAR 编号或已知人物名的说话人标了 (O.S.)/(V.O.) 仍是对白,记 placement;
+        # 旁白者(旁白/叙述/narrator)不记 placement,照旧进旁白候选
+        # 只认说话人括注 (V.O.)/(O.S.) 这类标记;〔OV〕/〔旁白〕kind 标签是旁白候选的写法(offer 系),照旧归旁白
+        is_char = bool(cid) or (name is not None and name in (known or ()))
+        if is_char and not re.search(r"旁白|叙述|narrat", f"{spk} {kind}", re.I) \
+                and not (kind and re.search(r"OV|VO|OS|画外", kind, re.I)):
+            pl = _placement_mark(f"{spk} {paren or ''}")
+            if pl:
+                out["placement"] = pl
+        return out
     return None
 
 
@@ -444,9 +469,11 @@ def parse_screenplay(text: str, known_names: set[str] | None = None) -> dict:
             continue
         d = _match_dialogue(s, known_names)
         if d and d["text"]:
+            in_narr_block = block == "narration"
             if block == "narration" and not d["speaker_id"]:
                 block = None
-            if d["vo"] or block == "narration":
+            # 人物的 (O.S.)/(V.O.) 句(带 placement)是对白,不是旁白候选(2026-10-03 声画分离);### 旁白 块内的仍归旁白
+            if (d["vo"] and not d.get("placement")) or in_narr_block:
                 cur["narration_candidates"].append({"speaker": d["speaker_name"] or d["speaker"],
                                                     "speaker_id": d["speaker_id"], "text": d["text"],
                                                     "est_s": d.get("est_s")})
@@ -757,7 +784,8 @@ def _scene_blocks(s: dict, narration: list[dict], cidx: dict) -> list[dict]:
                               "speaker": d["speaker_id"] or d["speaker_name"] or d["speaker"],
                               "speaker_name": d["speaker_name"] or (cidx.get(d["speaker_id"] or "", {}).get("name")),
                               "text": d["text"], "paren": d.get("paren"), "emotion": d.get("emotion"),
-                              "est_s": d.get("est_s"), "style_hits": d.get("style_hits") or []})
+                              "est_s": d.get("est_s"), "style_hits": d.get("style_hits") or [],
+                              **({"placement": d["placement"]} if d.get("placement") else {})})
             out.append({"type": "dialogue", "lines": lines})
         elif b["type"] == "narration":
             hit = _match(b.get("text"))
@@ -838,7 +866,9 @@ def derive(base: Path, ep: str) -> dict:
             "dialogue": [{"id": d.get("id") or f"{s['no']}-D{n+1:02d}", "speaker": d["speaker_id"] or d["speaker_name"] or d["speaker"],
                           "speaker_name": d["speaker_name"] or (cidx.get(d["speaker_id"] or "", {}).get("name")),
                           "text": d["text"], "paren": d.get("paren"), "emotion": d.get("emotion"),
-                          "est_s": d.get("est_s"), "style_hits": d.get("style_hits") or []}
+                          "est_s": d.get("est_s"), "style_hits": d.get("style_hits") or [],
+                          # 人物画外 / V.O. 标记(2026-10-03 声画分离):只在剧本标了 (O.S.)/(V.O.) 时出现,画内句不带此键
+                          **({"placement": d["placement"]} if d.get("placement") else {})}
                          for n, d in enumerate(s["dialogue"])],
             "blocks": _scene_blocks(s, narration, cidx),
             "narration_candidates": s["narration_candidates"], "sound": s["sound"][:6],

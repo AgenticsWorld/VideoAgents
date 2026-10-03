@@ -19,6 +19,8 @@ BGM 一起断。现在 `sources` 直接给出边界层(帧量化,与 render_tran
 后期配音(§8C,2026-10-03):p7-dub 原地改写 v0 母本的对白轨并写 `assets/audio/voice/epNN/dub/grpNNN/dub_manifest.json`。
 `sources` 每组另给 `dub_fp`(配音时刻 + 逐句时段指纹,没配音 = null)盖进清单,重配音后未重混 = FAIL(sound_changed 同级);
 `dub_predates_version`:当前采纳版本链的根版本建于配音之前(从旧母本派生,采纳文件里没有配音)= FAIL,须回滚或重做该版本再重混。
+画外对白轨(声画分离 2026-10-03,modules/offscreen_lines):`sources` 顶层 `offscreen_lines[]`(os/vo 句的绝对摆位)+ `offscreen_fingerprint`;
+清单 `offscreen.fingerprint` 盖章,之后台账指纹变了(新增 / 改位 / 重合成)= `offscreen_changed` FAIL,须重混。
 """
 from __future__ import annotations
 
@@ -95,6 +97,69 @@ def dub_fingerprint(man: dict | None) -> str | None:
     slim = [man.get("dubbed_at"), (man.get("vocal_removal") or {}).get("status"),
             [[e.get("line"), (e.get("segment") or {}).get("start"), e.get("fit_duration_s")] for e in (man.get("lines") or []) if isinstance(e, dict)]]
     return hashlib.sha256(json.dumps(slim, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:16]
+
+
+def _offscreen():
+    """modules/offscreen_lines(声画分离 2026-10-03:画外 / V.O. 句集级独立声轨);模块缺失返回 None。"""
+    try:
+        import offscreen_lines as osl
+    except ImportError:
+        try:
+            from modules import offscreen_lines as osl
+        except ImportError:
+            return None
+    return osl
+
+
+def offscreen_manifest(proj: Path, ep: str) -> dict | None:
+    """画外对白轨台账 assets/audio/voice/epNN/offscreen/offscreen_manifest.json(code/offscreen_lines.py synth 写)。"""
+    osl = _offscreen()
+    if osl is None:
+        return None
+    try:
+        return osl.load_manifest(Path(proj), ep)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def offscreen_fingerprint(proj: Path, ep: str, man: dict | None = None) -> str | None:
+    """画外对白轨指纹(逐句摆位 / 时长 / 文件);没有画外句 = None。盖章后它变了 = 须重混。"""
+    osl = _offscreen()
+    if osl is None:
+        return None
+    man = man if man is not None else offscreen_manifest(proj, ep)
+    if not man:
+        return None
+    try:
+        return osl.fingerprint(man) or None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def offscreen_rows(proj: Path, ep: str, rows: list[dict], include_dropped: bool = False) -> list[dict]:
+    """画外 / V.O. 句在混音时间线上的摆位(绝对秒,已含组起点 cum_start_s 与组内 time_ops 映射):
+    [{group_id, shot_id, idx, speaker, placement, source_fx, t0, duration_s, file, gain_db, status}];无画外句 / 模块缺失 = []。
+    落在该组删段区间内的句子(带 dropped、t0=None)在当前版本里已不存在,默认不列(include_dropped=True 时一并返回供回执提示)。"""
+    osl = _offscreen()
+    if osl is None:
+        return []
+    try:
+        out = list(osl.mix_rows(Path(proj), ep, rows) or [])
+    except Exception:  # noqa: BLE001
+        return []
+    return out if include_dropped else [o for o in out if not o.get("dropped") and o.get("t0") is not None]
+
+
+def offscreen_stale(proj: Path, ep: str, man: dict | None = None) -> bool | None:
+    """画外对白台账是否落后于当前 shot_list 的画外句(新增 / 删句 / 改位 / 改效果 / 改台词);模块缺失 = None(不判)。"""
+    osl = _offscreen()
+    fn = getattr(osl, "is_stale", None) if osl is not None else None
+    if fn is None:
+        return None
+    try:
+        return bool(fn(Path(proj), ep, man))
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def dub_predates_version(plan: dict, gid: str, man: dict | None) -> bool:
@@ -298,6 +363,10 @@ def write_manifest(proj: Path, ep: str, task_id: str, cli: str = "code/mix_basis
            # 组边界层(2026-09-24 过场设计):混音已把 BGM / 旁白铺在含边界插入的时间线上;finalize 一致时不再对声轨套边界层重映射
            "boundaries": {"source": "shot_list.transition_in", "ops": bounds, "fingerprint": boundary_fingerprint(bounds),
                           "delta_s": boundary_delta(bounds), "has_inserts": boundary_has_inserts(bounds)},
+           # 画外对白轨(声画分离 2026-10-03):os/vo 句集级独立声轨的指纹与句数;盖章后指纹变了 = 须重混
+           "offscreen": {"source": f"assets/audio/voice/{ep}/offscreen/offscreen_manifest.json",
+                         "fingerprint": offscreen_fingerprint(proj, ep),
+                         "count": len(offscreen_rows(proj, ep, rows))},
            "audio": {"file": str(audio.relative_to(proj)) if audio.is_relative_to(proj) else str(audio),
                      "duration_s": a_dur, "fingerprint": pp.file_fingerprint(audio)}}
     pp.write_json(manifest_path(proj, ep), man)
@@ -317,7 +386,10 @@ def compare(proj: Path, ep: str, plan: dict | None = None) -> dict:
            "cur_boundary_has_inserts": boundary_has_inserts(cur_b), "mix_boundary_fp": None, "mix_boundary_delta_s": 0.0,
            "boundary_status": BND_NONE if not cur_b else BND_ABSENT,
            "audio_present": audio_path(proj, ep) is not None, "changed_groups": [], "sound_changed": [],
-           "dub_changed": [], "dub_stale_versions": [r["group_id"] for r in cur if r.get("dub_predates_version")], "detail": ""}
+           "dub_changed": [], "dub_stale_versions": [r["group_id"] for r in cur if r.get("dub_predates_version")],
+           # 画外对白轨(声画分离 2026-10-03):当前台账指纹 vs 盖章指纹;None == None 视为一致(本集没有画外句)
+           "cur_offscreen_fp": offscreen_fingerprint(proj, ep), "mix_offscreen_fp": None, "offscreen_changed": False,
+           "detail": ""}
     man = load_manifest(proj, ep)
     stale_dub_note = ((";{} 组当前采纳的后期版本建于配音之前(从旧母本派生,文件里没有配音):{}{},须在后期页回滚到母本或重做该版本,再重混"
                        ).format(len(res["dub_stale_versions"]), ", ".join(res["dub_stale_versions"][:6]), "…" if len(res["dub_stale_versions"]) > 6 else "")
@@ -389,6 +461,12 @@ def compare(proj: Path, ep: str, plan: dict | None = None) -> dict:
     if res["dub_changed"]:
         res["detail"] += (";{} 组的后期配音在混音后变了(重配音 / 改时段 / 改去人声):{}{},须重跑 p8-mix,否则成片里的对白还是旧配音"
                           ).format(len(res["dub_changed"]), ", ".join(res["dub_changed"][:6]), "…" if len(res["dub_changed"]) > 6 else "")
+    # 画外对白轨(声画分离 2026-10-03):清单里的指纹 vs 当前台账(新增 / 改位 / 重合成 / 删掉都算变)
+    mo = man.get("offscreen") if isinstance(man.get("offscreen"), dict) else {}
+    res["mix_offscreen_fp"] = mo.get("fingerprint") or None
+    res["offscreen_changed"] = (res["mix_offscreen_fp"] or None) != (res["cur_offscreen_fp"] or None)
+    if res["offscreen_changed"]:
+        res["detail"] += ";画外对白轨已变(新增/改位/重合成),须重跑 p8-mix"
     res["detail"] += stale_dub_note
     if res.get("audio_fingerprint_ok") is False:
         res["detail"] += ";⚠ 混音文件在盖章后被改动(指纹不符)"
@@ -396,10 +474,11 @@ def compare(proj: Path, ep: str, plan: dict | None = None) -> dict:
 
 
 def check_row(res: dict) -> tuple[str, str]:
-    """机检口径:(PASS|WARN|FAIL, detail)。stale 且混音带后期时轴 = FAIL;原生声轨内容改过 / 后期配音改过 / 采纳版本早于配音 = FAIL;其余失配只 WARN。"""
+    """机检口径:(PASS|WARN|FAIL, detail)。stale 且混音带后期时轴 = FAIL;原生声轨内容改过 / 后期配音改过 / 采纳版本早于配音 /
+    画外对白轨改过(声画分离 2026-10-03)= FAIL;其余失配只 WARN。"""
     st = res.get("status")
     bst = res.get("boundary_status")
-    if res.get("sound_changed") or res.get("dub_changed") or res.get("dub_stale_versions"):
+    if res.get("sound_changed") or res.get("dub_changed") or res.get("dub_stale_versions") or res.get("offscreen_changed"):
         return "FAIL", res.get("detail", "")
     if bst == BND_STALE and (res.get("cur_boundary_has_inserts") or float(res.get("mix_boundary_delta_s") or 0) > 0):
         return "FAIL", res.get("detail", "")

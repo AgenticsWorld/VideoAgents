@@ -287,7 +287,23 @@ def fit_overflow(fit_dur: float, room: float, tol: float = COLLISION_TOL_S) -> b
 
 # ---------------------------------------------------------------- 项目数据
 
-def load_group(proj: Path, ep: str, gid: str):
+def _line_placement(ln: dict) -> str:
+    """声画分离(2026-10-03,modules/offscreen_lines):on 画内开口 / os 画外 / vo V.O.;模块缺失按画内。"""
+    try:
+        from modules import offscreen_lines as osl
+    except ImportError:
+        try:
+            import offscreen_lines as osl
+        except ImportError:
+            return "on"
+    return osl.placement(ln)
+
+
+def load_group(proj: Path, ep: str, gid: str, keep_offscreen: bool = False):
+    """→ (组, 画内台词, 镜表)。idx 按镜内全部有台词句累加(含 os/vo,与对白语音库 (shot_id, idx) 口径一致);
+    画外 / V.O. 句(placement os|vo)默认不进返回的 lines——它们不在 clip 原生人声里,不检测开口、不贴合、不混进 clip,
+    由 code/offscreen_lines.py 按 heard_in 窗口合成成集级独立声轨(mix_basis sources 的 offscreen_lines[])。
+    keep_offscreen=True 时一并返回(带 placement 字段),供回执列出被跳过的句子。"""
     sl = json.loads((proj / "directing" / ep / "shot_list.json").read_text(encoding="utf-8"))
     groups = {g["group_id"]: g for g in sl.get("generation_groups", [])}
     if gid not in groups:
@@ -302,10 +318,13 @@ def load_group(proj: Path, ep: str, gid: str):
             text = (ln.get("text") or ln.get("line") or "").strip()
             if not text:
                 continue
-            lines.append({"shot_id": sid, "idx": idx, "speaker": ln.get("speaker") or ln.get("character_id"),
-                          "text": text, "est_duration_s": ln.get("est_duration_s"),
-                          "emotion": ln.get("emotion") or ln.get("tone") or "",
-                          "delivery": ln.get("delivery")})   # 台词演法(modules/dialogue_direction.py)
+            pl = _line_placement(ln)
+            if pl == "on" or keep_offscreen:
+                lines.append({"shot_id": sid, "idx": idx, "speaker": ln.get("speaker") or ln.get("character_id"),
+                              "text": text, "est_duration_s": ln.get("est_duration_s"),
+                              "emotion": ln.get("emotion") or ln.get("tone") or "",
+                              "delivery": ln.get("delivery"),   # 台词演法(modules/dialogue_direction.py)
+                              "placement": pl})
             idx += 1
     return g, lines, shots
 
@@ -413,8 +432,16 @@ def main(argv=None):
         voice_path = dub_dir / "_dryrun" / "native_voice.wav"
         bed_path.parent.mkdir(parents=True, exist_ok=True)
 
-    group, lines, shots = load_group(proj, ep, gid)
+    group, all_lines, shots = load_group(proj, ep, gid, keep_offscreen=True)
+    lines = [ln for ln in all_lines if ln.get("placement", "on") == "on"]
+    # 声画分离(2026-10-03):画外 / V.O. 句不在 clip 原生人声里,这里跳过,由 code/offscreen_lines.py 出成集级独立声轨
+    offscreen_skipped = [f"{ln['shot_id']}/l{ln['idx']:02d}" for ln in all_lines if ln.get("placement", "on") != "on"]
+    if offscreen_skipped:
+        _log(f"画外 / V.O. 句 {len(offscreen_skipped)} 句不进本组配音(由 offscreen_lines 承担):{', '.join(offscreen_skipped)}")
     if not lines:
+        if offscreen_skipped:
+            raise SystemExit(f"{gid} 没有画内开口的台词(audio_plan={group.get('audio_plan')}),{len(offscreen_skipped)} 句画外 / V.O. "
+                             "由 code/offscreen_lines.py 承担,本组不派 p7-dub")
         raise SystemExit(f"{gid} 无 dialogue_lines(audio_plan={group.get('audio_plan')}),非对白组不派 p7-dub")
     total = probe_duration(clip)
 
@@ -539,6 +566,7 @@ def main(argv=None):
                 "shot_windows": {k: [round(v[0], 3), round(v[1], 3)] for k, v in windows.items()},
                 "tts_provider": provider, "speed_range": [args.speed_min, args.speed_max],
                 "dialogue_tts_library": bool(lib_audio),
+                "offscreen_lines_skipped": offscreen_skipped,   # 画外 / V.O. 句(声画分离 2026-10-03):集级 offscreen 轨承担
                 "lines": [], "checks": {}}
     fitted = []
     for i, (ln, (a, b)) in enumerate(zip(lines, segs)):

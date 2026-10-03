@@ -14,9 +14,13 @@
   6. narration_anchors_cover_all       narration.md 条目 100% 有挂点;挂点镜/组引用合法
   7. narration_window_gte_est_x1.15    可用画面窗口 window_s ≥ est_duration_s×1.15,
                                        且不超挂点镜区间物理时长
-  8. audio_plan_complete               每组 audio_plan ∈ {dialogue,narration_over,ambient_only}
-                                       且与 has_dialogue/挂点事实一致;ambient_only 必附
-                                       silent_rationale
+  8. audio_plan_complete               每组 audio_plan ∈ {dialogue,voice_over(旧名 narration_over),ambient_only}
+                                       且与台词事实一致(有画内句=dialogue;无画内句但有旁白挂点或画外/V.O. 句=voice_over;
+                                       皆无=ambient_only);ambient_only 必附 silent_rationale;has_dialogue 须=组内有画内句
+  8b. speakers_le_3                    §8A(2026-10-03 落成代码):每组画内说话人 ≤3,placement=os|vo 的句不计
+  8c. placement_valid 系列             声画分离(2026-10-03,docs/sound_split.md):委托 modules/offscreen_lines.validate
+                                       (placement_valid / placement_speaker_is_cast / placement_reason_valid / offscreen_fit /
+                                       post_voice_no_overlap);项目 output.sound_split=off 时 shot_list 不得有 os/vo 句
   (dialogue_est_fits_group_x0.7 需 screenplay 对白层估时与角色语速,由 code/check_dialogue_fit.py 执行——
    2026-08-30 起为 p6-dialogue-fit 节点的宿主 CLI,不再由 shot-planning 自查)
   项目「📤 输出设置」旁白开关(output.narration_enabled)关闭时:6/7 跳过(skipped: narration off),
@@ -66,13 +70,19 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from modules import time_cost as _tc  # noqa: E402  密集组限长(2026-10-03)
+try:
+    from modules import offscreen_lines as _osl  # noqa: E402  声画分离(2026-10-03):placement on|os|vo
+except Exception:  # pragma: no cover
+    _osl = None
 
 MAX_GROUP_S = 15              # 默认=Seedance 2.0 单次生成上限;实际以项目「视频模型设置」
                               # settings.json 的 shot_group.max_group_s 为准(main 里覆盖,4-30)
 MIN_GROUP_S = 4
 MAX_CHARS = 4
+MAX_SPEAKERS = 3              # §8A:组内画内说话人 ≤3(Seedance reference_audio 上限;画外 / V.O. 句不计,2026-10-03)
 WINDOW_FACTOR = 1.15          # §7D ①:窗口 ≥ est_duration_s×1.15
-AUDIO_PLANS = ("dialogue", "narration_over", "ambient_only")
+# voice_over(2026-10-03 声画分离)= 无画内句但有旁白挂点或画外 / V.O. 句;narration_over 为其旧名(存量照认)
+AUDIO_PLANS = ("dialogue", "voice_over", "narration_over", "ambient_only")
 # —— 组间转场契约(shot_list.generation_groups[].transition_in,2026-08-28;render_transitions.py 同源)——
 # 可渲染 5 种由宿主 CLI code/render_transitions.py 在 Phase 9 实施(pad 补偿,总时长不变);
 # 标注型 2 种不渲染(= 硬切),只供 continuity/QA 核构图对位;缺省 = hard_cut
@@ -169,6 +179,122 @@ def project_narration_enabled(shot_list_path: Path) -> bool:
         return False
 
 
+def project_root_of(shot_list_path: Path) -> Path:
+    return shot_list_path.resolve().parents[2]
+
+
+def project_sound_split(shot_list_path: Path) -> str:
+    """项目「📤 输出设置」声画分离 output.sound_split ∈ off|script_only|auto(默认 auto,2026-10-03)。"""
+    if _osl is not None:
+        try:
+            return _osl.mode(project_root_of(shot_list_path))
+        except Exception:
+            pass
+    try:
+        st = json.loads((project_root_of(shot_list_path) / "settings.json").read_text())
+        m = (st.get("output") or {}).get("sound_split")
+        return m if m in ("off", "script_only", "auto") else "auto"
+    except Exception:
+        return "auto"
+
+
+def line_placement(ln) -> str:
+    """对白行 placement(缺省 / 非法 = on;字符串写法的旧对白行 = on)。"""
+    if not isinstance(ln, dict):
+        return "on"
+    if _osl is not None:
+        return _osl.placement(ln)
+    p = str(ln.get("placement") or "").strip().lower()
+    return p if p in ("on", "os", "vo") else "on"
+
+
+def shot_onscreen_lines(shot: dict) -> list:
+    """一镜里有文本的画内台词行(dict 形态);旧字符串写法的行视同画内。"""
+    out = []
+    for ln in shot.get("dialogue_lines") or []:
+        if isinstance(ln, dict):
+            if str(ln.get("text") or ln.get("line") or "").strip() and line_placement(ln) == "on":
+                out.append(ln)
+        elif isinstance(ln, str) and ln.strip():
+            out.append({"text": ln.strip(), "speaker": (re.match(r"^(?:S\d+/)?(CHAR-\d+)", ln.strip()) or [None, None])[1]})
+    return out
+
+
+def shot_offscreen_lines(shot: dict) -> list:
+    return [ln for ln in shot.get("dialogue_lines") or []
+            if isinstance(ln, dict) and str(ln.get("text") or ln.get("line") or "").strip() and line_placement(ln) != "on"]
+
+
+def shot_has_onscreen_dialogue(shot: dict) -> bool:
+    """有画内句 = 对白镜;没有 dialogue_lines 字典行的旧镜表退回 is_dialogue。"""
+    lines = [ln for ln in shot.get("dialogue_lines") or [] if isinstance(ln, dict)]
+    if lines:
+        return bool(shot_onscreen_lines(shot))
+    return bool(shot.get("is_dialogue")) and not shot_offscreen_lines(shot)
+
+
+def _speaker_of(ln, names: dict | None) -> str:
+    raw = str(ln.get("speaker") or ln.get("char") or ln.get("character_id") or "").strip()
+    m = re.search(r"((?:CHAR|CRE)-\d+)", raw)
+    if m:
+        return m.group(1)
+    for k in ("speaker_char", "character_id"):
+        m = re.search(r"((?:CHAR|CRE)-\d+)", str(ln.get(k) or ""))
+        if m:
+            return m.group(1)
+    if names:
+        hit = names.get(raw) or names.get(re.sub(r"[〔【(\[（].*$", "", raw).strip())
+        if hit:
+            return hit
+    return raw
+
+
+def check_speakers(shot_list: dict, names: dict | None = None) -> list[str]:
+    """speakers_le_3(§8A,2026-10-03 落成代码):每组**画内**说话人 ≤ MAX_SPEAKERS;画外 / V.O. 句的说话人不计
+    (后期合成,不挂 audio_ref)。"""
+    errors = []
+    by_id = {s["shot_id"]: s for s in shot_list.get("shots") or [] if isinstance(s, dict) and s.get("shot_id")}
+    for g in shot_list.get("generation_groups") or []:
+        gid = g.get("group_id", "?")
+        on, off = set(), set()
+        for sid in g.get("shots") or []:
+            s = by_id.get(sid)
+            if not s:
+                continue
+            for ln in shot_onscreen_lines(s):
+                on.add(_speaker_of(ln, names) or "?")
+            for ln in shot_offscreen_lines(s):
+                off.add(_speaker_of(ln, names) or "?")
+        if len(on) > MAX_SPEAKERS:
+            errors.append(f"{gid} speakers_le_3: 画内说话人 {len(on)}>{MAX_SPEAKERS} {sorted(on)}"
+                          f"(os/vo 不计{';画外 ' + str(sorted(off)) if off else ''});按说话回合拆组,或把插话转画外(D3)")
+    return errors
+
+
+def check_placement(shot_list_path: Path, shot_list: dict, mode: str) -> list[str]:
+    """placement_valid 系列(2026-10-03):委托 modules/offscreen_lines.validate(heard_in 同组 / speaker 是本集人物 /
+    placement_reason / offscreen_fit / post_voice_no_overlap)。模式 off 时 shot_list 不得有 os/vo 句。"""
+    errors = []
+    by_id = {s["shot_id"]: s for s in shot_list.get("shots") or [] if isinstance(s, dict) and s.get("shot_id")}
+    if mode == "off":
+        for g in shot_list.get("generation_groups") or []:
+            for sid in g.get("shots") or []:
+                s = by_id.get(sid)
+                if s and shot_offscreen_lines(s):
+                    errors.append(f"{g.get('group_id', '?')}/{sid} placement_valid: 项目「声画分离」已关闭,但有 placement=os/vo 的台词"
+                                  "(改回画内或在输出设置开启)")
+        return errors
+    if _osl is None or not hasattr(_osl, "validate"):
+        print("[placement] skipped: modules/offscreen_lines 不可用")
+        return errors
+    try:
+        root, ep = project_root_of(shot_list_path), shot_list_path.parent.name
+        errors += [str(m) for m in (_osl.validate(root, ep, shot_list) or [])]
+    except Exception as exc:  # 校验器自身异常不吞:记为机检项
+        errors.append(f"placement_valid: offscreen_lines.validate 执行失败:{exc}")
+    return errors
+
+
 def derive_narration_path(shot_list_path: Path) -> Path | None:
     """directing/epNN/shot_list.json → story/episodes/epNN/narration.md"""
     ep = shot_list_path.parent.name
@@ -201,7 +327,7 @@ def propose_groups(shots: list[dict], id_step: int = 1) -> list[dict]:
             "shots": [s["shot_id"] for s in cur],
             "total_duration_s": int(round(sum(s["duration_s"] for s in cur))),
             "characters_union": sorted({c for s in cur for c in (s.get("characters") or [])}),
-            "has_dialogue": any(s.get("is_dialogue") for s in cur),
+            "has_dialogue": any(shot_has_onscreen_dialogue(s) for s in cur),   # 只看画内句(2026-10-03)
             "continuity_from": groups[-1]["group_id"] if groups else None,
         })
         cur.clear()
@@ -295,27 +421,46 @@ def check_7d(shot_list: dict, narration_md: str | None,
     by_id = {s["shot_id"]: s for s in shots}
     by_gid = {g.get("group_id"): g for g in groups}
 
+    def facts(g: dict) -> tuple[bool, bool]:
+        """(有画内句, 有画外/V.O. 句)。镜表没有 dialogue_lines 字典行的旧项目退回组 has_dialogue。"""
+        has_on = has_off = False
+        any_dict = False
+        for sid in g.get("shots") or []:
+            s = by_id.get(sid)
+            if not s:
+                continue
+            if any(isinstance(ln, dict) for ln in s.get("dialogue_lines") or []):
+                any_dict = True
+            has_on = has_on or bool(shot_onscreen_lines(s))
+            has_off = has_off or bool(shot_offscreen_lines(s))
+        if not any_dict:
+            return bool(g.get("has_dialogue")), False
+        if g.get("has_dialogue") is not None and bool(g.get("has_dialogue")) != has_on:
+            errors.append(f"{g.get('group_id', '?')} has_dialogue_consistent: has_dialogue={g.get('has_dialogue')},"
+                          f"但组内{'有' if has_on else '无'}画内台词句(画外 / V.O. 句不算对白镜,2026-10-03)")
+        return has_on, has_off
+
     if not narration_on:
         print("[7d] skipped: narration off(项目输出设置「旁白」已关闭,全片无旁白)"
-              "—— 仅查 audio_plan(禁 narration_over)")
+              "—— 仅查 audio_plan(禁 narration_over;voice_over 仅限有画外 / V.O. 句的组)")
         if shot_list.get("narration_anchors"):
             errors.append("narration_off: 旁白开关已关闭,但 shot_list 仍有 narration_anchors 条目"
                           "(全片无旁白约定,须清空或按新约定重定稿)")
         for g in groups:
             gid = g.get("group_id", "?")
             plan = g.get("audio_plan")
-            has_dlg = bool(g.get("has_dialogue"))
+            has_dlg, has_off = facts(g)
             if plan not in AUDIO_PLANS:
                 errors.append(f"{gid} audio_plan_complete: audio_plan={plan!r} 非法或缺失")
                 continue
             if plan == "narration_over":
                 errors.append(f"{gid} audio_plan_consistent: 旁白开关已关闭,禁用 narration_over"
-                              "(无对白组一律 ambient_only 并附 silent_rationale)")
+                              "(无对白组一律 ambient_only 并附 silent_rationale;只有画外 / V.O. 句的组写 voice_over)")
                 continue
-            expect = "dialogue" if has_dlg else "ambient_only"
+            expect = "dialogue" if has_dlg else ("voice_over" if has_off else "ambient_only")
             if plan != expect:
                 errors.append(f"{gid} audio_plan_consistent: audio_plan={plan},但按"
-                              f" has_dialogue={has_dlg}(旁白已关闭)应为 {expect}")
+                              f" 画内句={'有' if has_dlg else '无'}/画外句={'有' if has_off else '无'}(旁白已关闭)应为 {expect}")
             if plan == "ambient_only" and not (g.get("silent_rationale") or "").strip():
                 errors.append(f"{gid} silent_rationale: ambient_only 组未说明纯画面"
                               "能讲清叙事的理由(§7D ① 无声组核查)")
@@ -382,17 +527,19 @@ def check_7d(shot_list: dict, narration_md: str | None,
     for g in groups:
         gid = g.get("group_id", "?")
         plan = g.get("audio_plan")
-        has_dlg = bool(g.get("has_dialogue"))
+        has_dlg, has_off = facts(g)
         has_narr = gid in anchored_groups
         if plan not in AUDIO_PLANS:
             errors.append(f"{gid} audio_plan_complete: audio_plan={plan!r} 非法或缺失")
             continue
+        # voice_over(2026-10-03)与旧名 narration_over 等价:无画内句但有旁白挂点或画外 / V.O. 句
         expect = ("dialogue" if has_dlg
-                  else "narration_over" if has_narr else "ambient_only")
-        if plan != expect:
+                  else "voice_over" if (has_narr or has_off) else "ambient_only")
+        plan_norm = "voice_over" if plan == "narration_over" else plan
+        if plan_norm != expect:
             errors.append(f"{gid} audio_plan_consistent: audio_plan={plan},但按"
-                          f" has_dialogue={has_dlg}/挂点={'有' if has_narr else '无'}"
-                          f" 应为 {expect}")
+                          f" 画内句={'有' if has_dlg else '无'}/挂点={'有' if has_narr else '无'}/画外句={'有' if has_off else '无'}"
+                          f" 应为 {expect}{'(旧名 narration_over 亦可)' if expect == 'voice_over' else ''}")
         if plan == "ambient_only" and not (g.get("silent_rationale") or "").strip():
             errors.append(f"{gid} silent_rationale: ambient_only 组未说明纯画面"
                           "能讲清叙事的理由(§7D ① 无声组核查)")
@@ -865,6 +1012,18 @@ def main():
             narr_path = Path(args.narration) if args.narration else derive_narration_path(path)
             narr_text = narr_path.read_text() if narr_path and narr_path.is_file() else None
         errors += check_7d(data, narr_text, narration_on)
+    # §8A speakers_le_3(只数画内说话人)+ 声画分离 placement 系列(2026-10-03)
+    names = None
+    try:
+        from modules.dialogue_tts import name_index
+        names = name_index(project_root_of(path))
+    except Exception:
+        names = None
+    errors += check_speakers(data, names)
+    ss_mode = project_sound_split(path)
+    if ss_mode == "off":
+        print("[placement] skipped: sound_split off(项目「声画分离」已关闭,全部台词画内)")
+    errors += check_placement(path, data, ss_mode)
     if not args.skip_transition:
         errors += check_transitions(data, project_insert_budget_pct(Path(args.shot_list)))
     if errors:

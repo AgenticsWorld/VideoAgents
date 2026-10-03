@@ -87,14 +87,18 @@ def split_dialogue(seg: str):
     return lines, outside, offsets
 
 
-def load_groups(proj_root: Path, ep: str):
+def load_shot_list(proj_root: Path, ep: str) -> dict:
     sl = proj_root / "directing" / ep / "shot_list.json"
     if not sl.is_file():
         return {}
     try:
-        data = json.loads(sl.read_text())
+        return json.loads(sl.read_text())
     except Exception:
         return {}
+
+
+def load_groups(proj_root: Path, ep: str):
+    data = load_shot_list(proj_root, ep)
     out = {}
     for g in data.get("generation_groups", []):
         gid = g.get("group_id")
@@ -103,22 +107,65 @@ def load_groups(proj_root: Path, ep: str):
     return out
 
 
-def is_dialogue_group(g: dict | None, pj: dict) -> bool:
+def load_shots(proj_root: Path, ep: str) -> dict:
+    data = load_shot_list(proj_root, ep)
+    return {s["shot_id"]: s for s in data.get("shots", []) if isinstance(s, dict) and s.get("shot_id")}
+
+
+def _placement(ln: dict) -> str:
+    """对白行 placement(声画分离 2026-10-03,缺省 on);有 modules/offscreen_lines 时按它归一。"""
+    try:
+        from modules import offscreen_lines as osl
+        return osl.placement(ln)
+    except Exception:
+        p = str(ln.get("placement") or "").strip().lower()
+        return p if p in ("on", "os", "vo") else "on"
+
+
+def _speaker_is(ln: dict, cid: str) -> bool:
+    for k in ("speaker", "char", "character_id", "speaker_char"):
+        if cid and cid in str(ln.get(k) or ""):
+            return True
+    return False
+
+
+def shot_line_placements(shot: dict | None, cid: str) -> list[str]:
+    """该角色在本镜各台词句的 placement 列表(无台词 = [])。"""
+    out = []
+    for ln in (shot or {}).get("dialogue_lines") or []:
+        if isinstance(ln, dict) and str(ln.get("text") or ln.get("line") or "").strip() and _speaker_is(ln, cid):
+            out.append(_placement(ln))
+    return out
+
+
+def group_has_offscreen(g: dict | None, shots: dict) -> bool:
+    for sid in (g or {}).get("shots") or []:
+        for ln in (shots.get(sid) or {}).get("dialogue_lines") or []:
+            if isinstance(ln, dict) and str(ln.get("text") or ln.get("line") or "").strip() and _placement(ln) != "on":
+                return True
+    return False
+
+
+def is_dialogue_group(g: dict | None, pj: dict, shots: dict | None = None) -> bool:
     if g:
         if g.get("audio_plan"):
-            return g.get("audio_plan") == "dialogue"
+            if g.get("audio_plan") == "dialogue":
+                return True
+            # 只有画外 / V.O. 句的组(voice_over,旧名 narration_over):听者反应也走表演证据层,仍查(2026-10-03)
+            return g.get("audio_plan") in ("voice_over", "narration_over") and group_has_offscreen(g, shots or {})
         if "has_dialogue" in g:
-            return bool(g.get("has_dialogue"))
+            return bool(g.get("has_dialogue")) or group_has_offscreen(g, shots or {})
     return bool(pj.get("audio_refs")) or "{" in pj.get("video_prompt", "")
 
 
-def check_group(pf: Path, proj_root: Path, ep: str, groups: dict, strict: bool):
+def check_group(pf: Path, proj_root: Path, ep: str, groups: dict, strict: bool, shots: dict | None = None):
     if not performance_enabled(proj_root):
         return [], [], True
     pj = json.loads(pf.read_text())
     gid = pj.get("group_id", pf.stem)
     g = groups.get(gid)
-    if not is_dialogue_group(g, pj):
+    shot_tbl = shots if shots is not None else load_shots(proj_root, ep)   # shot_list 镜表(下面的 shots 是 prompt 的镜号列表)
+    if not is_dialogue_group(g, pj, shot_tbl):
         return [], [], True
     raw_shots = pj.get("shots", [])
     shots = [s.get("shot_id") if isinstance(s, dict) else s for s in raw_shots]
@@ -170,18 +217,27 @@ def check_group(pf: Path, proj_root: Path, ep: str, groups: dict, strict: bool):
             if missing:
                 errs.append(f"{gid}/{shot_id}: {cid} performance 缺字段 {missing}")
                 continue
-            # ① 触发词在本段台词内
-            if not any(word in ln for ln in lines):
-                errs.append(f"{gid}/{shot_id}: {cid} 触发词『{word}』不在{where}的任何 {{}} 台词内")
-            # ② 触发词绑定短语(台词之外再出现一次)
+            # 声画分离(2026-10-03):该角色本镜的台词全是画外 / V.O.(或本镜没有他的台词、只是听者)时,prompt 里没有他的 `{}`,
+            # ①② 不适用;改为要求触发词在 Shot 段正文(`{}` 之外)出现一次作听者反应绑定,缺了只 WARN
+            pls = shot_line_placements(shot_tbl.get(shot_id), cid)
+            offscreen_only = bool(pls) and all(p != "on" for p in pls)
             first_bind = -1
             for k, chunk in enumerate(outside):
                 pos = chunk.find(word)
                 if pos >= 0:
                     first_bind = offsets[k] + pos
                     break
-            if first_bind < 0:
-                errs.append(f"{gid}/{shot_id}: {cid} 触发词『{word}』未在{where}的 {{}} 之外再出现(缺触发词绑定短语,如「说到『{word}』时」)")
+            if offscreen_only:
+                if first_bind < 0:
+                    warns.append(f"{gid}/{shot_id}: {cid} 本镜台词为画外 / V.O.(后期合成,无 {{}}),触发词『{word}』未在{where}正文出现"
+                                 f"(听者反应绑定短语,如「听到『{word}』时」)")
+            else:
+                # ① 触发词在本段台词内
+                if not any(word in ln for ln in lines):
+                    errs.append(f"{gid}/{shot_id}: {cid} 触发词『{word}』不在{where}的任何 {{}} 台词内")
+                # ② 触发词绑定短语(台词之外再出现一次)
+                if first_bind < 0:
+                    errs.append(f"{gid}/{shot_id}: {cid} 触发词『{word}』未在{where}的 {{}} 之外再出现(缺触发词绑定短语,如「说到『{word}』时」)")
             # ③ end_state 逐字命中
             end_state = perf.get("end_state", "")
             if norm(end_state) not in norm(seg):
@@ -221,9 +277,10 @@ def main():
         want = set(args.groups)
         files = [f for f in files if f.stem in want]
     groups = load_groups(proj_root, args.ep)
+    shots = load_shots(proj_root, args.ep)
     all_errs, all_warns, skipped, checked = [], [], 0, 0
     for f in files:
-        errs, warns, skip = check_group(f, proj_root, args.ep, groups, args.strict)
+        errs, warns, skip = check_group(f, proj_root, args.ep, groups, args.strict, shots)
         if skip:
             skipped += 1
             continue

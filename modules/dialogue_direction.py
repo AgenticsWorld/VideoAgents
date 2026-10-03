@@ -23,6 +23,10 @@ import time
 from pathlib import Path
 
 from modules import time_cost as _tc                     # 时间尺(2026-10-03):估时口径唯一来源
+try:
+    from modules import offscreen_lines as _osl           # 声画分离(2026-10-03):placement on|os|vo
+except Exception:  # pragma: no cover
+    _osl = None
 
 PACES = dict(_tc.PACE_RATE)                              # 字/秒(有效字符,不含标点);有角色语速时按倍率 _tc.PACE_FACTOR
 PAUSE_S = _tc.PAUSE_S                                    # 句中每个停顿标点另加的时长
@@ -131,22 +135,62 @@ def _speaker_id(ln: dict) -> str:
     return m.group(1) if m else ""
 
 
-def _line_limit(shot: dict, lines: list[dict], i: int) -> float | None:
-    """这一句在本镜里最多能占多长:镜长 − 镜首留白 − 句间间隔 − 同镜其它句子已定(或估)的时长。"""
+def _placement(ln: dict) -> str:
+    """对白行 placement(缺省 on);有 offscreen_lines 模块时按它归一。"""
+    if _osl is not None:
+        return _osl.placement(ln)
+    p = str((ln or {}).get("placement") or "").strip().lower()
+    return p if p in ("on", "os", "vo") else "on"
+
+
+def _heard_in(ln: dict, shot_id: str) -> list[str]:
+    if _osl is not None:
+        try:
+            return list(_osl.heard_in(ln, shot_id))
+        except Exception:
+            pass
+    hs = [x for x in (ln.get("heard_in") or []) if isinstance(x, str) and x]
+    return hs or [shot_id]
+
+
+def _line_est(other: dict) -> float:
+    d = line_delivery(other)
+    try:
+        return float((d or {}).get("target_s") or other.get("est_duration_s") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _line_limit(shot: dict, lines: list[dict], i: int, shots_by_id: dict | None = None) -> float | None:
+    """这一句在本镜里最多能占多长:镜长 − 镜首留白 − 句间间隔 − 同镜其它**画内**句子已定(或估)的时长。
+    声画分离(2026-10-03):画外 / V.O. 句不占本镜嘴时间,画内句的上限只扣其它画内句;画外句自身的上限 =
+    Σ heard_in 各镜时长 − 这些镜里画内句的估时 − offset_s(至少 0.5s)。"""
     try:
         dur = float(shot.get("duration_s"))
     except (TypeError, ValueError):
         return None
-    others = 0.0
-    for j, other in enumerate(lines):
-        if j == i:
-            continue
-        d = line_delivery(other)
+    me = lines[i]
+    if _placement(me) != "on":
+        heard = _heard_in(me, str(shot.get("shot_id") or ""))
+        span, on_est = 0.0, 0.0
+        for sid in heard:
+            s = (shots_by_id or {}).get(sid) if shots_by_id else (shot if sid == shot.get("shot_id") else None)
+            if not s:
+                continue
+            try:
+                span += float(s.get("duration_s") or 0)
+            except (TypeError, ValueError):
+                pass
+            on_est += sum(_line_est(o) for o in s.get("dialogue_lines") or []
+                          if isinstance(o, dict) and line_text(o) and _placement(o) == "on")
         try:
-            others += float((d or {}).get("target_s") or other.get("est_duration_s") or 0)
+            off = float(me.get("offset_s")) if me.get("offset_s") is not None else 0.4
         except (TypeError, ValueError):
-            pass
-    return round(dur - LEAD_S - GAP_S * (len(lines) - 1) - others, 2)
+            off = 0.4
+        return round(max(0.5, span - on_est - off), 2)
+    on_lines = [o for o in lines if _placement(o) == "on"]
+    others = sum(_line_est(o) for j, o in enumerate(lines) if j != i and _placement(o) == "on")
+    return round(dur - LEAD_S - GAP_S * (len(on_lines) - 1) - others, 2)
 
 
 def context(base: Path, ep: str, shot_list: dict | None = None) -> list[dict]:
@@ -158,6 +202,7 @@ def context(base: Path, ep: str, shot_list: dict | None = None) -> list[dict]:
     cpms = _tc.character_cpm(base)
     group_of = {sid: g.get("group_id") for g in sl.get("generation_groups") or [] if isinstance(g, dict)
                 for sid in g.get("shots") or []}
+    shots_by_id = {s["shot_id"]: s for s in sl.get("shots") or [] if isinstance(s, dict) and s.get("shot_id")}
     out, prev = [], None
     for shot in sl.get("shots") or []:
         if not isinstance(shot, dict) or not shot.get("shot_id"):
@@ -180,7 +225,13 @@ def context(base: Path, ep: str, shot_list: dict | None = None) -> list[dict]:
                 "others_in_shot": [names.get(c, c) for c in shot.get("characters") or [] if c != spk],
                 "prev_line": prev,
                 "shot_duration_s": shot.get("duration_s"), "est_duration_s": ln.get("est_duration_s"),
-                "chars": effective_chars(text), "limit_s": _line_limit(shot, lines, i), "min_s": lo, "max_s": hi,
+                "chars": effective_chars(text), "limit_s": _line_limit(shot, lines, i, shots_by_id), "min_s": lo, "max_s": hi,
+                # 声画分离(2026-10-03):画外 / V.O. 句透传声源位置,工位写演法时知道这句是画外(听者反应镜承接 / 电话 / 内心)
+                "placement": _placement(ln), "heard_in": _heard_in(ln, shot["shot_id"]) if _placement(ln) != "on" else [shot["shot_id"]],
+                "source_fx": str(ln.get("source_fx") or "") if _placement(ln) != "on" else "",
+                "offset_s": ln.get("offset_s") if _placement(ln) != "on" else None,
+                "placement_reason": ln.get("placement_reason") if isinstance(ln.get("placement_reason"), dict) else None,
+                "placement_source": str(ln.get("placement_source") or ""),
                 "line_pace": _tc.norm_pace(ln.get("pace")),   # 对白层写的语速档(dialogue-rewrite,2026-10-03);分镜估时已按它算
                 "pace_seconds": {p: paced_target(text, p, cpms.get(spk)) for p in PACES},
                 "delivery": cur, "status": status,
@@ -283,7 +334,7 @@ def apply(base: Path, ep: str, items: list[dict], by: str = "") -> dict:
         ln.pop("delivery", None)                              # 先摘掉旧值,算上限时不把自己算进「其它句子」
         # 工位没给档位时沿用对白层写的 pace(分镜镜长就是按它定的),再没有才 medium
         pace = pace or _tc.norm_pace(ln.get("pace"))
-        target, ns = resolve_target(line_text(ln), pace, target_s, _line_limit(shot, lines, idx), cpms.get(_speaker_id(ln)))
+        target, ns = resolve_target(line_text(ln), pace, target_s, _line_limit(shot, lines, idx, shots), cpms.get(_speaker_id(ln)))
         notes += [f"{shot['shot_id']}/l{idx:02d}:{n}" for n in ns]
         ln["delivery"] = {"direction": direction, "scene": scene, "target_s": target,
                           **({"pace": pace} if pace else {}),

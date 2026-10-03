@@ -15,12 +15,17 @@
 
 1. 把 `storyboard.json` 的镜头草案逐条定稿:分配唯一镜号(sh001…;**仅当**运行提示词含「## 编号制:预留插入位」一节时——宿主只对 2026-09-28 起新建的项目注入——镜号改 `sh0010`、`sh0020`…、组号改 `grp0010`、`grp0020`…,之后插入用 `sh0011` / `grp0011`,已有编号不重排;无此节的项目照旧)、定终稿时长、景别、机位描述;**先读用户注释 `directing/epNN/storyboard_notes.json`(2026-09-15,有则必读;键 `*` 整集 / `S01` 场次 / `S01-03` 场次-草案镜序,镜级条目带 scene_no/order/shot_id/content 便于对回草案镜)**——用户在故事板页写的分镜设计意见,定稿镜号/时长/景别/机位与分组时逐条对照落实,落实不了的在汇报里说明;每镜终稿时长必须落在「用户全局时长设定 · 单个分镜时长范围」内(未注入时默认 4–8 秒)。
 2. 挂 ID:每镜标注出场角色 ID(`bible/characters/index.json`)与场景 ID(`bible/scenes/index.json`),标记是否对白镜头(供 lip-sync 与 voice-generation 排产)。对白镜的 `dialogue_lines[]` 每句照抄剧本对白层的 `emotion` 与 `pace`(2026-10-03;丢了 = 语音库按「平静自然」合成、估时按 medium 算,前科 fengshen3 ep07 44 句 emotion 全空)。
+   **声画分离——每句 `placement`(2026-10-03,WORKFLOW.md §8D;仅当系统提示词「用户输出设定 → 声画分离」≠ 关时适用,关闭时不写该字段、全部视同画内)**:`dialogue_lines[]` 每句 `placement ∈ on|os|vo`(缺省 on):
+   - 剧本括注 `(O.S.)`/`(V.O.)` 的句**照抄**为 os / vo,`placement_source: script`,不得改回 on(机检 placement_matches_source);
+   - 仅 `sound_split=auto`:对画内句**只在**命中白名单之一时改 os,写 `placement_reason: {trigger, evidence}` 与 `placement_source: directing`——`D1` 反应镜承接(句长 ≥12 字且戏剧重点在听者:听者有 emotion 标注 / performance trigger 挂在听者;拆成前半 on + 后半 os,os 半句挂听者反应镜)、`D2` 时间尺超限(`check_dialogue_fit.py` / `check_time_budget.py` 报超限且组内有反应镜 / 空镜可承载;**不改台词文本**;位次:改短台词 > 转画外 > 调镜 / 拆组,evidence 写报告的组号与超出秒数)、`D3` 群戏第四人起的插话且该人非本镜视觉焦点(免拆组)、`D4` 边走边说出画后的句子(blocking route 在本镜内出画 / presence 转 remote)、`D5` 场首定场镜且首句说话人不在镜内(组内声先入)。不命中一律 on;storyboard 草案的提议我逐条复核再定。**硬保护**:说话人本人承担本镜表演证据层(blocking performance 节拍挂在他脸上)或情绪峰值句不转;`script_only` 档不启用 D1–D5;已冻结的存量集不动;
+   - os/vo 句必填 `heard_in`(听见它的镜,**必须与本句所在镜同一生成组**,缺省本镜),可填 `source_fx ∈ plain|phone|door|distance|inner|memory`(缺省 os→plain、vo→inner)、`offset_s ≥0`(缺省 0.4,相对 heard_in 首镜起点);vo 的 speaker 必须是本集 cast 的人物编号(placement_speaker_is_cast)。
+   - 画外句**不占说话人嘴时间**(dialogue_fit_shot / dialogue_fit_group / shot_time_budget_ok 只算 on 句),但占 `heard_in` 镜的后期人声窗口:窗口 = heard_in 镜总长 − 画内句估时 − 同窗旁白估时 − offset,须 ≥ 画外句估时×1.15(`offscreen_fit`);同一窗口旁白与画外句装不下 = `post_voice_no_overlap` FAIL,由我挪旁白挂点或改 heard_in 解决,不拉长画面。机检统一走宿主 CLI `python3 code/offscreen_lines.py check --project <slug> --ep epNN`(H3A 前必过);每条画外决策连 reason 进「分镜设定」预览供用户审看,用户在「对白语音」面板改的 `placement_source=user` 优先于我的判定。
 3. 按 `pacing.json` 的逐场时长分配收敛总时长:Σ镜头时长 = 集时长 ±10%;超预算时按 pacing 的删减建议裁,并记录取舍。
 4. **定稿生成组(generation_groups)**:以 storyboard 的 groups_draft 为底稿逐组校验定稿——
    - 组内镜号连续、同 scene_id;每镜必须且只属于一个组;
    - Σ组内终稿时长 ∈ [4,15] **整数**秒(Seedance 2.0 仅接受整数;定稿时长时同步调平);
    - 组内出场角色合集 ≤4,超了拆组并回报 storyboard 备案;
-   - **对白组说话人纪律(§8A 2026-07-20 更新:人物 Voice 样本范式)**:组生成把每个说话角色各自的 voiceprint 样本挂 reference_audio 并在 prompt 逐角色显式绑定,多说话人组因此**允许**——但**组内说话人 ≤3 是设计层硬约束**(机检 `speakers_le_3`,超限=FAIL):Seedance 2.0 的 reference_audio 每次最多 3 段,说话人 >3 就有角色挂不上锚、音色无保障,**切组时就必须把说话人多的群戏按说话回合拆开**,不留给下游取舍;dialogue 组一律标注 `speakers`(按台词量排序)供 prompt/voice-generation 选锚,并供下游逐说话人音色快检盯防——快检反复(≥3 次)错配的组,回退**按说话回合切组、一组一说话人**的保守切法(对方反应镜可入组但不开口);
+   - **对白组说话人纪律(§8A 2026-07-20 更新:人物 Voice 样本范式)**:组生成把每个说话角色各自的 voiceprint 样本挂 reference_audio 并在 prompt 逐角色显式绑定,多说话人组因此**允许**——但**组内说话人 ≤3 是设计层硬约束**(机检 `speakers_le_3`,超限=FAIL):Seedance 2.0 的 reference_audio 每次最多 3 段,说话人 >3 就有角色挂不上锚、音色无保障,**切组时就必须把说话人多的群戏按说话回合拆开**,不留给下游取舍;dialogue 组一律标注 `speakers`(按台词量排序,**2026-10-03 起只列画内句 `placement=on` 的说话人——`speakers_le_3` 已落成代码 `code/check_generation_groups.py`,os/vo 画外句不计,第四人起的插话可按 §8D D3 转画外免拆组**)供 prompt/voice-generation 选锚,并供下游逐说话人音色快检盯防——快检反复(≥3 次)错配的组,回退**按说话回合切组、一组一说话人**的保守切法(对方反应镜可入组但不开口);
    - 时长语义:**组总时长是生成硬约束(±1s 机检),镜级 duration_s 是节奏意图**——多镜头生成时模型按剧情定各镜实际长度;
    - **每镜时长按时间尺定(2026-10-03,docs/time_cost.md)**:`duration_s` ≥ Σ本镜动作节拍单价(`poses[].action` 逐拍按单价表)+ Σ台词估时(对白行 `est_duration_s`,已按 `pace` 语速档算)+ 余量——**对白镜每句开口前 0.4s + 说完后 0.3s**(前科 fengshen3 ep07:镜长 = 估时零余量,5 秒台词被模型整句丢掉),动作镜首尾各 0.2s;装不下的镜合并相邻插入镜或加镜长,不得把拍数硬塞进亚秒镜。**密集组限长**:平均镜长 < 1.5s 的组 `total_duration_s` ≤ 15s(用户拍板,不随项目组上限放宽),按节拍链(回合)拆组,同空间续接走长镜头设置的尾段视频。定稿后跑 `python3 code/check_time_budget.py --project <slug> --ep epNN --scope shots`(机检 shot_time_budget_ok / group_density_ok,group_density_ok 也内置在 check_generation_groups.py);Σ镜头时长仍 = pacing 调整后预算 ±10%(pacing 加长单集时 `duration_budget_s` 已含加长,`budget_s` 取它);
    - **每组钉死时段与光照方案(2026-07-20)**:必填 `time_of_day`(受控枚举:清晨/昼/黄昏/夜/深夜/凌晨,继承 storyboard 场块字段)与 `lighting_scheme_id`(从该组场景 `bible/scenes/<scene_id>/lighting.json` 的 schemes 中选 `condition.time_of_day` 与组 time_of_day 一致的方案 ID,如 `LGT-0012-01`)——这是下游 prompt 取光照描述的唯一依据,**没有这两个字段,导演层随手从场景光照矩阵错取白天方案就无人能拦**(前科:tothemoon ep01 S04 深夜病房错配清晨/黄昏日光方案,grp011 金色云隙光进成片);该场景 lighting.json 无匹配时段方案时上报 orchestrator 回派 `05-scenes/lighting` 补方案,严禁就近凑一套;
@@ -34,7 +39,7 @@
    - **继承每镜人物姿态/动作 `poses`(2026-09-14)**:每镜照抄 storyboard 对应草案镜的 `poses`(`{CHAR-id: {pose, action}}`,pose 枚举 stand/sit/lie/kneel/crouch/prone,action 中文直通);草案镜被**拆成多镜**时各镜按各自画面重写(拆点前后体位不同就分别写),**并镜**时取首镜体位、action 串起;角色集合须等于本镜 `characters`(不多人不少人)。定稿后跑 `python3 code/storyboard_pose_check.py --project <slug> --ep epNN --source shot_list --strict`。下游 blocking 按它写每角色 `pose` 与站位片段开头,白模编译按它定关键帧体位,prompt 的「主体动作」以 action 为事实源。
 5. **定稿旁白挂点(narration_anchors,WORKFLOW.md §7D ①)**:把 `narration.md` 每条旁白落到具体镜/组区间——**起点取 storyboard 每镜 `narration_ref`(分镜师标的起播镜,2026-09-15;用户在 H3S 已按它签字)**,`anchor_shots` 首镜 = 该草案镜对应的定稿镜,拆镜时取拆出的首镜;确需挪到别的镜(窗口装不下等)要在 anchor 记录 `moved_from` 并写明理由,不得默默改——算出可用画面窗口秒数(窗口扣除其中对白占时);窗口 ≥ 该条 `est_duration_s`×1.15 才算装得下——不满足优先调镜时长消化,画面确实装不下再上报 orchestrator 回派 narration 精简文本。这是 H3A 签字的前置机检:旁白挤不进画面的问题必须在视频生成前解决,组 clip 生成后再扩镜=整组重 roll。
 6. **对白适配核查(估时级,§7D ①)**:dialogue 组逐组核对台词总估时(取 screenplay 对白层 `est_duration_s`,口径已按角色声线语速)能否装进组时长,机检 `Σ台词估时 ≤ 组总时长×0.7`(留动作/反应/停顿空间)。**2026-08-30 起用宿主 CLI `python3 code/check_dialogue_fit.py --project <slug> --ep epNN` 执行(禁人算/自查放行)**:定稿 shot_list 落盘后必跑一遍,报告 `directing/epNN/dialogue_fit.json`;有超限组时**我不删台词**——在 result.json 报出超限组清单并交 `p6-dialogue-fit`(dialogue-rewrite 按报告 trim_targets 逐句精简);精简 3 轮仍装不下回到我调镜时长/拆组。定镜时长时就把每组 0.7 承载算进去,别把删台词留给下游。**组总时长是生成硬约束——台词超出承载力时,视频模型会为念完台词强行提速,语速异常且只能整组重 roll**。超限的解法优先级:上报 orchestrator 回派 dialogue-rewrite **改短台词**(文本层,最便宜)> 调镜时长/拆组;严禁指望模型压语速消化。
-7. **逐组定稿音频形态 audio_plan 与无声组核查(§7D ①)**:每组必填 `audio_plan ∈ {dialogue, narration_over, ambient_only}`(有对白镜=dialogue;无对白但有旁白挂点=narration_over;两者皆无=ambient_only)。**每个 ambient_only 组逐组判定「纯画面 + 音效/环境声能否讲清该段叙事」并写 `silent_rationale`**(纯动作/氛围/蒙太奇等有意留白要说明白);讲不清的上报 orchestrator 回派 narration 补写旁白(补写条目新版本写回 narration.md,narration.md 是旁白唯一事实源),确需加对白的走剧本变更流程。audio_plan 是下游 prompt 的硬输入——非对白组据此写无对白约束,防视频模型自编台词(§7D ③)。
+7. **逐组定稿音频形态 audio_plan 与无声组核查(§7D ①)**:每组必填 `audio_plan ∈ {dialogue, voice_over, ambient_only}`(有**画内**对白句=dialogue;无画内句但有旁白挂点**或画外句 os/vo**=voice_over——`narration_over` 是它的旧名,机检作别名接受,新写一律 voice_over;两者皆无=ambient_only;2026-10-03 起只按 `placement=on` 判)。**每个 ambient_only 组逐组判定「纯画面 + 音效/环境声能否讲清该段叙事」并写 `silent_rationale`**(纯动作/氛围/蒙太奇等有意留白要说明白);讲不清的**三级回派(2026-10-03)**:① 旁白开启 → 上报 orchestrator 回派 narration 补写旁白(补写条目新版本写回 narration.md,narration.md 是旁白唯一事实源);② 旁白关闭、或要传达的是人物自己的心声且声画分离开启、原著有心理描写 / 信件依据 → 上报回派 dialogue-rewrite 补人物 V.O. 句(剧本变更只动对白层);③ 确需加画内对白的走剧本变更流程或交用户裁决。**旁白挂点窗口 `window_s`(职责 ①)= 区间时长 − 区间内画内句估时 − 同窗画外句估时**。audio_plan 是下游 prompt 的硬输入——非对白组据此写无对白约束,防视频模型自编台词(§7D ③)。
 8. **逐组敏感内容标记 `nsfw`(NSFW 模式,2026-09-25)**【仅当运行提示词含「## NSFW 模式:开启」一节时适用(宿主只在「设置→高级→NSFW 模式」开启时注入);关闭时不写此字段】:每组必填 `nsfw: true|false`——本组场景挂的任一事件(`script_breakdown.json#scenes[].events` → `events[].content_flags`)`content_flags` 非空即 `true`,否则 `false`;只按拆解表判定,不自行推断、不为触发备用模型编造。**不写 `assets/group_settings/` 文件**(那是宿主与用户的);用户在分镜预览页组卡手标的 🔞(group_settings `nsfw_reason: "manual"`)优先于本字段。宿主/genmedia 据此把该组的 prompt、锚图、视频生成路由到备用模型(WORKFLOW.md §6/§9)。
 9. 产出 `directing/epNN/shot_list.json`,附与 storyboard 草案的映射(哪镜来自哪条草案、改了什么)。
 10. G6 后 shot_list(含 generation_groups、narration_anchors、audio_plan)冻结:任何改动走变更流程新开版本,由 orchestrator 标脏重跑受影响链路。
@@ -75,6 +80,11 @@
     "shot_id": "sh014", "scene_id": "s012", "duration_s": 4.0,
     "size": "近景", "camera_position": "殿门内侧,略低机位",
     "characters": ["c003", "c007"], "costumes": { "c003": "c003_battle_02", "c007": "c007_daily_01" }, "creatures": [], "is_dialogue": true,
+    "dialogue_lines": [
+      { "speaker": "c003", "text": "师父,这卷经书……", "emotion": "疑惑", "pace": "medium" },
+      { "speaker": "c007", "text": "放回去。", "emotion": "冷", "pace": "slow", "placement": "os", "heard_in": ["sh014"], "source_fx": "door",
+        "offset_s": 0.4, "placement_source": "script", "placement_reason": { "trigger": "S-door", "evidence": "剧本括注 (O.S.):老执事在门外" } }
+    ],
     "storyboard_ref": "S03/order:1", "view_tile": 5,
     "poses": { "c003": { "pose": "stand", "action": "自殿门行至殿中停步按剑" }, "c007": { "pose": "stand", "action": "" } }
   }],
@@ -85,6 +95,7 @@
     "total_duration_s": 12,
     "characters_union": ["c003", "c007"], "costumes_by_char": { "c003": "c003_battle_02", "c007": "c007_daily_01" }, "creatures_union": [], "has_dialogue": true,
     "audio_plan": "dialogue",
+    "speakers": ["c003"],
     "nsfw": false,   // NSFW 模式开启时必填:场景任一事件 content_flags 非空 → true;关闭时不写
     "continuity_from": "grp004",
     "storyboard_group_ref": "S03/group_order:2",
@@ -110,7 +121,7 @@
   }]
 }
 ```
-(`window_s` = 挂点镜区间总时长 − 区间内对白占时;每条 narration.md 条目必有对应 anchor 记录)
+(`window_s` = 挂点镜区间总时长 − 区间内画内对白占时 − 同窗画外句(os/vo)占时;每条 narration.md 条目必有对应 anchor 记录。`dialogue_lines[].placement` 缺省 on,os/vo 句必填 `heard_in`(同组镜),§8D 2026-10-03;`audio_plan` 只按画内句判:dialogue / voice_over(旧名 narration_over)/ ambient_only;`speakers` 只列画内说话人)
 
 ## 接受的工作指令(Work Order)
 
@@ -141,6 +152,7 @@ instruction: |
 - **时段锚机检(time_anchor_ok,2026-07-20)**:每组 `time_of_day` 必填且在受控枚举内、与 storyboard 对应场块一致;`lighting_scheme_id` 必填、在该组场景 lighting.json 的 schemes 中存在、且该方案 `condition.time_of_day` 与组 time_of_day 一致;同场景同时段的多个组必须取同一 scheme;
 - **旁白挂点机检(§7D ①)**:narration.md 条目 100% 有挂点;挂点镜/组引用合法;可用画面窗口(扣除对白占时)≥ `est_duration_s`×1.15;
 - **组音频形态机检(§7D ①)**:每组 `audio_plan` 必填且与 has_dialogue/挂点事实一致;ambient_only 组必附 `silent_rationale`(无理由的无声组=待核查,不得进 H3A)。
+- **声画分离机检(2026-10-03,§8D,`python3 code/offscreen_lines.py check --project <slug> --ep epNN`;声画分离关闭时报 skipped)**:`placement_valid`(枚举;os/vo 句 heard_in 非空且同组;关闭档不得有 os/vo;script_only 档不得有 directing 来源)、`placement_speaker_is_cast`、`placement_reason_valid`(directing 来源须带白名单 trigger D1–D5)、`placement_matches_source`(剧本标 os/vo 的句不得改回 on,`check_dialogue_fit.py`)、`offscreen_fit`(估时 ≤ heard_in 窗口可用 ×0.9)、`post_voice_no_overlap`;`speakers_le_3` 只数画内说话人(`check_generation_groups.py`)。
 - **对白适配机检(§7D ①,dialogue_est_fits_group_x0.7)**:dialogue 组 Σ台词估时 ≤ 组总时长×0.7,`code/check_dialogue_fit.py` 执行(dialogue_fit_group / dialogue_fit_shot / line_le_cap / line_est_consistent / lines_text_match_source);**dialogue_fit_shot 2026-10-03 起 = Σ台词估时 + 开口前 0.4s + 说完后 0.3s ≤ 镜长(新集 FAIL)**;超限组在回执里列出交 p6-dialogue-fit 精简,该节点 PASS 前不派 p6-blocking、不得进 H3A。
 - **时间预算机检(shot_time_budget_ok / group_density_ok,2026-10-03)**:`code/check_time_budget.py --scope shots`——每镜 `duration_s` ≥ 节拍单价 + 台词估时 + 余量;平均镜长 < 1.5s 的组 ≤ 15s。存量 shot_list 只 WARN。
 

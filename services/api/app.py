@@ -347,6 +347,18 @@ async def dialogue_tts_sync(project: str, ep: str, body: dict[str, Any] | None =
     return await core.api_dialogue_tts_sync(project, ep, body or {})
 
 
+@api.get("/projects/{project}/episodes/{ep}/offscreen-lines", tags=["artifacts"])
+async def offscreen_lines_get(project: str, ep: str) -> dict[str, Any]:
+    """画外对白(O.S./V.O.)现状(输出设置「声画分离」,2026-10-03):模式、逐句摆位 / 合成状态、台账是否过期 + 后台合成状态。"""
+    return _artifact_urls(await core.api_offscreen_lines_get(project, ep), project)
+
+
+@api.post("/projects/{project}/episodes/{ep}/offscreen-lines/sync", tags=["artifacts"])
+async def offscreen_lines_sync(project: str, ep: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    """「合成画外对白」:{force?} 宿主后台跑 code/offscreen_lines.py synth,结束发 SSE offscreen_lines。"""
+    return await core.api_offscreen_lines_sync(project, ep, body or {})
+
+
 # ---- 后期处理(/preview/post):处方台账 / 出片作业 / 音效点位 / 拼装预检 / H3P 签字(2026-09-11) ----
 @api.post("/projects/{project}/post/{ep}/recipes", tags=["artifacts"])
 async def post_recipe_create(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:

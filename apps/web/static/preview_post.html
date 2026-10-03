@@ -1304,7 +1304,7 @@ function waveSelEdit(){
     const g=grpById(x.group_id)||{},cur=versionsOf(x.group_id).find(v=>v.v===(g.current||0));if(cur&&cur.url)files.push(artPath(cur.url));
     if(x.file)files.push(artPath(x.file));
     kind='dialogue';id=x.shot_id||x.group_id;
-    loc=I18N.f('配音 {ep}/{g}{sh}({sp};组内 {a}–{b}s,集时间 {c}–{d}s;数据 directing/{ep}/shot_list.json 镜 {shot} dialogue_lines,{src};组视频见 files)',{ep:EP,g:x.group_id,sh:x.shot_id?'/'+x.shot_id:'',sp:x.label||'-',a:num(x.t0-(g.cum_start_s||0),2),b:num(x.t1-(g.cum_start_s||0),2),c:num(x.t0,2),d:num(x.t1,2),shot:x.shot_id||'-',src:x.source==='dub'?I18N.f('配音音频 assets/audio/voice/{ep}/dub/{g}/dub_manifest.json',{ep:EP,g:x.group_id}):x.source==='library'?I18N.f('对白语音库 assets/audio/voice/{ep}/tts/tts_manifest.json',{ep:EP}):t('尚无配音音频')});
+    loc=I18N.f('配音 {ep}/{g}{sh}({sp};组内 {a}–{b}s,集时间 {c}–{d}s;数据 directing/{ep}/shot_list.json 镜 {shot} dialogue_lines,{src};组视频见 files)',{ep:EP,g:x.group_id,sh:x.shot_id?'/'+x.shot_id:'',sp:x.label||'-',a:num(x.t0-(g.cum_start_s||0),2),b:num(x.t1-(g.cum_start_s||0),2),c:num(x.t0,2),d:num(x.t1,2),shot:x.shot_id||'-',src:x.source==='dub'?I18N.f('配音音频 assets/audio/voice/{ep}/dub/{g}/dub_manifest.json',{ep:EP,g:x.group_id}):x.source==='library'?I18N.f('对白语音库 assets/audio/voice/{ep}/tts/tts_manifest.json',{ep:EP}):x.source==='offscreen'?I18N.f('画外对白 assets/audio/voice/{ep}/offscreen/offscreen_manifest.json',{ep:EP}):t('尚无配音音频')});
   }else if(lane==='narration'){
     if(x.file)files.push(artPath(x.file));kind=x.file?'narration_audio':'narration';id=x.num||x.seg_id||x.label;
     loc=I18N.f('旁白 {ep}/{id}(挂点组 {g};集时间 {c}–{d}s;数据 assets/audio/narration/{ep}/manifest.json 段 {id},文稿 story/episodes/{ep}/narration.md 条目 {id})',{ep:EP,id,g:x.group_id,c:num(x.t0,2),d:num(x.t1,2)});

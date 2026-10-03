@@ -240,10 +240,46 @@ def collect_lines(base: Path, ep: str, shot_list: dict | None = None) -> list[di
             delivery = _direction().line_delivery(ln)     # 台词演法(仍有效的才算;台词改过的作废)
             if delivery:
                 item.update(direction=delivery["direction"], scene=delivery["scene"], target_s=delivery["target_s"])
+            item.update(_placement_fields(ln, s["shot_id"]))   # 声画分离(2026-10-03):画内/画外/V.O. 与听见的镜
             out.append(item)
             idx += 1
             seq += 1
     return out
+
+
+# ---------------------------------------------------------------- 声画分离(2026-10-03,docs/sound_split.md)
+
+def _offscreen():
+    """modules/offscreen_lines(画外句契约);模块缺失时退化为「全部画内」。"""
+    try:
+        from modules import offscreen_lines
+    except ImportError:
+        try:
+            import offscreen_lines                        # 脚本直跑时无包前缀
+        except ImportError:
+            return None
+    return offscreen_lines
+
+
+def _placement_fields(ln: dict, shot_id: str) -> dict:
+    """对白行的声源位置字段(透传给台账 / 排轨 / 后期配音):placement on|os|vo、heard_in(听见的镜)、source_fx、offset_s。
+    os/vo 句照常进库合成(库是自然语速事实源,offscreen_lines.synth 复用库文件),idx 序号不变。"""
+    osl = _offscreen()
+    if osl is None:
+        return {"placement": "on", "heard_in": [shot_id]}
+    pl = osl.placement(ln)
+    out = {"placement": pl, "heard_in": osl.heard_in(ln, shot_id) if pl != "on" else [shot_id]}
+    if pl != "on":
+        fx = str(ln.get("source_fx") or "").strip()
+        out["source_fx"] = fx if fx in getattr(osl, "SOURCE_FX", {}) else ("inner" if pl == "vo" else "plain")
+        off = _f(ln.get("offset_s"))
+        out["offset_s"] = off if off is not None and off >= 0 else 0.4
+    return out
+
+
+def onscreen_only(items: list[dict]) -> list[dict]:
+    """只留画内开口的句子(placement 缺省即画内)。"""
+    return [e for e in items if (e.get("placement") or "on") == "on"]
 
 
 def _direction():

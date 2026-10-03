@@ -1029,6 +1029,13 @@ DEFAULT_GENCONFIG = {
                "dialogue_tts_speed": 1.0,
                "dialogue_tts_max_pause": 0,
                "dialogue_tts_max_tempo": 1.5,
+               # sound_split=声画分离(2026-10-03,docs/sound_split.md):人物台词可以不在画内开口——画外 O.S.(说话人在场但不入画)/
+               #   V.O.(内心独白、读信、回忆声等非本时空声源)。shot_list dialogue_lines[].placement ∈ on|os|vo,os/vo 句一律后期按人物
+               #   选角 TTS 合成(code/offscreen_lines.py),不进组 prompt `{}`、不挂该人 audio_ref,作为独立「画外对白」声轨混入成片。
+               #   off=全关(全部台词画内开口,存量口径);script_only=只认剧本层 (O.S.)/(V.O.) 标记;auto(默认)=剧本标记 + 分镜层按
+               #   白名单自动转画外(反应镜承接 / 时间尺超限 / 群戏第四人 / 出画后续说 / 定场镜首句),每条须写 placement_reason。
+               #   与旁白开关正交:旁白只管旁白者声线;人物 V.O. 归本项。
+               "sound_split": "auto",
                "spatial_blocking": False,
                # scene_plates=场景图(2026-09-17,仅白模关闭时生效;A 方案 docs/scene_plates.md):auto(默认)=每场景必出正向图(站在入口往内看的主视角图,
                #   environment-concept 登记 assets/concepts/scenes/<sid>/scene_plates.json),分镜定稿后各集 shot_list 有镜 plate_view=reverse 才由
@@ -1139,6 +1146,7 @@ UPSCALE_FFMPEG_FILTERS = ("lanczos", "bicubic", "spline", "bilinear")
 UPSCALE_FFMPEG_PRESETS = ("ultrafast", "fast", "medium", "slow", "veryslow")
 # 对白配音方式:native=视频原声(默认)/dubbing=后期配音(TTS 按画面开口时段贴合,workflow p7-dub)
 DIALOGUE_VOICE_MODES = ("native", "dubbing")
+SOUND_SPLIT_MODES = ("off", "script_only", "auto")   # 输出设置「声画分离」(2026-10-03,docs/sound_split.md):关 / 仅剧本标记 / 自动(默认)(与 modules.offscreen_lines.SOUND_SPLIT_MODES 同步)
 SCENE_PLATES_MODES = ("auto", "single", "pair")   # 输出设置「场景图」(2026-09-17,仅白模关闭时生效):正向必出;反向按需 / 不出 / 全出
 PLATE_MODE_LABELS = {"pano": "全景图 pano", "world": "世界模型 world", "grid": "九宫格 grid"}
 PLATE_MODES = ("pano", "world", "grid")   # 输出设置「背景图模式」(2026-09-22,仅白模开启时生效):全景图 / 世界模型 / 九宫格(2026-09-25)(与 modules.shot_plates.PLATE_MODES 同步)
@@ -2097,6 +2105,8 @@ def _validate_output(o: dict):
             raise ServiceError(400, f"output.sketch_style must be one of {_sk_styles}")
     if "plate_mode" in o and o["plate_mode"] not in PLATE_MODES:
         raise ServiceError(400, f"output.plate_mode must be one of {PLATE_MODES}")
+    if "sound_split" in o and o["sound_split"] not in SOUND_SPLIT_MODES:
+        raise ServiceError(400, f"output.sound_split must be one of {SOUND_SPLIT_MODES}")
     if "dialogue_tts" in o and not isinstance(o["dialogue_tts"], bool):
         raise ServiceError(400, "output.dialogue_tts must be a boolean")
     # 对白配音=后期配音时「生成对白语音」为必选(2026-09-23 用户拍板):UI 勾上锁死,这里兜底归一,
@@ -3218,6 +3228,32 @@ def build_role_prompt(agent_id: str, project: str,
         "视频原声模式下仍严禁把库音频混进成片对白(§8A 红线不变)**"
         if (out.get("dialogue_tts") is True or dubbing) else
         "关闭(默认)—— 不维护对白语音库;动态样片/白模样片不挂对白轨")
+    # 声画分离(2026-10-03,docs/sound_split.md):人物台词的画外 O.S. / V.O.;与旁白开关正交
+    sound_split = out.get("sound_split") if out.get("sound_split") in SOUND_SPLIT_MODES else "auto"
+    _ss_common = (
+        "画外句契约:shot_list `dialogue_lines[].placement ∈ on|os|vo`(缺省 on),os/vo 句必填 `heard_in`(听见的镜,须在本组内)、"
+        "可填 `source_fx`(plain/phone/door/distance/inner/memory)、`offset_s`、`placement_reason{trigger,evidence}`;"
+        "**os/vo 句一律后期按该人物选角 TTS 合成(宿主 CLI `python3 code/offscreen_lines.py plan|synth|check --project <slug> --ep epNN`,"
+        "不进组 prompt `{}`、不挂该人 audio_ref、正文不提其名),作为独立「画外对白」声轨由 audio-mixing 按 `mix_basis sources` 的 "
+        "`offscreen_lines[]` 摆位**(视频原声模式同样成立——§8A TTS 红线只约束画内口型,画外无嘴可对);组 `audio_plan` 只按画内句判"
+        "(有 on 句=dialogue;无 on 句但有旁白挂点或 os/vo 句=voice_over,narration_over 为其旧名;两者皆无=ambient_only);"
+        "`speakers_le_3` / audioref_bound / nonspeech_group_prompt_ok 都只数画内说话人;os/vo 句占 heard_in 镜的后期人声窗口"
+        "(与旁白互斥不重叠,offscreen_fit / post_voice_no_overlap),不占说话人嘴时间;字幕照出。"
+        "**旁白开关只管旁白者声线,人物 V.O. 归本项**:vo 的 speaker 必须是本集 cast 的人物编号、文本须是人物口吻,不得借人物 V.O. 伪装旁白")
+    sound_split_line = (
+        "**自动(auto,默认)** —— " + _ss_common +
+        ";**触发两层**:① 剧本层(screenplay / dialogue-rewrite)只在声源客观不在画内时在说话人括注写 `(O.S.)` / `(V.O.)`"
+        "(电话 / 隔门隔墙 / 出画仍说 → O.S.;心理描写改台词 / 读信 / 回忆中的话 / 幻听传音 → V.O.),剧本写了下游不得改回画内;"
+        "② 分镜层(storyboard / shot-planning)对本是画内的句子**只在**命中白名单之一时改 os 并写 placement_reason:"
+        "D1 反应镜承接(句长 ≥12 字且戏剧重点在听者)/ D2 时间尺超限(dialogue_fit / time_budget 报超限且组内有反应镜或空镜可承载,不改台词文本)/ "
+        "D3 群戏第四人起的插话(该人非本镜视觉焦点)/ D4 边走边说出画后的句子 / D5 场首定场镜且首句说话人不在镜内;"
+        "不命中一律保持 on;说话人本人承担本镜表演证据层(performance 节拍挂在他脸上)或情绪峰值句不得转画外;存量冻结集不动"
+        if sound_split == "auto" else
+        "**仅剧本标记(script_only)** —— " + _ss_common +
+        ";只认剧本层说话人括注 `(O.S.)` / `(V.O.)`(声源客观不在画内才写),分镜层不得自行把画内句改画外(白名单 D1–D5 不启用)"
+        if sound_split == "script_only" else
+        "**关闭(off)** —— 全部台词画内开口(存量口径):剧本不写 `(O.S.)`/`(V.O.)`(声源不在画内的话改写成画内句或交旁白 / 剧本变更),"
+        "shot_list 不写 placement(视同 on),不派 offscreen_lines,offscreen 系列机检报 skipped: sound_split off;旁白开关逻辑不受影响")
     # 过场模式(2026-09-24 设置项;2026-09-26 二期工位):项目级 settings.json#transitions,集级 episode.json#transitions_mode 可覆盖
     try:
         from modules import transition_design as _td_prompt
@@ -3356,6 +3392,7 @@ def build_role_prompt(agent_id: str, project: str,
 - 旁白:{narration_line}
 - 对白配音:{dialogue_voice}
 - 生成对白语音:{dialogue_tts_line}
+- 声画分离:{sound_split_line}
 - 过场模式:{transitions_line}
 - 人物精确空间位置:{spatial_line}
 - 视频分辨率:一切视频生成(首次/重 roll/兜底重做)一律 `--resolution {draft_res}`(草稿档);成片分辨率({final_res})与草稿档不同时,终版**默认且仅由 upscale 超分**得到——不询问用户、严禁按成片档重新生成(重生成贵、慢且画面随机);成片档 `--resolution {final_res}` 重出仅限一种情形——QA 判定超分不达标的兜底重出(WORKFLOW.md §7B)—— 分辨率直接决定生成费用,严禁擅自调高(genmedia 有硬闸门,越档自动压回草稿档)
@@ -7064,19 +7101,22 @@ def _shot_dialogue_lines(s: dict, draft: dict, idx: dict[str, dict]) -> list[dic
     lines: list[dict] = []
     seen: set[str] = set()
 
-    def _add(ref, speaker, text):
+    def _add(ref, speaker, text, placement="on"):
         key = ref or text
         if not key or key in seen:
             return
         seen.add(key)
-        lines.append({"ref": ref, "speaker": speaker, "text": text})
+        # placement(声画分离,2026-10-03):on 画内 / os 画外 / vo V.O.;缺键或非法视同画内
+        lines.append({"ref": ref, "speaker": speaker, "text": text,
+                      "placement": placement if placement in ("on", "os", "vo") else "on"})
 
     for emb in (s.get("dialogue"), s.get("dialogue_lines")):
         for d in (emb if isinstance(emb, list) else [emb]):
             # 规约键 text;有的出稿把正文写成 line(liaozhai2 ep08,2026-09-04),与 check_dialogue_fit 同样兼容
             txt = d.get("text") or d.get("line") if isinstance(d, dict) else None
             if txt:
-                _add(d.get("ref") or d.get("line_id") or d.get("id"), d.get("speaker"), str(txt).strip())
+                _add(d.get("ref") or d.get("line_id") or d.get("id"), d.get("speaker"), str(txt).strip(),
+                     str(d.get("placement") or "on").strip().lower())
     refs = []
     srcs = [s.get("dialogue_refs"), s.get("dialogue_ref")]
     if not _shot_has_own_dialogue(s):
@@ -8693,7 +8733,8 @@ def _preview_storyboard(project: str, ep: str):
         tr = cont_trans.get(gid) or {}
         groups.append({k: g.get(k) for k in (
             "group_id", "scene_id", "shots", "total_duration_s",
-            "characters_union", "creatures_union", "has_dialogue", "continuity_from")} | {
+            "characters_union", "creatures_union", "has_dialogue", "continuity_from",
+            "audio_plan")} | {                        # audio_plan:组卡音频形态 chip(2026-10-03 声画分离加 voice_over)
             "scene_no": scene_cast_contexts.get(gid, {}).get("scene_no"),
             "scene_cast": scene_cast_contexts.get(gid, {}).get("actor_ids", []),
             "scene_cast_refs": g.get("scene_cast_refs", []),
@@ -9654,6 +9695,14 @@ def _dialogue_tts_status(base: Path, ep: str) -> dict:
     out["running"] = job.get("status") == "running"
     out["job_error"] = job.get("error") or ""
     out["job_log"] = job.get("log") or ""
+    # 声画分离(2026-10-03):库关闭时面板仍要能改每句的声源位置(画外 / V.O.),前端据此只渲染逐句清单
+    try:
+        from modules import offscreen_lines as _ol
+        out["sound_split"] = _ol.mode(base)
+        if "has_shot_list" not in out:
+            out["has_shot_list"] = (base / "directing" / ep / "shot_list.json").is_file()
+    except Exception:  # noqa: BLE001
+        out["sound_split"] = "off"
     return out
 
 
@@ -9698,12 +9747,20 @@ def _dialogue_direction_rows(base: Path, ep: str) -> dict:
         e = plan.get((r["shot_id"], r["idx"])) or {}
         f = ldir / e["file"] if e.get("file") else None
         d = r.get("delivery") or {}
+        # 声画分离(2026-10-03):声源位置等字段由 dialogue_direction.context / dialogue_tts.plan 透传,缺键视同画内
+        pl = r.get("placement") or e.get("placement") or "on"
         out.append({k: r[k] for k in ("shot_id", "idx", "group_id", "speaker", "speaker_name", "text", "emotion", "status",
                                       "shot_duration_s", "est_duration_s", "limit_s", "min_s", "max_s", "pace_seconds")}
                    | {"direction": d.get("direction") or "", "scene": d.get("scene") or "", "pace": d.get("pace") or "",
                       "target_s": d.get("target_s"), "by": d.get("by") or "",
                       "audio": _audio_url(base, f) if f else None, "audio_status": e.get("status") or "",
-                      "duration_s": e.get("duration_s")})
+                      "duration_s": e.get("duration_s"),
+                      "placement": pl if pl in ("on", "os", "vo") else "on",
+                      "heard_in": r.get("heard_in") or e.get("heard_in") or [],
+                      "source_fx": r.get("source_fx") or e.get("source_fx") or "",
+                      "offset_s": r.get("offset_s") if r.get("offset_s") is not None else e.get("offset_s"),
+                      "placement_reason": r.get("placement_reason") or e.get("placement_reason") or None,
+                      "placement_source": r.get("placement_source") or e.get("placement_source") or ""})
     chk = dd.check(base, ep)
     return {"ep": ep, "lines": out, "total": chk["total"], "bound": chk["bound"], "warns": chk["warns"][:20],
             # 只有火山 Doubao-音频生成 1.0 能把场景与目标时长也用上;其余渠道演法只当语气指令
@@ -9735,16 +9792,91 @@ async def api_dialogue_direction_set(project: str, ep: str, body: dict):
         raise ServiceError(400, "idx must be an integer")
     if not shot_id:
         raise ServiceError(400, "shot_id is required")
+    # 声画分离(2026-10-03):声源位置 / 声源效果 / 偏移 / 听见的镜 经 modules/offscreen_lines.set_line 写进 shot_list
+    # (source=user,用户在面板上的裁决优先于分镜层自动判定);只带这些字段、不带 direction 的请求不摘演法
+    place_keys = ("placement", "heard_in", "source_fx", "offset_s", "placement_reason")
+    placed = False
+    if any(k in body for k in place_keys):
+        from modules import offscreen_lines as _ol
+        if "placement" in body and body["placement"] not in _ol.PLACEMENTS:
+            raise ServiceError(400, f"placement must be one of {_ol.PLACEMENTS}")
+        try:
+            _ol.set_line(base, ep, shot_id, idx, placement=body.get("placement"), heard_in=body.get("heard_in"),
+                         source_fx=body.get("source_fx"), offset_s=body.get("offset_s"),
+                         reason=body.get("placement_reason"), source="user")
+        except ValueError as e:
+            raise ServiceError(400, str(e))
+        placed = True
     if not str(body.get("direction") or "").strip():
-        dd.clear(base, ep, shot_id, idx)
-        return {"ok": True, "cleared": True, **_dialogue_direction_rows(base, ep)}
+        if "direction" in body or not placed:
+            dd.clear(base, ep, shot_id, idx)
+        HUB.publish({"type": "dialogue_tts", "project": base.name, "ep": ep, "status": "direction"})
+        return {"ok": True, "cleared": "direction" in body or not placed, "placed": placed, **_dialogue_direction_rows(base, ep)}
     res = dd.apply(base, ep, [{"shot_id": shot_id, "idx": idx, "direction": body.get("direction"),
                                "scene": body.get("scene"), "pace": body.get("pace"), "target_s": body.get("target_s")}],
                    by="user")
     if res.get("errors"):
         raise ServiceError(400, ";".join(res["errors"]))
     HUB.publish({"type": "dialogue_tts", "project": base.name, "ep": ep, "status": "direction"})
-    return {"ok": True, "notes": res.get("notes") or [], **_dialogue_direction_rows(base, ep)}
+    return {"ok": True, "notes": res.get("notes") or [], "placed": placed, **_dialogue_direction_rows(base, ep)}
+
+
+OFFSCREEN_JOBS: dict[str, dict] = {}     # "<project>/<ep>" -> {status, started_at, error, log, finished_at}(画外对白合成)
+
+
+async def api_offscreen_lines_get(project: str, ep: str):
+    """「对白语音」面板 / 分镜页:画外对白(O.S./V.O.)现状——模式、逐句摆位与合成状态、台账是否过期(声画分离,2026-10-03)。"""
+    from modules import offscreen_lines as _ol
+    base = _proj_base(project)
+    ep = re.sub(r"[^\w\-]", "", ep)
+    if not (base / "directing" / ep / "shot_list.json").is_file():
+        raise ServiceError(404, f"directing/{ep}/shot_list.json not found")
+    try:
+        out = _ol.status(base, ep)
+    except Exception as error:  # noqa: BLE001
+        out = {"mode": _ol.mode(base), "error": str(error)[:300], "lines": [], "total": 0}
+    job = OFFSCREEN_JOBS.get(f"{base.name}/{ep}") or {}
+    out["running"] = job.get("status") == "running"
+    out["job_error"] = job.get("error") or ""
+    out["job_log"] = job.get("log") or ""
+    return out
+
+
+def _offscreen_worker(project: str, ep: str, force: bool):
+    """后台线程:宿主 CLI code/offscreen_lines.py synth 合成画外对白(TTS,走子进程);结束发 SSE offscreen_lines。"""
+    key = f"{project}/{ep}"
+    job = OFFSCREEN_JOBS[key]
+    cmd = [sys.executable, str(ROOT / "code" / "offscreen_lines.py"), "synth", "--project", project, "--ep", ep]
+    if force:
+        cmd.append("--force")
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=3600, cwd=str(ROOT))
+        job["log"] = ((r.stdout or "") + "\n" + (r.stderr or "")).strip()[-2000:]
+        if r.returncode != 0:
+            raise RuntimeError((r.stderr or r.stdout or "").strip()[-500:] or f"exit {r.returncode}")
+        job.update(status="done", error="")
+    except Exception as e:  # noqa: BLE001
+        job.update(status="failed", error=str(e)[:500])
+    job["finished_at"] = time.time()
+    HUB.publish({"type": "offscreen_lines", "project": project, "ep": ep, "status": job["status"], "error": job.get("error", "")})
+
+
+async def api_offscreen_lines_sync(project: str, ep: str, body: dict):
+    """「合成画外对白」:{force?} 后台跑 code/offscreen_lines.py synth;声画分离关闭 400、同集在跑 409。"""
+    from modules import offscreen_lines as _ol
+    base = _proj_base(project)
+    ep = re.sub(r"[^\w\-]", "", ep)
+    if not _ol.enabled(base):
+        raise ServiceError(400, "output.sound_split is off for this project (输出设置→声画分离)")
+    if not (base / "directing" / ep / "shot_list.json").is_file():
+        raise ServiceError(404, f"directing/{ep}/shot_list.json not found")
+    key = f"{base.name}/{ep}"
+    if (OFFSCREEN_JOBS.get(key) or {}).get("status") == "running":
+        raise ServiceError(409, "offscreen lines synth is already running for this episode")
+    OFFSCREEN_JOBS[key] = {"status": "running", "started_at": time.time(), "error": "", "log": ""}
+    threading.Thread(target=_offscreen_worker, args=(base.name, ep, bool((body or {}).get("force"))), daemon=True).start()
+    HUB.publish({"type": "offscreen_lines", "project": base.name, "ep": ep, "status": "running"})
+    return {"ok": True, "job": key}
 
 
 async def api_dialogue_tts_sync(project: str, ep: str, body: dict):
@@ -10621,6 +10753,29 @@ def _post_audio_lanes(base: Path, ep: str, groups: list[dict], sfx: dict) -> dic
                 continue
             lanes["dialogue"].append({"group_id": gid, "shot_id": sid, "t0": round(c0 + d["t0"], 3),
                                       "t1": round(c0 + (d["t1"] or d["t0"]), 3), "label": ",".join(x for x in d.get("speakers") or [] if x)})
+    # 画外对白(声画分离,2026-10-03):os/vo 句不在组 clip 里,按 offscreen_manifest 的组内时刻 × 组起点(经当前版本 time_ops)
+    # 挂进「配音」轨,source=offscreen;条目时刻由 modules/offscreen_lines.mix_rows 算(与 mix_basis sources 同一口径)
+    try:
+        from modules import offscreen_lines as _ol
+        _rows = []
+        for g in groups:
+            cur_v = int(g.get("current") or 0)
+            ops = next((v.get("time_ops") or [] for v in g.get("versions") or [] if int(v.get("v") or 0) == cur_v), [])
+            _rows.append({"group_id": g["group_id"], "cum_start_s": g["cum_start_s"], "time_ops": ops})
+        for o in _ol.mix_rows(base, ep, _rows) or []:
+            f = o.get("file") or ""
+            try:
+                rel = str(Path(f).resolve().relative_to(base.resolve())) if f else ""
+            except ValueError:
+                rel = f
+            url = _post_url(base, rel) if rel else None
+            t0 = _f(o.get("t0"))
+            lanes["dialogue"].append({"group_id": o.get("group_id") or "", "shot_id": o.get("shot_id") or "",
+                                      "t0": round(t0, 3), "t1": round(t0 + _f(o.get("duration_s")), 3),
+                                      "label": f"{o.get('speaker') or ''} 👻", "file": url, "gain_db": _f(o.get("gain_db")),
+                                      "source": "offscreen", "placement": o.get("placement") or "os"})
+    except Exception:  # noqa: BLE001
+        pass                                         # 模块缺失 / 台账未建:配音轨不列画外条目
     ndir = base / "assets" / "audio" / "narration" / ep
     man = _read_json_safe(ndir / "manifest.json") or _read_json_safe(ndir / "narration_track.json") or {}
     for s in man.get("segments") or []:

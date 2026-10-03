@@ -25,6 +25,10 @@ sources 输出的每组字段:
   boundary_delta_s = Σ占时;混音 wav 总长应 = Σ组时长 + boundary_delta_s(stamp 核对)
   audio_lead_s(四期 2026-09-26,J-cut):>0 时本组原生轨要比 cum_start_s 早这么多秒进入,压在前组尾画面上(前组原生轨在重叠段渐弱、
                  本组在重叠段渐强,各 ≤ lead;BGM / 旁白不受影响);不占时、不进 timemap、不改 wav 总长;改了 = 边界指纹变 = 须重混
+顶层 offscreen_lines[](声画分离 2026-10-03,modules/offscreen_lines):画外 O.S. / V.O. 句的集级独立声轨,逐句
+  {group_id, shot_id, idx, speaker, placement, source_fx, t0, duration_s, file, gain_db},t0 = 混音时间线绝对秒(已含组起点
+  cum_start_s 与组内 time_ops 映射),混音按 t0 铺入(不占时、不改 wav 总长;与旁白同待遇,互斥不重叠);
+  offscreen_fingerprint = 台账指纹,盖进清单 offscreen.fingerprint,之后变了 = check FAIL(offscreen_changed),须重混
   cum_start_v0_s 母本基准起点(只用于换算旧口径的 meta boundary_map:组内时刻经 time_ops 映射 = timemap.map_time)
   time_ops       该版本相对母本的组内时长编辑(删段 out_len=0 / 变速 / 插入);boundary_map、对白开口时段都是母本
                  基准,落在删除区间内的事件在本版本里已不存在,不得再往上铺声音
@@ -61,11 +65,19 @@ def do_sources(proj: Path, ep: str, as_json: bool) -> int:
         if latest > int(r["v"]):
             pending[r["group_id"]] = latest
     total = round(sum(r["duration_s"] for r in rows), 6)
+    # 画外对白轨(声画分离 2026-10-03):os/vo 句按 heard_in 窗口合成的集级独立声轨,逐句绝对摆位 + 台账指纹
+    off_man = mb.offscreen_manifest(proj, ep)
+    off_all = mb.offscreen_rows(proj, ep, rows, include_dropped=True)
+    off_rows = [o for o in off_all if not o.get("dropped") and o.get("t0") is not None]
+    off_dropped = [o for o in off_all if o.get("dropped") or o.get("t0") is None]
+    off_fp = mb.offscreen_fingerprint(proj, ep, off_man)
+    off_stale = mb.offscreen_stale(proj, ep, off_man)
     out = {"episode": ep, "groups": rows, "total_duration_s": round(total + mb.boundary_delta(bounds), 6),
            "groups_total_s": total, "delta_vs_v0_s": mb.basis_delta(rows),
            "groups_on_post_version": sum(1 for r in rows if int(r["v"]) > 0),
            "ops_fingerprint": mb.ops_fingerprint(rows), "plan_fingerprint": pp.plan_fingerprint(plan),
            "boundaries": bounds, "boundary_delta_s": mb.boundary_delta(bounds), "boundary_fingerprint": mb.boundary_fingerprint(bounds),
+           "offscreen_lines": off_rows, "offscreen_fingerprint": off_fp,
            "unadopted_newer_versions": pending}
     missing = [r["group_id"] for r in rows if not r.get("src")]
     if as_json:
@@ -91,6 +103,18 @@ def do_sources(proj: Path, ep: str, as_json: bool) -> int:
                 _log("FAIL", f"{r['group_id']} 当前采纳版本 v{r['v']} 建于后期配音之前,文件里没有配音:先在后期页回滚到母本或重做该版本")
         for gid, v in pending.items():
             _log("WARN", f"{gid} 有未采纳的更新版本 v{v},混音按当前指针取源;要进成片须先在后期页采纳再开混")
+        for o in off_rows:
+            _log("OFFSCREEN", f"{o.get('group_id')} {o.get('shot_id')}/l{int(o.get('idx') or 0):02d} {o.get('speaker')} {o.get('placement')} "
+                              f"t0={float(o.get('t0') or 0):.3f}s dur={float(o.get('duration_s') or 0):.3f}s fx={o.get('source_fx') or 'plain'}"
+                              + (f" gain={o['gain_db']:+.1f}dB" if o.get("gain_db") not in (None, 0, 0.0) else ""))
+        for o in off_dropped:
+            _log("SKIP", f"{o.get('group_id')} {o.get('shot_id')}/l{int(o.get('idx') or 0):02d} 画外句落在该组采纳版本的删段内,本版本里已不存在,不铺")
+        if off_rows:
+            _log("PLAN", f"画外对白轨 {len(off_rows)} 句(独立声轨,按 t0 铺、不占时、不改 wav 总长),指纹 {off_fp}")
+        if off_stale:
+            _log("WARN", ("shot_list 有画外 / V.O. 句但尚无画外对白台账" if not off_man else
+                          "画外对白台账落后于当前 shot_list 的画外句(新增 / 删句 / 改位 / 改效果)")
+                 + ":先 python3 code/offscreen_lines.py synth 重出再开混")
     if missing:
         _log("FAIL", f"{len(missing)} 组无视频文件:{', '.join(missing[:8])}")
         return 1

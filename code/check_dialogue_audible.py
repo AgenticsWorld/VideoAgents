@@ -21,6 +21,22 @@ from _common import parse_args  # noqa: E402
 
 # 有声段检测(自相关基频 + 能量)在 modules/voice_activity.py,与 dub_group.py 的开口时段检测共用一套口径
 from voice_activity import voiced_mask, runs_from_mask, longest_in_window, extract_wav  # noqa: E402,F401
+try:
+    import offscreen_lines as _osl  # noqa: E402  声画分离(2026-10-03):os/vo 句不在 clip 音轨里,不核
+except Exception:  # pragma: no cover
+    _osl = None
+
+
+def _on_lines(shot: dict) -> list:
+    """本镜画内台词行(dict 且有文本);placement=os|vo 的句由后期合成,不在组 clip 音轨里,不参与核对。"""
+    out = []
+    for ln in shot.get("dialogue_lines") or []:
+        if not isinstance(ln, dict) or not str(ln.get("text") or ln.get("line") or "").strip():
+            continue
+        pl = _osl.placement(ln) if _osl is not None else (str(ln.get("placement") or "on").lower() if ln.get("placement") in ("on", "os", "vo") else "on")
+        if pl == "on":
+            out.append(ln)
+    return out
 
 
 def main(argv=None):
@@ -39,7 +55,7 @@ def main(argv=None):
         if args.groups and gid not in set(args.groups):
             continue
         ids = g.get("shots") or []
-        if not any(shots.get(x, {}).get("is_dialogue") and shots[x].get("dialogue_lines") for x in ids):
+        if not any(shots.get(x, {}).get("is_dialogue") and _on_lines(shots[x]) for x in ids):
             continue
         clip = base / "assets" / "clips" / args.ep / f"{gid}.mp4"
         if not clip.is_file():
@@ -66,9 +82,10 @@ def main(argv=None):
             dur = float(s.get("duration_s") or 0)
             a, b = bmap.get(sid, (t, t + dur))
             t += dur
-            if not (s.get("is_dialogue") and s.get("dialogue_lines")):
-                continue
-            est = sum(float(l.get("est_duration_s") or 0) for l in s["dialogue_lines"] if isinstance(l, dict))
+            on_lines = _on_lines(s) if s.get("is_dialogue") else []
+            if not on_lines:
+                continue                      # 无画内句(含只有画外 / V.O. 句的镜)不核
+            est = sum(float(l.get("est_duration_s") or 0) for l in on_lines)
             if est <= 0:
                 continue
             longest = longest_in_window(runs, a - args.pad, b + args.pad)

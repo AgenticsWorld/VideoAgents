@@ -100,6 +100,18 @@ def narration_texts(base: Path, ep: str) -> dict[str, dict]:
     return out
 
 
+def _offscreen():
+    """modules/offscreen_lines(画外句契约,2026-10-03 声画分离);模块缺失时返回 None = 全部按画内。"""
+    try:
+        from modules import offscreen_lines
+    except ImportError:
+        try:
+            import offscreen_lines
+        except ImportError:
+            return None
+    return offscreen_lines
+
+
 def _narration_id(ref) -> str | None:
     m = re.match(r"\s*(N-\d+)", str(ref or ""))
     return m.group(1) if m else None
@@ -162,7 +174,10 @@ def episode_subtitle_cues(base: Path, ep: str, group_ids: list[str], group_durat
     cues: list[dict] = []
     placed = {(p["shot_id"], p["idx"]): p for p in placements or []}
     shots = [s for s in sl.get("shots") or [] if isinstance(s, dict) and s.get("shot_id") in timeline]
-    # 对白:有库音频的句子按实际起止;其余镜内按各句估时比例分配
+    osl = _offscreen()
+    # 对白:有库音频的句子按实际起止;其余镜内按各句估时比例分配。
+    # 画外 / V.O. 句(2026-10-03 声画分离):不占本镜,锚在 heard_in 首镜起点 + offset_s,同窗口多句顺序叠排
+    offscreen_cursor: dict[tuple[str, float], float] = {}
     for s in shots:
         # 规约键 text;兼容写成 line 的出稿(与 dialogue_tts.collect_lines / dub_group 同口径,序号 idx 才能对上)
         lines = [ln for ln in (s.get("dialogue_lines") or []) if isinstance(ln, dict) and str(ln.get("text") or ln.get("line") or "").strip()]
@@ -170,21 +185,42 @@ def episode_subtitle_cues(base: Path, ep: str, group_ids: list[str], group_durat
             continue
         seg = timeline[s["shot_id"]]
         span = max(seg["end"] - seg["start"], MIN_CUE_S)
-        weights = [max(float(ln.get("est_duration_s") or 0), 0.0) for ln in lines]
-        if sum(weights) <= 0:
-            weights = [1.0] * len(lines)
-        total_w = sum(weights)
+        on_mask = [(osl.placement(ln) if osl else "on") == "on" for ln in lines]
+        weights = [max(float(ln.get("est_duration_s") or 0), 0.0) if on else 0.0 for ln, on in zip(lines, on_mask)]
+        if sum(weights) <= 0 and any(on_mask):
+            weights = [1.0 if on else 0.0 for on in on_mask]
+        total_w = sum(weights) or 1.0
         t = seg["start"]
         for idx, (ln, w) in enumerate(zip(lines, weights)):
             dur = span * w / total_w
             sp = str(ln.get("speaker") or ln.get("character_id") or "").strip()
             name = names.get(sp, sp)
             text = str(ln.get("text") or ln.get("line")).strip()
+            pl = osl.placement(ln) if osl else "on"
+            pre = {"os": "(画外)", "vo": "(V.O.)"}.get(pl, "")
             p = placed.get((s["shot_id"], idx))
-            start, end = (p["start"], max(p["end"], p["start"] + MIN_CUE_S)) if p else (t, t + dur)
+            if p:
+                start, end = p["start"], max(p["end"], p["start"] + MIN_CUE_S)
+                cue_shot, cue_group = s["shot_id"], seg["group_id"]
+            elif pl != "on":
+                heard = [h for h in (osl.heard_in(ln, s["shot_id"]) if osl else []) if h in timeline] or [s["shot_id"]]
+                first = min(heard, key=lambda h: timeline[h]["start"])
+                try:
+                    off = max(0.0, float(ln.get("offset_s")))
+                except (TypeError, ValueError):
+                    off = 0.4
+                key = (first, off)
+                start = offscreen_cursor.get(key, timeline[first]["start"] + off)
+                est = max(float(ln.get("est_duration_s") or 0), MIN_CUE_S)
+                end = start + est
+                offscreen_cursor[key] = end + 0.15
+                cue_shot, cue_group = first, timeline[first]["group_id"]
+            else:
+                start, end = t, t + dur
+                cue_shot, cue_group = s["shot_id"], seg["group_id"]
             cues.append({"start": round(start, 3), "end": round(end, 3), "kind": "dialogue",
-                         "text": f"{name}:{text}" if name and name != "NARRATOR" else text,
-                         "shot_id": s["shot_id"], "group_id": seg["group_id"]})
+                         "text": (f"{name}{pre}:{text}" if name and name != "NARRATOR" else f"{pre}{text}"),
+                         "shot_id": cue_shot, "group_id": cue_group})
             t += dur
     # 旁白:挂点表优先,缺失按 shots[].narration_ref 镜段兜底
     texts = narration_texts(base, ep)

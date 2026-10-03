@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from modules import time_cost as tc  # noqa: E402
 from modules import shot_timing  # noqa: E402
 from modules.dialogue_tts import name_index, resolve_speaker  # noqa: E402
-from check_dialogue_fit import load_speeds, speaker_id  # noqa: E402
+from check_dialogue_fit import load_speeds, speaker_id, line_placement  # noqa: E402  line_placement:声画分离(2026-10-03)
 
 TOL_S = 0.1              # 镜级容差
 SCENE_TOL_S = 0.5        # 场级容差
@@ -238,7 +238,9 @@ def _merge_candidates(scenes: list[dict]) -> list[dict]:
 
 
 # ================================================================ shots
-def _shot_lines(shot: dict, speeds: dict, names: dict) -> list[dict]:
+def _shot_lines(shot: dict, speeds: dict, names: dict, onscreen_only: bool = True) -> list[dict]:
+    """本镜台词 → 估时输入。声画分离(2026-10-03):placement=os|vo 的句由后期合成、不占本镜说话人嘴时间,
+    默认不计(其窗口由 offscreen_lines 的 offscreen_fit 另查);onscreen_only=False 时全部返回并带 placement。"""
     out = []
     raw = shot.get("dialogue_lines")
     if raw is None:
@@ -249,8 +251,13 @@ def _shot_lines(shot: dict, speeds: dict, names: dict) -> list[dict]:
         text = str(ln.get("text") or ln.get("line") or "").strip()
         if not text:
             continue
+        pl = line_placement(ln)
+        if onscreen_only and pl != "on":
+            continue
         sid, _ = resolve_speaker(ln, names)
-        out.append(_line_input(text, sid or "", speeds, ln.get("pace") or "", ln.get("emotion") or ""))
+        item = _line_input(text, sid or "", speeds, ln.get("pace") or "", ln.get("emotion") or "")
+        item["placement"] = pl
+        out.append(item)
     return out
 
 

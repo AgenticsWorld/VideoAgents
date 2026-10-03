@@ -20,11 +20,38 @@ LEAD_S = 0.10     # 镜起点到第一句开口的提前量
 MAX_DELAY_RATIO = 0.5   # 为避让上一句,本镜第一句最多顺延到本镜时长的这个比例处
 
 
+OFFSCREEN_OFFSET_S = 0.4   # 画外句缺省相对 heard_in 首镜起点的提前量(与 offscreen_lines 契约一致)
+
+
+def _offscreen_window(e: dict, timeline: dict[str, dict]) -> tuple[float, float, str] | None:
+    """os/vo 句(2026-10-03 声画分离)的听见窗口:heard_in 各镜在时间轴上的并集 (start, end, 首镜 shot_id);镜都不在时间轴上返回 None。"""
+    heard = [h for h in (e.get("heard_in") or []) if isinstance(h, str) and h in timeline]
+    if not heard:
+        return None
+    first = min(heard, key=lambda h: float(timeline[h]["start"]))
+    return float(timeline[first]["start"]), max(float(timeline[h]["end"]) for h in heard), first
+
+
 def place_lines(audio: dict[tuple[str, int], dict], timeline: dict[str, dict]) -> tuple[list[dict], list[dict]]:
     """audio:{(shot_id, idx): {path, duration_s, speaker, text, ...}};timeline:{shot_id: {start, end}}。
-    返回 (placements 按 start 排序, overflow 列表)。"""
+    返回 (placements 按 start 排序, overflow 列表)。
+    画外 / V.O. 句(placement os|vo,2026-10-03 声画分离):不按自己所在镜排,而是锚在 heard_in 首镜起点 + offset_s,
+    同一窗口的多句按 (shot_id, idx) 顺序叠排(句间 GAP_S),溢出按窗口末尾算;placement 原样带回。"""
     by_shot: dict[str, list[tuple[int, dict]]] = {}
+    offscreen: dict[tuple[str, float], list[tuple[str, int, dict, tuple[float, float]]]] = {}
     for (sid, idx), e in audio.items():
+        if (e.get("placement") or "on") != "on":
+            win = _offscreen_window(e, timeline)
+            if win is None and sid in timeline:                 # heard_in 不在时间轴上:退回自己的镜
+                seg = timeline[sid]
+                win = (float(seg["start"]), float(seg["end"]), sid)
+            if win is not None:
+                try:
+                    off = float(e.get("offset_s"))
+                except (TypeError, ValueError):
+                    off = OFFSCREEN_OFFSET_S
+                offscreen.setdefault((win[2], max(0.0, off)), []).append((sid, idx, e, (win[0], win[1])))
+            continue
         if sid in timeline:
             by_shot.setdefault(sid, []).append((idx, e))
     placements, overflow = [], []
@@ -48,8 +75,26 @@ def place_lines(audio: dict[tuple[str, int], dict], timeline: dict[str, dict]) -
                 overflow.append({k: pl[k] for k in ("shot_id", "idx", "speaker", "start", "end", "overflow_s")})
             t += dur + GAP_S
         busy = t
+    # 画外 / V.O.:按窗口首镜 + 偏移锚定,不参与画内句的避让链(它们在成片里走独立声轨)
+    for (first, off), items in sorted(offscreen.items(), key=lambda kv: (float(timeline[kv[0][0]]["start"]), kv[0][1])):
+        t = float(timeline[first]["start"]) + off
+        for sid, idx, e, (wstart, wend) in sorted(items, key=lambda x: (x[0], x[1])):
+            dur = float(e.get("duration_s") or 0)
+            pl = {"shot_id": sid, "idx": idx, "start": round(t, 3), "end": round(t + dur, 3), "duration_s": round(dur, 3),
+                  "path": Path(e["path"]), "speaker": e.get("speaker", ""), "text": e.get("text", ""),
+                  "group_id": timeline[first].get("group_id", ""), "overflow_s": round(max(0.0, t + dur - wend), 3),
+                  "placement": e.get("placement"), "heard_in": list(e.get("heard_in") or [first]), "anchor_shot": first}
+            placements.append(pl)
+            if pl["overflow_s"] > 0.05:
+                overflow.append({k: pl[k] for k in ("shot_id", "idx", "speaker", "start", "end", "overflow_s")})
+            t += dur + GAP_S
     placements.sort(key=lambda p: (p["start"], p["shot_id"], p["idx"]))
     return placements, overflow
+
+
+def placement_prefix(placement) -> str:
+    """字幕前缀:画外 (画外)、V.O. (V.O.),画内无。"""
+    return {"os": "(画外)", "vo": "(V.O.)"}.get(placement or "on", "")
 
 
 def cues_from_placements(placements: list[dict], names: dict[str, str] | None = None, min_cue_s: float = 0.6) -> list[dict]:
@@ -59,8 +104,9 @@ def cues_from_placements(placements: list[dict], names: dict[str, str] | None = 
     for p in placements:
         sp = p.get("speaker") or ""
         name = names.get(sp, sp)
+        pre = placement_prefix(p.get("placement"))     # 画外 / V.O. 句标前缀(2026-10-03)
         out.append({"start": p["start"], "end": max(p["end"], p["start"] + min_cue_s), "kind": "dialogue",
-                    "text": f"{name}:{p['text']}" if name and name != "NARRATOR" else p["text"],
+                    "text": (f"{name}{pre}:{p['text']}" if name and name != "NARRATOR" else f"{pre}{p['text']}"),
                     "shot_id": p["shot_id"], "group_id": p.get("group_id", "")})
     return out
 

@@ -27,6 +27,9 @@
 #   transition_clips_requested: = H3A 定稿的 shot_list 里含需视频生成的过场插入段(establishing source.mode=i2v / bridge;
 #     `python3 code/transition_design.py clips --project <slug> --ep epNN` 列出非空)——只在模式允许生成式过场(电影感 / 自定义勾选)时可能为真;
 #     真时实例化 p7-transition-clips(08-video-gen/video-generation,每集)并加进 g7 依赖;假 = 不实例化、g7 不因缺它而 HOLD
+#   offscreen_lines_present: = 项目输出设置 output.sound_split ≠ off 且本集定稿 shot_list 有 dialogue_lines[].placement ∈ os|vo 的画外 / V.O. 句
+#     (`python3 code/offscreen_lines.py plan --project <slug> --ep epNN --json` 的 lines 非空)——真时实例化 p8-offscreen(09-audio/voice-generation,每集)
+#     并加进 p8-mix 依赖;假 = 不实例化、p8-mix 不因缺它而 HOLD(2026-10-03,WORKFLOW.md §8D「声画分离」,docs/sound_split.md)
 
 version: 1
 defaults:
@@ -262,7 +265,7 @@ phases:
                                shot_time_budget_ok, group_density_ok], rubric: visual_plan_v1 } }   # 时间尺(2026-10-03):code/check_time_budget.py --scope shots --source storyboard   # transition_ok:每组按导演转场清单登记 transition_in(受控枚举)/narrative_block(闪回等块成对),WORKFLOW.md §9C(2026-08-28)   # costume_refs_valid:每组每个出场角色有 costumes[CHAR]=合法 COS-id(属该角色);换装点不得落在组内(2026-08-26)   # blocking_map_present:code/blocking_map_check.py --source storyboard --strict(2026-09-07 起只机检、不再渲染动线草图)
       - { id: g6s, gate: true, human: true, checkpoint: H3S-故事板确认, depends_on: [p6-storyboard] }   # 2026-09-11:用户在「📋 故事板」页(/preview/board)看分镜草案逐场逐镜表(可按需出铅笔草图,草图不是签字前置)后签字;未签字不派 shot-planning;签字后 storyboard.json 又改动则页面标「签字已过期」,orchestrator 重新建单
       - { id: p6-shots, agent: 07-directing/shot-planning, depends_on: [g6s],
-          outputs: ["directing/{ep}/shot_list.json"],    # 含 generation_groups(定稿生成组)、narration_anchors(旁白挂点定稿:每条旁白→镜/组区间+可用画面窗口)、逐组 audio_plan(dialogue/narration_over/ambient_only)
+          outputs: ["directing/{ep}/shot_list.json"],    # 含 generation_groups(定稿生成组)、narration_anchors(旁白挂点定稿:每条旁白→镜/组区间+可用画面窗口,窗口扣画内句 + 同窗画外句)、逐组 audio_plan(dialogue/voice_over/ambient_only;narration_over 为 voice_over 旧名)、每句 dialogue_lines[].placement(on/os/vo,声画分离 §8D,2026-10-03)
           validation: { auto: [duration_sum_pm_10pct, id_refs_valid, shot_ids_unique,
                                groups_cover_all_shots, group_shots_contiguous_same_scene,
                                group_duration_4_15_int, group_characters_lte_4,
@@ -273,6 +276,8 @@ phases:
                                creature_refs_valid,   # 每镜 creatures[] / 组 creatures_union 引用须存在于 bible/creatures/index.json(2026-08-26)
                                costume_refs_valid,    # 每镜 costumes{CHAR:COS} / 组 costumes_by_char 合法且组内同角色同一套;换装点只能落在组边界(costume_change_on_group_boundary,2026-08-26)
                                transition_ok,         # 组入口转场 transition_in:类型枚举/时长范围/非硬切必填 intent+reason/Σ可渲染 ≤ 集预算 1%/narrative_block 成对连续(code/check_generation_groups.py 内置,WORKFLOW.md §9C,2026-08-28)
+                               speakers_le_3,         # §8A:dialogue 组画内说话人 ≤3(2026-10-03 起落成代码 code/check_generation_groups.py;placement=os|vo 的画外句不计,第四人插话可按 §8D D3 转画外)
+                               placement_valid, placement_speaker_is_cast, placement_reason_valid, offscreen_fit, post_voice_no_overlap,   # 声画分离(2026-10-03,WORKFLOW.md §8D,code/offscreen_lines.py check):os/vo 句 heard_in 同组、speaker 为本集 cast 人物编号、分镜转画外须带白名单 trigger、画外句装进 heard_in 窗口(扣画内句 + 同窗旁白)且与旁白不同窗抢位;output.sound_split=off 时 skipped
                                blocking_map_present] } }   # 继承 storyboard blocking_map/view_tile 并按定稿组重切(code/blocking_map_check.py --strict,2026-08-19;2026-09-07 起不再渲染 blocking_maps/*.png,人物空间位置由 p6-whitebox 白模参考视频承担)   # 旁白/对白估时级适配 + 无声组核查(WORKFLOW.md §7D ①,H3A 签字前;ambient_only 组必附 silent_rationale,讲不清叙事的回派 narration 补写并写回 narration.md;dialogue 组 Σ台词估时 ≤ 组时长×0.7,超限优先回派 dialogue-rewrite 改短台词——台词超长会迫使视频模型赶词提速)
       # 对白时长校验修正环节(2026-08-30,WORKFLOW.md §7D ①′):对白在 Phase 5 写完、镜头时长到 Phase 6 才定,长度必然漂移。
       # 定稿镜头表后固定跑 code/check_dialogue_fit.py:PASS 即关单(报告落盘);超限组按报告 trim_targets 由 dialogue-rewrite
@@ -358,7 +363,8 @@ phases:
                                layout_map_bound,  # 2026-09-09 改版:refs 不得含场景俯视图 layout_top*.png / 九宫格 grid_9views*.png / 已退役的 blocking_maps/(俯视图只供分镜预览),逐角色 route_en 逐字命中、主体定义句用 blocking_map label(code/layout_map_bound_check.py)
                                scene_plate_bound,  # 场景图(正向/反向,2026-09-17,白模关闭项目):refs 在角色/生物 sheet 之后挂该场景正向图(+有镜标 reverse 时的反向图)、不再挂该场景旧概念图/俯视图,正文 Shot 1: 前固定段 Scene plates: + 每个 Shot 段头 Scene plate: this shot uses [Image N] … and not [Image M].(code/sync_scene_plates.py;白模开启 skipped)
                                shot_plate_bound,  # 分镜背景图已生成的组:refs 在角色/生物 sheet 之后按镜序挂各镜背景图(两张图的镜 start+end 都挂,不走首尾帧模式)+ 正文 Shot 1: 前固定段 Shot plates:(逐镜 [Image N] 说明句);背景图机位与当前白模不一致 WARN 过期(code/sync_shot_plates.py,2026-09-09;开关关闭 skipped)
-                               nonspeech_group_prompt_ok,   # §7D ③:narration_over/ambient_only 组禁 {} 台词、必含无对白约束句;narration_over 组声明配后期旁白
+                               nonspeech_group_prompt_ok,   # §7D ③:voice_over(旧名 narration_over)/ambient_only 组禁 {} 台词、必含无对白约束句;voice_over 组声明配后期人声(旁白或画外对白,通用句);只数画内说话人(2026-10-03)
+                               offscreen_not_in_prompt,   # 声画分离(2026-10-03,§8D,code/offscreen_lines.py check):dialogue_lines[].placement=os|vo 的句不得出现在 {} 内、audio_refs 不得含只有画外句的说话人、正文不提其名(白模 hidden 规则不变);sound_split=off 时 skipped
                                prompt_beats_bound,   # 时间尺(2026-10-03):每个 Shot 段顺序连接词数 ≤ blocking 节拍数 + 1,prompt 只把节拍写细不加顺序动作(code/check_time_budget.py --scope prompt)
                                prompt_skill_applied,   # §7F:组 json 回执 skill_applied 与项目「提示词技能」快照一致(id/sha256/checklist),code/prompt_skill_check.py
                                sd25_prompt_structure,   # 2026-09-09:套用 sd25-pe 的组正文必须按 2.5 官方结构(【人物】/【动作与声音】分组、每镜「使用/不采用」清单、【未采用素材】、【保持一致】;【场景】槽位由 sync_shot_plates 写),同脚本自动执行
@@ -445,6 +451,13 @@ phases:
           # 交付前 code/check_narration_sync.py --stamp 把当前 narration_anchors 指纹盖进 manifest(§8B ①)
           validation: { auto: [speech_rate_in_range, narration_fit_within_window_x0.9,
                                no_overlap_with_dialogue, narration_anchor_sync], qa: [11-qa/audio-qa] } }
+      - { id: p8-offscreen, agent: 09-audio/voice-generation, condition: offscreen_lines_present,   # 声画分离(2026-10-03,WORKFLOW.md §8D):本集有 placement=os|vo 的画外 / V.O. 句时每集派一次,先于 p8-mix
+          depends_on: [p6-shots, p6-dialogue-fit, p6-dialogue-direction, p8-voiceprints],   # p6-dialogue-direction 未实例化(dialogue_direction_enabled 假)时依赖自动解除;台词 / placement / heard_in / 演法再改 = offscreen_synced 失配,重跑本节点
+          # 只跑宿主 CLI code/offscreen_lines.py plan → synth → check:按 casting 该角色×形态 TTS 逐句合成画外句(同 §8C 口径,带 delivery;对白语音库开着时复用库文件)
+          # → source_fx 声处理(plain/phone/door/distance/inner/memory)→ 实测时长 → 按 heard_in 窗口收口;超窗上报回派 dialogue-rewrite 精简或 shot-planning 改 heard_in,
+          # 不得手摆音频 / 拉长画面 / 压语速硬塞;视频原声模式同样派发(画外无嘴,§8A TTS 红线只约束画内口型);产物作第四路「画外对白」轨由 p8-mix 按 mix_basis sources.offscreen_lines[] 铺
+          outputs: ["assets/audio/voice/{ep}/offscreen/offscreen_manifest.json"],
+          validation: { auto: [offscreen_fit, offscreen_synced, dub_speaker_casting_bound], qa: [11-qa/audio-qa] } }
       - { id: p8-music, agent: 09-audio/music, outputs: ["assets/audio/bgm/{ep}/"],
           # BGM 只在需烘托处落 cue(开场/转折/高潮/收束),不从头铺到尾
           # 项目音乐库(2026-09-27):选曲先查 assets/audio/library/music/(code/music_library.py list/search),有合适的复用、
@@ -454,7 +467,7 @@ phases:
       # p8-voice(兜底逐句 TTS patches/ 供 lip-sync 重驱)已废止(2026-07-09,§8A 红线:
       # TTS 进成片对白=严重口型问题);对白语音/口型缺陷走 p7-video 整组重生成
       - { id: p8-mix, agent: 09-audio/audio-mixing,
-          depends_on: [p7-video, p7-dub, p8-narrator, p8-music],       # 原生轨来自全部组 clip(后期配音模式下即配音后 clip,§8C)
+          depends_on: [p7-video, p7-dub, p8-narrator, p8-offscreen, p8-music],       # 原生轨来自全部组 clip(后期配音模式下即配音后 clip,§8C);p8-offscreen 未实例化(无画外句 / 声画分离关)时依赖自动解除;画外对白轨按 mix_basis sources.offscreen_lines[] 铺、指纹盖进 mix.json(§8B ⑤,2026-10-03)
           outputs: ["assets/audio/final/{ep}.wav", "assets/audio/final/{ep}.mix.json"],
           # 原生轨取源按后期页当前采纳版本(§8B ④,2026-09-23):只准 code/mix_basis.py sources 列出的 src / cum_start_s,
           # 交付前 code/mix_basis.py stamp --task-id 盖章;无盖章 = 旧口径(出成片时整条轨按 timemap 硬切)

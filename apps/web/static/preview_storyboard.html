@@ -1297,8 +1297,16 @@ function dlgHtml(s){
   return ls.map(l=>{
     const spk=l.speaker_name||l.speaker;
     if(!l.text)return `<div class="dlg dlg-unresolved" title="${esc(t('dialogue.md 中未找到该编号的台词'))}">💬 <span class="ref">${esc(l.ref||'')}</span></div>`;
-    return `<div class="dlg"${l.ref?` title="${esc(l.ref)}"`:''}>💬 ${spk?`<b>${esc(spk)}</b>:`:''}${esc(l.text)}</div>`;
+    // 声画分离(2026-10-03):画外 O.S. / V.O. 句前加角标——这句不在画内开口,后期按人物声线合成
+    const pl=l.placement==='os'||l.placement==='vo'?`<span class="tag" style="color:var(--accent)">${l.placement==='vo'?'👻 V.O.':'👻 O.S.'}</span> `:'';
+    return `<div class="dlg"${l.ref?` title="${esc(l.ref)}"`:''}>💬 ${pl}${spk?`<b>${esc(spk)}</b>:`:''}${esc(l.text)}</div>`;
   }).join('');
+}
+// 组音频形态 audio_plan(§7D;2026-10-03 加 voice_over=无画内句但有旁白/画外句):dialogue 💬 / voice_over|narration_over 👻 / ambient_only 🔇
+function audioPlanChip(g){
+  const ap=g.audio_plan;if(!ap)return '';
+  const m={dialogue:['💬','对白'],voice_over:['👻','后期人声'],narration_over:['👻','后期人声'],ambient_only:['🔇','无对白']}[ap];
+  return m?`<span class="tag" title="audio_plan: ${esc(ap)}">${m[0]} ${esc(t(m[1]))}</span>`:`<span class="tag">${esc(ap)}</span>`;
 }
 // 运镜(2026-08-27):后端从 directing/<ep>/shots/<sid>/camera.json 取 camera_move;
 // 项目自带中文标签用之,否则按 movement 英文枚举查词典,查不到原样显示;rig/speed_curve 灰色小字,
@@ -1811,7 +1819,7 @@ function groupCard(g,inner){
     <div class="ghead"><span class="gid">${esc(g.group_id)}</span>${cpBtn(g.group_id)}
       <span class="tag">${esc(range)} · ${I18N.f('{n} 镜',{n:(g.shots||[]).length})}</span>
       ${g.total_duration_s?`<span class="tag">Σ${esc(g.total_duration_s)}s</span>`:''}
-      ${g.has_dialogue?'<span class="tag">💬 对白</span>':''}
+      ${g.audio_plan?audioPlanChip(g):(g.has_dialogue?'<span class="tag">💬 对白</span>':'')}
       ${gsChip(g)}${blockChip(g)}${transChip(g)}${contChip(g)}
       <button class="editbtn gsbtn" data-grp="${esc(g.group_id)}" title="为本组单独选择视频模型与提示词技能(默认跟随全局;渠道不可换)">🎛 模型</button>
       ${nsfwBtn(g)}

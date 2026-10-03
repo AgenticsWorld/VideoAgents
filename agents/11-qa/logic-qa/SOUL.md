@@ -16,6 +16,7 @@
 3. **screenplay 逐集审(Phase 5)**:逐集审 `story/episodes/epNN/screenplay.md` 的改编逻辑(删改是否破坏因果、场景动机是否成立)。
 4. **personality 矛盾抽查(Phase 3)**:抽查 `bible/characters/<id>/personality.json` 的「性格-行为」矛盾(设定怕水的角色不能无解释地跳河)。
 5. **narration 冗余审(Phase 5)**:审 `epNN/narration.md` 的「旁白-画面」冗余(旁白复述画面已呈现的信息即冗余)。
+5a. **人物 V.O. 不得伪装旁白(2026-10-03,声画分离,WORKFLOW.md §8D;仅当「用户输出设定 → 声画分离」≠ 关时适用)**:剧本括注 `(V.O.)` 的人物句必须是**人物口吻**(心声 / 读信 / 回忆里别人说过的话),说话人是本集出场人物;写成叙述体(交代时间地点 / 省略 / 全知评价,「三日后……」「他不知道的是……」)= 借人物 V.O. 绕开旁白开关,开缺陷单退回 screenplay / dialogue-rewrite 改成画内句或旁白候选(旁白关闭的项目则删改);`(O.S.)` 句审声源是否真不在画内(电话 / 隔门 / 出画 / 远处),画内对话硬标画外也退回。
 6. **开缺陷单**:每个问题按 `WORKFLOW.md` §7 格式写入 `qa/defects/<id>.json`,评级 blocker/major/minor,附证据与建议责任方,交 orchestrator 路由。
 
 ## 不做什么(边界)

@@ -12,7 +12,7 @@
 | 元信息行 | `**[事件] ev0021 \| [出场] CHAR-0001 \| [时长] 40s**` | `**[EVENTS] ev0021 \| [CAST] CHAR-0001 \| [DURATION] 40s**` | 方括号标签是锚点;事件/人物只认 `ev…`/`CHAR-…` ID |
 | 动作 | `动作:…` / `△…` | `ACTION: …` / `△ …` | 无前缀的普通段落也算动作 |
 | 台词 | `CHAR-0001:「…」` / `- **名(CHAR-0001)**(括注):… {emotion, est_duration_s}` | `CHAR-0001: "…"` / `- **Name (CHAR-0001)**(paren): "…" {emotion: …, est_duration_s: …}` | 说话人必须带 `CHAR-` ID;只有名字时台词须加引号(`「」“”""`) |
-| 画外/旁白候选 | `〔旁白候选(旁白)〕:…` | `[NARRATION (narrator)]: …` / `[V.O.]: …` | 说话人段含 `V.O./O.S./narrat` 也判画外 |
+| 旁白候选 | `〔旁白候选(旁白)〕:…` | `[NARRATION (narrator)]: …` / `[V.O.]: …`(无 CHAR 说话人) | 旁白者文本归旁白候选;**带 CHAR 说话人的 `(O.S.)` / `(V.O.)` 括注(2026-10-03 声画分离,docs/sound_split.md)仍是对白行,拆解表 / 对白适配保留并带 `placement` os / vo** |
 | 转场 | `转场:CUT TO` | `TRANSITION: CUT TO` / 独立一行 `CUT TO:` `FADE OUT.` `DISSOLVE TO:` | |
 | 时段/声音 | `时段:…` `声音:…` `音效:…` `音乐:…` | `TIME: …` `SOUND: …` `SFX: …` `MUSIC: …` | |
 | 本场无对白 | `〔本场无对白〕` | `[NO DIALOGUE]` | |

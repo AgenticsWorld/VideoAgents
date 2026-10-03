@@ -14,7 +14,11 @@
   function url(proj,ep,tail){return '/api/v1/projects/'+encodeURIComponent(proj)+'/episodes/'+encodeURIComponent(ep)+'/dialogue-tts'+(tail||'')}
   function html(st,proj,ep){
     st=st||{};CUR={proj,ep,st};
-    if(!st.enabled&&!st.error)return '';   // 未开启「生成对白语音」不显示面板(2026-09-17)
+    if(!st.enabled&&!st.error){
+      // 未开启「生成对白语音」不显示库面板(2026-09-17);但「声画分离」开着时仍要能逐句改声源(画外 / V.O.),只出逐句清单(2026-10-03)
+      if(!(st.sound_split&&st.sound_split!=='off'&&st.has_shot_list))return '';
+      return `<div class="doc closed dtts"><h3 onclick="this.parentNode.classList.toggle('closed')">🗣 ${esc(t('对白声源'))} <span class="meta">${esc(t('画内 / 画外 O.S. / V.O.'))}</span></h3><div class="body"><div style="color:var(--dim);font-size:12px">${esc(t('画外句不进组视频,由宿主按人物声线后期合成(code/offscreen_lines.py);「生成对白语音」关闭时此处不显示语音库状态'))}</div><div class="dttslines" data-key="${esc(proj+'/'+ep)}"></div></div></div>`;
+    }
     let line='';
     if(st.running)line=`<span class="spin">⏳</span> ${esc(t('对白语音同步中…(只补合成台词或音色变了的句子)'))}`;
     else if(st.job_error)line=`<span style="color:var(--red)">❌ ${esc(st.job_error.slice(0,120))}</span>`;
@@ -47,14 +51,26 @@
     const paces=[['','语速'],['fast','快'],['medium','中'],['slow','慢']].map(([v,l])=>`<option value="${v}"${(r.pace||'')===v&&v?' selected':''}>${esc(t(l))}${v?' · '+r.pace_seconds[v]+'s':''}</option>`).join('');
     const warn=LINE_ST[r.status]?`<span style="color:var(--yellow)">${esc(t(LINE_ST[r.status]))}</span>`:'';
     const lib=r.audio_status?t(AUDIO_ST[r.audio_status]||r.audio_status)+(r.duration_s?' '+r.duration_s+'s':''):'';
+    // 声画分离(2026-10-03):声源位置 on 画内 / os 画外 O.S. / vo V.O.;画外句后期按人物声线合成,不进组视频
+    const pl=PLACES.some(([v])=>v===r.placement)?r.placement:'on';
+    const badge=pl==='on'?'':`<span class="dttsbadge" style="color:var(--accent);font-size:12px">${esc(t(pl==='vo'?'👻 V.O.':'👻 画外'))}</span>`;
+    const trig=r.placement_reason&&r.placement_reason.trigger?`<span style="color:var(--dim);font-size:11px" title="${esc(r.placement_reason.evidence||'')}">${esc(t('依据'))} ${esc(r.placement_reason.trigger)}</span>`:'';
+    const placeOpts=PLACES.map(([v,l])=>`<option value="${v}"${pl===v?' selected':''}>${esc(t(l))}</option>`).join('');
+    const fxCur=r.source_fx||(pl==='vo'?'inner':'plain');
+    const fxOpts=FXS.map(([v,l])=>`<option value="${v}"${fxCur===v?' selected':''}>${esc(t(l))}</option>`).join('');
+    const placeRow=`<div class="dttsplacerow" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;font-size:12px"><span style="color:var(--dim)">${esc(t('声源'))}</span><select class="dttsplace" data-orig="${pl}" style="${inp}">${placeOpts}</select>
+        <span class="dttsfxwrap" style="display:${pl==='on'?'none':'inline-flex'};gap:6px;align-items:center"><span style="color:var(--dim)">${esc(t('声源效果'))}</span><select class="dttsfx" style="${inp}">${fxOpts}</select>
+        <span style="color:var(--dim)">${esc(t('偏移(s)'))}</span><input class="dttsoffset" type="number" step="0.1" min="0" value="${r.offset_s??''}" placeholder="0.4" style="${inp};width:64px"></span>${trig}</div>`;
     return `<div class="dttsline" data-shot="${esc(r.shot_id)}" data-idx="${r.idx}" data-pace='${esc(JSON.stringify(r.pace_seconds))}' data-limit="${r.limit_s??''}" style="border-top:1px solid var(--border);padding:8px 0">
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>${esc(r.shot_id)}</b><span>${esc(r.speaker_name)}</span>${r.emotion?`<span style="color:var(--yellow);font-size:12px">${esc(r.emotion)}</span>`:''}<span>「${esc(r.text)}」</span></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>${esc(r.shot_id)}</b>${badge}<span>${esc(r.speaker_name)}</span>${r.emotion?`<span style="color:var(--yellow);font-size:12px">${esc(r.emotion)}</span>`:''}<span>「${esc(r.text)}」</span></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0;font-size:12px;color:var(--dim)">${r.audio?`<audio controls preload="none" src="${esc(r.audio)}" style="height:28px;max-width:260px"></audio>`:''}<span>${esc(lib)}</span><span>${esc(tr('镜长 {s}s',{s:r.shot_duration_s??'?'}))}</span>${warn}</div>
       <textarea class="dttsdir" rows="2" placeholder="${esc(t('演法:状态 + 怎么演 + 语速 / 音量 / 停顿'))}" style="${inp};width:100%;resize:vertical">${esc(r.direction)}</textarea>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px"><input class="dttsscene" type="text" value="${esc(r.scene)}" placeholder="${esc(t('场景与对象:在哪、对谁说、刚发生了什么'))}" style="${inp};flex:1;min-width:220px">
         <select class="dttspace" style="${inp}">${paces}</select><input class="dttstarget" type="number" step="0.1" min="0.3" value="${r.target_s??''}" title="${esc(t('目标时长(秒)'))}" style="${inp};width:70px"><span style="font-size:12px;color:var(--dim)">${esc(t('秒'))}</span>
-        <button class="editbtn dttssave">${esc(t('保存'))}</button><span class="dttsmsg" style="font-size:12px"></span></div></div>`;
+        <button class="editbtn dttssave">${esc(t('保存'))}</button><span class="dttsmsg" style="font-size:12px"></span></div>${placeRow}</div>`;
   }
+  const PLACES=[['on','画内'],['os','画外 O.S.'],['vo','V.O.']];
+  const FXS=[['plain','原声'],['phone','电话'],['door','隔门'],['distance','远处'],['inner','内心'],['memory','回忆']];
   function headHtml(d){
     const hint=d.timed?t('逐句演法与目标时长,对白语音按它合成;改完保存,再点「刷新对白语音」重出这一句')
                       :t('逐句演法;当前 TTS 渠道只把演法当语气指令,场景与目标时长用不上');
@@ -76,6 +92,10 @@
   document.addEventListener('click',e=>{                    // 展开面板时才拉逐句清单
     if(e.target.closest('#dttsbox .doc>h3')&&!e.target.closest('button'))setTimeout(()=>{if(!document.querySelector('#dttsbox .doc.closed'))loadLines()},0);
   });
+  document.addEventListener('change',e=>{                   // 声源切到画外/V.O. 才露出声源效果与偏移
+    const sel=e.target.closest('.dttsplace');if(!sel)return;
+    const w=sel.closest('.dttsline').querySelector('.dttsfxwrap');if(w)w.style.display=sel.value==='on'?'none':'inline-flex';
+  });
   document.addEventListener('change',e=>{                   // 选语速档:按字数算出的秒数填进目标时长(不超过本镜可用)
     const sel=e.target.closest('.dttspace');if(!sel||!sel.value)return;
     const row=sel.closest('.dttsline');let v=JSON.parse(row.dataset.pace||'{}')[sel.value];
@@ -86,10 +106,15 @@
     const b=e.target.closest('.dttssave');if(!b||b.disabled)return;
     const row=b.closest('.dttsline'),msg=row.querySelector('.dttsmsg');b.disabled=true;msg.textContent='';
     const target=row.querySelector('.dttstarget').value;
+    const body={shot_id:row.dataset.shot,idx:+row.dataset.idx,direction:row.querySelector('.dttsdir').value,
+        scene:row.querySelector('.dttsscene').value,pace:row.querySelector('.dttspace').value,target_s:target===''?null:+target};
+    const ps=row.querySelector('.dttsplace');
+    if(ps&&(ps.value!==ps.dataset.orig||ps.value!=='on')){   // 声源字段只在改了或本就是画外时随包发(走 offscreen_lines.set_line)
+      body.placement=ps.value;
+      if(ps.value!=='on'){body.source_fx=row.querySelector('.dttsfx').value;const off=row.querySelector('.dttsoffset').value;if(off!=='')body.offset_s=+off}
+    }
     try{
-      const r=await fetch(durl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-        shot_id:row.dataset.shot,idx:+row.dataset.idx,direction:row.querySelector('.dttsdir').value,
-        scene:row.querySelector('.dttsscene').value,pace:row.querySelector('.dttspace').value,target_s:target===''?null:+target})});
+      const r=await fetch(durl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       const j=await r.json().catch(()=>({}));
       if(!r.ok)throw new Error(j.detail||j.error||r.status);
       // 只重绘这一句和标题计数:别的句子里没保存的输入不动

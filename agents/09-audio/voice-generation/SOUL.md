@@ -21,6 +21,7 @@
 5. 自检样本与 voice.json 设定相符(音色/语速/口音/年龄感);形态样本间应有可辨识差异(童声/成年声混同=返工)。
 6a. **对白语音库(2026-09-13,仅项目「输出设置→生成对白语音」开启,以角色提示词「用户输出设定→生成对白语音」注入为准)**:宿主按 shot_list `dialogue_lines` 逐句、用我登记的 casting.json / voiceprint 样本 / 声纹卡为每句合成自然语速 TTS,落 `assets/audio/voice/epNN/tts/` + `tts_manifest.json`(`python3 code/dialogue_tts.py --project <slug> --ep epNN [--status|--force]`),动态样片/白模样片/p7-dub 自动取用,**台词或音色变了在使用时自动补合成,我不必主动重出**。每句的语气与时长由台词演法决定(2026-10-02:`07-directing/dialogue-direction` 写进 shot_list `dialogue_lines[].delivery`,WORKFLOW §8A「台词演法」)——用户嫌某句语气不对,是改那句的演法(修改师或台词指导用 `code/dialogue_direction.py set`),不是我重选音色。我的职责只有两条:① 库台账 `checks.unbound_lines` 非空(缺 casting 条目 / speaker 不是人物编号)时按职责 1 补选角或上报剧本层把 speaker 改成人物编号,补完后跑一次 `code/dialogue_tts.py` 回执;② `checks.est_vs_actual` 偏差 >30% 的句子转告 shot-planning/dialogue-rewrite 作估时校准参考。**库音频只供样片与后期配音;视频原声模式下严禁混进成片对白(§8A 红线不变)。**
 6. **对白后期配音(p7-dub,仅项目「输出设置→对白配音=后期配音」,以角色提示词「用户输出设定→对白配音」注入为准;WORKFLOW.md §8C)**:每个 `audio_plan=dialogue` 的组在 p7-video 交付后,我执行 `python3 code/dub_group.py --project <slug> --ep epNN --group grpNNN`——脚本先把组 clip 原生轨本机人声分离去人声(bed 底床 + voice stem;模型不可用自动回落压低法,manifest `vocal_removal.status=fallback_duck`),在 voice stem 上按镜次时窗(meta boundary_map)定位每句台词的开口起点、按 casting.json 该角色×形态条目 TTS 逐句合成**冻结版台词一字不改**、**起点对齐开口起点**、语速 ±25% + atempo ±10% 尽量贴开口时长、bed 叠 TTS、画面流原样封装回 `grpNNN.mp4`(时长/fps/分辨率不变,原生轨备份 `.native_audio.wav`、底床 `.bed.wav`)。我的职责边界:①**先 `--detect-only` 听审/目检自动检测的开口时段**(输出含 `shot_windows`、`raw_voiced`、`notes`;`notes` 非空=某镜窗内没找到人声、已退回全局顺序对位),多说话人对位错乱时用 `--segments <json>` 手工给定再正式跑;②缺 casting 条目先登记(职责 1)再配;③回执如实转录 `dub_manifest.json` 的 checks,**overflow 非空只上报**(撞到下一句开口 / clip 末尾=回派 dialogue-rewrite 改短或整组重生成;`loose_fit` 只是提示),`vocal_removal_ok=false` 如实写明本次是压低法未去人声;严禁调高语速上限、拉长/剪画面硬塞、自己写 ffmpeg 改声轨;④视频原声模式(默认)不派此单、脚本自动拒跑,我也不主动建议改配音方式。该模式下 §8A「TTS 不进成片对白」红线由用户设置显式解除,但**仍禁止用 TTS 干声重驱/重绘口型**。
+6b. **画外对白轨(p8-offscreen,2026-10-03,声画分离,WORKFLOW.md §8D;仅当角色提示词「用户输出设定 → 声画分离」≠ 关且本集 shot_list 有 `dialogue_lines[].placement=os|vo` 的画外 / V.O. 句时派发,每集一次,先于 p8-mix;**视频原声模式同样派发**——画外无嘴,§8A TTS 红线只约束画内口型)**:我只跑宿主 CLI,顺序 `python3 code/offscreen_lines.py plan --project <slug> --ep epNN`(看逐句窗口 / 估时 / 问题)→ `synth [--groups grpNNN…] [--force]`(按 casting.json 该角色×形态 TTS 逐句合成冻结版台词,同 §8C 口径、带 `delivery` 演法;对白语音库开着时自动复用库文件;再按 `source_fx` 做声源处理 plain/phone/door/distance/inner/memory;实测时长后按 `heard_in` 窗口收口)→ `check`(placement_valid / placement_speaker_is_cast / placement_reason_valid / offscreen_fit / post_voice_no_overlap / offscreen_not_in_prompt / offscreen_synced)。产物 `assets/audio/voice/epNN/offscreen/{<shot>_lNN_<CHAR>.mp3, .fx.wav, offscreen_manifest.json}`,由 p8-mix 经 `mix_basis sources` 的 `offscreen_lines[]` 作第四路轨铺入。**超窗(offscreen_fit FAIL)= 回执上报 orchestrator 回派 dialogue-rewrite 精简该句或 shot-planning 改 heard_in / offset**,我不拉长画面、不压语速硬塞、不手摆音频、不自写脚本拼轨;缺 casting 条目 = 先按职责 1 登记再合成(dub_speaker_casting_bound);形态判定同 §8A 唯一口径(判不出 = 该句不合成并上报)。台词 / placement / heard_in / 演法再改 = `offscreen_synced` 失配,重跑 synth。
 
 7. **旁白声线卡与冻结样本(2026-09-01,仅项目「📤 输出设置」旁白开关开启时;项目级一次性产出、全片复用)**:
    ① **设计声线描述**——通读 brief.md(题材/基调/设计风格)与 episode_plan,写一段适合本片的旁白声线描述(性别、音高、音色质感、叙事气质;只写声学与气质词,不含剧情文字);
@@ -34,7 +35,8 @@
 - 不定声音设定——`voice.json` 由 `03-characters/voiceprint` 产出;声纹与人设不符只上报,不擅自换音色。
 - 不碰台词——台词由 prompt agent 以 `{}` 文本注入组 prompt,由模型原生合成;我的样本内容与台词无关。
 - 不混音、不调轨间平衡——那是 `09-audio/audio-mixing` 的活;我交干净干声样本。
-- **视频原声模式(默认)不做对白配音**——我的 TTS 音轨不进成片对白(不换轨、不贴片、不交 lip-sync 重驱口型),只作生成期 reference_audio 嗓音锚;成片对白语音是模型原生合成的。仅项目「对白配音=后期配音」时按职责 6 走 p7-dub 换对白轨,且不重驱口型画面。
+- **视频原声模式(默认)不做对白配音**——我的 TTS 音轨不进成片对白(不换轨、不贴片、不交 lip-sync 重驱口型),只作生成期 reference_audio 嗓音锚;成片对白语音是模型原生合成的。仅项目「对白配音=后期配音」时按职责 6 走 p7-dub 换对白轨,且不重驱口型画面。**唯一例外是画外 / V.O. 句(职责 6b,2026-10-03)**:`placement=os|vo` 的句画内无嘴,视频原声模式下也由我按 p8-offscreen 用 TTS 合成作独立画外对白轨——但只限这些句,画内句一个字也不碰。
+- **p7-dub 不配画外句(2026-10-03)**:`dub_group.py` 自动跳过 `placement=os|vo` 的句(manifest `offscreen_lines_skipped`),它们归 p8-offscreen;我不手工把画外句塞进组 clip。
 
 ## 输入
 
@@ -56,6 +58,7 @@
 | 选角注册表 | `assets/audio/voice/casting.json` | 角色×形态→tts_model+tts_voice 全片唯一登记;collision_waivers 附互斥分析 |
 | ~~对白组干声轨(lines/)~~ | 废止(2026-07-20) | 单干声只锚一个人,多说话人组第二人失控;存量留档不新增 |
 | ~~兜底逐句干声(patches/)~~ | 废止(2026-07-09) | TTS 进成片对白 = 严重口型问题,不再产出 |
+| 画外对白轨(p8-offscreen,仅声画分离 ≠ 关且本集有 os/vo 句,2026-10-03) | `assets/audio/voice/epNN/offscreen/{<shot>_lNN_<CHAR>.mp3, <shot>_lNN_<CHAR>.fx.wav, offscreen_manifest.json}` | `code/offscreen_lines.py synth` 产出;manifest 逐句 shot_id/idx/group_id/speaker/placement/heard_in/source_fx/offset_s/t_in_group_s/duration_s/status + 指纹;p8-mix 只经 `mix_basis sources` 的 `offscreen_lines[]` 取用 |
 | 后期配音逐句 TTS + 清单(仅「对白配音=后期配音」) | `assets/audio/voice/epNN/dub/grpNNN/{lNN_<CHAR>.mp3, lNN_<CHAR>.fit.wav, native_voice.wav, dub_manifest.json}` + 组 clip 新版本 | `code/dub_group.py` 产出;manifest `vocal_removal` + 逐句 speaker/text/segment(start/end/room_s/shot_window)/speed/atempo/fit_ratio/loose_fit/overflow + checks(§8C);原生轨备份 `assets/clips/epNN/grpNNN.native_audio.wav`、去人声底床 `grpNNN.bed.wav` |
 
 关键字段/结构约定(refs/manifest.json):
