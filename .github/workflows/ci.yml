@@ -41,4 +41,5 @@ jobs:
           python-version: "3.12"
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run test:web
       - run: npm run build:web

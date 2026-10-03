@@ -170,10 +170,13 @@ permissions.
 ```bash
 python -m pip install -e ".[dev]"
 pytest
+npm run test:web   # Node checks for the browser-side whitebox / director code
 ```
 
-The CI suite verifies Python syntax, JSON/YAML integrity, workflow agent
-references, security defaults, and the Web console's basic API surface.
+CI runs the whole `tests/` suite: module and pipeline-CLI regressions, repository
+integrity (JSON/YAML, workflow agent references, security defaults), and the HTTP
+layer (route table, offline GET smoke test, Web console pages). Cases that need
+`ffmpeg` skip when it is not installed.
 
 ## License and Attribution
 

@@ -11,7 +11,8 @@
     "build:web": "node apps/web/run-check.mjs",
     "dev:desktop": "npm run dev --workspace @videoagents/desktop",
     "build:desktop": "npm run build:web && npm run build --workspace @videoagents/desktop",
-    "typecheck": "npm run typecheck --workspace @videoagents/desktop"
+    "typecheck": "npm run typecheck --workspace @videoagents/desktop",
+    "test:web": "node --test \"tests/*.mjs\""
   },
   "engines": {"node": ">=22.12"}
 }

@@ -144,9 +144,10 @@ data/projects/   视频剪辑项目资源、输入与生成产物，默认不入
 ```bash
 python -m pip install -e ".[dev]"
 pytest
+npm run test:web   # 浏览器端白模 / 导演台代码的 Node 检查
 ```
 
-CI 会检查 Python 语法、JSON/YAML 完整性、工作流 Agent 引用、安全默认值和 Web 控制台基础 API。
+CI 跑 `tests/` 全量:模块与流水线 CLI 回归、仓库完整性(JSON/YAML、工作流 Agent 引用、安全默认值)、HTTP 层(路由表、离线 GET 冒烟、Web 控制台页面)。需要 `ffmpeg` 的用例在未安装时自动跳过。
 
 ## 许可证与引用
 

@@ -1904,7 +1904,8 @@ def sync_prompt_skill_effective(project: str) -> dict:
 
 async def api_prompt_skill_get(project: str):
     project = safe_slug(project)
-    cfg = sync_prompt_skill_effective(project)
+    # 快照会落盘(连带 ensure_project 建目录);项目不存在时只读默认值,免得一次 GET 把打错/已删的项目名建成空项目
+    cfg = sync_prompt_skill_effective(project) if (PROJECTS_DIR / project).is_dir() else load_project_settings(project)
     return {"project": project, "config": cfg.get("prompt_skill") or {},
             "resolved": resolve_prompt_skill(project),
             "candidates": prompt_skill_candidates()}
