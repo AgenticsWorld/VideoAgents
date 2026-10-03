@@ -386,7 +386,9 @@ def check(shot_list: dict) -> list[str]:
         gshots = g.get("shots") or []
         # 2. 连续且同场景
         idxs = [order.get(x) for x in gshots]
-        if None in idxs or idxs != list(range(idxs[0], idxs[0] + len(idxs))):
+        if not gshots:
+            errors.append(f"{gid} group_shots_contiguous: 组内没有镜头(shots 为空)")
+        elif None in idxs or idxs != list(range(idxs[0], idxs[0] + len(idxs))):
             errors.append(f"{gid} group_shots_contiguous: 镜号不连续 {gshots}")
         scenes = {by_id[x].get("scene_id") for x in gshots if x in by_id}
         if len(scenes) > 1:

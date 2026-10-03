@@ -343,8 +343,6 @@ def validate_captions(data: dict, shot_list: dict,
         issues.append(f"全集引用 {len(used_tpl)} 个模版(>20),确认非失控生成")
     if data.get("cards"):
         issues.append("v3 暂不支持 cards 图卡(需求出现时再移植)")
-        if data.get("cards"):
-            issues.append("v3 暂不支持 cards 图卡(需求出现时再移植)")
     groups = {g["group_id"]: g for g in shot_list.get("generation_groups", [])}
     seen_ids = set()
     for i, c in enumerate(data.get("captions", [])):

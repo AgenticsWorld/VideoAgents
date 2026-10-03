@@ -96,6 +96,7 @@ _BUCKET_PATTERNS = (
 
 
 def _bucket(msg: str) -> str:
+    msg = msg.split(": ", 1)[-1]      # 去掉「<条目 id>: 」前缀:id 是 Agent 自起的,里面带着关键词不该把消息带到别的桶
     for name, keys in _BUCKET_PATTERNS:
         if any(k in msg for k in keys):
             return name
@@ -192,6 +193,8 @@ def main():
                         f"{tag}: start {st} 与 组起点+local_start 的 cut 基准 {exp0:.3f} 不一致(speech-snap 可回写)")
         for name in ("caption_schema_v2", "caption_groups_valid",
                      "caption_time_consistent", "caption_assets_resolved"):
+            if name == "caption_assets_resolved" and (fonts_m is None or sfx_m is None):
+                continue                          # 上面已按缺 manifest 报 FAIL;没有 manifest 就没校验过,不再补一行 PASS
             check(name, not buckets[name], "; ".join(buckets[name][:3]))
         if beat_text is not None:
             check("caption_text_from_source", not buckets["caption_text_from_source"],
