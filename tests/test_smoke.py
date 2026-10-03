@@ -1,9 +1,8 @@
 """CI smoke tests: package imports and release version consistency.
 
-The full regression suite in this directory lives outside version control
-(local-only since v1.0.4); this file is the one tracked exception — a minimal
-always-versioned check that keeps CI meaningful without shipping tests that
-depend on private local data.
+A minimal check that keeps CI meaningful on its own; the rest of the
+regression suite in this directory is versioned alongside it and must stay
+self-contained (no private project data, no network).
 """
 
 import asyncio

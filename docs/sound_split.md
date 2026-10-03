@@ -203,4 +203,4 @@ python3 code/sync_native_leads.py audible --project <slug> --ep epNN [--groups g
 `code/performance_bound_check.py`、`modules/dialogue_direction.py`、`modules/script_breakdown.py`、`modules/dialogue_tts.py`、
 `code/dub_group.py`、`code/mix_basis.py` + `modules/mix_manifest.py`、`modules/dialogue_track.py`、`modules/whitebox_subtitles.py`、
 `services/runtime/core.py`(设置 / 提示注入 / API / 后期轨)、`apps/web/static/{index.html,dialogue-tts.js,preview_storyboard.html,preview_post.html}`
-+ 11 份词典;三期 `modules/native_lead.py` + `code/sync_native_leads.py`;规约 WORKFLOW.md §8D 与各工位 SOUL。测试 `tests/test_offscreen_lines.py` 等(仅本机)。
++ 11 份词典;三期 `modules/native_lead.py` + `code/sync_native_leads.py`;规约 WORKFLOW.md §8D 与各工位 SOUL。测试 `tests/test_offscreen_lines.py` 等。

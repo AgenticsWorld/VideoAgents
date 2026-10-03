@@ -44,6 +44,6 @@
 - `modules/scene_int_ext.py`:`_ALIASES` 英文别名;存量推断词英文整词命中。
 - `code/check_dialogue_fit.py`、`services/runtime/core.py` 对白解析:`**final**`、英文列名与排除列、`Narration` 段。
 - `modules/storyboard_board.py`:旁白锚点位置词。
-- 测试:`tests/test_script_breakdown.py::test_parse_english_anchor_screenplay`(仅本机)。
+- 测试:`tests/test_script_breakdown.py::test_parse_english_anchor_screenplay`。
 
 存量中文项目不受影响;换输出语言后写作工位按本契约写,拆解/机检不用改。

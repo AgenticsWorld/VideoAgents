@@ -140,7 +140,7 @@ services/api/    Independently runnable Python API service, schemas, and runtime
 services/runtime/ Agent scheduling, project services, providers, and runtime tools
 apps/web/        Original static WebUI plus Python static server/API reverse proxy
 apps/desktop/    Electron shell, Python Web lifecycle, packaging, and updates
-tests/           Repository integrity and security-default tests
+tests/           Regression suite (pytest): modules, pipeline CLIs, and repository integrity
 data/projects/   Video project resources, inputs, and generated artifacts
 ```
 

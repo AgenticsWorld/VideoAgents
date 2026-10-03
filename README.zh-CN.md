@@ -119,7 +119,7 @@ services/api/    可独立运行的 Python API 服务、Schema 和运行状态
 services/runtime/ Agent 调度、项目业务、Provider 与内部运行工具
 apps/web/        原 WebUI 静态页面、Python 静态服务与同源 API 反向代理
 apps/desktop/    Electron 外壳、Python Web 服务生命周期、打包与更新
-tests/           仓库完整性和安全默认值测试
+tests/           回归测试(pytest):模块、流水线 CLI 与仓库完整性
 data/projects/   视频剪辑项目资源、输入与生成产物，默认不入 Git
 ```
 
