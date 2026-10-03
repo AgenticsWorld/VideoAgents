@@ -633,6 +633,15 @@ def _as_list(v) -> list:
     return [v]
 
 
+def _line_delivery(ln: dict) -> dict:
+    """台词行的演法三项(2026-10-03 故事板页台词后显示):情绪 emotion、语速档 pace(fast|medium|slow,
+    缺则取 delivery.pace)、估时 est_s(est_duration_s)。缺的项为 None,前端只显示有的。"""
+    dv = ln.get("delivery") if isinstance(ln.get("delivery"), dict) else {}
+    return {"emotion": ln.get("emotion") or dv.get("emotion") or None,
+            "pace": ln.get("pace") or dv.get("pace") or None,
+            "est_s": ln.get("est_duration_s", ln.get("est_s"))}
+
+
 def parse_dialogue_ref(v, names: dict) -> list[dict]:
     """草案镜 dialogue_ref 的几种历史写法 → [{speaker, name, text}] / [{ref}]:
     "S01/CHAR-0002:施主,请留步!" · "S01 · CHAR-0010:「食馎饦否?」(est 1.5s)" · "S04-D01" / "ep01-s01-d001"(仅编号)"""
@@ -642,7 +651,7 @@ def parse_dialogue_ref(v, names: dict) -> list[dict]:
             sp = item.get("speaker") or item.get("char") or ""
             txt = item.get("text") or item.get("line") or ""
             if txt:
-                rows.append({"speaker": sp, "name": names.get(sp, sp), "text": txt})
+                rows.append({"speaker": sp, "name": names.get(sp, sp), "text": txt, **_line_delivery(item)})
             elif item.get("id") or item.get("ref"):
                 rows.append({"ref": item.get("id") or item.get("ref")})
             continue
@@ -776,7 +785,7 @@ def load_board(base: Path, ep: str, catalog: dict | None = None) -> dict:
                     if isinstance(ln, dict) and ln.get("text"):
                         sp = ln.get("speaker") or ""
                         dialogue.append({"speaker": sp, "name": names.get(sp, sp), "text": ln["text"],
-                                         "est_s": ln.get("est_duration_s")})
+                                         **_line_delivery(ln)})
             if not dialogue:
                 dialogue = parse_dialogue_ref(_first(d, "dialogue_ref", "dialogue", "lines", default=None), names)
             key = shot_key(scene_no, order)

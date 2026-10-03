@@ -497,12 +497,21 @@ function shotNoHtml(sh){
   (sh.final||[]).forEach(f=>{no+=`<div class="fin" title="${esc(t('镜头表(shot_list.json)定稿镜号 · 时长 · 景别'))}">${esc(f.shot_id||'')}${f.duration_s!=null?' · '+secs(f.duration_s):''}${f.size?' · '+esc(f.size):''}${f.group?` <span class="grp">${esc(f.group)}</span>`:''}</div>`});
   return no;
 }
+// 台词后的演法三项(2026-10-03):情绪 · 语速 · 估时,只显示有的;情绪是剧本正文不过词典
+const PACE_ZH={fast:'快',medium:'中',slow:'慢'};
+function dlgMetaHtml(l){
+  const p=[];
+  if(l.emotion)p.push(`<span data-no-i18n>${esc(l.emotion)}</span>`);
+  if(l.pace)p.push(`<span>${esc(t('语速'))}</span> <span>${esc(PACE_ZH[l.pace]?t(PACE_ZH[l.pace]):l.pace)}</span>`);
+  if(l.est_s!=null)p.push(`<span>${esc(t('估时'))}</span> <span>${secs(l.est_s)}</span>`);
+  return p.length?`<span class="es">${p.join(' · ')}</span>`:'';
+}
 function shotContentHtml(sh,full){   // full = 打印页:备注不截断
   let c=`<div class="ct">${esc(sh.content)}</div>`;
   if(sh.action&&!(sh.content||'').includes(sh.action))c+=`<div class="ln"><span class="k">🎬</span><span class="v">${esc(sh.action)}</span></div>`;
   (sh.dialogue||[]).forEach(l=>{
     if(l.ref)c+=`<div class="ln dl"><span class="k">💬</span><span class="v dim">${esc(l.ref)}</span></div>`;
-    else c+=`<div class="ln dl"><span class="k">💬</span><span class="v"><span class="spk">${esc(l.name||cname(l.speaker)||'')}${l.name||l.speaker?':':''}</span> <span class="tx">${esc(l.text)}</span>${l.est_s!=null?`<span class="es">${secs(l.est_s)}</span>`:''}</span></div>`;
+    else c+=`<div class="ln dl"><span class="k">💬</span><span class="v"><span class="spk">${esc(l.name||cname(l.speaker)||'')}${l.name||l.speaker?':':''}</span> <span class="tx">${esc(l.text)}</span>${dlgMetaHtml(l)}</span></div>`;
   });
   // 旁白(2026-09-15):宿主按 草案镜 narration_ref → shot_list narration_anchors → 锚点引文推定 的顺序挂到镜(modules/storyboard_board.attach_narration);
   // 分镜师明确挂的不打标,推定的打灰标(悬停看锚点原文),让用户在 H3S 签字前能核对旁白落在哪一镜

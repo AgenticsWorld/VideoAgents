@@ -1,4 +1,5 @@
 window.I18N_DICT = {
+"估时": "perkiraan",
 "用本机文件对话框选另一版本视频(默认打开本集 assets/clips/<ep>/archive 归档目录),导入为本组新版本": "Pilih versi video lain lewat dialog berkas sistem (secara bawaan membuka folder arsip assets/clips/<ep>/archive episode ini) lalu impor sebagai versi baru grup ini",
 "读取分辨率…": "Membaca resolusi…",
 "读取分辨率失败:{e}": "Gagal membaca resolusi: {e}",
