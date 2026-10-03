@@ -4054,4 +4054,7 @@ window.I18N_DICT = {
 "{b}/{n} 句已写": "{b}/{n} falas com direção",
 "加载失败:{e}": "Falha ao carregar: {e}",
 "已保存,点「刷新对白语音」重出这一句": "Salvo. Clique em “Atualizar voz de diálogo” para sintetizar esta fala de novo",
+"可加长单集": "Extensão máx. por episódio",
+"剧本按时间尺(台词 + 动作节拍)算出的内容需求超过每集时长时,先把该集最多加长这个比例;仍装不下再精简台词,最后合并动作短镜。0 = 不允许加长。": "Quando a necessidade de conteúdo do roteiro, medida pela escala de tempo (diálogo + batidas de ação), ultrapassa a duração do episódio, o episódio é primeiro estendido em no máximo esta porcentagem; se ainda não couber, as falas são enxugadas e, por fim, os planos de ação curtos são fundidos. 0 = extensão não permitida.",
+"可加长单集需在 0–200% 之间": "A extensão máx. por episódio deve ficar entre 0 e 200%",
 };

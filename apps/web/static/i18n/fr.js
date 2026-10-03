@@ -4054,4 +4054,7 @@ window.I18N_DICT = {
 "{b}/{n} 句已写": "{b}/{n} répliques dirigées",
 "加载失败:{e}": "Échec du chargement : {e}",
 "已保存,点「刷新对白语音」重出这一句": "Enregistré. Cliquez sur « Actualiser la voix des dialogues » pour resynthétiser cette réplique",
+"可加长单集": "Rallonge max. par épisode",
+"剧本按时间尺(台词 + 动作节拍)算出的内容需求超过每集时长时,先把该集最多加长这个比例;仍装不下再精简台词,最后合并动作短镜。0 = 不允许加长。": "Quand le besoin de contenu du scénario, mesuré avec l'échelle de temps (dialogues + temps d'action), dépasse la durée de l'épisode, l'épisode est d'abord rallongé d'au plus ce pourcentage ; si cela ne suffit pas, les dialogues sont raccourcis, puis les plans d'action courts sont fusionnés. 0 = aucune rallonge autorisée.",
+"可加长单集需在 0–200% 之间": "La rallonge max. par épisode doit être comprise entre 0 et 200 %",
 };

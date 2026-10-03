@@ -14,7 +14,7 @@
 场次人物默认继承：每组保留 `scene_no`，以同集 `scene_no + scene_id` 建立完整 `scene_cast`，包含无对白、画外和静止陪衬人物。`characters_union` 是组内叙事角色合集，维持现有分组统计；完整在场集合单独记录，不再用叙事列表限制白模或引用人物。定稿后运行 `python code/sync_scene_cast.py --project <slug> --ep <ep> --write`，读取缺图报告并补交上游；同地点的不同时间、闪回不得混场。明确进退场与远程声音例外，不能把暂未入画解释为离场。
 
 1. 把 `storyboard.json` 的镜头草案逐条定稿:分配唯一镜号(sh001…;**仅当**运行提示词含「## 编号制:预留插入位」一节时——宿主只对 2026-09-28 起新建的项目注入——镜号改 `sh0010`、`sh0020`…、组号改 `grp0010`、`grp0020`…,之后插入用 `sh0011` / `grp0011`,已有编号不重排;无此节的项目照旧)、定终稿时长、景别、机位描述;**先读用户注释 `directing/epNN/storyboard_notes.json`(2026-09-15,有则必读;键 `*` 整集 / `S01` 场次 / `S01-03` 场次-草案镜序,镜级条目带 scene_no/order/shot_id/content 便于对回草案镜)**——用户在故事板页写的分镜设计意见,定稿镜号/时长/景别/机位与分组时逐条对照落实,落实不了的在汇报里说明;每镜终稿时长必须落在「用户全局时长设定 · 单个分镜时长范围」内(未注入时默认 4–8 秒)。
-2. 挂 ID:每镜标注出场角色 ID(`bible/characters/index.json`)与场景 ID(`bible/scenes/index.json`),标记是否对白镜头(供 lip-sync 与 voice-generation 排产)。
+2. 挂 ID:每镜标注出场角色 ID(`bible/characters/index.json`)与场景 ID(`bible/scenes/index.json`),标记是否对白镜头(供 lip-sync 与 voice-generation 排产)。对白镜的 `dialogue_lines[]` 每句照抄剧本对白层的 `emotion` 与 `pace`(2026-10-03;丢了 = 语音库按「平静自然」合成、估时按 medium 算,前科 fengshen3 ep07 44 句 emotion 全空)。
 3. 按 `pacing.json` 的逐场时长分配收敛总时长:Σ镜头时长 = 集时长 ±10%;超预算时按 pacing 的删减建议裁,并记录取舍。
 4. **定稿生成组(generation_groups)**:以 storyboard 的 groups_draft 为底稿逐组校验定稿——
    - 组内镜号连续、同 scene_id;每镜必须且只属于一个组;
@@ -22,6 +22,7 @@
    - 组内出场角色合集 ≤4,超了拆组并回报 storyboard 备案;
    - **对白组说话人纪律(§8A 2026-07-20 更新:人物 Voice 样本范式)**:组生成把每个说话角色各自的 voiceprint 样本挂 reference_audio 并在 prompt 逐角色显式绑定,多说话人组因此**允许**——但**组内说话人 ≤3 是设计层硬约束**(机检 `speakers_le_3`,超限=FAIL):Seedance 2.0 的 reference_audio 每次最多 3 段,说话人 >3 就有角色挂不上锚、音色无保障,**切组时就必须把说话人多的群戏按说话回合拆开**,不留给下游取舍;dialogue 组一律标注 `speakers`(按台词量排序)供 prompt/voice-generation 选锚,并供下游逐说话人音色快检盯防——快检反复(≥3 次)错配的组,回退**按说话回合切组、一组一说话人**的保守切法(对方反应镜可入组但不开口);
    - 时长语义:**组总时长是生成硬约束(±1s 机检),镜级 duration_s 是节奏意图**——多镜头生成时模型按剧情定各镜实际长度;
+   - **每镜时长按时间尺定(2026-10-03,docs/time_cost.md)**:`duration_s` ≥ Σ本镜动作节拍单价(`poses[].action` 逐拍按单价表)+ Σ台词估时(对白行 `est_duration_s`,已按 `pace` 语速档算)+ 余量——**对白镜每句开口前 0.4s + 说完后 0.3s**(前科 fengshen3 ep07:镜长 = 估时零余量,5 秒台词被模型整句丢掉),动作镜首尾各 0.2s;装不下的镜合并相邻插入镜或加镜长,不得把拍数硬塞进亚秒镜。**密集组限长**:平均镜长 < 1.5s 的组 `total_duration_s` ≤ 15s(用户拍板,不随项目组上限放宽),按节拍链(回合)拆组,同空间续接走长镜头设置的尾段视频。定稿后跑 `python3 code/check_time_budget.py --project <slug> --ep epNN --scope shots`(机检 shot_time_budget_ok / group_density_ok,group_density_ok 也内置在 check_generation_groups.py);Σ镜头时长仍 = pacing 调整后预算 ±10%(pacing 加长单集时 `duration_budget_s` 已含加长,`budget_s` 取它);
    - **每组钉死时段与光照方案(2026-07-20)**:必填 `time_of_day`(受控枚举:清晨/昼/黄昏/夜/深夜/凌晨,继承 storyboard 场块字段)与 `lighting_scheme_id`(从该组场景 `bible/scenes/<scene_id>/lighting.json` 的 schemes 中选 `condition.time_of_day` 与组 time_of_day 一致的方案 ID,如 `LGT-0012-01`)——这是下游 prompt 取光照描述的唯一依据,**没有这两个字段,导演层随手从场景光照矩阵错取白天方案就无人能拦**(前科:tothemoon ep01 S04 深夜病房错配清晨/黄昏日光方案,grp011 金色云隙光进成片);该场景 lighting.json 无匹配时段方案时上报 orchestrator 回派 `05-scenes/lighting` 补方案,严禁就近凑一套;
    - **组边界人物阵容原则(2026-07-23)**:同场景相邻组切界时,尽量让**组尾镜与下组首镜的出场角色集合一致**(如 solo 反应镜放组头而非组尾)——阵容一致的边界可安全续接;阵容变化的边界是"人物凭空出现"高危点(尾帧锚会把新增角色原地插入近似构图,前科:tothemoon ep01 grp018 尾镜伊娃 solo→grp019 首镜汤米+伊娃,汤米瞬现),无法避免时该边界的首镜构图须与前组尾镜显著不同,由 continuity-planning 核查(boundary_cast_framing);
    - 给每组记录 `continuity_from`(前一组 group_id,首组为 null),供视频生成按组序串行取前组尾帧。
@@ -140,7 +141,8 @@ instruction: |
 - **时段锚机检(time_anchor_ok,2026-07-20)**:每组 `time_of_day` 必填且在受控枚举内、与 storyboard 对应场块一致;`lighting_scheme_id` 必填、在该组场景 lighting.json 的 schemes 中存在、且该方案 `condition.time_of_day` 与组 time_of_day 一致;同场景同时段的多个组必须取同一 scheme;
 - **旁白挂点机检(§7D ①)**:narration.md 条目 100% 有挂点;挂点镜/组引用合法;可用画面窗口(扣除对白占时)≥ `est_duration_s`×1.15;
 - **组音频形态机检(§7D ①)**:每组 `audio_plan` 必填且与 has_dialogue/挂点事实一致;ambient_only 组必附 `silent_rationale`(无理由的无声组=待核查,不得进 H3A)。
-- **对白适配机检(§7D ①,dialogue_est_fits_group_x0.7)**:dialogue 组 Σ台词估时 ≤ 组总时长×0.7,`code/check_dialogue_fit.py` 执行(dialogue_fit_group / dialogue_fit_shot / line_le_cap / line_est_consistent / lines_text_match_source);超限组在回执里列出交 p6-dialogue-fit 精简,该节点 PASS 前不派 p6-blocking、不得进 H3A。
+- **对白适配机检(§7D ①,dialogue_est_fits_group_x0.7)**:dialogue 组 Σ台词估时 ≤ 组总时长×0.7,`code/check_dialogue_fit.py` 执行(dialogue_fit_group / dialogue_fit_shot / line_le_cap / line_est_consistent / lines_text_match_source);**dialogue_fit_shot 2026-10-03 起 = Σ台词估时 + 开口前 0.4s + 说完后 0.3s ≤ 镜长(新集 FAIL)**;超限组在回执里列出交 p6-dialogue-fit 精简,该节点 PASS 前不派 p6-blocking、不得进 H3A。
+- **时间预算机检(shot_time_budget_ok / group_density_ok,2026-10-03)**:`code/check_time_budget.py --scope shots`——每镜 `duration_s` ≥ 节拍单价 + 台词估时 + 余量;平均镜长 < 1.5s 的组 ≤ 15s。存量 shot_list 只 WARN。
 
 **评分(evaluation Agent,rubric visual_plan_v1,阈值 80;按 §7 适用「分镜类」)**:
 - 叙事清晰(30):定稿取舍不破坏 storyboard 的叙事链;

@@ -7,6 +7,8 @@
   3. group_duration_4_15_int     total_duration_s ∈ [4,15] 整数,且 = Σ组内 duration_s
   4. group_characters_lte_4      characters_union ≤4
   5. continuity_from_chain       首组 null,其余指向前一组 group_id
+  5b. group_density_ok           密集组(平均镜长 < 1.5s)总时长 ≤ 15s(2026-10-03 时间尺,用户拍板;modules/time_cost.py;
+                                 存量 shot_list(日期早于 2026-10-03)只 WARN)
 
 §7D ① 机检(workflow.yaml p6-shots validation,默认开启,--skip-7d 跳过):
   6. narration_anchors_cover_all       narration.md 条目 100% 有挂点;挂点镜/组引用合法
@@ -61,6 +63,9 @@ import json
 import re
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from modules import time_cost as _tc  # noqa: E402  密集组限长(2026-10-03)
 
 MAX_GROUP_S = 15              # 默认=Seedance 2.0 单次生成上限;实际以项目「视频模型设置」
                               # settings.json 的 shot_group.max_group_s 为准(main 里覆盖,4-30)
@@ -259,6 +264,10 @@ def check(shot_list: dict) -> list[str]:
             errors.append(f"{gid} duration_sum: total_duration_s={td} ≠ Σ镜时长 {real:g}(差须 ≤0.05s)")
         if not (isinstance(td, (int, float)) and MIN_GROUP_S <= td <= MAX_GROUP_S):
             errors.append(f"{gid} duration_range: {td} ∉ [{MIN_GROUP_S},{MAX_GROUP_S}]")
+        # 5b. 密集组限长(2026-10-03):亚秒快切组越长,模型按文字顺序与按白模时间的漂移越积越大
+        dense = _tc.group_density_issue([by_id[x]["duration_s"] for x in gshots if x in by_id], td if isinstance(td, (int, float)) else None)
+        if dense:
+            errors.append(f"{gid} group_density_ok: {dense}")
         # 4. 角色数
         chars = g.get("characters_union")
         real_chars = sorted({c for x in gshots if x in by_id for c in (by_id[x].get("characters") or [])})
@@ -834,6 +843,12 @@ def main():
             print(f"已写回 {path}")
 
     errors = check(data)
+    # 密集组限长对存量 shot_list(日期早于时间尺截止)只 WARN,不挡 G6
+    if _tc.is_legacy(_tc.doc_date(data)):
+        dense = [e for e in errors if " group_density_ok: " in e]
+        for e in dense:
+            print(f"  ⚠ {e}(存量 shot_list,仅提醒)")
+        errors = [e for e in errors if e not in dense]
     if path.parent.parent.name == "directing":
         sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
         from modules import script_keypoints as kp

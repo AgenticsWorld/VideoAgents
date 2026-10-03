@@ -167,6 +167,9 @@ def _dlg_meta(meta: str | None) -> dict:
     m = re.search(r"est_duration_s\s*[:：]\s*([\d.]+)", meta)
     if m:
         out["est_s"] = float(m.group(1))
+    m = re.search(r"\bpace\s*[:：]\s*(fast|medium|slow)\b", meta, re.I)   # 语速档(2026-10-03 时间尺,dialogue-rewrite 随情绪写)
+    if m:
+        out["pace"] = m.group(1).lower()
     m = re.search(r"style_hits\s*[:：]\s*\[(.*?)\]", meta)
     if m:
         out["style_hits"] = [x.strip().strip("\"'") for x in m.group(1).split(",") if x.strip().strip("\"'")]

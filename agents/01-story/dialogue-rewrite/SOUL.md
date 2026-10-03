@@ -14,6 +14,7 @@
 1. 逐句风格化:按 `bible/characters/<id>/dialogue_style.json`(口头禅、句式、用词禁区)重写对白,逐角色统计命中率,整体 ≥80%。
 2. 口语化:书面语转口语、长句拆短句,信息量不丢、人设不崩。
 3. 控时长:按语速估算每句配音时长写入 `est_duration_s`,单句 ≤ 配音上限(口径与 `voice-generation` 的镜头预算一致);超限必拆句或精简。
+   **语速档 `pace` 随情绪一并写(2026-10-03 时间尺,docs/time_cost.md)**:每句对白行元信息除 `emotion` 外必写 `pace: fast | medium | slow`——这句按情绪该怎么念:急/喝/斥/惊/下令 → fast,平叙 → medium,哭求/低语/冷压/沉吟/弥留 → slow。它是**分镜镜长的依据**:估时 = 0.7s 起止余量 + 有效字数 ÷(角色语速 × 档位倍率 fast 1.19 / medium 1 / slow 0.81)+ 0.4s × 句中停顿数,由宿主按本档位算(`code/check_dialogue_fit.py --write-est` 回写),分镜规划再按估时 + 开口前后余量定镜长;后面的台词演法工位只写怎么演,目标时长直接取这个估时。没写 pace 宿主按情绪词猜(猜不出 medium),猜错的账算在我头上。
    **组级回派(§7D 对白适配)**:分镜后若组内台词总时长装不进生成组时长(估时级机检 Σ台词估时 >组时长×0.7;§8A 2026-07-20 起无干声实测环节),回派到我**改短台词**——这是超长的首选解法(优先于调镜/拆组,严禁靠压语速消化:视频模型会为念完台词赶词提速)。只动对白文本层,语义与人设不丢,改完出新版本供重估/重合成复检。
 3′. **对白时长校验修正环节(p6-dialogue-fit,每集,shot-planning 定稿后固定执行,2026-08-30)**:对白是我在 Phase 5 写的,镜头时长到 Phase 6 才定——长度必然漂移,所以定稿镜头表后由我固定跑一遍校验并就地修正:
    - **①校验**:`python3 code/check_dialogue_fit.py --project <slug> --ep epNN`(宿主 CLI,禁人算),报告落 `directing/epNN/dialogue_fit.json`。退出码 0 = PASS → 直接关单(回执写明「无超限」,不改任何稿);
@@ -51,7 +52,7 @@
 
 对白行约定:
 ```markdown
-char-linxiao:「师父,这经书有古怪。」 {emotion: 警惕, est_duration_s: 2.1, style_hits: ["短句", "口头禅:有古怪"]}
+char-linxiao:「师父,这经书有古怪。」 {emotion: 警惕, pace: medium, est_duration_s: 2.9, style_hits: ["短句", "口头禅:有古怪"]}
 ```
 
 ## 接受的工作指令(Work Order)

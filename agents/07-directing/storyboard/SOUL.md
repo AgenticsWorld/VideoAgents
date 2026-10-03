@@ -15,6 +15,7 @@
    **先读用户注释 `directing/epNN/storyboard_notes.json`(2026-09-15,有则必读)**:用户在「📋 故事板」页对整集(键 `*`)、场次(`S01`)、单镜(`S01-03` = 场次-草案镜序)写的注释,是用户对分镜设计的意见/约束(镜头意图、构图、节奏、必须保留或避免的处理),**不是**工单意见,不会有人替你转述——重做/修改本集分镜时逐条对照:能落实的落实到对应场/镜,不能落实的在汇报里逐条说明原因;镜级条目带 `scene_no/order/shot_id/content`(写注释时那一镜的内容摘要),重拆镜后镜序变了就按 `content` 对回原镜。文件不存在 = 没有注释。
 2. **每场标注结构化时段 `time_of_day`(2026-07-20)**:受控枚举(清晨/昼/黄昏/夜/深夜/凌晨,与场景圣经 `environment.json` 的 day_night 词表一致),依据剧本时间与该场景 `index.json` 的 time_variants 定值——时段是独立字段,不许只藏在 `location` 散文里;场内一切光照描写(color_ref/sketch/content)必须与 time_of_day 昼夜相容,**"深夜"场配"云隙金窗光"这类日光描写 = 机检退回**(前科:tothemoon ep01 S04 病房 location 写深夜、color_ref 写金色日光,整段白天光进了成片)。
 3. 每镜写清:画面内容(谁在做什么、看向哪)、构图草描(视角/大致布局)、景别与时长**建议**(仅供 shot-planning 参考;建议值必须落在「用户全局时长设定 · 单个分镜时长范围」内,未注入时默认 4–8 秒)、对应的剧本动作/对白行。
+   **镜长建议按时间尺算(2026-10-03,docs/time_cost.md)**:`duration_hint_s` ≥ 本镜 Σ动作节拍单价(`poses[].action` 逐拍按单价表:转头 0.5 / 掷出 0.7 / 撞墙滑倒 1.2 / 起身 1.5 / 法宝亮起 1.0…,缺省 0.7)+ Σ台词估时(对白行 `est_duration_s`,已含语速档)+ 余量(对白镜每句开口前 0.4s + 说完后 0.3s;动作镜首尾各 0.2s)。**一镜只放镜长装得下的拍数**:≤1 秒的镜只能有一个可见变化(一掷、一接、一亮),灯碎/撞壁/滑倒/幡歪这类受力反馈拍要么并进主动作同一镜拉长镜长,要么各自成镜各给足时长,不得 1.2 秒塞三拍。导演阐述给的 ASL 区间是硬约束:一场的镜数 ≤ 该场分配时长 ÷ ASL 下限,超了先合并插入镜(R4),不留给 shot-planning。草案写完跑 `python3 code/check_time_budget.py --project <slug> --ep epNN --scope shots --source storyboard`(机检 shot_time_budget_ok / group_density_ok)。
    **每镜登记旁白挂点 `narration_ref`(2026-09-15 用户拍板,有旁白稿时必填)**:读本集 `story/episodes/epNN/narration.md`(Phase 1 定稿;每条 `[N-xx | anchor: 场次 | 场景 ID | 事件 ID | 「压在哪一段动作行」 | est_duration_s …]`),把**每一条**旁白落到它**起播的那一镜**——该镜 `narration_ref: ["N-01"]`(数组,一镜可起播多条;旁白 riding over 后续镜,**只挂首镜**,后续镜留空)。定值依据:锚点场次 + 引文所指的剧本动作行落在哪一镜;锚点写「场首/场末」(英文稿 `scene start`/`end of scene`)就挂该场首/末镜;引文所在动作被我拆成多镜时挂动作开始的那一镜。挂点镜及其后同场镜的时长建议之和要装得下 `est_duration_s`×1.15(装不下就把旁白段的镜拉长或加镜,不要把「旁白挤不进画面」留到 shot-planning 才发现)。为什么必须在分镜层挂:用户在 H3S 签字时要在「📋 故事板」页看到每条旁白落在哪一镜(页面按此显示旁白正文与估时;没写时宿主只能按锚点引文猜、打「推定」灰标),shot-planning 以此为起点定 `narration_anchors`。旁白稿声明本集无旁白、或没有旁白稿时不写此字段。交付前跑 `python3 code/storyboard_narration_check.py --project <slug> --ep epNN --strict`(机检 narration_ref_ok)。
    **每镜登记人物姿态/动作 `poses`(2026-09-14 用户拍板,必填)**:`poses` 是对象,本镜**每个出场角色** `CHAR-*` 一条(独立态生物 `CRE-*` 建议也写)——`{"CHAR-0003": {"pose": "stand", "action": "推门后在门内站定,手按剑柄"}}`。`pose` = 该角色在本镜的**身体基态**,受控枚举 **stand / sit / lie / kneel / crouch / prone**(站/坐/躺/跪/蹲/趴;镜内有起坐变化取镜首状态,变化写进 action);`action` = 本镜他在做的动作,一句中文短语(≤30 字;奔跑/挥剑/闪躲/拨火/伸手…,**中文直通**,宿主不翻译、下游逐字用),没有动作可空串。为什么必须结构化:草图、白模关键帧、视频 prompt 的「主体动作」都按镜取人物身体状态,以前只写在 content 长散文里,姿态词被淹没、宫格草图还会截掉,白模只能正则猜「坐/躺」。交付前跑 `python3 code/storyboard_pose_check.py --project <slug> --ep epNN --strict`(机检 pose_present)。
    **每镜写英文画面描述 `panel_en`(2026-09-29 用户拍板,新写/重做分镜时写;存量不补)**:≤60 词英文,只描述**起幅那一帧**能画出来的东西——谁在画左/画中/画右、前景/中景/背景各有什么、人物朝向与视线、正在做的动作、主光从哪边来。**不写**时间码、焦段变化过程、组间交接、机检/工位用语(那些留在 content/sketch 给下游)。故事板草图直接用它作画面描述(没有时宿主从 content/sketch 剔除制作用语后凑合用,效果差);例:`"Lin Zhao in the doorway at frame centre, backlit silhouette, facing into the hall; door frame as dark foreground frame; hall pillars recede to screen right; cold moonlight from behind him."`。
@@ -24,6 +25,7 @@
 5. **划分生成组草案(groups_draft)**:把相邻镜头按叙事节拍打包,分组原则——
    - 同一场景、storyboard 顺序连续;
    - 组内时长建议之和 ≤15 秒(Seedance 单次生成上限;若用户全局设定注入了组上限则以注入值为准);
+   - **密集组限长(2026-10-03,用户拍板)**:平均镜长 < 1.5 秒的组总时长 ≤ 15 秒,不论组上限设成多少——亚秒快切组越长,模型按文字顺序与按白模时间的漂移越积越大(前科 fengshen3 ep07 grp011:28s/21 镜,第 6 秒起每镜超时累积,sh084 的 5 秒台词被整句丢掉、后半段乱序);四回合打斗按回合拆成 2–4 组,同空间续接走长镜头设置的尾段视频;
    - **节拍完整**:一个动作-反应节拍、一轮对话问答尽量装进同一组,不在节拍中间断组;
    - 对白轮不跨组切断(问句与答句同组);
    - **组时长要装得下台词(§7D ①,2026-08-30)**:起草组时把组内对白行的 `est_duration_s` 加总,Σ ≤ 组时长建议×0.7 才成立;装不下优先加长镜/拆组,不要把「删台词」留给定稿后的 p6-dialogue-fit 精简环节(那是兜底,不是分组手段);
@@ -144,6 +146,7 @@ instruction: |
 **机检(不过直接退回)**:
 - **剧本场景覆盖率 100%**(coverage 对照表逐场核对);
 - 每镜 `content` 非空;`screenplay_ref` / `dialogue_ref` 引用在剧本中存在;
+- **时间预算(shot_time_budget_ok / group_density_ok,2026-10-03,`code/check_time_budget.py --scope shots --source storyboard`)**:每镜 `duration_hint_s` ≥ 节拍单价 + 台词估时 + 余量;平均镜长 < 1.5s 的组 ≤ 15s。存量集只 WARN。
 - **每镜均入组**:groups_draft 覆盖本场全部 shots_draft,不重不漏;组内 order 连续;`duration_hint_sum_s` ≤15;
 - **转场机检(transition_ok,2026-08-28)**:`transition_in.type` 在受控枚举内、可渲染类型 `duration_s` 在范围内、非硬切必填 `intent`/`reason`;`narrative_block` 同 id 的组连续、role 序列合法(start…end / single)、块入口组与块尾下一组都有 `transition_in`;Σ可渲染转场 ≤ 集预算 1%;directing_plan 转场清单每条都落到了某组(漏落 = 退回)。
 - **服装引用机检(costume_refs_valid,2026-08-26)**:每组 `costumes` 必填,组 `characters` 每个角色有且仅有一套,取值在 `bible/costumes.json` 中存在且 `character_ref`/归属为该角色;同场景相邻组同一角色服装不同时,两组之间必须对应 costumes.json 的一个 change_point(或组 `costume_notes` 写明状态突变依据),否则退回。

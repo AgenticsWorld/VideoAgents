@@ -430,6 +430,9 @@ a.hdr-icon:hover{border-color:var(--accent)}
         </div></div>
       <div class="row"><label>每集时长(分钟)</label><input type="number" id="npd-ep" min="0.5" step="0.5" value="5">
         <label style="width:auto;flex:none;display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px" title="勾选后不设固定每集时长,由剧本结构自动决定分集与每集时长"><input type="checkbox" id="npd-ep-auto" style="flex:none">根据剧本自动</label></div>
+      <div class="row"><label>可加长单集</label><input type="number" id="npd-extend" min="0" max="200" step="5" value="50" style="width:70px;flex:none"><span style="color:var(--dim);font-size:12px">%</span>
+        <button type="button" class="info-btn" data-info="npd-extend-info" title="说明">i</button></div>
+      <div class="note info-note" id="npd-extend-info">剧本按时间尺(台词 + 动作节拍)算出的内容需求超过每集时长时,先把该集最多加长这个比例;仍装不下再精简台词,最后合并动作短镜。0 = 不允许加长。</div>
       <div class="row"><label>分镜时长(秒)</label>
         <input type="number" id="npd-smin" min="0.5" step="0.5" value="0.5" title="下限">
         <span style="color:var(--dim)">—</span>
@@ -677,6 +680,9 @@ a.hdr-icon:hover{border-color:var(--accent)}
       </div></div>
     <div class="row"><label>每集时长(分钟)</label><input type="number" id="dur-ep" min="0.5" step="0.5" placeholder="10">
       <label style="width:auto;flex:none;display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px" title="勾选后不设固定每集时长,由剧本结构自动决定分集与每集时长"><input type="checkbox" id="dur-ep-auto" style="flex:none">根据剧本自动</label></div>
+    <div class="row"><label>可加长单集</label><input type="number" id="dur-extend" min="0" max="200" step="5" placeholder="50" style="width:70px;flex:none"><span style="color:var(--dim);font-size:12px">%</span>
+      <button type="button" class="info-btn" data-info="dur-extend-info" title="说明">i</button></div>
+    <div class="note info-note" id="dur-extend-info">剧本按时间尺(台词 + 动作节拍)算出的内容需求超过每集时长时,先把该集最多加长这个比例;仍装不下再精简台词,最后合并动作短镜。0 = 不允许加长。</div>
     <div class="row"><label>分镜时长(秒)</label>
       <input type="number" id="dur-smin" min="0.5" step="0.5" placeholder="1" title="下限">
       <span style="color:var(--dim)">—</span>
@@ -1462,7 +1468,7 @@ function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置�
   $('#npo-dialogue-tts').checked=false;syncDialogueTtsLock('npo');   // 生成对白语音默认关(2026-09-13);后期配音时锁死为开
   $('#npo-narration').checked=false;   // 新建项目旁白默认关闭(2026-09-01 用户拍板);存量项目缺省仍为开
   $('#npd-ep').value=5;$('#npd-ep-auto').checked=false;$('#npd-ep').disabled=false;
-  $('#npd-smin').value=0.5;$('#npd-smax').value=15;
+  $('#npd-smin').value=0.5;$('#npd-smax').value=15;$('#npd-extend').value=50;
   $('#npd-longtake').checked=false;$('#npd-longtake-mode').value='last_frame';npdLongtakeWarn();   // 长镜头默认关闭,连接方式默认尾帧图片
   sgApplyPreset('npsg','sd25');   // 分镜组默认按 Seedance 2.5 口径(30s/30图/10视频/10音频,2026-09-09);同时按模型联动白模开关
 }
@@ -1495,6 +1501,7 @@ function npValidateStep(n){   // 返回错误文案,''=通过(规则与各设置
     {const ce=trCloseValidate('npd');if(ce)return ce}
     if(!$('#npd-ep-auto').checked&&!(ep>0))return '每集时长需大于 0';
     if(!(mn>0&&mx>=mn))return '分镜时长需满足 0 < 下限 ≤ 上限';
+    {const ext=parseFloat($('#npd-extend').value);if(!(ext>=0&&ext<=200))return '可加长单集需在 0–200% 之间'}
   }
   return '';
 }
@@ -1514,7 +1521,8 @@ function npCollectSettings(){   // 不含 review:新建项目审核全 0(评委 
       platforms:[...document.querySelectorAll('.npo-platform:checked')].map(c=>c.value)},
     duration:{episode_minutes:$('#npd-ep-auto').checked?'auto':parseFloat($('#npd-ep').value),
       shot_min_s:parseFloat($('#npd-smin').value),shot_max_s:parseFloat($('#npd-smax').value),
-      long_take:$('#npd-longtake').checked,long_take_mode:$('#npd-longtake-mode').value},
+      long_take:$('#npd-longtake').checked,long_take_mode:$('#npd-longtake-mode').value,
+      episode_extend_pct:parseFloat($('#npd-extend').value)},
     shot_group:{max_group_s:parseFloat($('#npsg-maxs').value),
       max_ref_images:parseInt($('#npsg-imgs').value),
       max_ref_videos:parseInt($('#npsg-vids').value),
@@ -1877,6 +1885,7 @@ async function openDurModal(){
     $('#dur-ep').value=auto?10:(d.episode_minutes??10);
     $('#dur-smin').value=d.shot_min_s??1;
     $('#dur-smax').value=d.shot_max_s??10;
+    $('#dur-extend').value=d.episode_extend_pct??50;   // 可加长单集 %(2026-10-03 时间尺)
     $('#dur-longtake').checked=d.long_take===true;
     $('#dur-longtake-mode').value=d.long_take_mode==='tail_video'?'tail_video':'last_frame';
     DUR_DRAFT_RES=(cfg.output||{}).draft_resolution||'480p';
@@ -1896,11 +1905,13 @@ $('#dur-ok').onclick=async()=>{
   const ep=parseFloat($('#dur-ep').value),mn=parseFloat($('#dur-smin').value),mx=parseFloat($('#dur-smax').value);
   if(!epAuto&&!(ep>0)){$('#dur-err').textContent='每集时长需大于 0';return}
   if(!(mn>0&&mx>=mn)){$('#dur-err').textContent='分镜时长需满足 0 < 下限 ≤ 上限';return}
+  const ext=parseFloat($('#dur-extend').value);
+  if(!(ext>=0&&ext<=200)){$('#dur-err').textContent='可加长单集需在 0–200% 之间';return}
   const trc=trModeCollect('dur');
   if(trc.mode==='custom'&&!(trc.insert_budget_pct>=0&&trc.insert_budget_pct<=30)){$('#dur-err').textContent='过场时长预算需在 0–30% 之间';return}
   {const ce=trCloseValidate('dur');if(ce){$('#dur-err').textContent=ce;return}}
   try{
-    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),duration:{episode_minutes:epAuto?'auto':ep,shot_min_s:mn,shot_max_s:mx,long_take:$('#dur-longtake').checked,long_take_mode:$('#dur-longtake-mode').value},transitions:trc});
+    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),duration:{episode_minutes:epAuto?'auto':ep,shot_min_s:mn,shot_max_s:mx,long_take:$('#dur-longtake').checked,long_take_mode:$('#dur-longtake-mode').value,episode_extend_pct:ext},transitions:trc});
     await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/brief',{project:curProj(),rhythm:rhythmCollect('dur')});   // 只带 rhythm,构想/风格由服务端保留
     $('#dur-modal').style.display='none';
   }catch(e){$('#dur-err').textContent='保存失败:'+e.message}

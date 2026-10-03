@@ -203,16 +203,21 @@ phases:
           outputs: ["story/episodes/{ep}/screenplay.md"],   # 只把 dramatize 事件写成场,每场首行 [事件] 行;机检 code/check_screenplay_events.py --project --ep(§5A,2026-09-12)
           validation: { auto: [id_refs_valid, dramatized_events_covered, cut_events_absent, scene_has_dramatized_event], rubric: writing_v1, qa: [11-qa/logic-qa] } }
       - { id: p5-dialogue, agent: 01-story/dialogue-rewrite, for_each: episode, depends_on: [p5-screenplay],
-          validation: { auto: [style_hit_rate_gte_80, line_duration_fits] } }   # line_duration_fits:code/check_dialogue_fit.py 无 shot_list 时的「仅剧本层」模式(line_le_cap + line_est_consistent,2026-08-30)
+          validation: { auto: [style_hit_rate_gte_80, line_duration_fits] } }   # 2026-10-03 起每句对白行元信息随 emotion 写 pace: fast|medium|slow(语速档),估时按时间尺(modules/time_cost.py)   # line_duration_fits:code/check_dialogue_fit.py 无 shot_list 时的「仅剧本层」模式(line_le_cap + line_est_consistent,2026-08-30)
       - { id: p5-narration, agent: 01-story/narration, for_each: episode, depends_on: [p5-dialogue],
           condition: narration_enabled,   # 「📤 输出设置」旁白开关(默认关;2026-09-16 起未配置过的存量项目也视为关);关=用户约定全片无任何旁白,不派发、g5 不因缺我而 HOLD(§7D)
           outputs: ["story/episodes/{ep}/narration.md"],   # 每条带场景锚点 + est_duration_s(按 narrator 声线实测语速估算)
           validation: { auto: [pov_consistent_100, every_entry_anchored_with_est_duration], qa: [11-qa/logic-qa] } }
       - { id: p5-hooks, agent: 01-story/hook, for_each: episode, depends_on: [p5-narration],
           outputs: ["story/episodes/{ep}/hooks.json"], validation: { rubric: creative_v1, qa: [human_pick] } }
+      # 时间预算(2026-10-03,docs/time_cost.md):分时长前宿主按时间尺算每场内容需求(台词估时含开口前后余量 + 动作节拍单价),
+      # Σ需求 > 集预算按用户拍板三步:加长单集(≤ 设置「可加长单集」%,pacing 写 duration_budget_s + duration_policy)> 精简台词
+      # (trim_targets 回派 dialogue-rewrite)> 合并动作短镜(merge_candidates 交 storyboard)。code/check_time_budget.py --scope script
       - { id: p5-pacing, agent: 01-story/pacing, for_each: episode, depends_on: [p5-hooks],
-          outputs: ["story/episodes/{ep}/pacing.json"],
-          validation: { auto: [total_duration_pm_10pct], qa: [07-directing/director] } }
+          outputs: ["story/episodes/{ep}/pacing.json", "story/episodes/{ep}/time_budget.json"],
+          validation: { auto: [total_duration_pm_10pct, scene_time_budget_ok, episode_time_budget_ok,
+                               pacing_budget_adopted, pacing_extension_within_cap, pacing_total_matches_budget],
+                        qa: [07-directing/director] } }
       - { id: p5-breakdown, agent: 01-story/timeline-story, for_each: episode, depends_on: [p5-pacing],
           outputs: ["story/episodes/{ep}/script_breakdown.json"],   # 剧本拆解表(2026-09-11):剧情层产物的结构化视图,供「剧本预览」页与 H3 审看;只读拆解,不改剧本
           validation: { auto: [script_breakdown_ok] } }   # code/check_script_breakdown.py --project --ep
@@ -253,7 +258,8 @@ phases:
       - { id: p6-storyboard, agent: 07-directing/storyboard, depends_on: [p6-plan, p6-env-concept],   # 白模开启时 blocking_map 引用本集场景 layout.json 地标,须等本集场景布局包出齐
           outputs: ["directing/{ep}/storyboard.json"],   # 含 groups_draft(生成组草案)、每组 scene_refs/blocking_map(人物起点/动线/终点标注,引用场景 layout.json 地标)、每组 costumes(角色→COS-id,2026-08-26)、每镜 view_tile
           validation: { auto: [scene_coverage_100, every_shot_in_group, blocking_map_present, creature_refs_valid,
-                               costume_refs_valid, transition_ok], rubric: visual_plan_v1 } }   # transition_ok:每组按导演转场清单登记 transition_in(受控枚举)/narrative_block(闪回等块成对),WORKFLOW.md §9C(2026-08-28)   # costume_refs_valid:每组每个出场角色有 costumes[CHAR]=合法 COS-id(属该角色);换装点不得落在组内(2026-08-26)   # blocking_map_present:code/blocking_map_check.py --source storyboard --strict(2026-09-07 起只机检、不再渲染动线草图)
+                               costume_refs_valid, transition_ok,
+                               shot_time_budget_ok, group_density_ok], rubric: visual_plan_v1 } }   # 时间尺(2026-10-03):code/check_time_budget.py --scope shots --source storyboard   # transition_ok:每组按导演转场清单登记 transition_in(受控枚举)/narrative_block(闪回等块成对),WORKFLOW.md §9C(2026-08-28)   # costume_refs_valid:每组每个出场角色有 costumes[CHAR]=合法 COS-id(属该角色);换装点不得落在组内(2026-08-26)   # blocking_map_present:code/blocking_map_check.py --source storyboard --strict(2026-09-07 起只机检、不再渲染动线草图)
       - { id: g6s, gate: true, human: true, checkpoint: H3S-故事板确认, depends_on: [p6-storyboard] }   # 2026-09-11:用户在「📋 故事板」页(/preview/board)看分镜草案逐场逐镜表(可按需出铅笔草图,草图不是签字前置)后签字;未签字不派 shot-planning;签字后 storyboard.json 又改动则页面标「签字已过期」,orchestrator 重新建单
       - { id: p6-shots, agent: 07-directing/shot-planning, depends_on: [g6s],
           outputs: ["directing/{ep}/shot_list.json"],    # 含 generation_groups(定稿生成组)、narration_anchors(旁白挂点定稿:每条旁白→镜/组区间+可用画面窗口)、逐组 audio_plan(dialogue/narration_over/ambient_only)
@@ -263,6 +269,7 @@ phases:
                                narration_anchors_cover_all, narration_window_gte_est_x1.15,   # 旁白开关关闭时两项自动跳过(skipped: narration off),且 audio_plan 禁 narration_over(code/check_generation_groups.py)
                                group_audio_plan_defined, ambient_only_groups_justified,
                                dialogue_est_fits_group_x0.7,   # 2026-08-30 起由 code/check_dialogue_fit.py 执行(dialogue_fit_group),超限不再自查放行——定稿后固定进 p6-dialogue-fit 精简环节
+                               shot_time_budget_ok, group_density_ok,   # 时间尺(2026-10-03):每镜镜长 ≥ 节拍单价 + 台词估时 + 余量;平均镜长 <1.5s 的密集组 ≤15s(code/check_time_budget.py --scope shots;group_density_ok 也内置于 check_generation_groups.py)
                                creature_refs_valid,   # 每镜 creatures[] / 组 creatures_union 引用须存在于 bible/creatures/index.json(2026-08-26)
                                costume_refs_valid,    # 每镜 costumes{CHAR:COS} / 组 costumes_by_char 合法且组内同角色同一套;换装点只能落在组边界(costume_change_on_group_boundary,2026-08-26)
                                transition_ok,         # 组入口转场 transition_in:类型枚举/时长范围/非硬切必填 intent+reason/Σ可渲染 ≤ 集预算 1%/narrative_block 成对连续(code/check_generation_groups.py 内置,WORKFLOW.md §9C,2026-08-28)
@@ -295,7 +302,8 @@ phases:
           outputs: ["directing/{ep}/cinematography.json"], validation: { qa: [06-art/art-director] } }
       - { id: p6-blocking, agent: 07-directing/blocking, for_each: shot, depends_on: [p6-shots, p6-dialogue-fit],   # performance.trigger 取自定稿台词,须待对白精简完成(2026-08-30)
           outputs: ["directing/{ep}/shots/{shot}/blocking.json"],
-          validation: { auto: [presence_consistent_with_timeline, blocking_on_map] } }   # blocking_on_map:本镜站位落在组 blocking_map 动线上,地标词取场景 layout.json name_en
+          validation: { auto: [presence_consistent_with_timeline, blocking_on_map,
+                               beat_budget_ok, beat_spacing_ok] } }   # blocking_on_map:本镜站位落在组 blocking_map 动线上,地标词取场景 layout.json name_en;beat_*:时间尺节拍预算(2026-10-03,code/check_time_budget.py --scope blocking)
       - { id: p6-continuity, agent: 07-directing/continuity-planning,
           depends_on: [p6-camera, p6-composition, p6-blocking],
           outputs: ["directing/{ep}/continuity_plan.json"],   # 含 group_transitions(组间衔接检查)
@@ -351,6 +359,7 @@ phases:
                                scene_plate_bound,  # 场景图(正向/反向,2026-09-17,白模关闭项目):refs 在角色/生物 sheet 之后挂该场景正向图(+有镜标 reverse 时的反向图)、不再挂该场景旧概念图/俯视图,正文 Shot 1: 前固定段 Scene plates: + 每个 Shot 段头 Scene plate: this shot uses [Image N] … and not [Image M].(code/sync_scene_plates.py;白模开启 skipped)
                                shot_plate_bound,  # 分镜背景图已生成的组:refs 在角色/生物 sheet 之后按镜序挂各镜背景图(两张图的镜 start+end 都挂,不走首尾帧模式)+ 正文 Shot 1: 前固定段 Shot plates:(逐镜 [Image N] 说明句);背景图机位与当前白模不一致 WARN 过期(code/sync_shot_plates.py,2026-09-09;开关关闭 skipped)
                                nonspeech_group_prompt_ok,   # §7D ③:narration_over/ambient_only 组禁 {} 台词、必含无对白约束句;narration_over 组声明配后期旁白
+                               prompt_beats_bound,   # 时间尺(2026-10-03):每个 Shot 段顺序连接词数 ≤ blocking 节拍数 + 1,prompt 只把节拍写细不加顺序动作(code/check_time_budget.py --scope prompt)
                                prompt_skill_applied,   # §7F:组 json 回执 skill_applied 与项目「提示词技能」快照一致(id/sha256/checklist),code/prompt_skill_check.py
                                sd25_prompt_structure,   # 2026-09-09:套用 sd25-pe 的组正文必须按 2.5 官方结构(【人物】/【动作与声音】分组、每镜「使用/不采用」清单、【未采用素材】、【保持一致】;【场景】槽位由 sync_shot_plates 写),同脚本自动执行
                                h3_prompt_structure,   # 2026-09-09:期望 h3-pe 的组正文必须按 H3 Ref2VA 六段结构(subject_definitions 逐图 <Subject N>…<Picture i> / retention_analysis 逐份 / <d> 台词 / <Audio N> 绑 (Sx);背景图 <Picture N> 构图锚与 Plate anchor 由 sync_shot_plates 写),同脚本自动执行;自述 checklist 不算数。原注释:套用 sd25-pe 的组正文必须按 2.5 官方结构(【人物】/【动作与声音】分组、每镜「使用/不采用」清单、【未采用素材】、【保持一致】;【场景】槽位由 sync_shot_plates 写),同脚本自动执行;自述 checklist 不算数。原注释:组 json 回执 skill_applied 与项目「提示词技能」快照一致(id/sha256/checklist;不套用时 id=null+reason),code/prompt_skill_check.py;运行时另核 prompt_skill_read——漏读 SKILL.md 的运行直接 error 退回(2026-08-28)
@@ -370,7 +379,7 @@ phases:
           depends_on: [p7-consistency, p7-video@prev_group, p8-voiceprints, p8-narrator],  # 组序串行:前组尾帧作续接锚(仅「长镜头」开启的项目;关闭时无续接链,prev_group 依赖可解除、组可并行,2026-09-01);对白组台词干声作 reference_audio 音色锚(仅锚音色,对白语音口型模型原生;TTS 严禁作配音,§8A 红线);旁白/对白实测适配 narration_fit、dialogue_fit 未过不派发(§7D ②);开跑前核对 refs 素材完备(剧情道具缺参考图=违规配置退回,prop_ref_attached)
           # 组 json 有 video_refs(白模 camera.mp4,2026-09-07;2026-09-08 起无 top.mp4)时按序传 --ref-video;方舟/MiniMax 参考视频须公网 URL(文件托管已配置)
           outputs: ["assets/clips/{ep}/{group}.mp4", "assets/clips/{ep}/{group}.meta.json"],
-          validation: { auto: [group_duration_pm_1s, fps_ok, resolution_ok, audio_track_present,   # resolution_ok:画幅 16:9/9:16 只是大致比例——引擎原生输出近似比例(如 480p 档 864x496)即合规,不得因非严格 16:9/9:16 判失败或索要用户豁免(2026-08-03 Thedouble2 前科)
+          validation: { auto: [group_duration_pm_1s, fps_ok, resolution_ok, audio_track_present, dialogue_audible,   # dialogue_audible(2026-10-03):对白镜计划时段 ±1.5s 窗内最长人声段 / 台词估时 <0.3 判疑似整句缺失(code/check_dialogue_audible.py,不转写);resolution_ok:画幅 16:9/9:16 只是大致比例——引擎原生输出近似比例(如 480p 档 864x496)即合规,不得因非严格 16:9/9:16 判失败或索要用户豁免(2026-08-03 Thedouble2 前科)
                                last_frame_saved, boundaries_detected],
                         rubric: visual_gen_v1, qa: [11-qa/visual-qa] } }
       - { id: p7-dub, agent: 09-audio/voice-generation, depends_on: [p7-video],

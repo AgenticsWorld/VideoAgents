@@ -4063,4 +4063,7 @@ window.I18N_DICT = {
 "{b}/{n} 句已写": "{b}/{n} lines directed",
 "加载失败:{e}": "Failed to load: {e}",
 "已保存,点「刷新对白语音」重出这一句": "Saved. Click “Refresh dialogue speech” to re-synthesize this line",
+"可加长单集": "Episode extension cap",
+"剧本按时间尺(台词 + 动作节拍)算出的内容需求超过每集时长时,先把该集最多加长这个比例;仍装不下再精简台词,最后合并动作短镜。0 = 不允许加长。": "When the script's content need, measured by the time scale (dialogue + action beats), exceeds the episode length, the episode is first extended by at most this percentage; if it still does not fit, dialogue is trimmed, and finally short action shots are merged. 0 = no extension allowed.",
+"可加长单集需在 0–200% 之间": "Episode extension cap must be between 0 and 200%",
 };

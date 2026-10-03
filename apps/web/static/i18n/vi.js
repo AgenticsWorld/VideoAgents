@@ -4052,4 +4052,7 @@ window.I18N_DICT = {
 "{b}/{n} 句已写": "Đã viết {b}/{n} câu",
 "加载失败:{e}": "Tải thất bại: {e}",
 "已保存,点「刷新对白语音」重出这一句": "Đã lưu. Bấm “Làm mới giọng thoại” để tổng hợp lại câu này",
+"可加长单集": "Giới hạn kéo dài tập",
+"剧本按时间尺(台词 + 动作节拍)算出的内容需求超过每集时长时,先把该集最多加长这个比例;仍装不下再精简台词,最后合并动作短镜。0 = 不允许加长。": "Khi nhu cầu nội dung của kịch bản theo thước thời gian (thoại + nhịp hành động) vượt thời lượng tập, tập được kéo dài trước, tối đa theo tỷ lệ này; nếu vẫn không đủ thì rút gọn thoại, cuối cùng gộp các cảnh hành động ngắn. 0 = không cho phép kéo dài.",
+"可加长单集需在 0–200% 之间": "Giới hạn kéo dài tập phải trong khoảng 0–200%",
 };

@@ -4052,4 +4052,7 @@ window.I18N_DICT = {
 "{b}/{n} 句已写": "{b}/{n} Zeilen mit Anweisung",
 "加载失败:{e}": "Laden fehlgeschlagen: {e}",
 "已保存,点「刷新对白语音」重出这一句": "Gespeichert. „Dialogsprache aktualisieren“ klicken, um diese Zeile neu zu synthetisieren",
+"可加长单集": "Max. Verlängerung pro Folge",
+"剧本按时间尺(台词 + 动作节拍)算出的内容需求超过每集时长时,先把该集最多加长这个比例;仍装不下再精简台词,最后合并动作短镜。0 = 不允许加长。": "Wenn der nach der Zeitskala (Dialog + Aktionsschläge) berechnete Inhaltsbedarf des Drehbuchs die Folgenlänge übersteigt, wird die Folge zuerst um höchstens diesen Prozentsatz verlängert; passt es dann immer noch nicht, werden Dialoge gekürzt und zuletzt kurze Aktionseinstellungen zusammengelegt. 0 = keine Verlängerung erlaubt.",
+"可加长单集需在 0–200% 之间": "Die max. Verlängerung pro Folge muss zwischen 0 und 200 % liegen",
 };

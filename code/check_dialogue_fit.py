@@ -6,16 +6,19 @@
 本脚本把原先「由 shot-planning 自查」的估时级机检落成宿主 CLI,并给 dialogue-rewrite 产出逐句精简目标,
 作为分镜定稿后的固定环节 p6-dialogue-fit(检查 → 超限精简 → 复检,H3A 签字前必 PASS)。
 
-估时口径(与 dialogue.md / narration.md 一致):
-  est_duration_s = 有效字符数 ÷ (该说话角色 bible/characters/<CHAR>/voice.json#speed_cpm 中点 ÷ 60)
+估时口径(2026-10-03 起走时间尺 modules/time_cost.py,docs/time_cost.md):
+  est_duration_s = 0.7s 起止余量 + 有效字符数 ÷ 语速 + 0.4s × 句中停顿数
+  语速 = 该说话角色 bible/characters/<CHAR>/voice.json#speed_cpm 中点 ÷ 60 × 语速档倍率(对白行 `pace: fast|medium|slow`,
+  由 dialogue-rewrite 随情绪写;没写按情绪标签猜,猜不出 medium);
   有效字符 = 汉字/假名/谚文 + 拉丁字母数字(每字符 1),标点、空白、括注不计;
   无 voice.json / 无 speed_cpm 的说话人(群演等):有记录 est_duration_s 则信记录值,否则按本项目各角色语速中点的中位数估
   (项目无 voice.json 时 240);一律报 WARN speaker_speed_unknown,不参与 line_est_consistent。
+  存量(剧本 generated_at / shot_list 日期早于 2026-10-03)沿用旧公式「字数 ÷ 语速」比对,镜级只 WARN。
 
 机检项(FAIL 退出码 1;WARN 不影响退出码):
   1. dialogue_fit_group     每个 audio_plan=dialogue(或 has_dialogue)组:Σ台词估时 ≤ total_duration_s × ratio(默认 0.7)   FAIL
-  2. dialogue_fit_shot      每镜:Σ本镜台词估时 ≤ duration_s × shot_ratio(默认 1.0,物理装不下)                          FAIL
-                            Σ > duration_s × 0.85 报 WARN(紧,留不出反应/停顿)
+  2. dialogue_fit_shot      每镜:Σ本镜台词估时 + 开口前 0.4s + 说完后 0.3s ≤ duration_s(新集 FAIL;存量按旧口径
+                            Σ估时 ≤ duration_s × shot_ratio FAIL、> 0.85 WARN)
   3. line_le_cap            单句估时 ≤ settings.json#duration.shot_max_s × ratio(缺省 shot_max 10s)——Phase 5 line_duration_fits 同口径  FAIL
   4. line_est_consistent    shot_list / screenplay 记录的 est_duration_s 与按文本+语速重算值一致(容差 max(0.25s, 10%))——
                             台词改短后没同步估时 = 闸门失效                                                                  FAIL
@@ -49,6 +52,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import parse_args  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from modules.dialogue_tts import name_index, resolve_speaker  # noqa: E402  与逐句语音库同一套说话人解析(#58)
+from modules import time_cost as tc  # noqa: E402  时间尺(2026-10-03)
 
 GROUP_RATIO = 0.7          # §7D ①:Σ台词估时 ≤ 组总时长 × 0.7
 SHOT_RATIO = 1.0           # 镜级:物理装不下即 FAIL
@@ -61,6 +65,8 @@ EST_TOL_REL = 0.10         # 估时一致性相对容差
 _EFF_RE = re.compile(r"[0-9A-Za-z぀-ヿ㐀-䶿一-鿿豈-﫿가-힯]")
 _META_RE = re.compile(r"\s*\{[^{}]*\}\s*$")
 _EST_RE = re.compile(r"(est_duration_s\s*[:：]\s*)([0-9]+(?:\.[0-9]+)?)")
+_PACE_RE = re.compile(r"\bpace\s*[:：]\s*(fast|medium|slow)\b", re.I)
+_EMO_RE = re.compile(r"emotion\s*[:：]\s*([^,，}]+)")
 _CHAR_RE = re.compile(r"(CHAR-\d+)")
 # screenplay 对白行:- **老道儿(CHAR-0002)**(括注):台词 {emotion: …, est_duration_s: 1.6, …}
 _SP_LINE_RE = re.compile(r"^\s*[-*]\s*\*\*(?P<who>[^*]+?)\*\*\s*(?P<paren>(?:[(（][^()（）]*[)）]\s*)*)[:：]\s*(?P<body>.+?)\s*$")
@@ -86,6 +92,15 @@ def strip_meta(body: str) -> str:
 def meta_est(body: str):
     m = _EST_RE.search(body or "")
     return float(m.group(2)) if m else None
+
+
+def meta_pace(body: str) -> str:
+    """对白行花括号元信息里的 `pace: fast|medium|slow`;没写按 emotion 猜(猜不出返回空 = medium)。"""
+    m = _PACE_RE.search(body or "")
+    if m:
+        return m.group(1).lower()
+    e = _EMO_RE.search(body or "")
+    return tc.guess_pace(e.group(1)) if e else ""
 
 
 def speaker_id(who: str, names: dict | None = None):
@@ -131,8 +146,11 @@ def load_speeds(proj_root: Path) -> dict:
     return out
 
 
-def est_seconds(text: str, cpm: float) -> float:
-    return round(eff_chars(text) / (cpm / 60.0), 1)
+def est_seconds(text: str, cpm: float, pace: str = "", legacy: bool = False) -> float:
+    """台词估时:新口径走时间尺(起止余量 + 字数 ÷ 语速档 + 停顿);legacy=True 沿用旧公式(字数 ÷ 语速)。"""
+    if legacy:
+        return tc.line_est_legacy(text, cpm)
+    return tc.line_est(text, pace, cpm)
 
 
 # ---------------------------------------------------------------- 剧本对白层
@@ -160,7 +178,7 @@ def parse_screenplay_lines(md_text: str) -> list:
         if not text:
             continue
         out.append({"scene": scene, "speaker": speaker_id(m.group("who")), "who": m.group("who").strip(),
-                    "text": text, "est_recorded": meta_est(body), "lineno": i})
+                    "text": text, "est_recorded": meta_est(body), "pace": meta_pace(body), "lineno": i})
     return out
 
 
@@ -215,7 +233,7 @@ def parse_dialogue_md(md_text: str) -> tuple:
             text = strip_meta(body)
             if text:
                 bullets.append({"speaker": speaker_id(mb.group("who")), "who": mb.group("who").strip(),
-                                "text": text, "est_recorded": meta_est(body), "lineno": i})
+                                "text": text, "est_recorded": meta_est(body), "pace": meta_pace(body), "lineno": i})
     return idx, bullets
 
 
@@ -234,7 +252,8 @@ def shot_lines(shot: dict, dlg_idx: dict, names: dict | None = None) -> list:
                 if text:
                     sid, raw = resolve_speaker(ln, names or {})
                     out.append({"speaker": sid or raw or None, "speaker_name": raw or None, "text": text,
-                                "est_recorded": ln.get("est_duration_s"), "ref": ln.get("id") or ln.get("ref")})
+                                "est_recorded": ln.get("est_duration_s"), "ref": ln.get("id") or ln.get("ref"),
+                                "pace": tc.norm_pace(ln.get("pace")) or tc.guess_pace(ln.get("emotion") or ln.get("tone") or "")})
             elif isinstance(ln, str) and ln.strip():
                 mm = re.match(r"^(?:S\d+/)?(CHAR-\d+)\s*[:：]\s*(.+)$", ln.strip())
                 out.append({"speaker": mm.group(1) if mm else None, "text": mm.group(2) if mm else ln.strip(),
@@ -256,7 +275,7 @@ def shot_lines(shot: dict, dlg_idx: dict, names: dict | None = None) -> list:
 
 # ---------------------------------------------------------------- 主检
 def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ratio=SHOT_RATIO,
-        write_est=False, strict=False):
+        write_est=False, strict=False, legacy_override=None):
     ddir = proj_root / "directing" / ep
     sdir = proj_root / "story" / "episodes" / ep
     sl_path = ddir / "shot_list.json"
@@ -275,6 +294,16 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
 
     sp_text = sp_path.read_text() if sp_path.exists() else ""
     dm_text = dm_path.read_text() if dm_path.exists() else ""
+    # 存量判定(2026-10-03 时间尺):剧本 front matter generated_at / shot_list 日期早于截止 = 旧公式比对、镜级只 WARN
+    sl_doc = None
+    if sl_path.exists():
+        try:
+            sl_doc = json.loads(sl_path.read_text())
+        except Exception:
+            sl_doc = None
+    legacy = tc.is_legacy(tc.doc_date(sl_doc) if sl_doc else tc.frontmatter_date(sp_text))
+    if legacy_override is not None:
+        legacy = legacy_override
     sp_lines = parse_screenplay_lines(sp_text) if sp_text else []
     dlg_idx, dm_bullets = parse_dialogue_md(dm_text) if dm_text else ({}, [])
     source_name = "screenplay.md" if sp_lines else ("dialogue.md" if dm_bullets or dlg_idx else None)
@@ -306,7 +335,7 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
         spk = ln.get("speaker")
         known = spk in speeds
         cpm = cpm_of(spk)
-        est = est_seconds(ln["text"], cpm)
+        est = est_seconds(ln["text"], cpm, ln.get("pace") or "", legacy)
         rec = ln.get("est_recorded")
         if not known and rec is not None:
             est = round(float(rec), 1)   # 无语速设定的说话人:信记录值
@@ -326,7 +355,10 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "episode": ep, "ratio": ratio, "shot_ratio": shot_ratio, "shot_tight_ratio": SHOT_TIGHT_RATIO,
         "line_cap_s": line_cap_s, "shot_max_s": shot_max_s,
-        "est_formula": "eff_chars / (speed_cpm_mid / 60); eff_chars = CJK + [A-Za-z0-9]",
+        "est_formula": ("eff_chars / (speed_cpm_mid / 60); eff_chars = CJK + [A-Za-z0-9]  [legacy]" if legacy else
+                        f"{tc.ONSET_S} + eff_chars / (speed_cpm_mid / 60 × pace_factor) + {tc.PAUSE_S} × inner_pauses; "
+                        f"shot: Σest + {tc.PRE_SPEECH_S} + {tc.POST_SPEECH_S} per line ≤ duration (modules/time_cost.py)"),
+        "legacy": legacy, "pre_speech_s": tc.PRE_SPEECH_S, "post_speech_s": tc.POST_SPEECH_S,
         "speed_source": "bible/characters/<CHAR>/voice.json#speed_cpm midpoint", "fallback_cpm": fallback_cpm,
         "dialogue_source": source_name, "source_lines_total": len(source_lines),
         "mode": "full" if sl_path.exists() else "source_only",
@@ -336,11 +368,11 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
     if not sl_path.exists():
         warns.append(f"shot_list_missing: 未找到 {sl_path},仅做剧本层检查(line_le_cap / line_est_consistent)")
         if write_est:
-            _write_est_md(sp_path, sp_lines, speeds)
-            _write_est_md(dm_path, dm_bullets, speeds)
+            _write_est_md(sp_path, sp_lines, speeds, legacy=legacy)
+            _write_est_md(dm_path, dm_bullets, speeds, legacy=legacy)
         return _finish(report, errs, warns, unknown_speakers, ddir, strict, fallback_cpm)
 
-    sl = json.loads(sl_path.read_text())
+    sl = sl_doc if sl_doc is not None else json.loads(sl_path.read_text())
     shots = {s.get("shot_id"): s for s in sl.get("shots") or []}
     groups = sl.get("generation_groups") or []
     if groups_filter:
@@ -376,7 +408,7 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
                 spk = speaker_id(ln.get("speaker") or "", names)
                 known = spk in speeds
                 cpm = cpm_of(spk)
-                est = est_seconds(ln["text"], cpm)
+                est = est_seconds(ln["text"], cpm, ln.get("pace") or "", legacy)
                 if not known and ln.get("est_recorded") is not None:
                     est = round(float(ln["est_recorded"]), 1)   # 无语速设定的说话人:信记录值,只报 WARN
                 chars = eff_chars(ln["text"])
@@ -409,12 +441,21 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
             sest = round(sest, 1)
             srec["est_s"] = sest
             srec["ratio"] = round(sest / dur, 3) if dur else None
-            if dur and sest > dur * shot_ratio + 1e-9:
+            n_lines = len(srec["lines"])
+            margin = round(n_lines * (tc.PRE_SPEECH_S + tc.POST_SPEECH_S), 1) if n_lines else 0.0
+            srec["margin_s"] = margin
+            if not legacy and dur and n_lines and sest + margin > dur + 1e-9:
+                # 新口径:对白镜必须留开口前后余量(fengshen3 ep07 前科:镜长 = 估时,5s 台词被模型整句丢掉)
+                srec["status"] = "over"
+                shot_over += 1
+                errs.append(f"{gid}/{sid} dialogue_fit_shot: Σ台词估时 {sest}s + 开口前后余量 {margin}s = {round(sest + margin, 1)}s"
+                            f" > 镜长 {dur:g}s(超 {round(sest + margin - dur, 1)}s;加镜长或精简台词)")
+            elif legacy and dur and sest > dur * shot_ratio + 1e-9:
                 srec["status"] = "over"
                 shot_over += 1
                 errs.append(f"{gid}/{sid} dialogue_fit_shot: Σ台词估时 {sest}s > 镜长 {dur:g}s × {shot_ratio}"
                             f"(超 {round(sest - dur * shot_ratio, 1)}s)")
-            elif dur and sest > dur * SHOT_TIGHT_RATIO + 1e-9:
+            elif dur and n_lines and sest > dur * SHOT_TIGHT_RATIO + 1e-9:
                 srec["status"] = "tight"
                 shot_tight += 1
                 warns.append(f"{gid}/{sid} dialogue_fit_shot: Σ台词估时 {sest}s 占镜长 {dur:g}s 的 {sest / dur:.0%}(>{SHOT_TIGHT_RATIO:.0%},紧)")
@@ -461,8 +502,8 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
         if not groups_filter:
             sl["dialogue_est_total_s"] = round(sum(gr["est_s"] for gr in report["groups"]), 1)
         sl_path.write_text(json.dumps(sl, ensure_ascii=False, indent=2) + "\n")
-        _write_est_md(sp_path, sp_lines, speeds)
-        _write_est_md(dm_path, dm_bullets, speeds)
+        _write_est_md(sp_path, sp_lines, speeds, legacy=legacy)
+        _write_est_md(dm_path, dm_bullets, speeds, legacy=legacy)
         report["write_est"] = True
 
     report["summary"] = {"groups_total": len(groups), "dialogue_groups_checked": g_checked, "groups_over": g_over,
@@ -483,7 +524,7 @@ def _trim_target(grec: dict) -> dict:
     lines = []
     for ln in grec["lines"]:
         cut_s = need * ln["est_s"] / pool if ln in cands else 0.0
-        tgt_chars = int((ln["est_s"] - cut_s) * ln["cpm"] / 60.0)  # 向下取整保证 Σ ≤ cap
+        tgt_chars = int(max(0.0, ln["est_s"] - cut_s) * ln["cpm"] / 60.0)  # 向下取整保证 Σ ≤ cap(新口径含余量,偏保守)
         tgt_chars = max(0, min(ln["chars"], tgt_chars))
         lines.append({"shot_id": ln["shot_id"], "speaker": ln["speaker"], "text": ln["text"], "chars": ln["chars"],
                       "est_s": ln["est_s"], "target_chars": tgt_chars, "cut_chars": ln["chars"] - tgt_chars})
@@ -494,7 +535,7 @@ def _trim_target(grec: dict) -> dict:
             "lines": lines}
 
 
-def _write_est_md(path: Path, lines: list, speeds: dict, fallback: float = DEFAULT_CPM):
+def _write_est_md(path: Path, lines: list, speeds: dict, fallback: float = DEFAULT_CPM, legacy: bool = False):
     """把对白行 `{… est_duration_s: X …}` 的数字按重算值回写(只改数字,其余一字不动)。"""
     if not path.exists() or not lines:
         return
@@ -506,7 +547,7 @@ def _write_est_md(path: Path, lines: list, speeds: dict, fallback: float = DEFAU
             continue
         est = ln.get("est")
         if est is None:
-            est = est_seconds(ln["text"], speeds.get(ln.get("speaker"), fallback))
+            est = est_seconds(ln["text"], speeds.get(ln.get("speaker"), fallback), ln.get("pace") or "", legacy)
         new = _EST_RE.sub(lambda m: f"{m.group(1)}{est}", src[i - 1], count=1)
         if new != src[i - 1]:
             src[i - 1] = new
@@ -542,9 +583,11 @@ def main():
         ap.add_argument("--report", default=None, help="报告路径(默认 directing/epNN/dialogue_fit.json)")
         ap.add_argument("--no-report", action="store_true", help="不写报告文件")
         ap.add_argument("--strict", action="store_true", help="WARN 也视为 FAIL")
+        ap.add_argument("--legacy", dest="legacy", action="store_true", default=None, help="强制按旧口径(字数 ÷ 语速,无余量)")
+        ap.add_argument("--new", dest="legacy", action="store_false", help="强制按新口径(时间尺)")
     args, proj_root = parse_args("对白时长适配机检 dialogue_fit(WORKFLOW.md §7D ①)", configure=cfg)
     rep = run(proj_root, args.ep, args.groups or None, ratio=args.ratio, shot_ratio=args.shot_ratio,
-              write_est=args.write_est, strict=args.strict)
+              write_est=args.write_est, strict=args.strict, legacy_override=args.legacy)
     for w in rep["warnings"]:
         print("WARN", w)
     for e in rep["errors"]:

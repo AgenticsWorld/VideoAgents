@@ -536,6 +536,27 @@ refs/
 >     仍装不下才走分镜变更(shot-planning 调镜时长/拆组)。p6-blocking(表演触发词取自台词)与 H3A 签字以该节点
 >     PASS 为前置。估时口径统一:有效字符(汉字+英数字)÷(角色 voice.json `speed_cpm` 中点÷60),无语速设定的
 >     群演信记录值并 WARN。
+>   - **①″ 时间尺:台词 + 动作统一估时(2026-10-03,docs/time_cost.md,`modules/time_cost.py`,`python3 code/check_time_budget.py
+>     --project <slug> --ep epNN --scope script|shots|blocking|prompt`)**:前科 fengshen3 ep07 grp011(28s/21 镜)——视频丢了一句
+>     5 秒台词、后半段乱序,根因是上游三层同时超额分配时间:台词估时只算字数÷语速(语音库实测偏短约三成)、对白镜镜长 = 估时
+>     零余量(44 镜 34 镜占比 95–100%)、动作节拍从没人估过秒数(pacing 自上而下分 28s,blocking 1.2s 镜排三拍,prompt 再展开成五个
+>     动作)。改法:**一把尺四处用**——
+>     (a) 台词估时 = 0.7s 起止余量 + 有效字数 ÷(角色语速 × 语速档倍率 fast 1.19 / medium 1 / slow 0.81)+ 0.4s × 句中停顿数,
+>     语速档 `pace` 由 dialogue-rewrite 随 `emotion` 写进对白行元信息(shot_list `dialogue_lines[]` 照抄),台词演法工位的目标
+>     时长直接取它,不再被镜长截短;对白镜镜长 ≥ Σ估时 + 开口前 0.4s + 说完后 0.3s(`dialogue_fit_shot` 新集 FAIL);
+>     (b) 动作节拍按单价表取最短用时(转头/抬手 0.5、掷出/接住 0.7、转身 0.7、迈步 0.8、撞墙滑倒 1.2、起身 1.5、法宝亮起 1.0、
+>     保持 0.3,缺省 0.7;剧本散文里没有动作词的短句按描写 0.25);
+>     (c) **pacing 分时长前先算每场需求**(`--scope script`:Σ台词估时含余量 + Σ动作节拍),每场 `alloc_s` ≥ 需求;Σ需求 > 集预算
+>     按用户拍板顺序:**① 加长单集**(上限 = 基准预算 ×(1 + 项目设置「视频节奏 → 可加长单集」%,默认 50;pacing 写
+>     `duration_budget_s` + `duration_policy{kind: time_budget_extension, base_budget_s, extend_pct, need_s, reason}`,下游以调整后
+>     预算为基准)> **② 精简台词**(报告 trim_targets 回派 dialogue-rewrite)> **③ 合并动作短镜**(merge_candidates 交 storyboard);
+>     机检 scene_time_budget_ok / episode_time_budget_ok / pacing_budget_adopted / pacing_extension_within_cap / pacing_total_matches_budget;
+>     (d) 镜级(`--scope shots`,storyboard 与 shot-planning 都跑):镜长 ≥ 节拍单价 + 台词估时 + 余量(shot_time_budget_ok);**密集组
+>     (平均镜长 < 1.5s)总时长 ≤ 15s**(group_density_ok,用户拍板,不随项目组上限放宽;也内置于 check_generation_groups.py),按节拍链拆组;
+>     (e) 守门:blocking `beats[]` 单价之和 ≤ 镜长 − 台词估时、同人相邻节拍 ≥ 0.3s(beat_budget_ok / beat_spacing_ok);prompt 只把节拍
+>     写细不加顺序动作,顺序连接词数 ≤ 节拍数 + 1(prompt_beats_bound);出片后 `code/check_dialogue_audible.py` 按人声段核对
+>     每个对白镜(不转写),最长人声段 / 估时 < 0.3 判疑似整句缺失(dialogue_audible)。
+>     存量集(剧本 generated_at / shot_list 日期早于 2026-10-03)上述机检只 WARN、估时沿用旧公式比对。
 >   - **无声组核查**:每个 ambient_only 组必须逐组判定「纯画面 + 音效/环境声能否讲清该段叙事」
 >     并附理由(`silent_rationale`,如纯动作/氛围/蒙太奇段);讲不清的,默认回派 narration
 >     **补写旁白**(补写条目必须新版本写回 `narration.md` 并重过其机检与估时——narration.md

@@ -4054,4 +4054,7 @@ window.I18N_DICT = {
 "{b}/{n} 句已写": "{b}/{n} líneas con dirección",
 "加载失败:{e}": "Error al cargar: {e}",
 "已保存,点「刷新对白语音」重出这一句": "Guardado. Pulsa “Actualizar voz de diálogo” para volver a sintetizar esta línea",
+"可加长单集": "Alargue máximo por episodio",
+"剧本按时间尺(台词 + 动作节拍)算出的内容需求超过每集时长时,先把该集最多加长这个比例;仍装不下再精简台词,最后合并动作短镜。0 = 不允许加长。": "Cuando la necesidad de contenido del guion, medida con la escala de tiempo (diálogo + pulsos de acción), supera la duración del episodio, primero se alarga el episodio como máximo este porcentaje; si aún no cabe, se recortan los diálogos y, por último, se fusionan los planos de acción cortos. 0 = no se permite alargar.",
+"可加长单集需在 0–200% 之间": "El alargue máximo por episodio debe estar entre 0 y 200 %",
 };

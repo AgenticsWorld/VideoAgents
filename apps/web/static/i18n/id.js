@@ -4052,4 +4052,7 @@ window.I18N_DICT = {
 "{b}/{n} 句已写": "{b}/{n} kalimat sudah diarahkan",
 "加载失败:{e}": "Gagal memuat: {e}",
 "已保存,点「刷新对白语音」重出这一句": "Tersimpan. Klik “Segarkan suara dialog” untuk menyintesis ulang kalimat ini",
+"可加长单集": "Batas perpanjangan episode",
+"剧本按时间尺(台词 + 动作节拍)算出的内容需求超过每集时长时,先把该集最多加长这个比例;仍装不下再精简台词,最后合并动作短镜。0 = 不允许加长。": "Jika kebutuhan konten naskah menurut skala waktu (dialog + ketukan aksi) melebihi durasi episode, episode diperpanjang dulu paling banyak sebesar persentase ini; jika masih tidak muat, dialog dipangkas, dan terakhir shot aksi pendek digabung. 0 = tidak boleh diperpanjang.",
+"可加长单集需在 0–200% 之间": "Batas perpanjangan episode harus antara 0 dan 200%",
 };

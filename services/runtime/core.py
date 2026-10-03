@@ -957,8 +957,11 @@ DEFAULT_GENCONFIG = {
     # long_take_mode=连接方式(2026-09-23,仅长镜头开启时生效):last_frame=下组挂上组尾帧
     # 截图(默认);tail_video=下组挂上组最后 2–3s 视频向后续写(模型不支持/尾段不足/预算
     # 不足回退尾帧)。由设置决定,不区分连戏规划的 cut / continuous
+    # episode_extend_pct=可加长单集(2026-10-03 时间尺,默认 50):剧本内容按时间尺(台词 + 动作节拍)算出的需求超过
+    # 每集预算时,pacing 第一步把该集预算最多上调这个百分比(用户拍板的超预算顺序:加长单集 > 精简台词 > 合并动作短镜);
+    # 0 = 不允许加长。机检 code/check_time_budget.py --scope script
     "duration": {"episode_minutes": 10, "shot_min_s": 1, "shot_max_s": 10,
-                 "long_take": False, "long_take_mode": "last_frame"},
+                 "long_take": False, "long_take_mode": "last_frame", "episode_extend_pct": 50},
     # 过场模式(2026-09-24,docs/transition_design.md):minimal(现状:硬切为主,只按导演清单做叠化/黑白场)/ classic(字卡、全景扫动定场、
     # 叠字幕、定格、风格接缝)/ cinematic(定场+叠字、闪回生成式桥接、成对运镜)/ custom(六类边界逐项选 + 四附属项自填)。
     # 说明性字卡 / 插入预算 % / 生成式过场 / 新场景首镜定场 四项非 custom 时由 modules.transition_design.MODE_TABLE 派生、不落盘。
@@ -2029,8 +2032,9 @@ def _validate_duration(d: dict):
         assert (ep == "auto" or float(ep) > 0) and 0 < mn <= mx
         assert isinstance(d.get("long_take", False), bool)
         assert d.get("long_take_mode", "last_frame") in ("last_frame", "tail_video")
+        assert 0 <= float(d.get("episode_extend_pct", 50)) <= 200
     except (TypeError, ValueError, AssertionError):
-        raise ServiceError(400, "Invalid duration settings: episode duration must be > 0 or \"auto\"; shot duration must satisfy 0 < min <= max; long_take must be a boolean; long_take_mode must be last_frame or tail_video") from None
+        raise ServiceError(400, "Invalid duration settings: episode duration must be > 0 or \"auto\"; shot duration must satisfy 0 < min <= max; long_take must be a boolean; long_take_mode must be last_frame or tail_video; episode_extend_pct must be 0-200") from None
 
 
 def _validate_transitions(t: dict) -> dict:
@@ -3282,6 +3286,7 @@ def build_role_prompt(agent_id: str, project: str,
                    f"节奏(pacing)、剪辑(edit)一律以此为基准")
     shot_min = _fmt_num(dur.get("shot_min_s") or 1)
     shot_max = _fmt_num(dur.get("shot_max_s") or 10)
+    extend_pct = _fmt_num(dur.get("episode_extend_pct", 50) if dur.get("episode_extend_pct") is not None else 50)
     sg = ps.get("shot_group") or {}
     sg_max = _fmt_num(sg.get("max_group_s") or 15)
     sg_img = int(sg.get("max_ref_images", 9))
@@ -3334,7 +3339,8 @@ def build_role_prompt(agent_id: str, project: str,
 
 ## 用户时长设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档中的示例值)
 - 每集目标时长:{ep_line}
-- 单个分镜时长范围:{shot_min}–{shot_max} 秒 —— storyboard 的每镜时长建议与 shot-planning 的每镜终稿时长必须落在该区间。**对白承载(§7D ①/①′,2026-08-30)**:每组 Σ台词估时 ≤ 组时长×0.7、每镜 Σ ≤ 镜长、单句 ≤ {shot_max}×0.7 秒(估时 = 有效字符 ÷ 角色 voice.json speed_cpm 中点 ÷60);storyboard 起草分组、shot-planning 定镜时长都要按此装得下台词,定稿 shot_list 后由固定节点 p6-dialogue-fit(dialogue-rewrite)跑宿主 CLI `python3 code/check_dialogue_fit.py --project <slug> --ep epNN` 校验,超限按报告 trim_targets 只动对白文本层精简并 `--write-est` 复检;该节点 PASS 前不派 blocking、不发起 H3A,严禁靠压语速放行
+- 单个分镜时长范围:{shot_min}–{shot_max} 秒 —— storyboard 的每镜时长建议与 shot-planning 的每镜终稿时长必须落在该区间。**对白承载(§7D ①/①′,2026-10-03 改按时间尺)**:台词估时 = 0.7s 起止余量 + 有效字符 ÷(角色 voice.json speed_cpm 中点 ÷60 × 语速档倍率 fast 1.19 / medium 1 / slow 0.81)+ 0.4s × 句中停顿数,语速档取对白行 `pace`(dialogue-rewrite 随情绪写);**对白镜镜长 ≥ Σ台词估时 + 开口前 0.4s + 说完后 0.3s**(新集 FAIL;前科 fengshen3 ep07:镜长 = 估时,5 秒台词被模型整句丢掉),每组 Σ台词估时 ≤ 组时长×0.7、单句 ≤ {shot_max}×0.7 秒;storyboard 起草分组、shot-planning 定镜时长都要按此装得下台词,定稿 shot_list 后由固定节点 p6-dialogue-fit(dialogue-rewrite)跑宿主 CLI `python3 code/check_dialogue_fit.py --project <slug> --ep epNN` 校验,超限按报告 trim_targets 只动对白文本层精简并 `--write-est` 复检;该节点 PASS 前不派 blocking、不发起 H3A,严禁靠压语速放行
+- **时间尺与可加长单集(2026-10-03,docs/time_cost.md,`python3 code/check_time_budget.py --project <slug> --ep epNN --scope script|shots|blocking|prompt`)**:动作也按秒算——每个动作节拍按单价表取最短用时(转头 0.5 / 掷出 0.7 / 撞墙滑倒 1.2 / 起身 1.5 / 法宝亮起 1.0…,缺省 0.7,保持 0.3);**pacing 分配每场时长前先算该场需求 = Σ台词估时(含开口前后余量)+ Σ动作节拍**,Σ需求 > 每集预算时按用户拍板顺序处理:① **加长单集**——本集预算最多上调 **{extend_pct}%**(项目设置「视频节奏 → 可加长单集」,写 pacing.json `duration_budget_s` + `duration_policy{{kind: time_budget_extension, base_budget_s, extend_pct, need_s, reason}}`,shot-planning / edit 以调整后预算为基准);② 仍超 → **精简台词**(报告 trim_targets 回派 dialogue-rewrite);③ 仍超 → **合并动作短镜 / 删次要拍**(报告 merge_candidates 交 storyboard)。镜级:每镜镜长 ≥ Σ节拍单价 + 台词估时 + 余量;**密集组(平均镜长 < 1.5s)总时长 ≤ 15s**(按节拍链拆组,机检 group_density_ok);blocking 的 beats[] 单价之和 ≤ 镜长 − 台词估时、同人相邻节拍 ≥ 0.3s(beat_budget_ok / beat_spacing_ok);prompt 只把 blocking 的节拍写细,不加新的顺序动作(prompt_beats_bound:顺序连接词数 ≤ 节拍数 + 1)。存量集(产物日期早于 2026-10-03)这些机检只 WARN
 - 生成组(generation group)总时长上限:{sg_max} 秒(整数)—— storyboard 分组草案与 shot-planning 定稿的每组 Σ镜头时长必须 ≤{sg_max}s(项目「视频模型设置」,已由用户按所选视频模型的单次生成上限配置:Seedance 2.0 系列 15s、Seedance 2.5 30s;文档中出现的 15s 示例值一律以本设定为准,见 WORKFLOW.md §7A)
 - 长镜头(时长设置「长镜头」开关 + 「连接方式」尾帧图片/尾段视频):{long_take_line}
 - 每组参考素材数量上限(项目「视频模型设置」,优先级高于文档示例值):参考图 ≤{sg_img} 张、参考视频 ≤{sg_vid} 个、参考音频 ≤{sg_aud} 段 —— 这是**全局视频模型**的口径;模型侧硬限(Seedance 2.0:9图/3视频/3音频、参考音视频总时长各≤15s;Seedance 2.5:30图/10视频/10音频、总时长各≤30s)由 genmedia 提交前强制校验。**refs 按实际需要挂齐(2026-08-30 改):必挂项(每角色 sheet、每生物 sheet、场景干净俯视图+9 宫格、道具比例锚)与本组确需的按需项(额外脸部锚/道具细节图/手绘渲染图/前组尾帧)一律写入 refs,不得为凑上限省略必挂图、不得自行拆组;张数超过本组生效上限时照常落盘完整 refs 并标 `status: "blocked_refs_cap"` + `blocked_reason`(逐张路径与所属实体、上限值、超出张数),上报 orchestrator 转告用户——由用户在分镜预览决定:①「🎛 模型」给该组单独换参考图上限更高的视频模型(如 Seedance 2.5 ≤30 张,渠道不变),或 ②手动删减该组参考图;用户拍板后重派本组。视频生成工位对 `blocked_refs_cap` 或 refs 超本组生效上限的组禁开跑(refs_mandatory_le_cap);组级覆盖了模型的组,上限以该组模型硬限为准(见下方「组级覆盖」段,如有)**
