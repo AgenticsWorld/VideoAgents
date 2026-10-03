@@ -768,10 +768,10 @@ function epAudioSync(start){
 }
 function epAudioStop(){if(EPA){EPA.pause()}}
 /* ---------- 逐轨声音开关(2026-10-03):原声 / 配音 / 旁白 / BGM / 音效 五轨各一个 🔊 ----------
-   默认按项目「输出设置→对白配音」:视频原声 = 原声开、配音关;后期配音 = 原声关、配音开。原声 = 组视频 <video> 自带声轨;
+   默认按项目「输出设置→对白配音」:视频原声 = 原声开、配音关;后期配音 = 原声开、配音开(2026-10-03 用户改)。原声 = 组视频 <video> 自带声轨;
    其余四轨是分轨随播的外挂音频。只在逐轨分开出声的模式生效(单组;整集连播且没有混音成品);有混音成品 / 看成片时只放成品一条声轨,按钮灰显。 */
 let TRK={native:true,dialogue:false,narration:true,bgm:true,sfx:true};
-function trkInit(){const dub=(((D||{}).settings||{}).output||{}).dialogue_voice==='dubbing';TRK={native:!dub,dialogue:dub,narration:true,bgm:true,sfx:true}}
+function trkInit(){const dub=(((D||{}).settings||{}).output||{}).dialogue_voice==='dubbing';TRK={native:true,dialogue:dub,narration:true,bgm:true,sfx:true}}
 const trkMixed=()=>MODE==='final'||(MODE==='episode'&&!!((D||{}).finals||{}).final_audio);
 const nativeOn=()=>LAYERS.sound&&(trkMixed()||TRK.native);
 function trkToggle(key){TRK[key]=!TRK[key];applyLayerAudio()}
