@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """check_dialogue_audible.py — 出片后对白镜「有声段」核对 dialogue_audible(2026-10-03,docs/time_cost.md 第四落点的兜底)。
 
-不转写、不下载模型(规约禁止自发 ASR):只从组 clip 音轨按自相关找「像人声的有声段」(80–400 Hz 周期性 + 能量),
+不转写、不下载模型(规约禁止自发 ASR):只从组 clip 音轨按自相关找「像人声的有声段」(80–400 Hz 周期性 + 能量,modules/voice_activity.py),
 对每个对白镜,在它的计划时段(shot_list 累计时长;有 meta boundary_map 用 boundary_map)前后各放宽 --pad 秒,
 取窗内最长连续有声段 / 该镜台词估时:
   < --fail-ratio(默认 0.3)  FAIL  台词疑似整句缺失(前科 fengshen3 ep07 grp011 sh084:5s 台词窗内只有 0.9s 人声)
@@ -12,7 +12,6 @@
 退出码:0 通过(可含 WARN);1 有 FAIL。报告打印到 stdout,同时写 runs/_checks/dialogue_audible_<ep>.json(--no-report 不写)。
 """
 import json
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -20,62 +19,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import parse_args  # noqa: E402
 
-HOP_S, WIN_S = 0.05, 0.064
-F0_LO, F0_HI = 80, 400
-MERGE_GAP_S = 0.5
-MIN_RUN_S = 0.25
-
-
-def voiced_mask(wav: Path):
-    import numpy as np
-    import wave
-    w = wave.open(str(wav))
-    sr = w.getframerate()
-    x = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(float) / 32768
-    hop, win = int(sr * HOP_S), int(sr * WIN_S)
-    lo, hi = sr // F0_HI, sr // F0_LO
-    out = []
-    hann = np.hanning(win)
-    for i in range(0, max(0, len(x) - win), hop):
-        f = x[i:i + win] * hann
-        e = float(np.sqrt((f ** 2).mean()))
-        if e < 0.005:
-            out.append(False)
-            continue
-        ac = np.correlate(f, f, "full")[win - 1:]
-        ac = ac / (ac[0] + 1e-12)
-        out.append(bool(ac[lo:hi].max() > 0.45))
-    return out
-
-
-def runs_from_mask(mask, hop=HOP_S, merge_gap=MERGE_GAP_S, min_run=MIN_RUN_S):
-    runs, start = [], None
-    for i, v in enumerate(mask + [False]):
-        if v and start is None:
-            start = i
-        elif not v and start is not None:
-            runs.append([start * hop, i * hop])
-            start = None
-    merged = []
-    for r in runs:
-        if merged and r[0] - merged[-1][1] <= merge_gap:
-            merged[-1][1] = r[1]
-        else:
-            merged.append(list(r))
-    return [r for r in merged if r[1] - r[0] >= min_run]
-
-
-def longest_in_window(runs, a, b):
-    best = 0.0
-    for s, e in runs:
-        ov = min(e, b) - max(s, a)
-        if ov > best:
-            best = ov
-    return round(best, 2)
-
-
-def extract_wav(clip: Path, out: Path):
-    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(clip), "-vn", "-ac", "1", "-ar", "16000", str(out)], check=True)
+# 有声段检测(自相关基频 + 能量)在 modules/voice_activity.py,与 dub_group.py 的开口时段检测共用一套口径
+from voice_activity import voiced_mask, runs_from_mask, longest_in_window, extract_wav  # noqa: E402,F401
 
 
 def main(argv=None):

@@ -4058,6 +4058,7 @@ window.I18N_DICT = {
 "原声": "Âm gốc",
 "配音": "Lồng tiếng",
 "组视频自带的声轨": "Rãnh âm thanh gốc của clip nhóm",
+"已去人声的底床(配音在配音轨)": "Nền đã tách giọng (lồng tiếng phát ở rãnh Lồng tiếng)",
 "整集连播有混音成品 / 看成片时只放成品声轨,逐轨开关不生效": "Khi phát cả tập có bản mix hoàn chỉnh hoặc xem bản cuối, chỉ phát rãnh đã mix; công tắc từng rãnh không có tác dụng",
 "关闭这条轨道的声音": "Tắt tiếng rãnh này",
 "打开这条轨道的声音": "Bật tiếng rãnh này",

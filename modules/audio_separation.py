@@ -10,8 +10,9 @@ onnxruntime + numpy + ffmpeg,不引入 torch:
   去环境声 remove_ambience → voice + g·bed          (g 由处方参数 keep_db 决定,≤ -60 dB 视为完全去掉)
 
 模型首次使用时下载到 $VIDEOAGENTS_DATA_DIR/models/audio-separation/(sha256 校验);下载地址可用环境变量
-VIDEOAGENTS_SEPARATION_MODEL_URL 换成镜像,也可以手工把文件放进该目录。只由宿主 CLI code/post_apply.py 调用
-(本身就是服务端拉起的子进程,模型崩溃不影响服务)。
+VIDEOAGENTS_SEPARATION_MODEL_URL 换成镜像,也可以手工把文件放进该目录。只由宿主 CLI 调用:code/post_apply.py(后期页处方)
+与 code/dub_group.py(后期配音 §8C,2026-10-03:原生轨去人声后作底床,voice stem 用于开口检测)——都是服务端拉起的子进程,
+模型崩溃不影响服务。
 """
 from __future__ import annotations
 

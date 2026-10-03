@@ -384,11 +384,12 @@ phases:
                         rubric: visual_gen_v1, qa: [11-qa/visual-qa] } }
       - { id: p7-dub, agent: 09-audio/voice-generation, depends_on: [p7-video],
           condition: "output.dialogue_voice == dubbing and group.audio_plan == dialogue",   # 项目「输出设置→对白配音=后期配音」时每个对白组必派;视频原声(默认)不派、严禁 TTS 进成片对白(§8A)
-          # §8C 后期配音:组 clip 原生轨实测每句台词开口起止(说话人按 shot_list dialogue_lines 顺序对位),按 casting.json 角色声线
-          # TTS 逐句合成冻结版台词,语速(±25%)+atempo(±10%)贴合开口时长、起点对齐开口起点,替换 clip 对白轨(原生轨压低保留环境声/音效,
-          # 画面流 -c:v copy、时长不变;原生轨备份 grpNNN.native_audio.wav);统一走 code/dub_group.py;装不下的句子记 overflow 上报,不硬塞
+          # §8C 后期配音(2026-10-03 改版):原生轨先本机人声分离去人声(bed 底床;模型不可用回落压低法=vocal_removal_ok WARN),在人声 stem 上
+          # 按镜次时窗(meta boundary_map)定位每句台词的开口起点,按 casting.json 角色声线 TTS 逐句合成冻结版台词,起点对齐开口起点、
+          # 语速(±25%)+atempo(±10%)尽量贴开口时长,bed 叠 TTS 替换 clip 对白轨(画面流 -c:v copy、时长不变;原生轨备份 grpNNN.native_audio.wav、
+          # 底床 grpNNN.bed.wav);统一走 code/dub_group.py;撞到下一句开口 / clip 末尾的句子记 overflow 上报,不硬塞;混音盖章含配音指纹(mix_basis dub_fp)
           outputs: ["assets/audio/voice/{ep}/dub/{group}/dub_manifest.json", "assets/clips/{ep}/{group}.mp4"],
-          validation: { auto: [dub_lines_text_match_frozen_script, dub_speaker_casting_bound, dub_fit_ok,
+          validation: { auto: [dub_lines_text_match_frozen_script, dub_speaker_casting_bound, dub_fit_ok, vocal_removal_ok,
                                clip_duration_unchanged, video_stream_unchanged, av_offset_lt_80ms],
                         qa: [11-qa/audio-qa] } }
       - { id: p7-lipsync, agent: 08-video-gen/lip-sync, depends_on: [p7-video, p7-dub],

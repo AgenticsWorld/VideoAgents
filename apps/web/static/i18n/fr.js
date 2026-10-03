@@ -4060,6 +4060,7 @@ window.I18N_DICT = {
 "原声": "Son direct",
 "配音": "Doublage",
 "组视频自带的声轨": "La piste audio propre au clip du groupe",
+"已去人声的底床(配音在配音轨)": "Lit sans voix (le doublage joue sur la piste Doublage)",
 "整集连播有混音成品 / 看成片时只放成品声轨,逐轨开关不生效": "Avec un mixage final en lecture d'épisode, ou en regardant le final, seule la piste mixée est jouée ; les interrupteurs par piste sont sans effet",
 "关闭这条轨道的声音": "Couper cette piste",
 "打开这条轨道的声音": "Réactiver cette piste",

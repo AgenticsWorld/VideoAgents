@@ -4069,6 +4069,7 @@ window.I18N_DICT = {
 "原声": "Original",
 "配音": "Dub",
 "组视频自带的声轨": "The group clip's own audio track",
+"已去人声的底床(配音在配音轨)": "Vocal-removed bed (the dub plays on the Dub track)",
 "整集连播有混音成品 / 看成片时只放成品声轨,逐轨开关不生效": "With a finished mix in episode playback, or when watching the final, only the mixed track plays; per-track toggles have no effect",
 "关闭这条轨道的声音": "Mute this track",
 "打开这条轨道的声音": "Unmute this track",

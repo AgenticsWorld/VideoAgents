@@ -685,7 +685,7 @@ function setMonitor(keepTime){
   if(va.dataset.src!==fa.url){va.src=fa.url;va.dataset.src=fa.url}
   loadShotCuts(SEL,VA);
   if(vb.dataset.src!==fb.url){vb.src=fb.url;vb.dataset.src=fb.url}
-  va.muted=!nativeOn();vb.muted=true;
+  va.muted=vidMuted(SEL);vb.muted=true;
   $('#tagA').textContent='A · '+(VA===0?'v0 母本':'v'+VA)+(VA===cur?' ★':'');
   $('#tagB').textContent='B · '+(VB===0?'v0 母本':'v'+VB)+(VB===cur?' ★':'');
   $('#xgid').textContent=SEL;
@@ -736,7 +736,7 @@ function epLoad(i,t0){
   const vs=versionsOf(g.group_id);const cur=vs.find(v=>v.v===(g.current||0))||vs[0];
   const va=$('#va');
   if(!cur){epNext();return}
-  va.src=cur.url;va.dataset.src=cur.url;va.muted=!!(D.finals||{}).final_audio||!nativeOn();
+  va.src=cur.url;va.dataset.src=cur.url;va.muted=!!(D.finals||{}).final_audio||vidMuted(g.group_id);
   $('#tagA').textContent=g.group_id+' · '+(cur.v?'v'+cur.v:'v0');$('#xgid').textContent=g.group_id;$('#finfo').textContent=t('整集连播')+' '+(i+1)+'/'+D.groups.length;
   renderLeft();renderRight();renderFoot();renderWaves();
   va.addEventListener('loadedmetadata',()=>{if(t0)va.currentTime=t0;if(PLAYING_EP)va.play().catch(()=>{})},{once:true});
@@ -774,6 +774,10 @@ let TRK={native:true,dialogue:false,narration:true,bgm:true,sfx:false};
 function trkInit(){const dub=(((D||{}).settings||{}).output||{}).dialogue_voice==='dubbing';TRK={native:true,dialogue:dub,narration:true,bgm:true,sfx:false}}
 const trkMixed=()=>MODE==='final'||(MODE==='episode'&&!!((D||{}).finals||{}).final_audio);
 const nativeOn=()=>LAYERS.sound&&(trkMixed()||TRK.native);
+/* 后期配音去人声(2026-10-03):配音过的组原声条目带 file(去人声底床 bed.wav)→ <video> 自带声轨(bed+TTS)静音,
+   原声轨播 bed、配音轨播逐句 TTS,各放各的;整集有混音成品 / 看成片时照旧只放成品 */
+const nativeStemmed=gid=>!trkMixed()&&!!(((D||{}).lanes||{}).native||[]).find(x=>x.group_id===gid&&x.file);
+const vidMuted=gid=>!nativeOn()||nativeStemmed(gid);
 function trkToggle(key){TRK[key]=!TRK[key];applyLayerAudio()}
 /* ---------- 分轨随播(2026-09-16):配音 / 旁白 / BGM / 音效按集时间轴位置与 A 画面同步播放 ----------
    单组:组视频原生轨(原声)+ 四路分轨叠放;整集连播:有混音成品 final_audio 就只放它(已含各路),没有则原生轨 + 分轨;看成片:只放 final.mp4 自带声音。
@@ -783,6 +787,7 @@ const STEM={items:[],els:{},tick:null};
 const dbGain=db=>Math.min(1,Math.pow(10,(+db||0)/20));
 function stemBuild(){
   const L=(D&&D.lanes)||{},out=[];
+  (L.native||[]).forEach((x,i)=>{if(x.file)out.push({id:'o'+i,lane:'native',t0:+x.t0,t1:x.t1>x.t0?+x.t1:null,url:x.file,gain:dbGain(x.gain_db)})});
   (L.dialogue||[]).forEach((x,i)=>{if(x.file)out.push({id:'v'+i,lane:'dialogue',t0:+x.t0,t1:x.t1>x.t0?+x.t1:null,url:x.file,gain:dbGain(x.gain_db)})});
   (L.narration||[]).forEach((x,i)=>{if(x.file)out.push({id:'n'+i,lane:'narration',t0:+x.t0,t1:x.t1>x.t0?+x.t1:null,url:x.file,gain:dbGain(x.gain_db)})});
   (L.bgm||[]).forEach((x,i)=>{if(x.file)out.push({id:'m'+i,lane:'bgm',t0:+x.t0,t1:x.t1>x.t0?+x.t1:null,url:x.file,gain:dbGain(x.gain_db),fi:+x.fade_in||0,fo:+x.fade_out||0})});
@@ -824,7 +829,7 @@ function stemSync(){
   else if(STEM.tick){clearInterval(STEM.tick);STEM.tick=null}
 }
 function stemStop(){for(const k in STEM.els)STEM.els[k].pause();if(STEM.tick){clearInterval(STEM.tick);STEM.tick=null}$$('#waves .live').forEach(e=>e.classList.remove('live'))}
-function applyLayerAudio(){const va=$('#va');if(!va)return;if(MODE==='group')va.muted=!nativeOn();else if(MODE==='episode'){va.muted=!!(D.finals||{}).final_audio||!nativeOn();epAudioSync()}else if(MODE==='final')va.muted=!LAYERS.sound;renderWaves();stemSync()}
+function applyLayerAudio(){const va=$('#va');if(!va)return;if(MODE==='group')va.muted=vidMuted(SEL);else if(MODE==='episode'){va.muted=!!(D.finals||{}).final_audio||vidMuted((D.groups[EPIDX]||{}).group_id);epAudioSync()}else if(MODE==='final')va.muted=!LAYERS.sound;renderWaves();stemSync()}
 function updateSubtitle(abs){
   // 字幕样式预览:按包装层 subtitle_style 后期调整实时渲染(内容只做样式示意:取本组对白说话人)
   const el=$('#subt');const ss=(D.plan.recipes||[]).find(r=>r.kind==='subtitle_style'&&r.status!=='discarded');
@@ -1252,7 +1257,7 @@ function renderWaves(){
   const mixed=trkMixed();
   const snd=key=>`<button class="snd${TRK[key]?'':' off'}" data-trk="${key}" ${mixed?'disabled':''} title="${esc(mixed?t('整集连播有混音成品 / 看成片时只放成品声轨,逐轨开关不生效'):TRK[key]?t('关闭这条轨道的声音'):t('打开这条轨道的声音'))}">${TRK[key]?'🔊':'🔇'}</button>`;
   const lbl=(key,lb,tip)=>`<div class="lb" title="${esc(tip||'')}"><span>${esc(lb)}</span>${snd(key)}</div>`;
-  const lane=(lb,items,cls)=>{const key=LANE_KEY[cls];return lbl(key,lb,cls==='o'?t('组视频自带的声轨'):cls==='v'&&!items.some(x=>x.file)?'':I18N.f('{n} 条可随播',{n:items.filter(x=>x.file).length}))+`<div class="tr${TRK[key]?'':' off'}">${items.map((x,i)=>inWin(x)?`<i class="${cls}${'file' in x&&!x.file?' nofile':''}${isSel(key,i)?' sel':''}" data-lane="${key}" data-i="${i}" data-stem="${cls}${i}" style="${pos(x.t0,x.t1)}" title="${esc(x.label||'')}${'file' in x&&!x.file?' · '+esc(t('无音频文件')):''} · ${esc(t('点击选中'))}"></i>`:'').join('')}</div>`};
+  const lane=(lb,items,cls)=>{const key=LANE_KEY[cls];return lbl(key,lb,cls==='o'?(items.some(x=>x.file)?t('已去人声的底床(配音在配音轨)'):t('组视频自带的声轨')):cls==='v'&&!items.some(x=>x.file)?'':I18N.f('{n} 条可随播',{n:items.filter(x=>x.file).length}))+`<div class="tr${TRK[key]?'':' off'}">${items.map((x,i)=>inWin(x)?`<i class="${cls}${'file' in x&&!x.file?' nofile':''}${isSel(key,i)?' sel':''}" data-lane="${key}" data-i="${i}" data-stem="${cls}${i}" style="${pos(x.t0,x.t1)}" title="${esc(x.label||'')}${'file' in x&&!x.file?' · '+esc(t('无音频文件')):''} · ${esc(t('点击选中'))}"></i>`:'').join('')}</div>`};
   let h=lane(t('原声'),L.native||[],'o')+lane(t('配音'),L.dialogue||[],'v')+lane(t('旁白'),L.narration||[],'n')+lane(t('BGM'),L.bgm||[],'m');
   h+=lbl('sfx',t('音效'))+`<div class="tr${TRK.sfx?'':' off'}">${(L.sfx||[]).map((x,i)=>x.t_abs>=w0&&x.t_abs<=w1?`<i class="cue ${x.resolved?'':'miss'}${x.resolved&&!x.file?' nofile':''}${isSel('sfx',i)?' sel':''}" style="left:${((x.t_abs-w0)/W*100).toFixed(2)}%" data-lane="sfx" data-i="${i}" data-sfx="${esc(x.id)}" data-stem="s${i}" title="${esc(x.label)}${x.resolved?(x.file?'':' · '+esc(t('无音频文件'))):' · '+esc(t('未落地'))} · ${esc(t('点击选中'))}"></i>`:'').join('')}</div>`;
   h+=waveSelHtml();
@@ -1268,12 +1273,12 @@ function waveSelHtml(){
   const x=waveSelItem();if(!x)return '';
   const cls={native:'o',dialogue:'v',narration:'n',bgm:'m',sfx:'s'}[WSEL.lane],kd={native:t('原声'),dialogue:t('配音'),narration:t('旁白'),bgm:t('BGM'),sfx:t('音效')}[WSEL.lane];
   const tm=WSEL.lane==='sfx'?tc(x.t_abs):tc(x.t0)+'–'+tc(x.t1);
-  let nm=WSEL.lane==='dialogue'?`${x.group_id}${x.shot_id?' · '+x.shot_id:''}${x.label?' · '+x.label:''}`:WSEL.lane==='sfx'?`${x.id}${x.label?' · '+x.label:''} · ${x.group_id}`:WSEL.lane==='native'?`${x.group_id} · ${t('组视频自带的声轨')}`:x.label||'';
+  let nm=WSEL.lane==='dialogue'?`${x.group_id}${x.shot_id?' · '+x.shot_id:''}${x.label?' · '+x.label:''}`:WSEL.lane==='sfx'?`${x.id}${x.label?' · '+x.label:''} · ${x.group_id}`:WSEL.lane==='native'?`${x.group_id} · ${x.file?t('已去人声的底床(配音在配音轨)'):t('组视频自带的声轨')}`:x.label||'';
   return `<div class="wsel"><span class="kd ${cls}">${esc(kd)}</span><span class="nm" title="${esc(nm)}">${esc(nm)}</span><span class="tm">${esc(tm)}</span>`+
     `<button class="xs" data-ws="seek" title="${esc(t('把播放头定位到这一段起点'))}">⏵ ${esc(t('定位'))}</button>`+
     (WSEL.lane==='sfx'?`<button class="xs" data-ws="sfx">${esc(t('点位表'))}</button>`:'')+
     `<button class="xs pri" data-ws="edit" title="${esc(t('对这一段提修改意见,发给修改师处理'))}">✏️ ${esc(t('修改'))}</button>`+
-    (WSEL.lane==='native'?`<button class="xs" data-ws="sep" data-kind="remove_vocals" title="${esc(t('新增调整 · 音效与声音:用本机人声分离模型去掉原声里的人声(立即出片)'))}">${esc(t('去人声'))}</button><button class="xs" data-ws="sep" data-kind="remove_ambience" title="${esc(t('新增调整 · 音效与声音:只留人声,去掉原声里的音效 / 环境声 / 配乐(立即出片)'))}">${esc(t('去环境声'))}</button>`:'')+
+    (WSEL.lane==='native'&&!x.file?`<button class="xs" data-ws="sep" data-kind="remove_vocals" title="${esc(t('新增调整 · 音效与声音:用本机人声分离模型去掉原声里的人声(立即出片)'))}">${esc(t('去人声'))}</button><button class="xs" data-ws="sep" data-kind="remove_ambience" title="${esc(t('新增调整 · 音效与声音:只留人声,去掉原声里的音效 / 环境声 / 配乐(立即出片)'))}">${esc(t('去环境声'))}</button>`:'')+
     `<button class="xs" data-ws="close" title="${esc(t('清除选中(Esc)'))}">✕</button></div>`;
 }
 function bindWaveSel(){

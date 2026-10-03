@@ -4060,6 +4060,7 @@ window.I18N_DICT = {
 "原声": "Original",
 "配音": "Dublagem",
 "组视频自带的声轨": "A faixa de áudio do próprio clipe do grupo",
+"已去人声的底床(配音在配音轨)": "Base sem vozes (a dublagem toca na faixa Dublagem)",
 "整集连播有混音成品 / 看成片时只放成品声轨,逐轨开关不生效": "Com uma mixagem final na reprodução do episódio, ou ao assistir ao final, só a faixa mixada toca; os botões por faixa não têm efeito",
 "关闭这条轨道的声音": "Silenciar esta faixa",
 "打开这条轨道的声音": "Ativar o som desta faixa",

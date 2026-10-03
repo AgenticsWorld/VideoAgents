@@ -15,6 +15,9 @@ BGM cue 与旁白挂点按剪后时间线(cum_start_s)摆位;交付时盖章记�
 sources 输出的每组字段:
   src            本组混音取源(项目相对路径;v>0 = 后期采纳版本,v0 = 母本)
   sound_v        原生声轨内容所在版本(后期页去人声 / 去环境声改过才 > 0,2026-10-01);盖章后它变了 = check FAIL,须重混
+  dub_fp         后期配音指纹(§8C,2026-10-03;p7-dub 的 dub_manifest:配音时刻 + 逐句时段 + 去人声状态;未配音 = null);
+                 盖章后它变了(重配音 / 改时段)= check FAIL,须重混;dub_predates_version=true = 当前采纳版本建于配音之前、
+                 文件里没有配音 = FAIL(先回滚到母本或重做该版本)。配音后 clip 的对白轨已是 TTS,混音不另铺对白
   duration_s     该文件实测时长;cum_start_s = 混音时间线上的组起点(按 src 实测累计 **+ 本组前的组边界层**,BGM / 旁白摆位用这个)
   boundary_before_s 本组前组边界占时(定格 + 黑场停留 + 插入段,过场设计 2026-09-24):原生轨在此留白(按 boundaries[].audio:
                  mute 静音 / sustain 延续前段房间声),BGM / 旁白照常跨过去铺——跨越边界的 cue 不断;cum_start_groups_s = 不含边界层的组累计
@@ -83,7 +86,9 @@ def do_sources(proj: Path, ep: str, as_json: bool) -> int:
                 _log("LEAD", f"{b['from_group']}→{b['to_group']} 音先入 {b['audio_lead_s']:g}s:本组原生轨从 {r['cum_start_s'] - b['audio_lead_s']:.3f}s 起进入(J-cut),"
                              f"重叠段前组渐弱 / 本组渐强;不占时、不改 wav 总长")
             _log("SRC ", f"{r['group_id']} v{r['v']} {r.get('src') or '(无文件)'} {r['duration_s']:.3f}s @{r['cum_start_s']:.3f}s"
-                         + (f"  [{ops}]" if ops else ""))
+                         + (f"  [{ops}]" if ops else "") + (f"  dub={r['dub_fp']}" if r.get("dub_fp") else ""))
+            if r.get("dub_predates_version"):
+                _log("FAIL", f"{r['group_id']} 当前采纳版本 v{r['v']} 建于后期配音之前,文件里没有配音:先在后期页回滚到母本或重做该版本")
         for gid, v in pending.items():
             _log("WARN", f"{gid} 有未采纳的更新版本 v{v},混音按当前指针取源;要进成片须先在后期页采纳再开混")
     if missing:

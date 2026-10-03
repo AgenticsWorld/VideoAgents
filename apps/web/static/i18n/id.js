@@ -4058,6 +4058,7 @@ window.I18N_DICT = {
 "原声": "Asli",
 "配音": "Sulih suara",
 "组视频自带的声轨": "Trek audio bawaan klip grup",
+"已去人声的底床(配音在配音轨)": "Bed tanpa vokal (sulih suara diputar di trek Sulih suara)",
 "整集连播有混音成品 / 看成片时只放成品声轨,逐轨开关不生效": "Saat pemutaran episode memiliki mix jadi, atau saat menonton final, hanya trek mix yang diputar; sakelar per trek tidak berpengaruh",
 "关闭这条轨道的声音": "Bisukan trek ini",
 "打开这条轨道的声音": "Bunyikan trek ini",

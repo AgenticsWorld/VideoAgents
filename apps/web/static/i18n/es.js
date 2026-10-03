@@ -4060,6 +4060,7 @@ window.I18N_DICT = {
 "原声": "Original",
 "配音": "Doblaje",
 "组视频自带的声轨": "La pista de audio propia del clip del grupo",
+"已去人声的底床(配音在配音轨)": "Base sin voces (el doblaje suena en la pista Doblaje)",
 "整集连播有混音成品 / 看成片时只放成品声轨,逐轨开关不生效": "Con una mezcla final en la reproducción del episodio, o al ver el final, solo suena la pista mezclada; los interruptores por pista no tienen efecto",
 "关闭这条轨道的声音": "Silenciar esta pista",
 "打开这条轨道的声音": "Activar el sonido de esta pista",

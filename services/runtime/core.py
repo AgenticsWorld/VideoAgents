@@ -10558,9 +10558,21 @@ def _post_audio_lanes(base: Path, ep: str, groups: list[dict], sfx: dict) -> dic
     """监视器下方五轨 + 随播分轨(2026-09-16):旁白/BGM/音效条目带 file(可播放 URL)、gain_db、fade,前端按集时间轴位置与视频同步播放。
     2026-10-03:加 native(原声=组 clip 自带声轨,一组一条,声音由前端 <video> 出);dialogue 轨改为「配音」——
     有 p7-dub 产物(assets/audio/voice/epNN/dub/grpNNN/dub_manifest.json)按逐句开口时段挂 fit 音频;否则有对白语音库
-    (tts_manifest.json)的镜按镜起点顺排库音频;都没有保持原来的镜级条目(无 file 键=只画段落不随播)。"""
+    (tts_manifest.json)的镜按镜起点顺排库音频;都没有保持原来的镜级条目(无 file 键=只画段落不随播)。
+    2026-10-03 后期配音去人声:配音过的组(dub_manifest 带 bed_file,且当前版本的声轨没再被后期页改过、不早于配音)
+    原声条目带 file=去人声底床 bed.wav——前端此时把 <video> 静音、原声轨播 bed、配音轨播逐句 TTS,两轨各放各的不重复
+    (配音后 clip 自带声轨 = bed + TTS,直接出声会和配音轨叠两遍)。"""
     cum = {g["group_id"]: g["cum_start_s"] for g in groups}
     lanes = {"native": [], "dialogue": [], "narration": [], "bgm": [], "sfx": []}
+    pp = _post_pp()
+    try:
+        plan = pp.load_plan(base, ep)
+    except Exception:  # noqa: BLE001
+        plan = {}
+    try:
+        from modules import mix_manifest as _mm
+    except Exception:  # noqa: BLE001
+        _mm = None
 
     def _f(v, default=0.0) -> float:
         try:
@@ -10576,14 +10588,22 @@ def _post_audio_lanes(base: Path, ep: str, groups: list[dict], sfx: dict) -> dic
         lib_audio = {}
     for g in groups:
         gid, c0 = g["group_id"], g["cum_start_s"]
-        if g.get("has_clip"):
-            lanes["native"].append({"group_id": gid, "t0": round(c0, 3), "t1": round(c0 + _f(g.get("duration")), 3), "label": gid})
         dub = _read_json_safe(base / "assets" / "audio" / "voice" / ep / "dub" / gid / "dub_manifest.json") or {}
+        if g.get("has_clip"):
+            row = {"group_id": gid, "t0": round(c0, 3), "t1": round(c0 + _f(g.get("duration")), 3), "label": gid}
+            bed = dub.get("bed_file") if dub.get("dubbed_at") else None
+            if bed and plan and not pp.sound_version(plan, gid) and not (_mm and _mm.dub_predates_version(plan, gid, dub)):
+                url = _post_url(base, bed)
+                if url:
+                    row.update({"file": url, "gain_db": 0.0, "source": "dub_bed", "label": f"{gid} · bed"})
+            lanes["native"].append(row)
         dub_lines = [e for e in (dub.get("lines") or []) if isinstance(e, dict) and e.get("status") in ("ok", "overflow") and e.get("fit_file")]
         if dub_lines:
             for e in dub_lines:
                 seg = e.get("segment") if isinstance(e.get("segment"), dict) else {}
                 a, b = _f(seg.get("start")), _f(seg.get("end"))
+                if _f(e.get("fit_duration_s")) > 0:        # 起点优先(2026-10-03):条目长度按贴合后实际时长,可比画面开口长
+                    b = a + _f(e.get("fit_duration_s"))
                 lanes["dialogue"].append({"group_id": gid, "shot_id": e.get("shot_id") or "", "t0": round(c0 + a, 3), "t1": round(c0 + max(b, a), 3),
                                           "label": e.get("speaker") or "", "file": _post_url(base, e["fit_file"]), "gain_db": 0.0, "source": "dub"})
             continue

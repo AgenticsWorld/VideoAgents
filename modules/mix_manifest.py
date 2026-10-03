@@ -15,6 +15,10 @@
 BGM 一起断。现在 `sources` 直接给出边界层(帧量化,与 render_transitions.pad_ops 同口径)且 `cum_start_s` 已含它:混音把 BGM / 旁白
 铺在**带过场的最终时间线**上(跨越插入段的 cue 连续播),原生轨在边界处按策略留白;盖章记边界指纹,finalize 一致时**不再**对声轨套
 边界层重映射(字幕仍按表平移);边界层改了 = 须重跑 p8-mix。
+
+后期配音(§8C,2026-10-03):p7-dub 原地改写 v0 母本的对白轨并写 `assets/audio/voice/epNN/dub/grpNNN/dub_manifest.json`。
+`sources` 每组另给 `dub_fp`(配音时刻 + 逐句时段指纹,没配音 = null)盖进清单,重配音后未重混 = FAIL(sound_changed 同级);
+`dub_predates_version`:当前采纳版本链的根版本建于配音之前(从旧母本派生,采纳文件里没有配音)= FAIL,须回滚或重做该版本再重混。
 """
 from __future__ import annotations
 
@@ -79,6 +83,39 @@ def group_order(proj: Path, ep: str) -> list[str]:
     return [g.get("group_id") for g in (sl.get("generation_groups") or []) if isinstance(g, dict) and g.get("group_id")]
 
 
+def dub_manifest(proj: Path, ep: str, gid: str) -> dict | None:
+    d = pp.read_json(Path(proj) / "assets" / "audio" / "voice" / ep / "dub" / gid / "dub_manifest.json")
+    return d if isinstance(d, dict) and d.get("dubbed_at") else None
+
+
+def dub_fingerprint(man: dict | None) -> str | None:
+    """后期配音产物指纹:配音时刻 + 逐句 (起点, 贴合时长) + 去人声状态;重配音 / 改时段 / 改去人声都会变。"""
+    if not man:
+        return None
+    slim = [man.get("dubbed_at"), (man.get("vocal_removal") or {}).get("status"),
+            [[e.get("line"), (e.get("segment") or {}).get("start"), e.get("fit_duration_s")] for e in (man.get("lines") or []) if isinstance(e, dict)]]
+    return hashlib.sha256(json.dumps(slim, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:16]
+
+
+def dub_predates_version(plan: dict, gid: str, man: dict | None) -> bool:
+    """当前采纳版本(v>0)的版本链根(base_v=0 的那一版)是否建于配音之前:是 = 它从没配音的旧母本派生,文件里没有配音。"""
+    if not man:
+        return False
+    v = pp.current_version(plan, gid)
+    dubbed_at = str(man.get("dubbed_at") or "").replace("T", " ")
+    seen = set()
+    while v > 0 and v not in seen:
+        seen.add(v)
+        ver = next((x for x in pp.group_versions(plan, gid) if int(x.get("v") or 0) == v), None)
+        if not ver:
+            return False
+        if int(ver.get("base_v") or 0) <= 0:
+            created = str(ver.get("created_at") or "").replace("T", " ")
+            return bool(created) and bool(dubbed_at) and created < dubbed_at
+        v = int(ver.get("base_v") or 0)
+    return False
+
+
 def current_basis(proj: Path, ep: str, plan: dict | None = None, groups: list[str] | None = None) -> list[dict]:
     """各组当前指针的基准行:[{group_id, v, src(项目相对路径,可能 None), time_ops(组内秒,母本基准)}]。"""
     proj = Path(proj)
@@ -86,8 +123,11 @@ def current_basis(proj: Path, ep: str, plan: dict | None = None, groups: list[st
     rows = []
     for gid in (groups if groups is not None else group_order(proj, ep)):
         f = pp.current_file(proj, ep, gid, plan)
+        dm = dub_manifest(proj, ep, gid)
         rows.append({"group_id": gid, "v": pp.current_version(plan, gid),
                      "sound_v": pp.sound_version(plan, gid),      # 原生声轨内容所在版本(去人声 / 去环境声改过才 > 0)
+                     "dub_fp": dub_fingerprint(dm),               # 后期配音指纹(§8C;未配音 = None)
+                     "dub_predates_version": dub_predates_version(plan, gid, dm),
                      "src": str(f.relative_to(proj)) if f else None,
                      "time_ops": timemap.normalize_ops(pp.effective_time_ops(plan, gid))})
     return rows
@@ -276,11 +316,15 @@ def compare(proj: Path, ep: str, plan: dict | None = None) -> dict:
            "cur_boundary_fp": boundary_fingerprint(cur_b), "cur_boundary_delta_s": boundary_delta(cur_b),
            "cur_boundary_has_inserts": boundary_has_inserts(cur_b), "mix_boundary_fp": None, "mix_boundary_delta_s": 0.0,
            "boundary_status": BND_NONE if not cur_b else BND_ABSENT,
-           "audio_present": audio_path(proj, ep) is not None, "changed_groups": [], "sound_changed": [], "detail": ""}
+           "audio_present": audio_path(proj, ep) is not None, "changed_groups": [], "sound_changed": [],
+           "dub_changed": [], "dub_stale_versions": [r["group_id"] for r in cur if r.get("dub_predates_version")], "detail": ""}
     man = load_manifest(proj, ep)
+    stale_dub_note = ((";{} 组当前采纳的后期版本建于配音之前(从旧母本派生,文件里没有配音):{}{},须在后期页回滚到母本或重做该版本,再重混"
+                       ).format(len(res["dub_stale_versions"]), ", ".join(res["dub_stale_versions"][:6]), "…" if len(res["dub_stale_versions"]) > 6 else "")
+                      if res["dub_stale_versions"] else "")
     if not man:
         res["detail"] = ("本集尚无混音产物" if not res["audio_present"] else
-                         "混音未盖基准章(旧口径:按 v0 母本混,出成片时按 timemap 重映射)")
+                         "混音未盖基准章(旧口径:按 v0 母本混,出成片时按 timemap 重映射)") + stale_dub_note
         return res
     mrows = man.get("groups") or []
     m_by = {r.get("group_id"): r for r in mrows if isinstance(r, dict)}
@@ -303,6 +347,9 @@ def compare(proj: Path, ep: str, plan: dict | None = None) -> dict:
     # 原生声轨内容变了(后期页去人声 / 去环境声,或其弃用回退):时轴没变也必须重混,否则成片里还是旧声音
     res["sound_changed"] = [r["group_id"] for r in cur
                             if r["group_id"] in m_by and int(m_by[r["group_id"]].get("sound_v") or 0) != int(r.get("sound_v") or 0)]
+    # 后期配音(§8C):配音时刻 / 逐句时段 / 去人声状态变了(含混音后才配音)= 对白内容变了,同样必须重混
+    res["dub_changed"] = [r["group_id"] for r in cur
+                          if r["group_id"] in m_by and (m_by[r["group_id"]].get("dub_fp") or None) != (r.get("dub_fp") or None)]
     if res["cur_ops_fp"] == man.get("ops_fingerprint"):
         if versions_fingerprint(cur) == man.get("versions_fingerprint"):
             res["status"] = STATUS_CURRENT
@@ -339,16 +386,20 @@ def compare(proj: Path, ep: str, plan: dict | None = None) -> dict:
     if res["sound_changed"]:
         res["detail"] += (";{} 组的原生声轨在混音后改过(去人声 / 去环境声):{}{},须重跑 p8-mix,否则成片仍是旧声音"
                           ).format(len(res["sound_changed"]), ", ".join(res["sound_changed"][:6]), "…" if len(res["sound_changed"]) > 6 else "")
+    if res["dub_changed"]:
+        res["detail"] += (";{} 组的后期配音在混音后变了(重配音 / 改时段 / 改去人声):{}{},须重跑 p8-mix,否则成片里的对白还是旧配音"
+                          ).format(len(res["dub_changed"]), ", ".join(res["dub_changed"][:6]), "…" if len(res["dub_changed"]) > 6 else "")
+    res["detail"] += stale_dub_note
     if res.get("audio_fingerprint_ok") is False:
         res["detail"] += ";⚠ 混音文件在盖章后被改动(指纹不符)"
     return res
 
 
 def check_row(res: dict) -> tuple[str, str]:
-    """机检口径:(PASS|WARN|FAIL, detail)。stale 且混音带后期时轴 = FAIL;原生声轨内容改过 = FAIL;其余失配只 WARN。"""
+    """机检口径:(PASS|WARN|FAIL, detail)。stale 且混音带后期时轴 = FAIL;原生声轨内容改过 / 后期配音改过 / 采纳版本早于配音 = FAIL;其余失配只 WARN。"""
     st = res.get("status")
     bst = res.get("boundary_status")
-    if res.get("sound_changed"):
+    if res.get("sound_changed") or res.get("dub_changed") or res.get("dub_stale_versions"):
         return "FAIL", res.get("detail", "")
     if bst == BND_STALE and (res.get("cur_boundary_has_inserts") or float(res.get("mix_boundary_delta_s") or 0) > 0):
         return "FAIL", res.get("detail", "")

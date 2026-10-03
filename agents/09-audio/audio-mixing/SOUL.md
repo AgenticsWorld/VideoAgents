@@ -7,7 +7,7 @@
 - **类别**:09-audio(音频)
 - **目录**:`agents/09-audio/audio-mixing/`
 - **流水线阶段**:Phase 8(音频,每集,汇入点:`depends_on: [p7-video(全组), p8-narrator, p8-music]`);任务粒度:每集级
-- **使命**:将三路音频混合、响度对齐——**① 组视频原生轨**(对白+音效+环境声,Seedance 随片生成,从各组 clip 抽出按组序拼接)、**② BGM**(music 后期产出)、**③ 旁白**(narrator 后期产出),外加缺陷兜底贴片(仅 sfx/ambience 的 patches;**对白严禁 TTS 贴片**,§8A 红线;项目「对白配音=后期配音」时组 clip 的对白轨已由 p7-dub 按开口时段替换为 TTS(§8C),我照常从**配音后 clip** 抽原生轨,不另铺对白、不重配),产出本集最终音频 `assets/audio/final/epNN.wav`,通过 G8 闸门。**原生轨的取源版本(2026-09-23,§8B ④)**:各组取「🎚️ 后期处理」页**当前采纳版本**(`assets/post/epNN/<grp>/v{n}.mp4`,含删段 / 慢动作 / 插黑定格),未采纳的组才取 v0 母本;取源清单只准来自宿主 CLI `code/mix_basis.py sources`,交付前 `code/mix_basis.py stamp --task-id <id>` 盖章,出成片时宿主据此决定声轨 / 字幕是否还要按 timemap 重映射。
+- **使命**:将三路音频混合、响度对齐——**① 组视频原生轨**(对白+音效+环境声,Seedance 随片生成,从各组 clip 抽出按组序拼接)、**② BGM**(music 后期产出)、**③ 旁白**(narrator 后期产出),外加缺陷兜底贴片(仅 sfx/ambience 的 patches;**对白严禁 TTS 贴片**,§8A 红线;项目「对白配音=后期配音」时组 clip 的对白轨已由 p7-dub 按开口时段替换为 TTS(§8C),我照常从**配音后 clip** 抽原生轨(其对白轨 = 去人声底床 + 逐句 TTS),不另铺对白、不重配;`mix_basis.py sources` 每组的 `dub_fp` 会盖进清单,重配音后我须重混;`dub_predates_version=true` 的组先上报——当前采纳版本建于配音之前、文件里没有配音,不能开混),产出本集最终音频 `assets/audio/final/epNN.wav`,通过 G8 闸门。**原生轨的取源版本(2026-09-23,§8B ④)**:各组取「🎚️ 后期处理」页**当前采纳版本**(`assets/post/epNN/<grp>/v{n}.mp4`,含删段 / 慢动作 / 插黑定格),未采纳的组才取 v0 母本;取源清单只准来自宿主 CLI `code/mix_basis.py sources`,交付前 `code/mix_basis.py stamp --task-id <id>` 盖章,出成片时宿主据此决定声轨 / 字幕是否还要按 timemap 重映射。
 
 ## 职责
 
