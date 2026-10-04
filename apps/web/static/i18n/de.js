@@ -3296,7 +3296,7 @@ window.I18N_DICT = {
 
 // 背景图模式(2026-09-22):输出设置「背景图模式」+ 场景预览页分镜背景图板块按场景选择(全景图 / 世界模型)
 "背景图模式": "Hintergrundplatten-Modus",
-"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖)。九宫格:每个场景按布局包里的九个机位、以俯视图为参考一次生成一张 3×3 宫格,拆成 9 张背景图入库,每镜按白模机位自动选最合适的一格;选不到合适的(朝向/俯仰/距离/机高超限)自动以俯视图+九宫格整图为参考按本镜机位补出一张。": "Referenzquelle der Shot-Platten bei aktivem Whitebox (globale Einstellung; auf der Szenen-Vorschau je Szene überschreibbar). Neunfeld: pro Szene wird aus den neun Kamerapositionen des Layout-Pakets mit dem Grundriss als Referenz ein 3×3-Raster erzeugt, in 9 Platten zerlegt und abgelegt; jede Einstellung wählt automatisch die passendste Kachel nach ihrer Whitebox-Kamera, und passt keine Kachel (Richtung / Neigung / Abstand / Höhe außerhalb der Grenzen), wird automatisch eine Platte für die eigene Kamera der Einstellung aus Plan + Rasterbogen gerendert.",
+"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖)。两种模式都先为每个场景以俯视图为参考一次生成一张 3×3 宫格(同一站位朝八个方向各一格,外加一格仰拍;站位和机高按本集机位自动确定),拆成 9 张背景图入库,每镜按白模机位自动选最合适的一格。区别在选不到合适格子(朝向/俯仰/距离/机高超限)时:九宫格自动补图 = 自动按本镜机位补出一张(每张计一次出图费用);九宫格手动补图 = 不自动出图,由你在场景预览页的全景图或世界模型视窗里用「💾 背景图」手工截取。": "Referenzquelle der Shot-Hintergrundplatten bei aktivierter Whitebox (globale Einstellung; kann auf der Szenen-Vorschauseite pro Szene überschrieben werden). Beide Modi erzeugen zunächst für jede Szene aus dem Grundriss ein 3×3-Raster (ein Standpunkt mit Blick in acht Richtungen, dazu ein nach oben geneigtes Feld; Standpunkt und Kamerahöhe werden automatisch aus den Kameras dieser Episode bestimmt), teilen es in 9 Platten für die Bibliothek und wählen für jeden Shot das Feld, das am besten zu seiner Whitebox-Kamera passt. Sie unterscheiden sich, wenn kein Feld passt (Richtung / Neigung / Abstand / Kamerahöhe außerhalb des Bereichs): Neuner-Raster, automatische Ergänzung rendert eine zusätzliche Platte mit der Kamera dieses Shots (jede wird als Bildgenerierung berechnet); Neuner-Raster, manuelle Ergänzung erzeugt nichts – Sie nehmen die Platte selbst mit „💾 Platte“ im Panorama- oder Weltmodell-Viewer der Szenen-Vorschauseite auf.",
 "本场景分镜背景图的参考来源;默认跟随项目输出设置「背景图模式」,可单独覆盖": "Referenzquelle der Shot-Platten dieser Szene; folgt standardmäßig der Projekt-Ausgabeeinstellung „Hintergrundplatten-Modus“, hier überschreibbar",
 "跟随全局({m})": "Global folgen ({m})",
 "本场景背景图模式为「世界模型」,但尚未生成世界模型:出图链会停下(退出码 4),请先在上方「🌍 世界模型」板块生成": "Der Plattenmodus dieser Szene ist „Weltmodell“, aber es wurde noch kein Weltmodell erzeugt: die Plattenkette stoppt (Exit-Code 4). Bitte zuerst im Panel „🌍 Weltmodell“ oben erzeugen",
@@ -3305,6 +3305,14 @@ window.I18N_DICT = {
 "(暂无分镜背景图;白模签字 H3W 并导出后由分镜背景图链生成)": "(Noch keine Shot-Hintergrundplatten; die Plattenkette erzeugt sie nach H3W-Freigabe und Export der Whitebox)",
 "生效 {m}": "wirksam {m}",
 "服务未重启:背景图模式接口不可用": "Dienst nicht neu gestartet: der Plattenmodus-Endpunkt ist nicht verfügbar",
+// 九宫格自动补图 / 九宫格手动补图(2026-10-04):背景图模式选项、场景预览页待手工截取清单、分镜预览来源文字
+"九宫格自动补图": "Neuner-Raster, automatische Ergänzung",
+"九宫格手动补图": "Neuner-Raster, manuelle Ergänzung",
+"手动补图:{n} 张背景图待手工截取。打开上方全景图的 360° 预览或世界模型视窗,转到该镜的方向后点「💾 背景图」保存,再重跑分镜背景图即自动选用;也可在分镜预览页对该镜「换图」手选。": "Manuelle Ergänzung: {n} Platten warten auf eine manuelle Aufnahme. Öffnen Sie oben die 360°-Vorschau eines Panoramas oder den Weltmodell-Viewer, drehen Sie in die Richtung dieses Shots und klicken Sie zum Speichern auf „💾 Platte“; beim erneuten Ausführen der Shot-Hintergrundplatten wird sie automatisch übernommen. Sie können für diesen Shot auch in der Storyboard-Vorschau mit „Tauschen“ eine Platte wählen.",
+"{s} · 朝向 {b}° · 俯仰 {p}° · 机高 {h} m": "{s} · Richtung {b}° · Neigung {p}° · Kamerahöhe {h} m",
+"手动补图模式:没有合适九宫格图的镜不会自动出图,需要在全景图 360° 预览或世界模型视窗里用「💾 背景图」手工截取。当前没有待补的镜。": "Modus manuelle Ergänzung: Shots ohne passendes Rasterfeld werden nicht automatisch gerendert; nehmen Sie sie mit „💾 Platte“ in der 360°-Vorschau des Panoramas oder im Weltmodell-Viewer auf. Derzeit wartet nichts.",
+"手工截图": "manuelle Aufnahme",
+"待手动补图": "wartet auf manuelle Ergänzung",
 // 生成模型设置·数字人板块(2026-09-22,models.html):HeyGen/Kling/Agentics/ComfyUI(InfiniteTalk)面板文案 + 连接/验证状态
 "🧑 数字人": "🧑 Digitaler Mensch",
 "人物图片 + 对白音频生成说话片段；插件使用当前选中的渠道": "Erzeugt Sprechclips aus Personenbild + Dialog-Audio; das Plugin nutzt den aktuell gewählten Anbieter",

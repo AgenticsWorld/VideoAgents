@@ -165,7 +165,9 @@ def main():
     if tiles:
         h.append('<div class="tiles">' + ''.join(
             f'<figure><img src="{esc(url(e["file"]))}" onclick="zoom(this.src)"><figcaption>第 {int(e["pano_ref"].get("tile", 0)) + 1} 格 · '
-            f'{esc(e["pano_ref"].get("view", {}).get("camera_from"))}→{esc(e["pano_ref"].get("view", {}).get("looking_at"))} · {esc(e["camera"].get("facing"))} '
+            + (f'朝 {esc(e["pano_ref"].get("view", {}).get("card"))}' if e["pano_ref"].get("layout") == "center" else   # 中心点九宫格(2026-10-04):同一站位,只列方向
+               f'{esc(e["pano_ref"].get("view", {}).get("camera_from"))}→{esc(e["pano_ref"].get("view", {}).get("looking_at"))}')
+            + f' · {esc(e["camera"].get("facing"))} '
             f'h={esc(e["camera"].get("height_m"))}m · 直接用于 {tile_use.get(int(e["pano_ref"].get("tile", 0)) + 1, 0)} 镜</figcaption></figure>' for e in tiles) + '</div>')
     h.append('<h2>逐镜对照</h2><table><thead><tr><th>镜</th><th>本镜白模帧(机位真值)</th><th>九宫格选格</th><th>补图(俯视图 + 九宫格整图为参考)</th>'
              + ('<th>全景图模式旧图(切换前的母图,存档)</th>' if pano_entries else '') + '</tr></thead><tbody>')

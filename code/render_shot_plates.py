@@ -19,11 +19,18 @@ Agent 须原文上报,请用户到控制台「🎨 生成模型」换图像模�
   全景图(默认)= 上述全景制;世界模型 = 用户在场景预览页自选锚点创建全景图 → 基于它生成世界模型(World Labs Marble),
   本脚本在 world 里按母图机位截图作 [Image 1] 二次生成。世界模型模式的场景没有 world 时退出码 4 并打印 [world_missing],
   一张都不出——Agent 须原文上报,请用户到场景预览页该场景「🌍 世界模型」板块生成(计费)或改回全景图模式;不得自行生成世界模型。
-  九宫格(grid,2026-09-25)= 不出全景/不用世界模型/不出母图:每场景每光照方案按 layout.json#views(tile 1..9)以俯视图为参考出一张
+  九宫格(2026-09-25;2026-10-04 起出图方式默认「中心点九宫格」)= 不出全景/不用世界模型/不出母图:每场景每光照方案以俯视图为参考出一张
   3x3 宫格 <方案>_grid9.png,拆成 9 张背景图入库(pano_ref.kind=grid9),每镜按白模机位自动从九格里选最合适的一格(朝向/距离/机高/俯仰打分,
-  日志逐镜打印选格依据);**最近格不合适**(朝向差 >30° / 俯仰差 >20° / 机位距 >6 m / 机高档差 ≥2 任一,2026-09-26 默认流程)的镜自动以
-  俯视图 + 九宫格整图为参考按本镜机位单独出一张补图(pano_ref.kind=grid9_fallback,相近机位复用;日志「格子不合适(…)」逐镜给原因),
-  --max-new 同样限补图张数;--no-grid-fallback 关闭。layout.json 没有 tile 1..9 的 views 或地标缺失时抛 Grid9LayoutError(退出码 1),请先补场景布局包。
+  日志逐镜打印选格依据)。九格共用一个站位、原地转头:站位 = 本集该场景各镜机位的水平中位点,机高 = 机高中位数夹在 0.9–1.6 m,
+  第 1–8 格每 45° 一格平视,第 9 格朝仰拍镜最集中的方向按其仰角中位数仰拍(pano_ref.layout=center;参考图 = 标点俯视图 <方案>_grid9.plan.jpg + 版式模板)。
+  库里已有该方案九格时直接复用不重出;--grid-layout views 改回原方案(按 layout.json#views 的 9 个语义机位,缺 views/地标抛 Grid9LayoutError)。
+  **最近格不合适**(朝向差 >30° / 俯仰差 >20° / 机位距 >6 m / 机高档差 ≥2 任一)的镜按背景图模式分两种处理:
+    grid = 九宫格自动补图(默认):自动以俯视图 + 九宫格整图为参考按本镜机位单独出一张补图(pano_ref.kind=grid9_fallback,相近机位复用;
+      日志「格子不合适(…)」逐镜给原因),--max-new 同样限补图张数;--no-grid-fallback 关闭;
+    grid_manual = 九宫格手动补图(2026-10-04):不自动出图。库里有对本镜合适的手工截图(用户在场景预览页全景 360° 视窗 / 世界模型视窗
+      「💾 背景图」截取,库条目 manual=True)就选用(集索引 reuse=grid9_manual);没有 → 暂用最近格占位、集索引记 view.manual_needed,
+      脚本退出码 5 并打印 [manual_plate_needed] 列出待补的镜——Agent 须原文上报,请用户去截图(或在分镜预览页对该镜「换图」手选)后重跑;
+      不得自行出图、不得改背景图模式绕过。--status 对这些镜报 manual_needed(FAIL)。
 库里非母图的旧图(2026-09-10 前白模帧直出、2026-09-14 前逐镜全景直出,legacy)不再被新决策复用;--status 列出仍指向 legacy 图的镜
 (WARN 不算 FAIL);--repano 把这些镜整体按母图制重出(有费用,仅用户明确要求时用)。
 
@@ -37,7 +44,8 @@ Agent 须原文上报,请用户到控制台「🎨 生成模型」换图像模�
   python code/render_shot_plates.py --project <slug> --ep ep01 grp027 --repano  # 把仍指向 legacy(非全景制)图的镜重出(用户明确要求时)
   python code/render_shot_plates.py --project <slug> --ep ep01 --no-grid-fallback  # 九宫格模式关掉自动补图(只选格;加 --force 才重出宫格本身)
   可选 --sun west:把太阳罗盘方位换算成相对机位的方向写进提示词;--seed N:新出图固定种子。
-  退出码:0 完成;1 出错/机检不过;2 图像模型不支持全景(请用户换模型);3 已达 --max-new 上限还有待出;4 世界模型模式的场景尚未生成世界模型(请用户生成)。
+  退出码:0 完成;1 出错/机检不过;2 图像模型不支持全景(请用户换模型);3 已达 --max-new 上限还有待出;4 世界模型模式的场景尚未生成世界模型(请用户生成);
+        5 九宫格手动补图模式下有镜待用户手工截取背景图(其余镜已落盘)。
 
 纪律(2026-09-09,前科 dzg6 p6-shot-plates-ep01-s01s02:Agent 把本脚本丢后台就结单,进程随之被杀,16 镜一张没出):
   本脚本必须在派发任务内前台同步跑完;禁止 nohup/&/后台派发;每出一张即打印 saved: 并按镜落盘索引与库,
@@ -67,6 +75,9 @@ def main():
         ap.add_argument('--max-new', type=int, default=None, help='本次最多新出 N 张后停止(索引已按镜落盘);还有待出图时退出码 3,Agent 在前台循环再跑直到 0')
         ap.add_argument('--status', action='store_true', help='机检 shot_plates_complete:逐镜覆盖状态(ok/partial/missing/stale),有问题退出码 1;验收以此为准')
         ap.add_argument('--repano', action='store_true', help='集索引里仍指向 legacy(非全景制)库图的镜视为需重做,按全景制重出(有费用,仅用户明确要求时)')
+        ap.add_argument('--grid-layout', choices=('center', 'views'), default='center',
+                        help='九宫格出图方式(仅在该场景该方案还没有九宫格、或显式重出宫格时生效):center(默认,2026-10-04)= 同一站位 8 向 + 1 格仰拍,'
+                        '站位/机高按本集机位推;views = 原方案,按 layout.json#views 的 9 个语义机位')
         ap.add_argument('--grid-fallback', action=argparse.BooleanOptionalAction, default=True,
                         help='九宫格模式补图(2026-09-26 起为默认流程,--no-grid-fallback 关闭):最近格朝向/俯仰/距离/机高任一分量超限的镜,'
                         '改以俯视图 + 九宫格整图为参考按本镜机位单独出图(相近机位复用);索引里已用不合适格子的镜也会重新决策(不动已出宫格)。'
@@ -106,7 +117,7 @@ def main():
         return 1 if st['problems'] else 0
     try:
         stats = run_episode(base, ep, targets or None, dry_run=args.dry_run, force=args.force, sun=args.sun, seed=args.seed,
-                            max_new=args.max_new, repano=args.repano, grid_fallback=args.grid_fallback)
+                            max_new=args.max_new, repano=args.repano, grid_fallback=args.grid_fallback, grid_layout=args.grid_layout)
     except PanoUnsupported as error:
         print(f"[pano_unsupported] {error}", file=sys.stderr, flush=True)
         print(json.dumps({'shot_plates': {'blocked': 'pano_unsupported', 'detail': str(error)}}, ensure_ascii=False), flush=True)
@@ -129,6 +140,12 @@ def main():
     if stats.get('pending_new'):
         print(f"[shot_plates] 本次已达 --max-new 上限,仍有 {stats['pending_new']} 张待出:请在前台再次运行同一命令直到退出码 0", flush=True)
         return 3
+    if stats.get('manual_needed') and not args.dry_run:
+        # 九宫格手动补图(2026-10-04):这些镜没有合适的格子、库里也没有合适的手工截图,索引里暂用最近格占位。不自动出图,由用户补
+        print(f"[manual_plate_needed] {args.project}/{ep}: {len(stats['manual_needed'])} 张背景图待用户手动补图:{', '.join(stats['manual_needed'])};"
+              "请用户在场景预览页对应场景的全景 360° 视窗或世界模型视窗里按本镜机位用「💾 背景图」截取(或在分镜预览页对该镜「换图」手选),"
+              "之后重跑本命令;Agent 不得自行出图、不得改背景图模式绕过", flush=True)
+        return 5
     return 0
 
 

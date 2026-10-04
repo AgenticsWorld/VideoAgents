@@ -3296,7 +3296,7 @@ window.I18N_DICT = {
 
 // 背景图模式(2026-09-22):输出设置「背景图模式」+ 场景预览页分镜背景图板块按场景选择(全景图 / 世界模型)
 "背景图模式": "Chế độ nền cảnh quay",
-"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖)。九宫格:每个场景按布局包里的九个机位、以俯视图为参考一次生成一张 3×3 宫格,拆成 9 张背景图入库,每镜按白模机位自动选最合适的一格;选不到合适的(朝向/俯仰/距离/机高超限)自动以俯视图+九宫格整图为参考按本镜机位补出一张。": "Nguồn tham chiếu ảnh nền cảnh quay khi bật whitebox (cài đặt toàn cục; có thể ghi đè theo từng bối cảnh ở trang xem trước bối cảnh). Lưới chín ô: mỗi bối cảnh tạo một lưới 3×3 từ chín vị trí camera trong gói bố cục với sơ đồ nhìn từ trên làm tham chiếu, cắt thành 9 ảnh nền và lưu lại; mỗi cảnh quay tự động chọn ô phù hợp nhất theo camera whitebox, và nếu không ô nào phù hợp (hướng / độ nghiêng / khoảng cách / độ cao vượt ngưỡng) sẽ tự động dựng một ảnh nền cho chính camera của cảnh từ sơ đồ + bảng lưới.",
+"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖)。两种模式都先为每个场景以俯视图为参考一次生成一张 3×3 宫格(同一站位朝八个方向各一格,外加一格仰拍;站位和机高按本集机位自动确定),拆成 9 张背景图入库,每镜按白模机位自动选最合适的一格。区别在选不到合适格子(朝向/俯仰/距离/机高超限)时:九宫格自动补图 = 自动按本镜机位补出一张(每张计一次出图费用);九宫格手动补图 = 不自动出图,由你在场景预览页的全景图或世界模型视窗里用「💾 背景图」手工截取。": "Nguồn tham chiếu cho nền cảnh quay khi bật whitebox (thiết lập toàn cục; có thể ghi đè theo từng cảnh ở trang xem trước cảnh). Cả hai chế độ đều trước tiên tạo cho mỗi cảnh một lưới 3×3 từ mặt bằng nhìn từ trên (một vị trí đứng nhìn về tám hướng, thêm một ô ngước lên; vị trí đứng và độ cao máy quay được xác định tự động theo các máy quay của tập này), tách thành 9 ảnh nền đưa vào thư viện, rồi tự chọn cho mỗi cảnh quay ô khớp nhất với máy quay whitebox của nó. Khác nhau khi không có ô nào phù hợp (hướng / góc ngẩng / khoảng cách / độ cao máy quay vượt giới hạn): Lưới 3×3, tự động bổ sung sẽ tạo thêm một ảnh nền theo máy quay của cảnh quay đó (mỗi ảnh tính phí một lần tạo ảnh); Lưới 3×3, bổ sung thủ công không tạo gì cả — bạn tự chụp ảnh nền bằng «💾 Ảnh nền» trong trình xem toàn cảnh hoặc mô hình thế giới ở trang xem trước cảnh.",
 "本场景分镜背景图的参考来源;默认跟随项目输出设置「背景图模式」,可单独覆盖": "Nguồn tham chiếu cho ảnh nền cảnh quay của cảnh này; mặc định theo cài đặt đầu ra của dự án 「Chế độ nền cảnh quay」, có thể ghi đè riêng",
 "跟随全局({m})": "Theo toàn cục ({m})",
 "本场景背景图模式为「世界模型」,但尚未生成世界模型:出图链会停下(退出码 4),请先在上方「🌍 世界模型」板块生成": "Chế độ nền của cảnh này là 「Mô hình thế giới」 nhưng chưa tạo mô hình thế giới: chuỗi tạo ảnh nền sẽ dừng (mã thoát 4). Hãy tạo trước trong bảng 「🌍 Mô hình thế giới」 ở trên",
@@ -3305,6 +3305,14 @@ window.I18N_DICT = {
 "(暂无分镜背景图;白模签字 H3W 并导出后由分镜背景图链生成)": "(Chưa có ảnh nền cảnh quay; chuỗi ảnh nền sẽ tạo sau khi whitebox được ký duyệt H3W và xuất)",
 "生效 {m}": "hiệu lực {m}",
 "服务未重启:背景图模式接口不可用": "Dịch vụ chưa khởi động lại: API chế độ nền cảnh quay không khả dụng",
+// 九宫格自动补图 / 九宫格手动补图(2026-10-04):背景图模式选项、场景预览页待手工截取清单、分镜预览来源文字
+"九宫格自动补图": "Lưới 3×3, tự động bổ sung",
+"九宫格手动补图": "Lưới 3×3, bổ sung thủ công",
+"手动补图:{n} 张背景图待手工截取。打开上方全景图的 360° 预览或世界模型视窗,转到该镜的方向后点「💾 背景图」保存,再重跑分镜背景图即自动选用;也可在分镜预览页对该镜「换图」手选。": "Bổ sung thủ công: {n} ảnh nền đang chờ chụp thủ công. Mở bản xem 360° của toàn cảnh ở trên hoặc trình xem mô hình thế giới, xoay về hướng của cảnh quay đó rồi bấm «💾 Ảnh nền» để lưu; chạy lại nền cảnh quay thì ảnh sẽ được dùng tự động. Bạn cũng có thể chọn ảnh cho cảnh quay đó bằng «Đổi ảnh» ở trang xem trước storyboard.",
+"{s} · 朝向 {b}° · 俯仰 {p}° · 机高 {h} m": "{s} · hướng {b}° · góc ngẩng {p}° · độ cao máy quay {h} m",
+"手动补图模式:没有合适九宫格图的镜不会自动出图,需要在全景图 360° 预览或世界模型视窗里用「💾 背景图」手工截取。当前没有待补的镜。": "Chế độ bổ sung thủ công: cảnh quay không có ô lưới phù hợp sẽ không được tạo tự động; hãy chụp bằng «💾 Ảnh nền» trong bản xem 360° của toàn cảnh hoặc trình xem mô hình thế giới. Hiện không có cảnh quay nào đang chờ.",
+"手工截图": "ảnh chụp thủ công",
+"待手动补图": "chờ bổ sung thủ công",
 // 生成模型设置·数字人板块(2026-09-22,models.html):HeyGen/Kling/Agentics/ComfyUI(InfiniteTalk)面板文案 + 连接/验证状态
 "🧑 数字人": "🧑 Người ảo",
 "人物图片 + 对白音频生成说话片段；插件使用当前选中的渠道": "Tạo đoạn nói chuyện từ ảnh nhân vật + âm thanh thoại; plugin dùng kênh đang được chọn",

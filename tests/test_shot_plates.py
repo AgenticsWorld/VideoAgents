@@ -351,7 +351,8 @@ def test_ui_lang_is_zh_env_and_state(tmp_path, monkeypatch):
 
 # ---------------------------------------------------------------- 九宫格模式(2026-09-25,用户方案:俯视图出宫格 → 拆九张 → 按白模机位选格)
 def test_grid_modes_and_layout():
-    assert sp.PLATE_MODES == ('pano', 'world', 'grid') and 'grid' in sp.SCENE_PLATE_MODES
+    assert sp.PLATE_MODES == ('pano', 'world', 'grid', 'grid_manual') and sp.SCENE_PLATE_MODES == ('inherit',) + sp.PLATE_MODES
+    assert sp.GRID_PLATE_MODES == ('grid', 'grid_manual') and sp.DEFAULT_PLATE_MODE == 'grid'
     geom = sp.grid_geometry(9, FMT)
     assert geom['cols'] == geom['rows'] == 3 and geom['slots'] == 9
     assert geom['width'] * geom['height'] <= sp.GRID_MAX_PIXELS
@@ -670,3 +671,177 @@ def test_v25_activation_after_timing_tag_order_independent():
         # 标签被挤到段中间 → WARN
         bad = b.replace('Shot 1: 0-2秒：', 'Shot 1: 他走。 0-2秒：') if zh else b.replace('Shot 1: 0-2s: ', 'Shot 1: he walks. 0-2s: ')
         assert any('未紧跟段头' in w for w in st.check_prompt(bad, [2, 3], 5, st.KIND_SD25, 'g')[1])
+
+
+# ---------------------------------------------------------------- 中心点九宫格 + 九宫格手动补图(2026-10-04)
+def _hall_scene():
+    """20 x 6 m 的长厅(x 向长),四面墙 + 桌子 + 吊灯 + 矮帘。"""
+    objs = [{'id': 'wall_n', 'position': [0, 1.5, -3.25], 'size_m': [20, 3, 0.5]}, {'id': 'wall_s', 'position': [0, 1.5, 3.25], 'size_m': [20, 3, 0.5]},
+            {'id': 'wall_w', 'position': [-10.25, 1.5, 0], 'size_m': [0.5, 3, 7]}, {'id': 'wall_e', 'position': [10.25, 1.5, 0], 'size_m': [0.5, 3, 7]},
+            {'id': 'table_top', 'position': [4, 0.7, 0], 'size_m': [1, 0.05, 1]}, {'id': 'table_leg_1', 'position': [4, 0.35, 0], 'size_m': [0.05, 0.7, 0.05]},
+            {'id': 'lamp_01', 'position': [6, 2.6, 0], 'size_m': [0.4, 0.4, 0.4]}, {'id': 'lamp_02', 'position': [8, 2.6, 0], 'size_m': [0.4, 0.4, 0.4]},
+            {'id': 'curtain', 'position': [8, 0.3, -2.9], 'size_m': [1.8, 0.6, 0.05]}]
+    return {'scene_id': 'SCN-hall', 'dimensions_m': [24, 3, 10], 'objects': objs}
+
+
+def _hall_cams():
+    def f(pos, tgt):
+        return sp.camera_facts(cam(pos, tgt, 40.0), FMT, *AXES)
+    return [f((4, 0.3, 1), (9, 0.3, 1)), f((6, 0.3, 0), (6, 2.3, -3)), f((6, 0.5, 1), (6, 2.5, -2)), f((7, 1.4, -1), (2, 1.4, -1)), f((6, 1.3, 0), (0, 1.3, 0))]
+
+
+def test_plan_edges_reads_keys_prose_and_defaults():
+    assert sp.plan_edges({}) == {'north': 'top', 'east': 'right', 'south': 'bottom', 'west': 'left'}
+    assert sp.plan_edges({'orientation': {'top_of_map': 'east side', 'right_of_map': 'south'}})['north'] == 'left'
+    # alices SCN-long-hall:只写了上边 + 文字里说北端在左(镜像布局)→ 其余按对边补
+    e = sp.plan_edges({'orientation': {'top_of_map': "west wall (the low curtain); the hall's north end is at the left edge, the south end at the right edge"}})
+    assert e == {'west': 'top', 'north': 'left', 'south': 'right', 'east': 'bottom'}
+    v = sp.grid9c_vectors(e)
+    assert v['north'] == (-1.0, 0.0) and v['west'] == (0.0, -1.0) and abs(v['north-east'][0] + v['north-east'][1]) < 1e-9
+
+
+def test_grid9c_station_tilt_and_views():
+    scene = _hall_scene(); cams = _hall_cams()
+    layout = {'scene_id': 'SCN-hall', 'landmarks': [{'id': 'door', 'name_en': 'east door', 'xy': [0.9, 0.5]}]}
+    plan = sp.grid9c_views(scene, layout, FMT, AXES, cams)
+    pos = plan['station']
+    assert pos[1] == sp.GRID9C_HEIGHT_RANGE[0]                           # 机高中位数 0.5 → 夹到下限 0.9
+    assert abs(pos[0] - 6) <= 0.5 and abs(pos[2]) <= 1.0                 # 机位水平中位点附近的空网格点
+    assert not any(sp._in_box(pos[0], pos[2], o, sp.GRID9C_CLEARANCE_M) for o in sp.eye_band_solids(scene, pos[1]))
+    assert plan['tilt']['card'] == 'north' and plan['tilt']['pitch'] > 20      # 两条仰拍镜都朝北(-z)
+    vs = plan['views']
+    assert [v['tile'] for v in vs] == list(range(1, 10)) and [v['card'] for v in vs[:8]] == list(sp.GRID9C_DIRS)
+    assert all(v['pitch'] == 0 and abs(v['facts']['pitch_deg']) < 0.1 for v in vs[:8]) and vs[8]['facts']['pitch_deg'] > 20
+    assert [round(v['facts']['bearing_deg']) for v in vs[:8]] == [0, 45, 90, 135, 180, 225, 270, 315]
+    north, east = vs[0], vs[2]
+    assert abs(north['ahead_m'] - (3.0 + pos[2])) < 0.01 and abs(east['ahead_m'] - (10.0 - pos[0])) < 0.01    # 正前方到墙面的距离
+    assert (north['left_card'], north['right_card']) == ('west', 'east')
+    assert any('east door' in s for s in east['seen'])
+    joined = ' '.join(east['objects'])
+    assert 'hanging from the ceiling' in joined and 'lamp' in joined          # 吊灯写明悬挂
+    assert any('curtain' in o and 'only 0.6 m tall' in o for v in vs for o in v['objects'])   # 矮帘写明高度
+    assert not any('wall' in o for v in vs for o in v['objects'])             # 结构件不列
+    no_tilt = sp.grid9c_tilt([c for c in cams if c['pitch_deg'] <= 20], sp.grid9c_vectors(plan['edges']))
+    assert no_tilt['pitch'] == 0.0
+    down = sp.camera_facts(cam((6, 2.5, 0), (8, 0.2, 0), 40.0), FMT, *AXES)                 # 没有仰拍镜时看俯拍镜
+    assert sp.grid9c_tilt([c for c in cams if c['pitch_deg'] <= 20] + [down], sp.grid9c_vectors(plan['edges']))['pitch'] < -20
+
+
+def test_ensure_grid9_center_dry_run_and_fallback_wording(tmp_path):
+    from PIL import Image
+    base = tmp_path; sid = 'SCN-hall'
+    sdir = base / 'assets/concepts/scenes' / sid; sdir.mkdir(parents=True)
+    Image.new('RGB', (480, 200), (40, 40, 40)).save(sdir / 'layout_top.png')
+    scene = _hall_scene(); layout = {'scene_id': sid}
+    logs = []
+    tiles = sp.ensure_grid9(base, sid, 'L1', 'L1', scene=scene, layout=layout, axes=AXES, fmt=FMT, style_doc={}, time_of_day='day', lighting='',
+                            dry_run=True, log=logs.append, cameras=_hall_cams())
+    assert len(tiles) == 9 and all(t['pending'] and t['grid9'] and t['pano_ref']['layout'] == 'center' for t in tiles)
+    assert tiles[0]['refs'][0].endswith('L1_grid9.plan.jpg') and tiles[0]['pano_ref']['view']['card'] == 'north'
+    assert tiles[8]['pano_ref']['view']['pitch_deg'] > 20 and tiles[0]['pano_ref']['station'] == tiles[8]['pano_ref']['station']
+    prompt = tiles[0]['prompt']
+    assert 'one single camera standpoint' in prompt and 'Tile 9 (bottom-right): looking north' in prompt and 'tilted up' in prompt
+    assert 'eight red arrows' in prompt and 'north is toward the top edge' in prompt
+    assert not (sdir / 'plates').exists() or not list((sdir / 'plates').glob('*.png'))      # dry-run 不落图
+    try:                                                                                     # 中心点需要机位
+        sp.ensure_grid9(base, sid, 'L1', 'L1', scene=scene, layout=layout, axes=AXES, fmt=FMT, style_doc={}, time_of_day='', lighting='', dry_run=True)
+        assert False
+    except sp.Grid9LayoutError:
+        pass
+    try:                                                                                     # views 方式仍要 layout.json#views
+        sp.ensure_grid9(base, sid, 'L1', 'L1', scene=scene, layout=layout, axes=AXES, fmt=FMT, style_doc={}, time_of_day='', lighting='', dry_run=True,
+                        layout_kind='views')
+        assert False
+    except sp.Grid9LayoutError:
+        pass
+    shot = sp.camera_facts(cam((6, 0.2, 0), (9, 0.2, 0), 40.0), FMT, *AXES); shot['standing'] = 'on the floor'
+    fb = sp.build_grid9_fallback_prompt(shot, [], [], scene, layout, '', '', '', 'start', 'day', {}, tiles, tiles[2])
+    assert 'one common standpoint' in fb and 'tile 9 (bottom-right): facing north, tilted up' in fb and 'nine other camera positions' not in fb
+
+
+def test_find_manual_capture_fit_scheme_and_copies(tmp_path):
+    base = tmp_path
+    shot = sp.camera_facts(cam((0, 1.5, 0), (0, 1.5, -5), 40.0), FMT, *AXES)
+    def entry(key, pos, tgt, **kw):
+        rel = f'assets/concepts/scenes/X/plates/{key}.png'
+        (base / rel).parent.mkdir(parents=True, exist_ok=True); (base / rel).write_bytes(b'x')
+        return {'key': key, 'manual': True, 'master': True, 'file': rel, 'camera': sp.camera_facts(cam(pos, tgt, 60.0), FMT, *AXES),
+                'lighting_scheme_id': 'L1', 'pano_ref': {'kind': 'pano_manual', 'scheme': 'L1'}, **kw}
+    near = entry('near', (1, 1.6, 0), (1, 1.6, -5)); nearer = entry('nearer', (0.2, 1.5, 0), (0.2, 1.5, -5))
+    far = entry('far', (9, 1.6, 0), (9, 1.6, -5)); side = entry('side', (0, 1.5, 0), (5, 1.5, 0))
+    other = entry('other', (0, 1.5, 0), (0, 1.5, -5)); other['pano_ref']['scheme'] = 'L2'; other['lighting_scheme_id'] = 'L2'
+    nolight = entry('nolight', (0.5, 1.5, 0), (0.5, 1.5, -5)); nolight['pano_ref'] = {'kind': 'world_manual'}; nolight['lighting_scheme_id'] = 'nolight'
+    cp = entry('cp', (0, 1.5, 0), (0, 1.5, -5), copy=True)
+    tile = {'key': 't1', 'grid9': True, 'file': near['file'], 'camera': shot, 'pano_ref': {'kind': 'grid9', 'scheme': 'L1', 'tile': 0}}
+    e, info = sp.find_manual_capture([far, side, other, cp, tile, near, nearer], 'L1', shot, base)
+    assert e['key'] == 'nearer' and info['distance_m'] == 0.2 and not sp.grid9_unfit_reasons(info)     # 远 / 侧向 / 别的方案 / 副本 / 九格都不算
+    assert sp.find_manual_capture([far, side, other, cp, tile], 'L1', shot, base) == (None, {})
+    assert sp.find_manual_capture([nolight], 'L1', shot, base)[0]['key'] == 'nolight'                  # 不分方案的手工截图通用
+    (base / near['file']).unlink()
+    assert sp.find_manual_capture([near], 'L1', shot, base) == (None, {})                              # 文件不在
+    assert sp.is_manual_capture(near) and not sp.is_manual_capture(cp) and not sp.is_manual_capture(tile)
+    assert sp.pick_grid9_tile([tile], shot)[1] == {'tile': 1, 'key': 't1', **sp.plate_camera_fit(shot, shot)}
+
+
+def _manual_project(tmp_path, monkeypatch, mode):
+    """最小项目:一个场景两镜(一镜正对北、一镜贴地朝东),库里九格已齐(中心点),背景图模式 = mode。"""
+    import json
+    base = tmp_path; ep = 'ep01'; sid = 'SCN-hall'
+    (base / 'settings.json').write_text(json.dumps({'output': {'plate_mode': mode, 'spatial_blocking': True}}), encoding='utf-8')
+    scene = _hall_scene()
+    def camrec(shot_id, pos, tgt):
+        return {'shot_id': shot_id, 'movement': 'static', 'start': 0.0, 'duration_s': 2.0, 'keyframes': [cam(pos, tgt, 40.0)]}
+    episode = {'scenes': {sid: scene}, 'groups': [{'group_id': 'grp001', 'scene_id': sid,
+               'cameras': [camrec('sh001', (6, 1.0, 0), (6, 1.0, -3)), camrec('sh002', (-8, 0.2, 2), (-3, 0.2, 2))]}]}
+    (base / 'directing' / ep / 'whitebox').mkdir(parents=True)
+    (base / 'directing' / ep / 'whitebox' / 'episode.json').write_text(json.dumps(episode), encoding='utf-8')
+    (base / 'directing' / ep / 'shot_list.json').write_text(json.dumps({'shots': [], 'generation_groups': [{'group_id': 'grp001', 'lighting_scheme_id': 'L1'}]}), encoding='utf-8')
+    pdir = base / 'assets/concepts/scenes' / sid / 'plates'; pdir.mkdir(parents=True)
+    plan = sp.grid9c_views(scene, {}, FMT, AXES, [sp.camera_facts(cam((6, 1.0, 0), (6, 1.0, -3), 40.0), FMT, *AXES)])
+    tiles = []
+    for v in plan['views']:
+        rel = f'assets/concepts/scenes/{sid}/plates/L1_grid9_t{v["tile"]}.png'; (base / rel).write_bytes(b'x')
+        tiles.append({'key': f'L1_grid9_t{v["tile"]}', 'grid9': True, 'master': False, 'file': rel, 'camera': v['facts'], 'lighting_scheme_id': 'L1',
+                      'pano_ref': {'kind': 'grid9', 'layout': 'center', 'scheme': 'L1', 'tile': v['tile'] - 1, 'sheet': f'assets/concepts/scenes/{sid}/plates/L1_grid9.png'}})
+    lib = sp.load_library(base, sid); lib['plates'] = tiles
+    sp.save_library(base, sid, lib)
+    monkeypatch.setattr(sp, 'render_clean_frames', lambda *a, **k: None)
+    return base, ep, sid
+
+
+def test_grid_manual_mode_marks_needed_then_picks_manual_capture(tmp_path, monkeypatch):
+    base, ep, sid = _manual_project(tmp_path, monkeypatch, 'grid_manual')
+    called = []
+    monkeypatch.setattr('modules.genmedia.generate_image', lambda *a, **k: called.append(a), raising=False)
+    stats = sp.run_episode(base, ep, log=lambda *_: None)
+    assert stats['modes'][sid] == 'grid_manual' and stats['manual_needed'] == ['sh002:start'] and not stats['errors'] and not called
+    shots = sp.load_episode_index(base, ep)['shots']
+    assert shots['sh001']['plates'][0]['reuse'] == 'grid9' and 'manual_needed' not in (shots['sh001']['plates'][0]['view'] or {})
+    p2 = shots['sh002']['plates'][0]
+    assert p2['reuse'] == 'grid9' and p2['view']['manual_needed']['reasons'] and p2['key'].startswith('L1_grid9_t')      # 最近格占位
+    st = sp.status_episode(base, ep)
+    assert st['problems'] == {'sh002': 'manual_needed'} and st['shots']['sh001']['state'] == 'ok'
+    # 用户手工截了一张贴合 sh002 机位的图 → 重跑自动选用,不再待补
+    rel = f'assets/concepts/scenes/{sid}/plates/L1_hand1.png'; (base / rel).write_bytes(b'x')
+    lib = sp.load_library(base, sid)
+    lib['plates'].append({'key': 'L1_hand1', 'manual': True, 'master': True, 'file': rel, 'lighting_scheme_id': 'L1',
+                          'camera': sp.camera_facts(cam((-8, 0.3, 2), (-3, 0.3, 2), 60.0), FMT, *AXES), 'pano_ref': {'kind': 'world_manual', 'scheme': 'L1'}})
+    sp.save_library(base, sid, lib)
+    stats2 = sp.run_episode(base, ep, log=lambda *_: None)
+    assert not stats2.get('manual_needed') and stats2.get('grid9_manual_library') == 1 and not called
+    p2 = sp.load_episode_index(base, ep)['shots']['sh002']['plates'][0]
+    assert p2['key'] == 'L1_hand1' and p2['reuse'] == 'grid9_manual' and p2['view']['manual']['kind'] == 'world_manual'
+    assert sp.status_episode(base, ep)['problems'] == {}
+    assert sp.run_episode(base, ep, log=lambda *_: None)['skipped_fresh'] == 2            # 再跑:两镜都按记录保留
+
+
+def test_status_manual_needed_only_in_manual_mode(tmp_path, monkeypatch):
+    import json
+    base, ep, sid = _manual_project(tmp_path, monkeypatch, 'grid_manual')
+    sp.run_episode(base, ep, log=lambda *_: None)
+    assert sp.status_episode(base, ep)['problems'] == {'sh002': 'manual_needed'}
+    (base / 'settings.json').write_text(json.dumps({'output': {'plate_mode': 'grid', 'spatial_blocking': True}}), encoding='utf-8')
+    assert sp.status_episode(base, ep)['problems'] == {}            # 切回自动补图:占位标记不再算问题(重跑会自动补图)
+    sp.set_scene_plate_mode(base, sid, 'grid_manual')               # 场景级覆盖为手动补图
+    assert sp.status_episode(base, ep)['problems'] == {'sh002': 'manual_needed'}
+

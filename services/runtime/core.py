@@ -1046,9 +1046,11 @@ DEFAULT_GENCONFIG = {
                #   场景全景按母图机位重投影后二次生成(锚点按白模机位自动规划);world=用户在场景预览页自选锚点创建全景图 → 基于它
                #   生成世界模型(World Labs Marble)→ 出图时在世界模型里按母图机位截图作参考二次生成;场景级可在场景预览页
                #   「分镜背景图」板块覆盖(库 plates/index.json#mode)。世界模型模式的场景没有 world 时 render_shot_plates.py 退出码 4
-               #   [world_missing],由用户生成(计费),Agent 不得自行生成;grid(九宫格,2026-09-25)=不出全景不出母图,每场景每方案按
-               #   layout.json#views 以俯视图为参考出一张 3x3 宫格、拆 9 张入库,每镜按白模机位自动选最合适的一格
-               "plate_mode": "grid",   # 2026-09-26 默认九宫格(含自动补图);pano/world 仍受理但界面隐藏
+               #   [world_missing],由用户生成(计费),Agent 不得自行生成;grid(九宫格自动补图,默认)=不出全景不出母图,每场景每方案以俯视图为参考
+               #   出一张 3x3 宫格(2026-10-04 起中心点九宫格:同一站位 8 向 + 1 格仰拍,站位/机高按本集机位推)、拆 9 张入库,每镜按白模机位
+               #   自动选最合适的一格,选不到合适的自动按本镜机位补出一张;grid_manual(九宫格手动补图,2026-10-04)=选不到合适的不自动出图,
+               #   由用户在场景预览页用全景图 / 世界模型视窗「💾 背景图」手工截取(render_shot_plates.py 退出码 5 [manual_plate_needed])
+               "plate_mode": "grid",   # 2026-09-26 默认九宫格(含自动补图);界面露 grid / grid_manual,pano/world 仍受理但界面隐藏
                # (2026-09-08 废止 whitebox_top_video:白模只导出摄影机视角 camera.mp4,不再有俯视视频;存量 settings 里的该键忽略)
                "platforms": ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]},
     # 审核设置(设置菜单「审核设置」):各维度审核力度 0-100(0=不审核 100=最严格),按项目独立;
@@ -1148,8 +1150,10 @@ UPSCALE_FFMPEG_PRESETS = ("ultrafast", "fast", "medium", "slow", "veryslow")
 DIALOGUE_VOICE_MODES = ("native", "dubbing")
 SOUND_SPLIT_MODES = ("off", "script_only", "auto")   # 输出设置「声画分离」(2026-10-03,docs/sound_split.md):关(默认)/ 仅剧本标记 / 自动(与 modules.offscreen_lines.SOUND_SPLIT_MODES 同步)
 SCENE_PLATES_MODES = ("auto", "single", "pair")   # 输出设置「场景图」(2026-09-17,仅白模关闭时生效):正向必出;反向按需 / 不出 / 全出
-PLATE_MODE_LABELS = {"pano": "全景图 pano", "world": "世界模型 world", "grid": "九宫格 grid"}
-PLATE_MODES = ("pano", "world", "grid")   # 输出设置「背景图模式」(2026-09-22,仅白模开启时生效):全景图 / 世界模型 / 九宫格(2026-09-25)(与 modules.shot_plates.PLATE_MODES 同步)
+PLATE_MODE_LABELS = {"pano": "全景图 pano", "world": "世界模型 world", "grid": "九宫格自动补图 grid", "grid_manual": "九宫格手动补图 grid_manual"}
+# 输出设置「背景图模式」(仅白模开启时生效):九宫格自动补图 grid(默认)/ 九宫格手动补图 grid_manual(2026-10-04)/ 全景图 pano / 世界模型 world
+# (后两项界面隐藏、后端仍受理;与 modules.shot_plates.PLATE_MODES 同步)
+PLATE_MODES = ("pano", "world", "grid", "grid_manual")
 
 
 
@@ -3173,9 +3177,14 @@ def build_role_prompt(agent_id: str, project: str,
         "pano = 分镜背景图由场景全景按母图机位重投影后二次生成(锚点按白模机位自动规划,`render_scene_panos.py`);"
         "world = 用户在场景预览页自选锚点创建全景图 → 基于它生成世界模型(World Labs Marble)→ `render_shot_plates.py` 在世界模型里按母图机位截图作参考二次生成——"
         "**世界模型模式的场景没有世界模型时脚本退出码 4 并打印 `[world_missing]`,一张背景图也不出:原文上报,请用户到场景预览页该场景「🌍 世界模型」板块生成(计费)或改回全景图模式;Agent 不得自行跑 `worldlabs_world.py` 生成世界模型、不得改模式绕过**;"
-        "grid(九宫格,2026-09-25)= 不出全景、不用世界模型、不出母图:`render_shot_plates.py` 每场景每光照方案按 `layout.json#views`(tile 1..9)以俯视图为参考出一张 3x3 宫格 `<方案>_grid9.png`,"
+        "grid(九宫格自动补图,默认)/ grid_manual(九宫格手动补图,2026-10-04)= 不出全景、不用世界模型、不出母图:`render_shot_plates.py` 每场景每光照方案以俯视图为参考出一张 3x3 宫格 `<方案>_grid9.png`"
+        "(2026-10-04 起默认「中心点九宫格」:九格共用一个站位原地转头,站位/机高/第 9 格仰拍方向由脚本按本集该场景的白模机位自动推,不依赖 `layout.json#views`;库里已有九格时直接复用),"
         "拆成 9 张背景图入库,每镜按白模机位自动从九格里选最合适的一格(日志逐镜打印选格依据);宫格整图只作台账不进视频 refs,Agent 不得手工拆图、不得自绘宫格、不得用退役的 grid_9views.png 代替;"
-        "layout.json 缺 views(tile 1..9)时脚本报 Grid9LayoutError,先派 environment-concept 补布局包"
+        "场景缺俯视图 `layout_top.png` 时脚本报 Grid9LayoutError,先派 environment-concept 补布局包。"
+        "选不到合适格子的镜:grid 模式脚本自动按本镜机位补出一张(计费,--max-new 限张数);"
+        "**grid_manual 模式脚本不自动出图——库里有合适的手工截图就选用,没有则暂用最近格占位并以退出码 5 打印 `[manual_plate_needed]` 列出待补的镜:"
+        "原文上报,请用户到场景预览页对应场景的全景 360° 视窗或世界模型视窗用「💾 背景图」按该镜机位截取(或在分镜预览页对该镜「换图」手选)后重跑;"
+        "Agent 不得自行出图补、不得改背景图模式绕过,`--status` 对这些镜报 manual_needed 即未完成**"
         if spatial_on else
         "**关闭(默认)—— 走「场景图(正向/反向)」流程(A 方案,docs/scene_plates.md,2026-09-17),不建白模、不接参考视频**(p6-scene-model / p6-whitebox / p6-whitebox-export / p6-shot-plates 不派发,组 prompt 不写 video_refs / Whitebox reference 段,whitebox_ref_bound / shot_plate_bound 报 skipped):"
         f"本项目「场景图」设置 = **{scene_plates_mode}**(auto=正向必出、反向按分镜 plate_view 按需;single=只出正向;pair=每场景正反两张;场景级可在场景预览页覆盖)。"
@@ -7488,12 +7497,20 @@ def _preview_scenes(project: str):
                     if x.is_dir() and not x.name.startswith(".")}
     # 分镜背景图(2026-09-09):场景库 assets/concepts/scenes/<sid>/plates/index.json,按各集 shot_plates.json 反查被哪些镜引用
     used_by: dict[str, list] = {}
+    manual_needed: dict[str, list] = {}   # 场景 → 九宫格手动补图模式下待用户手工截取的镜(2026-10-04,集索引 view.manual_needed)
     for f in sorted((base / "directing").glob("ep*/shot_plates.json")):
         sp = _read_json_safe(f) or {}
         for sp_sid, rec in (sp.get("shots") or {}).items():
             for p in (rec.get("plates") or []) if isinstance(rec, dict) else []:
                 if isinstance(p, dict) and p.get("key"):
                     used_by.setdefault(p["key"], []).append(f"{f.parent.name}/{sp_sid}" + ("(end)" if p.get("role") == "end" else ""))
+                    if p.get("reuse") == "grid9" and isinstance(p.get("view"), dict) and p["view"].get("manual_needed") and rec.get("scene_id"):
+                        cam = p.get("camera") or {}
+                        manual_needed.setdefault(rec["scene_id"], []).append({
+                            "ep": f.parent.name, "shot_id": sp_sid, "role": p.get("role") or "start",
+                            "reasons": (p["view"]["manual_needed"] or {}).get("reasons") or [],
+                            "position": cam.get("position"), "bearing_deg": cam.get("bearing_deg"), "pitch_deg": cam.get("pitch_deg"),
+                            "height_m": cam.get("height_m")})
     # 各集白模机位一次读完按场景分组(逐场景读整集 JSON 在 260 场景项目上要 10s+)
     try:
         from modules.scene_panos import cameras_by_scene
@@ -7608,6 +7625,8 @@ def _preview_scenes(project: str):
             from modules import shot_plates as _shp
             plate_mode_view = {"mode": _shp.scene_plate_mode(base, sid), "effective": _shp.effective_plate_mode(base, sid),
                                "has_world": bool(world and (world.get("files") or {}).get("splats"))}
+            if plate_mode_view["effective"] == "grid_manual":
+                plate_mode_view["manual_needed"] = manual_needed.get(sid, [])
         except Exception as e:  # noqa: BLE001
             print(f"[preview-scenes] {sid} plate_mode 读取失败(忽略):{e}", flush=True)
         scenes.append({"id": sid, "name": meta.get("name") or sid,
@@ -7670,7 +7689,7 @@ async def api_scene_plates_mode(project: str, sid: str, body: dict):
 
 
 def _scene_plate_mode_set(project: str, sid: str, mode: str):
-    """场景预览页「分镜背景图」板块:场景级「背景图模式」覆盖(2026-09-22;inherit|pano|world,存库 plates/index.json#mode)。
+    """场景预览页「分镜背景图」板块:场景级「背景图模式」覆盖(2026-09-22;inherit|grid|grid_manual|pano|world,存库 plates/index.json#mode)。
     仅白模开启项目可改;world 模式不要求此刻已有世界模型(出图时没有才停下,退出码 4 [world_missing])。"""
     from modules import shot_plates as _shp
     from modules.whitebox import component as _component
@@ -8548,7 +8567,9 @@ def _preview_storyboard(project: str, ep: str):
             rows.append({"role": p.get("role"), "key": p.get("key"), "reuse": p.get("reuse"), "crop": p.get("crop"),
                          "file": p.get("file"), "url": f"/projects/{base.name}/{p['file']}?v={int(f.stat().st_mtime)}",
                          # 场景 id(2026-09-15):分镜预览「起点 · 复用库图」文字链到场景预览页并高亮该库图(?id=<sid>#plate=<key>)
-                         "scene_id": sp_rec.get("scene_id")})
+                         "scene_id": sp_rec.get("scene_id"),
+                         # 九宫格手动补图(2026-10-04):这张只是最近格占位,等用户手工截取
+                         "manual_needed": bool(p.get("reuse") == "grid9" and isinstance(p.get("view"), dict) and p["view"].get("manual_needed"))})
         shot_plates[str(sp_sid)] = rows
     # 组服装(2026-08-26):shot_list 组 costumes_by_char(权威)→ 缺则由镜 costumes 并集
     # → 再缺回落 continuity 的 costume_states(存量项目);经 costume_sheets.json 台账落到服装 sheet

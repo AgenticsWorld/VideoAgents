@@ -231,7 +231,7 @@ let WB_ON=true;
 let SP_MODE='auto';
 // 项目「背景图模式」(output.plate_mode,随预览数据 plate_mode 下发,2026-09-22):白模开启项目分镜背景图的参考来源,场景级可覆盖
 let PLATE_MODE='grid';   // 2026-09-26 默认九宫格
-const PLATE_MODE_NAMES={pano:'全景图',world:'世界模型',grid:'九宫格'};
+const PLATE_MODE_NAMES={pano:'全景图',world:'世界模型',grid:'九宫格自动补图',grid_manual:'九宫格手动补图'};
 // 深链定位:分镜预览页参考图标签跳转 ?id=<SCN-ID>,首次加载直接选中该场景
 let JUMP_ID=new URLSearchParams(location.search).get('id');
 // 把当前项目+选中场景写回地址栏(?project=&id=),刷新/分享后仍停在同一场景
@@ -369,19 +369,32 @@ function renderDetail(s){
         }).join('')+`</div>`:''));
   }
   // 分镜背景图(2026-09-09):场景库 plates/index.json,按机位指纹入库,标注被哪些集/镜引用
-  // 背景图模式(2026-09-22):白模开启时板块常显,标题后「背景图模式」= 跟随全局 / 九宫格 / 全景图 / 世界模型(2026-09-26 场景级三项均可选)(POST scenes/<sid>/plates/plate-mode)
+  // 背景图模式(2026-09-22):白模开启时板块常显,标题后「背景图模式」= 跟随全局 / 九宫格自动补图 / 九宫格手动补图(POST scenes/<sid>/plates/plate-mode);
+  // 2026-10-04 用户拍板:全景图 / 世界模型两项隐藏(只在本场景当前就是该值时保留一条隐藏项,好让旧覆盖值正确显示)
   const pm=s.plate_mode||null;
   if((s.plates||[]).length||(WB_ON&&pm)){
     const plates=s.plates||[];
     const pmSel=pm?` <select class="pm-mode" data-sid="${esc(s.id)}" title="${esc(t('本场景分镜背景图的参考来源;默认跟随项目输出设置「背景图模式」,可单独覆盖'))}">`
       +`<option value="inherit"${pm.mode==='inherit'?' selected':''}>${esc(I18N.f('跟随全局({m})',{m:t(PLATE_MODE_NAMES[PLATE_MODE]||PLATE_MODE)}))}</option>`
-      +`<option value="grid"${pm.mode==='grid'?' selected':''}>${esc(t('九宫格'))}</option>`
-      +`<option value="pano"${pm.mode==='pano'?' selected':''}>${esc(t('全景图'))}</option>`   // 2026-09-26 场景级三项常显(全景图/世界模型按用户要求恢复;项目设置页仍只露九宫格)
-      +`<option value="world"${pm.mode==='world'?' selected':''}>${esc(t('世界模型'))}</option></select>`:'';
+      +`<option value="grid"${pm.mode==='grid'?' selected':''}>${esc(t('九宫格自动补图'))}</option>`
+      +`<option value="grid_manual"${pm.mode==='grid_manual'?' selected':''}>${esc(t('九宫格手动补图'))}</option>`
+      +(pm.mode==='pano'?`<option value="pano" selected hidden>${esc(t('全景图'))}</option>`:'')
+      +(pm.mode==='world'?`<option value="world" selected hidden>${esc(t('世界模型'))}</option>`:'')+`</select>`:'';
     let body='';
     if(pm&&pm.effective==='world'&&!pm.has_world){
       body+=`<div class="meta-line pm-warn" style="color:#e6b422">⚠ ${esc(t('本场景背景图模式为「世界模型」,但尚未生成世界模型:出图链会停下(退出码 4),请先在上方「🌍 世界模型」板块生成'))} `
         +`<button type="button" class="editbtn pm-goworld">${esc(t('前往世界模型'))}</button></div>`;
+    }
+    // 九宫格手动补图(2026-10-04):没有合适格子的镜不自动出图,列出待用户手工截取的镜(集索引 view.manual_needed)与各自机位
+    if(pm&&pm.effective==='grid_manual'){
+      const need=pm.manual_needed||[];
+      if(need.length){
+        body+=`<div class="meta-line pm-warn" style="color:#e6b422">⚠ ${esc(I18N.f('手动补图:{n} 张背景图待手工截取。打开上方全景图的 360° 预览或世界模型视窗,转到该镜的方向后点「💾 背景图」保存,再重跑分镜背景图即自动选用;也可在分镜预览页对该镜「换图」手选。',{n:need.length}))}</div>`
+          +`<div class="meta-line" style="color:var(--dim)">`+need.map(x=>esc(I18N.f('{s} · 朝向 {b}° · 俯仰 {p}° · 机高 {h} m',
+            {s:`${x.ep}/${x.shot_id}(${x.role==='end'?t('终点'):t('起点')})`,b:x.bearing_deg!=null?Math.round(x.bearing_deg):'-',p:x.pitch_deg!=null?Math.round(x.pitch_deg):'-',h:x.height_m!=null?x.height_m:'-'}))).join('<br>')+`</div>`;
+      }else{
+        body+=`<div class="meta-line" style="color:var(--dim)">${esc(t('手动补图模式:没有合适九宫格图的镜不会自动出图,需要在全景图 360° 预览或世界模型视窗里用「💾 背景图」手工截取。当前没有待补的镜。'))}</div>`;
+      }
     }
     body+=plates.length?`<div class="gallery plates">`
       +plates.map(p=>{

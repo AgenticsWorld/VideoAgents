@@ -3298,7 +3298,7 @@ window.I18N_DICT = {
 
 // 背景图模式(2026-09-22):输出设置「背景图模式」+ 场景预览页分镜背景图板块按场景选择(全景图 / 世界模型)
 "背景图模式": "Mode de fond de plan",
-"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖)。九宫格:每个场景按布局包里的九个机位、以俯视图为参考一次生成一张 3×3 宫格,拆成 9 张背景图入库,每镜按白模机位自动选最合适的一格;选不到合适的(朝向/俯仰/距离/机高超限)自动以俯视图+九宫格整图为参考按本镜机位补出一张。": "Source de référence des plaques de plan quand la maquette blanche est active (réglage global ; remplaçable par scène sur la page d'aperçu des scènes). Neuf cases : pour chaque scène, une grille 3×3 est générée à partir des neuf positions de caméra du pack de disposition avec le plan vu de dessus comme référence, découpée en 9 plaques et stockée ; chaque plan choisit automatiquement la case la plus proche de sa caméra de maquette, et si aucune case ne convient (orientation / inclinaison / distance / hauteur hors limites), une plaque est rendue automatiquement pour la caméra du plan à partir du plan + de la planche.",
+"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖)。两种模式都先为每个场景以俯视图为参考一次生成一张 3×3 宫格(同一站位朝八个方向各一格,外加一格仰拍;站位和机高按本集机位自动确定),拆成 9 张背景图入库,每镜按白模机位自动选最合适的一格。区别在选不到合适格子(朝向/俯仰/距离/机高超限)时:九宫格自动补图 = 自动按本镜机位补出一张(每张计一次出图费用);九宫格手动补图 = 不自动出图,由你在场景预览页的全景图或世界模型视窗里用「💾 背景图」手工截取。": "Source de référence des fonds de plan lorsque le whitebox est activé (réglage global ; peut être remplacé par scène sur la page d'aperçu des scènes). Les deux modes génèrent d'abord, pour chaque scène, une grille 3×3 à partir du plan vu de dessus (un même point de vue dans huit directions, plus une case en contre-plongée ; le point de vue et la hauteur de caméra sont fixés automatiquement d'après les caméras de cet épisode), la découpent en 9 fonds dans la bibliothèque et choisissent pour chaque plan la case la plus proche de sa caméra whitebox. Ils diffèrent quand aucune case ne convient (orientation / inclinaison / distance / hauteur de caméra hors limites) : Grille 3×3, complément automatique génère un fond supplémentaire à la caméra de ce plan (chacun est facturé comme une génération d'image) ; Grille 3×3, complément manuel ne génère rien : vous capturez le fond vous-même avec « 💾 Plaque » dans la visionneuse de panorama ou de modèle de monde de la page d'aperçu des scènes.",
 "本场景分镜背景图的参考来源;默认跟随项目输出设置「背景图模式」,可单独覆盖": "Source de référence des fonds de plan de cette scène ; suit par défaut le réglage de sortie du projet « Mode de fond de plan », remplaçable ici",
 "跟随全局({m})": "Suivre le global ({m})",
 "本场景背景图模式为「世界模型」,但尚未生成世界模型:出图链会停下(退出码 4),请先在上方「🌍 世界模型」板块生成": "Le mode de fond de cette scène est « Modèle du monde » mais aucun modèle n’a encore été généré : la chaîne des fonds s’arrêtera (code de sortie 4). Générez-le d’abord dans le panneau « 🌍 Modèle du monde » ci-dessus",
@@ -3307,6 +3307,14 @@ window.I18N_DICT = {
 "(暂无分镜背景图;白模签字 H3W 并导出后由分镜背景图链生成)": "(Pas encore de fonds de plan ; la chaîne les génère après la validation H3W de la whitebox et son export)",
 "生效 {m}": "en vigueur {m}",
 "服务未重启:背景图模式接口不可用": "Service non redémarré : l’endpoint du mode de fond est indisponible",
+// 九宫格自动补图 / 九宫格手动补图(2026-10-04):背景图模式选项、场景预览页待手工截取清单、分镜预览来源文字
+"九宫格自动补图": "Grille 3×3, complément automatique",
+"九宫格手动补图": "Grille 3×3, complément manuel",
+"手动补图:{n} 张背景图待手工截取。打开上方全景图的 360° 预览或世界模型视窗,转到该镜的方向后点「💾 背景图」保存,再重跑分镜背景图即自动选用;也可在分镜预览页对该镜「换图」手选。": "Complément manuel : {n} fonds attendent une capture manuelle. Ouvrez l'aperçu 360° d'un panorama ci-dessus ou la visionneuse du modèle de monde, tournez vers la direction de ce plan et cliquez sur « 💾 Plaque » pour enregistrer ; relancez les fonds de plan et il sera repris automatiquement. Vous pouvez aussi choisir un fond pour ce plan avec « Remplacer » dans l'aperçu du storyboard.",
+"{s} · 朝向 {b}° · 俯仰 {p}° · 机高 {h} m": "{s} · orientation {b}° · inclinaison {p}° · hauteur de caméra {h} m",
+"手动补图模式:没有合适九宫格图的镜不会自动出图,需要在全景图 360° 预览或世界模型视窗里用「💾 背景图」手工截取。当前没有待补的镜。": "Mode complément manuel : les plans sans case adaptée ne sont pas générés automatiquement ; capturez-les avec « 💾 Plaque » dans l'aperçu 360° du panorama ou la visionneuse du modèle de monde. Rien n'est en attente pour l'instant.",
+"手工截图": "capture manuelle",
+"待手动补图": "en attente de complément manuel",
 // 生成模型设置·数字人板块(2026-09-22,models.html):HeyGen/Kling/Agentics/ComfyUI(InfiniteTalk)面板文案 + 连接/验证状态
 "🧑 数字人": "🧑 Humain numérique",
 "人物图片 + 对白音频生成说话片段；插件使用当前选中的渠道": "Génère des clips parlants à partir d'une image du personnage + de l'audio des dialogues ; le plugin utilise le canal sélectionné",

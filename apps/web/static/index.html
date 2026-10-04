@@ -521,12 +521,13 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <span id="npo-spatial-hint" style="color:var(--dim);font-size:12px">建场景白模，并导出白模摄影机视角视频作为视频的参考定位人物</span></div>
       <div class="row" id="npo-plate-mode-row"><label>背景图模式</label>
         <select id="npo-plate-mode" style="flex:none">
-          <option value="grid" selected>九宫格</option>
+          <option value="grid" selected>九宫格自动补图</option>
+          <option value="grid_manual">九宫格手动补图</option>
           <option value="pano" hidden>全景图</option>
-          <option value="world" hidden>世界模型</option><!-- 2026-09-26 用户拍板:界面只保留九宫格(默认);全景图/世界模型隐藏但保留,存量项目旧值仍能正确显示 -->
+          <option value="world" hidden>世界模型</option><!-- 2026-10-04 用户拍板:界面露两项(九宫格自动补图 默认 / 九宫格手动补图);全景图/世界模型隐藏但保留,存量项目旧值仍能正确显示 -->
         </select>
         <button type="button" class="info-btn" data-info="npo-plate-mode-hint" title="说明">i</button></div>
-      <div class="note info-note" id="npo-plate-mode-hint">白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖)。九宫格:每个场景按布局包里的九个机位、以俯视图为参考一次生成一张 3×3 宫格,拆成 9 张背景图入库,每镜按白模机位自动选最合适的一格;选不到合适的(朝向/俯仰/距离/机高超限)自动以俯视图+九宫格整图为参考按本镜机位补出一张。</div>
+      <div class="note info-note" id="npo-plate-mode-hint">白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖)。两种模式都先为每个场景以俯视图为参考一次生成一张 3×3 宫格(同一站位朝八个方向各一格,外加一格仰拍;站位和机高按本集机位自动确定),拆成 9 张背景图入库,每镜按白模机位自动选最合适的一格。区别在选不到合适格子(朝向/俯仰/距离/机高超限)时:九宫格自动补图 = 自动按本镜机位补出一张(每张计一次出图费用);九宫格手动补图 = 不自动出图,由你在场景预览页的全景图或世界模型视窗里用「💾 背景图」手工截取。</div>
       <div class="row" id="npo-scene-plates-row"><label>场景图模式</label>
         <select id="npo-scene-plates" style="flex:none">
           <option value="auto">自动:正向必出,反向按分镜按需</option>
@@ -642,12 +643,13 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <span id="out-spatial-hint" style="color:var(--dim);font-size:12px">建场景白模，并导出白模摄影机视角视频作为视频的参考定位人物</span></div>
     <div class="row" id="out-plate-mode-row"><label>背景图模式</label>
       <select id="out-plate-mode" style="flex:none">
-        <option value="grid" selected>九宫格</option>
+        <option value="grid" selected>九宫格自动补图</option>
+        <option value="grid_manual">九宫格手动补图</option>
         <option value="pano" hidden>全景图</option>
-        <option value="world" hidden>世界模型</option><!-- 2026-09-26 用户拍板:界面只保留九宫格(默认);全景图/世界模型隐藏但保留,存量项目旧值仍能正确显示 -->
+        <option value="world" hidden>世界模型</option><!-- 2026-10-04 用户拍板:界面露两项(九宫格自动补图 默认 / 九宫格手动补图);全景图/世界模型隐藏但保留,存量项目旧值仍能正确显示 -->
       </select>
       <button type="button" class="info-btn" data-info="out-plate-mode-hint" title="说明">i</button></div>
-    <div class="note info-note" id="out-plate-mode-hint">白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖)。九宫格:每个场景按布局包里的九个机位、以俯视图为参考一次生成一张 3×3 宫格,拆成 9 张背景图入库,每镜按白模机位自动选最合适的一格;选不到合适的(朝向/俯仰/距离/机高超限)自动以俯视图+九宫格整图为参考按本镜机位补出一张。</div>
+    <div class="note info-note" id="out-plate-mode-hint">白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖)。两种模式都先为每个场景以俯视图为参考一次生成一张 3×3 宫格(同一站位朝八个方向各一格,外加一格仰拍;站位和机高按本集机位自动确定),拆成 9 张背景图入库,每镜按白模机位自动选最合适的一格。区别在选不到合适格子(朝向/俯仰/距离/机高超限)时:九宫格自动补图 = 自动按本镜机位补出一张(每张计一次出图费用);九宫格手动补图 = 不自动出图,由你在场景预览页的全景图或世界模型视窗里用「💾 背景图」手工截取。</div>
     <div class="row" id="out-scene-plates-row"><label>场景图模式</label>
       <select id="out-scene-plates" style="flex:none">
         <option value="auto">自动:正向必出,反向按分镜按需</option>
@@ -1993,7 +1995,7 @@ function sgApplyPreset(pfx,key){
 }
 // 白模开关说明随勾选状态切换(2026-09-12):勾选=白模链说明,关闭=单张概念图说明;文案经 t() 走词典
 const SCENE_PLATES_MODES=['auto','single','pair'];   // 输出设置「场景图」(2026-09-17):白模关闭项目的场景一致性方案(正向/反向场景图)
-const PLATE_MODES=['pano','world','grid'];   // 输出设置「背景图模式」(2026-09-22):白模开启项目分镜背景图的参考来源;2026-09-26 起界面只露九宫格(默认,含自动补图),pano/world 为隐藏项(存量项目旧值仍显示、后端仍支持)
+const PLATE_MODES=['pano','world','grid','grid_manual'];   // 输出设置「背景图模式」:白模开启项目分镜背景图的参考来源;2026-10-04 起界面露 grid 九宫格自动补图(默认)/ grid_manual 九宫格手动补图,pano/world 为隐藏项(存量项目旧值仍显示、后端仍支持)
 function syncSpatialHint(id){
   const cb=$('#'+id),h=$('#'+id+'-hint');if(!cb||!h)return;
   h.textContent=t(cb.checked?'建场景白模，并导出白模摄影机视角视频作为视频的参考定位人物':'走「场景图(正向/反向)」流程,不建白模');

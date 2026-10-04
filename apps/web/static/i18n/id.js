@@ -3296,7 +3296,7 @@ window.I18N_DICT = {
 
 // 背景图模式(2026-09-22):输出设置「背景图模式」+ 场景预览页分镜背景图板块按场景选择(全景图 / 世界模型)
 "背景图模式": "Mode pelat latar",
-"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖)。九宫格:每个场景按布局包里的九个机位、以俯视图为参考一次生成一张 3×3 宫格,拆成 9 张背景图入库,每镜按白模机位自动选最合适的一格;选不到合适的(朝向/俯仰/距离/机高超限)自动以俯视图+九宫格整图为参考按本镜机位补出一张。": "Sumber referensi pelat shot saat whitebox aktif (pengaturan global; dapat ditimpa per adegan di halaman pratinjau adegan). Grid sembilan: per adegan dibuat satu grid 3×3 dari sembilan posisi kamera dalam paket tata letak dengan denah sebagai referensi, dipecah menjadi 9 pelat dan disimpan; setiap shot otomatis memilih ubin yang paling cocok berdasarkan kamera whitebox-nya, dan jika tidak ada ubin yang cocok (arah / pitch / jarak / tinggi di luar batas) satu pelat dirender otomatis untuk kamera shot itu sendiri dari denah + lembar grid.",
+"白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖)。两种模式都先为每个场景以俯视图为参考一次生成一张 3×3 宫格(同一站位朝八个方向各一格,外加一格仰拍;站位和机高按本集机位自动确定),拆成 9 张背景图入库,每镜按白模机位自动选最合适的一格。区别在选不到合适格子(朝向/俯仰/距离/机高超限)时:九宫格自动补图 = 自动按本镜机位补出一张(每张计一次出图费用);九宫格手动补图 = 不自动出图,由你在场景预览页的全景图或世界模型视窗里用「💾 背景图」手工截取。": "Sumber referensi latar belakang shot saat whitebox aktif (pengaturan global; dapat ditimpa per adegan di halaman pratinjau adegan). Kedua mode terlebih dahulu membuat satu grid 3×3 per adegan dari denah tampak atas (satu titik berdiri menghadap delapan arah, ditambah satu petak mendongak; titik berdiri dan tinggi kamera ditentukan otomatis dari kamera episode ini), membaginya menjadi 9 pelat di pustaka, lalu memilih petak yang paling cocok untuk tiap shot berdasarkan kamera whitebox-nya. Perbedaannya ada saat tidak ada petak yang cocok (arah / kemiringan / jarak / tinggi kamera di luar batas): Grid 3×3, pelengkap otomatis membuat satu pelat tambahan pada kamera shot itu (masing-masing ditagih sebagai satu pembuatan gambar); Grid 3×3, pelengkap manual tidak membuat apa pun — Anda menangkap sendiri pelatnya dengan \"💾 Pelat\" di penampil panorama atau model dunia pada halaman pratinjau adegan.",
 "本场景分镜背景图的参考来源;默认跟随项目输出设置「背景图模式」,可单独覆盖": "Sumber referensi pelat shot adegan ini; secara default mengikuti pengaturan output proyek 「Mode pelat latar」, dapat ditimpa di sini",
 "跟随全局({m})": "Ikuti global ({m})",
 "本场景背景图模式为「世界模型」,但尚未生成世界模型:出图链会停下(退出码 4),请先在上方「🌍 世界模型」板块生成": "Mode pelat adegan ini adalah 「Model dunia」 tetapi model dunia belum dibuat: rantai pelat akan berhenti (kode keluar 4). Buat dulu di panel 「🌍 Model dunia」 di atas",
@@ -3305,6 +3305,14 @@ window.I18N_DICT = {
 "(暂无分镜背景图;白模签字 H3W 并导出后由分镜背景图链生成)": "(Belum ada pelat latar shot; dibuat oleh rantai pelat setelah whitebox disetujui di H3W dan diekspor)",
 "生效 {m}": "berlaku {m}",
 "服务未重启:背景图模式接口不可用": "Layanan belum dimulai ulang: endpoint mode pelat tidak tersedia",
+// 九宫格自动补图 / 九宫格手动补图(2026-10-04):背景图模式选项、场景预览页待手工截取清单、分镜预览来源文字
+"九宫格自动补图": "Grid 3×3, pelengkap otomatis",
+"九宫格手动补图": "Grid 3×3, pelengkap manual",
+"手动补图:{n} 张背景图待手工截取。打开上方全景图的 360° 预览或世界模型视窗,转到该镜的方向后点「💾 背景图」保存,再重跑分镜背景图即自动选用;也可在分镜预览页对该镜「换图」手选。": "Pelengkap manual: {n} pelat menunggu ditangkap secara manual. Buka pratinjau 360° panorama di atas atau penampil model dunia, putar ke arah shot tersebut lalu klik \"💾 Pelat\" untuk menyimpan; jalankan ulang latar belakang shot dan pelat itu akan dipakai otomatis. Anda juga dapat memilih pelat untuk shot itu dengan \"Ganti\" di halaman pratinjau storyboard.",
+"{s} · 朝向 {b}° · 俯仰 {p}° · 机高 {h} m": "{s} · arah {b}° · kemiringan {p}° · tinggi kamera {h} m",
+"手动补图模式:没有合适九宫格图的镜不会自动出图,需要在全景图 360° 预览或世界模型视窗里用「💾 背景图」手工截取。当前没有待补的镜。": "Mode pelengkap manual: shot tanpa petak grid yang cocok tidak dibuat otomatis; tangkap dengan \"💾 Pelat\" di pratinjau 360° panorama atau penampil model dunia. Saat ini tidak ada yang menunggu.",
+"手工截图": "tangkapan manual",
+"待手动补图": "menunggu pelengkap manual",
 // 生成模型设置·数字人板块(2026-09-22,models.html):HeyGen/Kling/Agentics/ComfyUI(InfiniteTalk)面板文案 + 连接/验证状态
 "🧑 数字人": "🧑 Manusia Digital",
 "人物图片 + 对白音频生成说话片段；插件使用当前选中的渠道": "Menghasilkan klip berbicara dari gambar karakter + audio dialog; plugin memakai kanal yang sedang dipilih",

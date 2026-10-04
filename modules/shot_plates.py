@@ -49,6 +49,7 @@ import json
 import math
 import os
 import re
+from collections import Counter
 from pathlib import Path
 
 from modules.prompt_layout import paragraphize
@@ -475,9 +476,14 @@ def is_legacy(entry: dict) -> bool:
                                                                           or entry.get('revised') or entry.get('copy')))
 
 
-# ---------------------------------------------------------------- 背景图模式(2026-09-22):全景图 | 世界模型
-PLATE_MODES = ('pano', 'world', 'grid')                  # 项目输出设置 output.plate_mode(白模开启时显示;默认 grid 九宫格 2026-09-26;pano/world 界面隐藏)
-SCENE_PLATE_MODES = ('inherit', 'pano', 'world', 'grid')  # 场景级覆盖:库 assets/concepts/scenes/<sid>/plates/index.json#mode(默认 inherit)
+# ---------------------------------------------------------------- 背景图模式(2026-09-22):全景图 | 世界模型 | 九宫格自动补图 | 九宫格手动补图
+# grid = 九宫格自动补图(默认):选不到合适格子的镜自动按本镜机位单独出一张补图(计费);
+# grid_manual = 九宫格手动补图(2026-10-04):选不到合适格子的镜不自动出图,等用户在场景预览页的全景 360° 视窗 / 世界模型视窗用
+#   「💾 背景图」手工截取(库条目 manual=True);重跑时库里有合适的手工截图就自动选用,仍没有的镜在索引里记 view.manual_needed、
+#   CLI 退出码 5 [manual_plate_needed]、--status 报 manual_needed。
+PLATE_MODES = ('pano', 'world', 'grid', 'grid_manual')   # 项目输出设置 output.plate_mode(白模开启时显示;默认 grid;pano/world 界面隐藏)
+SCENE_PLATE_MODES = ('inherit',) + PLATE_MODES            # 场景级覆盖:库 assets/concepts/scenes/<sid>/plates/index.json#mode(默认 inherit)
+GRID_PLATE_MODES = ('grid', 'grid_manual')
 DEFAULT_PLATE_MODE = 'grid'   # 2026-09-26 用户拍板:默认九宫格(含自动补图);pano/world 后端仍支持,界面隐藏
 
 
@@ -497,7 +503,7 @@ def project_plate_mode(base: Path) -> str:
 
 
 def scene_plate_mode(base: Path, sid: str) -> str:
-    """场景级原始设置(inherit|pano|world),存库 index.json#mode;没有库文件 = inherit。"""
+    """场景级原始设置(inherit|pano|world|grid|grid_manual),存库 index.json#mode;没有库文件 = inherit。"""
     lib = read(library_dir(base, sid) / 'index.json', None)
     m = str((lib or {}).get('mode') or 'inherit').strip().lower() if isinstance(lib, dict) else 'inherit'
     return m if m in SCENE_PLATE_MODES else 'inherit'
@@ -519,8 +525,14 @@ def set_scene_plate_mode(base: Path, sid: str, mode: str):
     save_library(base, sid, lib)
 
 
-# ---------------------------------------------------------------- 九宫格模式(2026-09-25,用户方案)
-# ① 每场景每光照方案按 layout.json#views(tile 1..9:camera_from/looking_at/size/angle/desc_en)以俯视图为参考出一张 3x3 宫格;
+# ---------------------------------------------------------------- 九宫格模式(2026-09-25,用户方案;2026-10-04 默认改为中心点九宫格)
+# 出图方式 layout_kind:
+#   center(默认,2026-10-04 用户拍板,alices ep01 SCN-long-hall 实测可直接用的镜 22 → 51 / 67):九格共用一个站位(像全景锚点那样原地转头),
+#     站位 = 本集该场景该方案各镜机位的水平中位点,机高 = 机高中位数夹在 0.9–1.6 m,第 1–8 格每 45° 一格平视,第 9 格 = 仰拍镜最集中的
+#     方向 + 仰角中位数(没有仰拍镜时朝机位最多的方向再出一格平视);参考图 = 标点俯视图(红点 + 八向箭头)+ 版式模板。见下方「中心点九宫格」。
+#   views(原方案,--grid-layout views 备用):按 layout.json#views 的 9 个语义机位,见 grid9_views / build_grid9_prompt。
+# 库里已有该方案的九格(不论哪种方式出的)且文件齐全时直接复用,不重出。
+# ① 每场景每光照方案以俯视图为参考出一张 3x3 宫格;
 # ② 按版式拆成 9 张背景图入库(pano_ref.kind='grid9',不是母图:不走 find_master/单应派生);
 # ③ 每镜按白模机位事实与九格的合成机位(地标 xy → 白模坐标,机高按 angle、视场按 size)打分,自动选最近的一格作本镜背景图。
 # 评审时提过的替代方案(格位取本集母图机位 + 白模联系表作参考)实测跨宫格不一致、空白模帧时格子雷同,用户拍板回到本方案。
@@ -701,31 +713,353 @@ def build_grid9_prompt(layout: dict, scene: dict, views: list, geom: dict, facts
     return '\n'.join(lines)
 
 
+# ---------------------------------------------------------------- 中心点九宫格(2026-10-04,九宫格模式默认出图方式)
+GRID9C_DIRS = ('north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west')   # 第 1–8 格,每 45° 一格
+GRID9C_HEIGHT_RANGE = (0.9, 1.6)     # 站位机高 = 各镜机高中位数夹在此区间(m)
+GRID9C_FOV_V = 55.0                  # 每格垂直视场(°)
+GRID9C_TILT_MIN_DEG = 20.0           # 俯仰超过此值的镜算仰拍镜(第 9 格按它们定方向与仰角)
+GRID9C_CLEARANCE_M = 0.6             # 站位离实体的最小净距
+_PLAN_EDGES = ('top', 'right', 'bottom', 'left')
+_EDGE_VEC = {'top': (0, -1), 'right': (1, 0), 'bottom': (0, 1), 'left': (-1, 0)}   # 布局图边 → 白模 (dx, dz)
+_CARDINALS = ('north', 'east', 'south', 'west')
+_OPPOSITE = {'north': 'south', 'south': 'north', 'east': 'west', 'west': 'east'}
+_STRUCTURAL = re.compile(r'wall|lintel|masonry|vault|floor|ceiling|ground')
+
+
+def plan_edges(layout: dict) -> dict:
+    """布局图四条边各是哪个方向 → {'north': 'top', …}。认 layout.json#orientation 各边首词,以及说明文字里
+    「north end is at the left edge」这类写法;缺的边按对边、再按顺时针(上北右东下南左西)补齐。只用于宫格提示词里的方位叫法,
+    库里机位事实的 bearing 仍按 orientation_axes。"""
+    o = layout.get('orientation') or {}
+    edges = {}
+    for edge in _PLAN_EDGES:
+        text = str(o.get(f'{edge}_of_map') or '').strip().lower()
+        word = next((c for c in _CARDINALS if text.startswith(c)), None)
+        if word:
+            edges[edge] = word
+    prose = ' '.join(str(v) for v in o.values() if isinstance(v, str)).lower()
+    for m in re.finditer(r'\b(north|east|south|west)\b[^.;,]*?\b(?:at|on|toward|towards)\s+the\s+(top|right|bottom|left)\s+edge', prose):
+        edges.setdefault(m.group(2), m.group(1))
+    for a, b in (('top', 'bottom'), ('left', 'right')):
+        if a in edges and b not in edges:
+            edges[b] = _OPPOSITE[edges[a]]
+        if b in edges and a not in edges:
+            edges[a] = _OPPOSITE[edges[b]]
+    if len(edges) < 4 or len(set(edges.values())) < 4:
+        top = edges.get('top') or (_OPPOSITE[edges['bottom']] if 'bottom' in edges else 'north')
+        i = _CARDINALS.index(top)
+        edges = {e: _CARDINALS[(i + k) % 4] for k, e in enumerate(_PLAN_EDGES)}
+    return {card: edge for edge, card in edges.items()}
+
+
+def grid9c_vectors(edges: dict) -> dict:
+    """八个方向 → 白模 (dx, dz) 单位向量(按场景布局图自己的方位叫法)。"""
+    out = {}
+    for name in GRID9C_DIRS:
+        vx = sum(_EDGE_VEC[edges[c]][0] for c in name.split('-')); vz = sum(_EDGE_VEC[edges[c]][1] for c in name.split('-'))
+        n = math.hypot(vx, vz)
+        out[name] = (vx / n, vz / n)
+    return out
+
+
+def _dir_name(vec, vectors: dict) -> str:
+    return max(vectors, key=lambda k: vectors[k][0] * vec[0] + vectors[k][1] * vec[1])
+
+
+def _plan_side(name: str, edges: dict) -> str:
+    es = [edges[c] for c in name.split('-')]
+    if len(es) == 1:
+        return f'the {es[0]} edge'
+    return f"the {next(e for e in es if e in ('top', 'bottom'))}-{next(e for e in es if e in ('left', 'right'))} corner"
+
+
+def eye_band_solids(scene: dict, h: float) -> list:
+    """挡住机高这一层的白模实体(吊灯这类悬空件、矮道具、带 yaw 的斜放件不算)。"""
+    return [o for o in scene.get('objects', [])
+            if o['position'][1] - o['size_m'][1] / 2 < h + 0.2 and o['position'][1] + o['size_m'][1] / 2 > h - 0.6 and not (o.get('yaw') or 0)]
+
+
+def _in_box(x, z, o, margin=0.0) -> bool:
+    return abs(x - o['position'][0]) <= o['size_m'][0] / 2 + margin and abs(z - o['position'][2]) <= o['size_m'][2] / 2 + margin
+
+
+def _segment_hit(x0, z0, x1, z1, o):
+    """线段 (x0,z0)→(x1,z1) 进入实体 o 平面包围盒的参数 t(0..1);不相交返回 None。"""
+    t0, t1 = 0.0, 1.0
+    for a, b, c, half in ((x0, x1, o['position'][0], o['size_m'][0] / 2), (z0, z1, o['position'][2], o['size_m'][2] / 2)):
+        d = b - a
+        if abs(d) < 1e-9:
+            if abs(a - c) > half:
+                return None
+            continue
+        lo, hi = sorted(((c - half - a) / d, (c + half - a) / d))
+        t0, t1 = max(t0, lo), min(t1, hi)
+        if t0 > t1:
+            return None
+    return t0
+
+
+def visible_set_dressing(scene: dict, key: dict, fmt: dict) -> list[str]:
+    """本格画内、没被机高层实体挡住的陈设(门/灯/桌…,结构件与小零件不列),按基名归并计数,自左向右。
+    悬空件写明悬挂高度、矮物写明高度(2026-10-04 四宫格实测:吊灯被画成落地灯、0.6 m 矮帘被画成落地长帘)。"""
+    pos = key['position']
+    project = projector(key, fmt)
+    solids = eye_band_solids(scene, pos[1])
+    groups = {}
+    for o in scene.get('objects', []):
+        sx, sy, sz = o['size_m']; cx, cy, cz = o['position']
+        if _STRUCTURAL.search(o['id']) or max(sx, sz) >= 6 or max(sx, sz) < 0.35:
+            continue
+        dist = math.hypot(cx - pos[0], cz - pos[2])
+        q = project([cx, cy, cz]) if dist >= 0.6 else None
+        if not q or abs(q[0]) > 1.0:
+            continue
+        hits = [_segment_hit(pos[0], pos[2], cx, cz, s) for s in solids if s is not o]
+        if any(t is not None and t * dist < dist - 0.5 for t in hits):
+            continue
+        whole = _PART_SUFFIX.sub('', o['id'])
+        name = re.sub(r'_[a-z]?\d+$', '', whole).replace('_', ' ')
+        g = groups.setdefault(name, {'ids': set(), 'xs': [], 'd': [], 'bottom': 1e9, 'top': 0.0})
+        g['ids'].add(whole); g['xs'].append(q[0]); g['d'].append(dist)
+        g['bottom'] = min(g['bottom'], cy - sy / 2); g['top'] = max(g['top'], cy + sy / 2)
+    out = []
+    for name, g in sorted(groups.items(), key=lambda kv: sum(kv[1]['xs']) / len(kv[1]['xs'])):
+        n = len(g['ids']); xs = g['xs']
+        where = ('left and right of centre' if n > 1 and min(xs) < -.2 and max(xs) > .2 and not (min(xs) < -.8 and max(xs) > .8)
+                 else x_word(min(xs), max(xs), sum(xs) / len(xs)))
+        out.append(f"{n} {name}{'s' if n > 1 else ''} ({where}, {min(g['d']):.0f}"
+                   + (f"–{max(g['d']):.0f}" if n > 1 and max(g['d']) - min(g['d']) >= 1 else '') + ' m away'
+                   + (f", hanging from the ceiling at {g['bottom']:.1f} m, not standing on the floor" if g['bottom'] >= 1.8 else
+                      f", low, only {g['top']:.1f} m tall" if g['top'] <= 1.0 else '') + ')')
+    return out
+
+
+def grid9c_station(scene: dict, cameras: list) -> tuple[list, str]:
+    """站位 [x, y, z]:各镜机位水平中位点(落在实体净距内则吸附到最近的 0.25 m 空网格点),机高 = 机高中位数夹在 GRID9C_HEIGHT_RANGE。"""
+    import statistics
+    h = round(min(GRID9C_HEIGHT_RANGE[1], max(GRID9C_HEIGHT_RANGE[0], statistics.median(c['height_m'] for c in cameras))), 2)
+    x = statistics.median(c['position'][0] for c in cameras); z = statistics.median(c['position'][2] for c in cameras)
+    solids = eye_band_solids(scene, h)
+    dx, _, dz = scene['dimensions_m']
+    best = None
+    for i in range(-int(dx * 2), int(dx * 2) + 1):
+        for k in range(-int(dz * 2), int(dz * 2) + 1):
+            px, pz = i * 0.25, k * 0.25
+            if any(_in_box(px, pz, o, GRID9C_CLEARANCE_M) for o in solids):
+                continue
+            d = math.hypot(px - x, pz - z)
+            if best is None or d < best[0]:
+                best = (d, px, pz)
+    if best is None:
+        return [round(x, 2), h, round(z, 2)], f'{len(cameras)} 个机位的水平中位点(找不到空网格点,未吸附)'
+    return [best[1], h, best[2]], f'{len(cameras)} 个机位的水平中位点 [{x:.1f}, {z:.1f}] → 最近空网格点;机高 = 机高中位数夹在 {GRID9C_HEIGHT_RANGE[0]}–{GRID9C_HEIGHT_RANGE[1]} m'
+
+
+def grid9c_tilt(cameras: list, vectors: dict) -> dict:
+    """第 9 格:仰拍镜(俯仰 > GRID9C_TILT_MIN_DEG)最集中的方向 + 这些镜的仰角中位数;没有仰拍镜看俯拍镜(俯仰 < −阈值,pitch 为负);
+    都没有时朝机位最多的方向再出一格平视。"""
+    import statistics
+    def name_for(c):
+        d = sub(c['target'], c['position']); n = math.hypot(d[0], d[2]) or 1
+        return _dir_name((d[0] / n, d[2] / n), vectors)
+    for word, tilted in (('仰拍', [c for c in cameras if c['pitch_deg'] > GRID9C_TILT_MIN_DEG]),
+                         ('俯拍', [c for c in cameras if c['pitch_deg'] < -GRID9C_TILT_MIN_DEG])):
+        if tilted:
+            card, n = Counter(name_for(c) for c in tilted).most_common(1)[0]
+            pitch = float(round(statistics.median(c['pitch_deg'] for c in tilted if name_for(c) == card)))
+            return {'card': card, 'pitch': pitch, 'basis': f'{len(tilted)} 条{word}镜里 {n} 条朝 {card},俯仰中位 {pitch:g}°'}
+    return {'card': Counter(name_for(c) for c in cameras).most_common(1)[0][0], 'pitch': 0.0, 'basis': '无仰拍/俯拍镜,取机位最多的方向'}
+
+
+def grid9c_views(scene: dict, layout: dict, fmt: dict, axes, cameras: list) -> dict:
+    """中心点九宫格的九个机位:{'station', 'basis', 'tilt', 'edges', 'views': [{tile, card, pitch, plan_side, key, facts, ahead_m, …}]}。"""
+    ex, ez, texts = axes
+    edges = plan_edges(layout)
+    vectors = grid9c_vectors(edges)
+    pos, basis = grid9c_station(scene, cameras)
+    tilt = grid9c_tilt(cameras, vectors)
+    landmarks = [lm for lm in layout.get('landmarks', []) if isinstance(lm, dict) and 'xy' in lm]
+    dims = scene['dimensions_m']
+    floor_scene = {**scene, 'objects': [o for o in scene.get('objects', []) if o['position'][1] - o['size_m'][1] / 2 <= 0.3]}   # 悬空件不算脚下
+    solids = eye_band_solids(scene, pos[1])
+    views = []
+    for i, (card, pitch) in enumerate([(c, 0.0) for c in GRID9C_DIRS] + [(tilt['card'], tilt['pitch'])]):
+        ux, uz = vectors[card]
+        c = math.cos(math.radians(pitch))
+        key = {'position': list(pos), 'target': [pos[0] + ux * 10 * c, pos[1] + 10 * math.sin(math.radians(pitch)), pos[2] + uz * 10 * c], 'fov': GRID9C_FOV_V}
+        facts = camera_facts(key, fmt, ex, ez, texts)
+        facts['standing'] = standing_on(floor_scene, layout, key)
+        project = projector(key, fmt)
+        seen = []
+        for lm in landmarks:
+            p = [(lm['xy'][0] - .5) * dims[0], 1.0, (lm['xy'][1] - .5) * dims[2]]
+            dist = math.hypot(p[0] - pos[0], p[2] - pos[2])
+            if dist < 1.0 or lm.get('kind') in ('zone', 'space', 'direction'):
+                continue
+            q = project(p)
+            if q and abs(q[0]) <= 1.0 and abs(q[1]) <= 1.2:
+                seen.append((q[0], f"{lm.get('name_en') or lm.get('name') or lm['id']} ({x_word(q[0], q[0], q[0])}, about {dist:.0f} m away)"))
+        hits = [_segment_hit(pos[0], pos[2], pos[0] + ux * 100, pos[2] + uz * 100, o) for o in solids]
+        hits = [t * 100 for t in hits if t is not None and t * 100 > 0.05]
+        right = (-uz, ux)
+        views.append({'tile': i + 1, 'card': card, 'pitch': pitch, 'plan_side': _plan_side(card, edges), 'key': key, 'facts': facts,
+                      'ahead_m': round(min(hits), 1) if hits else None,
+                      'left_card': _dir_name((-right[0], -right[1]), vectors), 'right_card': _dir_name(right, vectors),
+                      'seen': [s for _, s in sorted(seen)], 'objects': visible_set_dressing(scene, key, fmt)})
+    return {'station': pos, 'basis': basis, 'tilt': tilt, 'edges': edges, 'views': views}
+
+
+def _label_font(size: int):
+    from PIL import ImageFont
+    for name in ('/System/Library/Fonts/Helvetica.ttc', 'arial.ttf', 'DejaVuSans.ttf'):
+        try:
+            return ImageFont.truetype(name, size)
+        except Exception:  # noqa: BLE001
+            continue
+    try:
+        return ImageFont.load_default(size)
+    except TypeError:   # 旧版 Pillow 的 load_default 不收字号
+        return ImageFont.load_default()
+
+
+def mark_grid9c_plan(plan_file: Path, scene: dict, pos, edges: dict, output: Path) -> Path:
+    """标点俯视图:俯视图叠站位红点 + 八向箭头与字母(N/NE/…,按本场景方位叫法),作中心点九宫格出图的 [Image 1]。"""
+    from PIL import Image, ImageDraw
+    im = Image.open(plan_file).convert('RGBA')
+    W, H = im.size
+    dx, _, dz = scene['dimensions_m']
+    px, py = (pos[0] / dx + .5) * W, (pos[2] / dz + .5) * H
+    ov = Image.new('RGBA', im.size, (0, 0, 0, 0))
+    dr = ImageDraw.Draw(ov)
+    font = _label_font(max(24, W // 60))
+    L, r = min(W, H) * 0.10, max(8, W // 200)
+    sx, sz = W / dx, H / dz
+    for name, (ux, uz) in grid9c_vectors(edges).items():
+        n = math.hypot(ux * sx, uz * sz); vx, vy = ux * sx / n, uz * sz / n     # 图上方向(俯视图非等比时按像素比例)
+        ex_, ey_ = px + vx * L, py + vy * L
+        dr.line([px, py, ex_, ey_], fill=(255, 30, 30, 235), width=5)
+        nx, ny = -vy, vx
+        dr.polygon([(ex_ + vx * 20, ey_ + vy * 20), (ex_ + nx * 11, ey_ + ny * 11), (ex_ - nx * 11, ey_ - ny * 11)], fill=(255, 30, 30, 235))
+        ch = ''.join(w[0].upper() for w in name.split('-'))
+        tx, ty = px + vx * (L + 52), py + vy * (L + 52)
+        tw, th = dr.textbbox((0, 0), ch, font=font)[2:]
+        dr.rectangle([tx - tw / 2 - 7, ty - th / 2 - 5, tx + tw / 2 + 7, ty + th / 2 + 7], fill=(255, 255, 255, 235))
+        dr.text((tx - tw / 2, ty - th / 2), ch, fill=(220, 20, 20, 255), font=font)
+    dr.ellipse([px - r, py - r, px + r, py + r], fill=(255, 20, 20, 255), outline=(255, 255, 255, 255), width=3)
+    Path(output).parent.mkdir(parents=True, exist_ok=True)
+    Image.alpha_composite(im, ov).convert('RGB').save(output, quality=92)
+    return Path(output)
+
+
+def build_grid9c_prompt(layout: dict, scene: dict, plan: dict, geom: dict, style: str, lighting: str, desc: str, time_of_day: str) -> str:
+    """中心点九宫格提示词([Image 1] 标点俯视图、[Image 2] 版式模板):整图声明 + 俯视图用法与地标 + 共用机位 + 逐格(方向/正前方距离/左右/画内地标与陈设)+ 禁项 + 风格。"""
+    views, pos, edges = plan['views'], plan['station'], plan['edges']
+    name = re.sub(r'[(（].*?[)）]', '', layout.get('scene_name_en') or layout.get('scene_name') or scene.get('name') or scene['scene_id']).strip()
+    name = re.sub(r'^SCN-', '', name).replace('-', ' ')
+    f0 = views[0]['facts']
+    lines = [(f"One image that is a {geom['cols']} by {geom['rows']} grid of nine separate photographs of the exact same location, all taken from "
+              f"one single camera standpoint: the camera stays on the same spot and only turns. Tiles 1 to 8 look level toward north, north-east, "
+              f"east, south-east, south, south-west, west and north-west in turn, one photograph every 45 degrees, so that together they cover "
+              f"the full 360-degree turn around that standpoint; tile 9 is the same standpoint looking {views[8]['card']}"
+              + (", with the camera tilted upward" if views[8]['pitch'] > 0 else ", with the camera tilted downward" if views[8]['pitch'] < 0
+                 else " once more") + ". Laid out as three "
+              f"rows of three equal rectangular tiles with thin straight pure-white gutters between them, exactly matching the blank tiling "
+              f"template in [Image 2]. Location: {name}. Time of day: {time_of_day or ''}." + (f" Lighting: {lighting}." if lighting else ''))]
+    p = ("[Image 1] is the top-down plan of this location, with the camera standpoint marked as a red dot and eight red arrows lettered "
+         "N, NE, E, SE, S, SW, W, NW showing the viewing directions. Use it only as the spatial layout reference: which wall, door, column, "
+         "object and open floor lies in each direction, how far away it is and what is beside it. Never reproduce the plan, its top-down "
+         "viewpoint, the red dot, the arrows or the letters; no tile may be a top-down, overhead, bird's-eye or plan view. On the plan, "
+         + ', '.join(f"{c} is toward the {edges[c]} edge" for c in _CARDINALS) + '.')
+    lms = [f"{(lm.get('name_en') or lm.get('name') or lm['id'])} ({_plan_pos_word(lm['xy'])})" for lm in layout.get('landmarks', []) if 'xy' in lm]
+    if lms:
+        p += " Landmarks on the plan: " + '; '.join(lms) + '.'
+    lines.append(p)
+    lines.append(f"Every tile uses the same camera: standing {f0['standing']}, lens {pos[1]:g} m above the floor ({f0['height_word']}), "
+                 f"{f0['lens_mm_equiv']:g}mm-equivalent rectilinear wide-angle lens with about {f0['fov_h_deg']:g} degrees horizontal field of view. "
+                 f"In tiles 1 to 8 the lens axis is perfectly horizontal — not looking up, not looking down, no roll — so the horizon is a level "
+                 f"line at mid-height and every vertical edge stays vertical; straight edges stay straight, no fisheye. Neighbouring directions "
+                 f"overlap: what is at the edge of one tile is near the centre of the next.")
+    lines.append("The architecture, materials, set dressing, weather, light direction and colour grade are identical in every tile; only the "
+                 "direction the camera faces changes from tile to tile. Finish every tile at full sharpness with deep focus, no shallow depth "
+                 "of field, no bokeh, no vignetting.")
+    for v in views:
+        t = f"Tile {v['tile']} ({grid_tile_word(geom, v['tile'] - 1)}): looking {v['card']}, toward {v['plan_side']} of the plan"
+        if v['pitch'] > 0:
+            t += (f", with the camera tilted up about {v['pitch']:g} degrees: the frame is dominated by the upper part of the wall in that direction "
+                  f"and the ceiling or sky above it, the floor is out of frame.")
+        elif v['pitch'] < 0:
+            t += (f", with the camera tilted down about {-v['pitch']:g} degrees: the frame is dominated by the floor or ground in that direction "
+                  f"and the base of whatever stands on it, the horizon is above the frame.")
+        else:
+            t += '.' + (f" The nearest solid surface straight ahead is about {v['ahead_m']:g} m away." if v['ahead_m'] is not None else
+                        " Nothing solid blocks the view straight ahead.")
+        t += f" Frame left is {v['left_card']}, frame right is {v['right_card']}."
+        if v['seen']:
+            t += ' In view from left to right: ' + '; '.join(v['seen']) + '.'
+        if v['objects']:
+            t += ' Set dressing in this view: ' + '; '.join(v['objects']) + '.'
+        lines.append(t)
+    if desc:
+        lines.append("General location description for materials and era: " + desc)
+    lines.append("Every tile is an empty location plate: no people, no characters, no human figures or silhouettes, no animals, no moving "
+                 "vehicles, no text, no numbers, no labels, no watermark. Keep the gutters thin, straight and pure white; never merge two "
+                 "tiles into one picture and never draw anything across a gutter.")
+    style = plate_style(strip_dof(style))
+    if style:
+        lines.append("Style: " + style)
+    return '\n'.join(lines)
+
+
 def grid9_entries(lib: dict, scheme_key: str) -> list[dict]:
     """库里该方案的九格条目(按格号排序)。"""
     es = [e for e in lib.get('plates', []) if e.get('grid9') and ((e.get('pano_ref') or {}).get('scheme') == scheme_key)]
     return sorted(es, key=lambda e: int((e.get('pano_ref') or {}).get('tile', 0)))
 
 
+def plate_camera_fit(c: dict, facts: dict) -> dict:
+    """一张库图的机位 c 对本镜机位 facts 的贴合度:score = 朝向差/30° + 机位水平距/5 m + 机高档差×0.5 + 俯仰差/20° + (图视场比本镜窄 5° 以上 ? 0.5 : 0)。"""
+    db = angle_diff(c.get('bearing_deg', 0), facts['bearing_deg'])
+    dist = math.hypot(c['position'][0] - facts['position'][0], c['position'][2] - facts['position'][2])
+    dh = abs(int(c.get('height_class', 2)) - int(facts['height_class']))
+    dp = abs(float(c.get('pitch_deg', 0)) - float(facts['pitch_deg']))
+    narrow = 0.5 if float(c.get('fov_v_deg', 55)) < facts['fov_v_deg'] - 5 else 0.0
+    return {'score': round(db / 30 + dist / 5 + dh * 0.5 + dp / 20 + narrow, 3), 'bearing_delta_deg': round(db, 1), 'distance_m': round(dist, 2),
+            'height_class_delta': dh, 'pitch_delta_deg': round(dp, 1), 'narrower_than_shot': bool(narrow)}
+
+
 def pick_grid9_tile(tiles: list[dict], facts: dict) -> tuple[dict | None, dict]:
-    """按白模机位事实从九格里选最合适的一格:score = 朝向差/30° + 机位水平距/5 m + 机高档差×0.5 + 俯仰差/20° + (格视场比本镜窄 5° 以上 ? 0.5 : 0)。
-    返回 (条目, 选格说明);说明含各分量,供预览/排查。"""
+    """按白模机位事实从九格里选最合适的一格(打分见 plate_camera_fit)。返回 (条目, 选格说明);说明含各分量,供预览/排查。"""
     best = None
     for e in tiles:
-        c = e.get('camera') or {}
-        db = angle_diff(c.get('bearing_deg', 0), facts['bearing_deg'])
-        dist = math.hypot(c['position'][0] - facts['position'][0], c['position'][2] - facts['position'][2])
-        dh = abs(int(c.get('height_class', 2)) - int(facts['height_class']))
-        dp = abs(float(c.get('pitch_deg', 0)) - float(facts['pitch_deg']))
-        narrow = 0.5 if float(c.get('fov_v_deg', 55)) < facts['fov_v_deg'] - 5 else 0.0
-        score = db / 30 + dist / 5 + dh * 0.5 + dp / 20 + narrow
-        info = {'tile': (e.get('pano_ref') or {}).get('tile', 0) + 1, 'key': e['key'], 'score': round(score, 3), 'bearing_delta_deg': round(db, 1),
-                'distance_m': round(dist, 2), 'height_class_delta': dh, 'pitch_delta_deg': round(dp, 1), 'narrower_than_shot': bool(narrow)}
-        if best is None or score < best[0]:
-            best = (score, e, info)
+        info = {'tile': (e.get('pano_ref') or {}).get('tile', 0) + 1, 'key': e['key'], **plate_camera_fit(e.get('camera') or {}, facts)}
+        if best is None or info['score'] < best[0]:
+            best = (info['score'], e, info)
     if best is None:
         return None, {}
     return best[1], best[2]
+
+
+def is_manual_capture(entry: dict) -> bool:
+    """用户手工补的背景图:全景 360° 视窗 / 世界模型视窗「💾 背景图」截取,或 3D 白模面板按白模视图出的图(库条目 manual=True);副本不算。"""
+    return bool(entry.get('manual')) and not entry.get('copy')
+
+
+def find_manual_capture(entries: list, scheme_key: str, facts: dict, base: Path) -> tuple[dict | None, dict]:
+    """九宫格手动补图模式:库里对本镜机位「合适」(同 GRID9_FIT 判据)的手工截图,多张取贴合度最好的;没有返回 (None, {})。
+    手工截图不分光照方案的(scheme 为空 / nolight)对任何方案都可用。"""
+    best = None
+    for e in entries:
+        if not is_manual_capture(e) or not e.get('camera') or not (base / e['file']).is_file():
+            continue
+        sch = str((e.get('pano_ref') or {}).get('scheme') or e.get('lighting_scheme_id') or '')
+        if sch and sch != 'nolight' and sch != scheme_key:
+            continue
+        info = {'key': e['key'], **plate_camera_fit(e['camera'], facts)}
+        if grid9_unfit_reasons(info):
+            continue
+        if best is None or info['score'] < best[0]:
+            best = (info['score'], e, info)
+    return (best[1], best[2]) if best else (None, {})
 
 
 # ---------------------------------------------------------------- 九宫格补图(2026-09-26,alices2 SCN-long-hall 试验)
@@ -816,12 +1150,23 @@ def build_grid9_fallback_prompt(facts, phrases, out_of_frame, scene, layout, sty
     if lms:
         plan += " Landmarks on the plan: " + '; '.join(lms) + '.'
     tile_words = []
+    center = False
     for e in sorted(tiles, key=lambda e: int((e.get('pano_ref') or {}).get('tile', 0))):
         pr = e.get('pano_ref') or {}; v = pr.get('view') or {}; c = e.get('camera') or {}
         i = int(pr.get('tile', 0))
-        tile_words.append(f"tile {i + 1} ({grid_tile_word({'cols': geom_cols, 'rows': geom_rows}, i)}): {GRID9_SIZE_WORDS.get(v.get('size'), 'view')} "
-                          f"from {v.get('camera_from', '?')} looking toward {v.get('looking_at', '?')}, facing {c.get('facing', '?')}")
-    sheet = ("[Image 2] is a 3 by 3 contact sheet of nine photographs of this exact same location taken from nine other camera positions "
+        word = grid_tile_word({'cols': geom_cols, 'rows': geom_rows}, i)
+        if pr.get('layout') == 'center':     # 中心点九宫格:九格同一站位,只换方向(第 9 格可带仰角)
+            center = True
+            tile_words.append(f"tile {i + 1} ({word}): facing {c.get('facing', '?')}"
+                              + (f", tilted {'up' if c['pitch_deg'] > 0 else 'down'} about {abs(round(c['pitch_deg']))} degrees"
+                                 if abs(float(c.get('pitch_deg') or 0)) >= 3 else ''))
+        else:
+            tile_words.append(f"tile {i + 1} ({word}): {GRID9_SIZE_WORDS.get(v.get('size'), 'view')} "
+                              f"from {v.get('camera_from', '?')} looking toward {v.get('looking_at', '?')}, facing {c.get('facing', '?')}")
+    c0 = (tiles[0].get('camera') or {}) if tiles else {}
+    how = (f"all taken from one common standpoint ({c0.get('standing', 'inside the location')}, lens {c0.get('height_m', '?')} m above the floor) "
+           f"with the camera turned to nine directions" if center else "taken from nine other camera positions")
+    sheet = (f"[Image 2] is a 3 by 3 contact sheet of nine photographs of this exact same location {how} "
              "(" + '; '.join(tile_words) + "). It is the authoritative reference for the architecture, materials, set dressing, colour grade, "
              "weather and light direction: the new image must look like it was photographed in exactly that place, in the same light. None of "
              "the nine tiles is this camera, so do not copy any tile's framing and do not reproduce the grid: construct the view from the camera "
@@ -856,14 +1201,15 @@ def build_grid9_fallback_prompt(facts, phrases, out_of_frame, scene, layout, sty
 
 
 def ensure_grid9(base: Path, sid: str, scheme_key: str, scheme_id: str, *, scene: dict, layout: dict, axes, fmt: dict, style_doc: dict,
-                 time_of_day: str, lighting: str, force: bool = False, dry_run: bool = False, seed=None, log=print) -> list[dict]:
-    """保证该场景该光照方案的九宫格已出并拆成 9 张背景图入库;已有且文件齐全(非 --force)直接返回库条目。
-    dry-run 只算机位/提示词,返回 pending 条目不落库。"""
+                 time_of_day: str, lighting: str, force: bool = False, dry_run: bool = False, seed=None, log=print,
+                 cameras: list | None = None, layout_kind: str = 'center') -> list[dict]:
+    """保证该场景该光照方案的九宫格已出并拆成 9 张背景图入库;已有且文件齐全(非 --force)直接返回库条目(不论当初哪种方式出的)。
+    layout_kind='center'(默认,2026-10-04):中心点九宫格,cameras = 本集该场景该方案各镜机位事实(定站位/机高/第 9 格);
+    layout_kind='views':原方案,按 layout.json#views 的 9 个语义机位。dry-run 只算机位/提示词,返回 pending 条目不落库。"""
     lib = load_library(base, sid)
     have = grid9_entries(lib, scheme_key)
     if len(have) == 9 and not force and all((base / e['file']).is_file() for e in have):
         return have
-    views = grid9_views(layout, scene)
     ex, ez, texts = axes
     geom = grid_geometry(9, fmt)
     pw, ph = plate_size(fmt)
@@ -873,34 +1219,53 @@ def ensure_grid9(base: Path, sid: str, scheme_key: str, scheme_id: str, *, scene
     plan_file = base / 'assets/concepts/scenes' / sid / (layout.get('layout_top') or 'layout_top.png')
     if not plan_file.is_file():
         raise Grid9LayoutError(f'{sid}: 缺俯视图 {plan_file.relative_to(base)},九宫格模式要先出场景布局包')
-    facts_by_tile = {}
-    for v in views:
-        f = camera_facts({'position': v['position'], 'target': v['target'], 'fov': v['fov']}, fmt, ex, ez, texts)
-        f['standing'] = standing_on(scene, layout, {'position': v['position'], 'target': v['target'], 'fov': v['fov']})
-        facts_by_tile[v['tile']] = f
     desc, scene_neg = scene_description(base, sid)
-    prompt = build_grid9_prompt(layout, scene, views, geom, facts_by_tile, style_doc.get('style_fragment_en') or '', lighting, desc, time_of_day, texts)
     negative = ', '.join(x for x in (plate_negative(style_doc.get('negative_prompt_en') or ''), scene_neg, NEGATIVE_GRID, NEGATIVE_MASTER) if x)
-    refs = [str(plan_file.relative_to(base)), tmpl_rel]
+    plan_rel = str(plan_file.relative_to(base))
     use_seed = seed if seed is not None else __import__('random').randint(1, 2**31 - 1)
     now = dt.datetime.now().isoformat(timespec='seconds')
+    center = None
+    if layout_kind == 'center':
+        if not cameras:
+            raise Grid9LayoutError(f'{sid}: 中心点九宫格需要本集该场景的白模机位来定站位,当前没有机位')
+        center = grid9c_views(scene, layout, fmt, axes, cameras)
+        plan_rel = f'{rel_dir}/{stem}.plan.jpg'       # 标点俯视图(红点 + 八向箭头)
+        prompt = build_grid9c_prompt(layout, scene, center, geom, style_doc.get('style_fragment_en') or '', lighting, desc, time_of_day)
+        tiles = [{'tile': v['tile'], 'facts': v['facts'], 'view': {'card': v['card'], 'pitch_deg': v['pitch'], 'ahead_m': v['ahead_m']}} for v in center['views']]
+        summary = (f"中心点:站位 {center['station']}({center['basis']});第 1–8 格每 45° 平视,第 9 格朝 {center['tilt']['card']}"
+                   + (f" {'仰' if center['tilt']['pitch'] > 0 else '俯'} {abs(center['tilt']['pitch']):g}°" if center['tilt']['pitch'] else '')
+                   + f"({center['tilt']['basis']})")
+    else:
+        views = grid9_views(layout, scene)
+        facts_by_tile = {}
+        for v in views:
+            f = camera_facts({'position': v['position'], 'target': v['target'], 'fov': v['fov']}, fmt, ex, ez, texts)
+            f['standing'] = standing_on(scene, layout, {'position': v['position'], 'target': v['target'], 'fov': v['fov']})
+            facts_by_tile[v['tile']] = f
+        prompt = build_grid9_prompt(layout, scene, views, geom, facts_by_tile, style_doc.get('style_fragment_en') or '', lighting, desc, time_of_day, texts)
+        tiles = [{'tile': v['tile'], 'facts': facts_by_tile[v['tile']], 'view': {k: v[k] for k in ('camera_from', 'looking_at', 'size', 'angle', 'desc')}} for v in views]
+        summary = 'layout.json#views:' + ', '.join(f"{v['tile']}:{v['camera_from']}→{v['looking_at']}/{v['size']}/{v['angle']}" for v in views)
+    refs = [plan_rel, tmpl_rel]
     entries = []
-    for v in views:
-        i = v['tile'] - 1
-        entries.append({'key': f'{stem}_t{v["tile"]}', 'grid9': True, 'master': False, 'file': f'{rel_dir}/{stem}_t{v["tile"]}.png',
-                        'lighting_scheme_id': scheme_id, 'time_of_day': time_of_day, 'camera': facts_by_tile[v['tile']], 'size': f'{pw}x{ph}',
+    for t in tiles:
+        i = t['tile'] - 1
+        entries.append({'key': f'{stem}_t{t["tile"]}', 'grid9': True, 'master': False, 'file': f'{rel_dir}/{stem}_t{t["tile"]}.png',
+                        'lighting_scheme_id': scheme_id, 'time_of_day': time_of_day, 'camera': t['facts'], 'size': f'{pw}x{ph}',
                         'seed': use_seed, 'refs': refs, 'prompt': prompt, 'negative': negative,
-                        'pano_ref': {'kind': 'grid9', 'sheet': sheet_rel, 'template': tmpl_rel, 'cols': geom['cols'], 'rows': geom['rows'], 'tile': i,
-                                     'sheet_size': f"{geom['width']}x{geom['height']}", 'tile_native': f"{geom['tile_w']}x{geom['tile_h']}",
-                                     'scheme': scheme_key, 'view': {k: v[k] for k in ('camera_from', 'looking_at', 'size', 'angle', 'desc')}},
+                        'pano_ref': {'kind': 'grid9', 'layout': layout_kind, 'sheet': sheet_rel, 'template': tmpl_rel, 'cols': geom['cols'], 'rows': geom['rows'],
+                                     'tile': i, 'sheet_size': f"{geom['width']}x{geom['height']}", 'tile_native': f"{geom['tile_w']}x{geom['tile_h']}",
+                                     'scheme': scheme_key, 'view': t['view'],
+                                     **({'station': center['station'], 'plan': plan_rel} if center else {})},
                         'plate_mode': 'grid', 'written_at': now})
     log(f"== {sid} 九宫格 {stem}:{geom['cols']}x{geom['rows']} {geom['width']}x{geom['height']},格 {geom['tile_w']}x{geom['tile_h']} → 拆后 {pw}x{ph};"
-        f"方案 {scheme_key};参考图 = 俯视图 + 版式模板;" + ', '.join(f"{v['tile']}:{v['camera_from']}→{v['looking_at']}/{v['size']}/{v['angle']}" for v in views))
+        f"方案 {scheme_key};参考图 = {'标点俯视图' if center else '俯视图'} + 版式模板;{summary}")
     if dry_run:
         log(prompt); log('refs: ' + json.dumps(refs, ensure_ascii=False))
         for e in entries:
             e['pending'] = True; e['dry_run'] = True
         return entries
+    if center:
+        mark_grid9c_plan(plan_file, scene, center['station'], center['edges'], base / plan_rel)
     compose_grid_sheet([], geom, base / tmpl_rel)
     from modules.genmedia import generate_image, get_config, image_pref_env
     with image_pref_env('scenes'):
@@ -913,8 +1278,10 @@ def ensure_grid9(base: Path, sid: str, scheme_key: str, scheme_id: str, *, scene
         e['pano_ref']['box'] = r['box']; e['channel'] = channel
         (base / e['file']).with_suffix('.json').write_text(json.dumps(e, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     (base / sheet_rel).with_suffix('.json').write_text(json.dumps(
-        {'kind': 'grid9', 'scene_id': sid, 'scheme': scheme_key, 'lighting_scheme_id': scheme_id, 'prompt': prompt, 'negative': negative, 'refs': refs,
-         'seed': use_seed, 'channel': channel, 'geometry': geom, 'tiles': [{'tile': v['tile'], 'key': e['key'], **e['pano_ref']['view']} for v, e in zip(views, entries)],
+        {'kind': 'grid9', 'layout': layout_kind, 'scene_id': sid, 'scheme': scheme_key, 'lighting_scheme_id': scheme_id, 'prompt': prompt, 'negative': negative,
+         'refs': refs, 'seed': use_seed, 'channel': channel, 'geometry': geom,
+         **({'station': center['station'], 'station_basis': center['basis'], 'tilt_tile': center['tilt'], 'plan_edges': center['edges']} if center else {}),
+         'tiles': [{'tile': t['tile'], 'key': e['key'], **e['pano_ref']['view']} for t, e in zip(tiles, entries)],
          'written_at': now}, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     lib = load_library(base, sid)
     lib['plates'] = [e for e in lib['plates'] if not (e.get('grid9') and (e.get('pano_ref') or {}).get('scheme') == scheme_key)] + entries
@@ -1284,7 +1651,7 @@ def plan_episode(base: Path, ep: str, only=None) -> dict:
 
 
 def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, sun='', seed=None, log=print, max_new=None,
-                repano=False, grid_fallback=True) -> dict:
+                repano=False, grid_fallback=True, grid_layout='center') -> dict:
     """出图主流程(母图制,2026-09-14):查母图库 → 机位范围内且视锥装得下的镜直接引用母图整图 → 缺的机位出广角母图(场景全景齐备 →
     渲白模帧 → 全景按母图机位重投影 → 出图 → 入库)→ 写集索引。返回统计:new = 新出母图张数,library = 引用已有/本次母图的镜数。
     repano:集索引里仍指向 legacy(非母图制)库图的镜视为需重做(可复用本次新出的母图)。
@@ -1328,8 +1695,10 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             derived = bool(old and '.view_' in Path(old.get('file') or '').name)   # 2026-09-14 三订前按镜裁出的派生图:改回引用母图整图,不出图
             if derived and not dry_run and (base/old['file']).is_file():
                 (base/old['file']).unlink()
-            # 九宫格补图(2026-09-26):开启 grid_fallback 时,索引里仍用「不合适」格子的镜重新决策(不动已有宫格,只为它补图)
-            regrade = bool(grid_fallback and old and old.get('reuse') == 'grid9'
+            mode_sid = modes.setdefault(sid, effective_plate_mode(base, sid))
+            # 九宫格补图(2026-09-26):开启 grid_fallback 时,索引里仍用「不合适」格子的镜重新决策(不动已有宫格,只为它补图);
+            # 九宫格手动补图(2026-10-04):同样每次重新决策,好接上用户新截的手工背景图
+            regrade = bool((grid_fallback or mode_sid == 'grid_manual') and old and old.get('reuse') == 'grid9'
                            and grid9_unfit_reasons(((old.get('view') or {}).get('grid9') or {})))
             if (old and cur is not None and not force and not derived and not regrade and not camera_stale(old.get('camera'), facts)
                     and (base/old['file']).is_file() and not (repano and is_legacy(cur))):
@@ -1339,7 +1708,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                 if is_legacy(cur):
                     stats['legacy'] += 1
                 continue
-            if modes.setdefault(sid, effective_plate_mode(base, sid)) == 'grid':   # 九宫格:不出母图,后面按九格选格
+            if mode_sid in GRID_PLATE_MODES:   # 九宫格(自动补图 / 手动补图):不出母图,后面按九格选格
                 decisions.append({**j, 'mode': 'grid9', 'entry': None, 'file': None, 'crop': None, 'reuse': 'grid9'})
                 continue
             view = {'plates': lib['plates'] + pending.get(sid, [])}   # 本次运行里已决定新出的母图也参与派生判断
@@ -1381,7 +1750,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
     for sid in new_scenes:
         stats['modes'][sid] = modes.get(sid) or effective_plate_mode(base, sid)
     for sid in sorted({d['scene_id'] for d in decisions if d['mode'] == 'grid9'}):
-        stats['modes'][sid] = 'grid'
+        stats['modes'][sid] = modes.get(sid) or 'grid'
     world_scenes = [sid for sid in new_scenes if stats['modes'][sid] == 'world']
     if world_scenes:
         from modules import worldlabs
@@ -1406,7 +1775,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                 views = [{'error': str(error)} for _ in reqs]
             for d, v in zip(reqs, views):
                 d['world_view'] = v
-    for sid in [x for x in new_scenes if stats['modes'][x] not in ('world', 'grid')]:
+    for sid in [x for x in new_scenes if stats['modes'][x] not in ('world',) + GRID_PLATE_MODES]:
         schemes = {}
         for d in decisions:
             if d['scene_id'] == sid and d['mode'] == 'new':
@@ -1418,18 +1787,28 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
     # 九宫格模式(2026-09-25,用户方案):每场景每光照方案先保证九宫格已出并拆好(俯视图为参考,不渲白模、不出全景),
     # 再按每镜白模机位从九格里自动选最合适的一格;本镜的白模帧另渲到 plate_frames/ 供预览核对(不进 refs)。
     grid9_frames = []
+    all_jobs = None
     for sid in sorted({d['scene_id'] for d in decisions if d['mode'] == 'grid9'}):
         layout = layouts[sid]; scene = episode['scenes'][sid]
         ds = [d for d in decisions if d['scene_id'] == sid and d['mode'] == 'grid9']
         by_scheme = {}
         for d in ds:
             by_scheme.setdefault(scene_panos.scheme_slug(d['scheme'], d['raw_group'].get('time_of_day')), []).append(d)
+        manual_fill = modes.get(sid) == 'grid_manual'      # 九宫格手动补图:选不到合适格子的镜不自动出图,等用户手工截取
+        auto_fill = grid_fallback and not manual_fill
         for scheme_key, sds in by_scheme.items():
             d0 = sds[0]
+            # 中心点九宫格的站位/机高/第 9 格按本集该场景该方案的全部机位定(不只是本次要重新决策的镜),重跑结果稳定
+            # ——只跑部分组/镜(only)时也按全集机位算,否则站位会随本次点名的镜变
+            if only and all_jobs is None:
+                all_jobs = plan_episode(base, ep)['jobs']
+            cams = [j['facts'] for j in (all_jobs if only else plan['jobs']) if j['scene_id'] == sid
+                    and scene_panos.scheme_slug(j['scheme'], j['raw_group'].get('time_of_day')) == scheme_key]
             try:
                 tiles = ensure_grid9(base, sid, scheme_key, d0['scheme'], scene=scene, layout=layout, axes=axes[sid], fmt=fmt, style_doc=style_doc,
                                      time_of_day=d0['raw_group'].get('time_of_day') or '', lighting=lighting_fragment(base, sid, d0['scheme']),
-                                     force=force and not grid_fallback, dry_run=dry_run, seed=seed, log=log)   # 默认(补图开)--force 只重出补图;重出宫格须 --no-grid-fallback --force
+                                     force=force and not grid_fallback, dry_run=dry_run, seed=seed, log=log,   # --force 只重新决策(自动补图模式下重出补图);重出宫格须 --no-grid-fallback --force(两种模式相同)
+                                     cameras=cams, layout_kind=grid_layout)
             except Grid9LayoutError:
                 raise
             except Exception as error:  # noqa: BLE001
@@ -1453,8 +1832,22 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                     f"(本镜 {d['facts']['facing']} h={d['facts']['height_m']}m {d['facts']['lens_mm_equiv']}mm;格 {entry['camera']['facing']} "
                     f"h={entry['camera']['height_m']}m {entry['camera']['lens_mm_equiv']}mm)")
                 # 九宫格补图(2026-09-26):最近格任一分量超 GRID9_FIT → 不用格子,改为按本镜机位单独出图(库里相近机位的补图直接复用)
-                reasons = grid9_unfit_reasons(info) if grid_fallback else []
+                reasons = grid9_unfit_reasons(info) if (auto_fill or manual_fill) else []
                 if not reasons:
+                    continue
+                if manual_fill:
+                    # 九宫格手动补图(2026-10-04):库里有对本镜合适的手工截图(全景 / 世界模型视窗「💾 背景图」)就选用;
+                    # 没有 → 先登记最近格作占位、记 view.manual_needed,由用户去截(CLI 退出码 5,--status 报 manual_needed),不自动出图
+                    cap, cinfo = find_manual_capture(libs[sid]['plates'], scheme_key, d['facts'], base)
+                    if cap is not None:
+                        d['mode'] = 'grid9_manual_library'; d['entry'] = cap; d['file'] = cap['file']; d['reuse'] = 'grid9_manual'
+                        d['view']['manual'] = {'reasons': reasons, 'key': cap['key'], 'kind': (cap.get('pano_ref') or {}).get('kind'), 'fit': cinfo}
+                        log(f"   ↳ 格子不合适({'; '.join(reasons)}),选用手工截取的背景图 {cap['key']}(朝向差 {cinfo['bearing_delta_deg']}° 距 {cinfo['distance_m']} m)")
+                    else:
+                        d['view']['manual_needed'] = {'reasons': reasons}
+                        stats.setdefault('manual_needed', []).append(f"{d['shot_id']}:{d['role']}")
+                        log(f"   ↳ 格子不合适({'; '.join(reasons)}),手动补图模式:暂用最近格占位,请用户在场景预览页 {sid} 的全景 360° 视窗 / "
+                            f"世界模型视窗按本镜机位(位置 {d['facts']['position']},朝向 {d['facts']['bearing_deg']}°,俯仰 {d['facts']['pitch_deg']}°)用「💾 背景图」截取后重跑")
                     continue
                 d['nearest_tile'] = entry; d['sheet_rel'] = sheet_rel; d['reuse'] = 'grid9_fallback'
                 fb = None if force else find_grid9_fallback(libs[sid]['plates'] + fb_pending, scheme_key, d['facts'], base, require_file=not dry_run)
@@ -1529,13 +1922,14 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             group_first.setdefault(d['group_id'], entry)
             continue
         # new master
-        if d['mode'] == 'grid9':   # 九宫格:格子已在上面出好并选定,这里只登记
+        if d['mode'] in ('grid9', 'grid9_manual_library'):   # 九宫格:格子(或手动补图模式下选用的手工截图)已在上面选定,这里只登记
             if d.get('grid_error') or not d.get('entry'):
                 stats['errors'].append(f"{shot_id}/{role}: {d.get('grid_error') or '九宫格未选格'}")
                 stats['plates'] -= 1
                 continue
             entry = d['entry']
-            stats['grid9'] = stats.get('grid9', 0) + 1
+            k = 'grid9' if d['mode'] == 'grid9' else 'grid9_manual_library'
+            stats[k] = stats.get(k, 0) + 1
             generated[(shot_id, role)] = entry; by_key[entry['key']] = entry
             group_first.setdefault(d['group_id'], entry)
             flush_shot(shot_id)
@@ -2338,7 +2732,8 @@ def sync_episode(base: Path, ep: str, groups=None, write: bool = False, strict: 
 
 # ---------------------------------------------------------------- coverage status(验收机检 shot_plates_complete)
 def status_episode(base: Path, ep: str, only=None) -> dict:
-    """每镜背景图覆盖状态:ok / partial(缺镜尾) / missing / stale(机位与当前白模不一致) / file_missing。
+    """每镜背景图覆盖状态:ok / partial(缺镜尾) / missing / stale(机位与当前白模不一致) / file_missing /
+    manual_needed(九宫格手动补图模式下没有合适格子、也没有合适的手工截图,等用户补)。
     验收以此为准,不采信 Agent 自述;退出码由调用方按 problems 判。"""
     plan = plan_episode(base, ep, only)
     idx = load_episode_index(base, ep)
@@ -2352,6 +2747,7 @@ def status_episode(base: Path, ep: str, only=None) -> dict:
             lib_by_key[e['key']] = e
     shots = {}
     legacy_shots = []
+    modes = {}
     for shot_id, roles in need.items():
         rec = idx['shots'].get(shot_id) or {}
         have = {p['role']: p for p in rec.get('plates', []) if isinstance(p, dict)}
@@ -2365,6 +2761,9 @@ def status_episode(base: Path, ep: str, only=None) -> dict:
                 state = 'file_missing'
             elif camera_stale(p.get('camera'), facts) and state == 'ok':
                 state = 'stale'
+            elif (p.get('reuse') == 'grid9' and (p.get('view') or {}).get('manual_needed') and state == 'ok'
+                  and modes.setdefault(scene_of[shot_id], effective_plate_mode(base, scene_of[shot_id])) == 'grid_manual'):
+                state = 'manual_needed'    # 九宫格手动补图:最近格只是占位,等用户手工截取(或在分镜预览「换图」手选)
             if p and p.get('key') in lib_by_key and is_legacy(lib_by_key[p['key']]):
                 legacy = True
         if legacy:

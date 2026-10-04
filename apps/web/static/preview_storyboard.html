@@ -1367,7 +1367,11 @@ function shotCard(s,grp){
       return `<div title="${esc(v)}"><img src="${esc(bust(p.url))}" loading="lazy" onclick="zoom(this.src)" alt="${esc(v)}"><div class="pl">${esc(v)}${esc(pv)}</div></div>`;
     }
     const role=p.role==='end'?t('终点'):t('起点');
-    const how=p.reuse==='crop'?t('裁自宽景'):p.reuse==='library'?t('复用库图'):p.reuse==='manual'?t('手动换图'):p.reuse==='revised'?t('按修改意见重出'):t('本镜新出');
+    // 九宫格(2026-10-04 补全来源文字):grid9 = 九宫格里选的格,grid9_fallback = 自动补图,grid9_manual = 手动补图模式下选用的手工截图;
+    // manual_needed = 手动补图模式下没有合适的图,当前这张只是最近格占位,等用户手工截取
+    const how0=p.reuse==='crop'?t('裁自宽景'):p.reuse==='library'?t('复用库图'):p.reuse==='manual'?t('手动换图'):p.reuse==='revised'?t('按修改意见重出')
+      :p.reuse==='grid9'?t('九宫格'):p.reuse==='grid9_fallback'?t('九宫格补图'):p.reuse==='grid9_manual'?t('手工截图'):t('本镜新出');
+    const how=p.manual_needed?how0+' · ⚠ '+t('待手动补图'):how0;
     const tip=[role,how,p.key||''].filter(Boolean).join(' · ');
     // ✏️ 修改:带上镜号/起止/文件/库 key 与修订命令,发给修改师处理这张背景图的问题(2026-09-26:以当前图为参考按意见新出一张替换本镜,原图不动;
     // 不再给 render_shot_plates --force——那是按机位重新决策,用户的意见进不去)
