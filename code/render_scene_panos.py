@@ -3,7 +3,7 @@
 
 按场景在白模内少数锚点出 360° 等距柱状全景(每个光照方案一张),分镜背景图(code/render_shot_plates.py)一律由全景按本镜机位
 重投影后二次生成。render_shot_plates.py 会自动保证全景齐备,本脚本用于:预跑/看锚点规划、手动指定锚点、按方案补全景、
-查状态。锚点数量由机位覆盖决定(贪心集合覆盖),不按分镜数;同方案第二个锚点起链式补洞、同锚点第二个方案起保结构重打光。
+查状态。锚点数量由机位覆盖决定(贪心集合覆盖),不按分镜数;每张全景独立出图(不参考其它锚点的全景),同锚点第二个方案起保结构重打光。
 
 用法:
   python code/render_scene_panos.py --project <slug> --scene SCN-0002 --dry-run     # 规划锚点 + 渲白模全景,不调图像模型
@@ -14,7 +14,7 @@
   python code/render_scene_panos.py --project <slug> --scene SCN-0002 --anchor -8,5 --only-new --scheme L1   # 只加锚点并只出它这一张(预览页「创建全景图」走这条;不规划、其它锚点不动;没有机位也可)
   python code/render_scene_panos.py --project <slug> --scene SCN-0002 --anchor -8,5,0,15 --only-new --scheme L1   # 第 4 项 y = 相机脚下平面海拔(米):相机 = y + 眼高;落在实体块里报错
   python code/render_scene_panos.py --project <slug> --scene SCN-0002 --replan --force        # 重新规划(保留锁定锚点)并重出
-  python code/render_scene_panos.py --project <slug> --scene SCN-0002 --redo A2 A3  # 只重出这两个锚点的全景(其余不动,链式参考其它已成全景)
+  python code/render_scene_panos.py --project <slug> --scene SCN-0002 --redo A2 A3  # 只重出这两个锚点的全景(其余不动;各自独立出图)
   python code/render_scene_panos.py --project <slug> --scene SCN-0002 --status      # 机检 scene_panos_ready:每 (锚点, 方案) 是否齐
   可选 --indoor / --outdoor 覆盖室内外判定(室内渲全景补天花板);--seed N 固定种子。
 
@@ -50,8 +50,6 @@ def main():
                         help='用户目视认可后,把该锚点最新一张归档成图(.rejected-* 被拒图 / .redo-* 重出时归档的上一版)认领为正式全景(不花钱;可配 --scheme;Agent 不得自行使用)')
         ap.add_argument('--pick', default=None, metavar='STAMP',
                         help='配合 --adopt:只认领文件名含这段的那张被拒图(如时间戳 20260921-084915);缺省取最新一张')
-        ap.add_argument('--trust', action='append', default=[], metavar='ANCHOR',
-                        help='用户目视认可该锚点全景跟了白模(白模一致性机检误报),之后可当链式父图(不花钱;可配 --scheme;Agent 不得自行使用)')
         ap.add_argument('--status', action='store_true', help='机检 scene_panos_ready:各 (锚点, 光照方案) 全景是否齐,缺则退出码 1')
     args, base = parse_args(__doc__, configure=configure)
     reexec_with_host_python()   # 缺 Playwright 时换宿主解释器重跑(_common)
@@ -68,14 +66,6 @@ def main():
         try:
             for aid in args.adopt:
                 sp.adopt_rejected(base, sid, aid, args.scheme or None, pick=args.pick)
-        except sp.PanoError as error:
-            print(f"错误:{error}", file=sys.stderr, flush=True)
-            return 1
-        return 0
-    if args.trust:
-        try:
-            for aid in args.trust:
-                sp.trust_pano(base, sid, aid, args.scheme or None)
         except sp.PanoError as error:
             print(f"错误:{error}", file=sys.stderr, flush=True)
             return 1

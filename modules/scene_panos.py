@@ -3,11 +3,10 @@
 
 数据(场景级资产,跨组跨集复用):assets/concepts/scenes/<sid>/panos/
   index.json                 schema scene_panos.v1:anchors[]{anchor_id, position[x,y,z], yaw_deg, source auto|manual, locked,
-                             serves[](镜号/角色), panos{<scheme_id>: {file, mode fresh|chain|relight, parent, channel, seed, size, …}}},
+                             serves[](镜号/角色), panos{<scheme_id>: {file, mode fresh|relight(存量另有 chain), parent, channel, seed, size, …}}},
                              indoor, planned_at, blocked{reason, provider, model, at}(图像模型不支持全景时写入,预览页据此提示用户换模型)
   <anchor_id>/whitebox_pano.jpg   白模彩色全景(出全景的第一参考图)          depth_pano.npy / depth_pano.json  径向深度(米)+ 相机记录
   <anchor_id>/<scheme>.png        该光照方案的真实全景(2:1)                <scheme>.json  提示词/参考图/渠道
-  <anchor_id>/<scheme>.chain_<parent>.jpg   由父锚点全景重投影到本锚点球面的参考图(链式补洞用,带空洞)
 
 锚点规划(问题「不想每个分镜位置都出全景」):全景数量由机位覆盖决定——锚点 a 可服务机位 c 须同时满足
   ① 水平距离 ≤ max(SERVE_MIN_M, SERVE_RATIO × 机位到主体距离) 且 ≤ SERVE_MAX_M(视差可接受,重投影空洞少);
@@ -16,15 +15,16 @@
 每轮取能服务最多未覆盖机位的候选,直到全覆盖;仍落网的机位以自身机位为锚点(全景与一张背景图成本相同,不会更贵)。
 手动:index.json 里 locked=true 的锚点规划时原样保留(CLI --anchor x,z 添加),只为未覆盖机位补锚点。
 
-多全景一致性(问题「一个场景多张全景会不一致」):同一光照方案第二个起的锚点全景走「链式补洞」——把已成全景用白模深度
-重投影到新锚点球面作参考图,提示词声明「同一地点换位置拍的,已有物体保持外观,只补空白区」;出图顺序按与已成锚点距离近的先出。
+每张全景独立出图(2026-10-04 去掉「链式补洞」):每个锚点只以本锚点白模全景 + 俯视图 + 文字出图,不再拿其它锚点的已成全景
+重投影当参考——父图画偏时子图整张照抄(fengshen3 SCN-0036:城内高处锚点 A5 抄成了父图 A1 的城外水面视角),图幅外无几何的
+方向又是按方向原样照搬,等于把父图转个角度再出一遍。多张全景的一致性靠白模几何 + 逐物清单文字 + 同一光照方案 / 材质段保证。
 时段变化(白天/夜晚):同一锚点已有其它方案的全景时走「保结构重打光」(以已成全景为第一参考图、白模全景第二,只改光照),
-不重画内容;两条路都以 `mode` 记在索引里。
+不重画内容;`mode` 记在索引里(fresh / relight;存量索引里的 chain 是旧版链式补洞出的图)。
 
 全景中心(问题「自动还是手动」):默认自动(上述规划),预览页「全景图」板块显示每个锚点在俯视图中的坐标;用户要改就
 `code/render_scene_panos.py --anchor x,z --force` 或直接改 index.json 后 --force 重出。
 预览页「创建全景图」(2026-09-13):俯视图上点一个坐标 → add_manual_anchor 加锁定锚点 → ensure_scene_panos(only=[新锚点], schemes={所选方案})
-只出这一张(链式/重打光规则照旧),其它锚点与背景图不动;后台任务 = CLI --anchor x,z[,yaw[,y]] --only-new --scheme <slug>
+只出这一张(独立出图;同锚点已有其它方案时重打光),其它锚点与背景图不动;后台任务 = CLI --anchor x,z[,yaw[,y]] --only-new --scheme <slug>
 (y = 相机脚下平面海拔,2026-09-29;预览页默认 0 = 地面,相机 = y + 眼高;不带 y 照旧自动找站立面)。
 """
 from __future__ import annotations
@@ -55,7 +55,6 @@ GRID_STEP_M = 0.5
 ASPECT_TOLERANCE = 0.03          # 返回全景宽高比偏离 2:1 超过此值 = 模型不按全景尺寸出图
 HOLE_INPAINT_MAX = 0.6
 PLATE_HOLE_MAX = 0.5             # 分镜重投影空洞超过此值 → 换锚点/加锚点
-CHAIN_INCLUDE_SOURCE = False      # 链式补洞是否再挂母全景原图:实测(dzg6 SCN-0002 A4/A5)模型会整张照抄原图、无视本锚点几何,默认关
 
 PANO_PROJECTION_RULES = (
     "Output a single seamless 360-degree equirectangular panorama with an exact 2:1 aspect ratio covering the full sphere: "
@@ -111,17 +110,6 @@ LAYOUT_REF_RULE = (
     "[Image {n}] is the top-down plan of the same location; use it only to decide what each block is and what lies in each "
     "direction. Never reproduce the map, its top-down viewpoint, colors or graphics. "
 )
-CHAIN_REF_RULE = (
-    "[Image {n}] is the finished panorama of this same location photographed from another standpoint a few metres away and "
-    "re-projected to this camera, so it shows stretching and blank holes: every object, facade, material, colour, weather and "
-    "light it shows is authoritative — keep all of it identical and in place, and paint only the blank or smeared areas with "
-    "matching content, so the two panoramas read as one place at the same moment. "
-)
-CHAIN_SOURCE_RULE = (
-    "[Image {n}] is that other panorama itself, un-warped: use it for the exact design, material, colour and orientation of every "
-    "object (the same chairs facing the same way, the same shelves, counters, signs, floor and ceiling) — same place, same minute; "
-    "take positions from [Image {m}] and the block layout, not from this image. "
-)
 RELIGHT_RULE = (
     "[Image {n}] is the finished panorama of exactly this location and camera at a different time of day: reproduce it "
     "pixel-aligned — identical geometry, objects, set dressing, materials and layout — and change only the lighting, sky, "
@@ -137,7 +125,7 @@ class PanoError(RuntimeError):
 
 
 class PanoProjectionError(PanoError):
-    """成图不是等距柱状投影(2:1 的广角照片),或没有跟白模(画成了别的视点 / 建筑外观)→ 成图已改名 .rejected,本批停下(链式补洞会把错误投影一路传下去)。"""
+    """成图不是等距柱状投影(2:1 的广角照片),或没有跟白模(画成了别的视点 / 建筑外观)→ 成图已改名 .rejected,本批停下。"""
 
 
 class PanoUnsupported(PanoError):
@@ -1368,26 +1356,10 @@ def reproject_to_camera(base: Path, sid: str, anchor: dict, scheme: str, camera:
             'buffer': [bw, bh], 'distance_from_anchor_m': round(float(np.linalg.norm(np.asarray(origin) - cam0)), 2)}
 
 
-def reproject_to_anchor(base: Path, sid: str, src: dict, scheme: str, dst: dict, width: int, height: int, output: Path) -> dict:
-    """父锚点全景 → 目标锚点球面(等距柱状),链式补洞的参考图;遮挡空洞留黑给图像模型补。"""
-    import numpy as np
-    bw, bh = min(width, 1440), min(height, 720)
-    dirs = _equirect_rays(float(dst.get('yaw_deg') or 0), bw, bh)
-    img, hit, cam0 = _warp(base, sid, src, scheme, dst['position'], dirs, bw, bh)
-    hole_frac = _finish(img, hit, width, height, output, inpaint=False)
-    return {'file': str(output), 'from': src['anchor_id'], 'hole_fraction': round(hole_frac, 3),
-            'distance_m': round(float(np.linalg.norm(np.asarray(dst['position'], dtype=np.float64) - cam0)), 2)}
-
-
 # ---------------------------------------------------------------- pano generation
-def _pano_dims():
-    w, h = (int(x) for x in PANO_SIZE.split('x'))
-    return w, h
-
-
 def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *, indoor: bool, seed: int | None = None,
                   time_of_day: str | None = None, log=print, cameras: list | None = None) -> dict:
-    """出一张 (锚点, 光照方案) 全景。模式:relight(同锚点已有其它方案)> chain(其它锚点已有同方案)> fresh。"""
+    """出一张 (锚点, 光照方案) 全景。模式:relight(同锚点已有其它方案)> fresh(独立出图;不参考其它锚点的全景)。"""
     from PIL import Image
     from modules.genmedia import generate_image, get_config, image_pref_env
     with image_pref_env('panos'):   # 场景预览页「🌐 全景模型」的选择(空=全局,不回退到本页「🎨 图像模型」)
@@ -1400,7 +1372,6 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
     wb_rec = read(out / 'depth_pano.json', {}) or {}
     if bool(wb_rec.get('indoor')) != bool(indoor) or (not indoor and int(wb_rec.get('guides') or 0) < GUIDES_VERSION):
         render_whitebox_pano(base, sid, anchor, indoor=indoor, log=log)   # 室内外判定变了 / 存量外景白模没有投影引导线:本机重渲,不作废已有全景
-    w, h = _pano_dims()
     refs, rules, parent, mode = [], [], None, 'fresh'
     others = {s: p for s, p in anchor.get('panos', {}).items() if s != scheme and (out / p.get('file', '')).is_file()}
     if others:
@@ -1410,37 +1381,6 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
         refs.append(wb); rules.append(WHITEBOX_REF_RULE.format(n=2))
     else:
         refs.append(wb); rules.append(WHITEBOX_REF_RULE.format(n=1))
-        donors = [a for a in idx['anchors'] if a['anchor_id'] != anchor['anchor_id']
-                  and (panos_dir(base, sid) / a['anchor_id'] / f'{scheme}.png').is_file()]
-        # 没跟白模的全景不当链式父图:重投影用的是白模深度,成图与白模对不上时参考图是一片拉花、还与白模参考图互相矛盾,
-        # 子锚点两张都不跟(fengshen3 SCN-0121:A1 对齐 30% / 基线 34% → A2、A3、A4 整条链带歪)。出图前停,不花钱。
-        # 环保护(含「正在重出的就是带歪整条链的那个根锚点」:后代直接不用,没有别的父图就不带父图新出,不拦它自己):
-        # 任何(直接或间接)从本锚点链出来的全景都不当父图 —— 重出本锚点时拿自己的子孙当参考,等于把上一版的偏差
-        # 绕回来再叠一层(fengshen3 SCN-0110:A7 链自旧 A2,重出 A2 时按距离又选中 A7,接缝比 4.8 → 20.8)。不看一致性,一律排除。
-        offspring = [a for a in donors if _descends_from(base, sid, a['anchor_id'], anchor['anchor_id'], scheme)]
-        if offspring:
-            donors = [a for a in donors if a not in offspring]
-            log(f"   跳过本锚点的子孙全景 {[a['anchor_id'] for a in offspring]}(它们是从本锚点链出来的,当父图会把偏差绕回来)")
-        untrusted = [a for a in donors if chain_donor_distrust(base, sid, a, scheme)]
-        donors = [a for a in donors if a not in untrusted]
-        if untrusted and not donors:
-            why = ';'.join(f"{a['anchor_id']}({chain_donor_distrust(base, sid, a, scheme)})" for a in untrusted)
-            raise PanoProjectionError(
-                f"{sid}/{anchor['anchor_id']}/{scheme}: 可作链式父图的全景都没跟白模:{why},未出图、本批停下。"
-                f"请用户在预览页对照白模全景核对父锚点:确实画偏 → render_scene_panos.py --redo <父锚点>(重出次数计入用户设定的重跑次数);"
-                f"用户目视认可 → render_scene_panos.py --trust <父锚点>(不花钱;Agent 不得自行使用)。")
-        if untrusted:
-            log(f"   跳过没跟白模的链式父图 {[a['anchor_id'] for a in untrusted]},改用次近的锚点")
-        if donors:
-            donors.sort(key=lambda a: math.dist(a['position'], anchor['position']))
-            src = donors[0]
-            chain = out / f"{scheme}.chain_{src['anchor_id']}.jpg"
-            info = reproject_to_anchor(base, sid, src, scheme, anchor, w, h, chain)
-            mode, parent = 'chain', {'anchor_id': src['anchor_id'], 'scheme': scheme, **{k: info[k] for k in ('hole_fraction', 'distance_m')}}
-            refs.append(chain); rules.append(CHAIN_REF_RULE.format(n=2))
-            if CHAIN_INCLUDE_SOURCE:
-                refs.append(panos_dir(base, sid) / src['anchor_id'] / f'{scheme}.png'); rules.append(CHAIN_SOURCE_RULE.format(n=3, m=2))
-            log(f"   链式补洞:参考 {src['anchor_id']} 全景重投影(空洞 {info['hole_fraction']:.0%},距 {info['distance_m']} m)" + ('+ 其原图' if CHAIN_INCLUDE_SOURCE else ''))
         layout = base / 'assets/concepts/scenes' / sid / ((read(base / 'assets/concepts/scenes' / sid / 'layout.json', {}) or {}).get('layout_top') or 'layout_top.png')
         from modules.whitebox import load_scene
         enclosed = anchor_view(load_scene(base, sid), anchor, indoor)['enclosed']
@@ -1484,11 +1424,6 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
                 f"用户目视认可这张时:render_scene_panos.py --adopt {anchor['anchor_id']}(不花钱;Agent 不得自行认领)。")
         if res and res['verdict'] == 'WARN':
             log(f"   WARN {'投影机检' if kind == 'projection' else '白模一致性'}:{res['reason']}")
-    if mode == 'chain':
-        score = chain_consistency(chain, target)
-        parent['consistency'] = score
-        if score is not None and score < CONSISTENCY_WARN:
-            log(f"   WARN 链式一致性 {score:.2f} < {CONSISTENCY_WARN}:请在预览页对照 {parent['anchor_id']} 全景核对,不一致用 render_scene_panos.py --redo {anchor['anchor_id']} 重出")
     _commit_pano(base, sid, idx, anchor, scheme, rec)
     log(f"saved: {target.relative_to(base)}")
     return rec
@@ -1697,7 +1632,6 @@ def projection_check(path: Path, usage: dict | None = None) -> dict | None:
 CONFORMITY_BUSY_NULL = 0.75      # 成图处处是边缘(机场大厅)时错位也能对上,指标失效 → 不判
 CONFORMITY_FAIL_S0 = 0.30
 CONFORMITY_WARN_Z = 2.0
-CHAIN_DONOR_MIN_ALIGNED = 0.50   # 链式父图保护:对齐度低于此且不高于错位基线才不当父图
 
 
 def conformity_check(result: Path, depth_npy: Path) -> dict | None:
@@ -1735,96 +1669,6 @@ def conformity_check(result: Path, depth_npy: Path) -> dict | None:
     if z < CONFORMITY_WARN_Z:
         return {**rec, 'verdict': 'WARN', **check_reason('alignment_not_above_null', aligned=f'{s0:.0%}', null=f'{mean:.0%}')}
     return {**rec, 'verdict': 'PASS', 'reason': ''}
-
-
-def _descends_from(base: Path, sid: str, anchor_id: str, ancestor_id: str, scheme: str, _seen: tuple = ()) -> bool:
-    """anchor_id 的全景是否(直接或间接)从 ancestor_id 链式补洞而来。重出 ancestor_id 时用它排除自己的子孙,避免偏差绕环放大。"""
-    if anchor_id == ancestor_id:
-        return True
-    if anchor_id in _seen:
-        return False
-    rec = read(panos_dir(base, sid) / anchor_id / f'{scheme}.json', {}) or {}
-    if rec.get('mode') != 'chain':
-        return False
-    up = (rec.get('parent') or {}).get('anchor_id')
-    if not up or up == anchor_id:
-        return False
-    return _descends_from(base, sid, up, ancestor_id, scheme, _seen + (anchor_id,))
-
-
-def _chain_distrust(base: Path, sid: str, anchor_id: str, scheme: str, _seen: tuple = ()) -> tuple:
-    """(根锚点, 原因);可用则 (None, '')。"""
-    rec = read(panos_dir(base, sid) / anchor_id / f'{scheme}.json', {}) or {}
-    conf = rec.get('conformity_check') or {}
-    if rec.get('adopted') or rec.get('conformity_ack'):
-        return None, ''
-    up = (rec.get('parent') or {}).get('anchor_id') if rec.get('mode') == 'chain' else None
-    if up and up != anchor_id and up not in _seen:          # 它自己就是从没跟白模的父图链出来的:同样带歪
-        # 父锚点在它之后重出 / 换过图:它链的是旧版父图。链式参考图压过文字,子全景的朝向整张继承父图——旧父图画反,子图跟着反,
-        # 且白模一致性 z 在开阔外景分不出来(fengshen3 SCN-0110:四张提示词列位同样转反 50%,A3←A1、A6←A3 方向正确,
-        # A5、A7←旧 A2(空洞 37% 文字占上风画反)跟着反;z 却是 A3 −2.7 最低)。父图换了就不再当父图,等用户核对(--trust)或重出。
-        up_rec = read(panos_dir(base, sid) / up / f'{scheme}.json', {}) or {}
-        if up_rec.get('written_at') and rec.get('written_at') and str(up_rec['written_at']) > str(rec['written_at']):
-            return anchor_id, f"链自 {up} 的旧版全景({up} 已于 {up_rec['written_at']} 换图)"
-        root, why = _chain_distrust(base, sid, up, scheme, _seen + (anchor_id,))
-        if why:
-            return root, f"链自 {up}:{why}"
-    if conf.get('verdict') != 'WARN' or float(conf.get('z') or 0) > 0:
-        return None, ''
-    if float(conf.get('aligned') or 0) >= CHAIN_DONOR_MIN_ALIGNED:
-        return None, ''                                     # 错位基线本身就高的开阔外景(fengshen3 SCN-0110 对齐 50–68% / 基线 65–73%):指标不灵,不拦
-                                                            # (0.40 → 0.50:SCN-0110 对齐 < 50% 的几张是列位文字转反画偏的 DEF-p6-pano-001,不是指标失灵)
-    return anchor_id, f"对齐 {conf.get('aligned', 0):.0%} 不高于错位基线 {conf.get('null', 0):.0%}"
-
-
-def chain_donor_distrust(base: Path, sid: str, anchor: dict, scheme: str) -> str:
-    """该锚点全景不宜当链式父图的原因,可用则返回 ''。判据比 conformity_check 的 WARN 窄:白模轮廓对齐度不高于错位基线(z ≤ 0)且绝对值
-    < CHAIN_DONOR_MIN_ALIGNED 才算,岩洞 / 暗场那类「对齐度低但仍高于基线」的 WARN 照常可用;从这种父图链出来的子全景同样不用。
-    用户认领(--adopt)或认可(--trust)过的不拦。"""
-    return _chain_distrust(base, sid, anchor['anchor_id'], scheme)[1]
-
-
-def trust_pano(base: Path, sid: str, anchor_id: str, scheme: str | None = None, log=print) -> list:
-    """用户目视认可该锚点全景跟了白模(机检误报):sidecar 记 conformity_ack,之后可当链式父图。不花钱。"""
-    out = panos_dir(base, sid) / anchor_id
-    sides = [out / f'{scheme}.json'] if scheme else [p for p in sorted(out.glob('*.json')) if p.name != 'depth_pano.json' and '.re' not in p.name]
-    done = []
-    for side in sides:
-        rec = read(side, None)
-        if not rec or not (out / rec.get('file', '')).is_file():
-            continue
-        rec['conformity_ack'] = {'by': 'user', 'at': _now()}
-        side.write_text(json.dumps(rec, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-        done.append(side.stem); log(f"   已认可 {anchor_id}/{side.stem} 可作链式父图")
-    if not done:
-        raise PanoError(f"{sid}/{anchor_id}: 没有可认可的全景" + (f"(方案 {scheme})" if scheme else ''))
-    return done
-
-
-def chain_consistency(chain_ref: Path, result: Path) -> float | None:
-    """链式补洞成图与重投影参考图在有内容区域的相似度 0–1(灰度结构相关 × 亮度接近度),只作 WARN 与预览展示。"""
-    try:
-        import cv2
-        import numpy as np
-        a = cv2.imread(str(chain_ref), cv2.IMREAD_COLOR); b = cv2.imread(str(result), cv2.IMREAD_COLOR)
-        if a is None or b is None:
-            return None
-        a = cv2.resize(a, (512, 256)); b = cv2.resize(b, (512, 256))
-        mask = (a.sum(axis=2) > 30)
-        mask[192:] = False                    # 地面近处拉伸最重,不计
-        ga = cv2.GaussianBlur(cv2.cvtColor(a, cv2.COLOR_BGR2GRAY), (5, 5), 0).astype(np.float64)
-        gb = cv2.GaussianBlur(cv2.cvtColor(b, cv2.COLOR_BGR2GRAY), (5, 5), 0).astype(np.float64)
-        if mask.sum() < 500:
-            return None
-        va, vb = ga[mask], gb[mask]
-        corr = float(np.corrcoef(va, vb)[0, 1]) if va.std() > 1 and vb.std() > 1 else 0.0
-        lum = 1.0 - min(1.0, float(np.abs(va - vb).mean()) / 96.0)
-        return round(max(0.0, 0.6 * max(corr, 0) + 0.4 * lum), 3)
-    except Exception:  # noqa: BLE001
-        return None
-
-
-CONSISTENCY_WARN = 0.55
 
 
 def pano_ready(base: Path, sid: str, anchor: dict, scheme: str) -> bool:
@@ -1985,7 +1829,7 @@ def ensure_scene_panos(base: Path, sid: str, *, cameras: list | None = None, sch
                     f.rename(f.with_suffix('.stale-' + dt.datetime.now().strftime('%Y%m%d-%H%M%S') + '.png'))
             a['panos'] = {}
             save_index(base, sid, idx)
-    # 只出本次机位用到的锚点(传了 cameras 时);顺序:先出服务机位最多的锚点(母全景),其余链式补洞
+    # 只出本次机位用到的锚点(传了 cameras 时);顺序:先出服务机位最多的锚点;每张独立出图
     keys = {_cam_key(c) for c in cams}
     if only:
         order = [a for a in idx['anchors'] if a['anchor_id'] in only]

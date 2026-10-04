@@ -84,7 +84,7 @@ def test_pano_support_matrix():
 
 
 def test_equirect_direction_roundtrip():
-    """_pano_points 的像素→方向与 reproject_to_anchor 的方向→像素互为逆(yaw 0,同一锚点重投影应落回同一像素)。"""
+    """_pano_points 的像素→方向与 _sample_pano 的方向→像素互为逆(yaw 0,同一锚点重投影应落回同一像素)。"""
     W, H = 64, 32
     for (col, row) in ((0, 0), (16, 8), (32, 16), (48, 24), (63, 31)):
         theta = (col + .5) / W * 2 * math.pi - math.pi
@@ -436,7 +436,7 @@ def test_ground_plan_is_projected_under_the_camera():
     assert (in_water[: h // 2 - 8] == np.asarray(sp.draw_projection_guides(grey, valid, depth, 1.8, 0.0), dtype=int)[: h // 2 - 8]).all()   # 天空不受影响
 
 
-# ---- 2026-09-21 DEF-p6-pano-001:提示词列位须与白模全景同一套旋转;链式父图不选自己的子孙;认领不拿别的位姿出的图
+# ---- 2026-09-21 DEF-p6-pano-001:提示词列位须与白模全景同一套旋转;认领不拿别的位姿出的图
 def test_object_inventory_column_matches_rendered_pano_at_every_yaw():
     import re
     from modules import scene_panos as sp
@@ -453,19 +453,6 @@ def _write_pano(d, aid, scheme, rec):
     import json
     (d / aid).mkdir(parents=True, exist_ok=True)
     (d / aid / f'{scheme}.json').write_text(json.dumps(rec), encoding='utf-8')
-
-
-def test_descends_from_follows_chain_parents_and_survives_loops(tmp_path):
-    from modules import scene_panos as sp
-    d = sp.panos_dir(tmp_path, 'S')
-    _write_pano(d, 'A1', 'L', {'mode': 'fresh'})
-    _write_pano(d, 'A2', 'L', {'mode': 'chain', 'parent': {'anchor_id': 'A1'}})
-    _write_pano(d, 'A7', 'L', {'mode': 'chain', 'parent': {'anchor_id': 'A2'}})
-    _write_pano(d, 'A8', 'L', {'mode': 'chain', 'parent': {'anchor_id': 'A9'}})
-    _write_pano(d, 'A9', 'L', {'mode': 'chain', 'parent': {'anchor_id': 'A8'}})
-    assert sp._descends_from(tmp_path, 'S', 'A7', 'A2', 'L') and sp._descends_from(tmp_path, 'S', 'A7', 'A1', 'L')
-    assert not sp._descends_from(tmp_path, 'S', 'A1', 'A2', 'L')
-    assert not sp._descends_from(tmp_path, 'S', 'A8', 'A2', 'L')                    # 存量环不死循环
 
 
 def test_adopt_rejected_skips_other_pose_and_honours_pick(tmp_path):
@@ -488,14 +475,36 @@ def test_adopt_rejected_skips_other_pose_and_honours_pick(tmp_path):
     assert rec['seed'] == 1
 
 
-def test_chain_child_of_replaced_parent_is_not_a_donor(tmp_path):
-    from modules import scene_panos as sp
+# ---- 2026-10-04 去掉链式补洞:别的锚点已有同方案全景也不当参考,每张独立出图(fengshen3 SCN-0036 A5 整张照抄 A1 的城外视角)
+def test_generate_pano_never_references_other_anchor_panos(tmp_path, monkeypatch):
+    import contextlib, json
+    from PIL import Image
+    from modules import genmedia, scene_panos as sp, whitebox
     d = sp.panos_dir(tmp_path, 'S')
-    _write_pano(d, 'A1', 'L', {'mode': 'fresh', 'written_at': '2026-09-20T22:00:00'})
-    _write_pano(d, 'A2', 'L', {'mode': 'chain', 'parent': {'anchor_id': 'A1'}, 'written_at': '2026-09-21T09:30:00'})      # 重出 / 认领过
-    _write_pano(d, 'A3', 'L', {'mode': 'chain', 'parent': {'anchor_id': 'A1'}, 'written_at': '2026-09-20T22:16:00'})
-    _write_pano(d, 'A5', 'L', {'mode': 'chain', 'parent': {'anchor_id': 'A2'}, 'written_at': '2026-09-20T23:39:00'})
-    _write_pano(d, 'A9', 'L', {'mode': 'chain', 'parent': {'anchor_id': 'A2'}, 'written_at': '2026-09-20T23:39:00', 'conformity_ack': {'by': 'user'}})
-    assert 'A2' in sp.chain_donor_distrust(tmp_path, 'S', {'anchor_id': 'A5'}, 'L')
-    assert sp.chain_donor_distrust(tmp_path, 'S', {'anchor_id': 'A3'}, 'L') == ''
-    assert sp.chain_donor_distrust(tmp_path, 'S', {'anchor_id': 'A9'}, 'L') == ''       # 用户 --trust 过:照用
+    for aid in ('A1', 'A5'):
+        (d / aid).mkdir(parents=True)
+        Image.new('RGB', (64, 32), (128, 128, 128)).save(d / aid / 'whitebox_pano.jpg')
+        (d / aid / 'depth_pano.json').write_text(json.dumps({'indoor': False, 'guides': sp.GUIDES_VERSION}), encoding='utf-8')
+    Image.new('RGB', (400, 200), (40, 60, 90)).save(d / 'A1' / 'L.png')
+    _write_pano(d, 'A1', 'L', {'mode': 'fresh', 'file': 'L.png'})
+    a1 = {'anchor_id': 'A1', 'position': [0, 2, 0], 'yaw_deg': 0, 'serves': [], 'panos': {'L': {'file': 'L.png', 'mode': 'fresh'}}}
+    a5 = {'anchor_id': 'A5', 'position': [3, 62, 3], 'yaw_deg': 0, 'serves': [], 'panos': {}}
+    idx = {'schema_version': sp.SCHEMA, 'scene_id': 'S', 'anchors': [a1, a5]}
+    sent = {}
+
+    def fake_image(prompt, target, **kw):
+        sent.update(prompt=prompt, refs=kw['refs'])
+        Image.new('RGB', (400, 200), (40, 60, 90)).save(target)
+    monkeypatch.setattr(genmedia, 'generate_image', fake_image)
+    monkeypatch.setattr(genmedia, 'get_config', lambda kind: {'provider': 'x', 'model': 'y'})
+    monkeypatch.setattr(genmedia, 'image_pref_env', lambda kind: contextlib.nullcontext())
+    monkeypatch.setattr(whitebox, 'load_scene', lambda base, sid: {'dimensions_m': [20, 4, 20], 'objects': []})
+    monkeypatch.setattr(sp, 'anchor_view', lambda scene, anchor, indoor: {'enclosed': False})
+    monkeypatch.setattr(sp, 'pano_prompt', lambda *a, **kw: 'BODY')
+    monkeypatch.setattr(sp, 'projection_check', lambda *a, **kw: None)
+    monkeypatch.setattr(sp, 'conformity_check', lambda *a, **kw: None)
+    rec = sp.generate_pano(tmp_path, 'S', idx, a5, 'L', indoor=False, seed=1, log=lambda *a: None, cameras=[])
+    assert rec['mode'] == 'fresh' and rec['parent'] is None
+    assert [Path(r).name for r in sent['refs']] == ['whitebox_pano.jpg']              # 只有本锚点白模(本例无俯视图)
+    assert 'another standpoint' not in sent['prompt']
+    assert not list((d / 'A5').glob('*.chain_*'))
