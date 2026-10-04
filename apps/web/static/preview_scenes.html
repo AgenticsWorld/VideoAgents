@@ -471,10 +471,16 @@ function renderDetail(s){
 // 场景没有全景图时按钮禁用并提示先创建全景图(带「前往创建全景图」跳到下方全景图板块);
 // 后台任务日志经 SSE scene_world 事件逐行显示;已有 world 时用 Spark 挂可漫游视窗(world-viewer.js)
 let WORLD_LIVE=null;   // 当前挂载的板块 {sid, onEvent}
+// 全景来源的显示名:只写锚点编号(全景图 A3),不带光照方案;同一锚点出了多套方案的全景时才补方案编号尾段区分,完整编号放悬停提示
+function worldSourceLabel(s,anchorId,scheme){
+  const a=((s.world_sources&&s.world_sources.anchors)||[]).find(x=>x.anchor_id===anchorId);
+  if(!a||(a.schemes||[]).length<2)return I18N.f('全景图 {a}',{a:anchorId});
+  return I18N.f('全景图 {a} / {s}',{a:anchorId,s:String(scheme||'').replace(/^LGT-(?:SCN-)?[A-Za-z0-9]+-/,'')});
+}
 function worldSourceOptions(s){
   const src=s.world_sources,opts=[];
   const anchors=(src&&src.anchors)||[];
-  anchors.forEach(a=>(a.schemes||[]).forEach(sc=>opts.push({v:`scene_pano|${a.anchor_id}|${sc}`,label:I18N.f('全景图 {a} / {s}',{a:a.anchor_id,s:sc})})));
+  anchors.forEach(a=>(a.schemes||[]).forEach(sc=>opts.push({v:`scene_pano|${a.anchor_id}|${sc}`,label:worldSourceLabel(s,a.anchor_id,sc),title:sc})));
   return opts;   // 只列已出图的全景锚点/方案;没有全景图 = 不能生成世界模型
 }
 function mountWorldSection(whitebox,s){
@@ -487,11 +493,11 @@ function mountWorldSection(whitebox,s){
   const opts=worldSourceOptions(s);
   const inp=(world&&world.input)||{};
   const curV=inp.source?`${inp.source}|${inp.anchor_id||''}|${inp.scheme||''}`:'';
-  const srcText=inp.source==='scene_pano'?I18N.f('全景图 {a} / {s}',{a:inp.anchor_id,s:inp.scheme}):inp.source==='depth2rgb'?I18N.f('Marble 深度转全景(锚点 {a})',{a:inp.anchor_id||'-'}):'';
+  const srcText=inp.source==='scene_pano'?worldSourceLabel(s,inp.anchor_id,inp.scheme):inp.source==='depth2rgb'?I18N.f('Marble 深度转全景(锚点 {a})',{a:inp.anchor_id||'-'}):'';
   const running=job&&job.status==='running';
   let h=`<div class="wb-toolbar"><div class="wb-heading"><strong>🌍 ${esc(t('世界模型'))} · ${esc(s.id)}</strong>`
     +(world?`<span style="color:var(--dim);font-weight:400">${esc(world.model||'')}${srcText?' · '+esc(t('来源'))+' '+esc(srcText):''}${world.written_at?' · '+esc(String(world.written_at).replace('T',' ')):''}</span>`:'')
-    +`</div><label style="color:var(--dim)">${esc(t('全景来源'))} <select class="ws-source">${opts.map(o=>`<option value="${esc(o.v)}"${o.v===curV?' selected':''}>${esc(o.label)}</option>`).join('')}</select></label>`
+    +`</div><label style="color:var(--dim)">${esc(t('全景来源'))} <select class="ws-source">${opts.map(o=>`<option value="${esc(o.v)}" title="${esc(o.title||'')}"${o.v===curV?' selected':''}>${esc(o.label)}</option>`).join('')}</select></label>`
     +`<button type="button" class="ws-gen"${running?' disabled':''}>${esc(running?t('生成中…'):world?t('重新生成世界模型'):t('生成世界模型'))}</button></div>`
     +`<div class="wb-status ws-status">${esc(running?t('正在生成世界模型…'):world?'':t('尚未生成世界模型;选择全景来源后点「生成世界模型」(约 5–10 分钟,消耗 World Labs credits)'))}</div>`
     +`<pre class="ws-log" data-no-i18n${running?'':' hidden'}>${esc((job&&job.log||[]).join('\n'))}</pre>`

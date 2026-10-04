@@ -2853,6 +2853,7 @@ window.I18N_DICT = {
 "重新生成世界模型": "Tạo lại mô hình thế giới",
 "确认重新生成(旧版归档到 world/variants/)": "Xác nhận tạo lại (bản cũ lưu vào world/variants/)",
 "全景图 {a} / {s}": "Toàn cảnh {a} / {s}",
+"全景图 {a}": "Toàn cảnh {a}",
 "Marble 深度转全景(锚点 {a})": "Marble độ sâu→toàn cảnh (mốc {a})",
 "全景来源": "Nguồn toàn cảnh",
 "尚未生成世界模型;选择全景来源后点「生成世界模型」(约 5–10 分钟,消耗 World Labs credits)": "Chưa có mô hình thế giới. Chọn nguồn toàn cảnh rồi bấm “Tạo mô hình thế giới” (khoảng 5–10 phút, tiêu tốn credits World Labs).",

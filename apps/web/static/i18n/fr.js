@@ -2855,6 +2855,7 @@ window.I18N_DICT = {
 "重新生成世界模型": "Régénérer le modèle de monde",
 "确认重新生成(旧版归档到 world/variants/)": "Confirmer la régénération (ancienne version archivée dans world/variants/)",
 "全景图 {a} / {s}": "Panorama {a} / {s}",
+"全景图 {a}": "Panorama {a}",
 "Marble 深度转全景(锚点 {a})": "Marble profondeur→panorama (ancre {a})",
 "全景来源": "Source du panorama",
 "尚未生成世界模型;选择全景来源后点「生成世界模型」(约 5–10 分钟,消耗 World Labs credits)": "Pas encore de modèle de monde. Choisissez une source de panorama puis cliquez « Générer le modèle de monde » (5–10 min, consomme des crédits World Labs).",
