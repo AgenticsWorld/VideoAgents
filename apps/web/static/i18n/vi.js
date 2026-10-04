@@ -2247,6 +2247,8 @@ window.I18N_DICT = {
 "新锚点 {id}": "Mốc mới {id}",
 "光照方案": "Phương án ánh sáng",
 "未被机位使用": "chưa máy quay nào dùng",
+"光向": "Hướng sáng",
+"反差": "Tương phản",
 "生成全景图": "Tạo toàn cảnh",
 "请先在俯视图上点一个位置,或填写 x/z 坐标": "Hãy nhấp một vị trí trên hình nhìn từ trên trước, hoặc nhập x/z",
 "相机脚下平面的海拔,0 = 地面;相机高度 = y + 眼高。点位后按该处高度自动填,可再改": "Cao độ của mặt phẳng camera đứng; 0 = mặt đất. Chiều cao camera = y + tầm mắt. Tự điền theo độ cao tại vị trí đã chọn; có thể sửa",

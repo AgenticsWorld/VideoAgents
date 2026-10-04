@@ -153,6 +153,9 @@ ul.arr>li{margin:2px 0}
 .pano-panel .ps-form{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 10px;padding:8px 10px;border:1px dashed var(--border);border-radius:8px}
 .pano-panel .ps-form .ps-surf{color:var(--dim);font-size:12px}
 .pano-panel .ps-form .ps-surf:empty{display:none}
+.pano-panel .ps-form .ps-scheme-info{flex-basis:100%;color:var(--dim);font-size:12px;line-height:1.5}
+.pano-panel .ps-form .ps-scheme-info:empty{display:none}
+.pano-panel .ps-form select.ps-scheme{max-width:min(100%,520px)}
 .pano-panel .ps-form label{display:inline-flex;align-items:center;gap:4px;color:var(--dim)}
 .pano-panel .ps-form input[type=number]{width:78px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:3px 6px}
 .pano-panel .ps-form select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:3px 6px}
@@ -808,6 +811,8 @@ async function mountPanoSection(host,s){
       }catch(e){}
     },delay);
   };
+  // 光照方案下拉的显示名:时段 · 空间 — 主光 / 方向 / 色温 〔编号尾段〕;服务端没给摘要(未重启 / 查不到方案)时退回编号
+  const schemeName=o=>o.label?o.label+(o.code?` 〔${o.code}〕`:''):o.scheme+(o.time_of_day?' · '+o.time_of_day:'');
   const openForm=()=>{
     const opts=panos.scheme_options||[];
     const nextId=(()=>{const used=new Set(anchors.map(a=>a.anchor_id));let n=anchors.length+1;while(used.has('A'+n))n++;return 'A'+n;})();
@@ -816,9 +821,17 @@ async function mountPanoSection(host,s){
       +`<label>z <input type="number" class="ps-z" step="0.1" value="${pick?pick.z:0}"> m</label>`
       +`<label title="${esc(t('相机脚下平面的海拔,0 = 地面;相机高度 = y + 眼高。点位后按该处高度自动填,可再改'))}">y <input type="number" class="ps-y" step="0.1" min="0" value="0"> m</label><span class="ps-surf"></span>`
       +`<label>yaw <input type="number" class="ps-yaw" step="1" value="0">°</label>`
-      +`<label>${esc(t('光照方案'))} <select class="ps-scheme">${opts.map(o=>`<option value="${esc(o.scheme)}">${esc(o.scheme)}${o.time_of_day?' · '+esc(o.time_of_day):''}${o.in_use?'':' · '+esc(t('未被机位使用'))}</option>`).join('')||`<option value="">default</option>`}</select></label>`
+      +`<label>${esc(t('光照方案'))} <select class="ps-scheme">${opts.map(o=>`<option value="${esc(o.scheme)}" title="${esc(o.scheme)}">${esc(schemeName(o))}${o.in_use?'':' · '+esc(t('未被机位使用'))}</option>`).join('')||`<option value="">default</option>`}</select></label>`
+      +`<div class="ps-scheme-info"></div>`
       +`<button type="button" class="ps-go">🌐 ${esc(t('生成全景图'))}</button><button type="button" class="ps-cancel">${esc(t('取消'))}</button>`;
     form.hidden=false;
+    // 选中方案的说明行:天气 / 光向 / 反差 + 完整编号(下拉里只放得下时段、主光、方向、色温)
+    const sel=form.querySelector('.ps-scheme'),info=form.querySelector('.ps-scheme-info');
+    const showScheme=()=>{
+      const o=opts.find(x=>x.scheme===sel.value);
+      info.textContent=o?[[t('天气'),o.weather],[t('光向'),o.azimuth],[t('反差'),o.contrast],[t('编号'),o.label?o.scheme:'']].filter(x=>x[1]).map(x=>x[0]+' '+x[1]).join(' · '):'';
+    };
+    sel.onchange=showScheme;showScheme();
     const ix=form.querySelector('.ps-x'),iz=form.querySelector('.ps-z');
     const sync=()=>{const x=parseFloat(ix.value),z=parseFloat(iz.value);if(Number.isFinite(x)&&Number.isFinite(z)){pick={x,z};setDot(x,z);probeY(x,z,400);}};
     ix.oninput=iz.oninput=sync;

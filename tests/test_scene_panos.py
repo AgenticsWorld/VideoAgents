@@ -158,6 +158,23 @@ def test_scene_scheme_options_prefers_camera_schemes_then_bible(tmp_path):
     assert sp.scene_scheme_options(tmp_path, 'SCN-0002', [])[0]['scheme'] == 'default'
 
 
+def test_scheme_summary_readable_label():
+    """下拉显示名:时段 · 空间 — 主光 / 方向 / 色温,括号里的补充说明去掉;编号只留尾段;两种 lighting.json 写法都认。"""
+    nested = {'scheme_id': 'LGT-SCN-0036-DUSK-EAST-A', 'condition': {'time_of_day': '黄昏', 'weather': ['海雾', '薄阴']}, 'contrast': '高反差(剪影级)',
+              'key_light': {'source': '日光·低角直射(落日沉入西侧叠山)', 'direction': '侧逆光', 'azimuth': '落日在画右后方的西天;人物走向画右即走向逆光',
+                            'color_temp': '暖黄(~2900K)'}}
+    r = sp.scheme_summary(nested, 'LGT-SCN-0036-DUSK-EAST-A')
+    assert r == {'label': '黄昏 — 日光·低角直射 / 侧逆光 / 暖黄', 'code': 'DUSK-EAST-A', 'weather': '海雾、薄阴',
+                 'azimuth': '落日在画右后方的西天;人物走向画右即走向逆光', 'contrast': '高反差'}
+    flat = {'id': 'LGT-0231-07', 'condition': {'time_of_day': '深夜', 'weather': '夜间无雨', 'sub_space': '一楼厨房'},
+            'key_source': '荧光灯管', 'direction': '顶光', 'color_temp': '混色(暖+冷)'}
+    r = sp.scheme_summary(flat, 'LGT-0231-07')
+    assert (r['label'], r['code']) == ('深夜 · 一楼厨房 — 荧光灯管 / 顶光 / 混色', '07')
+    assert sp.scheme_summary({}, 'default') == {'label': '', 'code': '', 'weather': '', 'azimuth': '', 'contrast': ''}
+    assert sp.scheme_summary({}, 'night', 'night')['label'] == 'night'
+    assert len(sp.scheme_summary({'key_source': '案上烛台的余烬' * 10}, 'x')['label']) <= 18
+
+
 def test_ensure_only_renders_new_anchor_without_touching_others(tmp_path, monkeypatch):
     base = _fake_scene_env(tmp_path, monkeypatch)
     rendered, generated = [], []

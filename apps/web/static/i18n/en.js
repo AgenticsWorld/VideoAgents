@@ -2336,6 +2336,8 @@ window.I18N_DICT = {
 "新锚点 {id}": "New anchor {id}",
 "光照方案": "Lighting scheme",
 "未被机位使用": "not used by any camera",
+"光向": "Light direction",
+"反差": "Contrast",
 "生成全景图": "Generate panorama",
 "请先在俯视图上点一个位置,或填写 x/z 坐标": "Click a position on the top view first, or fill in x/z",
 "相机脚下平面的海拔,0 = 地面;相机高度 = y + 眼高。点位后按该处高度自动填,可再改": "Elevation of the surface the camera stands on; 0 = ground. Camera height = y + eye height. Auto-filled from the height at the picked position; editable",

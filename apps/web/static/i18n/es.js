@@ -2249,6 +2249,8 @@ window.I18N_DICT = {
 "新锚点 {id}": "Nuevo anclaje {id}",
 "光照方案": "Esquema de iluminación",
 "未被机位使用": "no usado por ninguna cámara",
+"光向": "Dirección de la luz",
+"反差": "Contraste",
 "生成全景图": "Generar panorama",
 "请先在俯视图上点一个位置,或填写 x/z 坐标": "Haz clic primero en una posición de la vista superior o rellena x/z",
 "相机脚下平面的海拔,0 = 地面;相机高度 = y + 眼高。点位后按该处高度自动填,可再改": "Elevación de la superficie donde está la cámara; 0 = suelo. Altura de cámara = y + altura de los ojos. Se rellena automáticamente con la altura de la posición elegida; editable",

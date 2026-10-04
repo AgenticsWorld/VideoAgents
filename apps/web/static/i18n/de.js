@@ -2247,6 +2247,8 @@ window.I18N_DICT = {
 "新锚点 {id}": "Neuer Anker {id}",
 "光照方案": "Lichtschema",
 "未被机位使用": "von keiner Kamera genutzt",
+"光向": "Lichtrichtung",
+"反差": "Kontrast",
 "生成全景图": "Panorama erzeugen",
 "请先在俯视图上点一个位置,或填写 x/z 坐标": "Zuerst eine Position in der Draufsicht anklicken oder x/z eingeben",
 "相机脚下平面的海拔,0 = 地面;相机高度 = y + 眼高。点位后按该处高度自动填,可再改": "Höhe der Fläche, auf der die Kamera steht; 0 = Boden. Kamerahöhe = y + Augenhöhe. Wird aus der Höhe an der gewählten Position automatisch ausgefüllt; änderbar",

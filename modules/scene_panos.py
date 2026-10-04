@@ -1804,24 +1804,56 @@ def pano_ready(base: Path, sid: str, anchor: dict, scheme: str) -> bool:
     return bool(p) and (panos_dir(base, sid) / anchor['anchor_id'] / p.get('file', '')).is_file() and not whitebox_pano_stale(base, sid, anchor)
 
 
+def _scheme_text(v, limit: int) -> str:
+    """方案字段压成下拉里放得下的短语:列表取各项相连,去掉括号里的补充说明,仍超长就截到第一个分句,再超长截断加省略号。"""
+    if isinstance(v, (list, tuple)):
+        v = '、'.join(str(x) for x in v if x)
+    t = re.sub(r'[((][^(())]*[))]', '', str(v or ''))
+    t = re.split(r'[((]', t)[0].strip(' ,,;;。·')
+    if len(t) > limit:
+        t = re.split(r'——|[;;。,,]', t)[0].strip()
+    return t if len(t) <= limit else t[:limit - 1].rstrip() + '…'
+
+
+def scheme_summary(scheme: dict, scheme_id: str = '', time_of_day: str | None = None) -> dict:
+    """光照方案的人读摘要(预览页「创建全景图」下拉用,不让用户只对着 LGT-SCN-0036-DUSK-EAST-A 这类编号选):
+    label = 时段 · 所属空间 — 主光 / 光向 / 色温;code = 编号去掉 LGT-<场景号>- 前缀的尾段(DUSK-EAST-A),同时段多套方案靠它区分;
+    weather / azimuth / contrast 供选中后的说明行。lighting.json 两种写法(key_light{} 与平铺 key_source/direction/color_temp)都认;
+    查不到方案(scheme={})时 label 只剩时段,再没有就为空,由页面退回显示编号。"""
+    cond = scheme.get('condition') if isinstance(scheme.get('condition'), dict) else {}
+    kl = scheme.get('key_light') if isinstance(scheme.get('key_light'), dict) else {}
+    head = [x for x in (_scheme_text(cond.get('time_of_day') or scheme.get('time_of_day') or time_of_day, 10),
+                        _scheme_text(cond.get('space') or cond.get('sub_space'), 18)) if x]
+    light = [x for x in (_scheme_text(kl.get('source') or scheme.get('key_source'), 18),
+                         _scheme_text(kl.get('direction') or scheme.get('direction'), 12),
+                         _scheme_text(kl.get('color_temp') or scheme.get('color_temp'), 10)) if x]
+    label = ' — '.join(x for x in (' · '.join(head), ' / '.join(light)) if x)
+    code = re.sub(r'^LGT-(?:SCN-)?[A-Za-z0-9]+-', '', scheme_id or '')
+    return {'label': label, 'code': code if code != scheme_id else '',
+            'weather': _scheme_text(cond.get('weather'), 30), 'azimuth': _scheme_text(kl.get('azimuth'), 48),
+            'contrast': _scheme_text(scheme.get('contrast'), 16)}
+
+
 def scene_scheme_options(base: Path, sid: str, cameras: list | None = None) -> list[dict]:
     """可出全景的光照方案候选:各集机位实际用到的方案在前,其后补 bible lighting.json 里其余方案;都没有则 default。
-    每项 {scheme, time_of_day, in_use}。预览页「创建全景图」下拉与 CLI --scheme 校验共用。"""
+    每项 {scheme, time_of_day, in_use} + scheme_summary 的人读摘要(label / code / weather / azimuth / contrast)。
+    预览页「创建全景图」下拉与 CLI --scheme 校验共用。"""
     sid = component(sid)
     cams = scene_cameras(base, sid) if cameras is None else cameras
     out, seen = [], set()
     for c in cams:
         if c['scheme'] not in seen:
             seen.add(c['scheme'])
-            out.append({'scheme': c['scheme'], 'time_of_day': c.get('time_of_day'), 'in_use': True})
+            out.append({'scheme': c['scheme'], 'time_of_day': c.get('time_of_day'), 'in_use': True,
+                        **scheme_summary(lighting_scheme(base, sid, c['scheme']), c['scheme'], c.get('time_of_day'))})
     doc = read(base / 'bible/scenes' / sid / 'lighting.json', {}) or {}
     for s in doc.get('schemes', []) if isinstance(doc, dict) else []:
         slug = scheme_slug(s.get('scheme_id') or s.get('id'), s.get('time_of_day'))
         if slug not in seen:
             seen.add(slug)
-            out.append({'scheme': slug, 'time_of_day': s.get('time_of_day'), 'in_use': False})
+            out.append({'scheme': slug, 'time_of_day': s.get('time_of_day'), 'in_use': False, **scheme_summary(s, slug)})
     if not out:
-        out.append({'scheme': scheme_slug(None), 'time_of_day': None, 'in_use': False})
+        out.append({'scheme': scheme_slug(None), 'time_of_day': None, 'in_use': False, **scheme_summary({})})
     return out
 
 
