@@ -166,11 +166,16 @@ ul.arr>li{margin:2px 0}
 .world-panel .ws-log{background:#0b0e14;border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin:8px 0;max-height:220px;overflow:auto;font:12px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;color:var(--dim)}
 .world-panel .ws-status.err{color:var(--red)}
 .world-panel .ws-status.ok{color:var(--green)}
-.world-panel .ws-gen.armed{border-color:var(--yellow);color:var(--yellow)}
-.world-panel .wv-toolbar label{display:inline-flex;align-items:center;gap:4px;color:var(--dim)}
-.world-panel .wv-toolbar input[type=number]{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:3px 6px}
-/* 「💾 背景图」与全景 360° 视窗里的同名按钮同色(pano-viewer.js .p360-save) */
-.world-panel .wv-toolbar button.wv-save{background:rgba(40,120,70,.85);color:#fff;border-color:rgba(255,255,255,.25)}
+/* 世界模型卡片(2026-10-04 一个场景多个世界模型):正面预览图 + 编号 / 来源全景;点击打开全屏视窗 */
+.world-grid{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;margin:8px 0 2px}
+.world-card{position:relative;margin:0;width:320px;max-width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px;cursor:pointer}
+.world-card:hover,.world-card:focus-visible{border-color:var(--accent);outline:none}
+.world-card img,.world-card .world-noimg{width:100%;aspect-ratio:3/2;object-fit:cover;display:block;border-radius:5px;background:#0b0e14}
+.world-card .world-noimg{display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:12px}
+.world-card figcaption{margin-top:6px;font-size:12px;line-height:1.5;text-align:start}
+.world-card figcaption .fn{display:block;font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.world-card .world-meta{display:block;color:var(--dim)}
+.world-card .world-badge{position:absolute;z-index:1;left:14px;top:14px;font-size:11px;line-height:1;padding:3px 6px;border-radius:4px;background:var(--accent);color:#fff;pointer-events:none}
 #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:99;cursor:zoom-out}
 #lightbox img{max-width:96vw;max-height:96vh;border-radius:6px}
 /* ✂ 裁剪分镜背景图(2026-09-15):比例固定为项目画幅的框选浮层,拖选框移动、拖四角缩放,确认后服务端裁切覆盖原图 */
@@ -469,7 +474,9 @@ function renderDetail(s){
 // ---------------- 🌍 世界模型(World Labs Marble,2026-09-12) ----------------
 // 仅项目「白模」选项开启时显示:全景来源下拉(场景全景图锚点/方案;2026-09-13 起必须基于全景图,白模深度转世界模型选项已去掉)+「生成世界模型」按钮;
 // 场景没有全景图时按钮禁用并提示先创建全景图(带「前往创建全景图」跳到下方全景图板块);
-// 后台任务日志经 SSE scene_world 事件逐行显示;已有 world 时用 Spark 挂可漫游视窗(world-viewer.js)
+// 后台任务日志经 SSE scene_world 事件逐行显示。
+// 2026-10-04:一个场景可有多个世界模型——每次「生成世界模型」都新增一个(已有的不动);板块里每个世界模型一张卡片
+// (正面预览图 + 基于哪张全景图),点卡片打开全屏视窗(world-viewer.js openWorld:漫游预览 / 💾 截图存背景图 / ⚙ 设置)
 let WORLD_LIVE=null;   // 当前挂载的板块 {sid, onEvent}
 // 全景来源的显示名:只写锚点编号(全景图 A3),不带光照方案;同一锚点出了多套方案的全景时才补方案编号尾段区分,完整编号放悬停提示
 function worldSourceLabel(s,anchorId,scheme){
@@ -489,22 +496,31 @@ function mountWorldSection(whitebox,s){
   const sec=document.createElement('section');sec.className='wb-panel world-panel';blkMark(sec,'world');
   const spBlk=whitebox.parentNode.querySelector('.blk[data-blk="shot_plates"]');
   if(spBlk)spBlk.before(sec);else whitebox.after(sec);
-  const world=s.world||null,job=s.world_job||null;
+  // 一个场景可有多个世界模型(2026-10-04):s.worlds 全部,带 default 标记;旧服务只给 s.world(单个)时按一个处理
+  const worlds=(Array.isArray(s.worlds)?s.worlds:(s.world?[s.world]:[])).filter(w=>w&&w.files&&Object.keys(w.files.splats||{}).length);
+  const job=s.world_job||null;
   const opts=worldSourceOptions(s);
-  const inp=(world&&world.input)||{};
-  const curV=inp.source?`${inp.source}|${inp.anchor_id||''}|${inp.scheme||''}`:'';
-  const srcText=inp.source==='scene_pano'?worldSourceLabel(s,inp.anchor_id,inp.scheme):inp.source==='depth2rgb'?I18N.f('Marble 深度转全景(锚点 {a})',{a:inp.anchor_id||'-'}):'';
+  const srcOf=w=>{const inp=w.input||{};return inp.source==='scene_pano'?worldSourceLabel(s,inp.anchor_id,inp.scheme):inp.source==='depth2rgb'?I18N.f('Marble 深度转全景(锚点 {a})',{a:inp.anchor_id||'-'}):'';};
   const running=job&&job.status==='running';
+  const idle=worlds.length?t('点卡片打开全屏视窗:漫游预览、截图存背景图、调整设置。选一张全景图可再生成一个世界模型(约 5–10 分钟,消耗 World Labs credits),已有的不受影响')
+    :t('尚未生成世界模型;选择全景来源后点「生成世界模型」(约 5–10 分钟,消耗 World Labs credits)');
   let h=`<div class="wb-toolbar"><div class="wb-heading"><strong>🌍 ${esc(t('世界模型'))} · ${esc(s.id)}</strong>`
-    +(world?`<span style="color:var(--dim);font-weight:400">${esc(world.model||'')}${srcText?' · '+esc(t('来源'))+' '+esc(srcText):''}${world.written_at?' · '+esc(String(world.written_at).replace('T',' ')):''}</span>`:'')
-    +`</div><label style="color:var(--dim)">${esc(t('全景来源'))} <select class="ws-source">${opts.map(o=>`<option value="${esc(o.v)}" title="${esc(o.title||'')}"${o.v===curV?' selected':''}>${esc(o.label)}</option>`).join('')}</select></label>`
-    +`<button type="button" class="ws-gen"${running?' disabled':''}>${esc(running?t('生成中…'):world?t('重新生成世界模型'):t('生成世界模型'))}</button></div>`
-    +`<div class="wb-status ws-status">${esc(running?t('正在生成世界模型…'):world?'':t('尚未生成世界模型;选择全景来源后点「生成世界模型」(约 5–10 分钟,消耗 World Labs credits)'))}</div>`
-    +`<pre class="ws-log" data-no-i18n${running?'':' hidden'}>${esc((job&&job.log||[]).join('\n'))}</pre>`
-    +`<div class="ws-viewer"></div>`;
-  if(world&&world.previews){
-    const caps=[['whitebox_pano','白模全景'],['depth_pano','深度全景']].filter(([k])=>world.previews[k]);   // 输入全景不在此展示(全景图板块已有)
-    if(caps.length)h+=`<div class="gallery plates" style="margin-top:8px">${caps.map(([k,cap])=>`<figure><img src="${esc(world.previews[k])}" alt="${esc(t(cap))}" loading="lazy" onclick="zoomPano(this.src)"><figcaption><span class="fn">${esc(t(cap))}</span></figcaption></figure>`).join('')}</div>`;
+    +(worlds.length?`<span style="color:var(--dim);font-weight:400">${esc(I18N.f('{n} 个',{n:worlds.length}))}</span>`:'')
+    +`</div><label style="color:var(--dim)">${esc(t('全景来源'))} <select class="ws-source">${opts.map(o=>`<option value="${esc(o.v)}" title="${esc(o.title||'')}">${esc(o.label)}</option>`).join('')}</select></label>`
+    +`<button type="button" class="ws-gen"${running?' disabled':''}>${running?esc(t('生成中…')):'➕ '+esc(t('生成世界模型'))}</button></div>`
+    +`<div class="wb-status ws-status">${esc(running?t('正在生成世界模型…'):idle)}</div>`
+    +`<pre class="ws-log" data-no-i18n${running?'':' hidden'}>${esc((job&&job.log||[]).join('\n'))}</pre>`;
+  // 世界模型卡片:正面预览图(Marble 缩略图;没有就用它的全景)+ 编号 / 来源全景 / 模型 / 时间;点击打开全屏视窗
+  if(worlds.length){
+    h+=`<div class="world-grid">`+worlds.map((w,i)=>{
+      const pv=w.previews||{},img=pv.thumbnail||pv.world_pano||pv.pano||'';
+      const src=srcOf(w),meta=[w.model||'',w.written_at?String(w.written_at).replace('T',' ').slice(0,16):''].filter(Boolean).join(' · ');
+      return `<figure class="world-card" data-i="${i}" tabindex="0" role="button" title="${esc(t('点击打开全屏视窗:漫游预览、截图存背景图、调整设置'))}">`
+        +(w.default&&worlds.length>1?`<span class="world-badge">★ ${esc(t('默认'))}</span>`:'')
+        +(img?`<img src="${esc(img)}" alt="" loading="lazy">`:`<div class="world-noimg">${esc(t('无预览图'))}</div>`)
+        +`<figcaption><span class="fn">${esc(I18N.f('世界模型 {k}',{k:w.key||String(i+1)}))}${src?' · '+esc(t('来源'))+' '+esc(src):''}</span>`
+        +(meta?`<span class="world-meta" data-no-i18n>${esc(meta)}</span>`:'')+`</figcaption></figure>`;
+    }).join('')+`</div>`;
   }
   sec.innerHTML=h;
   const status=sec.querySelector('.ws-status'),log=sec.querySelector('.ws-log'),btn=sec.querySelector('.ws-gen'),sel=sec.querySelector('.ws-source');
@@ -518,31 +534,28 @@ function mountWorldSection(whitebox,s){
       status.appendChild(go);
     }
   }
-  let armed=null;
+  const openCard=fig=>{
+    const w=worlds[+fig.dataset.i];if(!w)return;
+    import('/static/world-viewer.js?v=20261004').then(m=>m.openWorld(proj,s.id,w,{format:FORMAT||null,sourceLabel:srcOf(w),onSaved:()=>reloadKeep(),onChanged:()=>reloadKeep()}))
+      .catch(e=>{status.className='wb-status ws-status err';status.textContent=t('世界模型加载失败:')+(e.message||e);});
+  };
+  sec.querySelectorAll('.world-card').forEach(fig=>{fig.onclick=()=>openCard(fig);fig.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openCard(fig);}};});
+  const genLabel=()=>{btn.textContent='➕ '+t('生成世界模型');};
   btn.onclick=async()=>{
-    const force=!!world;
-    if(force&&!armed){   // 已有 world:第二次点击才真正提交(旧版归档到 world/variants/),不用 confirm 弹窗
-      btn.classList.add('armed');btn.textContent=t('确认重新生成(旧版归档到 world/variants/)');
-      armed=setTimeout(()=>{armed=null;btn.classList.remove('armed');btn.textContent=t('重新生成世界模型');},8000);return;
-    }
-    if(armed){clearTimeout(armed);armed=null;btn.classList.remove('armed');}
     const [source,anchor,scheme]=(sel.value||'scene_pano||').split('|');
     btn.disabled=true;btn.textContent=t('生成中…');status.className='wb-status ws-status';status.textContent=t('正在生成世界模型…');log.hidden=false;log.textContent='';
     try{
-      const r=await fetch(`/api/v1/projects/${encodeURIComponent(proj)}/scenes/${encodeURIComponent(s.id)}/world`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source,anchor,scheme,force})});
+      // 不带 force:新服务每次都新增一个世界模型;旧服务(未重启)已有世界模型时会 409 拒绝,而带 force 会让它把现有的挪去归档
+      const r=await fetch(`/api/v1/projects/${encodeURIComponent(proj)}/scenes/${encodeURIComponent(s.id)}/world`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source,anchor,scheme})});
       const d=await r.json().catch(()=>({}));
       if(!r.ok)throw new Error(d.detail||(r.status===404?t('服务未重启:世界模型接口不可用'):r.status));
-    }catch(e){btn.disabled=false;btn.textContent=world?t('重新生成世界模型'):t('生成世界模型');status.className='wb-status ws-status err';status.textContent=t('启动失败:')+e.message;}
+    }catch(e){btn.disabled=false;genLabel();status.className='wb-status ws-status err';status.textContent=t('启动失败:')+e.message;}
   };
   WORLD_LIVE={sid:s.id,onEvent(ev){
     if(ev.status==='running'){if(ev.line){log.hidden=false;log.textContent+=(log.textContent?'\n':'')+ev.line;log.scrollTop=log.scrollHeight;}btn.disabled=true;btn.textContent=t('生成中…');return;}
     if(ev.status==='done'){status.className='wb-status ws-status ok';status.textContent=t('世界模型生成完成');reloadKeep();}
-    else{status.className='wb-status ws-status err';status.textContent=t('世界模型生成失败:')+(ev.error||'');btn.disabled=false;btn.textContent=world?t('重新生成世界模型'):t('生成世界模型');}
+    else{status.className='wb-status ws-status err';status.textContent=t('世界模型生成失败:')+(ev.error||'');btn.disabled=false;genLabel();}
   }};
-  if(world&&world.files&&Object.keys(world.files.splats||{}).length){
-    const host=sec.querySelector('.ws-viewer');
-    import('/static/world-viewer.js?v=20260926-save2').then(m=>m.mountWorld(host,proj,s.id,world,{format:FORMAT||null,onSaved:()=>reloadKeep()})).catch(e=>{host.textContent=t('世界模型加载失败:')+(e.message||e);});
-  }
 }
 // 后台任务完成后重取预览数据并原位重绘(保留当前场景与滚动位置)
 async function reloadKeep(){

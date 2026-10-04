@@ -1,22 +1,26 @@
 #!/usr/bin/env python3
 """World Labs(Marble)世界模型 CLI(2026-09-12;规则见 modules/worldlabs.py 顶部注释、docs/worldlabs_world.md)。
 
-按场景的全景生成可漫游 3D world(高斯泼溅),落盘 assets/concepts/scenes/<sid>/world/;场景预览页「🌍 世界模型」板块的
-「生成世界模型」按钮由宿主后台调用本脚本(仅项目「白模」选项开启时显示),也可手工跑:
+按场景的全景生成可漫游 3D world(高斯泼溅)。一个场景可以有多个世界模型(2026-10-04),每个落盘
+assets/concepts/scenes/<sid>/world/worlds/<key>/(key = W1、W2…;旧版放在 world/ 根下的那个算 W1)。场景预览页「🌍 世界模型」板块的
+「生成世界模型」按钮由宿主后台调用本脚本(仅项目「白模」选项开启时显示,每次带 --new),也可手工跑:
 
-  python code/worldlabs_world.py --project <slug> --scene SCN-0001                            # 场景全景图(首个锚点/方案)→ world
-  python code/worldlabs_world.py --project <slug> --scene SCN-0001 --anchor A2 --scheme day    # 指定锚点/光照方案的全景
+  python code/worldlabs_world.py --project <slug> --scene SCN-0001                            # 场景还没有世界模型时:全景图(首个锚点/方案)→ world
+  python code/worldlabs_world.py --project <slug> --scene SCN-0001 --new --anchor A2 --scheme day   # 用指定锚点/光照方案的全景再生成一个
   python code/worldlabs_world.py --project <slug> --scene SCN-0001 --source depth2rgb          # 白模深度全景 → Marble depth_to_rgb → world(计费)
-  python code/worldlabs_world.py --project <slug> --scene SCN-0001 --resume <operation_id>     # 中断后续接 world 下载
+  python code/worldlabs_world.py --project <slug> --scene SCN-0001 --resume <operation_id> --world W2   # 中断后续接 W2 的下载
+  python code/worldlabs_world.py --project <slug> --scene SCN-0001 --list                      # 列出已有世界模型(JSON)
+  python code/worldlabs_world.py --project <slug> --scene SCN-0001 --set-default W2            # 设默认世界模型(背景图截图 / 导演台用)
   python code/worldlabs_world.py --project <slug> --scene SCN-0001 --sources                   # 列出可用全景来源(JSON)
   python code/worldlabs_world.py --project <slug> --scene SCN-0001 --prompt-only               # 打印缺省提示词
   python code/worldlabs_world.py --credits                                                     # 只查余额
 可选:--model marble-1.1|marble-1.1-plus|marble-1.0|marble-1.0-draft(缺省取生成模型页配置)--seed N --prompt-file <txt>
-      --force(已有 world 时归档到 world/variants/<时间>/ 后重出;depth2rgb 重出全景)
+      --new(已有世界模型时再生成一个,不动已有的;--force 同义,保留给旧调用)
 Key/模型:控制台「🎨 生成模型」→「🌍 世界模型」;Key 也可设环境变量 WORLDLABS_API_KEY。
 退出码:0 完成;1 出错;2 项目「白模」选项关闭。
 """
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -43,7 +47,11 @@ def main() -> int:
         ap.add_argument('--prompt-file', default=None)
         ap.add_argument('--prompt-only', action='store_true')
         ap.add_argument('--resume', metavar='OPERATION_ID', default=None)
-        ap.add_argument('--force', action='store_true')
+        ap.add_argument('--world', metavar='KEY', default=None, help='--resume 续接的世界模型 key(W1、W2…)')
+        ap.add_argument('--new', action='store_true', help='已有世界模型时再生成一个(不动已有的)')
+        ap.add_argument('--force', action='store_true', help='同 --new(旧调用兼容)')
+        ap.add_argument('--list', action='store_true', help='列出已有世界模型(JSON)后退出')
+        ap.add_argument('--set-default', metavar='KEY', default=None, help='把该世界模型设为场景默认后退出')
         ap.add_argument('--sources', action='store_true', help='列出可用全景来源(JSON)后退出')
         ap.add_argument('--credits', action='store_true', help='只查余额')
     args, base = parse_args(__doc__, ep=False, configure=configure)
@@ -60,6 +68,16 @@ def main() -> int:
     if args.sources:
         print(json.dumps(wl.list_sources(base, sid), ensure_ascii=False, indent=2))
         return 0
+    if args.list:
+        dk = wl.default_key(base, sid)
+        print(json.dumps([{'key': w['key'], 'default': w['key'] == dk, 'dir': str(w['dir'].relative_to(base)),
+                           **{k: w['record'].get(k) for k in ('world_id', 'model', 'written_at')},
+                           'input': {k: (w['record'].get('input') or {}).get(k) for k in ('source', 'anchor_id', 'scheme')}}
+                          for w in wl.list_worlds(base, sid)], ensure_ascii=False, indent=2))
+        return 0
+    if args.set_default:
+        print(f'default={wl.set_default(base, sid, component(args.set_default))}')
+        return 0
     if not spatial_blocking_enabled(base):
         print(f'[worldlabs] {args.project}: skipped: spatial_blocking off(项目输出设置「白模」已关闭)')
         return 2
@@ -68,21 +86,33 @@ def main() -> int:
         print(prompt)
         return 0
     if args.resume:
-        wl.finish_world(base, sid, args.resume, log=log)
-        return 0
-    out = wl.world_dir(base, sid)
-    if (out / 'world.json').is_file() and not args.force:
-        log(f'跳过:已有 {out / "world.json"}(--force 归档后重出)')
+        if not args.world:
+            print('--resume 须带 --world <key>(生成时日志里打印的世界模型编号)', file=sys.stderr)
+            return 1
+        key = component(args.world)
+        rec = wl.finish_world(base, sid, args.resume, log=log, out=wl.pending_world_dir(base, sid, key), key=key)
+    elif wl.list_worlds(base, sid) and not (args.new or args.force):
+        have = ', '.join(w['key'] for w in wl.list_worlds(base, sid))
+        log(f'跳过:{sid} 已有世界模型 {have}(--new 再生成一个)')
+        rec = wl.read_world(base, sid) or {}
     else:
         log(f'余额 {wl.get_credits()} credits')
-        if args.force:
-            wl.archive_world(base, sid, log=log)
-        wl.prepare_pano(base, sid, source=args.source, anchor_id=args.anchor, scheme=args.scheme, text_prompt=prompt,
-                        seed=args.seed, force=args.force, log=log)
-        wl.generate_world(base, sid, prompt, model=args.model, seed=args.seed, log=log)
+        key, out = wl.new_world_dir(base, sid)
+        log(f'世界模型 {key} → {out}')
+        try:
+            wl.prepare_pano(base, sid, source=args.source, anchor_id=args.anchor, scheme=args.scheme, text_prompt=prompt,
+                            seed=args.seed, force=True, log=log, out=out)
+            rec = wl.generate_world(base, sid, prompt, model=args.model, seed=args.seed, log=log, out=out, key=key)
+        except BaseException:
+            # 还没提交 worlds:generate 就失败 → 目录里只有输入全景,清掉不留空壳;已提交的留着,可 --resume <operation_id> --world <key> 续接
+            if not (out / 'generate.json').is_file():
+                shutil.rmtree(out, ignore_errors=True)
+            else:
+                op = (json.loads((out / 'generate.json').read_text(encoding='utf-8')) or {}).get('operation_id')
+                log(f'世界模型 {key} 未完成;可续接:--resume {op} --world {key}')
+            raise
         log(f'余额 {wl.get_credits()} credits')
-    rec = wl.read_world(base, sid) or {}
-    print(json.dumps({k: rec.get(k) for k in ('world_id', 'model', 'world_marble_url', 'files')}, ensure_ascii=False, indent=2))
+    print(json.dumps({k: rec.get(k) for k in ('key', 'world_id', 'model', 'world_marble_url', 'files')}, ensure_ascii=False, indent=2))
     return 0
 
 

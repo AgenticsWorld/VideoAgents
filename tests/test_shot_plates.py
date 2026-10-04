@@ -295,6 +295,64 @@ def test_world_missing_lists_scenes_and_world_missing_check(tmp_path):
     assert worldlabs._pick_splat(tmp_path, 'SCN-0002', json.loads((wdir / 'world.json').read_text()))[0] == '500k'
 
 
+def test_multiple_worlds_per_scene(tmp_path):
+    """一个场景多个世界模型:根下旧版算 W1 原地读取,新的进 world/worlds/<key>/;默认 = index.json#default,没记取第一个。"""
+    import json
+    from modules import worldlabs as wl
+    sid = 'SCN-0003'
+    assert wl.list_worlds(tmp_path, sid) == [] and wl.default_key(tmp_path, sid) is None and wl.read_world(tmp_path, sid) is None
+    assert wl.world_dir(tmp_path, sid) == tmp_path / 'assets/concepts/scenes' / sid / 'world'
+    # 没有旧版时第一个新世界模型就是 W1
+    key, out = wl.new_world_dir(tmp_path, sid)
+    assert key == 'W1' and out == tmp_path / 'assets/concepts/scenes' / sid / 'world/worlds/W1'
+    assert wl.list_worlds(tmp_path, sid) == []                       # 没有 world.json = 还没生成完,不列
+    (out / 'world.json').write_text(json.dumps({'world_id': 'a', 'key': 'W1', 'files': {'splats': {'500k': 's.spz'}},
+                                                'input': {'source': 'scene_pano', 'anchor_id': 'A1', 'scheme': 'day'}}), encoding='utf-8')
+    (out / 's.spz').write_bytes(b'x'); (out / 'thumbnail.jpg').write_bytes(b'x')
+    key2, out2 = wl.new_world_dir(tmp_path, sid)
+    assert key2 == 'W2'
+    assert wl.new_world_dir(tmp_path, sid)[0] == 'W3'                # 半途留下的空目录不复用
+    (out2 / 'world.json').write_text(json.dumps({'world_id': 'b', 'key': 'W2', 'files': {'splats': {'500k': 's.spz'}}, 'alignment': {'scale_fix': 1.2},
+                                                 'input': {'source': 'scene_pano', 'anchor_id': 'A3', 'scheme': 'dusk'}}), encoding='utf-8')
+    (out2 / 's.spz').write_bytes(b'x')
+    assert [w['key'] for w in wl.list_worlds(tmp_path, sid)] == ['W1', 'W2']
+    assert wl.default_key(tmp_path, sid) == 'W1' and wl.read_world(tmp_path, sid)['world_id'] == 'a' and not wl.world_missing(tmp_path, sid)
+    assert wl.set_default(tmp_path, sid, 'W2') == 'W2'
+    assert wl.read_world(tmp_path, sid)['world_id'] == 'b' and wl.world_dir(tmp_path, sid) == out2 and wl.world_dir(tmp_path, sid, 'W1') == out
+    assert wl._pick_splat(tmp_path, sid, wl.read_world(tmp_path, sid))[1] == 's.spz'
+    summary = wl.worlds_summary(tmp_path, sid, '/projects/p')
+    assert [(w['key'], w['default'], w['input']['anchor_id']) for w in summary] == [('W1', False, 'A1'), ('W2', True, 'A3')]
+    assert summary[0]['previews']['thumbnail'].startswith(f'/projects/p/assets/concepts/scenes/{sid}/world/worlds/W1/thumbnail.jpg?v=')
+    assert summary[1]['dir'] == f'assets/concepts/scenes/{sid}/world/worlds/W2' and summary[1]['base_url'].endswith('/world/worlds/W2/')
+    assert wl.preview_summary(tmp_path, sid, '/projects/p')['key'] == 'W2' and wl.preview_summary(tmp_path, sid, '/projects/p', 'W1')['key'] == 'W1'
+    # 对齐微调写回该世界模型的 world.json
+    al = wl.update_alignment(tmp_path, sid, 'W2', yaw_fix_deg=7, scale_fix=1.05)
+    assert (al['yaw_fix_deg'], al['scale_fix']) == (7.0, 1.05) and json.loads((out2 / 'world.json').read_text())['alignment']['yaw_fix_deg'] == 7.0
+    import pytest
+    with pytest.raises(wl.WorldLabsError):
+        wl.set_default(tmp_path, sid, 'W9')
+    with pytest.raises(wl.WorldLabsError):
+        wl.update_alignment(tmp_path, sid, 'W2', scale_fix=0)
+    assert wl.pending_world_dir(tmp_path, sid, 'W3').name == 'W3'
+
+
+def test_legacy_root_world_reads_as_w1(tmp_path):
+    """旧版放在 world/ 根下的世界模型原地当 W1 读取;再生成的排到 W2,默认仍是旧的那个。"""
+    import json
+    from modules import worldlabs as wl
+    sid = 'SCN-0004'
+    root = tmp_path / 'assets/concepts/scenes' / sid / 'world'
+    root.mkdir(parents=True)
+    (root / 'world.json').write_text(json.dumps({'world_id': 'old', 'files': {'splats': {'500k': 's.spz'}}}), encoding='utf-8')
+    (root / 's.spz').write_bytes(b'x')
+    assert [(w['key'], w['dir']) for w in wl.list_worlds(tmp_path, sid)] == [('W1', root)]
+    assert wl.read_world(tmp_path, sid)['key'] == 'W1' and wl.worlds_summary(tmp_path, sid, '/projects/p')[0]['base_url'].endswith(f'/{sid}/world/')
+    key, out = wl.new_world_dir(tmp_path, sid)
+    assert key == 'W2' and out == root / 'worlds/W2'
+    (out / 'world.json').write_text(json.dumps({'world_id': 'new', 'files': {}}), encoding='utf-8')
+    assert [w['key'] for w in wl.list_worlds(tmp_path, sid)] == ['W1', 'W2'] and wl.default_key(tmp_path, sid) == 'W1'
+
+
 def _v25_fixture():
     prompt = {
         'refs': ['assets/concepts/characters/CHAR-0001/sheet.png', 'assets/concepts/scenes/S/layout_top.png'],

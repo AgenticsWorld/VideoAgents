@@ -511,8 +511,14 @@ async def board_sketch(project: str, ep: str, body: dict[str, Any]) -> dict[str,
 
 @api.post("/projects/{project}/scenes/{sid}/world", tags=["artifacts"])
 async def scene_world_start(project: str, sid: str, body: dict[str, Any]) -> dict[str, Any]:
-    """场景预览页「生成世界模型」(World Labs Marble):{source, anchor?, scheme?, force?}。"""
+    """场景预览页「生成世界模型」(World Labs Marble):{source, anchor?, scheme?};每次新增一个世界模型,已有的不动。"""
     return await core.api_scene_world_start(project, sid, body)
+
+
+@api.post("/projects/{project}/scenes/{sid}/worlds/{key}", tags=["artifacts"])
+async def scene_world_update(project: str, sid: str, key: str, body: dict[str, Any]) -> dict[str, Any]:
+    """世界模型全屏视窗的设置(2026-10-04):{default?: true, yaw_fix_deg?, scale_fix?} → 设为默认 / 保存对齐微调。"""
+    return _artifact_urls(await core.api_scene_world_update(project, sid, key, body), project)
 
 
 @api.post("/projects/{project}/scenes/{sid}/panos", tags=["artifacts"])

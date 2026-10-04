@@ -7577,12 +7577,14 @@ def _preview_scenes(project: str):
                     r["url"] = f"/projects/{base.name}/assets/concepts/scenes/{sid}/panos/{aid}/{r['file']}?v={r.get('mtime') or 0}"
             lt = adir / sid / (((_read_json_safe(adir / sid / "layout.json") or {}).get("layout_top")) or "layout_top.png")
             panos["layout_top_url"] = f"/projects/{base.name}/assets/concepts/scenes/{sid}/{lt.name}?v={int(lt.stat().st_mtime)}" if lt.is_file() else None
-        # 世界模型(2026-09-12):assets/concepts/scenes/<sid>/world/world.json,预览页「🌍 世界模型」板块用 Spark 渲染 splats_*.spz;
+        # 世界模型(2026-09-12):预览页「🌍 世界模型」板块用 Spark 渲染 splats_*.spz。2026-10-04 起一个场景可有多个:
+        # worlds = 全部世界模型摘要(world/worlds/<key>/,旧版 world/ 根下那个算 W1),world = 其中的默认世界模型(截图链 / 导演台用);
         # world_sources = 可作 world 输入的全景来源(锚点/方案),供板块下拉
-        world, world_sources = None, None
+        world, worlds, world_sources = None, [], None
         try:
             from modules import worldlabs
-            world = worldlabs.preview_summary(base, sid, f"/projects/{base.name}")
+            worlds = worldlabs.worlds_summary(base, sid, f"/projects/{base.name}")
+            world = next((w for w in worlds if w.get("default")), None)
             if (adir / sid / "layout.json").is_file():
                 world_sources = worldlabs.list_sources(base, sid)
         except Exception as e:  # noqa: BLE001
@@ -7633,7 +7635,7 @@ def _preview_scenes(project: str):
                        "meta": meta, "docs": docs, "scene_plates": scene_plates_view, "plate_mode": plate_mode_view,
                        # plates/ panos/ world/ 子目录不进概念图库,分别以「分镜背景图」「全景图」「世界模型」板块展示
                        "images": [im for im in _asset_urls(base, adir / sid, IMG_EXTS) if not im["name"].startswith(("plates/", "panos/", "world/"))],
-                       "plates": plates, "panos": panos, "world": world, "world_sources": world_sources,
+                       "plates": plates, "panos": panos, "world": world, "worlds": worlds, "world_sources": world_sources,
                        "world_job": _scene_world_job_view(base.name, sid)})
     # 项目「白模」选项(output.spatial_blocking,默认关):关闭时场景预览页不显示「生成世界模型」按钮与世界模型板块
     whitebox_enabled = (load_project_settings(base.name).get("output") or {}).get("spatial_blocking") is True
@@ -7921,7 +7923,8 @@ def _scene_plate_manual(project: str, sid: str, body: dict) -> dict:
     src_file = str(body.get("source_file") or "")
     entry = {"key": key, "master": True, "manual": True, "file": rel, "lighting_scheme_id": scheme, "time_of_day": body.get("time_of_day"),
              "camera": facts, "size": f"{pw}x{ph}", "refs": [src_file] if src_file else [],
-             "pano_ref": {"kind": f"{source}_manual", "anchor_id": anchor_id or None, "scheme": scheme, "view": view, "source_file": src_file or None},
+             "pano_ref": {"kind": f"{source}_manual", "anchor_id": anchor_id or None, "scheme": scheme, "view": view, "source_file": src_file or None,
+                          **({"world_key": re.sub(r"[^\w\-]", "", str(body.get("world_key") or "")) or None} if source == "world" else {})},
              "plate_mode": "manual", "created_by": {"source": "preview_ui", "tool": "pano360" if source == "pano" else "world-viewer"},
              "written_at": now.isoformat(timespec="seconds")}
     (base / rel).with_suffix(".json").write_text(json.dumps(entry, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -8230,9 +8233,10 @@ async def api_scene_pano_discard(project: str, sid: str, body: dict):
 
 
 async def api_scene_world_start(project: str, sid: str, body: dict):
-    """场景预览页「生成世界模型」:{source: scene_pano, anchor?, scheme?, force?}。
+    """场景预览页「生成世界模型」:{source: scene_pano, anchor?, scheme?}。
     仅项目「白模」选项开启且场景已建白模、且已有全景图时可用(2026-09-13 起世界模型必须基于全景图,
-    depth2rgb 白模深度转世界模型不再对页面开放,仅 CLI 保留);已有 world 须 force(旧版归档到 world/variants/)。"""
+    depth2rgb 白模深度转世界模型不再对页面开放,仅 CLI 保留)。2026-10-04 起每次都新增一个世界模型(world/worlds/<key>/),
+    已有的不动;旧页面传的 force 不再有意义。"""
     from modules import worldlabs
     base = _proj_base(project)
     sid = re.sub(r"[^\w\-]", "", sid)
@@ -8251,33 +8255,64 @@ async def api_scene_world_start(project: str, sid: str, body: dict):
         raise ServiceError(400, "World Labs API Key 未配置:请到控制台「🎨 生成模型」→「🌍 世界模型」填写")
     anchor = re.sub(r"[^\w\-]", "", str(body.get("anchor") or ""))
     scheme = re.sub(r"[^\w\-]", "", str(body.get("scheme") or ""))
-    force = bool(body.get("force"))
-    if worldlabs.read_world(base, sid) and not force:
-        raise ServiceError(409, f"{sid} 已有世界模型;重新生成请传 force")
     jobkey = f"{base.name}/{sid}"
     if (WORLD_JOBS.get(jobkey) or {}).get("status") == "running":
         raise ServiceError(409, f"{sid} 的世界模型正在生成中")
-    cmd = [sys.executable, "-u", str(ROOT / "code" / "worldlabs_world.py"), "--project", base.name, "--scene", sid, "--source", source]
+    cmd = [sys.executable, "-u", str(ROOT / "code" / "worldlabs_world.py"), "--project", base.name, "--scene", sid, "--source", source, "--new"]
     if anchor:
         cmd += ["--anchor", anchor]
     if scheme:
         cmd += ["--scheme", scheme]
-    if force:
-        cmd.append("--force")
     WORLD_JOBS[jobkey] = {"status": "running", "log": [], "started_at": time.time(), "finished_at": None, "error": "",
-                          "params": {"source": source, "anchor": anchor, "scheme": scheme, "force": force}}
+                          "params": {"source": source, "anchor": anchor, "scheme": scheme}}
     threading.Thread(target=_scene_world_worker, args=(base.name, sid, jobkey, cmd), daemon=True).start()
     HUB.publish({"type": "scene_world", "project": base.name, "scene": sid, "status": "running", "line": ""})
     return {"ok": True, "job": jobkey}
 
 
 async def api_scene_world_status(project: str, sid: str):
-    """世界模型任务状态 + 当前 world 摘要(页面打开时恢复进行中的日志)。"""
+    """世界模型任务状态 + 世界模型摘要(页面打开时恢复进行中的日志):worlds = 全部,world = 默认世界模型(导演台的世界背景用它)。"""
     from modules import worldlabs
     base = _proj_base(project)
     sid = re.sub(r"[^\w\-]", "", sid)
-    world = await asyncio.to_thread(worldlabs.preview_summary, base, sid, f"/projects/{base.name}")
-    return {"project": base.name, "scene": sid, "job": _scene_world_job_view(base.name, sid), "world": world}
+    worlds = await asyncio.to_thread(worldlabs.worlds_summary, base, sid, f"/projects/{base.name}")
+    return {"project": base.name, "scene": sid, "job": _scene_world_job_view(base.name, sid),
+            "world": next((w for w in worlds if w.get("default")), None), "worlds": worlds}
+
+
+def _scene_world_update(project: str, sid: str, key: str, body: dict) -> dict:
+    from modules import worldlabs
+    base = _proj_base(project)
+    sid = re.sub(r"[^\w\-]", "", sid)
+    key = re.sub(r"[^\w\-]", "", key)
+    if not sid or not key:
+        raise ServiceError(400, "scene id and world key are required")
+    if not worldlabs.find_world(base, sid, key):
+        raise ServiceError(404, f"{sid} 没有世界模型 {key}")
+
+    def num(name):
+        if body.get(name) is None:
+            return None
+        try:
+            return float(body[name])
+        except (TypeError, ValueError):
+            raise ServiceError(400, f"{name} 须为数字") from None
+    yaw, scale = num("yaw_fix_deg"), num("scale_fix")
+    try:
+        if yaw is not None or scale is not None:
+            worldlabs.update_alignment(base, sid, key, yaw_fix_deg=yaw, scale_fix=scale)
+        if body.get("default") is True:
+            worldlabs.set_default(base, sid, key)
+    except worldlabs.WorldLabsError as e:
+        raise ServiceError(400, str(e)) from None
+    return {"ok": True, "scene_id": sid, "world": worldlabs.preview_summary(base, sid, f"/projects/{base.name}", key)}
+
+
+async def api_scene_world_update(project: str, sid: str, key: str, body: dict):
+    """场景预览页世界模型全屏视窗的设置(2026-10-04):{default?: true, yaw_fix_deg?, scale_fix?}。
+    default = 设为场景默认世界模型(背景图模式 world 的截图、导演台世界背景用它);yaw_fix_deg / scale_fix = 保存视窗里调好的对齐微调
+    (写该世界模型 world.json#alignment)。返回更新后的世界模型摘要。"""
+    return await asyncio.to_thread(_scene_world_update, project, sid, key, body or {})
 
 
 async def api_test_worldlabs(body: dict):

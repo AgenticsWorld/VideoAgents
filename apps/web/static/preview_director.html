@@ -733,7 +733,8 @@ async function ensureWorld(){
     const resolution=files['500k']?'500k':files['150k']?'150k':files['100k']?'100k':choices[0];
     $('#worldres').innerHTML=choices.map(r=>`<option value="${esc(r)}">${esc(r)}</option>`).join('');$('#worldres').value=resolution;
     // Use the authenticated v1 artifact route (the summary also includes a legacy-style base URL).
-    const base=artifactBase()+'assets/concepts/scenes/'+encodeURIComponent(rr.group.scene_id)+'/world/';
+    // meta.dir = 场景默认世界模型的目录(2026-10-04 起一个场景可有多个世界模型,各在 world/worlds/<key>/);旧服务不带时退回 world/ 根
+    const base=artifactBase()+(meta.dir?meta.dir.split('/').map(encodeURIComponent).join('/'):'assets/concepts/scenes/'+encodeURIComponent(rr.group.scene_id)+'/world')+'/';
     WORLD=new DirectorWorld(rr,PAD,meta,base,()=>{if(VIEW==='world'){DIRTY=true;kick()}},(state,res,detail)=>{
       $('#worldres').disabled=state==='loading';$('#worldretry').disabled=state==='loading';
       if(state==='ready')worldStatus(`${res} · ${Number(detail).toLocaleString()} splats · ${t('拖动=转头 · W/S 前后 · A/D 左右 · Q/E 升降 · Shift 加速 · 滚轮=前进')} · ${t('世界背景使用场景当前模型')}`);

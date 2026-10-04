@@ -9,12 +9,14 @@ world 输入全景(二选一,预览页下拉):
   depth2rgb   Marble API 深度→RGB(pano:depth_to_rgb):用锚点的白模径向深度全景(scene_panos 渲的 depth_pano.npy,缺则现渲)
               log 编码送 API 出全景(计费);场景还没规划锚点时自动在场景最空旷处取机位、渲进 world/ 目录。
 
-产物目录:assets/concepts/scenes/<sid>/world/
+一个场景可以有多个世界模型(2026-10-04):每个一个目录 assets/concepts/scenes/<sid>/world/worlds/<key>/(key = W1、W2…),
+world/index.json#default 记「默认世界模型」(背景图模式 world 的截图、导演台的世界背景都用它;没记 = 第一个)。
+此前的单世界模型产物直接放在 world/ 根下,原地当作 W1 读取,不搬动;旧版 --force 归档的 world/variants/<label>/ 不再列出。
+每个世界模型目录:
   input.json          本次输入:来源/锚点/方案/相机位/提示词          pano.png   送 worlds:generate 的等距柱状全景(2:1)
   depth_pano.png      (depth2rgb)log 编码 8bit 深度全景(白=近)      whitebox_pano.jpg (depth2rgb)白模彩色全景
   generate.json       worlds:generate 的 operation 记录               world.json  world 响应 + alignment(白模坐标对齐)+ 各步骤
-  splats_<res>.spz    高斯泼溅(500k / full_res 等)                    collider.glb  碰撞网格   world_pano.jpg / thumbnail.jpg
-  variants/<label>/   重新生成前归档的上一版 world 产物(预览页只读根下当前 world)
+  splats_<res>.spz    高斯泼溅(500k / full_res 等)                    collider.glb  碰撞网格   world_pano.jpg / thumbnail.jpg(正面预览图)
 
 坐标对齐(推导自 docs.worldlabs.ai/api/rendering-spz 与 web-chisel-depth-png 示例):world 原点 = 全景相机位,
 OpenCV 系(y 向下、z 向前 = 全景中心列);metric_scale_factor 乘坐标、ground_plane_offset 减 y 得米制,
@@ -31,6 +33,7 @@ import datetime as dt
 import json
 import math
 import os
+import re
 import shutil
 import time
 import urllib.error
@@ -43,6 +46,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_BASE_URL = 'https://api.worldlabs.ai'
 SCHEMA = 'worldlabs_world.v1'
 WORLD_DIR = 'world'
+WORLDS_SUBDIR = 'worlds'        # world/worlds/<key>/:每个世界模型一个目录(2026-10-04)
+LEGACY_KEY = 'W1'              # world/ 根下的旧版单世界模型,原地读取不搬动
 PROVIDER = 'marble'
 DEFAULT_MODEL = 'marble-1.1'
 # 与 docs.worldlabs.ai/api/models 一致;models.html 的 WORLD_MODELS 同步维护
@@ -143,14 +148,122 @@ def scene_dir(base: Path, sid: str) -> Path:
     return base / 'assets/concepts/scenes' / component(sid)
 
 
-def world_dir(base: Path, sid: str) -> Path:
+def world_root(base: Path, sid: str) -> Path:
     return scene_dir(base, sid) / WORLD_DIR
 
 
-def read_world(base: Path, sid: str) -> dict | None:
-    p = world_dir(base, sid) / 'world.json'
-    rec = read(p, None) if p.is_file() else None
+def _read_record(path: Path) -> dict | None:
+    rec = read(path, None) if path.is_file() else None
     return rec if isinstance(rec, dict) and rec.get('world_id') else None
+
+
+def _key_order(key: str):
+    m = re.fullmatch(r'W(\d+)', key)
+    return (int(m.group(1)) if m else 10 ** 9, key)
+
+
+def list_worlds(base: Path, sid: str) -> list[dict]:
+    """场景的全部世界模型 [{key, dir, record}],按 key 序号(W1、W2…)。只列已生成完(有 world.json)的;
+    world/ 根下的旧版单世界模型算 W1。record 带 key 字段(旧版记录里没有,读出时补上)。"""
+    root = world_root(base, sid)
+    found: dict[str, dict] = {}
+    rec = _read_record(root / 'world.json')
+    if rec:
+        found[LEGACY_KEY] = {'key': LEGACY_KEY, 'dir': root, 'record': {**rec, 'key': LEGACY_KEY}}
+    sub = root / WORLDS_SUBDIR
+    if sub.is_dir():
+        for d in sub.iterdir():
+            rec = _read_record(d / 'world.json') if d.is_dir() else None
+            if rec and d.name not in found:
+                found[d.name] = {'key': d.name, 'dir': d, 'record': {**rec, 'key': d.name}}
+    return sorted(found.values(), key=lambda w: _key_order(w['key']))
+
+
+def default_key(base: Path, sid: str, worlds: list[dict] | None = None) -> str | None:
+    """默认世界模型的 key:world/index.json#default(仍存在时),否则第一个;一个都没有 → None。"""
+    worlds = list_worlds(base, sid) if worlds is None else worlds
+    keys = [w['key'] for w in worlds]
+    chosen = (read(world_root(base, sid) / 'index.json', None) or {}).get('default')
+    return chosen if chosen in keys else (keys[0] if keys else None)
+
+
+def find_world(base: Path, sid: str, key: str | None = None) -> dict | None:
+    """{key, dir, record}:key 给定取该世界模型,缺省取默认;没有 → None。"""
+    worlds = list_worlds(base, sid)
+    key = key or default_key(base, sid, worlds)
+    return next((w for w in worlds if w['key'] == key), None)
+
+
+def world_dir(base: Path, sid: str, key: str | None = None) -> Path:
+    """世界模型目录:key 给定取该世界模型,缺省取默认;场景还没有世界模型时返回 world/ 根。"""
+    w = find_world(base, sid, key)
+    if w:
+        return w['dir']
+    if key:
+        raise WorldLabsError(f'{sid}: 没有世界模型 {key}')
+    return world_root(base, sid)
+
+
+def read_world(base: Path, sid: str, key: str | None = None) -> dict | None:
+    w = find_world(base, sid, key)
+    return w['record'] if w else None
+
+
+def new_world_dir(base: Path, sid: str) -> tuple[str, Path]:
+    """给新世界模型分配 key 并建目录 world/worlds/<key>/。编号接着已有的往后排,不复用半途失败留下的目录;根下有旧版产物时 W1 留给它。"""
+    root = world_root(base, sid)
+    sub = root / WORLDS_SUBDIR
+    used = {w['key'] for w in list_worlds(base, sid)} | ({d.name for d in sub.iterdir() if d.is_dir()} if sub.is_dir() else set())
+    if (root / 'world.json').exists():
+        used.add(LEGACY_KEY)
+    n = 1
+    while f'W{n}' in used:
+        n += 1
+    out = sub / f'W{n}'
+    out.mkdir(parents=True)
+    return f'W{n}', out
+
+
+def pending_world_dir(base: Path, sid: str, key: str) -> Path:
+    """--resume 续接用:已分配但还没生成完(或已生成完)的世界模型目录;不存在抛错。"""
+    key = component(key)
+    root = world_root(base, sid)
+    out = root / WORLDS_SUBDIR / key
+    if out.is_dir():
+        return out
+    if key == LEGACY_KEY and (root / 'generate.json').is_file():
+        return root
+    raise WorldLabsError(f'{sid}: 没有世界模型目录 {key}')
+
+
+def set_default(base: Path, sid: str, key: str) -> str:
+    """把 key 设为场景的默认世界模型(写 world/index.json)。"""
+    if not find_world(base, sid, key):
+        raise WorldLabsError(f'{sid}: 没有世界模型 {key}')
+    path = world_root(base, sid) / 'index.json'
+    _write_json(path, {**(read(path, None) or {}), 'schema_version': SCHEMA, 'scene_id': sid, 'default': key, 'written_at': _now()})
+    return key
+
+
+def update_alignment(base: Path, sid: str, key: str, *, yaw_fix_deg: float | None = None, scale_fix: float | None = None) -> dict:
+    """保存视窗里调好的对齐微调(world.json#alignment 的 yaw_fix_deg / scale_fix);截图链与导演台读同一份。返回更新后的 alignment。"""
+    w = find_world(base, sid, key)
+    if not w:
+        raise WorldLabsError(f'{sid}: 没有世界模型 {key}')
+    rec = read(w['dir'] / 'world.json', None) or {}
+    al = dict(rec.get('alignment') or {})
+    if yaw_fix_deg is not None:
+        if not math.isfinite(yaw_fix_deg) or abs(yaw_fix_deg) > 180:
+            raise WorldLabsError('yaw 微调须在 -180 到 180 度之间')
+        al['yaw_fix_deg'] = round(float(yaw_fix_deg), 2)
+    if scale_fix is not None:
+        if not math.isfinite(scale_fix) or not 0.05 <= scale_fix <= 20:
+            raise WorldLabsError('尺度微调须在 0.05 到 20 之间')
+        al['scale_fix'] = round(float(scale_fix), 4)
+        al['scale_fix_basis'] = 'manual'
+    rec['alignment'] = al
+    _write_json(w['dir'] / 'world.json', rec)
+    return al
 
 
 def _write_json(path: Path, data: dict):
@@ -244,12 +357,13 @@ def choose_camera(scene: dict, height_m: float = CAMERA_HEIGHT_M) -> list[float]
 
 # ---------------------------------------------------------------- 1. pano input
 def prepare_pano(base: Path, sid: str, *, source: str, anchor_id: str | None = None, scheme: str | None = None,
-                 text_prompt: str = '', seed: int | None = None, force: bool = False, log=print) -> dict:
-    """准备送 worlds:generate 的全景 world/pano.png,写 world/input.json(来源/锚点/相机位)。"""
+                 text_prompt: str = '', seed: int | None = None, force: bool = False, log=print, out: Path | None = None) -> dict:
+    """准备送 worlds:generate 的全景 <out>/pano.png,写 <out>/input.json(来源/锚点/相机位)。out = 本次世界模型目录(new_world_dir)。"""
     from modules import scene_panos as sp
     if source not in SOURCES:
         raise WorldLabsError(f'source 须为 {SOURCES} 之一:{source}')
-    out = world_dir(base, sid)
+    if out is None:
+        out = new_world_dir(base, sid)[1]
     out.mkdir(parents=True, exist_ok=True)
     prev = read(out / 'input.json', None) or {}
     if source == 'scene_pano':
@@ -353,34 +467,15 @@ def finish_pano(out: Path, operation_id: str, *, log=print) -> dict:
 
 
 # ---------------------------------------------------------------- 2. world generation
-def archive_world(base: Path, sid: str, label: str | None = None, *, log=print) -> Path | None:
-    """把当前 world 产物挪到 world/variants/<label>/(重新生成前保留上一版);预览页只读根下当前 world。"""
-    out = world_dir(base, sid)
-    if not (out / 'world.json').is_file():
-        return None
-    label = component(label or dt.datetime.now().strftime('%Y%m%d-%H%M%S'))
-    dest = out / 'variants' / label
-    if dest.exists():
-        raise WorldLabsError(f'归档目录已存在:{dest}')
-    dest.mkdir(parents=True)
-    moved = []
-    for f in list(out.iterdir()):
-        if f.is_file() and (f.name in ('world.json', 'generate.json', 'collider.glb', 'thumbnail.jpg', 'world_pano.jpg', 'input.json',
-                                       'pano.png', 'depth_pano.png', 'whitebox_pano.jpg') or f.name.startswith('splats_')):
-            os.replace(f, dest / f.name)
-            moved.append(f.name)
-    log(f'已归档上一版 world → {dest}({", ".join(moved)})')
-    return dest
-
-
 def generate_world(base: Path, sid: str, text_prompt: str | None, *, model: str | None = None, seed: int | None = None,
-                   display_name: str | None = None, log=print) -> dict:
-    out = world_dir(base, sid)
+                   display_name: str | None = None, log=print, out: Path | None = None, key: str | None = None) -> dict:
+    if out is None:
+        raise WorldLabsError('generate_world 须给 out(本次世界模型目录,见 new_world_dir)')
     pano = out / 'pano.png'
     if not pano.is_file():
         raise WorldLabsError(f'缺少全景 {pano}(先 prepare_pano)')
     model = model or default_model()
-    body = {'display_name': (display_name or f'{base.name} {sid}')[:64], 'model': model,
+    body = {'display_name': (display_name or ' '.join(x for x in (base.name, sid, key) if x))[:64], 'model': model,
             'world_prompt': {'type': 'image', 'is_pano': True,   # 实测须 JSON 布尔,字符串 'true' 422
                              'image_prompt': {'source': 'data_base64', 'data_base64': base64.b64encode(pano.read_bytes()).decode('ascii'), 'extension': 'png'}}}
     if text_prompt:
@@ -392,12 +487,13 @@ def generate_world(base: Path, sid: str, text_prompt: str | None, *, model: str 
     op_id = op['operation_id']
     _write_json(out / 'generate.json', {'operation_id': op_id, 'submitted_at': _now(), 'model': model, 'seed': seed, 'text_prompt': text_prompt})
     log(f'operation {op_id},约 5 分钟,轮询中…')
-    return finish_world(base, sid, op_id, log=log)
+    return finish_world(base, sid, op_id, log=log, out=out, key=key)
 
 
-def finish_world(base: Path, sid: str, operation_id: str, *, log=print) -> dict:
-    """轮询 world 生成结果并下载全部资产,写 world.json。可用于中断后续接(--resume)。"""
-    out = world_dir(base, sid)
+def finish_world(base: Path, sid: str, operation_id: str, *, log=print, out: Path | None = None, key: str | None = None) -> dict:
+    """轮询 world 生成结果并下载全部资产,写 <out>/world.json。可用于中断后续接(--resume)。"""
+    if out is None:
+        raise WorldLabsError('finish_world 须给 out(本次世界模型目录,见 new_world_dir / pending_world_dir)')
     op = poll_operation(operation_id, progress=lambda o: log(f'  … {_progress_text(o)}'))
     world = op.get('response') or {}
     if not world.get('world_id'):
@@ -427,7 +523,7 @@ def finish_world(base: Path, sid: str, operation_id: str, *, log=print) -> dict:
     cam = inp.get('camera') or {}
     gpo = semantics.get('ground_plane_offset')
     record = {
-        'schema_version': SCHEMA, 'scene_id': sid, 'written_at': _now(),
+        'schema_version': SCHEMA, 'scene_id': sid, 'key': key, 'written_at': _now(),
         'world_id': world['world_id'], 'display_name': world.get('display_name'), 'model': world.get('model') or gen_rec.get('model'),
         'world_marble_url': world.get('world_marble_url'), 'caption': assets.get('caption'),
         'semantics_metadata': semantics, 'files': files,
@@ -480,24 +576,37 @@ def default_prompt(base: Path, sid: str) -> str:
 
 
 # ---------------------------------------------------------------- preview summary
-def preview_summary(base: Path, sid: str, url_prefix: str) -> dict | None:
-    """预览 API 用:当前 world(文件清单只列实际存在的)+ 对齐参数 + 预览图 URL(url_prefix = /projects/<slug>)。"""
-    wj = read_world(base, sid)
-    if not wj:
-        return None
-    wdir = world_dir(base, sid)
+def _summary(base: Path, w: dict, url_prefix: str, is_default: bool) -> dict:
+    wj, wdir = w['record'], w['dir']
     files = wj.get('files') or {}
     world = {k: wj.get(k) for k in ('world_id', 'model', 'world_marble_url', 'caption', 'written_at', 'semantics_metadata', 'alignment')}
+    world['key'] = w['key']
+    world['default'] = is_default
     world['input'] = {k: (wj.get('input') or {}).get(k) for k in ('source', 'anchor_id', 'scheme', 'camera')}
     world['files'] = {'splats': {res: name for res, name in (files.get('splats') or {}).items() if (wdir / name).is_file()},
                       **{k: files[k] for k in ('collider', 'thumbnail', 'world_pano') if files.get(k) and (wdir / files[k]).is_file()}}
-    rel = f'assets/concepts/scenes/{component(sid)}/{WORLD_DIR}'
+    rel = wdir.relative_to(base).as_posix()
+    world['dir'] = rel                       # 项目内相对路径(导演台走 artifacts 路由取文件、截图台账记来源)
     world['base_url'] = f'{url_prefix}/{rel}/'
     world['previews'] = {k: f'{url_prefix}/{rel}/{n}?v={int((wdir / n).stat().st_mtime)}'
                          for k, n in (('pano', 'pano.png'), ('whitebox_pano', 'whitebox_pano.jpg'), ('depth_pano', 'depth_pano.png'),
-                                      ('thumbnail', 'thumbnail.jpg'))
+                                      ('thumbnail', 'thumbnail.jpg'), ('world_pano', 'world_pano.jpg'))
                          if (wdir / n).is_file()}
     return world
+
+
+def worlds_summary(base: Path, sid: str, url_prefix: str) -> list[dict]:
+    """预览 API 用:场景全部世界模型的摘要(key / 是否默认 / 来源全景 / 文件清单只列实际存在的 / 对齐参数 / 预览图 URL)。
+    url_prefix = /projects/<slug>;previews.thumbnail 是 Marble 给的正面预览图。"""
+    worlds = list_worlds(base, sid)
+    dk = default_key(base, sid, worlds)
+    return [_summary(base, w, url_prefix, w['key'] == dk) for w in worlds]
+
+
+def preview_summary(base: Path, sid: str, url_prefix: str, key: str | None = None) -> dict | None:
+    """单个世界模型的摘要:key 缺省取默认世界模型;没有 → None。"""
+    w = find_world(base, sid, key)
+    return _summary(base, w, url_prefix, w['key'] == default_key(base, sid)) if w else None
 
 
 # ---------------------------------------------------------------- 背景图模式「世界模型」:在 world 里按母图机位截图(2026-09-22)
@@ -506,16 +615,17 @@ VIEW_RES_ORDER = ('full_res', '1000k', '500k', '150k', '100k')   # 截图用的 
 
 
 def world_missing(base: Path, sid: str) -> bool:
-    """场景是否还没有可用 world(world.json + 至少一个 splats 文件)。"""
-    wj = read_world(base, sid)
-    if not wj:
+    """场景是否还没有可用 world(默认世界模型的 world.json + 至少一个 splats 文件)。"""
+    w = find_world(base, sid)
+    if not w:
         return True
-    splats = (wj.get('files') or {}).get('splats') or {}
-    return not any((world_dir(base, sid) / n).is_file() for n in splats.values())
+    splats = (w['record'].get('files') or {}).get('splats') or {}
+    return not any((w['dir'] / n).is_file() for n in splats.values())
 
 
 def _pick_splat(base: Path, sid: str, wj: dict, res: str | None = None) -> tuple[str, str]:
-    splats = {r: n for r, n in ((wj.get('files') or {}).get('splats') or {}).items() if (world_dir(base, sid) / n).is_file()}
+    wdir = world_dir(base, sid, wj.get('key'))
+    splats = {r: n for r, n in ((wj.get('files') or {}).get('splats') or {}).items() if (wdir / n).is_file()}
     if not splats:
         raise WorldLabsError(f'{sid}: world.json 没有可用的 splats 文件(先生成世界模型)')
     if res and res in splats:
@@ -554,9 +664,9 @@ def render_world_views(base: Path, sid: str, requests: list[dict], *, width: int
         raise WorldLabsError('缺少 Playwright,请安装项目依赖并运行 python -m playwright install chromium') from e
     wj = read_world(base, sid)
     if not wj or world_missing(base, sid):
-        raise WorldLabsError(f'{sid}: 还没有世界模型(assets/concepts/scenes/{sid}/world/world.json),请先在场景预览页「🌍 世界模型」板块生成')
+        raise WorldLabsError(f'{sid}: 还没有世界模型(assets/concepts/scenes/{sid}/world/),请先在场景预览页「🌍 世界模型」板块生成')
     res_used, splat_name = _pick_splat(base, sid, wj, res)
-    splat_path = world_dir(base, sid) / splat_name
+    splat_path = world_dir(base, sid, wj.get('key')) / splat_name
     data = splat_path.read_bytes()
     inp = wj.get('input') or {}
     results: list[dict] = []
@@ -597,7 +707,7 @@ def render_world_views(base: Path, sid: str, requests: list[dict], *, width: int
                 out = Path(r['output'])
                 out.parent.mkdir(parents=True, exist_ok=True)
                 t0 = time.time()
-                rec = {'kind': 'world', 'file': str(out), 'world_id': wj.get('world_id'), 'anchor_id': inp.get('anchor_id'),
+                rec = {'kind': 'world', 'file': str(out), 'world_id': wj.get('world_id'), 'world_key': wj.get('key'), 'anchor_id': inp.get('anchor_id'),
                        'scheme': inp.get('scheme'), 'res': res_used, 'size': [width, height], 'hole_fraction': None}
                 try:
                     errors.clear()
