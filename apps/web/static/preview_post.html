@@ -200,6 +200,9 @@ body.wscrub,body.wscrub *{cursor:col-resize!important;user-select:none!important
 .waves .wsel .tm{color:var(--dim);font-family:var(--mono);font-size:10.5px}
 /* 右栏 */
 .scope{display:flex;gap:6px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:11.5px;align-items:center;flex:none;flex-wrap:wrap}
+/* 作用域选项放不下时换行(叙事块名 / 译文较长),不再被右栏宽度裁掉;单项仍超宽才省略,悬停看全名 */
+.scope .seg{flex-wrap:wrap;max-width:100%}
+.scope .seg span{max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .acc{border-bottom:1px solid var(--border)}
 .acc-h{display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--panel);font-weight:600;font-size:12px;cursor:pointer;user-select:none}
 .acc-h .cnt{font:10px var(--mono);color:var(--dim);font-weight:400}
@@ -1327,7 +1330,7 @@ function renderRight(){
   if(SCOPE==='block'&&!(g&&g.block_id))SCOPE='group';
   const scopes=[['episode',t('整集')],['scene',g?g.scene_id:''],...(g&&g.block_id?[['block',t('叙事块 ')+g.block_id]]:[]),['group',SEL],['range',RANGE&&RANGE.t1!=null?`${num(RANGE.t0)}–${num(RANGE.t1)}s`:t('时间段')]];
   let h=`<div class="col-h" id="rec-h"><span class="car">${REC_ON?'▾':'▸'}</span>🎨 ${esc(t('后期调整'))} <span class="lite" id="rc"></span><span class="sp"></span><span class="lite" id="multi-n">${MULTI.size?esc(I18N.f('已选 {n} 组',{n:MULTI.size})):''}</span></div>`;
-  h+=`<div class="scope">${esc(t('作用域'))} <span class="seg">${scopes.map(([k,l])=>`<span data-s="${k}" class="${SCOPE===k?'on':''}" ${k==='range'&&!(RANGE&&RANGE.t1!=null)?'style="opacity:.5"':''}>${esc(l)}</span>`).join('')}</span></div>`;
+  h+=`<div class="scope">${esc(t('作用域'))} <span class="seg">${scopes.map(([k,l])=>`<span data-s="${k}" class="${SCOPE===k?'on':''}" title="${esc(l)}" ${k==='range'&&!(RANGE&&RANGE.t1!=null)?'style="opacity:.5"':''}>${esc(l)}</span>`).join('')}</span></div>`;
   h+=`<div class="scroll" id="rlist">`;
   const all=g?effective(SEL):[];
   let count=0;
