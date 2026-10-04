@@ -73,11 +73,26 @@ EXTERIOR_PROJECTION_RULES = (
 GROUND_PLAN_RULE = (
     "The ground of [Image {n}] carries the top-down plan of this location re-projected onto the floor from this exact camera: it shows "
     "precisely what the ground is under and around the camera — open water, shallows, sand, gravel, grass, mud, paving, paths — and where "
-    "each shoreline or edge runs, already bent into this projection. Follow it exactly: where it shows water directly beneath the camera, "
-    "the camera is standing in the water, so the nadir and the whole near foreground are water surface (ripples, reflections, the bed "
-    "showing through shallows), never dry land; keep every shoreline, path edge and patch boundary where the texture puts it. It is a "
-    "map, not a photo: render real ground seen from eye level, and ignore the flattened top views of objects printed on it — the blocks "
-    "are the objects. "
+    "each shoreline or edge runs, already bent into this projection; keep every shoreline, path edge and patch boundary where the texture "
+    "puts it. It is a map, not a photo: render real ground seen from eye level, and ignore the flattened top views of objects printed on "
+    "it — the blocks are the objects. "
+)
+# 脚下是不是陆地由宿主按俯视图判(ground_cover),不让模型自己从贴图颜色猜:俯视图里背阴的林地 / 山岩与水面常是同一种暗青色
+# (fengshen3 SCN-0036:林地 (65,72,72)、海面 (93,113,120)),旧规则又只写了「脚下是水」一种情形 → 陆上锚点脚下被画成水面。
+# 颜色纹理判水会把蓝灰石板地、背阴山岩误判成水(实测 fengshen3 153 张俯视图里几十张),所以**只在判为陆地时下断言**;
+# 判为水 / 岸边 / 拿不准时沿用旧的条件句(由模型按贴图读),误判不会让别的场景凭空多出水面。
+GROUND_NADIR_LAND_RULE = (
+    "The plan shows dry land directly beneath the camera, not water: the nadir and the whole near foreground are solid ground — the "
+    "terrain the plan shows there (earth, rock, grass, woodland floor, paving) — never a water surface, never a flooded or mirror-wet "
+    "plain. Dark or blue-grey patches of the plan under and around the camera are shaded vegetation or rock, not water. "
+)
+GROUND_NADIR_READ_RULE = (
+    "Where it shows water directly beneath the camera, the camera is standing in the water, so the nadir and the whole near foreground "
+    "are water surface (ripples, reflections, the bed showing through shallows), never dry land. "
+)
+GROUND_OFFMAP_LAND_RULE = (
+    "The plain earth-toned ground without plan texture lies beyond the edge of the plan: it is unmapped dry land — continue the "
+    "neighbouring terrain there (the same hills, woods, fields or shore the plan shows at that edge) out to the horizon, never open water. "
 )
 GUIDES_REF_RULE = (
     "The curved grid lines on the sky and ground of [Image {n}] and the short tick marks on its horizon are projection guides only: they "
@@ -610,17 +625,116 @@ def anchor_indoor(base: Path, sid: str, scene: dict, anchor: dict, override: boo
 
 
 # ---------------------------------------------------------------- whitebox depth pano (Playwright)
-GUIDES_VERSION = 2               # 外景白模全景投影引导线版本;depth_pano.json 的 guides 低于此值 → 出全景前重渲白模(本机、不花钱)
+GUIDES_VERSION = 3               # 外景白模全景投影引导线版本(3 = 图幅外地面按水陆分别画,2026-10-04);depth_pano.json 的 guides 低于此值 → 出全景前重渲白模(本机、不花钱)
 SKY_PLANE_M = 25.0               # 虚拟天空网格平面离镜头的高度
 
 
-def draw_projection_guides(color, valid, depth, cam_h: float, yaw_deg: float, *, ground_plan=None, cam_xz=(0.0, 0.0), floor_wd=None):
+WATER_MASK_W = 256               # 水陆判定的工作分辨率(宽)
+WATER_BLUE_MIN = 0.19            # (B−R)/均值:海面 0.21–0.27、河面 0.3–0.7;云海 0.10–0.16、暖色沙土为负
+WATER_TEX_MAX = 0.05             # 9×9 邻域亮度标准差 / 均值:水面 0.02–0.04;林地 0.13–0.16(林地同样偏青,靠纹理分开)
+WATER_DEEP_BLUE = 0.35           # 很蓝的深色河面带波纹(fengshen3 SCN-0110 水中锚点处 蓝 0.52–0.67、纹理 0.06–0.08):纹理上限放宽
+WATER_DEEP_TEX_MAX = 0.10
+WATER_LUM = (20.0, 160.0)        # 亮度窗:排除黑边(≈11)与云海 / 白玉地面(165–225)
+WATER_MIN_AREA = 0.015           # 小于图幅 1.5% 的连通块不算水体
+WATER_OVERRIDE = 'ground_water.png'   # 场景目录下放这张图(白 = 水,与俯视图同幅)即覆盖自动判定
+NADIR_LAND_MAX = 0.15            # 脚下那一圈水占比 ≤ 此值才断言「脚下是陆地」
+EDGE_WATER_MIN = 0.35            # 图幅边缘沿边 ±1/12 边长内水占比 ≥ 此值 → 这段边缘之外按水画(判水有漏洞,沿边抹平)
+OFFMAP_LAND_RGB = (165.0, 150.0, 125.0)
+_water_cache: dict = {}
+
+
+def water_mask(plan):
+    """俯视图 → 水面掩码(bool,宽 WATER_MASK_W)。颜色 + 纹理启发式:偏蓝、平滑、亮度居中的大块 = 水。
+    已知误判:黄昏 / 夜景俯视图里成片的暗青色屋面街巷会判成水(fengshen3 SCN-0141 关内一侧),与暗色河面在颜色纹理上分不开;
+    云海、白玉地面靠亮度窗排除。判错时在场景目录放 WATER_OVERRIDE 覆盖。"""
+    import cv2
+    import numpy as np
+    from PIL import Image
+    im = plan.convert('RGB')
+    W = WATER_MASK_W; H = max(1, round(W * im.height / im.width))
+    a = np.asarray(im.resize((W * 2, H * 2), Image.LANCZOS), dtype=np.float32)
+    lum = a.mean(axis=2)
+    mu = cv2.blur(lum, (9, 9)); sd = np.sqrt(np.maximum(cv2.blur(lum * lum, (9, 9)) - mu * mu, 0))
+    tex = cv2.resize(sd / np.maximum(mu, 20), (W, H), interpolation=cv2.INTER_AREA)
+    s = cv2.resize(a, (W, H), interpolation=cv2.INTER_AREA)
+    mean = s.mean(axis=2)
+    blue = (s[..., 2] - s[..., 0]) / np.maximum(mean, 10)
+    smooth = ((blue > WATER_BLUE_MIN) & (tex < WATER_TEX_MAX)) | ((blue > WATER_DEEP_BLUE) & (tex < WATER_DEEP_TEX_MAX))
+    m = (smooth & (mean > WATER_LUM[0]) & (mean < WATER_LUM[1])).astype(np.uint8)
+    k = np.ones((5, 5), np.uint8)
+    m = cv2.morphologyEx(cv2.morphologyEx(m, cv2.MORPH_OPEN, k), cv2.MORPH_CLOSE, k)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(m, 8)
+    keep = [i for i in range(1, n) if st[i, cv2.CC_STAT_AREA] >= WATER_MIN_AREA * m.size]
+    return np.isin(lab, keep)
+
+
+def scene_water_mask(base: Path, sid: str):
+    """(掩码, 来源 'file' | 'auto');没有俯视图 → (None, None)。按文件 mtime 缓存。"""
+    import numpy as np
+    from PIL import Image
+    sdir = base / 'assets/concepts/scenes' / component(sid)
+    override = sdir / WATER_OVERRIDE
+    plan_file = sdir / ((read(sdir / 'layout.json', {}) or {}).get('layout_top') or 'layout_top.png')
+    src, kind = (override, 'file') if override.is_file() else (plan_file, 'auto')
+    if not src.is_file():
+        return None, None
+    key = (str(src), src.stat().st_mtime_ns)
+    if key not in _water_cache:
+        im = Image.open(src)
+        if kind == 'file':
+            H = max(1, round(WATER_MASK_W * im.height / im.width))
+            _water_cache[key] = np.asarray(im.convert('L').resize((WATER_MASK_W, H), Image.BOX)) > 127
+        else:
+            _water_cache[key] = water_mask(im)
+    return _water_cache[key], kind
+
+
+def edge_water(mask):
+    """水面掩码 → 只把最外一圈换成沿边抹平后的判定(图幅外地面按它归类):自动判水在暗河面上常有漏洞,
+    漏洞那一段边缘之外会被画成陆地、把河切断。"""
+    import numpy as np
+    out = mask.copy()
+
+    def smooth(line):
+        k = max(3, len(line) // 6) | 1
+        return np.convolve(np.pad(line.astype(np.float64), k // 2, mode='edge'), np.ones(k) / k, mode='valid') >= EDGE_WATER_MIN
+    out[0, :] = smooth(mask[0, :]); out[-1, :] = smooth(mask[-1, :])
+    out[:, 0] = smooth(mask[:, 0]); out[:, -1] = smooth(mask[:, -1])
+    return out
+
+
+def ground_cover(mask, floor_wd, position) -> dict:
+    """锚点脚下的水陆:{'nadir': land|water|shore, 'nadir_water': 脚下那一圈水占比, 'offmap_land': 图幅外有按陆地画的一段,
+    'water_fraction'}。图幅外按最近的图幅边缘归类。"""
+    import numpy as np
+    fw, fd = float(floor_wd[0]), float(floor_wd[1])
+    edge = edge_water(mask)
+    H, W = mask.shape
+    r = max(2.0, 0.5 * float(position[1]))                                  # 「脚下」= 天底附近那一圈:镜头越高范围越大
+    g = np.linspace(-r, r, 21); gx, gz = np.meshgrid(g, g); disc = gx * gx + gz * gz <= r * r
+    u = np.clip((float(position[0]) + gx[disc]) / fw + .5, 0, 1 - 1e-6); v = np.clip((float(position[2]) + gz[disc]) / fd + .5, 0, 1 - 1e-6)
+    frac = float(edge[(v * H).astype(int), (u * W).astype(int)].mean())
+    nadir = 'land' if frac <= NADIR_LAND_MAX else 'water' if frac >= .7 else 'shore'
+    border = np.concatenate([edge[0, :], edge[-1, :], edge[:, 0], edge[:, -1]])
+    return {'nadir': nadir, 'nadir_water': round(frac, 2), 'offmap_land': bool((~border).any()), 'water_fraction': round(float(mask.mean()), 3)}
+
+
+def ground_cover_rule(cover: dict) -> str:
+    """地面水陆句:判为陆地才断言;其余沿用「贴图显示脚下是水就画水」的条件句。图幅外有按陆地画的一段时补一句那是陆地。"""
+    out = GROUND_NADIR_LAND_RULE if cover['nadir'] == 'land' else GROUND_NADIR_READ_RULE
+    return out + (GROUND_OFFMAP_LAND_RULE if cover.get('offmap_land') else '')
+
+
+def draw_projection_guides(color, valid, depth, cam_h: float, yaw_deg: float, *, ground_plan=None, cam_xz=(0.0, 0.0), floor_wd=None, water=None):
     """开阔外景白模只有几个小盒子贴着地平线,上半幅纯色、下半幅淡地面,看上去就是一张普通广角构图,图像模型读不出等距柱状投影
     (fengshen3 SCN-0110:2:1 成图是广角照片)。给无几何的天空与地面补世界直角网格:直线在等距柱状里弯成向天顶/天底汇聚的曲线,
     是这种投影最强的视觉签名;地平线补四向刻度。只画在无几何的天空与地面像素上,不盖白模块体;不动深度全景。
     ground_plan(俯视布局图)+ cam_xz + floor_wd=(宽, 深):把俯视图按地面世界坐标贴到白模地面上(v2,2026-09-20)。白模地面是一整块
     平面,不分水 / 沙 / 草 / 路——fengshen3 SCN-0110 站在水里的 A2 / A5 / A7 锚点,成图脚下全是砂砾滩,水只在远处。贴上俯视图后
-    [Image 1] 直接给出这个锚点脚下与四周是什么、岸线在哪(已按等距柱状弯好)。按像素在地面上的跨度选降采样层,免掠射处闪烁。"""
+    [Image 1] 直接给出这个锚点脚下与四周是什么、岸线在哪(已按等距柱状弯好)。按像素在地面上的跨度选降采样层,免掠射处闪烁。
+    water(water_mask 的水面掩码,v3):图幅之外的地面按最近图幅边缘的水陆分别画——水边外照旧延伸边缘像素(还是水);陆地外改成
+    偏暖的土色(边缘色与 OFFMAP_LAND_RGB 混合)。原先一律延伸边缘像素,地图角上的锚点四周 3/4 是图幅外,边缘又是背阴林地的暗青色,
+    一直铺到地平线,模型读成水面(fengshen3 SCN-0036 A5)。不传 water = 旧画法。"""
     import numpy as np
     from PIL import Image
     h, w = depth.shape
@@ -651,6 +765,7 @@ def draw_projection_guides(color, valid, depth, cam_h: float, yaw_deg: float, *,
         gx = cam_xz[0] + dirs[..., 0] * tg; gz = cam_xz[1] + dirs[..., 2] * tg
         u = gx / fw + .5; v = gz / fd + .5                                 # 俯视图:上缘 = -Z,左缘 = -X,整幅铺满白模地面
         inside = ground                                                    # 图幅之外按边缘延伸(水边外还是水),不留一圈「白地」被读成陆地
+        off_map = (u < 0) | (u >= 1) | (v < 0) | (v >= 1)
         u = np.clip(u, 0, 1 - 1e-6); v = np.clip(v, 0, 1 - 1e-6)
         foot = tg * pix / np.maximum(np.abs(dy), 1e-3)                     # 一像素在地面上的跨度(米)
         plan = ground_plan.convert('RGB')
@@ -664,6 +779,10 @@ def draw_projection_guides(color, valid, depth, cam_h: float, yaw_deg: float, *,
             yy = np.clip((v[sel] * small.shape[0]).astype(int), 0, small.shape[0] - 1)
             xx = np.clip((u[sel] * small.shape[1]).astype(int), 0, small.shape[1] - 1)
             img[sel] = img[sel] * .15 + small[yy, xx] * .85
+        if water is not None:
+            mh, mw = water.shape
+            land_out = ground & off_map & ~edge_water(water)[(v * mh).astype(int), (u * mw).astype(int)]
+            img[land_out] = img[land_out] * .4 + np.array(OFFMAP_LAND_RGB) * .6
     a_ground = np.maximum(grid(tg, 1.0) * .8, grid(tg, 5.0)) * ground      # 5 = 奇数倍,粗线与细线重合
     if ground_plan is not None:
         a_ground = a_ground * .45                                           # 地面已有俯视图纹理:网格只留淡淡一层示意投影
@@ -735,7 +854,8 @@ def render_whitebox_pano(base: Path, sid: str, anchor: dict, *, indoor: bool, lo
         plan = Image.open(plan_file) if plan_file.is_file() else None
         draw_projection_guides(Image.open(io.BytesIO(color_jpeg)), valid, raw_depth, camera[1], float(anchor.get('yaw_deg') or 0),
                                ground_plan=plan, cam_xz=(camera[0], camera[2]),
-                               floor_wd=(scene['dimensions_m'][0], scene['dimensions_m'][2])).save(out / 'whitebox_pano.jpg', quality=92)
+                               floor_wd=(scene['dimensions_m'][0], scene['dimensions_m'][2]),
+                               water=scene_water_mask(base, sid)[0]).save(out / 'whitebox_pano.jpg', quality=92)
     record = {'schema_version': SCHEMA, 'scene_id': sid, 'anchor_id': anchor['anchor_id'], 'written_at': _now(),
               'camera': {'position': camera, 'yaw_deg': float(anchor.get('yaw_deg') or 0), 'height_m': camera[1]},
               'size': [width, height], 'cube': DEPTH_CUBE, 'indoor': indoor, 'guides': 0 if indoor else GUIDES_VERSION, 'valid_fraction': round(float(valid.mean()), 4),
@@ -1372,7 +1492,7 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
     wb_rec = read(out / 'depth_pano.json', {}) or {}
     if bool(wb_rec.get('indoor')) != bool(indoor) or (not indoor and int(wb_rec.get('guides') or 0) < GUIDES_VERSION):
         render_whitebox_pano(base, sid, anchor, indoor=indoor, log=log)   # 室内外判定变了 / 存量外景白模没有投影引导线:本机重渲,不作废已有全景
-    refs, rules, parent, mode = [], [], None, 'fresh'
+    refs, rules, parent, mode, cover = [], [], None, 'fresh', None
     others = {s: p for s, p in anchor.get('panos', {}).items() if s != scheme and (out / p.get('file', '')).is_file()}
     if others:
         s0, p0 = next(iter(others.items()))
@@ -1392,6 +1512,14 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
         rules.append(GUIDES_REF_RULE.format(n=refs.index(wb) + 1))
         if int((read(out / 'depth_pano.json', {}) or {}).get('guides') or 0) >= 2:
             rules.append(GROUND_PLAN_RULE.format(n=refs.index(wb) + 1))
+            water, water_src = scene_water_mask(base, sid)
+            if water is not None:                                             # 脚下 / 四向的水陆由宿主判好写明,不让模型从贴图颜色猜
+                from modules.whitebox import load_scene as _load_scene
+                dims = _load_scene(base, sid)['dimensions_m']
+                cover = {**ground_cover(water, (dims[0], dims[2]), anchor['position']), 'source': water_src}
+                log(f"   地面水陆({'手工掩码' if water_src == 'file' else '按俯视图颜色纹理自动判'}):脚下 {cover['nadir']}(水占 {cover['nadir_water']:.0%}),"
+                    f"图幅水面占 {cover['water_fraction']:.0%}")
+            rules.append(ground_cover_rule(cover) if cover else GROUND_NADIR_READ_RULE)
     prompt = PANO_PROJECTION_RULES + ''.join(rules) + pano_prompt(base, sid, scheme, anchor, indoor=indoor, mode=mode, time_of_day=time_of_day)
     if seed is None:
         import random
@@ -1409,7 +1537,7 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
            'channel': {'provider': cfg.get('provider'), 'model': cfg.get('model')}, 'size': [rw, rh], 'seed': seed,
            'refs': [str(r.relative_to(base)) if str(r).startswith(str(base)) else str(r) for r in refs],
            'prompt': prompt, 'negative': NEGATIVE, 'anchor': {'position': anchor['position'], 'yaw_deg': anchor.get('yaw_deg', 0)},
-           'written_at': _now()}
+           'ground_cover': cover, 'written_at': _now()}
     rec['projection_check'] = proj = projection_check(target, usage=anchor_usage(anchor, cameras if cameras is not None else scene_cameras(base, sid)))
     rec['conformity_check'] = conf = conformity_check(target, out / 'depth_pano.npy')
     for kind, res, what in (('projection', proj, '成图不是等距柱状全景'), ('conformity', conf, '成图没有跟白模')):

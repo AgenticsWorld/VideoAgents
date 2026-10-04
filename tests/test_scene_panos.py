@@ -508,3 +508,63 @@ def test_generate_pano_never_references_other_anchor_panos(tmp_path, monkeypatch
     assert [Path(r).name for r in sent['refs']] == ['whitebox_pano.jpg']              # 只有本锚点白模(本例无俯视图)
     assert 'another standpoint' not in sent['prompt']
     assert not list((d / 'A5').glob('*.chain_*'))
+
+
+# ---- 2026-10-04 地面水陆:按俯视图颜色 + 纹理判水;陆上锚点明写「脚下是陆地」,图幅外陆地一侧不再延伸成暗青色(fengshen3 SCN-0036 A5)
+def _water_plan():
+    """上半幅平滑海面;下半幅 = 左:偏青但纹理粗的背阴林地(颜色与水面相近),右:暖色沙地。"""
+    import numpy as np
+    from PIL import Image
+    rng = np.random.default_rng(7)
+    a = np.zeros((288, 512, 3), dtype=np.float64)
+    a[:144] = (93, 113, 120)
+    forest = np.repeat(np.repeat(rng.uniform(.45, 1.55, (36, 64)), 4, axis=0), 4, axis=1)[..., None] * np.array([56, 66, 67.])
+    a[144:, :256] = forest[:, :256]
+    a[144:, 256:] = (176, 164, 154)
+    return Image.fromarray(np.clip(a + rng.normal(0, 1.5, a.shape), 0, 255).astype('uint8'))
+
+
+def test_water_mask_separates_sea_from_shaded_forest_and_sand():
+    m = sp.water_mask(_water_plan())
+    h, w = m.shape
+    assert m[: h // 2 - 6].mean() > .95                     # 海面
+    assert m[h // 2 + 6:, : w // 2 - 6].mean() < .05        # 背阴林地:同样偏青,靠纹理排除
+    assert m[h // 2 + 6:, w // 2 + 6:].mean() == 0          # 沙地
+    import numpy as np
+    from PIL import Image
+    assert not sp.water_mask(Image.fromarray(np.full((90, 160, 3), (205, 216, 230), dtype='uint8'))).any()   # 云海 / 白玉地面:太亮
+    assert not sp.water_mask(Image.fromarray(np.full((90, 160, 3), (8, 10, 14), dtype='uint8'))).any()       # 黑边
+
+
+def test_ground_cover_asserts_only_dry_land():
+    m = sp.water_mask(_water_plan())
+    land = sp.ground_cover(m, (40, 22.5), [-15, 1.8, 8])
+    sea = sp.ground_cover(m, (40, 22.5), [0, 1.8, -8])
+    shore = sp.ground_cover(m, (40, 22.5), [10, 1.8, 0.3])
+    assert (land['nadir'], sea['nadir'], shore['nadir']) == ('land', 'water', 'shore') and land['offmap_land']
+    assert 'dry land directly beneath the camera' in sp.ground_cover_rule(land) and 'unmapped dry land' in sp.ground_cover_rule(land)
+    for cover in (sea, shore):                                # 判为水 / 岸边:不下断言,沿用「贴图显示是水就画水」的条件句
+        rule = sp.ground_cover_rule(cover)
+        assert rule.startswith('Where it shows water directly beneath the camera') and 'not water' not in rule
+    assert not sp.ground_cover(m[: m.shape[0] // 2 - 6], (40, 10), [0, 1.8, 0])['offmap_land']     # 四边全是水:图幅外没有陆地段
+
+
+def test_offmap_ground_is_earth_toned_on_land_side_and_stays_water_on_water_side():
+    import numpy as np
+    from PIL import Image
+    plan = _water_plan(); m = sp.water_mask(plan)
+    w, h = 256, 128
+    valid = np.zeros((h, w), dtype=bool); depth = np.full((h, w), 1e9)
+    grey = Image.new('RGB', (w, h), (200, 200, 200))
+    kw = dict(ground_plan=plan, floor_wd=(40, 22.5))
+    # 相机在林地一角(西南角内 1 m),yaw 0:画面中心朝北(海),身后(左右缘)与左侧朝图幅外的陆地
+    new = np.asarray(sp.draw_projection_guides(grey, valid, depth, 1.8, 0.0, cam_xz=(-19, 10.25), water=m, **kw), dtype=int)
+    old = np.asarray(sp.draw_projection_guides(grey, valid, depth, 1.8, 0.0, cam_xz=(-19, 10.25), **kw), dtype=int)
+    band = slice(h // 2 + 6, h // 2 + 24)
+    assert old[band, :8, 2].mean() >= old[band, :8, 0].mean()                    # 旧画法:图幅外延伸林地边缘,偏青
+    assert new[band, :8, 0].mean() > new[band, :8, 2].mean() + 15                # 新画法:图幅外陆地偏暖土色
+    # 相机在海里靠北缘:朝北的图幅外仍是水(延伸边缘像素),与旧画法逐像素相同
+    sea_new = np.asarray(sp.draw_projection_guides(grey, valid, depth, 1.8, 0.0, cam_xz=(0, -10.25), water=m, **kw), dtype=int)
+    sea_old = np.asarray(sp.draw_projection_guides(grey, valid, depth, 1.8, 0.0, cam_xz=(0, -10.25), **kw), dtype=int)
+    mid = slice(w // 2 - 20, w // 2 + 20)
+    assert (sea_new[band, mid] == sea_old[band, mid]).all() and sea_new[band, mid, 2].mean() > sea_new[band, mid, 0].mean() + 10
