@@ -13,11 +13,11 @@
 
 > **流程开关(2026-08-19)**:项目「输出设置 → 人物精确空间位置」(`output.spatial_blocking`,默认关;2026-09-16 起未配置过的存量项目也视为关)决定本岗产物形态——**开启**:下述布局包流程(职责 2–3、6,机检 scene_layout_pack_ok);**关闭**:走「场景图(正向/反向)」流程(A 方案,2026-09-17,docs/scene_plates.md)——每场景出**正向图** `main_01.png`(`--aspect` 按项目画幅 `--n 1`;**站在入口(门口)往内看**的主视角,整间主体陈设一次入画,**无人**,机位平视不倾斜,门窗等开口位置须与 architecture.json 一致)(光照按**本集该场景首个时段**匹配的 `lighting.json` 方案画,方案 id 登记为 `front.lighting_scheme_id`——这是母版光照,必填;**其它时段的昼/夜光照变体本岗不出**,2026-09-30 起由 p6-scene-plates 按分镜组 `lighting_scheme_id` 判缺口、宿主以母版为参考补出,学生物阶段变体按集判缺口),并登记 `assets/concepts/scenes/<id>/scene_plates.json`(schema `scene_plates.v1`:`mode` 默认 `inherit`;`front{file, lighting_scheme_id(母版光照方案,2026-09-30), standing_en(站位,如 just inside the west doorway), looking_en(看向,如 east across the hall toward the idol), in_frame_en[](画内自左向右的主要陈设/开口清单), behind_en[](身后不入画的开口/陈设,如 the west doorway)}`;可预填 `reverse{standing_en, looking_en, in_frame_en}` 供出反向图时采用),不出 layout_top/layout.json;§6A 场景所需视图=正向图(+按模式需要的反向图)。**反向图**(以正向图为母版,站在场景远端朝入口回望,补全正向图缺的那面,门、窗等开口尤其要对):项目「场景图」设置 `pair` 时 p6-env-concept 出正向图后一并用宿主 `python3 code/render_scene_plates.py --project <slug> --scene <id>` 出;`auto`(默认)时 p6-env-concept 不出——分镜定稿后由 **p6-scene-plates**(本岗)跑 `python3 code/render_scene_plates.py --project <slug> --ep epNN`,脚本只给各集 shot_list 有镜 `plate_view=reverse` 的场景补出 `reverse_01.png`、写回登记并自动接线组 prompt,同一脚本同时补**光照变体**:各集 shot_list 组 `lighting_scheme_id` ≠ 该视角母版方案时,以正向图/反向图为 `--ref` 只改光照出 `main_01__<方案>.png` / `reverse_01__<方案>.png`,登记 `scene_plates.json#variants`(只出用到的方案×视角,母版重出后自动判过期重出;禁手工出变体);结单前必跑 `--status`(机检 scene_plates_complete)PASS;shot_list 引用了但还没有正向图的场景(拆解表外、分镜新增),p6-scene-plates 先按正向图规范补出并登记再补反向(2026-09-30);`single` 时不出反向图。**p6-env-concept 结单机检用 `render_scene_plates.py --status --scene <本集场景…>`**——那时本集还没有 shot_list,`--ep` 取不到场景会空跑 PASS。**禁止手绘/自写脚本出反向图、禁止把俯视图或九宫格挂进 refs**。以系统提示词「用户输出设定」段为准。
 
-1. 读取工单圈定的关键场景:`bible/scenes/index.json` 条目 + 该场景的 `architecture.json`、`lighting.json`、`environment.json`,与 `style.json` 合成绘图 prompt。**一目录一空间(2026-09-07)**:若 index/architecture 条目实际含两个以上空间(A/B 形态、`sub_spaces`、`sub_settings`、子空间),**不得**在同一 `<id>/` 目录里出第二套 `layout_top_<space>.png`,也不得在 layout.json 里另立 `landmarks_<space>` / `views_<space>` / `orientation_<space>`(宿主机检与白模/动线只读主 `landmarks`/`views`,附加包等于没有);正确做法是**上报 orchestrator 回派 05-scenes/scene 拆 ID**,再按新 ID 各出一套完整布局包。(前科 dzg6 SCN-0075/0076/0079 的 `_sg`/`_cabin`/`_kitchen` 附加包,2026-09-07 已拆为 SCN-0254/0255/0256)。
+1. 读取工单圈定的关键场景:`bible/scenes/index.json` 条目 + 该场景的 `architecture.json`、`lighting.json`、`environment.json`,与 `style.json` 合成绘图 prompt(**`lighting.json` 只在出正向图即布局包流程关闭时用;俯视图不按任何光照方案画,见职责 3 ⑤,2026-10-04**)。**一目录一空间(2026-09-07)**:若 index/architecture 条目实际含两个以上空间(A/B 形态、`sub_spaces`、`sub_settings`、子空间),**不得**在同一 `<id>/` 目录里出第二套 `layout_top_<space>.png`,也不得在 layout.json 里另立 `landmarks_<space>` / `views_<space>` / `orientation_<space>`(宿主机检与白模/动线只读主 `landmarks`/`views`,附加包等于没有);正确做法是**上报 orchestrator 回派 05-scenes/scene 拆 ID**,再按新 ID 各出一套完整布局包。(前科 dzg6 SCN-0075/0076/0079 的 `_sg`/`_cabin`/`_kitchen` 附加包,2026-09-07 已拆为 SCN-0254/0255/0256)。
 2. **先定空间事实,再出图(2026-08-19)**:依 architecture.json 的空间结构先写 `layout.json` 草案——地图朝向(图上方是哪面墙/哪个方位)、≥3 个地标(门/窗/主家具/地形特征等,每个给 `id`、`name_en`、归一化坐标 `xy`∈[0,1]²,x 向右 y 向下)、机位语义 `views[tile 1..9]`(每条 `camera_from` 从哪个地标、`looking_at` 看向哪个地标、`size` 景别、`angle` 机位高度;2026-09-09 起 views 不再对应九宫格图,只作分镜 `view_tile` 挂机位与白模编译推断视轴的文字事实源,仍须 9 条);**机位规则(2026-08-26,写 views 时自核;前科 polan:SCN-003/006 混进俯视格、SCN-004/005 七格同一条街/巷轴雷同)**:① `angle ∈ {eye, low, high_oblique}`——`eye` 人眼高度、`low` 贴地低机位、`high_oblique` 斜俯高机位(俯角 ≤45°,仍看得见墙体立面与天际线);**九格一律不出垂直俯视**——俯视由 `layout_top.png` 专职,`desc_en` 禁写 俯视/俯瞰/鸟瞰/top-down/bird's-eye/nadir/plan view 一类措辞(写了模型就复刻俯视图进格);② `camera_from` ≠ `looking_at`,且 `(camera_from, looking_at)` 九格两两不同;③ 同一 `looking_at` ≤3 格;④ 景别配比:`wide` ≤4 格、`close`/`detail` ≥2 格;`angle=low` ≥1 格;⑤ 方位角分散:以地标 `xy` 算 `camera_from`→`looking_at` 的方位角(图上方为 0°、顺时针,x 向右 y 向下),**同一 ±30° 方位内 ≤3 格**——线性空间(巷/街/路)尤其要守:轴向正反各留 1–2 格,其余改垂直看墙、地标特写、贴地与斜俯,否则九格退化成同一条纵深;任何一条不满足就改 views 再出图,不得出图后再补描述);地标坐标是布局图 prompt 的依据("main door at bottom center, fireplace on the right wall…"),出图后对照实图校正坐标——**layout.json 与图必须一致,它是分镜师标站位、prompt 写地标词的唯一文字事实源**。
-3. **出俯视空间布局图 `layout_top.png`**:正射垂直俯视(true nadir orthographic plan view),整场空间边界与全部地标可辨,**无人物、无文字标注、无箭头**(干净底图,直接进组视频 refs 作空间位置参考;2026-09-07 起不再叠加人物动线标注,人物空间位置由 3D 白模参考视频承担),≥2560x1440;只出 1 张(`--n 1`),不达标走用户重跑次数设定,替换下来的旧图移入 `candidates/`。**俯视图 prompt 四条写法(2026-08-26;前科 offer SCN-0005:prompt 写了门栓/棂格这类只有立面才可见的特征,模型只能把门窗平铺到地面上,近侧南墙整面消失)**:① 机位句用正射措辞、**不用 bird's-eye**(该词会让机位前倾、露出墙面立面):`camera axis exactly perpendicular to the floor; no wall face, no elevation, no side of any building is visible; only the floor plane, the top edges of the walls and the tops of furniture are seen`;② 洞口用平面图语言写成墙线上的缺口,**不写立面特征**——门扇/门栓/窗棂/壁挂/壁画等一律不写、并明句排除:`all walls are continuous thick wall lines enclosing the room; the main door is a wide gap in the bottom (south) wall line, flanked by two narrower window gaps; … door leaves, door bars, window lattices and anything mounted on a wall face are not visible from directly above and must not be drawn`;③ 近侧(图下方)那面墙必须明写存在:`the bottom (south) wall is fully present along the bottom edge of the room, seen only as its top edge / thickness; the floor ends at that wall line`(俯视图最容易丢的就是这面墙);④ negative 追加 `door lying on the floor, window lying on the floor, door bar on the floor, wall elements projected onto the floor, elevation view of a door or window, missing wall, open side, dollhouse cutaway, tilted camera, oblique aerial view`。出图后按实图校正 layout.json 坐标时,门窗地标取**墙线上的缺口位置**,不得按被平铺到地面的门窗读数(错图不校正;重出走用户重跑次数设定——为 0 或额度用尽则不自行重出,缺陷上报用户裁决)。
+3. **出俯视空间布局图 `layout_top.png`**:正射垂直俯视(true nadir orthographic plan view),整场空间边界与全部地标可辨,**无人物、无文字标注、无箭头**(干净底图,只供白模建模、分镜预览与全景/背景图脚本作空间参考,2026-09-09 起不进组视频 refs;2026-09-07 起不再叠加人物动线标注,人物空间位置由 3D 白模参考视频承担),≥2560x1440;只出 1 张(`--n 1`),不达标走用户重跑次数设定,替换下来的旧图移入 `candidates/`。**俯视图 prompt 五条写法(①–④ 2026-08-26,⑤ 2026-10-04;前科 offer SCN-0005:prompt 写了门栓/棂格这类只有立面才可见的特征,模型只能把门窗平铺到地面上,近侧南墙整面消失)**:① 机位句用正射措辞、**不用 bird's-eye**(该词会让机位前倾、露出墙面立面):`camera axis exactly perpendicular to the floor; no wall face, no elevation, no side of any building is visible; only the floor plane, the top edges of the walls and the tops of furniture are seen`;② 洞口用平面图语言写成墙线上的缺口,**不写立面特征**——门扇/门栓/窗棂/壁挂/壁画等一律不写、并明句排除:`all walls are continuous thick wall lines enclosing the room; the main door is a wide gap in the bottom (south) wall line, flanked by two narrower window gaps; … door leaves, door bars, window lattices and anything mounted on a wall face are not visible from directly above and must not be drawn`;③ 近侧(图下方)那面墙必须明写存在:`the bottom (south) wall is fully present along the bottom edge of the room, seen only as its top edge / thickness; the floor ends at that wall line`(俯视图最容易丢的就是这面墙);④ negative 追加 `door lying on the floor, window lying on the floor, door bar on the floor, wall elements projected onto the floor, elevation view of a door or window, missing wall, open side, dollhouse cutaway, tilted camera, oblique aerial view`;⑤ **光照一律中性,不按 `lighting.json` 任何方案画(2026-10-04)**:俯视图只是空间参考——白模按它量墙线、全景/九宫格背景图按它判各方向是什么、宿主按它的颜色纹理判水陆,下游没有任何一处拿它当光照参考,各时段的光照由 `lighting.json` 方案的 `prompt_fragment_en` 走文字进背景图提示词。所以 prompt 里**不写**时段、色温、光源与光向(夜/黄昏/清晨/月光/烛火/灯笼光/暖橘调/冷青调一类措辞一律不写,场景只在夜里出现也照此办),统一写 `flat, even, neutral white lighting with no visible light source; no time of day; no cast shadows; lamps, candles and fires are unlit; every surface shows its true local colour`,negative 追加 `night, dusk, sunset, moonlight, candlelight, glowing lamps, colored light, dramatic lighting, long cast shadows`;风格串照常逐字注入,但在它前面写明「该串只管材质与质感,光照以本段的中性均匀光为准」。(前科:liaozhai3 SCN-0088 按夜外月光档把俯视图画成全幅冷青;暗色调俯视图里成片的暗青屋面街巷被宿主判成水面,fengshen3 SCN-0141。)出图后按实图校正 layout.json 坐标时,门窗地标取**墙线上的缺口位置**,不得按被平铺到地面的门窗读数(错图不校正;重出走用户重跑次数设定——为 0 或额度用尽则不自行重出,缺陷上报用户裁决)。
 4. ~~出 9 宫格多角度场景图~~ **已退役(2026-09-09)**:不再生成 `grid_9views.png` 及其昼夜变体;存量文件不删、不进视频参考图。场景在各机位下的画面由 `08-video-gen/shot-plates` 在白模签字导出后按每镜机位出分镜背景图(以白模干净帧 + 俯视图 + architecture/lighting 文字为依据)。
-5. 昼/夜等变体:俯视图不出变体;光照差异由 lighting.json 各方案的 `prompt_fragment_en` 进分镜背景图提示词,无需本岗出图。
+5. 昼/夜等变体:俯视图不出变体,本身也不带任何时段的光照(中性光,见职责 3 ⑤);光照差异由 lighting.json 各方案的 `prompt_fragment_en` 进分镜背景图提示词,无需本岗出图。
 6. 落盘布局包 + prompt 记录 + 与设定卡的对照说明,存 `assets/concepts/scenes/<id>/`;交付前跑 `python3 code/blocking_map_check.py --project <slug> --scene <id>`(机检 scene_layout_pack_ok)。
 7. 发现设定卡自身矛盾(如建筑风格与文化设定打架)时上报,不自行修改。
 
@@ -34,9 +34,9 @@
 
 ```bash
 python3 modules/genmedia.py info     # 当前渠道/模型记入 prompts.json
-# ① 俯视空间布局图(无人、无标注;地标位置按 layout.json 草案写进 prompt)
+# ① 俯视空间布局图(无人、无标注、中性光不带时段;地标位置按 layout.json 草案写进 prompt)
 python3 modules/genmedia.py image \
-  --prompt "top-down bird's-eye plan view of <场景>, the whole room/area visible from directly above: <逐地标写方位,如 main door at bottom center, tall window on the top wall, long table in the center, fireplace on the right wall>; <architecture/lighting/style.json 要素>; no people, no text, no arrows, no labels" \
+  --prompt "true nadir orthographic plan view of <场景>, the whole room/area visible from directly above: <逐地标写方位,如 main door at bottom center, tall window on the top wall, long table in the center, fireplace on the right wall>; <architecture/style.json 的结构、材质与陈设要素,不写 lighting.json 的光照方案>; flat, even, neutral white lighting with no visible light source, no time of day, no cast shadows; no people, no text, no arrows, no labels" \
   --output assets/concepts/scenes/<id>/layout_top.png --size 2560x1440 --n 1
 # ②③ 九宫格及其昼夜变体已退役(2026-09-09):不再出图;场景各机位画面由 shot-plates 工位在白模签字导出后按镜出背景图
 # ④ 自检布局包
@@ -55,7 +55,7 @@ python3 code/blocking_map_check.py --project <slug> --scene <id>
 |---|---|---|
 | scene | 场景注册条目(ID、层级、出场章节) | `bible/scenes/index.json` |
 | architecture | 建筑风格卡 | `bible/scenes/<id>/architecture.json` |
-| lighting | 基准光照方案(日/夜/室内外) | `bible/scenes/<id>/lighting.json` |
+| lighting | 基准光照方案(日/夜/室内外);**只用于正向图(母版光照),俯视图不用** | `bible/scenes/<id>/lighting.json` |
 | environment | 天气/季节/昼夜可变维度 | `bible/scenes/<id>/environment.json` |
 | art-director | 风格锚点、负面清单(H2 已锁定) | `bible/style.json` |
 
@@ -90,7 +90,7 @@ python3 code/blocking_map_check.py --project <slug> --scene <id>
     { "tile": 7, "camera_from": "long_table", "looking_at": "fireplace", "size": "close", "angle": "low",
       "desc_en": "low-angle close shot across the table top toward the fireplace" }
   ],
-  "checklist": { "architecture_match": true, "lighting_match": true, "style_match": true }
+  "checklist": { "architecture_match": true, "lighting_neutral": true, "style_match": true }
 }
 ```
 `xy` 为归一化坐标(x 向右、y 向下,0–1);`name_en` 是下游 blocking `space_fragment_en` 与 prompt 地标词的**唯一词源**(逐字取用,防同一地标多种叫法;**内容语言随用户界面语言,2026-08-24 二订,字段名保留 `_en` 历史后缀——`name_en`/`desc_en`/route_en 只进 prompt、不上图,无字体限制;存量英文项目补地标沿用英文,不得半中半英;`desc_en` 同此口径**);`views` 必须 tile 1..9 各一条(2026-09-09 起不再对应九宫格图,仍是分镜 view_tile 与白模视轴推断的事实源);每条带 `camera_from`/`looking_at`(地标 id)/`size`(`wide`|`medium`|`close`|`detail`)/`angle`(`eye`|`low`|`high_oblique`)/`desc_en`,并满足职责 2 的机位规则(机位对两两不同、同一 looking_at ≤3、wide ≤4、close/detail ≥2、low ≥1、同一 ±30° 方位内 ≤3、无俯视措辞;2026-08-26,自核项、暂不入脚本机检)。
@@ -106,7 +106,7 @@ agent: 06-art/environment-concept
 instruction: |
   ep01 用到、库里还没有的场景 s012(青云宗大殿):产出场景布局包:俯视空间布局图 layout_top.png + layout.json
   (≥3 地标坐标、机位语义 views)。建筑依 bible/scenes/s012/architecture.json,
-  光照依 lighting.json,风格遵循 bible/style.json 并注入负面清单。
+  俯视图用中性均匀光、不带时段(不按 lighting.json 方案画),风格遵循 bible/style.json 并注入负面清单。
   产出 assets/concepts/scenes/s012/,交付前跑 blocking_map_check.py --scene s012。
 ```
 
@@ -117,12 +117,13 @@ instruction: |
 - **scene_single_space(2026-09-07,同一脚本)**:layout.json 不得含 `landmarks_*` / `views_*` / `orientation_*` 子空间键;一个目录只放一个空间的布局包,第二个空间须另立 SCN。
 - prompt 记录完整。
 - 俯视图无人物、无文字/箭头标注(底图必须干净)。
+- 俯视图光照中性(2026-10-04,只约束此后新出的图,存量不重出):看不出时段,无明显投影,无点亮的灯火,无整幅偏色;prompt 无时段/色温/光源措辞。
 
 **自核(2026-08-26,不入脚本、交付前逐条对照 layout.json#views 与实图)**:
 - views 满足职责 2 的机位规则:`angle` 全部在 {eye, low, high_oblique} 内、`desc_en` 无俯视/俯瞰/鸟瞰/top-down/bird's-eye/nadir/plan view 措辞;`(camera_from, looking_at)` 两两不同;同一 `looking_at` ≤3 格;`wide` ≤4、`close`/`detail` ≥2、`low` ≥1;按地标 xy 算的机位方位角同一 ±30° 内 ≤3 格。
 
 **评分(evaluation Agent,rubric visual_gen_v1,阈值 80;按 §7 适用「图像产物」)**:
-- 与设计稿匹配(35):建筑/光照/环境设定逐项吻合;
+- 与设计稿匹配(35):建筑/环境设定逐项吻合;光照——俯视图须中性(带时段光照按不吻合扣分),正向图须与登记的母版光照方案吻合;
 - 技术质量(30):透视、结构无崩坏;
 - 角色一致(25):本岗折算为「俯视图与 layout.json 地标坐标一致」(逐地标对得上);
 - 无违禁(10):不含 style.json 负面清单元素。
