@@ -3970,6 +3970,8 @@ window.I18N_DICT = {
 "分镜表按事件 content_flags 推导": "derived from event content_flags in the shot list",
 "本组已标记 NSFW({src}):图像/视频走备用渠道,派单带 nsfw: true;点击取消标记": "This group is flagged NSFW ({src}): images/video go to the fallback provider and dispatch carries nsfw: true; click to clear the flag",
 "标记本组为 NSFW:图像/视频改走「设置→高级→NSFW 模式」的备用渠道,派单带 nsfw: true": "Flag this group as NSFW: images/video are routed to the fallback provider set in “Settings → Advanced → NSFW mode” and dispatch carries nsfw: true",
+"确认把 {grp} 标记为 NSFW?\n标记后本组图像/视频改走备用渠道,派单带 nsfw: true。": "Flag {grp} as NSFW?\nIts images/video will be routed to the fallback provider and dispatch will carry nsfw: true.",
+"确认取消 {grp} 的 NSFW 标记?\n取消后本组图像/视频改回主渠道。": "Clear the NSFW flag on {grp}?\nIts images/video will go back to the primary provider.",
 "已标记": "flagged",
 "🔞 本组文字命中敏感词 {words},但未标记 NSFW:如需改走备用模型请点「🔞」标记本组(机检 nsfw_hint 只提示不路由)": "🔞 This group's text matches sensitive words {words} but is not marked NSFW: click 「🔞」 to mark the group if it should use the fallback models (the nsfw_hint check only hints, it never routes)",
 "❌ 投影机检未过": "❌ Projection check failed",

@@ -1557,6 +1557,9 @@ async function toggleNsfw(grp){
   const proj=$('#project').value.trim()||'demo';
   const btn=document.querySelector(`.nsfwbtn[data-grp="${grp}"]`);
   const cur=btn&&btn.getAttribute('style');   // 亮黄 = 当前已标记
+  // 🔞 紧挨着其它组卡按钮,一点即切换容易误触(2026-10-05):标记/取消都先确认
+  if(!confirm(cur?I18N.f('确认取消 {grp} 的 NSFW 标记?\n取消后本组图像/视频改回主渠道。',{grp})
+                 :I18N.f('确认把 {grp} 标记为 NSFW?\n标记后本组图像/视频改走备用渠道,派单带 nsfw: true。',{grp})))return;
   try{
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/storyboard/'+encodeURIComponent(EP)+'/'+encodeURIComponent(grp)+'/settings',
       {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nsfw:!cur})});

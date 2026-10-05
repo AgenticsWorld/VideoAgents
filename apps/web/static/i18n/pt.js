@@ -3961,6 +3961,8 @@ window.I18N_DICT = {
 "分镜表按事件 content_flags 推导": "derivado dos content_flags dos eventos na lista de planos",
 "本组已标记 NSFW({src}):图像/视频走备用渠道,派单带 nsfw: true;点击取消标记": "Este grupo está marcado como NSFW ({src}): imagem/vídeo vão para o provedor reserva e o despacho leva nsfw: true; clique para remover a marcação",
 "标记本组为 NSFW:图像/视频改走「设置→高级→NSFW 模式」的备用渠道,派单带 nsfw: true": "Marcar este grupo como NSFW: imagem/vídeo passam para o provedor reserva de “Configurações → Avançado → Modo NSFW” e o despacho leva nsfw: true",
+"确认把 {grp} 标记为 NSFW?\n标记后本组图像/视频改走备用渠道,派单带 nsfw: true。": "Marcar {grp} como NSFW?\nA imagem/vídeo deste grupo passarão para o provedor reserva e o despacho levará nsfw: true.",
+"确认取消 {grp} 的 NSFW 标记?\n取消后本组图像/视频改回主渠道。": "Remover a marcação NSFW de {grp}?\nA imagem/vídeo deste grupo voltarão ao provedor principal.",
 "已标记": "marcado",
 "🔞 本组文字命中敏感词 {words},但未标记 NSFW:如需改走备用模型请点「🔞」标记本组(机检 nsfw_hint 只提示不路由)": "🔞 O texto deste grupo contém palavras sensíveis {words}, mas não está marcado como NSFW: clique em 「🔞」 para marcá-lo se deve usar os modelos de reserva (a verificação nsfw_hint apenas avisa, nunca roteia)",
 "❌ 投影机检未过": "❌ Verificação de projeção falhou",

@@ -3959,6 +3959,8 @@ window.I18N_DICT = {
 "分镜表按事件 content_flags 推导": "suy ra từ content_flags của sự kiện trong bảng phân cảnh",
 "本组已标记 NSFW({src}):图像/视频走备用渠道,派单带 nsfw: true;点击取消标记": "Nhóm này đã gắn cờ NSFW ({src}): hình ảnh/video đi kênh dự phòng, giao việc kèm nsfw: true; bấm để bỏ cờ",
 "标记本组为 NSFW:图像/视频改走「设置→高级→NSFW 模式」的备用渠道,派单带 nsfw: true": "Gắn cờ NSFW cho nhóm này: hình ảnh/video chuyển sang kênh dự phòng trong “Cài đặt → Nâng cao → Chế độ NSFW”, giao việc kèm nsfw: true",
+"确认把 {grp} 标记为 NSFW?\n标记后本组图像/视频改走备用渠道,派单带 nsfw: true。": "Gắn cờ NSFW cho {grp}?\nHình ảnh/video của nhóm này sẽ chuyển sang kênh dự phòng, giao việc kèm nsfw: true.",
+"确认取消 {grp} 的 NSFW 标记?\n取消后本组图像/视频改回主渠道。": "Bỏ cờ NSFW của {grp}?\nHình ảnh/video của nhóm này sẽ quay lại kênh chính.",
 "已标记": "đã gắn cờ",
 "🔞 本组文字命中敏感词 {words},但未标记 NSFW:如需改走备用模型请点「🔞」标记本组(机检 nsfw_hint 只提示不路由)": "🔞 Văn bản của nhóm này khớp từ nhạy cảm {words} nhưng chưa được đánh dấu NSFW: bấm 「🔞」 để đánh dấu nếu cần dùng model dự phòng (kiểm tra nsfw_hint chỉ gợi ý, không định tuyến)",
 "❌ 投影机检未过": "❌ Kiểm tra phép chiếu thất bại",

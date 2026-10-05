@@ -3959,6 +3959,8 @@ window.I18N_DICT = {
 "分镜表按事件 content_flags 推导": "diturunkan dari content_flags peristiwa pada daftar shot",
 "本组已标记 NSFW({src}):图像/视频走备用渠道,派单带 nsfw: true;点击取消标记": "Grup ini ditandai NSFW ({src}): gambar/video memakai penyedia cadangan, pengiriman membawa nsfw: true; klik untuk menghapus tanda",
 "标记本组为 NSFW:图像/视频改走「设置→高级→NSFW 模式」的备用渠道,派单带 nsfw: true": "Tandai grup ini NSFW: gambar/video dialihkan ke penyedia cadangan di “Pengaturan → Lanjutan → Mode NSFW”, pengiriman membawa nsfw: true",
+"确认把 {grp} 标记为 NSFW?\n标记后本组图像/视频改走备用渠道,派单带 nsfw: true。": "Tandai {grp} sebagai NSFW?\nGambar/video grup ini akan dialihkan ke penyedia cadangan dan pengiriman membawa nsfw: true.",
+"确认取消 {grp} 的 NSFW 标记?\n取消后本组图像/视频改回主渠道。": "Hapus tanda NSFW dari {grp}?\nGambar/video grup ini kembali ke penyedia utama.",
 "已标记": "ditandai",
 "🔞 本组文字命中敏感词 {words},但未标记 NSFW:如需改走备用模型请点「🔞」标记本组(机检 nsfw_hint 只提示不路由)": "🔞 Teks grup ini cocok dengan kata sensitif {words} tetapi belum ditandai NSFW: klik 「🔞」 untuk menandai grup jika perlu memakai model cadangan (pemeriksaan nsfw_hint hanya memberi petunjuk, tidak merutekan)",
 "❌ 投影机检未过": "❌ Pemeriksaan proyeksi gagal",
