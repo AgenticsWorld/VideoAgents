@@ -256,6 +256,7 @@ ABSENCE_WORDS = ('不出现', '不出场', '不在场', '不入画', '不入镜'
 _SENT_SPLIT_RE = re.compile(r'(?<=[。．.!?！？;；\n])')
 
 
+_FROZEN_LINE_RE = re.compile(r'\{[^{}]*\}')
 DIRECTOR_NOTE_RE = re.compile(r"Director's note(?: \(user instruction, must follow\))?:.*?(?=\n\n|Global constraints:|$)", re.S)
 
 
@@ -275,11 +276,13 @@ def hidden_cast_mentions(text: str, group: dict | None, cast, verbatim=()) -> li
     """正文把未在本组白模出现的人物写进了画面:[(id, 命中词)…]。命中词 = actor id,或白模 label(≥2 字);同一人物只报一次。
     按句判断:含 ABSENCE_WORDS 的否定句(「X 已离场,不出现在画面中」)不算;别的人物 label 包含本 label 时不按子串误报。
     扫描前剔除:宿主固定段 Scene presence / Whitebox reference(其中的不在场声明与图例由宿主生成)、用户导演注释
-    `Director's note …`(原句必须保留)、verbatim 里的逐字片段(blocking_map route_en 等用户原文)。"""
+    `Director's note …`(原句必须保留)、verbatim 里的逐字片段(blocking_map route_en 等用户原文)、`{…}` 冻结台词
+    (台词一字不改,台词里提到不在场人物的名字不等于把人写进画面,#95)。"""
     if not cast or not text:
         return []
     from modules.scene_cast import CAST_BLOCK_RE
     body = DIRECTOR_NOTE_RE.sub('', _BLOCK_RE.sub('', CAST_BLOCK_RE.sub('', text)))
+    body = _FROZEN_LINE_RE.sub('', body)
     for frag in verbatim or ():
         if frag:
             body = body.replace(frag, '')

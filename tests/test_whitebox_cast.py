@@ -3,6 +3,7 @@ import copy
 import json
 
 from modules.scene_cast import scene_reference_rows, complete_prompt_cast, check_prompt_cast
+from modules.whitebox_refs import hidden_cast_mentions
 from modules.whitebox_refs import (appearing_cast, apply_prompt, cast_filter, check_prompt, hidden_cast_refs,
                                    in_frame, legend_rows, plan_refs, strip_cast_refs)
 
@@ -192,3 +193,12 @@ def test_fixed_blocks_keep_canonical_order_across_resyncs(tmp_path):
     # 任一 sync 重跑都不再改动正文
     assert apply_prompt(a, plan)['video_prompt'] == a['video_prompt']
     assert complete_prompt_cast(a, rows)['video_prompt'] == a['video_prompt']
+
+
+def test_hidden_mention_ignores_frozen_dialogue_lines():
+    """#95 #97:{} 冻结台词里提到缺席人物的名字不算把人写进画面;{} 外的描写照报。"""
+    group = {'actors': [{'id': 'CHAR-0002', 'label': '李靖'}, {'id': 'CHAR-0001', 'label': '哪吒'}]}
+    cast = {'visible': ['CHAR-0001'], 'hidden': {'CHAR-0002': '整组不在任一镜画幅内'}}
+    quoted = 'Shot 1: 哪吒拱手:{请伯父李靖不必上本。}随后转身。'
+    assert hidden_cast_mentions(quoted, group, cast) == []
+    assert hidden_cast_mentions(quoted + '李靖站在阶下。', group, cast) == [('CHAR-0002', '李靖')]
