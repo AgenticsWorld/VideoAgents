@@ -220,3 +220,11 @@ def test_action_body_ignores_frozen_lines_quotes_and_native_lead():
     lead = "他站定。\n【原生先入】本镜起即由李靖在画外开口:{你先去。再不许回来}——说话人不在画内,话未说完即切到下一镜。"
     assert tc.count_sequence_connectors(ctb._action_body(lead)) == 0
     assert tc.count_sequence_connectors(ctb._action_body("Not used: Image 3. He nods, then turns. Native lead: X is mid-line, then finishes.")) == 1
+
+
+def test_line_est_ignores_outer_quotes():
+    """#104:剧本层对白行带外层「」,镜头表层不带——两层对同一句须给出同一估时。"""
+    for quoted in ("「木吒!」", "『木吒!』", "“木吒!”", '"木吒!"', "「木吒!」 "):
+        assert tc.line_est(quoted, "fast", 220) == tc.line_est("木吒!", "fast", 220), quoted
+    assert tc.inner_pauses("「你来,我走。」") == tc.inner_pauses("你来,我走。") == 1
+    assert tc.inner_pauses("「走!」他喊,「快!」") == 2            # 句中的引号收尾仍是停顿
