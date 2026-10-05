@@ -392,14 +392,14 @@ async function load(){
   syncUrl();   // 先写项目名(id 沿用当前选中/深链),加载完成后再按实际命中的条目重写
   $('#detail').innerHTML='<div class="empty">加载中…</div>';
   const epf=EpFilter.load(proj);   // 分集过滤数据与主数据并行取(不会 reject)
+  // 虚拟人像资产库是否启用(未启用则不渲染入库按钮;查询失败按未启用处理);同样与主数据并行取
+  const avf=postJson('/api/v1/avatar-assets/status',{project:proj,refs:[]}).then(d=>!!d.enabled,()=>false);
   try{
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/characters');
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
     DATA=(await r.json()).characters;
   }catch(e){$('#items').innerHTML='';$('#detail').innerHTML=`<div class="empty">加载失败:${esc(e.message)}</div>`;return}
-  // 虚拟人像资产库是否启用(未启用则不渲染入库按钮;查询失败按未启用处理)
-  try{AV_ENABLED=!!(await postJson('/api/v1/avatar-assets/status',{project:proj,refs:[]})).enabled}
-  catch(e){AV_ENABLED=false}
+  AV_ENABLED=await avf;
   // 有图和有设定的排前面
   DATA.sort((a,b)=>(b.images.length?2:0)+(Object.keys(b.docs).length?1:0)-((a.images.length?2:0)+(Object.keys(a.docs).length?1:0))||a.id.localeCompare(b.id));
   // 「旁白」伪角色固定列表首位(项目旁白开关开启时后端下发,2026-09-01)

@@ -42,15 +42,21 @@ def _body(model: Any, **extra: Any) -> dict[str, Any]:
 
 
 def _artifact_urls(value: Any, project: str) -> Any:
-    old = f"/projects/{core.safe_slug(project)}/"
-    new = f"/api/v1/projects/{core.safe_slug(project)}/artifacts/"
-    if isinstance(value, str):
-        return new + value[len(old):] if value.startswith(old) else value
-    if isinstance(value, dict):
-        return {key: _artifact_urls(item, project) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_artifact_urls(item, project) for item in value]
-    return value
+    slug = core.safe_slug(project)
+    old, new = f"/projects/{slug}/", f"/api/v1/projects/{slug}/artifacts/"
+    cut = len(old)
+
+    # 前缀只算一次:预览接口一次返回几 MB、几十万个节点,逐节点重算 slug 在人物预览上要多花 0.2 秒
+    def walk(item: Any) -> Any:
+        if isinstance(item, str):
+            return new + item[cut:] if item.startswith(old) else item
+        if isinstance(item, dict):
+            return {key: walk(sub) for key, sub in item.items()}
+        if isinstance(item, list):
+            return [walk(sub) for sub in item]
+        return item
+
+    return walk(value)
 
 
 @asynccontextmanager
