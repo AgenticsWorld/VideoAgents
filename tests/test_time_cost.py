@@ -201,3 +201,15 @@ def test_dialogue_fit_new_vs_legacy(tmp_path, capsys):
     rep = cdf.run(base, "ep01", legacy_override=True)
     assert rep["legacy"] is True and rep["checks"]["dialogue_fit_shot"] != "FAIL"
     capsys.readouterr()
+
+
+def test_action_body_ignores_frozen_lines_quotes_and_native_lead():
+    """#109 #110:顺序连接词只数动作散文——冻结台词、『触发词』引用、宿主【原生先入】句里的「再/先/接着」不计。"""
+    import check_time_budget as ctb
+    body = ("场景激活：使用 Image 2。不采用：Image 3。"
+            "她抬头:{你再不许来,先去。}说到『再不许』时抬手,随后转身。\n"
+            "【原生先入】本镜开场时哪吒正说到一半,上一镜画外已说出的「先去」不再重说,接着说完。\n")
+    assert tc.count_sequence_connectors(ctb._action_body(body)) == 1          # 只剩「随后」
+    lead = "他站定。\n【原生先入】本镜起即由李靖在画外开口:{你先去。再不许回来}——说话人不在画内,话未说完即切到下一镜。"
+    assert tc.count_sequence_connectors(ctb._action_body(lead)) == 0
+    assert tc.count_sequence_connectors(ctb._action_body("Not used: Image 3. He nods, then turns. Native lead: X is mid-line, then finishes.")) == 1

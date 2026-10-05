@@ -31,6 +31,7 @@ from _common import parse_args  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from modules import time_cost as tc  # noqa: E402
 from modules import shot_timing  # noqa: E402
+from modules import native_lead  # noqa: E402
 from modules.dialogue_tts import name_index, resolve_speaker  # noqa: E402
 from check_dialogue_fit import load_speeds, speaker_id, line_placement  # noqa: E402  line_placement:声画分离(2026-10-03)
 
@@ -398,10 +399,15 @@ def run_blocking(base: Path, ep: str, rep_all: dict, strict: bool, groups_filter
 _USE_RE = re.compile(r"(不采用|Not used)\s*[:：][^。.\n]*[。.]")
 
 
+_QUOTED_RE = re.compile(r"\{[^{}]*\}|『[^『』]*』|「[^「」]*」")
+
+
 def _action_body(body: str) -> str:
-    """Shot 段正文去掉机器句(场景激活/画内/画外/构图层次/使用/不采用),只留动作描写。"""
+    """Shot 段正文去掉机器句(场景激活/画内/画外/构图层次/使用/不采用、宿主写的【原生先入】句),只留动作描写;
+    冻结台词 `{…}` 与『…』「…」引用(触发词绑定短语)不是动作,里面的「再/先/接着」不计顺序连接词(#109 #110)。"""
     m = _USE_RE.search(body)
-    return body[m.end():] if m else body
+    body = body[m.end():] if m else body
+    return _QUOTED_RE.sub("", native_lead.MARK_RE.sub("", body))
 
 
 def run_prompt(base: Path, ep: str, rep_all: dict, strict: bool, groups_filter) -> Report:
