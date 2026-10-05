@@ -268,29 +268,59 @@ def _save_decisions(base: Path, ep: str, decisions: dict) -> None:
     tmp.replace(path)
 
 
-def waive_group(base: Path, ep: str, gid: str, on: bool, by: str = APPROVED_BY) -> list:
-    """导演台「批准本组」:该组未套用(open/stale/decided)的待决项记为 approved=按当前白模原样接受(有效状态 waived,
-    阻断级也不再拦 H3W 签字/导出);取消批准则撤回这些记录(被顶掉的用户答复还原)。返回处理的 issue_id。"""
+def waive_groups(base: Path, ep: str, gids: list, on: bool, by: str = APPROVED_BY) -> dict:
+    """导演台「批准本组 / 全部批准」:这些组未套用(open/stale/decided)的待决项记为 approved=按当前白模原样接受(有效状态 waived,
+    阻断级也不再拦 H3W 签字/导出);取消批准则撤回这些记录(被顶掉的用户答复还原)。返回 {gid: [处理的 issue_id]}(只列有处理的组)。"""
     decisions = load_decisions(base, ep)
-    group = next((g for g in collect(base, ep)['groups'] if g['group_id'] == gid), None)
-    touched = []
-    for issue in (group or {}).get('issues', []):
-        iid = issue['issue_id']
-        if on and issue['status'] in ('open', 'stale', 'decided'):
-            # decided = 用户选过方案但 Agent 还没套用:批准的是当前白模,未套用的选择同样让位(原答复留在 superseded,取消批准时还原)
-            decisions[iid] = {'choice': APPROVED, 'note': '批准本组即按当前白模接受', 'by': by,
-                              'at': time.strftime('%Y-%m-%dT%H:%M:%S+08:00'), 'issue_hash': issue['issue_hash']}
-            if issue['status'] == 'decided':
-                decisions[iid]['superseded'] = issue['decision']
-            touched.append(iid)
-        elif not on and (decisions.get(iid) or {}).get('choice') == APPROVED:
-            old = decisions.pop(iid).get('superseded')
-            if old:
-                decisions[iid] = old
-            touched.append(iid)
+    wanted = set(gids)
+    touched = {}
+    for group in collect(base, ep)['groups']:
+        if group['group_id'] not in wanted:
+            continue
+        for issue in group.get('issues', []):
+            iid = issue['issue_id']
+            if on and issue['status'] in ('open', 'stale', 'decided'):
+                # decided = 用户选过方案但 Agent 还没套用:批准的是当前白模,未套用的选择同样让位(原答复留在 superseded,取消批准时还原)
+                decisions[iid] = {'choice': APPROVED, 'note': '批准本组即按当前白模接受', 'by': by,
+                                  'at': time.strftime('%Y-%m-%dT%H:%M:%S+08:00'), 'issue_hash': issue['issue_hash']}
+                if issue['status'] == 'decided':
+                    decisions[iid]['superseded'] = issue['decision']
+                touched.setdefault(group['group_id'], []).append(iid)
+            elif not on and (decisions.get(iid) or {}).get('choice') == APPROVED:
+                old = decisions.pop(iid).get('superseded')
+                if old:
+                    decisions[iid] = old
+                touched.setdefault(group['group_id'], []).append(iid)
     if touched:
         _save_decisions(base, ep, decisions)
     return touched
+
+
+def waive_group(base: Path, ep: str, gid: str, on: bool, by: str = APPROVED_BY) -> list:
+    """单组版 waive_groups;返回处理的 issue_id。"""
+    return waive_groups(base, ep, [gid], on, by).get(gid, [])
+
+
+def choose_recommended(base: Path, ep: str, by: str = 'user:page') -> dict:
+    """导演台「全部选择推荐方案」:本集所有未答复(open/stale)的待决项——不分阻断/建议——选 recommended 选项,
+    没有推荐的用默认取舍(provisional);两者都没有的留给用户逐项选。已答复/已套用/随组批准的不动。
+    返回 {'chosen': [issue_id], 'skipped': [issue_id]}。"""
+    decisions = load_decisions(base, ep)
+    chosen, skipped = [], []
+    for group in collect(base, ep)['groups']:
+        for issue in group['issues']:
+            if issue['status'] not in ('open', 'stale'):
+                continue
+            choice = issue['recommended'] or (PROVISIONAL if issue['provisional'] else None)
+            if not choice:
+                skipped.append(issue['issue_id'])
+                continue
+            decisions[issue['issue_id']] = {'choice': choice, 'note': '全部选择推荐方案', 'by': by,
+                                            'at': time.strftime('%Y-%m-%dT%H:%M:%S+08:00'), 'issue_hash': issue['issue_hash']}
+            chosen.append(issue['issue_id'])
+    if chosen:
+        _save_decisions(base, ep, decisions)
+    return {'chosen': chosen, 'skipped': skipped}
 
 
 def accept_provisional(base: Path, ep: str, by: str = 'sign:g6w') -> list:

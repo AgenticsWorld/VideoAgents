@@ -355,6 +355,37 @@ async def approve(project: str, ep: str, body: dict | None = None):
     return await checked(_do)
 
 
+@router.post('/approve-all')
+async def approve_all(project: str, ep: str):
+    """顶栏「全部批准」:本集所有已白模调度、且未批准(或批准已过期)的组一次批准;口径同逐组 /approve(未答待决项随之 waived)。
+    未白模调度的组(自动推断草稿)跳过并列在 skipped。"""
+    def _do():
+        base, doc, episode = _load(project, ep)
+        current = dm.approvals_public(doc, episode)
+        done, skipped = [], []
+        for group in episode['groups']:
+            gid = group['group_id']
+            if gid in current and not current[gid]['stale']:
+                continue
+            if not dm.plan_path(base, ep, gid).is_file() or group.get('scene_id') not in episode.get('scenes', {}):
+                skipped.append(gid)
+                continue
+            dm.set_approval(doc, gid, dm.group_sha(episode, group), True)
+            done.append(gid)
+        out = {'ok': True, 'approved': done, 'skipped': skipped}
+        if done:
+            dm.save_ledger(base, ep, doc)
+            from modules.whitebox_issues import collect, waive_groups
+            out['waived'] = waive_groups(base, ep, done, True)
+            if out['waived']:
+                col = collect(base, ep)
+                out['issues'] = {g['group_id']: g['issues'] for g in col['groups'] if g['group_id'] in out['waived']}
+                out['issues_summary'] = col['summary']
+        out.update(approvals=dm.approvals_public(doc, episode), summary=dm.summary(doc))
+        return out
+    return await checked(_do)
+
+
 @router.post('/signoff')
 async def signoff(project: str, ep: str, body: dict | None = None):
     """答复 H3W 白模签字卡(与控制台同一条);阻断级待决项未清时宿主拒签(409)。"""

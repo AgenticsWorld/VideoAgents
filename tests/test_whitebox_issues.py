@@ -177,3 +177,29 @@ def test_group_approval_waives_open_issues(project):
     collected = collect(project, 'ep01')
     assert collected['summary']['blocking_open'] == 1 and collected['summary']['decided'] == 1
     assert decided_pending(collected)[0]['choice'] == 'B'
+
+
+def test_choose_recommended_answers_all_open_issues(project):
+    """导演台「全部选择推荐方案」:未答复的不分阻断/建议都选推荐(没推荐用默认取舍),两者都没有的跳过;已答复的不动。"""
+    from modules.whitebox_issues import choose_recommended
+    issue_c = {**ISSUE_A, 'issue_id': 'WBI-ep01-grp1-003', 'question': ISSUE_A['question'] + '(三)', 'recommended': None}
+    issue_d = {**ISSUE_B, 'issue_id': 'WBI-ep01-grp1-004', 'question': ISSUE_B['question'] + '(四)', 'recommended': 'B'}
+    issue_e = {**ISSUE_A, 'issue_id': 'WBI-ep01-grp1-005', 'question': ISSUE_A['question'] + '(五)'}
+    write(project / 'directing/ep01/whitebox_plans/grp1.json', plan_with([ISSUE_A, ISSUE_B, issue_c, issue_d, issue_e]))
+    decide(project, 'ep01', issue_e['issue_id'], 'B')                       # 用户已自己选过:不覆盖
+    result = choose_recommended(project, 'ep01')
+    assert result == {'chosen': [ISSUE_A['issue_id'], issue_c['issue_id'], issue_d['issue_id']], 'skipped': [ISSUE_B['issue_id']]}
+    decisions = load_decisions(project, 'ep01')
+    assert decisions[ISSUE_A['issue_id']]['choice'] == 'A' and decisions[issue_c['issue_id']]['choice'] == 'provisional'
+    assert decisions[issue_d['issue_id']]['choice'] == 'B' and decisions[issue_e['issue_id']]['choice'] == 'B'
+    summary = collect(project, 'ep01')['summary']
+    assert summary['decided'] == 4 and summary['open'] == 1 and summary['blocking_ids'] == [ISSUE_B['issue_id']]
+    assert choose_recommended(project, 'ep01') == {'chosen': [], 'skipped': [ISSUE_B['issue_id']]}   # 幂等
+
+
+def test_waive_groups_batch(project):
+    from modules.whitebox_issues import waive_groups
+    write(project / 'directing/ep01/whitebox_plans/grp1.json', plan_with([ISSUE_A, ISSUE_B]))
+    assert waive_groups(project, 'ep01', ['grp1', 'grp9'], True) == {'grp1': [ISSUE_A['issue_id'], ISSUE_B['issue_id']]}
+    assert collect(project, 'ep01')['summary']['waived'] == 2
+    assert waive_groups(project, 'ep01', ['grp9'], False) == {}

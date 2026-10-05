@@ -81,6 +81,16 @@ async def decide_issue(project: str,ep: str,issue_id: str,body: dict):
     return {'issue':issue,'summary':summary,'text':format_summary(summary,core.ui_lang_code() or 'zh')}
 
 
+@router.post('/{ep}/issues/recommended')
+async def choose_recommended_issues(project: str,ep: str):
+    """导演台「全部选择推荐方案」:本集所有未答复的待决项选推荐方案(没有推荐的用默认取舍)。返回处理清单 + 各组合并后的 issues。"""
+    from modules.whitebox_issues import choose_recommended,collect,format_summary
+    base=project_path(project,ep)
+    result=await checked(choose_recommended,base,ep,'user:page')
+    data=await checked(collect,base,ep)
+    return {**result,'groups':data['groups'],'summary':data['summary'],'text':format_summary(data['summary'],core.ui_lang_code() or 'zh')}
+
+
 def file_links(project,record):
     return [{'name':Path(path).name,'url':f'/api/v1/projects/{quote(project)}/artifacts/{path}'} for path in record.get('files',[])]
 

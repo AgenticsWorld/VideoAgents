@@ -50,6 +50,15 @@ header select{cursor:pointer;max-width:260px}
 .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;border:1px solid var(--border2);border-radius:14px;padding:2px 10px;color:var(--dim)}
 .pill.run{color:var(--yellow);border-color:#5f4a17}
 .pill.ok{color:var(--green);border-color:#2b5a3c}
+/* 顶栏可点胶囊(已批准 / 提问)+ 下拉菜单 */
+button.pill.menu{background:none;cursor:pointer;font-family:inherit;line-height:inherit}
+button.pill.menu:hover,button.pill.menu.open{border-color:var(--accent);color:var(--text)}
+button.pill.menu.ok:hover,button.pill.menu.ok.open{color:var(--green)}
+button.pill.menu .car{font-size:9px;opacity:.7}
+#pillmenu{position:fixed;display:none;flex-direction:column;min-width:150px;background:var(--panel2);border:1px solid var(--border2);border-radius:8px;padding:4px;z-index:110;box-shadow:0 6px 24px #000a}
+#pillmenu button{background:none;border:0;border-radius:5px;padding:6px 10px;font-size:12.5px;text-align:left;white-space:nowrap}
+#pillmenu button:hover:not(:disabled){background:var(--panel3)}
+#pillmenu button:disabled{opacity:.45;cursor:default}
 .empty{color:var(--dim);text-align:center;margin-top:60px}
 .spin{display:inline-block;animation:spin 1.2s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -384,7 +393,10 @@ function renderEps(){
   const rb=runningBatches();
   h+=rb.length?`<span class="pill run"><span class="spin">⟳</span> ${esc(I18N.f('{n} 个批次运行中',{n:rb.length}))} · ${esc(rb.map(b=>b.group_ids.join(',')).join(' | '))}</span>`:`<span class="pill">${esc(t('无批次运行'))}</span>`;
   const apAll=DD.approvals||{},apN=Object.keys(apAll).filter(k=>grpById(k)).length,apStale=Object.values(apAll).filter(a=>a.stale).length;
-  h+=`<span class="pill ${apN===WB.groups.length&&WB.groups.length?'ok':''}" title="${esc(t('组级批准:看过并认可的组打 ✓;白模再变则标过期'))}">✓ ${esc(I18N.f('已批准 {a}/{n}',{a:apN,n:WB.groups.length}))}${apStale?` · <span style="color:var(--yellow)">${esc(I18N.f('{n} 组过期',{n:apStale}))}</span>`:''}</span>`;
+  h+=`<button class="pill menu ${apN===WB.groups.length&&WB.groups.length?'ok':''}" data-pillmenu="approve" title="${esc(t('组级批准:看过并认可的组打 ✓;白模再变则标过期'))}">✓ ${esc(I18N.f('已批准 {a}/{n}',{a:apN,n:WB.groups.length}))}${apStale?` · <span style="color:var(--yellow)">${esc(I18N.f('{n} 组过期',{n:apStale}))}</span>`:''}<span class="car">▾</span></button>`;
+  // Agent 提问:已选择(已选 / 已套用 / 随组批准接受)/ 总数
+  const iq=issueStats();
+  h+=`<button class="pill menu ${iq.total&&iq.answered===iq.total?'ok':''}" data-pillmenu="issues" title="${esc(t('Agent 提问:已选择 / 总数'))}">⚠ ${esc(I18N.f('提问 {a}/{n}',{a:iq.answered,n:iq.total}))}<span class="car">▾</span></button>`;
   h+=`<span id="gatebox">${gateHtml()}</span>`;
   if(!DD.whitebox_enabled)h+=`<span class="pill" style="color:var(--yellow)">${esc(t('项目未开启「人物精确空间位置」,白模链未启用'))}</span>`;
   if(WB.errors&&WB.errors.length)h+=`<span class="pill" style="color:var(--red)" title="${esc(WB.errors.map(e=>e.group_id+': '+e.error).join('\n'))}">${esc(I18N.f('{n} 组编译报错',{n:WB.errors.length}))}</span>`;
@@ -394,6 +406,56 @@ function renderEps(){
   renderEpSubmit();
   $('#ep-submit').onclick=()=>{const b=$('#ep-submit');b.dataset.busy='1';submitBatch({},b)};
 }
+
+/* 顶栏胶囊菜单:✓ 已批准 → 全部批准;⚠ 提问 → 全部选择推荐方案 */
+function issueStats(){
+  let total=0,answered=0,pending=0;
+  for(const g of (WB||{}).groups||[])for(const i of g.issues||[]){total++;if(i.status==='open'||i.status==='stale')pending++;else answered++}
+  return {total,answered,pending};
+}
+// 可批准的组:已白模调度、且未批准或批准已过期
+const approvableGroups=()=>((WB||{}).groups||[]).filter(g=>!unplanned(g.group_id)&&(!(DD.approvals||{})[g.group_id]||(DD.approvals||{})[g.group_id].stale));
+function closePillMenu(){const m=$('#pillmenu');if(m)m.style.display='none';$$('#eps .pill.menu.open').forEach(b=>b.classList.remove('open'))}
+function openPillMenu(btn){
+  let m=$('#pillmenu');if(!m){m=document.createElement('div');m.id='pillmenu';document.body.appendChild(m)}
+  const kind=btn.dataset.pillmenu;
+  if(m.style.display==='flex'&&m.dataset.kind===kind){closePillMenu();return}
+  closePillMenu();
+  if(kind==='approve'){const n=approvableGroups().length;
+    m.innerHTML=`<button data-act="approve-all" ${n?'':'disabled'} title="${esc(t('批准本集所有已完成白模调度的组;各组未答的 Agent 提问随之按当前白模接受'))}">✓ ${esc(t('全部批准'))}${n?` (${n})`:''}</button>`}
+  else{const n=issueStats().pending;
+    m.innerHTML=`<button data-act="recommend-all" ${n?'':'disabled'} title="${esc(t('给本集所有未答的 Agent 提问选择推荐方案(没有推荐方案的用默认取舍);提交本集时套用'))}">☑ ${esc(t('全部选择推荐方案'))}${n?` (${n})`:''}</button>`}
+  m.dataset.kind=kind;m.style.display='flex';btn.classList.add('open');
+  const r=btn.getBoundingClientRect();m.style.top=(r.bottom+4)+'px';m.style.left=Math.max(8,Math.min(r.left,innerWidth-m.offsetWidth-8))+'px';
+}
+async function approveAll(){
+  try{
+    const r=await J(api('/approve-all'),'POST',{});
+    DD.approvals=r.approvals;DD.summary=r.summary;
+    for(const [gid,list] of Object.entries(r.issues||{})){const g=grpById(gid);if(g)g.issues=list}
+    renderRight();renderApproveBtn();renderLeft();renderEps();
+    const n=(r.approved||[]).length,k=(r.skipped||[]).length;
+    toast((n?I18N.f('已批准 {n} 组',{n}):t('没有可批准的组'))+(k?' · '+I18N.f('{n} 组尚未白模调度,已跳过',{n:k}):''),5000);
+  }catch(e){toast(t('批准失败:')+e.message,6000)}
+}
+async function recommendAll(){
+  try{
+    const r=await J(wbApi(encodeURIComponent(EP)+'/issues/recommended'),'POST',{});
+    for(const row of r.groups||[]){const g=grpById(row.group_id);if(g)g.issues=row.issues}
+    renderRight();renderLeft();renderEps();
+    const n=(r.chosen||[]).length,k=(r.skipped||[]).length;
+    toast((n?I18N.f('已为 {n} 项提问选择推荐方案,提交本集时套用',{n}):t('没有待答的提问'))+(k?' · '+I18N.f('{n} 项没有推荐方案,需逐项选择',{n:k}):''),6000);
+  }catch(e){toast(t('保存失败:')+e.message,6000)}
+}
+document.addEventListener('click',e=>{
+  const act=e.target.closest('#pillmenu [data-act]');
+  if(act){if(act.disabled)return;closePillMenu();(act.dataset.act==='approve-all'?approveAll:recommendAll)();return}
+  const b=e.target.closest('#eps [data-pillmenu]');
+  if(b&&DD&&WB){openPillMenu(b);return}
+  closePillMenu();
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closePillMenu()});
+addEventListener('resize',closePillMenu);
 
 function gateHtml(){
   const g=DD.gate||{};
@@ -1553,7 +1615,7 @@ async function decideIssue(issueId,choice,btn){
   try{
     const r=await J(wbApi(encodeURIComponent(EP)+'/issues/'+encodeURIComponent(issueId)+'/decision'),'POST',{choice});
     const g=grpById(SEL);const idx=(g.issues||[]).findIndex(i=>i.issue_id===issueId);if(idx>=0)g.issues[idx]=r.issue;
-    renderRight();renderLeft();
+    renderRight();renderLeft();renderEps();
   }catch(e){toast(t('保存失败:')+e.message);btn.disabled=false}
 }
 async function submitBatch(body,btn){
