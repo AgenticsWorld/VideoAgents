@@ -13,6 +13,7 @@
   python code/render_scene_panos.py --project <slug> --scene SCN-0002 --anchor -8,5 --force   # 手动加锚点(x,z[,yaw°],锁定)并全部重出
   python code/render_scene_panos.py --project <slug> --scene SCN-0002 --anchor -8,5 --only-new --scheme L1   # 只加锚点并只出它这一张(预览页「创建全景图」走这条;不规划、其它锚点不动;没有机位也可)
   python code/render_scene_panos.py --project <slug> --scene SCN-0002 --anchor -8,5,0,15 --only-new --scheme L1   # 第 4 项 y = 相机脚下平面海拔(米):相机 = y + 眼高;落在实体块里报错
+  python code/render_scene_panos.py --project <slug> --scene SCN-0002 --anchor -8,5,135,11.6 --camera-y --only-new   # 第 4 项 y = 相机本身的高度(预览页「3D 白模」板块按当前视角创建走这条):位置照用,不加眼高、不夹回地面
   python code/render_scene_panos.py --project <slug> --scene SCN-0002 --replan --force        # 重新规划(保留锁定锚点)并重出
   python code/render_scene_panos.py --project <slug> --scene SCN-0002 --redo A2 A3  # 只重出这两个锚点的全景(其余不动;各自独立出图)
   python code/render_scene_panos.py --project <slug> --scene SCN-0002 --status      # 机检 scene_panos_ready:每 (锚点, 方案) 是否齐
@@ -40,6 +41,8 @@ def main():
         ap.add_argument('--force', action='store_true', help='重渲白模全景并重出全部方案全景(旧全景作废)')
         ap.add_argument('--replan', action='store_true', help='重新规划锚点(locked 锚点保留)')
         ap.add_argument('--anchor', action='append', default=[], help='手动锚点 x,z[,yaw°[,y]](白模米制坐标,锁定;可多次;y = 相机脚下平面海拔,相机 = y + 眼高,缺省自动找站立面)')
+        ap.add_argument('--camera-y', action='store_true',
+                        help='配合 --anchor x,z,yaw,y(--only-new / --dry-run):第 4 项 y 是相机本身的高度(白模视口取位),位置照用——不加眼高、不夹回地面,出界 / 落在实体块里报错')
         ap.add_argument('--only-new', action='store_true', help='配合 --anchor:不重新规划,只给本次新加的锚点出全景(其它锚点/背景图不动)')
         ap.add_argument('--scheme', default=None, help='只出这个光照方案(slug,见 --status 的 schemes);--only-new 时缺省取机位在用的第一个方案')
         ap.add_argument('--redo', nargs='+', default=None, help='只作废并重出这些锚点的全景(如 --redo A2 A3;旧图改名 .redo-<时间>.png 保留)')
@@ -73,6 +76,14 @@ def main():
     idx = sp.load_index(base, sid)
     only = None
     schemes = None
+    if args.camera_y and (not (args.only_new or args.dry_run) or any(len(spec.split(',')) < 4 for spec in args.anchor) or not args.anchor):
+        print('--camera-y 须配合 --anchor x,z,yaw,y 与 --only-new(或 --dry-run)', file=sys.stderr)
+        return 1
+
+    def height_kw(parts):   # --anchor 第 4 项:缺省 = 脚下平面海拔(相机 = y + 眼高);--camera-y = 相机本身的高度
+        if len(parts) < 4:
+            return {}
+        return {'camera_y': parts[3]} if args.camera_y else {'y': parts[3]}
     if args.scheme:
         opts = {o['scheme']: o for o in sp.scene_scheme_options(base, sid, cams)}
         if args.scheme not in opts:
@@ -89,7 +100,7 @@ def main():
                 return 1
             try:
                 a = sp.add_manual_anchor(base, sid, parts[0], parts[1], parts[2] if len(parts) > 2 else 0.0, cameras=cams, persist=False,
-                                         y=parts[3] if len(parts) > 3 else None)
+                                         **height_kw(parts))
             except sp.PanoError as error:
                 print(f"错误:{error}", file=sys.stderr, flush=True)
                 return 1
@@ -108,7 +119,7 @@ def main():
                 return 1
             try:
                 a = sp.add_manual_anchor(base, sid, parts[0], parts[1], parts[2] if len(parts) > 2 else 0.0, cameras=cams,
-                                         y=parts[3] if len(parts) > 3 else None)
+                                         **height_kw(parts))
             except sp.PanoError as error:
                 print(f"错误:{error}", file=sys.stderr, flush=True)
                 return 1

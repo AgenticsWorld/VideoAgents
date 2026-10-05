@@ -2326,6 +2326,12 @@ window.I18N_DICT = {
 "{n} 个锚点": "{n} anchors",
 // 创建全景图(2026-09-13):板块始终显示 + 俯视图点选坐标出一张全景
 "➕ 创建全景图": "➕ Create panorama",
+// 「3D 白模」板块的「创建全景图」(2026-10-05):按白模旋转视角当前的相机位置与朝向出一张,弹窗确认后才创建
+"按白模旋转视角当前的摄像机位置(x / y / z)与朝向(yaw)出一张 2:1 全景(只出这一张,其它锚点不动;消耗全景模型出图费用)": "Generate one 2:1 panorama from the blockout orbit view’s current camera position (x / y / z) and heading (yaw) (only this one; other anchors untouched; costs panorama-model image credits)",
+"请先把「3D 白模」切到「旋转视角」,再按当前视角创建全景图": "Switch “3D blockout” to “Orbit view” first, then create the panorama from the current view",
+"当前白模摄像机 ({x}, {z}) 在场景地面范围之外(x ±{mx} m、z ±{mz} m 以内才能出全景),请先把视角移到场景内": "The blockout camera ({x}, {z}) is outside the scene ground (a panorama needs x within ±{mx} m and z within ±{mz} m). Move the view inside the scene first",
+"当前白模摄像机在地面以下,请先把视角升到地面以上": "The blockout camera is below the ground. Raise the view above the ground first",
+"将基于当前的白模摄像机位置和视角来创建全景图:\n位置 x {x} · y {y} · z {z} m,朝向 yaw {yaw}°\n光照方案:{scheme}\n\n只出这一张,其它锚点不动;消耗全景模型出图费用。确认创建?": "A panorama will be created from the current blockout camera position and view:\nPosition x {x} · y {y} · z {z} m, heading yaw {yaw}°\nLighting scheme: {scheme}\n\nOnly this one is generated; other anchors are untouched; it costs panorama-model image credits. Create it?",
 "服务未重启:创建全景图接口不可用": "Service not restarted: the create-panorama API is unavailable",
 "项目「白模」选项已关闭,不能生成全景图": "The project “Whitebox” option is off; panoramas cannot be generated",
 "该场景还没有白模,不能出全景(先建场景白模)": "This scene has no whitebox yet; build the scene whitebox first",

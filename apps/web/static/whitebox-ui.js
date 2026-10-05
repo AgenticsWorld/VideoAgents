@@ -74,6 +74,16 @@ async function mount(host,project,scene,group=null,ep='') {
     space.bindFly?.();   // 旋转视角漫游(2026-09-26,同世界模型视窗:拖动转头、滚轮前进、WASD/QE 平移);测试桩渲染器没有该方法
     if(group){camera=new WhiteboxRenderer(host.querySelector('.wb-camera'),{...format,controls:false});camera.load(scene,group);}
   } catch(e){host.querySelector('.wb-result').textContent=t('3D 加载失败：{error}',{error:wbMessage(e.message)});dispose();return;}
+  // 旋转视角当前的相机位姿(2026-10-05,场景预览页「3D 白模」板块的「创建全景图」按它出图):position 白模米制坐标,
+  // yaw_deg 与全景锚点同一约定(0 朝 -Z = 俯视图上方,+90° 转向 -X = 图左)。wbSetPose 把视角摆回去(出图后页面重载用)。测试桩渲染器没有这些方法
+  if(!group&&space.overview&&space.flyDirection){
+    const deg=180/Math.PI;
+    host.wbPose=()=>{const p=space.overview.position,d=space.flyDirection();
+      return {view:host.querySelector('select').value,position:[p.x,p.y,p.z],yaw_deg:((Math.atan2(-d.x,-d.z)*deg)%360+360)%360,pitch_deg:Math.asin(Math.max(-1,Math.min(1,d.y)))*deg};};
+    host.wbSetPose=pose=>{space.overview.position.fromArray(pose.position);
+      if(space.fly){space.fly.yaw=pose.yaw_deg/deg;space.fly.pitch=Math.max(-1.5,Math.min(1.5,(pose.pitch_deg||0)/deg));space.applyFly();}};
+    host.dispatchEvent(new CustomEvent('wb:ready'));
+  }
   const render=()=>{
     space.setTime(time);space.render(host.querySelector('select').value);
     if(camera){camera.setTime(time);camera.render('camera');host.querySelector('.wb-time').textContent=`${time.toFixed(2)} / ${group.duration_s.toFixed(2)} s · ${camera.shotId}`;host.querySelector('input').value=time;}

@@ -7561,6 +7561,9 @@ def _preview_scenes(project: str):
                 panos["scheme_options"] = []
             panos["has_whitebox"] = (adir / sid / "layout.json").is_file()   # 与 modules.whitebox.load_scene 的前提一致(俯视图布局包)
             panos["job"] = _scene_job_view(PANO_JOBS, base.name, sid)
+            # 创建接口认 camera_y(2026-10-05「3D 白模」板块按当前视角创建):页面据此才启用那个按钮——
+            # 静态页先于服务更新时,旧接口会忽略 camera_y、按「站立面 + 眼高」另取高度出一张不对的图(白花钱)
+            panos["view_pose"] = True
             pdir = adir / sid / "panos"
             for a in panos["anchors"]:
                 aid = a["anchor_id"]
@@ -8103,6 +8106,8 @@ async def api_scene_pano_start(project: str, sid: str, body: dict):
     """场景预览页「创建全景图」(2026-09-13):{x, z, yaw?, y?, scheme?} 白模米制坐标(俯视图点选换算)→ 后台跑
     code/render_scene_panos.py --anchor x,z[,yaw[,y]] --only-new --scheme <slug>:加一个锁定锚点、只出它这一张全景,其它锚点/背景图不动。
     y(2026-09-29)= 相机脚下平面海拔(0 = 地面),相机 = y + 眼高;请求体不带 y 照旧自动找站立面。落在实体块里由 CLI 报错(任务 failed)。
+    camera_y(2026-10-05「3D 白模」板块的「创建全景图」)= 相机本身的高度:按白模旋转视角当前的相机位置 (x, camera_y, z) 与 yaw 出,
+    位置照用(CLI --camera-y:不加眼高、不夹回地面;出界 / 落在实体块里任务 failed);与 y 同给时以 camera_y 为准。
     进度经 SSE scene_panos 事件;完成后预览数据里多出该锚点。退出码 2 = 全景模型不支持 2:1(index.json#blocked,预览页红条)。"""
     base = _proj_base(project)
     sid = re.sub(r"[^\w\-]", "", sid)
@@ -8116,22 +8121,28 @@ async def api_scene_pano_start(project: str, sid: str, body: dict):
         x, z = float(body.get("x")), float(body.get("z"))
         yaw = float(body.get("yaw") or 0.0)
         y = None if body.get("y") in (None, "") else float(body.get("y"))
+        camera_y = None if body.get("camera_y") in (None, "") else float(body.get("camera_y"))
     except (TypeError, ValueError):
         raise ServiceError(400, "x/z(米,白模坐标)必填且须为数字") from None
     if not all(math.isfinite(v) for v in (x, z, yaw)):
         raise ServiceError(400, "x/z/yaw 须为有限数")
     if y is not None and not (math.isfinite(y) and y >= 0):
         raise ServiceError(400, "y(相机脚下平面海拔,米)须为 ≥ 0 的有限数")
+    if camera_y is not None and not (math.isfinite(camera_y) and camera_y > 0):
+        raise ServiceError(400, "camera_y(相机高度,米)须为 > 0 的有限数")
     scheme = re.sub(r"[^A-Za-z0-9_\-]", "", str(body.get("scheme") or ""))
     jobkey = f"{base.name}/{sid}"
     if (PANO_JOBS.get(jobkey) or {}).get("status") == "running":
         raise ServiceError(409, f"{sid} 正在生成全景图")
     cmd = [sys.executable, "-u", str(ROOT / "code" / "render_scene_panos.py"), "--project", base.name, "--scene", sid,
            "--anchor", f"{x:g},{z:g},{yaw:g}" + ("" if y is None else f",{y:g}"), "--only-new"]
+    if camera_y is not None:
+        cmd[cmd.index("--anchor") + 1] = f"{x:g},{z:g},{yaw:g},{camera_y:g}"
+        cmd.append("--camera-y")
     if scheme:
         cmd += ["--scheme", scheme]
     PANO_JOBS[jobkey] = {"status": "running", "log": [], "started_at": time.time(), "finished_at": None, "error": "",
-                         "params": {"x": x, "z": z, "yaw": yaw, "y": y, "scheme": scheme}}
+                         "params": {"x": x, "z": z, "yaw": yaw, "y": y, "camera_y": camera_y, "scheme": scheme}}
     threading.Thread(target=_scene_job_worker, args=(PANO_JOBS, "scene_panos", base.name, sid, jobkey, cmd),
                      kwargs={"rc2_error": "当前全景模型不支持 2:1 全景,请到本页顶部「🌐 全景模型」切换后重试"}, daemon=True).start()
     HUB.publish({"type": "scene_panos", "project": base.name, "scene": sid, "status": "running", "line": ""})

@@ -25,6 +25,7 @@
 `code/render_scene_panos.py --anchor x,z --force` 或直接改 index.json 后 --force 重出。
 预览页「创建全景图」(2026-09-13):俯视图上点一个坐标 → add_manual_anchor 加锁定锚点 → ensure_scene_panos(only=[新锚点], schemes={所选方案})
 只出这一张(独立出图;同锚点已有其它方案时重打光),其它锚点与背景图不动;后台任务 = CLI --anchor x,z[,yaw[,y]] --only-new --scheme <slug>
+(「3D 白模」板块的「创建全景图」= 按当前旋转视角的相机位置与朝向出:加 --camera-y,第 4 项 y 即相机本身的高度)
 (y = 相机脚下平面海拔,2026-09-29;预览页默认 0 = 地面,相机 = y + 眼高;不带 y 照旧自动找站立面)。
 """
 from __future__ import annotations
@@ -191,6 +192,23 @@ def _inside(p, obj, margin=0.0) -> bool:
     c, s = math.cos(-yaw), math.sin(-yaw)
     lx, lz = dx * c - dz * s, dx * s + dz * c
     return abs(lx) <= sx / 2 + margin and abs(lz) <= sz / 2 + margin and abs(y - cy) <= sy / 2 + margin
+
+
+def _inside_shape(p, obj) -> bool:
+    """点是否在物体的真实形状里(球 = 内接椭球、圆柱 = 竖直椭圆柱,同 raycast / 白模渲染);_inside 按包围盒,
+    贴着树冠飞的白模视角会被误判成「在实体块里」。"""
+    if not _inside(p, obj):
+        return False
+    shape = obj.get('shape') or 'box'
+    if shape == 'box':
+        return True
+    cx, cy, cz = obj['position']; hx, hy, hz = (max(float(v) / 2, 1e-9) for v in obj['size_m'])
+    yaw = float(obj.get('yaw') or 0)
+    dx, dz = p[0] - cx, p[2] - cz
+    c, sn = math.cos(-yaw), math.sin(-yaw)
+    lx, lz = dx * c - dz * sn, dx * sn + dz * c
+    flat = (lx / hx) ** 2 + (lz / hz) ** 2
+    return flat + ((p[1] - cy) / hy) ** 2 <= 1 if shape == 'sphere' else flat <= 1
 
 
 def _clearance(p, objects) -> float:
@@ -372,6 +390,25 @@ def manual_anchor_pos(scene: dict, x: float, z: float, y: float, eye: float, *, 
         free = [t for t in surfaces_at(scene, x, z) if _free_at(scene, [x, t + eye, z])]
         raise PanoError(f'({x}, {z}) y={y:g} m:相机高 {p[1]} m 处在白模实体块里,出不了全景;'
                         + (f"该点可站的平面海拔:{' / '.join(f'{t:g}' for t in free)} m" if free else '该点被体块包死,请换一个位置'))
+    return p
+
+
+def camera_anchor_pos(scene: dict, x: float, z: float, camera_y: float, *, indoor: bool = False) -> list:
+    """白模视口取位的锚点位置 [x, camera_y, z](2026-10-05 预览页「3D 白模」板块的「创建全景图」):相机位置照用,不加眼高、不找站立面、
+    不夹回地面。相机在白模地面范围外(留 0.5 m 边)/ 不高于地面 / 落在实体块里 / 室内高过屋顶 → PanoError,不悄悄挪位。"""
+    w, top, d = (float(v) for v in scene['dimensions_m'])
+    if not all(math.isfinite(v) for v in (x, z, camera_y)):
+        raise PanoError(f'相机位置须为有限数:({x}, {camera_y}, {z})')
+    if abs(x) > w / 2 - .5 or abs(z) > d / 2 - .5:
+        raise PanoError(f'相机 ({x:g}, {z:g}) 在白模地面范围之外(x ±{w / 2 - .5:g} m、z ±{d / 2 - .5:g} m 以内才能出全景),请把白模视角移到场景内')
+    if camera_y <= 0:
+        raise PanoError(f'相机高度须高于地面:{camera_y:g} m')
+    p = [round(x, 3), round(camera_y, 3), round(z, 3)]
+    if indoor and p[1] >= top - .2:
+        raise PanoError(f'相机高 {p[1]} m 已到室内屋顶({top:g} m)之外,请把白模视角降到 {round(top - .3, 1):g} m 以下')
+    hit = next((o['id'] for o in scene.get('objects', []) if _inside_shape(p, o)), None)
+    if hit:
+        raise PanoError(f'相机 ({x:g}, {camera_y:g}, {z:g}) 处在白模实体块 {hit} 里,出不了全景,请把白模视角移到空处')
     return p
 
 
@@ -1945,12 +1982,14 @@ def probe_anchor_height(base: Path, sid: str, x: float, z: float, *, cameras: li
 
 
 def add_manual_anchor(base: Path, sid: str, x: float, z: float, yaw_deg: float = 0.0, *, cameras: list | None = None,
-                      persist: bool = True, y: float | None = None) -> dict:
+                      persist: bool = True, y: float | None = None, camera_y: float | None = None) -> dict:
     """手动加一个锁定锚点(预览页俯视图点选 / CLI --anchor):坐标夹回白模地面内 0.5 m,高度 = 该点站立面 + 眼高(城墙顶/楼上随最近机位那一层),
     serves = 尚无锚点服务且它能服务的机位(不抢已有锚点的机位,不改动其它锚点)。写回 index.json,返回新锚点。
     persist=False(CLI --dry-run):只算出这个锚点会是什么样,不写索引。
     y(2026-09-29 预览页「创建全景图」的 y 输入):相机脚下平面的海拔(米,0 = 地面),相机高度 = y + 眼高,不再自动找站立面;
-    落在实体块里 / 室内场景高过屋顶 → PanoError(报出该点可站的平面海拔)。y=None 照旧自动。"""
+    落在实体块里 / 室内场景高过屋顶 → PanoError(报出该点可站的平面海拔)。y=None 照旧自动。
+    camera_y(2026-10-05「3D 白模」板块的「创建全景图」):相机本身的高度,位置 (x, camera_y, z) 照用(camera_anchor_pos:不加眼高、不夹回地面,
+    出界 / 落在实体里报错);与 y 同给时以 camera_y 为准。"""
     from modules.whitebox import load_scene
     sid = component(sid)
     scene = load_scene(base, sid)
@@ -1961,13 +2000,17 @@ def add_manual_anchor(base: Path, sid: str, x: float, z: float, yaw_deg: float =
     w, _, d = scene['dimensions_m']
     px = round(max(-w / 2 + .5, min(w / 2 - .5, float(x))), 3)
     pz = round(max(-d / 2 + .5, min(d / 2 - .5, float(z))), 3)
+    if camera_y is not None:
+        px, pz = float(x), float(z)       # 白模视口取位:不夹回,出界由 camera_anchor_pos 报错
     used = {a['anchor_id'] for a in idx['anchors']}
     n = len(idx['anchors']) + 1
     while f'A{n}' in used:
         n += 1
     served = {k for a in idx['anchors'] for k in a.get('serves', [])}
     eye = default_anchor_height(cams, scene)
-    if y is None:
+    if camera_y is not None:
+        pos = camera_anchor_pos(scene, px, pz, float(camera_y), indoor=scene_indoor(base, sid) is True)
+    elif y is None:
         pos = anchor_pos_at(scene, px, pz, cams, eye)   # 该点站立面 + 眼高(与最近机位同层)
     else:
         pos = manual_anchor_pos(scene, px, pz, float(y), eye, indoor=scene_indoor(base, sid) is True)

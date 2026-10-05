@@ -633,3 +633,31 @@ def test_elevated_anchor_is_described_as_mid_air_viewpoint():
     assert words.startswith('11.6 m above the floor') and 'seen from above' in words
     wall = {'dimensions_m': [60, 30, 60], 'objects': [box('wall', (0, 6, 0), (6, 12, 50))]}
     assert not sp._elevated(wall, [0, 13.6, 0])                                   # 站在 12 m 墙顶不是悬空
+
+
+# ---- 2026-10-05 「3D 白模」板块按当前视角创建全景:相机位置照用(不加眼高、不夹回地面)
+def test_camera_anchor_pos_uses_exact_camera_and_rejects_bad_spots():
+    import pytest
+    scene = _treetop_scene()
+    assert sp.camera_anchor_pos(scene, 10.123456, -4.5, 7.25) == [10.123, 7.25, -4.5]
+    assert sp.camera_anchor_pos(scene, -4.1 + 2.4, 0 + 2.4, 9 + 3.2) == [-1.7, 12.2, 2.4]    # 树冠包围盒的角上、椭球之外:不算在实体里
+    for bad in ((60, 0, 5), (0, 29.8, 5), (0, 0, 0), (0, 0, -1), (-4.1, 0, 9), (-22, 16, 4)):   # 出界 x / 出界 z / 贴地 / 地下 / 树冠里 / 殿里
+        with pytest.raises(sp.PanoError):
+            sp.camera_anchor_pos(scene, bad[0], bad[1], bad[2])
+    room = {'dimensions_m': [10, 3, 10], 'objects': []}
+    with pytest.raises(sp.PanoError):
+        sp.camera_anchor_pos(room, 0, 0, 2.9, indoor=True)                                  # 室内高过屋顶
+    assert sp.camera_anchor_pos(room, 0, 0, 2.9) == [0, 2.9, 0]
+
+
+def test_add_manual_anchor_with_camera_y_keeps_view_pose(tmp_path):
+    import json
+    sdir = tmp_path / 'assets/concepts/scenes/SCN-0001'; sdir.mkdir(parents=True)
+    (sdir / 'layout.json').write_text(json.dumps({'scene_id': 'SCN-0001', 'landmarks': []}), encoding='utf-8')
+    bdir = tmp_path / 'bible/scenes/SCN-0001'; bdir.mkdir(parents=True)
+    (bdir / 'whitebox.json').write_text(json.dumps(_treetop_scene()), encoding='utf-8')
+    a = sp.add_manual_anchor(tmp_path, 'SCN-0001', 12.5, -3.25, 137.0, cameras=[], camera_y=6.4, persist=False)
+    assert a['position'] == [12.5, 6.4, -3.25] and a['yaw_deg'] == 137.0 and a['source'] == 'manual' and a['locked']
+    import pytest
+    with pytest.raises(sp.PanoError):
+        sp.add_manual_anchor(tmp_path, 'SCN-0001', 49.9, 0, 0.0, cameras=[], camera_y=6.4, persist=False)   # 出界不夹回,报错

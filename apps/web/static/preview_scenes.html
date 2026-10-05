@@ -302,7 +302,7 @@ function renderList(){
 }
 
 function renderDetail(s){
-  import('/static/whitebox-ui.js?v=20260926-flykeys').then(m=>m.resetWhitebox());
+  import('/static/whitebox-ui.js?v=20261005-pose').then(m=>m.resetWhitebox());
   const box=$('#detail');
   const m=s.meta||{};
   const aliases=(m.aliases||[]).map(a=>a.name||a).filter(Boolean);
@@ -464,7 +464,7 @@ function renderDetail(s){
   const gallery=box.querySelector('.blk[data-blk="gallery"]');
   if(gallery)gallery.after(whitebox);
   else box.insertBefore(whitebox,box.querySelector('.doc'));
-  import('/static/whitebox-ui.js?v=20260926-flykeys').then(m=>m.mountScene(whitebox,$('#project').value.trim()||'demo',s.id));
+  import('/static/whitebox-ui.js?v=20261005-pose').then(m=>m.mountScene(whitebox,$('#project').value.trim()||'demo',s.id));
   // 🌍 世界模型(2026-09-12;2026-09-22 挪到「分镜背景图」板块之上):有背景图板块插其前,否则白模之后(全景图板块随后插到白模与它之间)
   mountWorldSection(whitebox,s);
   // 🌐 全景图(2026-09-10):3D 白模之下,按锚点列全景 + 每个锚点中心在俯视图中的坐标;始终显示 + 「创建全景图」(2026-09-13)
@@ -587,6 +587,7 @@ try{
 // → POST /scenes/<sid>/panos → 后台加锁定锚点并只出这一张(SSE scene_panos 逐行日志,done 后原位重载)。
 // 预览 API 未重启(旧服务不带 scenes[].panos)时直接读产物 panos/index.json 兜底(此时创建接口也不可用)。
 let PANO_LIVE=null;   // 当前挂载的板块 {sid, onEvent}
+let WB_KEEP_POSE=null;   // 「3D 白模」板块按当前视角创建全景:{sid, pose},出图后页面重载时把白模视角摆回去(用一次即清)
 async function mountPanoSection(host,s){
   const proj=$('#project').value.trim()||'demo';
   let panos=s.panos,legacy=false;
@@ -862,13 +863,13 @@ async function mountPanoSection(host,s){
       if(!Number.isFinite(x)||!Number.isFinite(z)){status.className='wb-status ps-status err';status.textContent=t('请先在俯视图上点一个位置,或填写 x/z 坐标');return;}
       const yv=form.querySelector('.ps-y').value.trim(),y=yv===''?0:parseFloat(yv);
       if(!Number.isFinite(y)||y<0){status.className='wb-status ps-status err';status.textContent=t('y(脚下平面海拔)须为不小于 0 的数字');return;}
-      stopPick();form.hidden=true;btn.disabled=true;btn.textContent=t('生成中…');
+      stopPick();form.hidden=true;btn.disabled=true;btn.textContent=t('生成中…');wbBusy(true);
       status.className='wb-status ps-status';status.textContent=t('正在生成全景图…');log.hidden=false;log.textContent='';
       try{
         const r=await fetch(`/api/v1/projects/${encodeURIComponent(proj)}/scenes/${encodeURIComponent(s.id)}/panos`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({x,z,y,yaw,scheme})});
         const d=await r.json().catch(()=>({}));
         if(!r.ok)throw new Error(d.detail||(r.status===404?t('服务未重启:创建全景图接口不可用'):r.status));
-      }catch(e){btn.disabled=false;btn.textContent=t('➕ 创建全景图');status.className='wb-status ps-status err';status.textContent=t('启动失败:')+e.message;log.hidden=true;form.hidden=false;}
+      }catch(e){btn.disabled=false;btn.textContent=t('➕ 创建全景图');wbBusy(false);status.className='wb-status ps-status err';status.textContent=t('启动失败:')+e.message;log.hidden=true;form.hidden=false;}
     };
   };
   const onMapClick=e=>{
@@ -891,10 +892,54 @@ async function mountPanoSection(host,s){
     else{hint.hidden=false;hint.textContent=t('该场景没有俯视图,请直接填写 x/z 坐标(白模米制,原点在场景中心)');}
     openForm();
   };
+  // ---- 「3D 白模」板块的「➕ 创建全景图」(2026-10-05):按白模旋转视角当前的摄像机位置 (x, y, z) 与朝向 yaw 直接出一张;
+  // 弹窗确认后才提交(POST …/panos {x, z, yaw, camera_y, scheme}:位置照用,不加眼高、不夹回地面)。进度 / 日志仍在本板块。
+  // 白模面板异步挂载(whitebox-ui.js 挂好后在 host 上给出 wbPose / wbSetPose 并发 wb:ready),两边谁先好都能接上
+  let wbBtn=null;
+  const canPose=canCreate&&panos.view_pose===true;
+  const wbBusy=on=>{if(wbBtn)wbBtn.disabled=on||!canPose;};
+  const attachWbBtn=()=>{
+    const heading=host.querySelector(':scope>.wb-toolbar>.wb-heading');
+    if(!heading||!host.wbPose||heading.querySelector('.wb-pano-create'))return;
+    if(WB_KEEP_POSE&&WB_KEEP_POSE.sid===s.id){host.wbSetPose(WB_KEEP_POSE.pose);WB_KEEP_POSE=null;}   // 出图后重载:视角摆回提交时的位置
+    wbBtn=document.createElement('button');wbBtn.type='button';wbBtn.className='wb-pano-create';
+    wbBtn.textContent=t('➕ 创建全景图');
+    // 服务未重启(预览数据没有 panos.view_pose):旧接口不认 camera_y,会按「站立面 + 眼高」另取高度,按钮禁用
+    wbBtn.title=!canCreate?createTitle:!canPose?t('服务未重启:创建全景图接口不可用'):t('按白模旋转视角当前的摄像机位置(x / y / z)与朝向(yaw)出一张 2:1 全景(只出这一张,其它锚点不动;消耗全景模型出图费用)');
+    wbBtn.disabled=!canPose||btn.disabled;
+    heading.appendChild(wbBtn);
+    const msg=document.createElement('div');msg.className='wb-status wb-pano-msg';msg.hidden=true;host.querySelector(':scope>.wb-toolbar').after(msg);
+    const say=text=>{msg.hidden=!text;msg.style.color=text?'var(--red)':'';msg.textContent=text||'';};
+    wbBtn.onclick=async()=>{
+      say('');
+      const pose=host.wbPose();
+      if(pose.view!=='overview'){say(t('请先把「3D 白模」切到「旋转视角」,再按当前视角创建全景图'));return;}
+      const r2=v=>Math.round(v*100)/100;
+      const x=r2(pose.position[0]),camera_y=r2(pose.position[1]),z=r2(pose.position[2]),yaw=Math.round(pose.yaw_deg)%360;
+      const mx=r2(W/2-.5),mz=r2(D/2-.5);
+      if(Math.abs(x)>mx||Math.abs(z)>mz){say(I18N.f('当前白模摄像机 ({x}, {z}) 在场景地面范围之外(x ±{mx} m、z ±{mz} m 以内才能出全景),请先把视角移到场景内',{x,z,mx,mz}));return;}
+      if(camera_y<=0){say(t('当前白模摄像机在地面以下,请先把视角升到地面以上'));return;}
+      const opts=panos.scheme_options||[];
+      const picked=form.querySelector('.ps-scheme')?.value;   // 下方创建表单开着时沿用它选中的光照方案,否则取第一个(机位在用的排前)
+      const opt=opts.find(o=>o.scheme===picked)||opts[0];
+      const scheme=opt?opt.scheme:'';
+      if(!confirm(I18N.f('将基于当前的白模摄像机位置和视角来创建全景图:\n位置 x {x} · y {y} · z {z} m,朝向 yaw {yaw}°\n光照方案:{scheme}\n\n只出这一张,其它锚点不动;消耗全景模型出图费用。确认创建?',{x,y:camera_y,z,yaw,scheme:opt?schemeName(opt):'default'})))return;
+      stopPick();form.hidden=true;btn.disabled=true;btn.textContent=t('生成中…');wbBusy(true);
+      status.className='wb-status ps-status';status.textContent=t('正在生成全景图…');log.hidden=false;log.textContent='';
+      try{
+        const r=await fetch(`/api/v1/projects/${encodeURIComponent(proj)}/scenes/${encodeURIComponent(s.id)}/panos`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({x,z,yaw,camera_y,scheme})});
+        const d=await r.json().catch(()=>({}));
+        if(!r.ok)throw new Error(d.detail||(r.status===404?t('服务未重启:创建全景图接口不可用'):r.status));
+        WB_KEEP_POSE={sid:s.id,pose};
+        blkOpen(sec);sec.scrollIntoView({behavior:'smooth',block:'nearest'});
+      }catch(e){btn.disabled=false;btn.textContent=t('➕ 创建全景图');wbBusy(false);status.className='wb-status ps-status';status.textContent='';log.hidden=true;say(t('启动失败:')+e.message);}
+    };
+  };
+  host.addEventListener('wb:ready',attachWbBtn);attachWbBtn();
   PANO_LIVE={sid:s.id,onEvent(ev){
-    if(ev.status==='running'){if(ev.line){log.hidden=false;log.textContent+=(log.textContent?'\n':'')+ev.line;log.scrollTop=log.scrollHeight;}btn.disabled=true;btn.textContent=t('生成中…');return;}
+    if(ev.status==='running'){if(ev.line){log.hidden=false;log.textContent+=(log.textContent?'\n':'')+ev.line;log.scrollTop=log.scrollHeight;}btn.disabled=true;btn.textContent=t('生成中…');wbBusy(true);return;}
     if(ev.status==='done'){status.className='wb-status ps-status ok';status.textContent=t('全景图生成完成');reloadKeep();}
-    else{status.className='wb-status ps-status err';status.textContent=t('全景图生成失败:')+(ev.error||'');btn.disabled=!canCreate;btn.textContent=t('➕ 创建全景图');reloadKeep();}   // 失败也重载:锚点/白模全景/blocked 红条已落盘
+    else{status.className='wb-status ps-status err';status.textContent=t('全景图生成失败:')+(ev.error||'');btn.disabled=!canCreate;btn.textContent=t('➕ 创建全景图');wbBusy(false);reloadKeep();}   // 失败也重载:锚点/白模全景/blocked 红条已落盘
   }};
 }
 
