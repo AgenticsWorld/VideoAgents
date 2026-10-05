@@ -829,7 +829,7 @@ window.I18N_DICT = {
 "连接本地 ComfyUI(启动时加": "Hubungkan ComfyUI lokal (saat memulai tambahkan",
 "选择一个 Agent 开始": "Pilih satu Agent untuk memulai",
 "通用 S3 协议:AWS S3 / Cloudflare R2 / MinIO / Backblaze B2 等均可(填对应 Endpoint)。注意境外源站方舟拉取可能较慢或不稳。依赖": "Protokol S3 umum: AWS S3 / Cloudflare R2 / MinIO / Backblaze B2 dll. semuanya bisa (isi Endpoint terkait). Perhatikan bahwa pengambilan oleh Ark dari origin luar negeri bisa lambat atau tidak stabil. Bergantung pada",
-"道具设定卡 + 参考图(特写/比例锚图)": "Kartu setting prop + gambar referensi (close-up/gambar anchor skala)",
+"道具设定卡 + 道具图": "Kartu setting prop + gambar prop",
 "道具预览": "Pratinjau Prop",
 "道具预览 · Agentics：VideoAgents": "Pratinjau Prop · Agentics: VideoAgents",
 "生物预览": "Pratinjau Makhluk",

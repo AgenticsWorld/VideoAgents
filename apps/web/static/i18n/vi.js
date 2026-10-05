@@ -829,7 +829,7 @@ window.I18N_DICT = {
 "连接本地 ComfyUI(启动时加": "Kết nối ComfyUI cục bộ (khi khởi động thêm",
 "选择一个 Agent 开始": "Chọn một Agent để bắt đầu",
 "通用 S3 协议:AWS S3 / Cloudflare R2 / MinIO / Backblaze B2 等均可(填对应 Endpoint)。注意境外源站方舟拉取可能较慢或不稳。依赖": "Giao thức S3 chung: AWS S3 / Cloudflare R2 / MinIO / Backblaze B2, v.v. đều được (điền Endpoint tương ứng). Lưu ý với nguồn ở nước ngoài, Ark tải có thể chậm hoặc không ổn định. Phụ thuộc",
-"道具设定卡 + 参考图(特写/比例锚图)": "Thẻ thiết lập đạo cụ + ảnh tham chiếu (cận cảnh/ảnh neo tỷ lệ)",
+"道具设定卡 + 道具图": "Thẻ thiết lập đạo cụ + ảnh đạo cụ",
 "道具预览": "Xem trước đạo cụ",
 "道具预览 · Agentics：VideoAgents": "Xem trước đạo cụ · Agentics: VideoAgents",
 "生物预览": "Xem trước sinh vật",

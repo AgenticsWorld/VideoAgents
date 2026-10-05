@@ -830,7 +830,7 @@ window.I18N_DICT = {
 "连接本地 ComfyUI(启动时加": "ローカル ComfyUI に接続(起動時に",
 "选择一个 Agent 开始": "Agent を選んで開始",
 "通用 S3 协议:AWS S3 / Cloudflare R2 / MinIO / Backblaze B2 等均可(填对应 Endpoint)。注意境外源站方舟拉取可能较慢或不稳。依赖": "汎用 S3 プロトコル:AWS S3 / Cloudflare R2 / MinIO / Backblaze B2 などが利用できます(対応する Endpoint を入力)。海外オリジンからは Ark の取得が遅い/不安定な場合があります。依存:",
-"道具设定卡 + 参考图(特写/比例锚图)": "小道具設定カード + 参照画像(クローズアップ/スケールアンカー画像)",
+"道具设定卡 + 道具图": "小道具設定カード + 小道具画像",
 "道具预览": "小道具プレビュー",
 "道具预览 · Agentics：VideoAgents": "小道具プレビュー · Agentics: VideoAgents",
 "生物预览": "クリーチャープレビュー",

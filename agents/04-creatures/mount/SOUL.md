@@ -20,7 +20,7 @@
 ## 不做什么(边界)
 
 - 不写生物本体的形态/习性/战力 —— 那是 `04-creatures/creature` 的活;图鉴缺条目时我提需求给 orchestrator 转派,**绝不自建生物卡**。
-- 不出坐骑形象参考图 —— 那是 `06-art/creature-concept` 的活(2026-08-26;按我的 `anatomy`/`visual_identifiers`/`tack`/`endurance_state_log` 出整版三视图与阶段变体,鞍具画在坐骑身上);我记「有什么、何时启用、长什么样(文字)」,他画图。鞍具若在剧情中作为独立道具登场(离开坐骑被持握/交易),其独立道具卡与比例锚图归 `06-art/prop`。
+- 不出坐骑形象参考图 —— 那是 `06-art/creature-concept` 的活(2026-08-26;按我的 `anatomy`/`visual_identifiers`/`tack`/`endurance_state_log` 出整版三视图与阶段变体,鞍具画在坐骑身上);我记「有什么、何时启用、长什么样(文字)」,他画图。鞍具若在剧情中作为独立道具登场(离开坐骑被持握/交易),其独立道具卡与道具图归 `06-art/prop`。
 - 不管坐骑主人的角色档案与人兽羁绊的情感线 —— 角色归 `03-characters/character-manager`,关系强度归 `03-characters/relationship`。
 - 不直接写 `bible/` 受控终稿 —— 合并与仲裁是 `00-orchestration/memory-bible` 的活。
 

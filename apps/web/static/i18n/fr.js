@@ -830,7 +830,7 @@ window.I18N_DICT = {
 "连接本地 ComfyUI(启动时加": "Connecter un ComfyUI local (au démarrage, ajouter",
 "选择一个 Agent 开始": "Choisir un Agent pour commencer",
 "通用 S3 协议:AWS S3 / Cloudflare R2 / MinIO / Backblaze B2 等均可(填对应 Endpoint)。注意境外源站方舟拉取可能较慢或不稳。依赖": "Protocole S3 générique : AWS S3 / Cloudflare R2 / MinIO / Backblaze B2, etc. (renseigner l'Endpoint correspondant). Attention : la récupération par Ark depuis des origines hors de Chine peut être lente ou instable. Dépend de",
-"道具设定卡 + 参考图(特写/比例锚图)": "Fiches d'accessoires + images de référence (gros plans/ancrages d'échelle)",
+"道具设定卡 + 道具图": "Fiches d'accessoires + images d'accessoires",
 "道具预览": "Aperçu des accessoires",
 "道具预览 · Agentics：VideoAgents": "Aperçu des accessoires · Agentics: VideoAgents",
 "生物预览": "Aperçu des créatures",

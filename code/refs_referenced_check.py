@@ -5,16 +5,17 @@
   - refs_all_referenced:refs[i-1] 必须在 video_prompt 以 `[Image i]` 或 `<主体>@Image i` 至少出现一次。
     genmedia 把 refs 逐张作为 image_url 全部发给模型,正文不点名的图是一张「无说明的参考」——
     模型可能忽略它(白占参考图名额,前科 polan3 grp008/009 满员挂不上尾帧),也可能误用它
-    (道具比例锚图里的木板/碗漏进画面);官方指南:每次涉及主体都要明确指代,避免省略。
+    (旧道具比例锚图里的木板/碗漏进画面);官方指南:每次涉及主体都要明确指代,避免省略。
   - audioref_all_referenced:audio_refs[i-1] 同理须以 `[Audio i]` / `@Audio i` 引用。
   - videoref_all_referenced(2026-09-07):video_refs[i-1](白模参考视频 camera.mp4 等)须以 `[Video i]` 引用,
     白模视频的固定说明段由 code/sync_whitebox_refs.py(whitebox_ref_bound)另核。
   - prop_ref_bound:`assets/concepts/props/<PROP-id>/` 下的道具图除被引用外,须以绑定句
     `<道具名>@Image i` 形式绑定(道具首现 Shot 段,后接 scale.prompt_token);只写 `[Image i]`
     不带 `@` 按 WARN,--strict 时按违规。
-  - prop_ref_single(2026-09-14):同一道具目录 `assets/concepts/props/<PROP-id>/` 默认只挂比例锚图
-    `scale_ref_01.png` 一张;同一道具挂 ≥2 张、或只挂了样式图而无比例锚图,按 WARN 提示
-    (样式图 main_01 仅本组确有该道具细节特写镜头时按需追加,故不判违规)。
+  - prop_ref_single(2026-09-14;2026-10-05 改挂道具图):同一道具目录 `assets/concepts/props/<PROP-id>/`
+    默认只挂道具图 `main_01.png` 一张;尺寸对比图/比例锚图 `scale_ref_*.png` 已停出、不再挂,道具尺寸
+    靠正文逐字的 scale.prompt_token。同一道具挂 ≥2 张、或挂的是比例锚图,按 WARN 提示
+    (存量组 prompt 仍挂比例锚图的不判违规,重写时改挂道具图)。
   - tailframe_declared:refs 含 `*.last_frame.png`(前组尾帧)时,正文必须有开场声明句
     `opening continues from [Image i]` 或改写句 `same location and lighting as [Image i]`
     (SOUL:有前组尾帧锚时开头声明;首镜含尾帧里不存在的角色时用改写句);缺句=尾帧白挂,
@@ -87,7 +88,7 @@ def check_group(pf: Path, strict: bool):
         if is_prop and i not in bound:
             msg = f"{gid}: [Image {i}] {short} 道具图只写了 [Image {i}]、无 `<道具名>@Image {i}` 绑定句"
             (errs if strict else warns).append(msg)
-    # prop_ref_single:同一道具默认只挂 scale_ref_01.png 一张(2026-09-14)
+    # prop_ref_single:同一道具默认只挂道具图 main_01.png 一张,比例锚图 scale_ref_*.png 不再挂(2026-10-05)
     by_prop: dict[str, list[tuple[int, str]]] = {}
     for i, r in enumerate(refs, start=1):
         m = PROP_DIR_RE.search(r)
@@ -95,11 +96,13 @@ def check_group(pf: Path, strict: bool):
             by_prop.setdefault(m.group(1), []).append((i, Path(r).name))
     for pid, items in by_prop.items():
         names = [n for _, n in items]
+        scale_refs = [n for n in names if n.startswith("scale_ref")]
         if len(items) >= 2:
-            warns.append(f"{gid}: 道具 {pid} 挂了 {len(items)} 张图({', '.join(names)});默认只挂比例锚图 scale_ref_01.png,"
-                         "样式图仅本组确有该道具细节特写镜头时才追加")
-        elif not names[0].startswith("scale_ref"):
-            warns.append(f"{gid}: 道具 {pid} 只挂了样式图 {names[0]}、无比例锚图 scale_ref_01.png(默认应挂比例锚图)")
+            warns.append(f"{gid}: 道具 {pid} 挂了 {len(items)} 张图({', '.join(names)});默认只挂道具图 main_01.png 一张"
+                         + (",比例锚图已停用、不再挂" if scale_refs else ""))
+        elif scale_refs:
+            warns.append(f"{gid}: 道具 {pid} 挂的是比例锚图 {names[0]}(已停用);默认应挂道具图 main_01.png,"
+                         "道具尺寸靠正文 scale.prompt_token 文字")
     for i, r in enumerate(arefs, start=1):
         if i not in used_aud:
             errs.append(f"{gid}: [Audio {i}] {Path(r).name} 正文未引用(须 `<角色>@Audio {i}` 绑定句)")
@@ -119,7 +122,7 @@ def check_group(pf: Path, strict: bool):
 
 def main():
     args, proj_root = parse_args(
-        "refs_all_referenced 机检:组 prompt refs/audio_refs 每份素材正文至少引用一次;道具图须 @Image 绑定(同一道具默认只挂比例锚图一张);尾帧须开场声明句",
+        "refs_all_referenced 机检:组 prompt refs/audio_refs 每份素材正文至少引用一次;道具图须 @Image 绑定(同一道具默认只挂道具图 main_01.png 一张);尾帧须开场声明句",
         configure=lambda ap: (
             ap.add_argument("groups", nargs="*", help="只查指定组(如 grp002),缺省全批"),
             ap.add_argument("--strict", action="store_true",

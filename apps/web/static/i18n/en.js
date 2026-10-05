@@ -868,7 +868,7 @@ window.I18N_DICT = {
 "连接本地 ComfyUI(启动时加": "Connect to local ComfyUI (at startup add",
 "选择一个 Agent 开始": "Pick an agent to start",
 "通用 S3 协议:AWS S3 / Cloudflare R2 / MinIO / Backblaze B2 等均可(填对应 Endpoint)。注意境外源站方舟拉取可能较慢或不稳。依赖": "Generic S3 protocol: AWS S3 / Cloudflare R2 / MinIO / Backblaze B2 etc. all work (enter the corresponding Endpoint). Note: Ark may fetch slowly or unreliably from origins outside China. Requires",
-"道具设定卡 + 参考图(特写/比例锚图)": "Prop cards + reference images (close-ups/scale anchor images)",
+"道具设定卡 + 道具图": "Prop cards + prop images",
 "道具预览": "Prop Preview",
 "道具预览 · Agentics：VideoAgents": "Prop Preview · Agentics: VideoAgents",
 "生物预览": "Creature Preview",

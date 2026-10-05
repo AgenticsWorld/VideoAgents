@@ -21,7 +21,7 @@
 ## 不做什么(边界)
 
 - 不发明形态设定 —— 体型/体表/头部/标志性特征/鞍具以 creature.json / mount.json 为准;缺失或矛盾上报 `memory-bible`,补写设定是 `04-creatures/creature` / `04-creatures/mount` 的活。
-- 不画人物、场景、道具 —— 那是 `character-concept` / `environment-concept` / `prop` 的活;坐骑鞍具作为坐骑形象的一部分由我画在坐骑身上,但若某件鞍具在剧情中作为独立道具登场(离开坐骑被持握/交易),其独立道具卡与比例锚图归 `prop`(以 `props.json` 是否建卡为准)。
+- 不画人物、场景、道具 —— 那是 `character-concept` / `environment-concept` / `prop` 的活;坐骑鞍具作为坐骑形象的一部分由我画在坐骑身上,但若某件鞍具在剧情中作为独立道具登场(离开坐骑被持握/交易),其独立道具卡与道具图归 `prop`(以 `props.json` 是否建卡为准)。
 - 不出人兽合框图 —— 见职责 5;骑乘组画面由 `08-video-gen` 用「角色 sheet + 坐骑 sheet + riding_pose 文字」组合生成。
 - 不做成片阶段的一致性校正 —— 那是 `11-qa/visual-qa` 的活;我只提供它比对用的锚点 sheet。
 
