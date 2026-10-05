@@ -391,6 +391,7 @@ async function load(){
   const proj=$('#project').value.trim()||'demo';
   syncUrl();   // 先写项目名(id 沿用当前选中/深链),加载完成后再按实际命中的条目重写
   $('#detail').innerHTML='<div class="empty">加载中…</div>';
+  const epf=EpFilter.load(proj);   // 分集过滤数据与主数据并行取(不会 reject)
   try{
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/characters');
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
@@ -404,7 +405,7 @@ async function load(){
   // 「旁白」伪角色固定列表首位(项目旁白开关开启时后端下发,2026-09-01)
   const ni=DATA.findIndex(x=>x.narrator);
   if(ni>0)DATA.unshift(DATA.splice(ni,1)[0]);
-  await EpFilter.load(proj);
+  await epf;
   // 优先级:首次深链 id > 页内刷新前已选中的条目 > 列表第一项(切项目时旧 id 找不到自然回落)
   const keep=JUMP_ID||CUR;
   JUMP_ID=null;   // 只在首次加载生效

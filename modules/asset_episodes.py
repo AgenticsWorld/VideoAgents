@@ -6,10 +6,12 @@
   ② 设定卡自带 episodes[] 声明(道具卡常见);
   ③ 名字命中:道具/生物按 名字+别名(≥2 字);人物/场景只按规范名,且仅当该集语料里完全没有该类 ID 时才启用
      (老项目剧本不写 ID;人物/场景别名含「我」「家中」之类,不能拿来匹配)。
-结果按语料文件 (路径, mtime, size) 签名缓存,文件不变不重扫。
+结果按集缓存:签名 = 该集语料文件 (路径, mtime, size) + 资产目录内容,哪一集的文件变了只重扫那一集
+(整项目一个签名时,agent 正在写某一集就会让每次请求都全量重扫——64 集的项目一次 5 秒多)。
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -24,7 +26,7 @@ _EP_FILES = ("story/episodes/{ep}/screenplay.md", "story/episodes/{ep}/dialogue.
 _EP_GLOBS = ("directing/{ep}/shots/*/blocking.json", "assets/prompts/{ep}/*.json")
 _EP_DIR_RE = re.compile(r"^ep\d+[A-Za-z]?$")
 _MAX_BYTES = 8 * 1024 * 1024
-_CACHE: dict[str, tuple[tuple, dict]] = {}
+_CACHE: dict[tuple[str, str], tuple[tuple, dict]] = {}   # (项目, 集) → ((语料签名, 资产目录指纹), {kind: 命中的资产 id})
 
 
 def _read_json(p: Path):
@@ -138,6 +140,40 @@ def _ids_hit(ids, text: str) -> set[str]:
     return set(re.findall(pat, text))
 
 
+def _names_pattern(names) -> re.Pattern | None:
+    names = sorted(set(names), key=len, reverse=True)   # 长名在前:同一起点先取最长的那个
+    return re.compile("|".join(re.escape(n) for n in names)) if names else None
+
+
+def _names_hit(pat: re.Pattern | None, text: str) -> set[str]:
+    """一次扫描取出语料里出现的全部名字,结果与逐个 `name in text` 相同(逐个搜在十几 MB 的语料上要近 10 秒)。
+    每次从上一个命中起点的下一个字符接着找,所以互相重叠的名字不会漏;同一起点只报最长的,更短的同起点名字必是它的前缀,扫完补上。"""
+    if pat is None:
+        return set()
+    found: set[str] = set()
+    pos, search = 0, pat.search
+    while m := search(text, pos):
+        found.add(m.group())
+        pos = m.start() + 1
+    return {g[:i] for g in found for i in range(2, len(g) + 1)}
+
+
+def _scan_episode(cat: dict, fam: dict, files: list[Path]) -> dict[str, set[str]]:
+    """一集语料里命中的资产:{kind: {id…}}(规则 ①③)。"""
+    text = _corpus(files)
+    if not text:
+        return {}
+    by_name = [k for k in KINDS if k in ("creatures", "props") or not (fam[k] and fam[k].search(text))]
+    named = _names_hit(_names_pattern(n for k in by_name for r in cat[k].values() for n in r["names"]), text)
+    out = {}
+    for kind in KINDS:
+        hits = _ids_hit(cat[kind], text)
+        if kind in by_name:
+            hits |= {aid for aid, rec in cat[kind].items() if not named.isdisjoint(rec["names"])}
+        out[kind] = hits
+    return out
+
+
 def _id_family(ids) -> re.Pattern | None:
     """该类 ID 的前缀族(CHAR- / SCN- …),用来判断「这集语料到底写不写这类 ID」。"""
     pres = {m.group(1) for i in ids if (m := re.match(r"^([A-Za-z]+[-_])\d", i))}
@@ -149,35 +185,28 @@ def build(base: Path) -> dict:
     base = Path(base)
     eps = episode_ids(base)
     ep_files = {ep: _ep_files(base, ep) for ep in eps}
-    meta = [base / "story" / "episode_plan.json", base / "bible" / "props.json",
-            base / "bible" / "creatures" / "index.json", base / "bible" / "creatures" / "creature.json",
-            base / "bible" / "creatures" / "mount.json", base / "bible" / "scenes" / "index.json",
-            base / "bible" / "characters" / "index.json"]
-    sig = []
-    for f in meta + [f for fs in ep_files.values() for f in fs]:
-        try:
-            st = f.stat()
-            sig.append((str(f), st.st_mtime_ns, st.st_size))
-        except OSError:
-            pass
-    sig = tuple(sig)
-    hit = _CACHE.get(str(base))
-    if hit and hit[0] == sig:
-        return hit[1]
-
     cat = _catalog(base)
+    cat_fp = hashlib.md5(json.dumps(cat, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
     out: dict = {k: {aid: set(r["episodes"]) & set(eps) for aid, r in cat[k].items()} for k in KINDS}
     fam = {k: _id_family(cat[k]) for k in KINDS}
     for ep in eps:
-        text = _corpus(ep_files[ep])
-        if not text:
-            continue
-        for kind in KINDS:
-            by_name = kind in ("creatures", "props") or not (fam[kind] and fam[kind].search(text))
-            hits = _ids_hit(cat[kind], text)
-            for aid, rec in cat[kind].items():
-                if aid in hits or (by_name and any(n in text for n in rec["names"])):
-                    out[kind][aid].add(ep)
+        sig = []
+        for f in ep_files[ep]:
+            try:
+                st = f.stat()
+                sig.append((str(f), st.st_mtime_ns, st.st_size))
+            except OSError:
+                pass
+        key = (tuple(sig), cat_fp)
+        hit = _CACHE.get((str(base), ep))
+        if hit and hit[0] == key:
+            found = hit[1]
+        else:
+            found = _scan_episode(cat, fam, ep_files[ep])
+            _CACHE[(str(base), ep)] = (key, found)
+        for kind, aids in found.items():
+            for aid in aids:
+                out[kind][aid].add(ep)
     plan = _read_json(base / "story" / "episode_plan.json") or {}
     titles = {}
     for e in plan.get("episodes") or []:
@@ -190,5 +219,4 @@ def build(base: Path) -> dict:
     res = {"episodes": [{"ep": ep, "title": titles.get(ep, "")} for ep in eps if ep in live]}
     for k in KINDS:
         res[k] = {aid: sorted(v) for aid, v in out[k].items() if v}
-    _CACHE[str(base)] = (sig, res)
     return res
