@@ -12,6 +12,8 @@
          route_en 自身混入裁决批注/坐标/时间码/白模术语(prose_clean,2026-09-29)= VIOLATION,回派上游清理;
       ④ 主体定义句用同一个词:video_prompt 须含 "<label>@Image N"(label 逐字取 blocking_map.characters[].label
          短规范名,全集同角色同词;骑乘态生物并入骑手条目、独立态生物条目同规则)。
+         白模判为「本组不出现」的人物/生物(whitebox_refs.cast_filter 的 hidden)豁免④:按白模人物参考图规约
+         它不挂参考图、不写 @Image 绑定(#100);route_en 逐字核对(③)照做。白模未开/未编译时不豁免。
   - blocking_map 为空/缺失的组按 WARN(存量项目;--strict 按 FAIL)。
 
 用法:python3 code/layout_map_bound_check.py --project <slug> --ep ep01           # 查全批
@@ -26,6 +28,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from modules.prose_hygiene import annotation_hits, describe, prompt_annotation_hits  # noqa: E402
+from modules.whitebox_refs import cast_filter  # noqa: E402
 from _common import parse_args, spatial_blocking_enabled  # noqa: E402
 
 # 不要求紧跟 [Image:图号 token 被 remap 删掉后残留的「Spatial layout: is the …」空悬句也要测出(2026-09-14)
@@ -68,12 +71,17 @@ def check_group(pf: Path, groups: dict, proj_root: Path, ep: str, strict: bool):
         warns.append(f"{gid}: 正文残留 Spatial layout / Map usage 俯视图声明句(跑 code/sync_shot_plates.py --write 清理)")
     # ③ route_en 逐字 + ④ 主体定义句同词
     hay = norm(vp)
+    try:
+        cast = cast_filter(proj_root, ep, gid)
+    except Exception:  # noqa: BLE001  白模产物读不了 = 不豁免
+        cast = None
+    hidden = set((cast or {}).get("hidden") or {})
     for ch in bm.get("characters") or []:
         cid = ch.get("id", "?")
         label = (ch.get("label") or "").strip()
         if not label:
             errs.append(f"{gid}/{cid}: blocking_map 缺 label(短规范名;回派 shot-planning,先过 blocking_map_check.py 的 label_ok)")
-        elif not re.search(re.escape(label) + r"\s*@\s*Image\s*\d+", vp):
+        elif cid not in hidden and not re.search(re.escape(label) + r"\s*@\s*Image\s*\d+", vp):
             errs.append(f"{gid}/{cid}: video_prompt 缺主体定义句 \"{label}@Image N\"(主体定义句须与 blocking_map.label 同一个词)")
         route = ch.get("route_en")
         if not route:
