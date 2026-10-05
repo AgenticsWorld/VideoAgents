@@ -763,12 +763,14 @@ def load_board(base: Path, ep: str, catalog: dict | None = None) -> dict:
             for c in _as_list(d.get("creatures")) + [x for f in finals for x in _as_list(f.get("creatures"))]:
                 if isinstance(c, str) and c not in creatures:
                     creatures.append(c)
-            if not cast:   # 镜上没写 → 镜头表定稿镜的 characters → 所属组草案的 characters
+            # 镜草案显式写了空的出场名单(键存在、值为 [])= 刻意的空镜/插入镜,不回退到镜头表或组草案的人物(#105)
+            no_people = not cast and any(isinstance(d.get(k), list) and not d[k] for k in ("cast", "characters", "cast_ids"))
+            if not cast and not no_people:   # 镜上没写 → 镜头表定稿镜的 characters → 所属组草案的 characters
                 for f in finals:
                     for c in _as_list(_first(f, "characters", "cast", default=[])):
                         if isinstance(c, str) and c not in cast:
                             cast.append(c)
-            if not cast:
+            if not cast and not no_people:
                 for c in grp_cast_by_order.get(order, []) + grp_cast_by_id.get(str(d.get("shot_id") or ""), []):
                     if c not in cast:
                         cast.append(c)
@@ -1232,13 +1234,27 @@ def normalize_poses(v) -> dict:
     return out
 
 
+_OFFSCREEN_POSE_RE = re.compile(r"^\s*[（(\[【]?\s*(?:画外|off[- ]?screen|o\.\s?s\.)", re.I)
+
+
+def pose_offscreen(rec) -> bool:
+    """poses 条目的 action 以「画外」开头(「画外:只闻其声」)= 该人物本镜不入画(#105)。"""
+    return isinstance(rec, dict) and bool(_OFFSCREEN_POSE_RE.match(str(rec.get("action") or "")))
+
+
+def frame_cast(shot: dict) -> list:
+    """本镜入画的出场人物/生物 id:shot.cast 去掉 poses 标了「画外」的。草图提示词的出场句、姿态句、参考图都按它取。"""
+    poses = shot.get("poses") or {}
+    return [c for c in shot.get("cast") or [] if not pose_offscreen(poses.get(c))]
+
+
 def pose_hint(shot: dict, names: dict | None = None) -> str:
     """每镜「Body poses and actions:」句:有结构化 `poses` 时逐角色 "<名> <体位英文>, <action 原文>"(action 中文直通,2026-09-14 拍板),
     否则退回从 content/action/sketch 文字按关键词表推导(最多 10 个短语);都没有返回空。"""
     poses = shot.get("poses") or {}
     segs = []
     for cid, rec in poses.items():
-        if not isinstance(rec, dict):
+        if not isinstance(rec, dict) or pose_offscreen(rec):
             continue
         name = (names or {}).get(cid, cid)
         body = ", ".join(x for x in (POSE_EN.get(rec.get("pose") or "", ""), str(rec.get("action") or "").strip()) if x)
@@ -1246,6 +1262,8 @@ def pose_hint(shot: dict, names: dict | None = None) -> str:
             segs.append(f"{name} {body}")
     if segs:
         return "; ".join(segs)
+    if poses and all(pose_offscreen(rec) for rec in poses.values()):
+        return ""      # 全是画外条目:本镜没有要画的姿态,不再从散文里推导
     text = " ".join(str(shot.get(k) or "") for k in ("content", "action", "sketch"))
     return ", ".join(_pose_term_hits(text)[:10])
 
@@ -1431,8 +1449,9 @@ def _shot_text(shot: dict, names: dict | None = None) -> str:
     """本镜全部可画文字(画面/动作/构图/panel_en/姿态/出场人名),供轴线运动分句判断主体是否在本镜。"""
     bits = [shot.get(k) or "" for k in ("_panel", "panel_en", "content", "action", "sketch", "extras", "_note")]
     for cid, p in (shot.get("poses") or {}).items():
-        bits.append(str((p or {}).get("action") or "") if isinstance(p, dict) else str(p))
-    bits += [str((names or {}).get(c, c)) for c in shot.get("cast") or []]
+        if not pose_offscreen(p):
+            bits.append(str((p or {}).get("action") or "") if isinstance(p, dict) else str(p))
+    bits += [str((names or {}).get(c, c)) for c in frame_cast(shot)]
     return " ".join(str(b) for b in bits).lower()
 
 
@@ -1519,7 +1538,7 @@ def ref_cast_ids(base: Path, shot: dict, catalog: dict, limit: int | None = None
     """单镜参考图对应的出场人物/生物 id(collect_refs 同序同上限)。"""
     cap = MAX_CAST_REFS if limit is None else min(MAX_CAST_REFS, limit)
     ids: list[str] = []
-    for cid in shot.get("cast") or []:
+    for cid in frame_cast(shot):
         rec = catalog["characters"].get(cid) or catalog["creatures"].get(cid) or {}
         if rec.get("file") and (base / rec["file"]).is_file() and len(ids) < cap:
             ids.append(cid)
@@ -1557,7 +1576,7 @@ def _shot_parts(shot: dict, names: dict, clip: dict | None = None, grid: bool = 
     lens = lens_rule(shot)
     if lens:
         out.append(f"Lens: {lens}.")
-    cast = [names.get(c, c) for c in shot.get("cast") or []]
+    cast = [names.get(c, c) for c in frame_cast(shot)]
     if cast:
         out.append(("Characters: " if grid else "Characters in frame: ") + ", ".join(cast) + ".")
     ph = pose_hint(shot, names)
@@ -1614,7 +1633,7 @@ def build_prompt(scene: dict, shot: dict, names: dict, note: str = "", with_refs
         parts.append(f"Location (draw as simple shapes): {space}.")
     if note and note.strip():
         parts.append(f"Revision instruction (takes priority): {note.strip()}")
-    negative = pack["negative"] if shot.get("cast") else pack["negative"].replace(SKETCH_NEGATIVE_PEOPLE_TAIL, "")
+    negative = pack["negative"] if frame_cast(shot) else pack["negative"].replace(SKETCH_NEGATIVE_PEOPLE_TAIL, "")
     return " ".join(parts), negative
 
 
@@ -1812,7 +1831,7 @@ def collect_grid_refs(base: Path, ep: str, panels: list[tuple[dict, dict]], cata
     cache = sketch_dir(base, ep) / "_refcache"
     freq: dict[str, int] = {}
     for _, shot in panels:
-        for cid in shot.get("cast") or []:
+        for cid in frame_cast(shot):
             freq[cid] = freq.get(cid, 0) + 1
     refs: list[Path] = []
     for cid, _ in sorted(freq.items(), key=lambda kv: (-kv[1], kv[0])):

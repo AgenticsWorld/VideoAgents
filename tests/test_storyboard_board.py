@@ -383,3 +383,38 @@ def test_digital_accent_per_shot():
     assert "Accent: none" in g
     film, _ = sbb.build_prompt({}, shot, {})
     assert "Accent" not in film
+
+
+# ---------------- 空镜与画外条目(#105) ----------------
+
+def test_explicit_empty_characters_means_no_people(tmp_path):
+    """镜草案显式写 characters: [] = 本镜无人,不回退到组草案人物;没写该键的镜照旧回退。"""
+    base = tmp_path / "p"
+    (base / "directing" / "ep01").mkdir(parents=True)
+    (base / "directing" / "ep01" / "storyboard.json").write_text(json.dumps({"scenes": [{
+        "scene_no": "S01",
+        "groups_draft": [{"characters": ["CHAR-1", "CHAR-2"], "shot_orders": [1, 2]}],
+        "shots_draft": [
+            {"order": 1, "content": "空庭,落叶", "characters": []},
+            {"order": 2, "content": "两人对坐"}]}]}, ensure_ascii=False))
+    shots = sbb.load_board(base, "ep01")["scenes"][0]["shots"]
+    assert shots[0]["cast"] == []
+    assert shots[1]["cast"] == ["CHAR-1", "CHAR-2"]
+
+
+def test_offscreen_pose_entries_stay_out_of_sketch_prompt(tmp_path):
+    """poses 里 action 以「画外」开头的人物不进出场句、姿态句,也不挂参考图。"""
+    names = {"CHAR-1": "哪吒", "CHAR-2": "李靖"}
+    shot = {"size_hint": "特写", "cast": ["CHAR-1", "CHAR-2"], "content": "案上的令箭",
+            "poses": {"CHAR-1": {"pose": "stand", "action": "握拳"}, "CHAR-2": {"pose": "stand", "action": "画外:只闻其声"}}}
+    assert sbb.frame_cast(shot) == ["CHAR-1"]
+    prompt, _ = sbb.build_prompt({"location": "大殿"}, shot, names)
+    assert "Characters in frame: 哪吒." in prompt and "李靖" not in prompt
+    (tmp_path / "a.png").write_bytes(b"x"); (tmp_path / "b.png").write_bytes(b"x")
+    catalog = {"characters": {"CHAR-1": {"file": "a.png"}, "CHAR-2": {"file": "b.png"}}, "creatures": {}}
+    assert sbb.ref_cast_ids(tmp_path, shot, catalog) == ["CHAR-1"]
+    empty = {"size_hint": "空镜", "cast": [], "content": "空庭,有人影晃动",
+             "poses": {"CHAR-2": {"pose": "stand", "action": "画外:踱步"}}}
+    prompt, negative = sbb.build_prompt({"location": "庭院"}, empty, names)
+    assert "Characters in frame" not in prompt and "Body poses" not in prompt
+    assert sbb.SKETCH_NEGATIVE_PEOPLE_TAIL not in negative
