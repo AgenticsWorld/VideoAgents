@@ -148,6 +148,10 @@ class PanoUnsupported(PanoError):
     """当前图像模型不支持 2:1 全景 → 调用方停下并通知用户换模型。"""
 
 
+class PanoSparseError(PanoError):
+    """悬空高视点、白模全景里地面以上的体块又太少(sparse_view)→ 出图前停下,等用户确认(--allow-sparse)后才花钱。"""
+
+
 def _now():
     return dt.datetime.now().isoformat(timespec='seconds')
 
@@ -661,7 +665,7 @@ def anchor_indoor(base: Path, sid: str, scene: dict, anchor: dict, override: boo
 
 
 # ---------------------------------------------------------------- whitebox depth pano (Playwright)
-GUIDES_VERSION = 3               # 外景白模全景投影引导线版本(3 = 图幅外地面按水陆分别画,2026-10-04);depth_pano.json 的 guides 低于此值 → 出全景前重渲白模(本机、不花钱)
+GUIDES_VERSION = 4               # 外景白模全景投影引导线版本(3 = 图幅外地面按水陆分别画,2026-10-04;4 = 低于 y=0 的地形块也贴俯视图 + 网格,2026-10-05);depth_pano.json 的 guides 低于此值 → 出全景前重渲白模(本机、不花钱)
 SKY_PLANE_M = 25.0               # 虚拟天空网格平面离镜头的高度
 
 
@@ -770,7 +774,10 @@ def draw_projection_guides(color, valid, depth, cam_h: float, yaw_deg: float, *,
     [Image 1] 直接给出这个锚点脚下与四周是什么、岸线在哪(已按等距柱状弯好)。按像素在地面上的跨度选降采样层,免掠射处闪烁。
     water(water_mask 的水面掩码,v3):图幅之外的地面按最近图幅边缘的水陆分别画——水边外照旧延伸边缘像素(还是水);陆地外改成
     偏暖的土色(边缘色与 OFFMAP_LAND_RGB 混合)。原先一律延伸边缘像素,地图角上的锚点四周 3/4 是图幅外,边缘又是背阴林地的暗青色,
-    一直铺到地平线,模型读成水面(fengshen3 SCN-0036 A5)。不传 water = 旧画法。"""
+    一直铺到地平线,模型读成水面(fengshen3 SCN-0036 A5)。不传 water = 旧画法。
+    下沉地形(v4,2026-10-05):命中点低于 y=0 的体块(下山的坡面 / 低一级的台地 / 下坡的路)也是地面,同样按命中点的 (x, z) 贴俯视图
+    + 网格。原先贴图只认 y=0 平面,这些块保持白模原色——悬在东坡上方的锚点(fengshen3 SCN-0109 A2)天底带一半是纯白空洞,
+    提示词却说「[Image 1] 的地面贴着俯视图」,模型脚下没有投影线索,出成航拍广角照片。陡面(崖壁)只贴图不画网格。"""
     import numpy as np
     from PIL import Image
     h, w = depth.shape
@@ -792,10 +799,17 @@ def draw_projection_guides(color, valid, depth, cam_h: float, yaw_deg: float, *,
     with np.errstate(divide='ignore', invalid='ignore'):
         t_ground = np.where(dy < -1e-4, cam_h / -dy, np.inf)
         t_sky = np.where(dy > 1e-4, SKY_PLANE_M / dy, np.inf)
-    # 地面像素 = 下半球且(无几何 或 深度落在 y=0 平面上);天空像素 = 上半球无几何
-    ground = (dy < 0) & (~valid | (np.abs(depth - t_ground) < 0.03 * t_ground + 0.05))
+    # 地面像素 = 下半球且(无几何 或 深度落在 y=0 平面上 或 命中点低于 y=0 的下沉地形);天空像素 = 上半球无几何
+    sunk = valid & (dy < 0) & (depth > 1.03 * t_ground + 0.05)
+    ground = (dy < 0) & (~valid | (np.abs(depth - t_ground) < 0.03 * t_ground + 0.05) | sunk)
     sky = (dy > 0) & ~valid
-    tg = np.where(np.isfinite(t_ground), t_ground, 1e9); ts = np.where(np.isfinite(t_sky), t_sky, 1e9)
+    tg = np.where(sunk, depth, np.where(np.isfinite(t_ground), t_ground, 1e9)); ts = np.where(np.isfinite(t_sky), t_sky, 1e9)
+    level_ground = ground
+    if sunk.any():
+        # 网格是世界 x / z 等值线的竖直投影:恰好落在某条等值线上的竖直崖壁会整面涂成线色 → 只画在朝上的面(法线离竖直 < 60°)
+        pts = dirs * depth[..., None]
+        nrm = np.cross(np.gradient(pts, axis=1), np.gradient(pts, axis=0))
+        level_ground = ground & (~sunk | (np.abs(nrm[..., 1]) > 0.5 * np.linalg.norm(nrm, axis=2)))
     if ground_plan is not None and floor_wd:
         fw, fd = float(floor_wd[0]), float(floor_wd[1])
         gx = cam_xz[0] + dirs[..., 0] * tg; gz = cam_xz[1] + dirs[..., 2] * tg
@@ -819,7 +833,7 @@ def draw_projection_guides(color, valid, depth, cam_h: float, yaw_deg: float, *,
             mh, mw = water.shape
             land_out = ground & off_map & ~edge_water(water)[(v * mh).astype(int), (u * mw).astype(int)]
             img[land_out] = img[land_out] * .4 + np.array(OFFMAP_LAND_RGB) * .6
-    a_ground = np.maximum(grid(tg, 1.0) * .8, grid(tg, 5.0)) * ground      # 5 = 奇数倍,粗线与细线重合
+    a_ground = np.maximum(grid(tg, 1.0) * .8, grid(tg, 5.0)) * level_ground   # 5 = 奇数倍,粗线与细线重合
     if ground_plan is not None:
         a_ground = a_ground * .45                                           # 地面已有俯视图纹理:网格只留淡淡一层示意投影
     a_sky = np.maximum(grid(ts, 10.0) * .8, grid(ts, 50.0)) * sky
@@ -892,8 +906,11 @@ def render_whitebox_pano(base: Path, sid: str, anchor: dict, *, indoor: bool, lo
                                ground_plan=plan, cam_xz=(camera[0], camera[2]),
                                floor_wd=(scene['dimensions_m'][0], scene['dimensions_m'][2]),
                                water=scene_water_mask(base, sid)[0]).save(out / 'whitebox_pano.jpg', quality=92)
+    # 镜头正下方实际地面的海拔(天底那几行的深度;正下方没有几何 = y=0):下沉地形上方的锚点,提示词的离地高度按它写
+    nadir = raw_depth[-max(2, height // 256):]
+    ground_y = round(camera[1] - float(np.median(nadir[nadir > 0])), 2) + 0.0 if (nadir > 0).mean() > .5 else 0.0
     record = {'schema_version': SCHEMA, 'scene_id': sid, 'anchor_id': anchor['anchor_id'], 'written_at': _now(),
-              'camera': {'position': camera, 'yaw_deg': float(anchor.get('yaw_deg') or 0), 'height_m': camera[1]},
+              'camera': {'position': camera, 'yaw_deg': float(anchor.get('yaw_deg') or 0), 'height_m': camera[1], 'ground_y': ground_y},
               'size': [width, height], 'cube': DEPTH_CUBE, 'indoor': indoor, 'guides': 0 if indoor else GUIDES_VERSION, 'valid_fraction': round(float(valid.mean()), 4),
               'z_max': round(z_max, 3)}
     (out / 'depth_pano.json').write_text(json.dumps(record, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
@@ -1292,11 +1309,32 @@ def object_inventory(scene: dict, layout: dict, anchor: dict, view: dict | None 
 ELEVATED_EYE_M = 3.0             # 镜头高出脚下站立面超过此值 = 悬空高视点(预览页手填 y 的锚点;人 / 脚架到不了)
 
 
-def _elevated(scene: dict, pos) -> bool:
-    return float(pos[1]) - standing_surface(scene, pos) > ELEVATED_EYE_M
+SUNK_GROUND_M = 0.5              # 脚下实际地面低于 y=0 超过此值 = 下沉地形(下山的坡面 / 低一级的台地),离地高度按实际地面算
 
 
-def _lens_height_words(scene: dict, pos) -> str:
+def _sunk(ground_y) -> bool:
+    return ground_y is not None and float(ground_y) < -SUNK_GROUND_M
+
+
+def _elevated(scene: dict, pos, ground_y: float | None = None) -> bool:
+    floor = float(ground_y) if _sunk(ground_y) else standing_surface(scene, pos)
+    return float(pos[1]) - floor > ELEVATED_EYE_M
+
+
+def _lens_height_words(scene: dict, pos, ground_y: float | None = None) -> str:
+    """ground_y = 镜头正下方实际地面的海拔(白模深度全景的天底,depth_pano.json#camera.ground_y)。脚下是下沉地形时离地高度按它写:
+    站立面只认 y ≥ 0 的顶面,悬在下山坡面上方的锚点(fengshen3 SCN-0109 A2:y 16.67、坡面 −7.58)原先写成「离地 16.67 m」,实际 24.25 m。
+    清单里各块的高度仍以 y=0 为基准,所以两个数都写明。"""
+    if _sunk(ground_y):
+        drop = round(-float(ground_y), 1)
+        eye = round(float(pos[1]) - float(ground_y), 2)
+        level = (f'the terrain right under the camera lies {drop} m below the main ground level that every height below is measured from, '
+                 f'so the lens is {round(float(pos[1]), 2)} m above that main ground level')
+        if eye > ELEVATED_EYE_M:
+            return (f'{eye} m above the ground directly beneath it ({level}) — an elevated crane-height viewpoint with nothing under the camera: '
+                    f'the ground lies far below, and anything lower than {round(float(pos[1]), 1)} m above the main ground level '
+                    f'(roofs, walls, treetops) is seen from above, never from underneath')
+        return f'{eye} m above the ground directly beneath it ({level})'
     floor = standing_surface(scene, pos)
     eye = round(float(pos[1]) - floor, 2)
     if eye > ELEVATED_EYE_M:
@@ -1307,6 +1345,77 @@ def _lens_height_words(scene: dict, pos) -> str:
     if floor < SURFACE_MIN_M:
         return f'{eye} m above the floor'
     return f'{eye} m above the surface it stands on, which is itself raised {round(floor, 1)} m above the ground below'
+
+
+# ---------------------------------------------------------------- sparse elevated viewpoint gate (2026-10-05)
+# 悬空高视点 + 白模全景里地面以上的体块太少 → 出图前停下等用户确认。前科 fengshen3 SCN-0109 A2(白模视口取位:悬在东坡上方、离地 24 m、
+# 离行宫 47–78 m):地面以上体块只占球面 1.6%,参考图里几乎没有「这是全景」的线索,成图是一张航拍广角照片,投影机检拒收,白花一次出图费。
+# 标定(全部项目 103 个外景锚点):体块占比单独不成判据——贴地的稀疏锚点(河滩 / 田野,1.3–4%)24 个里 23 个一次出成;
+# 悬空锚点 6 个里只有占比 1.6% 的这一个翻车(其余 5.7% / 8.7% / 22.6% / 33%)。所以两条同时满足才拦。悬空锚点全是手动加的
+# (预览页手填 y / 白模视口取位);自动规划的锚点是「站立面 + 眼高」,没有翻车样本,ensure_scene_panos 只拦 source == 'manual' 的。
+SPARSE_BLOCKS_MIN = 0.03         # 悬空锚点地面以上体块占球面比例低于此值 → 先提示
+SPARSE_BLOCK_Y_M = 0.3           # 命中点高于此才算「地面以上的体块」(铺装 / 门槛线 / 地形顶面不算)
+SPARSE_SIZE = (360, 180)
+
+
+def ground_below(scene: dict, pos) -> float:
+    """镜头正下方实际地面的海拔。脚下有 ≥ 1 m 的站立面(墙顶 / 高台)= 该面;开底场景(floor == 'none')里再往 y=0 以下找下沉地形
+    (射线对白模物体求交;盒体的 roll 不计,倾斜坡面按未倾斜近似——只供闸门粗判,提示词用深度全景的天底实测 anchor_ground_y);
+    正下方什么都没有 = 0。"""
+    import numpy as np
+    surf = standing_surface(scene, pos)
+    if surf > 0 or scene.get('floor') != 'none':
+        return surf
+    t = float(raycast([float(v) for v in pos], np.array([[0.0, -1.0, 0.0]]), [_obj_box(o) for o in scene.get('objects', [])])[0])
+    return min(0.0, round(float(pos[1]) - t, 3)) if math.isfinite(t) else 0.0
+
+
+def blocks_coverage(scene: dict, pos) -> float:
+    """锚点处地面以上的白模体块占全景球面的比例(按立体角;射线对白模物体求最近命中,命中点 y > SPARSE_BLOCK_Y_M 才算)。"""
+    import numpy as np
+    w, h = SPARSE_SIZE
+    dirs = _equirect_rays(0.0, w, h)
+    origin = [float(v) for v in pos]
+    t = raycast(origin, dirs, [_obj_box(o) for o in scene.get('objects', [])])
+    above = np.isfinite(t) & (origin[1] + dirs[:, 1] * np.where(np.isfinite(t), t, 0.0) > SPARSE_BLOCK_Y_M)
+    weight = np.repeat(np.sin((np.arange(h) + .5) / h * np.pi), w)          # 射线按行排:每行的立体角权重 = sin(极角)
+    return float((above * weight).sum() / weight.sum())
+
+
+def sparse_view(scene: dict, pos, *, indoor: bool = False) -> dict | None:
+    """悬空高视点且体块稀少 → {'blocks': 占比, 'height_m': 离地高度, 'limit': SPARSE_BLOCKS_MIN};否则 None(室内不判)。"""
+    if indoor:
+        return None
+    height = float(pos[1]) - ground_below(scene, pos)
+    if height <= ELEVATED_EYE_M:
+        return None
+    blocks = blocks_coverage(scene, pos)
+    if blocks >= SPARSE_BLOCKS_MIN:
+        return None
+    return {'blocks': round(blocks, 4), 'height_m': round(height, 1), 'limit': SPARSE_BLOCKS_MIN}
+
+
+def anchor_sparse(base: Path, sid: str, anchor: dict, indoor: bool | None = None) -> dict | None:
+    """sparse_view 的场景级入口(CLI / 预览接口出图前预检):按这个锚点的室内外判定。"""
+    from modules.whitebox import load_scene
+    scene = load_scene(base, sid)
+    return sparse_view(scene, anchor['position'], indoor=anchor_indoor(base, sid, scene, anchor, indoor))
+
+
+def sparse_message(sid: str, anchor_id: str, sv: dict) -> str:
+    return (f"{sid}/{anchor_id}: 悬空高视点(镜头离地 {sv['height_m']:g} m),白模全景里地面以上的体块只占球面 {sv['blocks']:.1%}"
+            f"(低于 {sv['limit']:.0%}):这样的参考图几乎没有等距柱状投影的线索,图像模型多半出成航拍广角照片、被投影机检拒掉,白花一次出图费;"
+            "主体在全景里只占很小一块,重投影成分镜背景图也糊。未出图。建议把锚点挪近 / 放低后重建;"
+            "用户确认仍要出时加 --allow-sparse(Agent 不得自行加)。")
+
+
+def anchor_ground_y(base: Path, sid: str, anchor: dict) -> float | None:
+    """该锚点白模深度全景记下的脚下实际地面海拔;没渲过 / 位姿已变 / 存量记录没有该字段 → None(按站立面口径)。"""
+    out = panos_dir(base, sid) / str(anchor.get('anchor_id') or '')
+    cam = (read(out / 'depth_pano.json', None) or {}).get('camera') or {}
+    if cam.get('ground_y') is None or math.dist(cam.get('position', [9e9] * 3), anchor['position']) > .05:
+        return None
+    return float(cam['ground_y'])
 
 
 def pano_prompt(base: Path, sid: str, scheme: str, anchor: dict, *, indoor: bool, mode: str, time_of_day: str | None = None) -> str:
@@ -1372,11 +1481,12 @@ def pano_prompt(base: Path, sid: str, scheme: str, anchor: dict, *, indoor: bool
     elif indoor:
         parts.append(INDOOR_RULE.strip())
     standing = standing_on(scene, layout, {'position': anchor['position'], 'target': anchor['position']})
-    if _elevated(scene, anchor['position']):
+    ground_y = anchor_ground_y(base, sid, anchor)
+    if _elevated(scene, anchor['position'], ground_y):
         standing = 'hangs in mid-air ' + (('above ' + standing[3:]) if standing.startswith('on ') else standing)
     else:
         standing = 'stands ' + standing
-    parts.append(f"The camera {standing}, lens {_lens_height_words(scene, anchor['position'])}, level horizon.")
+    parts.append(f"The camera {standing}, lens {_lens_height_words(scene, anchor['position'], ground_y)}, level horizon.")
     if centre:
         parts.append('Looking straight ahead (image centre): ' + centre + '.')
     if right:
@@ -2025,11 +2135,13 @@ def add_manual_anchor(base: Path, sid: str, x: float, z: float, yaw_deg: float =
 
 def ensure_scene_panos(base: Path, sid: str, *, cameras: list | None = None, schemes: dict | None = None, dry_run=False,
                        force=False, replan=False, indoor: bool | None = None, seed=None, redo: list | None = None,
-                       only: list | None = None, log=print) -> dict:
+                       only: list | None = None, allow_sparse: bool = False, log=print) -> dict:
     """本场景全景齐备:规划锚点(增量)→ 渲白模全景 → 逐 (锚点, 方案) 出图。schemes={scheme: time_of_day};缺省取各集机位所用方案。
     返回 {'anchors', 'new', 'pending', 'indoor'}。dry_run 只规划 + 渲白模全景,不调图像模型。
     only=[anchor_id…](2026-09-13 预览页「创建全景图」):不规划/不补锚点,只给这些锚点出图(不看它们服务哪些机位),
-    没有机位也允许(方案须显式传 schemes)。"""
+    没有机位也允许(方案须显式传 schemes)。
+    allow_sparse(2026-10-05):待出图的手动锚点里有悬空且体块稀少的(sparse_view)→ 出图前抛 PanoSparseError,一张都不出;用户确认后带
+    allow_sparse 重跑,确认记在锚点 sparse_ok 上(以后补其它方案 / 重出不再问)。带 only / redo 时只确认那几个锚点。"""
     from modules.whitebox import load_scene
     sid = component(sid)
     scene = load_scene(base, sid)
@@ -2111,6 +2223,19 @@ def ensure_scene_panos(base: Path, sid: str, *, cameras: list | None = None, sch
         order = sorted((a for a in idx['anchors'] if cameras is None or set(a.get('serves', [])) & keys),
                        key=lambda a: -len(a.get('serves', [])))
     todo = [(a, s, t) for s, t in need.items() for a in order if force or not pano_ready(base, sid, a, s)]
+    scope = set(only or redo or [])
+    for a in {a['anchor_id']: a for a, _, _ in todo}.values():
+        sv = None if a.get('sparse_ok') or a.get('source') != 'manual' else sparse_view(scene, a['position'], indoor=a['indoor'])
+        if not sv:
+            continue
+        if dry_run:
+            log(f"   WARN {sparse_message(sid, a['anchor_id'], sv)}")
+        elif allow_sparse and (not scope or a['anchor_id'] in scope):
+            log(f"   {a['anchor_id']}: 悬空高视点、地面以上体块只占球面 {sv['blocks']:.1%}——用户已确认仍要出(--allow-sparse)")
+            a['sparse_ok'] = True
+            save_index(base, sid, idx)
+        else:
+            raise PanoSparseError(sparse_message(sid, a['anchor_id'], sv))
     if todo and not dry_run:
         check_pano_support(base, sid, idx, log=log)
     for a, s, t in todo:

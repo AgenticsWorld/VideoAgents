@@ -21,7 +21,9 @@
 
 退出码:0 完成;1 出错;2 当前图像模型不支持 2:1 全景(打印 [pano_unsupported],请用户到控制台「🎨 生成模型」换图像模型,
 Agent 不得自行换模型);3 成图不是等距柱状投影(打印 [pano_projection_fail],成图已改名 .rejected-projection-*,本批停下;
-重出 --redo <锚点>,次数计入用户设定的重跑次数,用尽上报用户)。全景与分镜背景图一样在派发任务内前台跑完,禁止丢后台。
+重出 --redo <锚点>,次数计入用户设定的重跑次数,用尽上报用户);4 待出图的锚点是悬空高视点且白模全景里地面以上的体块太少(打印 [pano_sparse],
+未出图、--only-new 时连锚点也不加:这类锚点多半出成航拍广角照片被机检拒掉,原文上报用户;用户确认仍要出才加 --allow-sparse,
+Agent 不得自行加)。全景与分镜背景图一样在派发任务内前台跑完,禁止丢后台。
 """
 import json
 import sys
@@ -46,6 +48,8 @@ def main():
         ap.add_argument('--only-new', action='store_true', help='配合 --anchor:不重新规划,只给本次新加的锚点出全景(其它锚点/背景图不动)')
         ap.add_argument('--scheme', default=None, help='只出这个光照方案(slug,见 --status 的 schemes);--only-new 时缺省取机位在用的第一个方案')
         ap.add_argument('--redo', nargs='+', default=None, help='只作废并重出这些锚点的全景(如 --redo A2 A3;旧图改名 .redo-<时间>.png 保留)')
+        ap.add_argument('--allow-sparse', action='store_true',
+                        help='用户确认后:悬空高视点且地面以上体块太少的锚点(退出码 4 [pano_sparse])仍然出图;配 --only-new / --redo 时只确认那几个锚点(Agent 不得自行使用)')
         ap.add_argument('--indoor', action='store_true')
         ap.add_argument('--outdoor', action='store_true')
         ap.add_argument('--seed', type=int, default=None)
@@ -76,6 +80,7 @@ def main():
     idx = sp.load_index(base, sid)
     only = None
     schemes = None
+    indoor = True if args.indoor else False if args.outdoor else None
     if args.camera_y and (not (args.only_new or args.dry_run) or any(len(spec.split(',')) < 4 for spec in args.anchor) or not args.anchor):
         print('--camera-y 须配合 --anchor x,z,yaw,y 与 --only-new(或 --dry-run)', file=sys.stderr)
         return 1
@@ -118,6 +123,14 @@ def main():
                 print(f'--anchor 须为 x,z[,yaw[,y]]:{spec}', file=sys.stderr)
                 return 1
             try:
+                if not args.allow_sparse:
+                    # 先预演(不写索引):悬空且体块稀少的位置在用户确认前不加锚点、不渲白模、不出图
+                    probe = sp.add_manual_anchor(base, sid, parts[0], parts[1], parts[2] if len(parts) > 2 else 0.0, cameras=cams, persist=False,
+                                                 **height_kw(parts))
+                    sparse = sp.anchor_sparse(base, sid, probe, indoor)
+                    if sparse:
+                        print(f"[pano_sparse] {sp.sparse_message(sid, probe['anchor_id'], sparse)}", file=sys.stderr, flush=True)
+                        return 4
                 a = sp.add_manual_anchor(base, sid, parts[0], parts[1], parts[2] if len(parts) > 2 else 0.0, cameras=cams,
                                          **height_kw(parts))
             except sp.PanoError as error:
@@ -151,7 +164,6 @@ def main():
                                    'source': 'manual', 'locked': True, 'serves': [], 'panos': {}})
         sp.save_index(base, sid, idx)
         args.replan = True
-    indoor = True if args.indoor else False if args.outdoor else None
     if args.status:
         idx = sp.load_index(base, sid)
         schemes = sorted({c['scheme'] for c in cams})
@@ -166,7 +178,10 @@ def main():
         return 0 if ok else 1
     try:
         stats = sp.ensure_scene_panos(base, sid, cameras=cams, schemes=schemes, dry_run=args.dry_run, force=args.force, replan=args.replan, indoor=indoor,
-                                      seed=args.seed, redo=args.redo, only=only)
+                                      seed=args.seed, redo=args.redo, only=only, allow_sparse=args.allow_sparse)
+    except sp.PanoSparseError as error:
+        print(f"[pano_sparse] {error}", file=sys.stderr, flush=True)
+        return 4
     except sp.PanoUnsupported as error:
         print(f"[pano_unsupported] {error}", file=sys.stderr, flush=True)
         return 2

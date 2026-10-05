@@ -866,11 +866,25 @@ async function mountPanoSection(host,s){
       stopPick();form.hidden=true;btn.disabled=true;btn.textContent=t('生成中…');wbBusy(true);
       status.className='wb-status ps-status';status.textContent=t('正在生成全景图…');log.hidden=false;log.textContent='';
       try{
-        const r=await fetch(`/api/v1/projects/${encodeURIComponent(proj)}/scenes/${encodeURIComponent(s.id)}/panos`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({x,z,y,yaw,scheme})});
-        const d=await r.json().catch(()=>({}));
-        if(!r.ok)throw new Error(d.detail||(r.status===404?t('服务未重启:创建全景图接口不可用'):r.status));
+        if(!(await postPano({x,z,y,yaw,scheme}))){btn.disabled=false;btn.textContent=t('➕ 创建全景图');wbBusy(false);status.className='wb-status ps-status';status.textContent='';log.hidden=true;form.hidden=false;}
       }catch(e){btn.disabled=false;btn.textContent=t('➕ 创建全景图');wbBusy(false);status.className='wb-status ps-status err';status.textContent=t('启动失败:')+e.message;log.hidden=true;form.hidden=false;}
     };
+  };
+  // 「创建全景图」提交(俯视图点选 / 3D 白模视角两个入口共用,2026-10-05):悬空高视点且白模全景里地面以上体块太少的位置,服务端先不起任务、
+  // 回 needs_confirm=sparse(前科 SCN-0109 A2:出成航拍广角照片被投影机检拒收)→ 弹窗说明,确认后带 allow_sparse 重发。返回 false = 用户取消。
+  const postPano=async payload=>{
+    const send=async body=>{
+      const r=await fetch(`/api/v1/projects/${encodeURIComponent(proj)}/scenes/${encodeURIComponent(s.id)}/panos`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok)throw new Error(d.detail||(r.status===404?t('服务未重启:创建全景图接口不可用'):r.status));
+      return d;
+    };
+    const d=await send(payload);
+    if(d.needs_confirm!=='sparse')return true;
+    const sv=d.sparse||{},pct=v=>Math.round((Number(v)||0)*1000)/10;
+    if(!confirm(I18N.f('这个位置是悬空高视点(镜头离地约 {height} m),白模全景里地面以上的体块只占 {blocks}%(低于 {limit}%)。\n这样的全景多半会被图像模型出成航拍广角照片、被投影机检拒收,白花一次出图费用;主体在全景里只占很小一块,重投影成分镜背景图也会糊。\n\n建议取消后把位置挪近 / 放低再创建。仍要按这个位置出图?',{height:sv.height_m,blocks:pct(sv.blocks),limit:pct(sv.limit)})))return false;
+    await send({...payload,allow_sparse:true});
+    return true;
   };
   const onMapClick=e=>{
     if(rotating||e.target.closest('.pano-dir'))return;
@@ -927,9 +941,7 @@ async function mountPanoSection(host,s){
       stopPick();form.hidden=true;btn.disabled=true;btn.textContent=t('生成中…');wbBusy(true);
       status.className='wb-status ps-status';status.textContent=t('正在生成全景图…');log.hidden=false;log.textContent='';
       try{
-        const r=await fetch(`/api/v1/projects/${encodeURIComponent(proj)}/scenes/${encodeURIComponent(s.id)}/panos`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({x,z,yaw,camera_y,scheme})});
-        const d=await r.json().catch(()=>({}));
-        if(!r.ok)throw new Error(d.detail||(r.status===404?t('服务未重启:创建全景图接口不可用'):r.status));
+        if(!(await postPano({x,z,yaw,camera_y,scheme}))){btn.disabled=false;btn.textContent=t('➕ 创建全景图');wbBusy(false);status.className='wb-status ps-status';status.textContent='';log.hidden=true;return;}
         WB_KEEP_POSE={sid:s.id,pose};
         blkOpen(sec);sec.scrollIntoView({behavior:'smooth',block:'nearest'});
       }catch(e){btn.disabled=false;btn.textContent=t('➕ 创建全景图');wbBusy(false);status.className='wb-status ps-status';status.textContent='';log.hidden=true;say(t('启动失败:')+e.message);}

@@ -661,3 +661,78 @@ def test_add_manual_anchor_with_camera_y_keeps_view_pose(tmp_path):
     import pytest
     with pytest.raises(sp.PanoError):
         sp.add_manual_anchor(tmp_path, 'SCN-0001', 49.9, 0, 0.0, cameras=[], camera_y=6.4, persist=False)   # 出界不夹回,报错
+
+
+# ---- 2026-10-05 fengshen3 SCN-0109 A2(悬在下山坡面上方的白模视角):下沉地形贴俯视图 / 离地高度按实际地面 / 稀疏悬空出图前先提示
+def _summit_scene():
+    """开底山顶:山顶台面顶 0,东侧坡面顶 −5,远处一座小庙。"""
+    return {'floor': 'none', 'dimensions_m': [100, 14, 56], 'objects': [
+        box('terrain_summit', (-10, -15, 0), (60, 30, 40)),
+        box('terrain_east_slope', (35, -10, 0), (30, 10, 56)),
+        box('shrine', (-20, 4, 0), (9, 8, 12))]}
+
+
+def test_sunk_terrain_gets_ground_plan_and_grid():
+    import numpy as np
+    from PIL import Image
+    h, w = 128, 256
+    plan = Image.new('RGB', (400, 400), (150, 140, 120))
+    dy = sp._equirect_rays(0.0, w, h).reshape(h, w, 3)[..., 1]
+    cam_h = 16.0
+    with np.errstate(divide='ignore'):
+        t_plane = np.where(dy < -1e-4, cam_h / -dy, 0.0)
+    depth = np.zeros((h, w), dtype='float32'); valid = np.zeros((h, w), dtype=bool)
+    low = dy < -0.5                                                                # 天底一圈:命中 y = −8 的下沉平面(比 y=0 平面远一半)
+    depth[low] = (t_plane * 1.5)[low]; valid[low] = True
+    depth[70:80, 100:140] = 3.0; valid[70:80, 100:140] = True                       # 地平线下一块地面以上的体块
+    white = Image.new('RGB', (w, h), (255, 255, 240))
+    out = np.asarray(sp.draw_projection_guides(white, valid, depth, cam_h, 0.0, ground_plan=plan, floor_wd=(100, 100)), dtype=int)
+    assert out[-6:, :, 2].mean() < 160 and (out[-6:] != out[-1, 0]).any()         # 天底不再是纯白:贴了俯视图,且有网格线
+    assert (out[70:80, 100:140] == (255, 255, 240)).all()                           # 地面以上的体块不动
+
+
+def test_lens_height_follows_real_ground_over_sunk_terrain():
+    scene = _summit_scene()
+    words = sp._lens_height_words(scene, [39.87, 16.67, -26.0], -7.58)
+    assert words.startswith('24.25 m above the ground directly beneath it') and '7.6 m below the main ground level' in words
+    assert '16.67 m above that main ground level' in words and 'seen from above' in words
+    assert sp._elevated(scene, [39.87, 2.0, -26.0], -7.58) and not sp._elevated(scene, [39.87, 2.0, -26.0])
+    low = sp._lens_height_words(scene, [39.87, 1.0, -26.0], -1.5)                   # 下沉但不悬空:只说明两个基准,不写「从上往下看」
+    assert low.startswith('2.5 m above the ground directly beneath it') and 'seen from above' not in low
+    assert sp._lens_height_words(scene, [0, 11.6, 0], 0.0) == sp._lens_height_words(scene, [0, 11.6, 0])   # 不下沉:照旧按站立面
+
+
+def test_sparse_view_flags_only_elevated_anchor_with_few_blocks():
+    scene = _summit_scene()
+    assert sp.ground_below(scene, [39, 16.67, -26]) == -5.0 and sp.ground_below(scene, [0, 11.6, 0]) == 0.0
+    far = sp.sparse_view(scene, [39, 16.67, -26])                                    # 悬在东坡上方 21.7 m,庙在 60 m 外
+    assert far and far['height_m'] == 21.7 and far['blocks'] < sp.SPARSE_BLOCKS_MIN
+    assert sp.sparse_view(scene, [-8, 6, 0]) is None                                # 悬空但庙就在眼前:体块够
+    assert sp.sparse_view(scene, [10, 1.8, 15]) is None                             # 贴地的稀疏锚点不拦(河滩 / 田野实测都能出)
+    assert sp.sparse_view(scene, [39, 16.67, -26], indoor=True) is None
+    assert sp.ground_below({**scene, 'floor': None}, [39, 16.67, -26]) == 0.0       # 有地面板:下沉块在地板下
+
+
+def test_ensure_stops_before_spending_on_sparse_manual_anchor(tmp_path, monkeypatch):
+    import pytest
+    from modules import whitebox
+    scene = _summit_scene()
+    monkeypatch.setattr(whitebox, 'load_scene', lambda base, sid: dict(scene))
+    monkeypatch.setattr(sp, 'scene_indoor', lambda base, sid, _depth=0: False)
+    generated = []
+    monkeypatch.setattr(sp, 'render_whitebox_pano', lambda base, sid, a, **kw: None)
+    monkeypatch.setattr(sp, 'whitebox_pano_stale', lambda base, sid, a: False)
+    monkeypatch.setattr(sp, 'check_pano_support', lambda *a, **kw: {})
+    monkeypatch.setattr(sp, 'generate_pano', lambda base, sid, idx, a, s, **kw: generated.append((a['anchor_id'], s)))
+    a = sp.add_manual_anchor(tmp_path, 'SCN-0001', 39, -26, 160.0, cameras=[], camera_y=16.67)
+    assert sp.anchor_sparse(tmp_path, 'SCN-0001', a)
+    kw = dict(cameras=[], schemes={'L1': None}, only=[a['anchor_id']])
+    with pytest.raises(sp.PanoSparseError):
+        sp.ensure_scene_panos(tmp_path, 'SCN-0001', **kw)
+    assert not generated and not sp.load_index(tmp_path, 'SCN-0001')['anchors'][0].get('sparse_ok')
+    assert sp.ensure_scene_panos(tmp_path, 'SCN-0001', dry_run=True, **kw)['pending'] == ['A1/L1']       # 预演只警不拦
+    sp.ensure_scene_panos(tmp_path, 'SCN-0001', allow_sparse=True, **kw)
+    assert generated == [('A1', 'L1')] and sp.load_index(tmp_path, 'SCN-0001')['anchors'][0]['sparse_ok'] is True
+    monkeypatch.setattr(sp, 'pano_ready', lambda base, sid, a, s: s == 'L1')
+    sp.ensure_scene_panos(tmp_path, 'SCN-0001', cameras=[], schemes={'L2': None}, only=['A1'])            # 已确认过:补别的方案不再问
+    assert generated[-1] == ('A1', 'L2')

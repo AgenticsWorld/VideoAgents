@@ -2243,6 +2243,8 @@ window.I18N_DICT = {
 "当前白模摄像机 ({x}, {z}) 在场景地面范围之外(x ±{mx} m、z ±{mz} m 以内才能出全景),请先把视角移到场景内": "Camera mô hình khối ({x}, {z}) nằm ngoài phạm vi mặt đất của cảnh (toàn cảnh cần x trong ±{mx} m và z trong ±{mz} m). Hãy di chuyển góc nhìn vào trong cảnh trước",
 "当前白模摄像机在地面以下,请先把视角升到地面以上": "Camera mô hình khối đang ở dưới mặt đất. Hãy nâng góc nhìn lên trên mặt đất trước",
 "将基于当前的白模摄像机位置和视角来创建全景图:\n位置 x {x} · y {y} · z {z} m,朝向 yaw {yaw}°\n光照方案:{scheme}\n\n只出这一张,其它锚点不动;消耗全景模型出图费用。确认创建?": "Sẽ tạo ảnh toàn cảnh dựa trên vị trí camera và góc nhìn hiện tại của mô hình khối:\nVị trí x {x} · y {y} · z {z} m, hướng yaw {yaw}°\nPhương án ánh sáng: {scheme}\n\nChỉ tạo ảnh này; các điểm neo khác giữ nguyên; tốn phí tạo ảnh của mô hình toàn cảnh. Tạo ngay?",
+// 稀疏悬空预检(2026-10-05):悬空高视点且白模全景里体块太少的位置,出图前先弹窗确认
+"这个位置是悬空高视点(镜头离地约 {height} m),白模全景里地面以上的体块只占 {blocks}%(低于 {limit}%)。\n这样的全景多半会被图像模型出成航拍广角照片、被投影机检拒收,白花一次出图费用;主体在全景里只占很小一块,重投影成分镜背景图也会糊。\n\n建议取消后把位置挪近 / 放低再创建。仍要按这个位置出图?": "Vị trí này là điểm nhìn lơ lửng trên không (ống kính cách mặt đất khoảng {height} m), và các khối phía trên mặt đất chỉ chiếm {blocks}% ảnh toàn cảnh mô hình khối (dưới {limit}%).\nMô hình ảnh rất có thể sẽ biến ảnh toàn cảnh như vậy thành ảnh chụp từ trên không góc rộng, bị kiểm tra phép chiếu từ chối và lãng phí một lần tạo ảnh; chủ thể cũng chỉ chiếm một mảng rất nhỏ trong ảnh toàn cảnh nên nền cảnh quay chiếu lại từ đó sẽ bị mờ.\n\nNên hủy rồi tạo ở vị trí gần hơn / thấp hơn. Vẫn tạo ảnh tại vị trí này?",
 "服务未重启:创建全景图接口不可用": "Dịch vụ chưa khởi động lại: API tạo toàn cảnh không khả dụng",
 "项目「白模」选项已关闭,不能生成全景图": "Tùy chọn “Whitebox” của dự án đang tắt; không thể tạo toàn cảnh",
 "该场景还没有白模,不能出全景(先建场景白模)": "Cảnh này chưa có whitebox; hãy dựng whitebox cảnh trước",

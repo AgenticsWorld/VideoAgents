@@ -529,7 +529,8 @@ async def scene_world_update(project: str, sid: str, key: str, body: dict[str, A
 
 @api.post("/projects/{project}/scenes/{sid}/panos", tags=["artifacts"])
 async def scene_pano_start(project: str, sid: str, body: dict[str, Any]) -> dict[str, Any]:
-    """场景预览页「创建全景图」:{x, z, yaw?, y?, scheme?}(白模米制坐标;y = 相机脚下平面海拔)→ 后台加锁定锚点并只出这一张全景;进度经 SSE scene_panos。"""
+    """场景预览页「创建全景图」:{x, z, yaw?, y?, scheme?}(白模米制坐标;y = 相机脚下平面海拔)→ 后台加锁定锚点并只出这一张全景;进度经 SSE scene_panos。
+    悬空高视点且体块稀少的位置先返回 {ok: false, needs_confirm: "sparse"}(不起任务),确认后带 allow_sparse: true 重发。"""
     return await core.api_scene_pano_start(project, sid, body)
 
 

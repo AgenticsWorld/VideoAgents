@@ -44,7 +44,7 @@ Agent 须原文上报,请用户到控制台「🎨 生成模型」换图像模�
   python code/render_shot_plates.py --project <slug> --ep ep01 grp027 --repano  # 把仍指向 legacy(非全景制)图的镜重出(用户明确要求时)
   python code/render_shot_plates.py --project <slug> --ep ep01 --no-grid-fallback  # 九宫格模式关掉自动补图(只选格;加 --force 才重出宫格本身)
   可选 --sun west:把太阳罗盘方位换算成相对机位的方向写进提示词;--seed N:新出图固定种子。
-  退出码:0 完成;1 出错/机检不过;2 图像模型不支持全景(请用户换模型);3 已达 --max-new 上限还有待出;4 世界模型模式的场景尚未生成世界模型(请用户生成);
+  退出码:0 完成;1 出错/机检不过(含 [pano_sparse]:手动加的悬空稀疏锚点待出全景,未出图,原文上报用户裁决);2 图像模型不支持全景(请用户换模型);3 已达 --max-new 上限还有待出;4 世界模型模式的场景尚未生成世界模型(请用户生成);
         5 九宫格手动补图模式下有镜待用户手工截取背景图(其余镜已落盘)。
 
 纪律(2026-09-09,前科 dzg6 p6-shot-plates-ep01-s01s02:Agent 把本脚本丢后台就结单,进程随之被杀,16 镜一张没出):
@@ -59,7 +59,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import parse_args, reexec_with_host_python, spatial_blocking_enabled  # noqa: E402
-from modules.scene_panos import PanoProjectionError, PanoUnsupported  # noqa: E402
+from modules.scene_panos import PanoProjectionError, PanoSparseError, PanoUnsupported  # noqa: E402
 from modules.shot_plates import WorldMissing, run_episode, status_episode, sync_episode  # noqa: E402
 from modules.whitebox import component, read  # noqa: E402
 
@@ -126,6 +126,10 @@ def main():
         print(f"[pano_projection_fail] {error}", file=sys.stderr, flush=True)
         print(json.dumps({'shot_plates': {'blocked': 'pano_projection_fail', 'detail': str(error)}}, ensure_ascii=False), flush=True)
         return 3
+    except PanoSparseError as error:   # 手动加的悬空稀疏锚点待出全景:不花钱,原文上报用户(确认后 render_scene_panos.py --redo <锚点> --allow-sparse)
+        print(f"[pano_sparse] {error}", file=sys.stderr, flush=True)
+        print(json.dumps({'shot_plates': {'blocked': 'pano_sparse', 'detail': str(error)}}, ensure_ascii=False), flush=True)
+        return 1
     except WorldMissing as error:
         print(f"[world_missing] {error}", file=sys.stderr, flush=True)
         print(json.dumps({'shot_plates': {'blocked': 'world_missing', 'scenes': error.scenes, 'detail': str(error)}}, ensure_ascii=False), flush=True)

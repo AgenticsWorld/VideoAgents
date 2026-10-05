@@ -8086,7 +8086,7 @@ def _scene_job_worker(jobs: dict, etype: str, project: str, sid: str, jobkey: st
             job["status"] = "failed"
             # CLI 的错误行以「错误:」/「[pano_unsupported]」开头(其后可能跟多行响应体),取该行起的片段;没有就取末尾几行
             lines = job["log"]
-            start = next((i for i in range(len(lines) - 1, -1, -1) if lines[i].startswith(("错误:", "[pano_unsupported]", "[pano_projection_fail]", "[world_missing]", "scene_panos:"))),
+            start = next((i for i in range(len(lines) - 1, -1, -1) if lines[i].startswith(("错误:", "[pano_unsupported]", "[pano_projection_fail]", "[pano_sparse]", "[world_missing]", "scene_panos:"))),
                          max(len(lines) - 3, 0))
             job["error"] = " ".join(x.strip() for x in lines[start:start + 4])[:500] or f"exit {rc}"
             if rc == 2 and rc2_error:
@@ -8108,7 +8108,10 @@ async def api_scene_pano_start(project: str, sid: str, body: dict):
     y(2026-09-29)= 相机脚下平面海拔(0 = 地面),相机 = y + 眼高;请求体不带 y 照旧自动找站立面。落在实体块里由 CLI 报错(任务 failed)。
     camera_y(2026-10-05「3D 白模」板块的「创建全景图」)= 相机本身的高度:按白模旋转视角当前的相机位置 (x, camera_y, z) 与 yaw 出,
     位置照用(CLI --camera-y:不加眼高、不夹回地面;出界 / 落在实体块里任务 failed);与 y 同给时以 camera_y 为准。
-    进度经 SSE scene_panos 事件;完成后预览数据里多出该锚点。退出码 2 = 全景模型不支持 2:1(index.json#blocked,预览页红条)。"""
+    进度经 SSE scene_panos 事件;完成后预览数据里多出该锚点。退出码 2 = 全景模型不支持 2:1(index.json#blocked,预览页红条)。
+    稀疏悬空预检(2026-10-05):这个位置是悬空高视点、白模全景里地面以上的体块又太少(modules.scene_panos.sparse_view,多半出成航拍广角
+    照片被机检拒掉)→ 不起任务,返回 {ok: false, needs_confirm: "sparse", sparse: {blocks, height_m, limit}};页面弹窗确认后带
+    allow_sparse: true 重发(CLI --allow-sparse)。"""
     base = _proj_base(project)
     sid = re.sub(r"[^\w\-]", "", sid)
     if not sid:
@@ -8134,11 +8137,18 @@ async def api_scene_pano_start(project: str, sid: str, body: dict):
     jobkey = f"{base.name}/{sid}"
     if (PANO_JOBS.get(jobkey) or {}).get("status") == "running":
         raise ServiceError(409, f"{sid} 正在生成全景图")
+    allow_sparse = body.get("allow_sparse") is True
+    if not allow_sparse:
+        sparse = await asyncio.to_thread(_scene_pano_sparse, base, sid, x, z, yaw, y, camera_y)
+        if sparse:
+            return {"ok": False, "needs_confirm": "sparse", "sparse": sparse}
     cmd = [sys.executable, "-u", str(ROOT / "code" / "render_scene_panos.py"), "--project", base.name, "--scene", sid,
            "--anchor", f"{x:g},{z:g},{yaw:g}" + ("" if y is None else f",{y:g}"), "--only-new"]
     if camera_y is not None:
         cmd[cmd.index("--anchor") + 1] = f"{x:g},{z:g},{yaw:g},{camera_y:g}"
         cmd.append("--camera-y")
+    if allow_sparse:
+        cmd.append("--allow-sparse")
     if scheme:
         cmd += ["--scheme", scheme]
     PANO_JOBS[jobkey] = {"status": "running", "log": [], "started_at": time.time(), "finished_at": None, "error": "",
@@ -8147,6 +8157,17 @@ async def api_scene_pano_start(project: str, sid: str, body: dict):
                      kwargs={"rc2_error": "当前全景模型不支持 2:1 全景,请到本页顶部「🌐 全景模型」切换后重试"}, daemon=True).start()
     HUB.publish({"type": "scene_panos", "project": base.name, "scene": sid, "status": "running", "line": ""})
     return {"ok": True, "job": jobkey}
+
+
+def _scene_pano_sparse(base: Path, sid: str, x: float, z: float, yaw: float, y: float | None, camera_y: float | None) -> dict | None:
+    """「创建全景图」起任务前的稀疏悬空预检(只读,不写索引):预演这个锚点会落在哪 → modules.scene_panos.anchor_sparse。
+    位置非法(出界 / 落在实体块里)等一律返回 None,照旧交给 CLI 报错(任务 failed,原文显示)。"""
+    from modules import scene_panos as _sp
+    try:
+        anchor = _sp.add_manual_anchor(base, sid, x, z, yaw, persist=False, y=y, camera_y=camera_y)
+        return _sp.anchor_sparse(base, sid, anchor)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _scene_pano_probe(project: str, sid: str, body: dict) -> dict:
