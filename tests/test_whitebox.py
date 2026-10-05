@@ -1158,3 +1158,21 @@ def test_export_renderer_fingerprint_ignores_stills_page():
     import inspect
     from modules import whitebox_export
     assert 'whitebox-stills' not in inspect.getsource(whitebox_export.renderer_fingerprint)
+
+
+def test_export_fingerprint_ignores_review_fingerprints():
+    """#108:镜头上的审查指纹(source/placement_fingerprint)重打不让已导出视频过期;旧口径 manifest 一字未变时仍认。"""
+    from modules import whitebox_export as we
+    cam = {'shot_id': 'sh001', 'keyframes': [{'t': 0, 'position': [0, 1.5, 4], 'target': [0, 1, 0], 'fov': 27}],
+           'source_fingerprint': 'aaa', 'placement_fingerprint': 'bbb'}
+    group = {'group_id': 'grp001', 'scene_id': 'SCN-0001', 'cameras': [cam], 'issues': [{'id': 'x'}]}
+    episode = {'scenes': {'SCN-0001': {'dimensions_m': [8, 3, 8]}}}
+    restamped = {**group, 'cameras': [{**cam, 'source_fingerprint': 'ccc', 'placement_fingerprint': 'ddd'}]}
+    assert we.fingerprint(episode, restamped) == we.fingerprint(episode, group)
+    moved = {**group, 'cameras': [{**cam, 'keyframes': [{**cam['keyframes'][0], 'fov': 35}]}]}
+    assert we.fingerprint(episode, moved) != we.fingerprint(episode, group)
+    legacy = we._fingerprint(episode, group, review_marks=True)
+    assert legacy != we.fingerprint(episode, group)
+    assert we.fingerprint_matches(legacy, episode, group) and we.fingerprint_matches(we.fingerprint(episode, group), episode, group)
+    assert not we.fingerprint_matches(legacy, episode, moved) and not we.fingerprint_matches('', episode, group)
+    assert cam['source_fingerprint'] == 'aaa'                                   # 不改入参

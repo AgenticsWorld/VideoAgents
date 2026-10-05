@@ -128,6 +128,8 @@ continuity 从源组 continuity_from 取前组。actors 默认 validate，camera
 
 指纹采用宿主 `v2:` 数值规范化：递归将等值整数与浮点数（如 `3`/`3.0`、`0`/`-0.0`）视为相同，布尔、字符串和实际数值变更仍区分；禁止 Agent 手写 JSON 哈希或复制旧算法。无前缀旧指纹仅在原始输入完全匹配时兼容。迁移已失效旧指纹须先证明历史输入哈希匹配旧审查且与当前输入仅有等值数值序列化差异，保留备份和逐项证据；无法证明则重新审查，不能批量刷指纹。回归案例：liaozhai3/ep01 整集 shot_list 回写把 `duration_s:3.0` 写成 `3`、轨迹 `0.0` 写成 `0`，旧文本哈希误报 source/placement changed，并连带使跨组重复机位报 missing matched shot。第二例(2026-09-23 fengshen3/ep06):改名单用 sed 把 grp0052→grp019,shot_list 的 scene_presence.reason 与 sh022–sh031 的 camera/blocking/composition 注记文字随之变化,grp005/grp019 全组 source/placement 指纹失效;改名/改注记文字后须由宿主函数重打指纹,证据为反向替换后哈希逐项复原(runs/p6-rename-ep06-grp019-shots/fingerprint-restamp.json)。
 
+白模视频指纹（`manifest.json#source_sha256`）不含镜头上的审查指纹 `source_fingerprint` / `placement_fingerprint`（#108，2026-10-05）：按上面的规则证明几何不变、只重打审查指纹后，已导出的 `camera.mp4` 不判过期、无须重导；此前导出的 manifest（旧口径含审查指纹）在输入一字未变时仍被认。
+
 验收分别记录“设定数值一致”“几何与主体取景可用”“视觉符合构图”。前项通过不能冒充后项通过。采样覆盖镜内轨迹与各阶段边界，静态首尾相同仍可能中途移动。源设定与房间尺寸/站位无法同时成立时，列出具体冲突并明确取舍，回写 camera/composition/shot_list/prompt 和白模计划，保留决定，再导出和刷新参考视频。案例：liaozhai2/ep01 S06-14 经用户确认校准轨道、保留 1.85–3.15s；S07-01/09 经用户确认保留空间与站位、改更广焦段。
 
 ## 防穿模检查

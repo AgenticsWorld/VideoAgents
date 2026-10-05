@@ -22,11 +22,28 @@ STATIC = Path(__file__).resolve().parents[1] / 'apps/web/static'
 _EXPORT_LOCK = threading.Lock()
 
 
-def fingerprint(episode, group):
+# 镜头上的审查指纹(上游文字/摆位变没变的标记)不影响画面,不进视频指纹(#108):上游只改说明文字、证明几何不变后
+# 重打审查指纹,视频不该判过期
+REVIEW_FINGERPRINT_KEYS = ('source_fingerprint', 'placement_fingerprint')
+
+
+def _fingerprint(episode, group, review_marks=False):
     scene = episode['scenes'][group['scene_id']]
     # 待决项/裁决状态不影响画面,不进视频指纹(否则用户每答一题所有组视频都会显示过期)
     group = {k: v for k, v in group.items() if k != 'issues'}
+    if not review_marks and isinstance(group.get('cameras'), list):
+        group['cameras'] = [{k: v for k, v in cam.items() if k not in REVIEW_FINGERPRINT_KEYS} if isinstance(cam, dict) else cam
+                            for cam in group['cameras']]
     return hashlib.sha256(json.dumps([scene, group], sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def fingerprint(episode, group):
+    return _fingerprint(episode, group)
+
+
+def fingerprint_matches(saved, episode, group):
+    """manifest 里存的 source_sha256 是否仍对得上本组:现行口径,或 2026-10-05 前含审查指纹的旧口径(一字未变当然仍有效)。"""
+    return bool(saved) and saved in (_fingerprint(episode, group), _fingerprint(episode, group, review_marks=True))
 
 
 def renderer_fingerprint():
@@ -61,7 +78,7 @@ def ensure_videos(base, episode, group_ids=None, *, width=None, height=None, fps
         except (ValueError, OSError):
             record = {}
         files = [f'assets/whitebox/{ep}/{gid}/camera.mp4']
-        current = (isinstance(record, dict) and record.get('source_sha256') == fingerprint(episode, group)
+        current = (isinstance(record, dict) and fingerprint_matches(record.get('source_sha256'), episode, group)
                    and record.get('renderer_sha256') == renderer_hash and record.get('fps') == fps
                    and all(record.get(k) == v for k, v in fmt.items())
                    and record.get('files') == files

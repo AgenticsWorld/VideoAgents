@@ -63,7 +63,7 @@ def main():
     if args.check_only:return 0
     # 核验模式只读(#85):在内存里算指纹比对,不落盘 episode.json / whitebox.scene.json,不导出、不接线
     if args.verify_export:
-        from modules.whitebox_export import fingerprint
+        from modules.whitebox_export import fingerprint_matches
         report={}
         for g in episode['groups']:
             if scoped and g['group_id'] not in selected:continue
@@ -71,7 +71,7 @@ def main():
             try:record=json.loads((folder/'manifest.json').read_text(encoding='utf-8'))
             except Exception:record={}
             video=folder/'camera.mp4'
-            report[g['group_id']]=('ok' if record.get('source_sha256')==fingerprint(episode,g) and video.is_file() and video.stat().st_size>0
+            report[g['group_id']]=('ok' if fingerprint_matches(record.get('source_sha256'),episode,g) and video.is_file() and video.stat().st_size>0
                                    else 'stale' if video.is_file() else 'missing')
         bad={k:v for k,v in report.items() if v!='ok'}
         print(json.dumps({'whitebox_videos_exported':{'groups':len(report),'ok':len(report)-len(bad),'problems':bad}},ensure_ascii=False),flush=True)
