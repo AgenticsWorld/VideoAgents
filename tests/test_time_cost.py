@@ -39,6 +39,13 @@ def test_beat_costs_prose_and_phrase():
     assert kinds == ["throw", "fx", "default"] and beats[-1]["cost_s"] == tc.DESC_CLAUSE_S   # 同类并拍,描写短句按 0.25
     assert tc.is_meta_action_line("拍:④ 更大冲突 | 时长:28s") and tc.is_meta_action_line("动作段 ab07-1 起手 → 反制")
     assert not tc.is_meta_action_line("【起手】洞口人影一闪")
+    # #106:场头说明 bullet(键名可带括注)不算动作;「≤」只在节拍标签里的动作行照常计时
+    for line in ("空间:SCN-0148 殿门朝东", "- 场地(ab08-1 ①):府前空场,马只能绕圈", "三级尺度(设计风格 §5):L1 石阶 / L2 行宫",
+                 "环境:山红土赤", "方位(SCN-0036):望陈塘关朝东", "内容处理:塔内火只逼不伤", "生成分段(承长镜头):组A ≈14s",
+                 "合计 12.5s ≤ 15.4s"):
+        assert tc.is_meta_action_line(line), line
+    for line in ("【闪回①·≤4s】他转身拔剑", "环境骤暗,他后退半步", "空间里只剩风声"):
+        assert not tc.is_meta_action_line(line), line
 
 
 def test_sequence_connectors_and_blocking_beats():

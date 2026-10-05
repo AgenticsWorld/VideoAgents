@@ -143,7 +143,10 @@ BEAT_COSTS: tuple[tuple[str, float, tuple[str, ...]], ...] = (
 )
 _SPLIT_RE = re.compile(r"[。;;!!??\n]+|[,,、]+|——|—|…+|\s+(?:then|and then|next|after that)\s+", re.I)
 _CONNECT_WORDS = ("先", "随后", "接着", "然后", "再", "之后", "紧接着", "最后", "继而", "一边", "同时", "跟着", "顺势", "随即")
-_META_LINE_RE = re.compile(r"^\s*(拍|出场|事件|对白装载|动作段|时长|转场|时段|声音|音效|音乐|BEAT|CAST|EVENTS|DURATION)\s*([:：]|\s)")
+_META_LINE_RE = re.compile(r"^\s*(?:[-*]\s*)?(拍|出场|事件|对白装载|动作段|时长|转场|时段|声音|音效|音乐|BEAT|CAST|EVENTS|DURATION)\s*([:：]|\s)")
+# 场头说明 bullet(#106):键名后可带一段括注,须紧跟冒号——「空间:…」「场地(ab08-1 ①):…」「三级尺度(设计风格 §5):…」
+_META_NOTE_RE = re.compile(r"^\s*(?:[-*]\s*)?\**(空间|场地|环境|方位|三级尺度|内容处理|生成分段|画外角色|光照|天气|备注|说明)\**"
+                           r"\s*(?:[（(][^）)\n]*[）)])?\s*[:：]")
 _BEAT_TAG_RE = re.compile(r"【[^】]{1,12}】|\[BEAT:[^\]]*\]", re.I)
 _SEQ_RE = re.compile(r"随后|接着|然后|紧接着|继而|之后|跟着|顺势|随即|最后|再(?=[^次]|$)|先(?=[^生前后头])"
                      r"|\bthen\b|\bnext\b|\bafter that\b|\bfollowed by\b|\bfinally\b|\bafterwards\b", re.I)
@@ -197,8 +200,12 @@ def action_cost(text: str, prose: bool = False) -> tuple[float, list[dict]]:
 
 
 def is_meta_action_line(line: str) -> bool:
-    """剧本场内的说明性 bullet(拍:/出场:/对白装载:…)不算动作。"""
-    return bool(_META_LINE_RE.match(str(line or ""))) or "≤" in str(line or "")
+    """剧本场内的说明性 bullet(拍:/出场:/对白装载:/空间:/场地(…):…)不算动作。
+    含「≤」的行多是装载/时长核算,也算说明;但「≤」只出现在节拍标签里的动作行(「【闪回①·≤4s】他转身…」)照常计时(#106)。"""
+    s = str(line or "")
+    if _META_LINE_RE.match(s) or _META_NOTE_RE.match(s):
+        return True
+    return "≤" in _BEAT_TAG_RE.sub("", s)
 
 
 def count_sequence_connectors(text: str) -> int:
