@@ -527,9 +527,19 @@ def is_moderation_error(exc: BaseException) -> bool:
             (isinstance(exc, _HTTPStatusError) and exc.status >= 500):
         return False
     text = str(exc)
-    if "PrivacyInformation" in text and "Sensitive" not in text:
+    # 方舟真人拒收的错误码是 Input{Image,Video}SensitiveContentDetected.PrivacyInformation,本身带 "Sensitive"(#112)
+    if "PrivacyInformation" in text:
         return False
     return bool(_NSFW_MODERATION_RE.search(text) or _NSFW_MODERATION_CODE_RE.search(text))
+
+
+_ERROR_CODE_RE = re.compile(r"\"code\"\s*:\s*\"?([\w.\-]+)")
+
+
+def _error_code(exc: BaseException) -> str:
+    """错误正文里的渠道错误码(日志只打首行会把它截掉);取不到返回空串。"""
+    m = _ERROR_CODE_RE.search(str(exc))
+    return m.group(1) if m else ""
 
 
 def nsfw_failover_cfg(kind: str, cfg: dict, exc: BaseException, group: str = "") -> dict | None:
@@ -554,7 +564,8 @@ def nsfw_failover_cfg(kind: str, cfg: dict, exc: BaseException, group: str = "")
         return None
     ncfg["_nsfw_route"] = "failover"
     ncfg["_nsfw_error"] = str(exc)[:300]
-    print(f"[genmedia] NSFW 兜底:{kind} 被渠道 {cfg.get('provider')} 内容审核拒收({str(exc).splitlines()[0][:160]}),"
+    code = _error_code(exc)
+    print(f"[genmedia] NSFW 兜底:{kind} 被渠道 {cfg.get('provider')} 内容审核拒收({f'错误码 {code};' if code else ''}{str(exc).splitlines()[0][:160]}),"
           f"改用备用渠道 {_nsfw_fb_desc(kind, fb)} 重提一次(不计重跑次数)", file=sys.stderr, flush=True)
     _nsfw_write_group_flag(group, str(exc))
     return ncfg

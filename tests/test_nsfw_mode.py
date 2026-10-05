@@ -82,6 +82,11 @@ def test_moderation_error_detection():
     assert genmedia.is_moderation_error(RuntimeError("MiniMax /video_generation 失败(code=1026):sensitive"))
     assert genmedia.is_moderation_error(RuntimeError("Fal video任务失败(content_policy_violation):x"))
     assert not genmedia.is_moderation_error(E(400, "u", '{"error":{"code":"InputImagePrivacyInformationDetected"}}'))
+    # #112:方舟真人拒收的真实错误码带 SensitiveContentDetected 前缀,同样不算内容审核
+    privacy = E(400, "u", '{"error":{"code":"InputVideoSensitiveContentDetected.PrivacyInformation","message":"may contain real person"}}')
+    assert not genmedia.is_moderation_error(privacy)
+    assert genmedia._error_code(privacy) == "InputVideoSensitiveContentDetected.PrivacyInformation"
+    assert genmedia._error_code(RuntimeError("no code here")) == ""
     assert not genmedia.is_moderation_error(E(429, "u", "moderation rate limit"))
     assert not genmedia.is_moderation_error(genmedia._TransportError("u", OSError("reset")))
     assert not genmedia.is_moderation_error(RuntimeError("Error when parsing request"))
