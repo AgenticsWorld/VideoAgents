@@ -8752,6 +8752,7 @@ def _preview_storyboard(project: str, ep: str):
     # 集级三下拉(渠道/模型/技能)所需的存盘配置与可选清单
     data["episode_settings"] = {k: epay[k] for k in ("config", "providers", "skills", "project_skill")}
     data["nsfw_mode"] = nsfw_enabled()      # 组卡 🔞 开关只在 NSFW 模式开启时显示(设置→高级→NSFW 模式)
+    data["prompt_gate"] = _prompt_gate(base, ep)   # H3V 视频提示词签字(g7p):集行右侧状态 / 签字按钮
     for g in (sl.get("generation_groups") or []):
         if not isinstance(g, dict):
             continue
@@ -9647,6 +9648,83 @@ async def api_board_signoff(project: str, ep: str, body: dict):
         "signed_at": time.strftime("%Y-%m-%d %H:%M:%S"), "signed_from": "preview_board",
         "storyboard_mtime": int(sbf.stat().st_mtime) if sbf.is_file() else None})
     return {"ok": True, "confirm": res, "gate": _board_gate(base, ep)}
+
+
+# ---- 视频提示词签字(H3V,workflow.yaml g7p,2026-10-05):本集全部组 p7-prompt 关单后、锚点包 / 组视频生成前 ----
+# 用户在「🎦 分镜预览」页审看各组视频提示词后签字;口径(闸门节点 / 缺提示词的组 / 逐组指纹)在 modules/prompt_gate.py,
+# genmedia video 提交前按同一节点状态硬校验 video_prompt_signed。
+
+def _prompt_gate_episodes(proj: str, gate_id: str | None) -> list[str]:
+    """H3V 闸门对应哪些集:节点 for_each.episode → 节点 id 里的 epNN;认不出返回空(不做前置核对)。"""
+    node = next((n for n in _dag_load_nodes(PROJECTS_DIR / proj / "runs" / "dag.json")
+                 if n.get("id") == gate_id), None) if gate_id else None
+    ep = _gate_episode(node) if node else ""
+    if not ep and gate_id:
+        m = re.search(r"(?<![A-Za-z0-9])(ep\d+)(?![A-Za-z0-9])", str(gate_id))
+        ep = m.group(1) if m else ""
+    return [ep] if ep else []
+
+
+def _prompt_gate(base: Path, ep: str) -> dict:
+    """视频提示词签字状态:dag.json 里 g7p(-ep)节点 + 待答复的 H3V 签字卡 + 签字记录(逐组指纹 → 签字后改动过的组)。"""
+    from modules import prompt_gate as pg
+    node = pg.gate_node(base, ep)
+    cards = []
+    for c in CONFIRMS.values():
+        if c.get("answer") is not None or c.get("kind") != "sign" or c.get("project") != base.name:
+            continue
+        cp, q, gid = str(c.get("checkpoint") or ""), str(c.get("question") or ""), str(c.get("gate_id") or "")
+        if not (cp.upper().startswith(pg.CODE) or pg.CODE in q or gid == pg.GATE_ID or gid.startswith(pg.GATE_ID + "-")):
+            continue
+        if ep in gid or ep in q or (not gid and ep not in q):
+            cards.append({k: c.get(k) for k in ("id", "question", "options", "default", "gate_id", "checkpoint")})
+    rec = pg.load_record(base, ep)
+    signed = bool(node and node.get("state") in _DONE_STATES) or (canonical_choice(rec.get("answer"), "sign") == "签字")
+    return {"gate_id": (node or {}).get("id") or f"{pg.GATE_ID}-{ep}", "state": (node or {}).get("state"),
+            "in_dag": bool(node), "pending": cards, "signed": signed,
+            "changed_groups": pg.changed_groups(base, ep, rec) if signed else [],
+            "missing_prompts": pg.missing_prompts(base, ep),
+            "signed_at": rec.get("signed_at"), "signed_answer": rec.get("answer"), "checkpoint": pg.CHECKPOINT}
+
+
+def _prompt_gate_sign_guard(proj: str, gate_id: str | None) -> None:
+    """H3V 签字前置:本集还有生成组没有视频提示词 → 409 拒签(提示词没写完,签了也只放行一部分)。"""
+    from modules import prompt_gate as pg
+    base = PROJECTS_DIR / proj
+    for ep in _prompt_gate_episodes(proj, gate_id):
+        miss = pg.missing_prompts(base, ep)
+        if miss:
+            zh = (ui_lang_code() or "zh") == "zh"
+            head = ", ".join(miss[:6]) + ("…" if len(miss) > 6 else "")
+            raise ServiceError(409, (f"H3V 未能签字:{ep} 还有 {len(miss)} 组没有视频提示词({head}),等提示词写完再签" if zh else
+                                     f"H3V cannot be signed: {ep} still has {len(miss)} group(s) without a video prompt ({head}); "
+                                     f"sign after the prompts are finished"))
+
+
+def _prompt_gate_record(proj: str, gate_id: str | None, cid: str, answer: str, origin: str = "console") -> None:
+    """落 assets/prompts/<ep>/prompt_signoff.json:答复 + 签字时逐组提示词指纹(控制台签字卡与分镜预览页签字同一条记录)。"""
+    from modules import prompt_gate as pg
+    base = PROJECTS_DIR / proj
+    for ep in _prompt_gate_episodes(proj, gate_id):
+        atomic_write_json(base / pg.SIGNOFF_REL.format(ep=ep), {
+            "schema": "prompt_signoff/1.0", "ep": ep, "gate": pg.GATE_ID, "confirm_id": cid, "answer": answer,
+            "signed_at": time.strftime("%Y-%m-%d %H:%M:%S"), "signed_from": origin,
+            "groups": pg.fingerprints(base, ep) if answer == "签字" else {}})
+
+
+async def api_prompt_signoff(project: str, ep: str, body: dict):
+    """分镜预览页「✅ 签字确认 / ⏸ 暂缓」:答复待处理的 H3V 签字卡(与控制台签字卡同一条,api_confirm_answer)。"""
+    base = _proj_base(project)
+    ep = re.sub(r"[^\w\-]", "", ep)
+    cid = str(body.get("confirm_id") or "")
+    answer = canonical_choice(body.get("answer"), "sign")   # 各语言译文归一;缺答复不默认成签字
+    if not answer:
+        raise ServiceError(400, "answer must be 签字 or 暂缓")
+    if not cid or cid not in CONFIRMS:
+        raise ServiceError(404, "sign-off card not found (it may have been answered from the console)")
+    CONFIRMS[cid]["signed_from"] = "preview_storyboard"
+    res = await api_confirm_answer(cid, {"answer": answer})
+    return {"ok": True, "confirm": res, "gate": _prompt_gate(base, ep)}
 
 
 BOARD_ANIMATIC_JOBS: dict[str, dict] = {}     # "<project>/<ep>" -> {status, started_at, error, finished_at}
@@ -15165,8 +15243,22 @@ async def api_confirm_answer(cid: str, body: dict):
             proj = _approval_project(c)
             if proj:
                 _post_sign_guard(proj, c.get("gate_id"))
+        is_h3v = (c.get("kind") == "sign" and c.get("gate_id")
+                  and str(c.get("checkpoint") or "").upper().startswith("H3V"))
+        if is_h3v and answer == "签字":
+            # H3V 视频提示词确认:本集还有组没写出提示词 → 拒签(2026-10-05)
+            proj = _approval_project(c)
+            if proj:
+                _prompt_gate_sign_guard(proj, c.get("gate_id"))
         c["answer"] = answer
         c["answered"] = time.time()
+        if is_h3v:
+            try:
+                proj = _approval_project(c)
+                if proj:
+                    _prompt_gate_record(proj, c.get("gate_id"), cid, answer, c.get("signed_from") or "console")
+            except Exception as e:  # noqa: BLE001
+                print(f"[prompt_gate] H3V 签字记录落盘失败:{e}", flush=True)
         if (c.get("kind") == "sign" and c.get("gate_id")
                 and c["answer"] == "签字"):
             if str(c.get("checkpoint") or "").upper().startswith("H3A"):
@@ -15600,13 +15692,14 @@ GATE_LABELS = {
     "H3A": ("分镜确认", "Storyboard & shot list sign-off"),
     "H3S": ("故事板确认", "Storyboard sign-off"),
     "H3W": ("白模确认", "Whitebox sign-off"),
+    "H3V": ("视频提示词确认", "Video prompt sign-off"),
     "H3B": ("视觉生成确认", "Visual generation sign-off"),
     "H3P": ("后期确认", "Post-production sign-off"),
     "H4": ("首集成片确认", "First-episode final cut sign-off"),
     "H5": ("发布签字", "Release sign-off"),
 }
-# 节点 id 前缀 → 代号(按最长前缀匹配,g6s/g6w 先于 g6)
-_GATE_ID_CODES = (("g6s", "H3S"), ("g6w", "H3W"), ("g10", "H5"), ("g2", "H1"), ("g3", "H1A"),
+# 节点 id 前缀 → 代号(按最长前缀匹配,g6s/g6w 先于 g6、g7p 先于 g7)
+_GATE_ID_CODES = (("g6s", "H3S"), ("g6w", "H3W"), ("g7p", "H3V"), ("g10", "H5"), ("g2", "H1"), ("g3", "H1A"),
                   ("g4", "H2"), ("g5", "H3"), ("g6", "H3A"), ("g7", "H3B"), ("g9", "H4"))
 
 

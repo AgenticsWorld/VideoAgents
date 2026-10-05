@@ -4139,4 +4139,12 @@ window.I18N_DICT = {
 "画外对白": "Lời ngoài hình",
 "画外对白 assets/audio/voice/{ep}/offscreen/offscreen_manifest.json": "lời ngoài hình assets/audio/voice/{ep}/offscreen/offscreen_manifest.json",
 "人物台词可以不在画内开口:画外 O.S.(说话人在场但不入画)/ V.O.(内心独白、读信、回忆声)。画外句在后期按该人物声线合成,不进组视频生成。自动=剧本标记 + 分镜按白名单自动转画外;仅剧本标记=只认剧本写的 (O.S.)/(V.O.);关=全部台词画内开口。与旁白开关正交:旁白只管旁白者声线": "Lời nhân vật không nhất thiết nói trong khung hình: ngoài hình O.S. (có mặt nhưng ngoài khung) / V.O. (độc thoại nội tâm, đọc thư, giọng hồi tưởng). Lời ngoài hình được tổng hợp hậu kỳ bằng giọng nhân vật đó, không vào bước tạo video nhóm. Tự động = đánh dấu trong kịch bản + phân cảnh tự chuyển theo danh sách trắng; Chỉ đánh dấu kịch bản = chỉ nhận (O.S.)/(V.O.) viết trong kịch bản; Tắt = mọi lời nói trong khung hình. Độc lập với công tắc lời dẫn: lời dẫn chỉ quản giọng người kể",
+"视频提示词签字 · 待答复": "Ký duyệt prompt video · chờ trả lời",
+"视频提示词已签字": "Prompt video đã được ký duyệt",
+"视频提示词签字": "Ký duyệt prompt video",
+"签字后 {n} 组有改动": "{n} nhóm thay đổi sau khi ký duyệt",
+"签字后这些组的视频提示词有改动(不需要重签):{g}": "Prompt video của các nhóm này đã thay đổi sau khi ký duyệt (không cần ký lại): {g}",
+"等总制片建签字单(本集全部组的视频提示词写完后自动);建好后这里出现「签字确认」按钮。签字前不生成本集组视频": "Đang chờ nhà sản xuất tạo thẻ ký duyệt (tự động khi prompt video của mọi nhóm trong tập đã viết xong); sau đó nút \"Ký duyệt\" sẽ hiện ở đây. Không tạo video nhóm của tập này trước khi ký duyệt",
+"确认签字放行本集视频提示词?签字后总制片开始派本集的锚点包与组视频生成。": "Ký duyệt prompt video của tập này? Sau khi ký, nhà sản xuất bắt đầu giao gói ảnh neo và tạo video theo nhóm của tập này.",
+"还有 {n} 组没有视频提示词:{g}": "Còn {n} nhóm chưa có prompt video: {g}",
 };

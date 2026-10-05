@@ -293,6 +293,12 @@ async def board_signoff(project: str, ep: str, body: dict[str, Any]) -> dict[str
     return await core.api_board_signoff(project, ep, body)
 
 
+@api.post("/projects/{project}/storyboard/{ep}/prompt-signoff", tags=["artifacts"])
+async def storyboard_prompt_signoff(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
+    """分镜预览页视频提示词签字(H3V):{confirm_id, answer: 签字|暂缓} → 答复签字卡并落 assets/prompts/<ep>/prompt_signoff.json。"""
+    return await core.api_prompt_signoff(project, ep, body)
+
+
 @api.post("/projects/{project}/script/{ep}/notes", tags=["artifacts"])
 async def script_note(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
     """剧本预览页「🗒 注释」(2026-09-27):{key, text, label?}(空 text = 删除)→ story/episodes/<ep>/script_notes.json。"""

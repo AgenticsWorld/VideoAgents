@@ -65,6 +65,8 @@ prompt 写完必跑 `python3 code/sync_continuity_refs.py --project <slug> --ep 
 
 镜头视频一律通过统一模块生成——渠道/模型由用户在控制台「🎨 生成模型」页配好,我不挑模型、不直连 API:
 
+**视频提示词签字硬闸(H3V,2026-10-05)**【仅当 `genmedia.py video` 报 `video_prompt_signed` 拒单时适用;没报就不用管,不需要我自己先去查签字状态】:本集视频提示词要先由用户在「分镜预览」页签字(`H3V-视频提示词确认`,DAG 节点 `g7p-epNN`),签字前宿主拒绝往 `assets/clips/epNN/` 出组视频。遇到该拒单 = 本集还没签字,不是渠道故障:**不重试、不改输出路径 / 文件名绕过、不改 dag.json**,回执原样上报总制片后结单。
+
 ```bash
 python3 modules/genmedia.py info     # 先看当前渠道/模型,记入回执 meta
 python3 modules/genmedia.py info --group epNN/grpNNN   # 该组有组级/集级模型覆盖(分镜预览「🎛 模型」/顶部下拉)时显示本组生效模型

@@ -4150,4 +4150,12 @@ window.I18N_DICT = {
 "画外对白": "Off-screen dialogue",
 "画外对白 assets/audio/voice/{ep}/offscreen/offscreen_manifest.json": "off-screen dialogue assets/audio/voice/{ep}/offscreen/offscreen_manifest.json",
 "人物台词可以不在画内开口:画外 O.S.(说话人在场但不入画)/ V.O.(内心独白、读信、回忆声)。画外句在后期按该人物声线合成,不进组视频生成。自动=剧本标记 + 分镜按白名单自动转画外;仅剧本标记=只认剧本写的 (O.S.)/(V.O.);关=全部台词画内开口。与旁白开关正交:旁白只管旁白者声线": "Character lines need not be spoken on camera: off-screen O.S. (speaker present but out of frame) / V.O. (inner monologue, letters, remembered voices). Off-screen lines are synthesized in post with that character's voice and never enter group video generation. Auto = script markers + storyboard whitelist auto-conversion; Script only = only honor (O.S.)/(V.O.) written in the script; Off = every line spoken on camera. Orthogonal to the narration switch: narration only governs the narrator's voice",
+"视频提示词签字 · 待答复": "Video prompt sign-off · awaiting reply",
+"视频提示词已签字": "Video prompts signed",
+"视频提示词签字": "Video prompt sign-off",
+"签字后 {n} 组有改动": "{n} group(s) changed since sign-off",
+"签字后这些组的视频提示词有改动(不需要重签):{g}": "Video prompts of these groups changed after sign-off (no need to sign again): {g}",
+"等总制片建签字单(本集全部组的视频提示词写完后自动);建好后这里出现「签字确认」按钮。签字前不生成本集组视频": "Waiting for the producer to create the sign-off card (automatic once every group's video prompt in this episode is written); a \"Sign off\" button appears here once it exists. No group video is generated for this episode before sign-off",
+"确认签字放行本集视频提示词?签字后总制片开始派本集的锚点包与组视频生成。": "Sign off this episode's video prompts? After sign-off the producer starts dispatching this episode's anchor packs and group video generation.",
+"还有 {n} 组没有视频提示词:{g}": "{n} group(s) still have no video prompt: {g}",
 };

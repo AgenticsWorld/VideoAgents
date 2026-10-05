@@ -7067,6 +7067,23 @@ def _check_id_digits(*paths):
                     f" grp/sh 编号固定三位零填充,应为 {fixed!r}(完整路径 {path})")
 
 
+def _check_video_prompt_signed(output):
+    """video_prompt_signed 前置机检(H3V,workflow.yaml g7p,2026-10-05):组视频输出路径
+    (…/assets/clips/<ep>/grpNNN*.mp4)所属的集,DAG 里有「视频提示词确认」闸门且用户还没签字 = 拒单。
+    DAG 里没有该闸门的集(改版前已展开的存量集)不拦;过场素材等其它输出路径不在此列。"""
+    from modules import prompt_gate
+    target = prompt_gate.clip_target(output)
+    if not target:
+        return
+    base, ep, _ = target
+    blocked = prompt_gate.video_blocked(base, ep)
+    if blocked:
+        raise RuntimeError(
+            f"本集视频提示词还没有签字(video_prompt_signed):{ep} 的人工闸门 {blocked} 未放行,"
+            f"签字前不得生成组视频。用户在「分镜预览」页审看本集各组视频提示词并签字"
+            f"「{prompt_gate.CHECKPOINT}」后再提交;本单原样上报总制片,不要改输出路径绕过。(输出 {output})")
+
+
 def _cmd_info(args):
     group = getattr(args, "group", "") or ""
     for kind in ("image", "video", "music", "tts"):
@@ -7139,6 +7156,8 @@ def _cmd_video(args):
     _check_id_digits(args.output, args.return_last_frame)
     gen_audio = {"on": True, "off": False, "": None}[args.generate_audio]
     group = args.group or _group_from_output(args.output)
+    if not args.dry_run:
+        _check_video_prompt_signed(args.output)
     if args.dry_run:
         cfg = apply_nsfw_route("video", apply_group_video_override(get_config("video"), group), group)
         from modules.continuity_refs import validate_request

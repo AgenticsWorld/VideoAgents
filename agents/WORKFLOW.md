@@ -39,7 +39,7 @@ prompt 写完必跑 `python3 code/sync_continuity_refs.py --project <slug> --ep 
 3. **任务皆工单**:Orchestrator 用统一的 Work Order(见 §6)派活;Agent 只做工单里的事。
 4. **质量三道闸**:机器校验(schema/指标)→ Evaluation 评分(rubric,阈值 80)→ 专项 QA Agent 审核。不过关自动带意见退回重做,重跑次数默认 0(即默认不自动重跑,首次不过即升级人工;用户可在设置「高级→Agent 高级设置→重跑次数」全局改,运行提示词「用户重跑次数设定」注入的值覆盖本文档所有写死的 3 次/≤3 次/max_retries: 3),仍不过升级人工。
 5. **上下文按需组装**:Agent 不读全库。上下文由 orchestrator 派单时**内联进工单本体**:把该任务需要的输入文件路径清单(Bible 当前受控版片段所在文件、上游产物、相关 `qa/defects/` 缺陷单)+ 硬约束直接写进工单 `instruction`/`inputs`,执行 Agent 只读工单列出的文件,不自行读全库补料(缺料走回执上报)。`attempt > 1` 的重做单必须在 `instruction` 附上次失败原因与 evaluation 逐条修改意见(`runs/<task_id>/eval.json` 路径列入 `inputs`);扇出批次的共用说明只在 instruction 写一次,不逐实例复制。(2026-09-08:原「上下文管家」Agent 及 full/inline 两级 Context Package 已删除——每单先打包一次约 4 分钟,实测收益抵不过时间与 token 开销;`runs/<task_id>/context.md` 不再产出。)
-6. **人工确认点(H1–H5 + H1A/H3A/H3B)不可跳过**:世界圣经、**角色与资产(H1A)**、美术风格、首集剧本、**每集分镜(H3A)**、**每集视觉生成(H3B)**、首集成片、发布,均需用户签字;其中分镜确认与视觉生成确认为每集一次——用户在控制台「分镜设定」预览页审看分镜/生成组划分并签字后,该集才允许进入 Phase 7 视频生成;本集全部生成组机检/抽检通过后,用户在「后期处理」页审看组 clip 并签字(H3B),该集才允许进入 Phase 9 剪辑合成。
+6. **人工确认点(H1–H5 + H1A/H3A/H3V/H3B)不可跳过**:世界圣经、**角色与资产(H1A)**、美术风格、首集剧本、**每集分镜(H3A)**、**每集视频提示词(H3V,2026-10-05:本集全部组视频提示词写完后、生成视频前,用户在「分镜预览」页审看并签字)**、**每集视觉生成(H3B)**、首集成片、发布,均需用户签字;其中分镜确认与视觉生成确认为每集一次——用户在控制台「分镜设定」预览页审看分镜/生成组划分并签字后,该集才允许进入 Phase 7 视频生成;本集全部生成组机检/抽检通过后,用户在「后期处理」页审看组 clip 并签字(H3B),该集才允许进入 Phase 9 剪辑合成。
 7. **用户全局时长设定优先**:每集目标时长与单个分镜时长范围由用户在 Web 控制台「🎵 视频节奏」配置(默认每集 10 分钟、单镜 1–10 秒),运行时注入各 Agent 系统提示词;episode-planner 的每集预算、storyboard/shot-planning 的每镜时长必须以此为准,本文档各表中的具体秒数(如 180s/集、4.0s/镜)仅为示例。每集时长可设为「根据剧本自动」(settings.json `duration.episode_minutes: "auto"`):此时不设固定每集预算,episode-planner 按剧情结构自行决定集数与每集时长并在 episode_plan 中写明各集实际预算,pacing/edit 以 episode_plan 实际预算为基准。
 8. **视频按生成组产出**:相邻同场景镜头打包为「生成组」(Σ时长 ≤项目「视频模型设置」的组时长上限,整数秒;默认 15s=Seedance 2.0 单次生成上限,仅当视频模型为 Seedance 2.5 且用户调高该设置时最高 30s——本文档余下部分出现的 15s 组上限示例值均指该设置的默认值,以系统提示词注入的项目实际设置为准),一组一次 Seedance 多镜头生成(见 §4 Phase 6/7 与 §9);组 clip 是一级产物,镜级时长是节奏意图而非硬约束。
 9. **输出文件命名仅限英文与数字(2026-07-20)**:所有 Agent 落盘的文件名与目录名只准使用英文字母(a-z/A-Z)、数字(0-9)及分隔符 `-`/`_`/`.`,**禁止中文及其他任何非 ASCII 字符**——中文文件名在 ffmpeg/对象存储预签名 URL/跨平台路径处理中随时炸链。角色/场景等实体一律用 ID 或拼音/英文 slug 入文件名(如 `CHAR-0001_voiceprint.mp3`,不是 `林风_声纹.mp3`);机检项 ascii_filename,命中非 ASCII 文件名直接退回。本条只限**文件名**,文件内容(JSON 字段值、字幕、剧本)不受限。用户放入 `novel/`、`refs/` 的输入文件不强制,但引用时应先规范化改名。
@@ -196,8 +196,9 @@ refs/
                              │
           ┌──────────────────┴───────────────────┐
    Phase 7 视觉生成(每组流水)              Phase 8 音频(每集)
-   prompt → image-generation →              sfx-cue/ambience-cue/音色样本/
-   character-consistency →                  旁白轨(先于 p7-video)→ music(后期)
+   prompt(全集)→ [H3V 视频提示词确认(每集签字)]  sfx-cue/ambience-cue/音色样本/
+   → image-generation →                     旁白轨(先于 p7-video)→ music(后期)
+   character-consistency →
    video-generation(组序串行,原生音频)      → audio-mixing(原生轨+BGM+旁白,
    → [dub 后期配音,仅设置开启 §8C]            依赖全组 p7-video)[G8 闸门]
    → lip-sync(兜底)/animation → upscale
@@ -222,7 +223,7 @@ refs/
 
 立项时生成的 dag.json 允许先用**阶段级模板节点**(p0–p11 各一套,不带集号)。但 `story/episode_plan.json` 通过 G5 后,orchestrator 必须**立即把「按集推进」的阶段展开为逐集节点**,此后模板节点不得再承接任何工单:
 
-1. **展开范围**:Phase 5 的每集任务(screenplay/dialogue/narration/hook/pacing)与 Phase 6–10 全部节点,按 `pX-<task>-epNN` 逐集生成;每集自带闸门节点 `g6-epNN`(H3A 分镜签字,human)、`g7-epNN`(H3B 视觉生成签字,human)、`g8-epNN`、`g9-epNN`(H4 仅首集 human)、`g10-epNN`(H5 发布签字,human)。Phase 11 按发布单元展开。集间依赖遵循试点策略(首集全链路过 H4 后,后续集方可批量推进)。
+1. **展开范围**:Phase 5 的每集任务(screenplay/dialogue/narration/hook/pacing)与 Phase 6–10 全部节点,按 `pX-<task>-epNN` 逐集生成;每集自带闸门节点 `g6-epNN`(H3A 分镜签字,human)、`g7p-epNN`(H3V 视频提示词签字,human;依赖本集全部组的 `p7-prompt`,本集各组 `p7-image` / `p7-video` 依赖它,2026-10-05)、`g7-epNN`(H3B 视觉生成签字,human)、`g8-epNN`、`g9-epNN`(H4 仅首集 human)、`g10-epNN`(H5 发布签字,human)。Phase 11 按发布单元展开。集间依赖遵循试点策略(首集全链路过 H4 后,后续集方可批量推进)。
 2. **模板节点处置**:被展开覆盖的模板节点(如 `p6-plan`、`g6`)在展开时置为 `state: expanded` 并在 `note` 里指向逐集节点;**严禁拿单套模板节点跨集复用**——首集跑完把模板标 passed、后续集工单游离于 DAG 之外,会让空转看门狗失明。
 3. **补录回填**:若展开时该集已有既往工单(历史修复场景),按 `runs/<task_id>/` 实际记录回填节点 `state` 与 `run_id`,changelog 标注 `backfill`。
 4. **一致性机检**:episode_plan 中的每个 epNN 在 DAG 中必须至少有一个节点;未完结的 epNN 必须存在可跑或待签节点。任一不满足即视为调度缺陷(同 §6.1 三方不一致)。Web 控制台空转看门狗会对「plan 有集、DAG 无节点」自动告警并唤醒 orchestrator 补展开。
@@ -474,6 +475,12 @@ refs/
 | lip-sync(兜底) | 仅做不换语音的音画对齐校正;对白口型/语音缺陷默认走 video-generation 整组重生成(**严禁 TTS 干声换轨重驱口型**,§8A 红线);后期配音模式下对 p7-dub 交付的 clip 做同样的整体时移对齐兜底(仍不重驱口型画面,§8C) | 组 clip、缺陷单 | 更新组 clip | 机检:音画偏移 <80ms;QA:visual-qa 复检 |
 | animation | 动作补间/局部重绘修复(按 QA 缺陷单触发;**重绘涉及人物/场景/道具形象的,素材与 prompt 受 §7E 形象红线约束**) | 组 clip、缺陷单 | 修复后组 clip | 复检原缺陷项通过;**涉形象重绘过 repair_ref_anchored(§7E)** |
 | upscale | 超分至「输出设置」成片分辨率(像素尺寸按 aspect_ratio.json 画幅矩阵换算);**成片分辨率与草稿档不同时默认派发,无需用户确认(§7B)**;**只准宿主 CLI `modules/genmedia.py upscale`,渠道按「🎨 生成模型 → 超分」设置(2026-09-23)** | 组 clip(样片模式下 meta 含 draft_task) | 终版组 clip(meta 含 `upscale` 段) | 机检:目标分辨率、`code/check_upscale_artifacts.py` 伪影机检(按渠道类型分判据) |
+
+**H3V 视频提示词确认(每集,`g7p`,2026-10-05)**:本集**全部**生成组的 `p7-prompt` 关单(validation.auto 全过,各 `sync_*` 机器写入段已落)后,orchestrator 立即经 confirm 机制(`--sign`)向用户发起**视频提示词签字**——用户在「🎦 分镜预览」页逐组审看视频提示词(正文 + 参考图 / 参考视频 / 参考音频清单),集行右侧「✅ 签字确认 / ⏸ 暂缓」与控制台签字卡是同一条。**未签字不派本集任何 `p7-image` / `p7-consistency` / `p7-video`**(锚点包也不提前出:提示词被打回时 refs 清单会变)。
+> - **宿主硬闸**:`modules/genmedia.py video` 输出到 `assets/clips/epNN/grpNNN*.mp4` 时,本集 `g7p` 节点在 `runs/dag.json` 里且未放行即拒单(`video_prompt_signed`,`modules/prompt_gate.py`)——拒单原样上报总制片,不得改输出路径绕过;`--dry-run` 不拦。签字前置:本集还有生成组没有 `video_prompt` → 宿主 409 拒签。
+> - **暂缓 / 有意见**:用户暂缓并给意见 = 按意见回派对应组的 `p7-prompt`(或用户自己在预览页「✏️ 修改」/「📨 提交注释」发修改师),改完重新建单;不得把「暂缓」当作可继续出视频。
+> - **签字放行的是「首次开跑」,不是冻结提示词**:签字记录 `assets/prompts/epNN/prompt_signoff.json` 逐组记提示词指纹(正文 + refs / audio_refs / video_refs);签字后用户自己在分镜预览页改某组提示词重出、修改师或缺陷返工改写个别组,**不重签**(页面只提示「签字后 N 组有改动」)。只有整集提示词被标脏重写(H3A 重签、换提示词技能 / 视频模型后成批重写)才把 `g7p` 退回 pending 重新建单。
+> - **存量集**:改版前已展开 DAG 的集,**本集尚未派出任何 `p7-video` 的补插 `g7p-epNN`**(并把本集 `p7-image` / `p7-video` 依赖挂上);已开始视频生成的集不补(硬闸只看节点在不在,不在 = 不拦)。
 
 **G7 闸门 + H3B 视觉生成确认(每集)**:全集生成组 QA 通过率 100%(允许 ≤5% 组人工豁免);**人工抽检每集 10% 组**;机检/抽检通过后,orchestrator 经 confirm 机制(`--sign`)向用户发起**视觉生成签字**——用户在「后期处理」页审看本集各组 clip 后签字,未签字不进 Phase 9 剪辑合成。签字确认的是组内容质量;成片方式(超分路径)仍按 §7B 自动执行,不另设确认。
 
@@ -1124,7 +1131,7 @@ orchestrator 派 for_each 批处理单时在 `instruction` 末尾明写一句「
 3. 缺陷根因在上游(如设定本身错)→ 不许下游打补丁,缺陷单改派上游,orchestrator 按 DAG 标脏并只重跑受影响链路;
 4. **返修中的一切重生成受 §7E 形象红线约束**:只准复用在库概念图作形象锚、prompt 必带 style.json 风格锚,所涉概念图缺失时停手上报补齐——严禁修正环节新造人物/场景/道具形象(机检 repair_ref_anchored);
 5. 通过闸门的产物视为已签字定稿,后续修改必须走变更流程(标脏重跑 / 重建签字单),不得静默覆盖。
-6. **用户修改通道(2026-09-11)**:预览页「✏️ 修改」默认发给修改师 `00-orchestration/reviser`(§5),不经总制片派单;修改师改完只落 `runs/revisions/<run_id>.json` 变更记录,总制片据记录把受影响节点标脏(`state` 回 pending、note 写记录 id),`rerun_downstream=是` 才重派、否 只标脏不派;改动使 H3S/H3A/H3B 等签字过期的,按 §8 重新建签字单。修改师的重生成同受 §7E 形象红线与 §7B 分辨率闸门约束。
+6. **用户修改通道(2026-09-11)**:预览页「✏️ 修改」默认发给修改师 `00-orchestration/reviser`(§5),不经总制片派单;修改师改完只落 `runs/revisions/<run_id>.json` 变更记录,总制片据记录把受影响节点标脏(`state` 回 pending、note 写记录 id),`rerun_downstream=是` 才重派、否 只标脏不派;改动使 H3S/H3A/H3B 等签字过期的,按 §8 重新建签字单(H3V 例外:签字后个别组提示词改写不算过期,见 Phase 7「H3V」)。修改师的重生成同受 §7E 形象红线与 §7B 分辨率闸门约束。
 
 **闸门放行硬约束(G0–G10 通用,含 H1–H5)**:
 1. **缺陷清零机检**:闸门判定前 orchestrator 必须机检本闸门范围内的缺陷单——`status=open|fixing|verify` 的 blocker/major = 0,且所有 `due_gate` 到期缺陷已闭环;否则闸门只能给出 `verdict: PASS_WITH_WAIVER` 或 `HOLD`,不存在「带 open major 直接 PASS」。
@@ -1146,6 +1153,7 @@ orchestrator 派 for_each 批处理单时在 `instruction` 末尾明写一句「
 | H3 | G5 后 | 第 1 集剧本(「剧本预览」页审看剧本拆解表:场次/人物/对白/旁白/节奏/情绪/钩子,逐块提修改意见直发负责工位) |
 | H3S(每集) | p6-storyboard 后、shot-planning 前 | 本集分镜草案(「📋 故事板」页审看逐场逐镜表:编号/内容(含台词、旁白正文与挂点镜,2026-09-15)/铅笔草图 + 导演计划;草图按需出、不是签字前置;意见发总制片改分镜后重新建单;签字后 storyboard.json 再改动即视为签字过期,orchestrator 重新建单,2026-09-11) |
 | H3A(每集) | G6 后、Phase 7 前 | 本集分镜设定:分镜脚本/生成组划分/旁白挂点及估时适配/逐组音频形态与无声组判定/概念图覆盖审计结果(§6A,新出场实体补图与遗漏主角标注;2026-09-30 起含本集按集新出的场景/道具/生物图)(「分镜设定」预览页审看;签字前不生成视频,签字后另有旁白实测适配机检拦在 p7-video 前,§7D);**同时确认本项目「视频提示词技能」:自动(按生效视频模型)/手选/跳过,签字即冻结快照(§7F)**;**过场设计(§9C,2026-09-26):签字卡带本集待裁决过场建议数,签字即接受剩余建议写回 shot_list(想保留硬切的边界先在过场卡点「⏭ 保持硬切」)** |
+| H3V(每集) | 本集全部组 p7-prompt 后、p7-image / p7-video 前 | 本集各组视频提示词(「🎦 分镜预览」页逐组审看正文与参考图 / 参考视频 / 参考音频清单;签字前不出锚点包、不生成组视频,genmedia video 另有 `video_prompt_signed` 硬校验;缺提示词的组未清宿主拒签;签字后个别组改写不重签,整集重写才重新建单,§Phase 7「H3V」,2026-10-05) |
 | H3B(每集) | G7 后、Phase 9 前 | 本集全部生成组终版 clip(「后期处理」页审看组画面/原生音频质量;签字前不进剪辑合成) |
 | H3P(每集) | p9-subtitle 后、p9-post / G9 前 | 本集后期处方(「🎚️ 后期处理」页:分镜组母本上的特效/包装/画面修补/光感/调色/音效处方,A|B 比对后采纳,拼装预检通过;派单中处方未清或 post_ok FAIL 宿主拒签;签字后台账再改动即视为签字过期,orchestrator 重新建单;签字时清理旧版本文件,§9D,2026-09-11) |
 | H4 | G9 后 | 第 1 集成片(试点集全片审看) |

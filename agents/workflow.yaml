@@ -18,6 +18,8 @@
 #     2026-09-09 顺序:p6-whitebox 只编译(--compile-only)供预览页审看 → 用户签字 g6w「H3W-白模确认」→ p6-whitebox-export 导出 camera.mp4(2026-09-10 起同派 whitebox-staging,原 whitebox-export 工位已并入)
 #     → p6-shot-plates 生成分镜背景图(code/render_shot_plates.py)→ g6「H3A-分镜确认」;
 #     关闭时不实例化以上白模节点，并从 g6 移除对应依赖（同其他 condition 节点）。用户工单单独要求白模预演时同此。
+#   g7p「H3V-视频提示词确认」(2026-10-05,每集):本集全部组 p7-prompt 关单 → 用户在「🎦 分镜预览」页审看各组视频提示词并签字 → 才派 p7-image / p7-video;
+#     宿主硬校验 video_prompt_signed(genmedia video)与签字前置(缺提示词的组 → 拒签)见 p7 段注释与 modules/prompt_gate.py
 #   transition_design_enabled: = 本集生效「过场模式」≠ minimal(settings.json#transitions.mode,集级 episode.json#transitions_mode 覆盖;
 #     `python3 code/transition_design.py mode --project <slug> --ep epNN` 的 mode)——开启时实例化 p6-transition-design(07-directing/transition-design)
 #     并加进 g6 依赖;极简 = 不实例化、g6 不因缺它而 HOLD(2026-09-26,docs/transition_design.md)
@@ -373,7 +375,15 @@ phases:
                                h3_prompt_structure,   # 2026-09-09:期望 h3-pe 的组正文必须按 H3 Ref2VA 六段结构(subject_definitions 逐图 <Subject N>…<Picture i> / retention_analysis 逐份 / <d> 台词 / <Audio N> 绑 (Sx);背景图 <Picture N> 构图锚与 Plate anchor 由 sync_shot_plates 写),同脚本自动执行;自述 checklist 不算数。原注释:套用 sd25-pe 的组正文必须按 2.5 官方结构(【人物】/【动作与声音】分组、每镜「使用/不采用」清单、【未采用素材】、【保持一致】;【场景】槽位由 sync_shot_plates 写),同脚本自动执行;自述 checklist 不算数。原注释:组 json 回执 skill_applied 与项目「提示词技能」快照一致(id/sha256/checklist;不套用时 id=null+reason),code/prompt_skill_check.py;运行时另核 prompt_skill_read——漏读 SKILL.md 的运行直接 error 退回(2026-08-28)
                                motion_pair_bound,   # 2026-09-26 三期:组边界 transition_in.motion_pair(成对运镜)两侧组 prompt 含宿主写入的「【运镜对接】」句(前组末 Shot 段尾镜带出 / 本组首 Shot 段接入),残留过期句 = 违规;code/sync_motion_pairs.py --write 机器写入,无 motion_pair 的集 PASS
                                shot_timing_bound] } }   # 2026-09-23:镜次时长——shot_list 每镜 duration_s 按生效模型官方写法进正文(2.5/Wan 3.0 连续整数秒时间段标在段首镜段头后、H3 Shot k≥2 切点 At MM:SS.mmm,、2.0 不写),标签齐全/连续/末段止于 round(total_duration_s)/Σ duration_s = total_duration_s;code/sync_shot_timing.py --write 机器写入(§7F ⑩)
-      - { id: p7-image, agent: 08-video-gen/image-generation, depends_on: [p7-prompt],
+      # 视频提示词签字(2026-10-05):本集**全部**生成组的 p7-prompt 关单(含各 sync_* 机器写入段与 validation.auto 全过)后,用户在「🎦 分镜预览」页
+      # (/preview/storyboard)逐组审看视频提示词(正文 + 参考图 / 参考视频 / 参考音频清单)并签字;集行右侧有「✅ 签字确认 / ⏸ 暂缓」(与控制台签字卡同一条)。
+      # **未签字不派本集任何 p7-image / p7-consistency / p7-video**(也不提前出锚点包:提示词被打回时 refs 清单会变);宿主另有硬校验——
+      # genmedia video 输出到 assets/clips/{ep}/grpNNN*.mp4 时,本集 g7p 节点在 DAG 里且未放行即拒单(video_prompt_signed,modules/prompt_gate.py)。
+      # 签字前置(宿主拦):本集还有生成组没有 video_prompt → 409 拒签。用户暂缓 / 提意见 = 按意见回派 p7-prompt(或用户在预览页「✏️ 修改」发修改师)后重新建单。
+      # 签字放行的是「首次开跑」:签字后用户自己在分镜预览页改某组提示词重出、修改师 / 缺陷返工改写个别组,**不重签**(页面只提示「签字后 N 组有改动」);
+      # 只有整集提示词被标脏重写(p7-prompt 全集重跑,如 H3A 重签、换提示词技能 / 视频模型后成批重写)才把本节点退回 pending 重新建单。
+      - { id: g7p, gate: true, human: true, checkpoint: H3V-视频提示词确认, scope: episode, depends_on: [p7-prompt] }
+      - { id: p7-image, agent: 08-video-gen/image-generation, depends_on: [p7-prompt, g7p],
           outputs: ["assets/keyframes/{ep}/{group}/"],     # 组参考锚点包(≤9 张,建议 4–5;reuse-first:概念库全覆盖即零新生成 reuse-only,开场合成锚帧默认禁出,§7A 2026-07-24)
           validation: { auto: [resolution_ok, aspect_ok, anchors_lte_9, reuse_first_ok,   # aspect_ok:16:9/9:16 只是大致比例,近似即合规,禁按严格比例判等;reuse_first_ok:概念库已有可用图的锚不得新生成;新生成锚 meta 必记 gap_reason;anchor_opening 无兜底批准不得存在
                                prop_ref_attached,   # 组内出场剧情道具参考图已入锚点包
@@ -384,7 +394,7 @@ phases:
           condition: group.has_character,
           validation: { auto: [face_similarity_gte_0.85] } }   # 仅校新生成锚;复用锚(source=reuse:)与概念图同源免校,reuse-only 组直接放行(§7A 2026-07-24)
       - { id: p7-video, agent: 08-video-gen/video-generation,
-          depends_on: [p7-consistency, p7-video@prev_group, p8-voiceprints, p8-narrator],  # 组序串行:前组尾帧作续接锚(仅「长镜头」开启的项目;关闭时无续接链,prev_group 依赖可解除、组可并行,2026-09-01);对白组台词干声作 reference_audio 音色锚(仅锚音色,对白语音口型模型原生;TTS 严禁作配音,§8A 红线);旁白/对白实测适配 narration_fit、dialogue_fit 未过不派发(§7D ②);开跑前核对 refs 素材完备(剧情道具缺参考图=违规配置退回,prop_ref_attached)
+          depends_on: [g7p, p7-consistency, p7-video@prev_group, p8-voiceprints, p8-narrator],  # g7p:本集视频提示词用户签字(H3V)后才生成组视频(p7-consistency 是条件节点,故此处显式再挂一次);组序串行:前组尾帧作续接锚(仅「长镜头」开启的项目;关闭时无续接链,prev_group 依赖可解除、组可并行,2026-09-01);对白组台词干声作 reference_audio 音色锚(仅锚音色,对白语音口型模型原生;TTS 严禁作配音,§8A 红线);旁白/对白实测适配 narration_fit、dialogue_fit 未过不派发(§7D ②);开跑前核对 refs 素材完备(剧情道具缺参考图=违规配置退回,prop_ref_attached)
           # 组 json 有 video_refs(白模 camera.mp4,2026-09-07;2026-09-08 起无 top.mp4)时按序传 --ref-video;方舟/MiniMax 参考视频须公网 URL(文件托管已配置)
           # 原生先入(三期 2026-10-03,§8D ⑨):组有 native_lead 句时开跑前 code/sync_native_leads.py check 复核 native_lead_bound;交付后 code/sync_native_leads.py audible --groups {group}(人声起点落在前一镜窗口 ≥0.3s = PASS,否则 WARN「先入未生效」只记回执、不阻断、不开缺陷单)
           outputs: ["assets/clips/{ep}/{group}.mp4", "assets/clips/{ep}/{group}.meta.json"],

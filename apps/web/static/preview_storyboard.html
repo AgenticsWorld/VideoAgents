@@ -60,6 +60,15 @@ header .ps-info select.ov{color:var(--accent)}
 #eps button.on{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
 /* 📨 提交注释(2026-09-26):分集行靠右,把本集全部组注释一次性发修改师并清空;有注释时紫色同 📝 组注释 */
 #eps .notes-submit{margin-left:auto}
+/* 🖋 视频提示词签字(H3V,workflow.yaml g7p,2026-10-05):分集行靠右、「提交注释」之前;本集全部组提示词写完后总制片建签字单,签字后才出锚点包 / 组视频 */
+#eps .pgate{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:12px;border:1px solid var(--border2,var(--border));border-radius:14px;padding:2px 10px;color:var(--yellow);white-space:nowrap}
+#eps .pgate.ok{color:var(--green);border-color:#2b5a3c}
+#eps .pgate.idle{color:var(--dim)}
+#eps .pgate .chg{color:var(--yellow)}
+#eps .pgate .signbtn{background:var(--panel2,var(--panel));color:var(--text);border:1px solid var(--border);border-radius:6px;padding:2px 10px;font-size:12px;cursor:pointer;font-family:inherit}
+#eps .pgate .signbtn.pri{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
+#eps .pgate .signbtn:disabled{opacity:.5;cursor:default}
+#eps .pgate + .notes-submit{margin-left:0}
 #eps .notes-submit.has{color:var(--purple);border-color:var(--purple)}
 #eps .notes-submit:disabled{opacity:.45;cursor:default}
 #eps .notes-submit .st{font-size:10px;margin-left:4px;opacity:.75}
@@ -1115,7 +1124,10 @@ try{
   es.onmessage=e=>{
     try{
       const ev=JSON.parse(e.data);
+      // H3V 视频提示词签字卡建好 / 被答复(控制台或别的页面签的)→ 刷新集行签字状态;confirm_done 事件不带 project,按签字卡 id 认
+      if(ev.type==='confirm_done'){if((((LAST_DATA||{}).prompt_gate||{}).pending||[]).some(c=>c.id===ev.id))load(true);return}
       if(ev.project!==($('#project').value.trim()||'demo'))return;
+      if(ev.type==='confirm'){if(ev.kind==='sign'&&String(ev.checkpoint||'').toUpperCase().startsWith('H3V'))load(true);return}
       if(ev.type==='sketchgen')sgApply(ev.grp,ev);
       else if(ev.type==='sketch')load(true);
       else if(ev.type==='prompt_skill'||ev.type==='group_settings'||ev.type==='episode_settings'||ev.type==='transition_design')load(true);
@@ -1264,7 +1276,46 @@ $('#gs-ok').onclick=async()=>{
 };
 
 // 集行:≤12 集逐集按钮,更多时收成一行下拉(/static/ep-picker.js,2026-09-12)
-function renderEps(episodes){EpPicker.render($('#eps'),episodes,EP,ep=>{EP=ep;load()});$('#eps').appendChild(notesSubmitBtn())}
+function renderEps(episodes){EpPicker.render($('#eps'),episodes,EP,ep=>{EP=ep;load()});const pg=promptGateBox();if(pg)$('#eps').appendChild(pg);$('#eps').appendChild(notesSubmitBtn())}
+/* 🖋 视频提示词签字(H3V,workflow.yaml g7p,2026-10-05):本集全部组的视频提示词写完后总制片建签字单(与控制台签字卡同一条),
+   在这里看完各组提示词直接签;签字前本集不出锚点包、不生成组视频(genmedia video 另有 video_prompt_signed 硬校验)。
+   DAG 里没有该闸门且没签过的集(改版前已展开的存量集)不显示 */
+function promptGateBox(){
+  const g=(LAST_DATA&&LAST_DATA.prompt_gate)||null;
+  if(!g||!((g.pending||[]).length||g.signed||g.in_dag))return null;
+  const el=document.createElement('span');el.className='pgate';el.id='pgate';
+  if((g.pending||[]).length){
+    const c=g.pending[0],miss=g.missing_prompts||[];
+    el.title=miss.length?I18N.f('还有 {n} 组没有视频提示词:{g}',{n:miss.length,g:miss.slice(0,8).join(', ')}):(c.question||'');
+    el.innerHTML=`🖋 ${esc(t('视频提示词签字 · 待答复'))} <button class="signbtn pri" data-cid="${esc(c.id)}" data-answer="签字">✅ ${esc(t('签字确认'))}</button><button class="signbtn" data-cid="${esc(c.id)}" data-answer="暂缓">⏸ ${esc(t('暂缓'))}</button>`;
+  }else if(g.signed){
+    const chg=g.changed_groups||[];
+    el.classList.add('ok');
+    if(chg.length)el.title=I18N.f('签字后这些组的视频提示词有改动(不需要重签):{g}',{g:chg.join(', ')});
+    el.innerHTML=`✅ ${esc(t('视频提示词已签字'))}${g.signed_at?' · '+esc(g.signed_at):''}${chg.length?` <span class="chg">· ${esc(I18N.f('签字后 {n} 组有改动',{n:chg.length}))}</span>`:''}`;
+  }else{
+    el.classList.add('idle');
+    el.title=t('等总制片建签字单(本集全部组的视频提示词写完后自动);建好后这里出现「签字确认」按钮。签字前不生成本集组视频');
+    el.innerHTML=`${esc(t('视频提示词签字'))} · ${esc(g.state||'pending')}`;
+  }
+  return el;
+}
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('#pgate .signbtn');if(!b||b.disabled||!EP)return;
+  if(b.dataset.answer==='签字'&&!confirm(t('确认签字放行本集视频提示词?签字后总制片开始派本集的锚点包与组视频生成。')))return;
+  const proj=$('#project').value.trim()||'demo';
+  document.querySelectorAll('#pgate .signbtn').forEach(x=>x.disabled=true);
+  try{
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/storyboard/'+encodeURIComponent(EP)+'/prompt-signoff',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm_id:b.dataset.cid,answer:b.dataset.answer})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(j.detail||j.error||r.status);
+    if(LAST_DATA&&j.gate){LAST_DATA.prompt_gate=j.gate;const old=$('#pgate'),nw=promptGateBox();if(old&&nw)old.replaceWith(nw);else if(old)old.remove()}
+    if(b.dataset.answer==='签字')JumpAnchor.toast('✅ '+t('视频提示词已签字'));
+  }catch(err){
+    document.querySelectorAll('#pgate .signbtn').forEach(x=>x.disabled=false);
+    JumpAnchor.toast(I18N.f('签字失败:{e}',{e:err.message}));
+  }
+});
 /* 📨 提交注释(2026-09-26):分集行靠右;本集全部组注释(assets/notes/<ep>/<grp>.json,含组定位:场次/场景/镜号/时长/节拍/prompt 路径)
    由服务端拼成一张修改单发修改师,派单成功后逐组清空(同「清空保存」,Director's note 句从 video_prompt 移除);无注释时禁用 */
 function notesSubmitBtn(){

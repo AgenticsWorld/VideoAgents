@@ -4139,4 +4139,12 @@ window.I18N_DICT = {
 "画外对白": "Dialog luar layar",
 "画外对白 assets/audio/voice/{ep}/offscreen/offscreen_manifest.json": "dialog luar layar assets/audio/voice/{ep}/offscreen/offscreen_manifest.json",
 "人物台词可以不在画内开口:画外 O.S.(说话人在场但不入画)/ V.O.(内心独白、读信、回忆声)。画外句在后期按该人物声线合成,不进组视频生成。自动=剧本标记 + 分镜按白名单自动转画外;仅剧本标记=只认剧本写的 (O.S.)/(V.O.);关=全部台词画内开口。与旁白开关正交:旁白只管旁白者声线": "Dialog tokoh tidak harus diucapkan di dalam layar: luar layar O.S. (hadir tetapi di luar bingkai) / V.O. (monolog batin, surat, suara kenangan). Dialog luar layar disintesis pada pascaproduksi dengan suara tokoh itu dan tidak masuk pembuatan video grup. Otomatis = penanda naskah + storyboard mengubah otomatis sesuai daftar putih; Hanya penanda naskah = hanya (O.S.)/(V.O.) yang ditulis di naskah; Mati = semua dialog diucapkan di layar. Terpisah dari sakelar narasi: narasi hanya mengatur suara narator",
+"视频提示词签字 · 待答复": "Persetujuan prompt video · menunggu jawaban",
+"视频提示词已签字": "Prompt video disetujui",
+"视频提示词签字": "Persetujuan prompt video",
+"签字后 {n} 组有改动": "{n} grup berubah sejak disetujui",
+"签字后这些组的视频提示词有改动(不需要重签):{g}": "Prompt video grup-grup ini berubah setelah disetujui (tidak perlu disetujui ulang): {g}",
+"等总制片建签字单(本集全部组的视频提示词写完后自动);建好后这里出现「签字确认」按钮。签字前不生成本集组视频": "Menunggu produser membuat kartu persetujuan (otomatis setelah prompt video semua grup episode ini selesai ditulis); setelah itu tombol \"Setujui\" muncul di sini. Video grup episode ini tidak dibuat sebelum disetujui",
+"确认签字放行本集视频提示词?签字后总制片开始派本集的锚点包与组视频生成。": "Setujui prompt video episode ini? Setelah disetujui, produser mulai menugaskan paket jangkar dan pembuatan video grup episode ini.",
+"还有 {n} 组没有视频提示词:{g}": "Masih ada {n} grup tanpa prompt video: {g}",
 };

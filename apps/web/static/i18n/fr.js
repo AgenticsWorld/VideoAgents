@@ -4141,4 +4141,12 @@ window.I18N_DICT = {
 "画外对白": "Dialogue hors champ",
 "画外对白 assets/audio/voice/{ep}/offscreen/offscreen_manifest.json": "dialogue hors champ assets/audio/voice/{ep}/offscreen/offscreen_manifest.json",
 "人物台词可以不在画内开口:画外 O.S.(说话人在场但不入画)/ V.O.(内心独白、读信、回忆声)。画外句在后期按该人物声线合成,不进组视频生成。自动=剧本标记 + 分镜按白名单自动转画外;仅剧本标记=只认剧本写的 (O.S.)/(V.O.);关=全部台词画内开口。与旁白开关正交:旁白只管旁白者声线": "Les répliques des personnages n'ont pas à être dites à l'écran : hors champ O.S. (présent mais hors cadre) / V.O. (monologue intérieur, lettres, voix remémorées). Les répliques hors champ sont synthétisées en post-production avec la voix du personnage et n'entrent pas dans la génération vidéo du groupe. Auto = marques du scénario + conversion automatique du storyboard selon la liste blanche ; Marques du scénario seules = seuls les (O.S.)/(V.O.) écrits dans le scénario comptent ; Désactivé = toutes les répliques à l'écran. Indépendant de l'interrupteur de narration : la narration ne régit que la voix du narrateur",
+"视频提示词签字 · 待答复": "Validation des prompts vidéo · en attente de réponse",
+"视频提示词已签字": "Prompts vidéo validés",
+"视频提示词签字": "Validation des prompts vidéo",
+"签字后 {n} 组有改动": "{n} groupe(s) modifié(s) depuis la validation",
+"签字后这些组的视频提示词有改动(不需要重签):{g}": "Les prompts vidéo de ces groupes ont été modifiés après la validation (inutile de valider à nouveau) : {g}",
+"等总制片建签字单(本集全部组的视频提示词写完后自动);建好后这里出现「签字确认」按钮。签字前不生成本集组视频": "En attente de la création de la fiche de validation par le producteur (automatique une fois les prompts vidéo de tous les groupes de l'épisode rédigés) ; le bouton « Valider » apparaîtra ici ensuite. Aucune vidéo de groupe n'est générée pour cet épisode avant la validation",
+"确认签字放行本集视频提示词?签字后总制片开始派本集的锚点包与组视频生成。": "Valider les prompts vidéo de cet épisode ? Après validation, le producteur lance les packs d'ancrage et la génération des vidéos de groupe de cet épisode.",
+"还有 {n} 组没有视频提示词:{g}": "{n} groupe(s) n'ont pas encore de prompt vidéo : {g}",
 };

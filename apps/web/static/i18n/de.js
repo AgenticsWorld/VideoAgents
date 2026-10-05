@@ -4139,4 +4139,12 @@ window.I18N_DICT = {
 "画外对白": "Off-Screen-Dialog",
 "画外对白 assets/audio/voice/{ep}/offscreen/offscreen_manifest.json": "Off-Screen-Dialog assets/audio/voice/{ep}/offscreen/offscreen_manifest.json",
 "人物台词可以不在画内开口:画外 O.S.(说话人在场但不入画)/ V.O.(内心独白、读信、回忆声)。画外句在后期按该人物声线合成,不进组视频生成。自动=剧本标记 + 分镜按白名单自动转画外;仅剧本标记=只认剧本写的 (O.S.)/(V.O.);关=全部台词画内开口。与旁白开关正交:旁白只管旁白者声线": "Figurenzeilen müssen nicht im Bild gesprochen werden: Off-Screen O.S. (anwesend, aber außerhalb des Bildes) / V.O. (innerer Monolog, Briefe, erinnerte Stimmen). Off-Screen-Zeilen werden in der Post mit der Stimme der Figur synthetisiert und gehen nicht in die Gruppenvideo-Generierung ein. Auto = Drehbuchmarkierungen + automatische Umwandlung im Storyboard per Whitelist; Nur Drehbuchmarkierungen = nur im Drehbuch geschriebene (O.S.)/(V.O.) gelten; Aus = alle Zeilen im Bild. Unabhängig vom Erzähler-Schalter: dieser regelt nur die Erzählstimme",
+"视频提示词签字 · 待答复": "Videoprompt-Freigabe · Antwort ausstehend",
+"视频提示词已签字": "Videoprompts freigegeben",
+"视频提示词签字": "Videoprompt-Freigabe",
+"签字后 {n} 组有改动": "{n} Gruppe(n) seit der Freigabe geändert",
+"签字后这些组的视频提示词有改动(不需要重签):{g}": "Die Videoprompts dieser Gruppen wurden nach der Freigabe geändert (keine erneute Freigabe nötig): {g}",
+"等总制片建签字单(本集全部组的视频提示词写完后自动);建好后这里出现「签字确认」按钮。签字前不生成本集组视频": "Warten, bis der Produzent die Freigabekarte erstellt (automatisch, sobald die Videoprompts aller Gruppen dieser Folge geschrieben sind); danach erscheint hier die Schaltfläche „Freigeben“. Vor der Freigabe wird für diese Folge kein Gruppenvideo generiert",
+"确认签字放行本集视频提示词?签字后总制片开始派本集的锚点包与组视频生成。": "Videoprompts dieser Folge freigeben? Nach der Freigabe beginnt der Produzent mit der Vergabe der Ankerpakete und der Gruppenvideo-Generierung dieser Folge.",
+"还有 {n} 组没有视频提示词:{g}": "{n} Gruppe(n) haben noch keinen Videoprompt: {g}",
 };

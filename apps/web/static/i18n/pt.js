@@ -4141,4 +4141,12 @@ window.I18N_DICT = {
 "画外对白": "Diálogo fora de quadro",
 "画外对白 assets/audio/voice/{ep}/offscreen/offscreen_manifest.json": "diálogo fora de quadro assets/audio/voice/{ep}/offscreen/offscreen_manifest.json",
 "人物台词可以不在画内开口:画外 O.S.(说话人在场但不入画)/ V.O.(内心独白、读信、回忆声)。画外句在后期按该人物声线合成,不进组视频生成。自动=剧本标记 + 分镜按白名单自动转画外;仅剧本标记=只认剧本写的 (O.S.)/(V.O.);关=全部台词画内开口。与旁白开关正交:旁白只管旁白者声线": "As falas das personagens não precisam ser ditas em quadro: fora de quadro O.S. (presente mas fora do enquadramento) / V.O. (monólogo interior, cartas, vozes recordadas). As falas fora de quadro são sintetizadas na pós-produção com a voz da personagem e não entram na geração do vídeo do grupo. Auto = marcas do roteiro + conversão automática do storyboard por lista branca; Só marcas do roteiro = só valem (O.S.)/(V.O.) escritos no roteiro; Desligado = todas as falas em quadro. Independente do interruptor de narração: a narração só rege a voz do narrador",
+"视频提示词签字 · 待答复": "Aprovação dos prompts de vídeo · aguardando resposta",
+"视频提示词已签字": "Prompts de vídeo aprovados",
+"视频提示词签字": "Aprovação dos prompts de vídeo",
+"签字后 {n} 组有改动": "{n} grupo(s) alterado(s) desde a aprovação",
+"签字后这些组的视频提示词有改动(不需要重签):{g}": "Os prompts de vídeo destes grupos foram alterados após a aprovação (não é preciso aprovar de novo): {g}",
+"等总制片建签字单(本集全部组的视频提示词写完后自动);建好后这里出现「签字确认」按钮。签字前不生成本集组视频": "Aguardando o produtor criar o cartão de aprovação (automático quando os prompts de vídeo de todos os grupos do episódio estiverem escritos); depois o botão «Aprovar» aparece aqui. Nenhum vídeo de grupo deste episódio é gerado antes da aprovação",
+"确认签字放行本集视频提示词?签字后总制片开始派本集的锚点包与组视频生成。": "Aprovar os prompts de vídeo deste episódio? Após a aprovação, o produtor começa a encaminhar os pacotes de âncoras e a geração de vídeo por grupo deste episódio.",
+"还有 {n} 组没有视频提示词:{g}": "{n} grupo(s) ainda sem prompt de vídeo: {g}",
 };
