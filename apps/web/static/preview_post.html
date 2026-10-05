@@ -556,7 +556,7 @@ function renderMonitorShell(){
     <span class="vchip a">A</span><select id="selA"></select>
     <span class="vchip b">B</span><select id="selB"></select>
     <span style="flex:1"></span>
-    <button class="sm" id="b-first" title="${esc(t('回到开头'))}">⏮</button><button class="sm" id="b-fprev" title="${esc(t('上一帧'))}">◀</button><button class="sm" id="b-play">▶ ${esc(t('播放'))}</button><button class="sm" id="b-fnext" title="${esc(t('下一帧'))}">▶</button>
+    <button class="sm" id="b-frame" title="${esc(t('把 A 画面当前帧存为参考帧(供参考帧匹配/重打光/重绘)'))}">📷 ${esc(t('取参考帧'))}</button>
     <button class="sm" id="b-mask" title="${esc(t('在画面上拖一个矩形,作为遮标/局部重绘/特效范围的蒙版'))}">◻ ${esc(t('画蒙版'))}</button>
   </div>
   <div class="screen"><div class="frame" id="frame">
@@ -576,7 +576,7 @@ function renderMonitorShell(){
     <div class="tl" id="xtl"><s id="xrange" style="display:none"></s><i id="xfill"></i><b id="xph"></b></div>
     <span class="tc" id="xtc">00:00.00 / 00:00.00</span>
     <button class="sm" id="b-range" title="${esc(t('把当前时刻设为时间段起点/终点(组内时间段作用域);离镜头切点(走带条上的白色竖线)0.3 秒内自动吸附到切点,按住 ⌥/Alt 点击不吸附'))}">◇ ${esc(t('标记时间段'))}</button>
-    <button class="sm" id="b-frame" title="${esc(t('把 A 画面当前帧存为参考帧(供参考帧匹配/重打光/重绘)'))}">📷 ${esc(t('取参考帧'))}</button>
+    <button class="sm" id="b-first" title="${esc(t('回到开头'))}">⏮</button><button class="sm" id="b-fprev" title="${esc(t('上一帧'))}">◀</button><button class="sm" id="b-play">▶ ${esc(t('播放'))}</button><button class="sm" id="b-fnext" title="${esc(t('下一帧'))}">▶</button>
   </div>
   <div class="waves" id="waves"></div>`;
   const va=$('#va'),vb=$('#vb');
