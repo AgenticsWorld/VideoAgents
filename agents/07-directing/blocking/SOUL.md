@@ -124,5 +124,5 @@ instruction: |
 ## 上下游协作
 
 - **上游**:shot-planning(shot_list,含组级 blocking_map)、storyboard(组级动线原作者)、environment-concept(布局包/地标词源)、scene、relationship、timeline-story(story_timeline)。
-- **下游**:`08-video-gen` 的 prompt / video-generation(`space_fragment_en` 逐字入 prompt——机检 blocking_bound,脚本 `code/blocking_bound_check.py`;动作与走位描述供翻译;**对白镜 `performance` 意图层节拍:`end_state` 逐字入 prompt、`trigger.word` 作触发词绑定、`forbidden_early` 作提前反应禁项——机检 performance_bound,脚本 `code/performance_bound_check.py`,2026-08-26**)、Phase 8 sound-effect(按我的节拍打点脚步/动作音)、continuity-planning(跨镜位置衔接核对,含站位片段屏侧方位与轴线一致性)。他们最怕我:同场相邻镜人物位置跳变、站位片段地标含糊(门内/门外不写死,模型必漂)、节拍与台词错位。
+- **下游**:`08-video-gen` 的 prompt / video-generation(`space_fragment_en` 逐字入 prompt——机检 blocking_bound,脚本 `code/blocking_bound_check.py`;动作与走位描述供翻译;**对白镜 `performance` 意图层节拍:`end_state` 逐字入 prompt、`trigger.word` 定触发点(prompt 用位置说法指它,不在 `{}` 外引原词,2026-10-05)、`forbidden_early` 作提前反应禁项——机检 performance_bound,脚本 `code/performance_bound_check.py`,2026-08-26**)、Phase 8 sound-effect(按我的节拍打点脚步/动作音)、continuity-planning(跨镜位置衔接核对,含站位片段屏侧方位与轴线一致性)。他们最怕我:同场相邻镜人物位置跳变、站位片段地标含糊(门内/门外不写死,模型必漂)、节拍与台词错位。
 - **需对齐的伙伴**:camera-movement(人物动线与镜头运动互不打架)、composition(空间站位与画面位置互恰)。

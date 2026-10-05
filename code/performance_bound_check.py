@@ -10,17 +10,23 @@ agents/08-video-gen/prompt/skills/performance-direction/SKILL.md):
     trigger{line_ref, word} / forbidden_early[] / end_state,由 blocking agent 产出);
   - prompt agent 写组级 video_prompt 时,该镜对应 Shot 段必须:
       ① `trigger.word` 出现在该段某个 `{}` 台词内(触发词就在本镜台词里);
-      ② `trigger.word` 在该段 `{}` 之外至少再出现一次(触发词绑定短语,如「说到『X』时」);
+      ② 触发点用**位置说法**绑定(2026-10-05 改订,原「触发词在 `{}` 外再出现一次」作废):
+         grpNNN.json `performance[].trigger_anchor`(如「后半句」「句尾四个字」)逐字出现在该段 `{}` 之外;
+         该段 `{}` 之外不得用引号引出本段台词里的词(line_words_quoted——模型会把引出来的词当台词再念一遍,
+         前科 fengshen3 ep08 sh006「…扰害父母愚弄百姓,死后愚弄百姓」);一句台词只写一个 `{}`、不拆段(line_split);
       ③ `end_state` 逐字命中(忽略大小写与连续空白);
-      ④ `forbidden_early` 各词组不出现在该段第一处绑定短语之前的文本中(WARN);
+      ④ `forbidden_early` 各词组不出现在该段位置说法之前的文本中(WARN);
   - 全文不得出现 `AU\\d` 编码字样(au_not_in_prompt,FAIL)——编码会被渲染成画面文字;
   - grpNNN.json 应带 `performance[]`(逐镜逐角色 trigger_word / end_state / au_calibration),
     与 blocking 不一致按 WARN 报;
   - 存量 blocking.json 无 `performance` 的对白镜按 WARN 报(待回派 blocking 补写),
-    加 --strict 时按 FAIL。
+    加 --strict 时按 FAIL;
+  - 存量旧写法(`performance[]` 条目无 `trigger_anchor`)的 ② 三项只报 WARN,不拦已出片的组;
+    本单新写 / 重写的组加 --fresh 复核,旧写法一律 FAIL。
 
 用法:python3 code/performance_bound_check.py --project <slug> --ep ep05           # 查全批
      python3 code/performance_bound_check.py --project <slug> --ep ep05 grp002 …  # 只查指定组
+     python3 code/performance_bound_check.py --project <slug> --ep ep05 --fresh grp002 …  # 本单新写 / 重写的组
 退出码:0=通过(可含 WARN / skipped),1=有违规(逐条打印)。
 prompt 批产出后必须全批跑一遍;video-generation 开跑前对单组复核。
 """
@@ -36,6 +42,9 @@ from _common import DATA_DIR, parse_args
 AU_RE = re.compile(r"\bAU\s?\d{1,2}\b", re.IGNORECASE)
 BRACE_RE = re.compile(r"\{([^{}]*)\}")
 PERF_FIELDS = ("goal", "arc_from", "arc_to", "end_state")
+QUOTE_RE = re.compile(r"『([^』\n]{1,40})』|「([^」\n]{1,40})」|“([^”\n]{1,40})”|‘([^’\n]{1,40})’|\"([^\"\n]{1,40})\"")
+HOST_MARK_RE = re.compile(r"(?:【原生先入】|Native lead:)[^\n]*")   # 宿主写的原生先入标记句(modules/native_lead.py),不算工位引词
+SAY_RE = r"(?:说到|讲到|念到|喊到|on the word)\s*"
 
 
 PERFORMANCE_SKILL_ID = "08-video-gen/prompt/performance-direction"
@@ -60,6 +69,48 @@ def performance_enabled(proj_root: Path) -> bool:
 
 def norm(s: str) -> str:
     return re.sub(r"\s+", " ", s or "").strip().lower()
+
+
+def bare(s: str) -> str:
+    """去空白与标点,只留字——比对台词文本用。"""
+    return re.sub(r"[\W_]+", "", s or "").lower()
+
+
+def quoted_line_words(lines: list[str], outside: list[str]) -> list[str]:
+    """`{}` 之外被引号引出、且是本段 `{}` 台词子串的词。"""
+    spoken = bare("".join(lines))
+    text = "\n".join(HOST_MARK_RE.sub("", c) for c in outside)
+    found = []
+    for m in QUOTE_RE.finditer(text):
+        q = next(g for g in m.groups() if g is not None)
+        if bare(q) and bare(q) in spoken and q not in found:
+            found.append(q)
+    return found
+
+
+def split_lines(shot: dict | None, lines: list[str]) -> list[str]:
+    """本镜画内台词里被拆成多个 `{}` 的句子(原生先入的 `{余句}` 只有一个 `{}`,不算)。"""
+    braces = [bare(x) for x in lines]
+    out = []
+    for ln in (shot or {}).get("dialogue_lines") or []:
+        if not isinstance(ln, dict) or _placement(ln) != "on":
+            continue
+        raw = str(ln.get("text") or ln.get("line") or "").strip()
+        t = bare(raw)
+        if not t or any(t in b for b in braces):
+            continue
+        for i in range(len(braces)):
+            acc = ""
+            for j in range(i, len(braces)):
+                acc += braces[j]
+                if not braces[j] or not t.startswith(acc):
+                    break
+                if acc == t and j > i:
+                    out.append(raw)
+                    break
+            if raw in out:
+                break
+    return out
 
 
 def shot_segments(video_prompt: str, n_shots: int):
@@ -158,7 +209,8 @@ def is_dialogue_group(g: dict | None, pj: dict, shots: dict | None = None) -> bo
     return bool(pj.get("audio_refs")) or "{" in pj.get("video_prompt", "")
 
 
-def check_group(pf: Path, proj_root: Path, ep: str, groups: dict, strict: bool, shots: dict | None = None):
+def check_group(pf: Path, proj_root: Path, ep: str, groups: dict, strict: bool, shots: dict | None = None,
+                fresh: bool = False):
     if not performance_enabled(proj_root):
         return [], [], True
     pj = json.loads(pf.read_text())
@@ -189,6 +241,7 @@ def check_group(pf: Path, proj_root: Path, ep: str, groups: dict, strict: bool, 
     if segs is None and shots:
         warns.append(f"{gid}: Shot 段数与镜数({len(shots)})不符,降级为全文匹配")
 
+    no_anchor = []   # 存量旧写法:performance[] 条目没有 trigger_anchor 的镜,整组合并报一条 WARN
     for i, shot_id in enumerate(shots, start=1):
         if not shot_id:
             warns.append(f"{gid}: shots[{i-1}] 缺 shot_id,跳过")
@@ -202,6 +255,17 @@ def check_group(pf: Path, proj_root: Path, ep: str, groups: dict, strict: bool, 
         where = f"Shot {i}" if segs else "全文"
         lines, outside, offsets = split_dialogue(seg)
         has_dialogue_here = bool(lines)
+        # 新写法 = 本镜任一 performance[] 条目带 trigger_anchor(或 --fresh);旧写法的引词 / 拆段只 WARN
+        new_style = fresh or any(e.get("trigger_anchor") for (sid, _), e in perf_index.items() if sid == shot_id)
+        report = errs if new_style else warns
+        legacy = "" if new_style else "(存量旧写法,重写本组提示词时改)"
+        for raw in split_lines(shot_tbl.get(shot_id), lines):
+            report.append(f"{gid}/{shot_id}: 台词「{raw}」在{where}被拆成多个 {{}}(line_split;一句台词只写一个 {{}},"
+                          f"表演描写放在 {{}} 前后){legacy}")
+        quoted = quoted_line_words(lines, outside)
+        if quoted:
+            report.append(f"{gid}/{shot_id}: {where}的 {{}} 之外引了台词里的词 {'、'.join('『' + q + '』' for q in quoted)}"
+                          f"(line_words_quoted;模型会把它当台词再念一遍,改用位置说法如「说到后半句时」){legacy}")
         for ch in bj.get("characters", []):
             cid = ch.get("id", "?")
             perf = ch.get("performance")
@@ -235,9 +299,27 @@ def check_group(pf: Path, proj_root: Path, ep: str, groups: dict, strict: bool, 
                 # ① 触发词在本段台词内
                 if not any(word in ln for ln in lines):
                     errs.append(f"{gid}/{shot_id}: {cid} 触发词『{word}』不在{where}的任何 {{}} 台词内")
-                # ② 触发词绑定短语(台词之外再出现一次)
-                if first_bind < 0:
-                    errs.append(f"{gid}/{shot_id}: {cid} 触发词『{word}』未在{where}的 {{}} 之外再出现(缺触发词绑定短语,如「说到『{word}』时」)")
+                # ② 位置说法绑定:trigger_anchor 逐字出现在 `{}` 之外,且不含触发词原文
+                anchor = str((perf_index.get((shot_id, cid)) or {}).get("trigger_anchor") or "").strip()
+                first_bind = -1 if anchor else first_bind   # 旧写法 ④ 仍以触发词绑定短语为界
+                if anchor and word in anchor:
+                    errs.append(f"{gid}/{shot_id}: {cid} trigger_anchor「{anchor}」含触发词原文『{word}』(只写位置说法,如「后半句」「句尾四个字」)")
+                elif anchor:
+                    for k, chunk in enumerate(outside):
+                        pos = chunk.find(anchor)
+                        if pos >= 0:
+                            first_bind = offsets[k] + pos
+                            break
+                    if first_bind < 0:
+                        errs.append(f"{gid}/{shot_id}: {cid} trigger_anchor「{anchor}」未逐字出现在{where}的 {{}} 之外(缺位置说法绑定,如「说到{anchor}时」)")
+                elif new_style:
+                    errs.append(f"{gid}/{shot_id}: {cid} grpNNN.json performance[] 缺 trigger_anchor"
+                                f"(触发点的位置说法,如「后半句」「句尾四个字」)")
+                else:
+                    no_anchor.append(shot_id)
+                if not quoted and re.search(SAY_RE + re.escape(word), "\n".join(outside), re.IGNORECASE):
+                    report.append(f"{gid}/{shot_id}: {cid} {where}的 {{}} 之外写了「说到{word}」(line_words_quoted;"
+                                  f"触发词原文不出 {{}},改用位置说法){legacy}")
             # ③ end_state 逐字命中
             end_state = perf.get("end_state", "")
             if norm(end_state) not in norm(seg):
@@ -247,13 +329,16 @@ def check_group(pf: Path, proj_root: Path, ep: str, groups: dict, strict: bool, 
                 before = seg[:first_bind]
                 for fb in perf.get("forbidden_early") or []:
                     if fb and fb in before:
-                        warns.append(f"{gid}/{shot_id}: {cid} 触发词之前出现禁止提前反应「{fb}」(检查是否为否定句;若为正面描写须删)")
+                        warns.append(f"{gid}/{shot_id}: {cid} 触发点之前出现禁止提前反应「{fb}」(检查是否为否定句;若为正面描写须删)")
             # grpNNN.json performance[] 一致性
             e = perf_index.get((shot_id, cid))
             if perf_index and not e:
                 warns.append(f"{gid}/{shot_id}: {cid} 未登记于 grpNNN.json performance[]")
             elif e and (e.get("trigger_word") != word or norm(e.get("end_state", "")) != norm(end_state)):
                 warns.append(f"{gid}/{shot_id}: {cid} grpNNN.json performance[] 的 trigger_word/end_state 与 blocking 不一致")
+    if no_anchor:
+        warns.append(f"{gid}: {'、'.join(dict.fromkeys(no_anchor))} 的 performance[] 缺 trigger_anchor"
+                     f"(存量旧写法,触发点未用位置说法绑定;新写 / 重写的组加 --fresh 复核)")
     if strict:
         errs += [w for w in warns if "缺 performance(" in w]
         warns = [w for w in warns if "缺 performance(" not in w]
@@ -264,6 +349,8 @@ def main():
     def configure(ap):
         ap.add_argument("groups", nargs="*", help="只查指定组 id(如 grp002);缺省全批")
         ap.add_argument("--strict", action="store_true", help="blocking 缺 performance 的对白镜按 FAIL")
+        ap.add_argument("--fresh", action="store_true",
+                        help="本单新写 / 重写的组:旧写法(引台词词 / 拆 {} / 缺 trigger_anchor)按 FAIL,不按存量 WARN")
     args, proj_root = parse_args("performance_bound 机检", configure=configure)
     if not performance_enabled(proj_root):
         print("performance_bound: skipped — 项目技能未启用表演控制")
@@ -280,7 +367,7 @@ def main():
     shots = load_shots(proj_root, args.ep)
     all_errs, all_warns, skipped, checked = [], [], 0, 0
     for f in files:
-        errs, warns, skip = check_group(f, proj_root, args.ep, groups, args.strict, shots)
+        errs, warns, skip = check_group(f, proj_root, args.ep, groups, args.strict, shots, args.fresh)
         if skip:
             skipped += 1
             continue
