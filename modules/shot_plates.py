@@ -2235,13 +2235,28 @@ def plan_group_refs(base: Path, ep: str, gid: str, idx: dict | None = None, epis
             openings_zh, openings_en = o['rule_zh'], o['rule']
         except Exception:  # noqa: BLE001
             pass
-    plates, missing = [], []
+    # 构图层次点名了白模判为「本组不出现」的人物(#96):该层不写进机器句——否则宿主自己把隐藏人物写进正文,
+    # whitebox_hidden_mention 必 FAIL 且工位无权改机器句;composition 与白模不一致由 WARN 指回上游。
+    hidden_cast = None
+    if wb_group:
+        try:
+            from modules.whitebox_refs import cast_filter, hidden_cast_mentions
+            hidden_cast = cast_filter(base, ep, gid)
+        except Exception:  # noqa: BLE001
+            hidden_cast = None
+    plates, missing, layer_drops = [], [], []
     for k, shot_id in enumerate(raw.get('shots') or [], 1):
         rec = idx['shots'].get(shot_id)
         if not rec or not rec.get('plates'):
             missing.append(shot_id)
             continue
         layers = (read(base/'directing'/ep/'shots'/component(shot_id)/'composition.json', {}) or {}).get('layers') or {}
+        if hidden_cast and hidden_cast.get('hidden'):
+            for k2 in ('fg', 'mg', 'bg'):
+                hits = hidden_cast_mentions(str(layers.get(k2) or ''), wb_group, hidden_cast)
+                if hits:
+                    layers = {a: b for a, b in layers.items() if a != k2}
+                    layer_drops.append((shot_id, k2, hits[0][1]))
         for p in rec['plates']:
             if not (base/p['file']).is_file():
                 missing.append(shot_id)
@@ -2252,7 +2267,8 @@ def plan_group_refs(base: Path, ep: str, gid: str, idx: dict | None = None, epis
                            'view': p.get('view') or {}, 'in_frame': ex.get('in_frame') or [], 'out_of_frame': ex.get('out_of_frame') or [],
                            'backdrop': ex.get('backdrop') or '', 'centre': ex.get('centre') or [],
                            'layers': {k2: layers.get(k2) for k2 in ('fg', 'mg', 'bg') if layers.get(k2)} if p['role'] == 'start' else {}})
-    return {'plates': plates, 'missing': missing, 'group': raw, 'openings_zh': openings_zh, 'openings_en': openings_en}
+    return {'plates': plates, 'missing': missing, 'group': raw, 'openings_zh': openings_zh, 'openings_en': openings_en,
+            'layer_drops': layer_drops}
 
 
 # ---------------------------------------------------------------- 逐镜画内/画外清单(2026-09-14)
@@ -2696,6 +2712,9 @@ def sync_group(base: Path, ep: str, gid: str, write: bool = False, strict: bool 
     v25 = group_is_v25(base, ep, gid)
     h3 = (not v25) and group_is_h3(base, ep, gid)
     result['seedance_25'] = v25; result['minimax_h3'] = h3
+    for shot_id, layer, term in plan.get('layer_drops') or []:
+        result['warnings'].append(f"{gid}/{shot_id}: composition.json layers.{layer} 点名了本组白模不出现的人物「{term}」,该层未写进「构图层次」机器句"
+                                  "(上游 composition 与白模不一致,回派 shot-planning / whitebox-staging 对齐)")
     if write:
         updated, warns = apply_prompt(prompt, plan, v25, h3)
         result['warnings'].extend(f'{gid}: {w}' for w in warns)

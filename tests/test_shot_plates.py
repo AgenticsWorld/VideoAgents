@@ -903,3 +903,27 @@ def test_status_manual_needed_only_in_manual_mode(tmp_path, monkeypatch):
     sp.set_scene_plate_mode(base, sid, 'grid_manual')               # 场景级覆盖为手动补图
     assert sp.status_episode(base, ep)['problems'] == {'sh002': 'manual_needed'}
 
+
+
+def test_composition_layer_naming_hidden_cast_is_dropped_with_warning(tmp_path, monkeypatch):
+    """#96:composition 的层次描述点名了白模判为本组不出现的人物 → 该层不进「构图层次」机器句,sync 报 WARN 指回上游。"""
+    import json
+    import modules.whitebox_refs as wr
+    base = tmp_path
+    (base/'directing/ep01/shots/sh001').mkdir(parents=True)
+    (base/'directing/ep01/shot_list.json').write_text(json.dumps(
+        {'generation_groups': [{'group_id': 'grp001', 'shots': ['sh001']}]}, ensure_ascii=False))
+    (base/'directing/ep01/shots/sh001/composition.json').write_text(json.dumps(
+        {'layers': {'fg': '案上的香炉', 'mg': '供桌,其上李靖的脸', 'bg': '西壁神龛'}}, ensure_ascii=False))
+    (base/'plate.png').write_bytes(b'x')
+    idx = {'shots': {'sh001': {'plates': [{'role': 'start', 'key': 'k1', 'file': 'plate.png'}]}}}
+    wb_group = {'group_id': 'grp001', 'scene_id': 'SCN-0001', 'cameras': [],
+                'actors': [{'id': 'CHAR-0001', 'label': '哪吒'}, {'id': 'CHAR-0002', 'label': '李靖'}]}
+    episode = {'groups': [wb_group], 'scenes': {}}
+    monkeypatch.setattr(wr, 'cast_filter', lambda *a: {'visible': ['CHAR-0001'], 'hidden': {'CHAR-0002': '整组不在画幅内'}})
+    plan = sp.plan_group_refs(base, 'ep01', 'grp001', idx, episode)
+    assert plan['plates'][0]['layers'] == {'fg': '案上的香炉', 'bg': '西壁神龛'}
+    assert plan['layer_drops'] == [('sh001', 'mg', '李靖')]
+    monkeypatch.setattr(wr, 'cast_filter', lambda *a: None)                     # 白模未开:原样写
+    plan = sp.plan_group_refs(base, 'ep01', 'grp001', idx, episode)
+    assert set(plan['plates'][0]['layers']) == {'fg', 'mg', 'bg'} and plan['layer_drops'] == []
