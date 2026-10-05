@@ -2303,6 +2303,8 @@ def shot_view_extras(scene: dict, layout: dict, key: dict, fmt: dict) -> dict:
                 w = walls.setdefault(s, {'x': [], 'z': it['z'], 'xmin': 1, 'xmax': -1})
                 w['x'].append(it['x']); w['z'] = min(w['z'], it['z']); w['xmin'] = min(w['xmin'], it['xmin']); w['xmax'] = max(w['xmax'], it['xmax'])
             continue
+        if not it.get('landmark'):
+            continue   # 没登记成布局地标的白模辅助几何(wall_ne / cushion…)只有几何块 id,不是可描述的画面对象,不进视频提示词机器句(#99)
         named.append({'name': it['name'], 'x': it['x'], 'z': it['z'], 'area': max(0.0, it['xmax'] - it['xmin']) / 2 * max(0.0, it['ymax'] - it['ymin']) / 2,
                       'wall': False, 'text': ''})
     for s, w in walls.items():

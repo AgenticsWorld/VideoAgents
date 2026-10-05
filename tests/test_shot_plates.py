@@ -927,3 +927,17 @@ def test_composition_layer_naming_hidden_cast_is_dropped_with_warning(tmp_path, 
     monkeypatch.setattr(wr, 'cast_filter', lambda *a: None)                     # 白模未开:原样写
     plan = sp.plan_group_refs(base, 'ep01', 'grp001', idx, episode)
     assert set(plan['plates'][0]['layers']) == {'fg', 'mg', 'bg'} and plan['layer_drops'] == []
+
+
+def test_view_extras_skip_geometry_without_landmark():
+    """#99:没登记成布局地标的白模辅助几何(wall_ne / cushion)不进视频提示词的画内/背景清单;出图用的 inventory 不受影响。"""
+    scene = {'dimensions_m': [10, 4, 10], 'objects': [
+        {'id': 'wall_ne', 'position': [2, 1.5, -4], 'size_m': [3, 3, .2]},
+        {'id': 'cushion_1', 'position': [-1, .2, -2], 'size_m': [.6, .2, .6]},
+        {'id': 'altar', 'position': [0, .6, -3], 'size_m': [1.6, 1.2, .8]}]}
+    layout = {'landmarks': [{'id': 'altar', 'name': '香案', 'xy': [.5, .2], 'kind': 'prop'}]}
+    key = {'position': [0, 1.5, 4], 'target': [0, 1.0, -3], 'fov': 50.0}
+    assert {i['name'] for i in sp.inventory(scene, layout, key, FMT)[0]} == {'cushion', '香案', 'wall ne'}
+    extras = sp.shot_view_extras(scene, layout, key, FMT)
+    assert extras['in_frame'] == ['香案'] and extras['centre'] == ['香案']
+    assert 'wall' not in extras['backdrop'] and 'cushion' not in extras['backdrop']
