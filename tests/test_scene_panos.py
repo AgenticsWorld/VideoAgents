@@ -585,3 +585,51 @@ def test_offmap_ground_is_earth_toned_on_land_side_and_stays_water_on_water_side
     sea_old = np.asarray(sp.draw_projection_guides(grey, valid, depth, 1.8, 0.0, cam_xz=(0, -10.25), **kw), dtype=int)
     mid = slice(w // 2 - 20, w // 2 + 20)
     assert (sea_new[band, mid] == sea_old[band, mid]).all() and sea_new[band, mid, 2].mean() > sea_new[band, mid, 0].mean() + 10
+
+
+# ---- 2026-10-05 fengshen3 SCN-0109 A1:球 / 柱按真实形状求交;挡着的不是墙不写成围墙;悬空高视点写明
+def _treetop_scene():
+    crown = lambda i, x, z: {'id': i, 'shape': 'sphere', 'position': [x, 9, z], 'size_m': [6, 8, 6]}
+    return {'dimensions_m': [100, 14, 60], 'objects': [
+        crown('pine_1_crown', -4.1, 0), crown('pine_2_crown', 2, 5.3),
+        {'id': 'pine_1_trunk', 'shape': 'cylinder', 'position': [-4.1, 3, 0], 'size_m': [.6, 6, .6]},
+        {'id': 'shrine', 'shape': 'box', 'position': [-22, 4, 16], 'size_m': [9, 8, 12]}]}
+
+
+def test_raycast_uses_true_sphere_and_cylinder_shapes():
+    import numpy as np
+    d = np.array([[0, 0, -1.0], [0, -1.0, 0]])
+    ball = ((0, 0, 0), (2, 4, 2), 0.0, 'sphere'); pole = ((0, 0, 0), (2, 4, 2), 0.0, 'cylinder'); cube = ((0, 0, 0), (2, 4, 2), 0.0)
+    assert sp.raycast([0, 0, 5], d, [ball])[0] == 4 and sp.raycast([0, 0, 5], d, [pole])[0] == 4
+    assert np.isinf(sp.raycast([.9, 1.9, 5], d, [ball])[0]) and sp.raycast([.9, 1.9, 5], d, [cube])[0] == 4      # 盒角:椭球外
+    assert sp.raycast([.5, 5, 0], d, [pole])[1] == 3                                                               # 柱顶面
+    assert np.isinf(sp.raycast([.9, 5, .9], d, [pole])[1]) and sp.raycast([.9, 5, .9], d, [cube])[1] == 3          # 盒角:圆外
+    assert sp.raycast([0, 0, 0], d, [ball]).tolist() == [1, 2]                                                    # 起点在内 → 出射点
+
+
+def test_treetop_anchor_sees_past_crowns_and_never_calls_them_walls():
+    scene = _treetop_scene()
+    layout = {'landmarks': [{'id': 'shrine', 'name': '行宫正殿', 'xy': [.28, .77]}]}
+    anchor = {'position': [0, 11.6, 0], 'yaw_deg': 180}
+    view = sp.anchor_view(scene, anchor, False)
+    assert view['objects']['shrine']['px'] > sp.VIS_MIN_PX                       # 包围盒会把它整个挡掉(两个树冠盒之间没有缝)
+    boxed = {**scene, 'objects': [{**o, 'shape': 'box'} for o in scene['objects']]}
+    assert sp.anchor_view(boxed, anchor, False)['objects']['shrine']['px'] < view['objects']['shrine']['px']
+    assert any('行宫正殿' in line for line in sp.object_inventory(scene, layout, anchor, view))
+    assert all(s['walled'] == 0 for s in view['sectors'].values())               # 树冠再高也不是墙
+    right = view['sectors']['right']                                             # 朝南看,西边的树冠在右
+    assert right['blockers'][0][0] == 'pine_1_crown' and right['blockers'][0][1] >= sp.SECTOR_BLOCKER_MIN
+    text = sp.sector_sentence(scene, layout, view, 'right')
+    assert 'pine 1 crown about' in text and 'enclosing wall' not in text
+    walls = {'dimensions_m': [20, 4, 20], 'objects': [box('wall_n', (0, 2, -3), (20, 4, .4))]}
+    wview = sp.anchor_view(walls, {'position': [0, 1.6, 0], 'yaw_deg': 0}, True)
+    assert 'enclosing wall' in sp.sector_sentence(walls, {}, wview, 'centre')     # 真墙照旧
+
+
+def test_elevated_anchor_is_described_as_mid_air_viewpoint():
+    scene = _treetop_scene()
+    assert sp._elevated(scene, [0, 11.6, 0]) and not sp._elevated(scene, [0, 1.6, 0])
+    words = sp._lens_height_words(scene, [0, 11.6, 0])
+    assert words.startswith('11.6 m above the floor') and 'seen from above' in words
+    wall = {'dimensions_m': [60, 30, 60], 'objects': [box('wall', (0, 6, 0), (6, 12, 50))]}
+    assert not sp._elevated(wall, [0, 13.6, 0])                                   # 站在 12 m 墙顶不是悬空

@@ -250,8 +250,7 @@ def point_walled(scene: dict, pos) -> float:
     tall_top = max(0.6 * float(scene['dimensions_m'][1]), origin[1] + 1.5)
     best = np.full(len(dirs), np.inf); tall_hit = np.zeros(len(dirs), dtype=bool)
     for o in objs:
-        box = (tuple(float(v) for v in o['position']), tuple(float(v) for v in o['size_m']), float(o.get('yaw') or 0))
-        t = raycast(origin, dirs, [box])
+        t = raycast(origin, dirs, [_obj_box(o)])
         nearer = t < best
         tall_hit = np.where(nearer, float(o['position'][1]) + float(o['size_m'][1]) / 2 >= tall_top, tall_hit)
         best = np.where(nearer, t, best)
@@ -1035,6 +1034,8 @@ VIS_MIN_PX = 10                  # 少于此像素(720×360)= 看不见,不进�
 VIS_PROMINENT = 0.35             # 可见像素 / 无遮挡时应占像素 ≥ 此值 = 看得清;否则只是「从开口里瞥见」
 SECTOR_OPEN_MAX = 0.10           # 某向地平线带里「看得出去」的像素占比低于此值 = 该向被墙挡死
 OPEN_DISTANCE_M = 25.0
+SECTOR_WALL_MIN = 0.5            # 某向地平线带里最近命中是通顶高墙(盒体)的占比 ≥ 此值 = 挡着的是墙;否则照实写挡着的物体
+SECTOR_BLOCKER_MIN = 0.15        # 物体占该向地平线带 ≥ 此比例才写进「近处挡着」
 OUTDOOR_WORDS = ('云海', '云面', '云台', '台外', '山道', '星月', '星空', '月光', '月色', '天空', '天幕', '日光', '阳光', '崖前', '下不见底',
                  'sky', 'cloud', 'moon', 'star', 'sunlight', 'terrace', 'horizon', 'outdoor', 'exterior')
 INDOOR_RULE = (
@@ -1087,15 +1088,23 @@ def anchor_view(scene: dict, anchor: dict, indoor: bool) -> dict:
     ids = nearest.reshape(h, w); t = tmin.reshape(h, w)
     band = slice(int(h * (90 - 20) / 180), int(h * (90 + 3) / 180))   # 地平线上 20° 到下 3°:越过矮家具、不看脚下地面
     tall_top = max(0.6 * float(scene['dimensions_m'][1]), origin[1] + 1.5)
-    tall_ids = [n_fixed + i for i, o in enumerate(scene.get('objects', [])) if float(o['position'][1]) + float(o['size_m'][1]) / 2 >= tall_top]
+    # 墙只认盒体:树冠(球)、树干 / 柱(圆柱)再高也不是墙
+    tall_ids = [n_fixed + i for i, o in enumerate(scene.get('objects', []))
+                if (o.get('shape') or 'box') == 'box' and float(o['position'][1]) + float(o['size_m'][1]) / 2 >= tall_top]
     walled = np.isin(ids, tall_ids)
+    oids = [o['id'] for o in scene.get('objects', [])]
     sectors = {}
     for name, c0 in (('centre', .5), ('right', .75), ('behind', 0.0), ('left', .25)):
         cols = (np.arange(int((c0 - .125) * w), int((c0 + .125) * w)) % w)
-        tt = t[band][:, cols]
+        tt = t[band][:, cols]; ii = ids[band][:, cols]
+        near = np.isfinite(tt) & (tt <= OPEN_DISTANCE_M) & (ii >= n_fixed)
+        # 该向近处挡着视线的物体:[物体 id, 占该向地平线带的比例, 距离中位数],占比大的在前(不是墙时四向说明照实写它,见 sector_sentence)
+        blockers = sorted(([oids[int(k) - n_fixed], round(float((near & (ii == k)).mean()), 3), round(float(np.median(tt[near & (ii == k)])), 1)]
+                           for k in np.unique(ii[near])), key=lambda b: -b[1])
         sectors[name] = {'open': round(float((~np.isfinite(tt) | (tt > OPEN_DISTANCE_M)).mean()), 3),
                          'walled': round(float(walled[band][:, cols].mean()), 3),
                          'wall_m': round(float(np.median(tt[np.isfinite(tt)])), 1) if np.isfinite(tt).any() else None,
+                         'blockers': blockers,
                          'cols': set(cols.tolist())}
     view = {'objects': objects, 'sectors': sectors,
             'enclosed': bool(indoor and all(v['open'] < SECTOR_OPEN_MAX for v in sectors.values()))}
@@ -1114,7 +1123,9 @@ def _object_name(oid: str, landmarks: dict, names: dict) -> tuple[str, str | Non
 
 
 def sector_sentence(scene: dict, layout: dict, view: dict, sector: str) -> str:
-    """被墙挡死的方向写什么:该向看得见的具名地标(看得清的在前,只从开口瞥见的另说),其余就是近处的墙。"""
+    """被挡死的方向写什么:该向看得见的具名地标(看得清的在前,只从开口瞥见的另说),其余就是近处的墙。
+    挡着的不是通顶高墙(树冠、巨石、车、矮院墙:walled < SECTOR_WALL_MIN)时照实写是哪几个物体、多远,不写成「围墙」——
+    fengshen3 SCN-0109 A1 把 1.2 m 外的松树冠写成 enclosing wall,成图正中画出一道粉墙加山门(2026-10-05)。"""
     landmarks = {lm['id']: lm for lm in layout.get('landmarks', []) if 'xy' in lm}
     names = {lid: lm.get('name_en') or lm.get('name') or lid for lid, lm in landmarks.items()}
     sec = view['sectors'][sector]
@@ -1130,6 +1141,17 @@ def sector_sentence(scene: dict, layout: dict, view: dict, sector: str) -> str:
         bucket = clear if v['fraction'] >= VIS_PROMINENT else glimpsed
         if name not in bucket and name not in clear:
             bucket.append(name)
+    blockers = [] if sec.get('walled', 1.0) >= SECTOR_WALL_MIN else [b for b in sec.get('blockers') or [] if b[1] >= SECTOR_BLOCKER_MIN][:3]
+    if blockers:
+        near = [f"{_object_name(oid, landmarks, names)[0]} about {dist} m away" for oid, _share, dist in blockers]
+        shown = {n.split(' about ')[0] for n in near}
+        clear = [n for n in clear if n not in shown]; glimpsed = [n for n in glimpsed if n not in shown]
+        text = ' and '.join(near) + ', close to the camera and filling most of this direction exactly as its block does in [Image 1]'
+        if clear:
+            text += '; past it, ' + ', '.join(clear)
+        if glimpsed:
+            text += '; only a narrow glimpse past it of ' + ', '.join(glimpsed)
+        return text
     wall = f"the solid enclosing wall of this space about {sec['wall_m']} m away" if sec.get('wall_m') else 'the solid enclosing wall of this space'
     text = (', '.join(clear) + ', in front of ' + wall) if clear else wall
     if glimpsed:
@@ -1230,9 +1252,21 @@ def object_inventory(scene: dict, layout: dict, anchor: dict, view: dict | None 
     return lines
 
 
+ELEVATED_EYE_M = 3.0             # 镜头高出脚下站立面超过此值 = 悬空高视点(预览页手填 y 的锚点;人 / 脚架到不了)
+
+
+def _elevated(scene: dict, pos) -> bool:
+    return float(pos[1]) - standing_surface(scene, pos) > ELEVATED_EYE_M
+
+
 def _lens_height_words(scene: dict, pos) -> str:
     floor = standing_surface(scene, pos)
     eye = round(float(pos[1]) - floor, 2)
+    if eye > ELEVATED_EYE_M:
+        # 手填 y 抬到半空的锚点:不写明的话模型按「站在地上」理解,11.6 m 的树冠 / 屋脊该在眼前却画到头顶(SCN-0109 A1)
+        below = 'the floor' if floor < SURFACE_MIN_M else f'the surface beneath it, which is itself raised {round(floor, 1)} m above the ground below'
+        return (f'{eye} m above {below} — an elevated crane-height viewpoint with nothing under the camera: the ground lies far below, '
+                f'and anything lower than {round(float(pos[1]), 1)} m (roofs, walls, treetops) is seen from above, never from underneath')
     if floor < SURFACE_MIN_M:
         return f'{eye} m above the floor'
     return f'{eye} m above the surface it stands on, which is itself raised {round(floor, 1)} m above the ground below'
@@ -1277,8 +1311,15 @@ def pano_prompt(base: Path, sid: str, scheme: str, anchor: dict, *, indoor: bool
                        ([az + sd / 2, ax + sw / 2, sd / 2 - az, sw / 2 - ax][(k + i) % 4] for i in range(4))))
     blocked = {n for n, v in view['sectors'].items()
                if v['open'] < SECTOR_OPEN_MAX and v.get('wall_m') and v['wall_m'] < 0.6 * max(to_edge[n], 0.1)}
-    centre, right, behind, left = (sector_sentence(scene, layout, view, n) if n in blocked else t
-                                   for n, t in (('centre', centre), ('right', right), ('behind', behind), ('left', left)))
+    def sector_text(n, t):
+        if n not in blocked:
+            return t
+        text = sector_sentence(scene, layout, view, n)
+        # 室外被树冠 / 巨石这类物体(不是墙)挡着:俯视图那一边的景还在它后面、上方,接着写,不然那个方向只剩一个物体
+        if t and not indoor and view['sectors'][n].get('walled', 1.0) < SECTOR_WALL_MIN and 'enclosing wall' not in text:
+            text += '; beyond and around it: ' + t
+        return text
+    centre, right, behind, left = (sector_text(n, t) for n, t in (('centre', centre), ('right', right), ('behind', behind), ('left', left)))
     enclosed = view['enclosed']
     vis_words, hid_words = visible_landmark_words(scene, layout, view) if enclosed else (set(), set())
     where = 'interior' if indoor else 'exterior'
@@ -1293,8 +1334,12 @@ def pano_prompt(base: Path, sid: str, scheme: str, anchor: dict, *, indoor: bool
         parts.append(ENCLOSED_RULE.strip())
     elif indoor:
         parts.append(INDOOR_RULE.strip())
-    parts.append(f"The camera stands {standing_on(scene, layout, {'position': anchor['position'], 'target': anchor['position']})}, "
-                 f"lens {_lens_height_words(scene, anchor['position'])}, level horizon.")
+    standing = standing_on(scene, layout, {'position': anchor['position'], 'target': anchor['position']})
+    if _elevated(scene, anchor['position']):
+        standing = 'hangs in mid-air ' + (('above ' + standing[3:]) if standing.startswith('on ') else standing)
+    else:
+        standing = 'stands ' + standing
+    parts.append(f"The camera {standing}, lens {_lens_height_words(scene, anchor['position'])}, level horizon.")
     if centre:
         parts.append('Looking straight ahead (image centre): ' + centre + '.')
     if right:
@@ -1330,7 +1375,9 @@ def pano_prompt(base: Path, sid: str, scheme: str, anchor: dict, *, indoor: bool
 
 # ---------------------------------------------------------------- reprojection (numpy, backward warp)
 # 目标视图每个像素先对白模几何射线求交得 3D 点(密集、无散射空洞),再回到源全景取色,并用源深度全景做遮挡判定;
-# 只有真被遮挡处才是空洞。几何 = 白模 objects(盒;球/柱按盒近似)+ 地板(外扩 20 m,机位可在白模地面外)+ 室内天花板。
+# 只有真被遮挡处才是空洞。几何 = 白模 objects(盒 / 椭球 / 椭圆柱,与白模渲染同形)+ 地板(外扩 20 m,机位可在白模地面外)+ 室内天花板。
+# 球/柱原先按包围盒近似(2026-10-05 改):盒比真实形状大,贴着树冠的锚点(fengshen3 SCN-0109 A1,离树冠 1.1 m)整座行宫被
+# 「盒角」挡掉——物体清单里一个庙体都没有、四向说明写成「正前方 2.4 m 是围墙」,而白模全景里庙就在两个树冠之间。
 # reach = 目标机位坐标:地板再外扩到机位脚下。超长焦远景机位(fengshen3 SCN-0052 ep06 sh001,场外 178 m)的下半幅射线否则从地板盒
 # 底下穿过算成空洞(54.7% 里占 43%),白白触发 auto-self 兜底锚点。
 def scene_boxes(scene: dict, indoor: bool, reach=None) -> list:
@@ -1342,25 +1389,49 @@ def scene_boxes(scene: dict, indoor: bool, reach=None) -> list:
     if indoor:
         boxes.append(((0.0, h + 0.025, 0.0), (w, 0.05, d), 0.0))
     for o in scene.get('objects', []):
-        boxes.append((tuple(float(v) for v in o['position']), tuple(float(v) for v in o['size_m']), float(o.get('yaw') or 0)))
+        boxes.append(_obj_box(o))
     return boxes
 
 
+def _obj_box(o: dict) -> tuple:
+    """白模物体 → raycast 的求交体 (中心, 尺寸, yaw, 形状)。"""
+    return (tuple(float(v) for v in o['position']), tuple(float(v) for v in o['size_m']), float(o.get('yaw') or 0), o.get('shape') or 'box')
+
+
 def raycast(origin, dirs, boxes):
-    """origin (3,), dirs (N,3) 单位向量 → 每条射线最近命中距离 t (N,),无命中 inf。"""
+    """origin (3,), dirs (N,3) 单位向量 → 每条射线最近命中距离 t (N,),无命中 inf。
+    boxes 每项 (中心, 尺寸, yaw[, 形状]):形状缺省 box;sphere = 内接椭球、cylinder = 竖直椭圆柱(与 whitebox-renderer.js 同形)。"""
     import numpy as np
     o = np.asarray(origin, dtype=np.float64)
     best = np.full(dirs.shape[0], np.inf)
-    for (c, size, yaw) in boxes:
+
+    def quadric(p, d):
+        """|p + t·d|² = 1 的进出区间(p、d 已按半轴归一);方向在该截面上无分量时:起点在内 = 全程,在外 = 不相交。"""
+        a = (d * d).sum(axis=1); b = 2 * (d * p).sum(axis=1); cq = float((p * p).sum()) - 1.0
+        with np.errstate(divide='ignore', invalid='ignore'):
+            root = np.sqrt(b * b - 4 * a * cq)                    # 判别式 < 0 → nan → 下面的比较全 False = 不命中
+            lo_, hi_ = (-b - root) / (2 * a), (-b + root) / (2 * a)
+        flat = a < 1e-12
+        return np.where(flat, -np.inf if cq <= 0 else np.nan, lo_), np.where(flat, np.inf if cq <= 0 else np.nan, hi_)
+
+    for (c, size, yaw, *shape) in boxes:
+        shape = shape[0] if shape else 'box'
         cy, sy = math.cos(-yaw), math.sin(-yaw)
         ox, oy, oz = o[0] - c[0], o[1] - c[1], o[2] - c[2]
         lo = np.array([cy * ox + sy * oz, oy, -sy * ox + cy * oz])
         ld = np.stack([cy * dirs[:, 0] + sy * dirs[:, 2], dirs[:, 1], -sy * dirs[:, 0] + cy * dirs[:, 2]], axis=1)
-        half = np.array(size, dtype=np.float64) / 2
-        with np.errstate(divide='ignore', invalid='ignore'):
-            inv = 1.0 / ld
-            t1 = (-half - lo) * inv; t2 = (half - lo) * inv
-        tmin = np.max(np.minimum(t1, t2), axis=1); tmax = np.min(np.maximum(t1, t2), axis=1)
+        half = np.maximum(np.array(size, dtype=np.float64) / 2, 1e-9)
+        if shape == 'sphere':
+            tmin, tmax = quadric(lo / half, ld / half)
+        else:
+            with np.errstate(divide='ignore', invalid='ignore'):
+                inv = 1.0 / ld
+                t1 = (-half - lo) * inv; t2 = (half - lo) * inv
+            if shape == 'cylinder':                               # 侧面(xz 椭圆)∩ 上下底(y 向夹层)
+                smin, smax = quadric((lo / half)[[0, 2]], (ld / half)[:, [0, 2]])
+                tmin = np.maximum(smin, np.minimum(t1, t2)[:, 1]); tmax = np.minimum(smax, np.maximum(t1, t2)[:, 1])
+            else:
+                tmin = np.max(np.minimum(t1, t2), axis=1); tmax = np.min(np.maximum(t1, t2), axis=1)
         hit = (tmax >= np.maximum(tmin, 0.02)) & (tmax > 0.02)
         t = np.where(tmin > 0.02, tmin, tmax)
         best = np.where(hit & (t < best), t, best)
