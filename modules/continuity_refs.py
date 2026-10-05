@@ -16,7 +16,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from modules.prompt_layout import paragraphize, same_layout_insensitive
+from modules.prompt_layout import paragraphize, same_layout_insensitive, through_shot
 from modules.whitebox import component, read
 
 START, END = 'Continuation reference:', 'End continuation reference.'
@@ -260,6 +260,31 @@ def remap(text, kind, old, new):
     return rx.sub(replace, text)
 
 
+_CUT = re.compile(r'cut to|reverse angle|切镜|反打', re.I)
+_CLAUSE = re.compile(r'[,，。.;；:：!！?？()（）\n]')
+# 否定词到关键词之间隔得太远就不再算同一句否定;「不仅/不断/不时切镜」这类实际是肯定
+_NEGATED = re.compile(r"(?:不(?![同仅只但单止光断过久远禁由时妨少知觉])|没有|禁止|严禁|避免|杜绝|勿|而非|并非)[^\n]{0,12}$"
+                      r"|无(?:任何)?\s*$"
+                      r"|\b(?:no|not|never|without|avoid\w*|don['’]?t|doesn['’]?t|cannot|can['’]?t|nor)\b[^\n]{0,30}$", re.I)
+
+
+def opening_cut_instruction(text):
+    """continuous 边界开场的切镜指令(#111):看正文开头到 Shot 1 段结束(其后的【保持一致】、Global constraints 等
+    约束段不看;没有「Shot 1:」段头的写法退回 Shot 2 之前的全文),「不出现切镜」「不给反打」「no cut to …」这类
+    否定约束句本身就是在要求不切镜,不算。返回命中的词或 None。"""
+    scope = through_shot(text, 1)
+    if scope is None:
+        scope = text.split('Shot 2:')[0]
+    for m in _CUT.finditer(scope):
+        clause = _CLAUSE.split(scope[:m.start()])[-1]
+        # 「不出现跳剪、切镜」:顿号并列的光杆词沿用前面的否定;「不挪座、正反打换机位」是另起的肯定分句
+        if not re.match(r'\s*(?:[、,，。.;；或和与及/]|$)', scope[m.end():]):
+            clause = clause.split('、')[-1]
+        if not _NEGATED.search(clause):
+            return m.group(0)
+    return None
+
+
 def apply_prompt(prompt, continuation):
     out = copy.deepcopy(prompt)
     text = BLOCK.sub('', out.get('video_prompt') or '').strip()
@@ -281,7 +306,7 @@ def apply_prompt(prompt, continuation):
     text = text.strip()
     continuous = c.get('boundary') == 'continuous'
     if c['mode'] == 'tail_video':
-        if continuous and re.search(r'cut to|reverse angle|切镜|反打', text.split('Shot 2:')[0], re.I):
+        if continuous and opening_cut_instruction(text):
             raise ValueError('连续动作边界的开场仍有切镜指令，请调整首镜 prompt/分镜')
         n = videos_new.index(c['video']) + 1
         if continuous:

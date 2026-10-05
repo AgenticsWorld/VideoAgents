@@ -42,6 +42,26 @@ def paragraphize(text: str) -> str:
     return t.strip()
 
 
+_ANCHOR_RE = re.compile(r"(?:" + "|".join(_HEADS) + r")|【[^】\n]{1,24}】|(?:subject_definitions|summary|"
+                        r"retention_analysis|detailed_description|overall_soundscape|non_diegetic_music):")
+
+
+def through_shot(text: str, n: int = 1):
+    """正文开头到第 n 个 Shot 段结束为止的部分:前置段(开场句、主体定义 …)连同该 Shot 段,截到它后面第一个
+    段首锚点(下一个 Shot、宿主固定段、【保持一致】、Global constraints …)之前;Agent 把一镜拆成几个自然段时
+    一并算入。正文里没有「Shot n:」段头返回 None。"""
+    if not isinstance(text, str):
+        return None
+    head = re.compile(r"Shot\s*%d\s*(?:[:：]|[｜|])" % n)
+    out, found = [], False
+    for para in paragraphize(text).split("\n\n"):
+        if found and _ANCHOR_RE.match(para):
+            break
+        found = found or bool(head.match(para))
+        out.append(para)
+    return "\n\n".join(out) if found else None
+
+
 def same_layout_insensitive(a: str, b: str) -> bool:
     """两段 prompt 仅空白排版不同(存量单行正文 vs 分段正文)时视为相同。"""
     return re.sub(r"\s+", "", a or "") == re.sub(r"\s+", "", b or "")

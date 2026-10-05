@@ -162,6 +162,36 @@ def test_continuous_rejects_cut_instruction(project):
     assert 'same location and lighting as [Image 1]' in out['video_prompt']
 
 
+@pytest.mark.parametrize('text', [
+    # #111 原报告:单镜组,【保持一致】段的约束句
+    'Shot 1: 0-4秒：镜头完全不动,六十五毫米平视全景。\n\n【保持一致】\n保持与上一组同一视轴的连续,不出现切镜或跳剪;保持全片无人说话。',
+    'Shot 1: 固定机位。Global constraints: no watermark, no cut to another angle, no reverse angle.',   # 存量单行正文
+    'Shot 1: 全镜一个连续环绕,不切镜、不反打,不给单独反打,严禁切镜。',
+    'Shot 1: 一镜到底,不出现跳剪、叠化、切镜。',
+    'Shot 1: one continuous take, never cut to a new angle, without a reverse angle. Do not cut to the door.',
+    'Shot 1: 固定机位。\n\nShot 2: 切镜到过肩反打。',   # 第二镜起可以切
+    '开场延续上一组,不切镜。画面里他起身走向门口。',   # 没有 Shot 段头:退回全文,否定句同样不算
+])
+def test_negated_or_out_of_scope_cut_words_pass(text):
+    assert cr.opening_cut_instruction(text) is None
+
+
+@pytest.mark.parametrize('text', [
+    'Shot 1: cut to a reverse angle.',
+    'Shot 1: 固定镜头,反打中近景,机位在她身后。',
+    'Shot 1: 两人不起身、不挪座,正反打都在书店开口这一侧完成。',
+    'Shot 1: 两人不挪座、正反打换机位。',
+    'Shot 1: 镜头不断切镜到门外。',
+    'Shot 1: 他不回头。Then cut to the doorway.',
+    'Shot 1: 推近。\n\n运镜:落幅前切镜到门外。\n\n【保持一致】不出现跳剪。',   # 一镜写成两个自然段
+    '开场先切镜到门外,再回到屋内。',
+    # Shot 1 之前的开场句同样算开场
+    'same location and lighting continuing from the previous group, cut to a new 中景 framing. Shot 1: 固定机位。',
+])
+def test_affirmative_cut_instruction_detected(text):
+    assert cr.opening_cut_instruction(text)
+
+
 def test_disable_removes_only_continuation(project):
     cr.sync_group(project, 'ep01', 'grp002', write=True)
     edit(project/'settings.json', lambda d: d['duration'].update(long_take=False))
