@@ -941,3 +941,45 @@ def test_view_extras_skip_geometry_without_landmark():
     extras = sp.shot_view_extras(scene, layout, key, FMT)
     assert extras['in_frame'] == ['香案'] and extras['centre'] == ['香案']
     assert 'wall' not in extras['backdrop'] and 'cushion' not in extras['backdrop']
+
+
+def test_swap_shot_plate_points_slot_at_library_entry(tmp_path, monkeypatch):
+    """#98:换图只改本镜该角色的集索引条目(reuse=manual、记换前 key),库与其它镜不动;找不到/同图按 PlateSwapError 报。"""
+    import json
+    base = tmp_path
+    sid, ep = 'SCN-1', 'ep01'
+    pdir = base/'assets/concepts/scenes'/sid/'plates'; pdir.mkdir(parents=True)
+    for k in ('L1_a', 'L1_b'):
+        (pdir/f'{k}.png').write_bytes(b'x')
+    f = facts((0, 1.5, 0), (0, 1.5, -10), 27)
+    lib = {'schema_version': sp.SCHEMA_LIBRARY, 'scene_id': sid, 'plates': [
+        {'key': 'L1_a', 'file': f'assets/concepts/scenes/{sid}/plates/L1_a.png', 'master': True, 'camera': f, 'lighting_scheme_id': 'L1'},
+        {'key': 'L1_b', 'file': f'assets/concepts/scenes/{sid}/plates/L1_b.png', 'master': True, 'camera': f, 'lighting_scheme_id': 'L1'}]}
+    sp.save_library(base, sid, lib)
+    idx = {'schema_version': sp.SCHEMA_EPISODE, 'ep': ep, 'shots': {
+        'sh001': {'group_id': 'grp001', 'scene_id': sid, 'lighting_scheme_id': 'L1', 'plates': [
+            {'role': 'start', 'key': 'L1_a', 'file': lib['plates'][0]['file'], 'reuse': 'library', 'camera': f},
+            {'role': 'end', 'key': 'L1_a', 'file': lib['plates'][0]['file'], 'reuse': 'library', 'camera': f}]},
+        'sh002': {'group_id': 'grp001', 'scene_id': sid, 'lighting_scheme_id': 'L1', 'plates': [
+            {'role': 'start', 'key': 'L1_b', 'file': lib['plates'][1]['file'], 'reuse': 'new', 'camera': f}]}}}
+    sp.save_episode_index(base, ep, idx)
+    synced = []
+    monkeypatch.setattr(sp, 'sync_group', lambda b, e, g, write=False, **kw: synced.append((g, write)) or {'group_id': g, 'errors': [], 'warnings': [], 'updated': True})
+    res = sp.swap_shot_plate(base, ep, 'sh001', 'start', 'L1_b')
+    assert res['key'] == 'L1_b' and res['previous'] == {'key': 'L1_a', 'file': lib['plates'][0]['file'], 'reuse': 'library'}
+    assert synced == [('grp001', True)]
+    after = sp.load_episode_index(base, ep)['shots']
+    start, end = after['sh001']['plates']
+    assert start['key'] == 'L1_b' and start['reuse'] == 'manual' and start['swapped_from']['key'] == 'L1_a' and start['camera'] == f
+    assert end['key'] == 'L1_a' and after['sh002']['plates'][0]['key'] == 'L1_b'          # 另一角色 / 另一镜不动
+    assert [e['key'] for e in sp.load_library(base, sid)['plates']] == ['L1_a', 'L1_b']   # 库不动
+    import pytest
+    with pytest.raises(sp.PlateSwapError) as ex:
+        sp.swap_shot_plate(base, ep, 'sh001', 'start', 'L1_b')
+    assert ex.value.status == 400
+    with pytest.raises(sp.PlateSwapError) as ex:
+        sp.swap_shot_plate(base, ep, 'sh001', 'start', 'nope')
+    assert ex.value.status == 404
+    with pytest.raises(sp.PlateSwapError) as ex:
+        sp.swap_shot_plate(base, ep, 'sh002', 'end', 'L1_a')
+    assert ex.value.status == 404

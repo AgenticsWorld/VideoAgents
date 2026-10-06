@@ -7990,51 +7990,23 @@ def _shot_plate_candidates(project: str, ep: str, shot_id: str) -> dict:
 
 
 def _shot_plate_swap(project: str, ep: str, shot_id: str, body: dict) -> dict:
-    """{role: start|end, key} → 集索引 directing/<ep>/shot_plates.json 本镜该角色条目改指向库里这张图(reuse=manual,记录换前 key),
-    再 sync_shot_plates --write 本组,把新图接进组 prompt refs / Shot plates 段。本镜机位指纹(camera)不动:非 --force 重出时按
-    「记录仍新鲜」保留手选;--force 才按机位重新决策。"""
-    shot_plates, base, ep, shot_id, idx, rec, sid = _shot_plate_ctx(project, ep, shot_id)
-    role = str((body or {}).get("role") or "start").strip().lower()
-    key = re.sub(r"[^\w\-.]", "", str((body or {}).get("key") or ""))
-    if role not in ("start", "end"):
-        raise ServiceError(400, "role must be start or end")
-    if not key:
-        raise ServiceError(400, "key is required")
-    slot = next((p for p in rec["plates"] if isinstance(p, dict) and p.get("role") == role), None)
-    if slot is None:
-        raise ServiceError(404, f"{ep}/{shot_id} 没有 {role} 背景图条目,无从替换")
-    lib = shot_plates.load_library(base, sid)
-    entry = next((e for e in lib["plates"] if e.get("key") == key), None)
-    if not entry or not entry.get("file"):
-        raise ServiceError(404, f"{sid} 的背景图库里没有 {key}")
-    f = base / str(entry["file"])
-    if not f.is_file():
-        raise ServiceError(404, f"背景图文件不存在:{entry['file']}")
-    if slot.get("key") == key and slot.get("file") == entry["file"]:
-        raise ServiceError(400, "选的就是当前这张图,无需替换")
-    view = None
+    """{role: start|end, key} → 本镜该角色的背景图改指向库里这张图(reuse=manual)并 sync 本组 prompt。
+    逻辑在 modules/shot_plates.swap_shot_plate(与 code/swap_shot_plate.py 同一入口,#98)。"""
+    from modules import shot_plates
+    base = _proj_base(project)
+    if not str(ep or "").strip() or not re.sub(r"[^\w\-]", "", str(shot_id or "")):
+        raise ServiceError(400, "ep / shot_id is required")
     try:
-        if slot.get("camera") and entry.get("camera"):
-            view = shot_plates.view_info(entry, slot["camera"])
-    except Exception:  # noqa: BLE001
-        view = None
-    prev = {"key": slot.get("key"), "file": slot.get("file"), "reuse": slot.get("reuse")}
-    slot.update({"key": key, "file": entry["file"], "reuse": "manual", "crop": None, "view": view,
-                 "whitebox_frame": entry.get("whitebox_frame"),
-                 "swapped_from": prev, "swapped_at": datetime.now().isoformat(timespec="seconds")})
-    rec["written_at"] = datetime.now().isoformat(timespec="seconds")
-    shot_plates.save_episode_index(base, ep, idx)
-    sync = None
-    gid = rec.get("group_id")
-    if gid:
-        try:
-            sync = shot_plates.sync_group(base, ep, gid, write=True)
-        except Exception as e:  # noqa: BLE001
-            sync = {"group_id": gid, "errors": [f"sync 失败:{e}"], "warnings": [], "updated": False}
-    return {"ok": True, "ep": ep, "shot_id": shot_id, "scene_id": sid, "group_id": gid, "role": role,
-            "plate": {"role": role, "key": key, "reuse": "manual", "crop": None, "file": entry["file"],
-                      "url": f"/projects/{base.name}/{entry['file']}?v={int(f.stat().st_mtime)}", "scene_id": sid},
-            "previous": prev, "sync": sync}
+        res = shot_plates.swap_shot_plate(base, ep, re.sub(r"[^\w\-]", "", str(shot_id)), (body or {}).get("role") or "start",
+                                          (body or {}).get("key") or "")
+    except shot_plates.PlateSwapError as e:
+        raise ServiceError(e.status, str(e))
+    f = base / res["file"]
+    return {"ok": True, "ep": res["ep"], "shot_id": res["shot_id"], "scene_id": res["scene_id"], "group_id": res["group_id"],
+            "role": res["role"],
+            "plate": {"role": res["role"], "key": res["key"], "reuse": "manual", "crop": None, "file": res["file"],
+                      "url": f"/projects/{base.name}/{res['file']}?v={int(f.stat().st_mtime)}", "scene_id": res["scene_id"]},
+            "previous": res["previous"], "sync": res["sync"]}
 
 
 async def api_shot_plate_candidates(project: str, ep: str, shot_id: str):

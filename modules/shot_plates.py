@@ -2798,6 +2798,65 @@ def status_episode(base: Path, ep: str, only=None) -> dict:
             'legacy_shots': legacy_shots}
 
 
+# ---------------------------------------------------------------- 换图(2026-09-23 分镜预览「🔁 换图」;2026-10-05 #98 CLI code/swap_shot_plate.py 同一入口)
+class PlateSwapError(ValueError):
+    """换图请求不成立;status 供服务端映射 HTTP 状态(400 参数 / 404 找不到)。"""
+    def __init__(self, status: int, message: str):
+        super().__init__(message)
+        self.status = status
+
+
+def swap_shot_plate(base: Path, ep: str, shot_id: str, role: str, key: str) -> dict:
+    """集索引 directing/<ep>/shot_plates.json 本镜 role(start|end)条目改指向本场景库里的 key(reuse=manual,记换前 key),
+    再 sync --write 本组把新图接进组 prompt refs / Shot plates 段。本镜机位指纹(camera)不动:非 --force 重出按「记录仍新鲜」
+    保留手选,--force 才按机位重新决策。返回 {ep, shot_id, scene_id, group_id, role, key, file, previous, sync}。"""
+    ep, shot_id = component(ep), component(shot_id)
+    role = str(role or 'start').strip().lower()
+    key = re.sub(r'[^\w\-.]', '', str(key or ''))
+    if role not in ('start', 'end'):
+        raise PlateSwapError(400, 'role must be start or end')
+    if not key:
+        raise PlateSwapError(400, 'key is required')
+    idx = load_episode_index(base, ep)
+    rec = idx['shots'].get(shot_id)
+    if not isinstance(rec, dict) or not rec.get('plates'):
+        raise PlateSwapError(404, f'{ep}/{shot_id} 还没有分镜背景图(白模签字并导出后由 p6-shot-plates 生成)')
+    sid = component(str(rec.get('scene_id') or ''))
+    if not sid:
+        raise PlateSwapError(409, f'{ep}/{shot_id} 的背景图记录缺 scene_id,无法定位场景库')
+    slot = next((p for p in rec['plates'] if isinstance(p, dict) and p.get('role') == role), None)
+    if slot is None:
+        raise PlateSwapError(404, f'{ep}/{shot_id} 没有 {role} 背景图条目,无从替换')
+    entry = next((e for e in load_library(base, sid)['plates'] if e.get('key') == key), None)
+    if not entry or not entry.get('file'):
+        raise PlateSwapError(404, f'{sid} 的背景图库里没有 {key}')
+    if not (base/str(entry['file'])).is_file():
+        raise PlateSwapError(404, f"背景图文件不存在:{entry['file']}")
+    if slot.get('key') == key and slot.get('file') == entry['file']:
+        raise PlateSwapError(400, '选的就是当前这张图,无需替换')
+    view = None
+    try:
+        if slot.get('camera') and entry.get('camera'):
+            view = view_info(entry, slot['camera'])
+    except Exception:  # noqa: BLE001
+        view = None
+    now = dt.datetime.now().isoformat(timespec='seconds')
+    prev = {'key': slot.get('key'), 'file': slot.get('file'), 'reuse': slot.get('reuse')}
+    slot.update({'key': key, 'file': entry['file'], 'reuse': 'manual', 'crop': None, 'view': view,
+                 'whitebox_frame': entry.get('whitebox_frame'), 'swapped_from': prev, 'swapped_at': now})
+    rec['written_at'] = now
+    save_episode_index(base, ep, idx)
+    sync = None
+    gid = rec.get('group_id')
+    if gid:
+        try:
+            sync = sync_group(base, ep, gid, write=True)
+        except Exception as e:  # noqa: BLE001
+            sync = {'group_id': gid, 'errors': [f'sync 失败:{e}'], 'warnings': [], 'updated': False}
+    return {'ep': ep, 'shot_id': shot_id, 'scene_id': sid, 'group_id': gid, 'role': role, 'key': key, 'file': entry['file'],
+            'previous': prev, 'sync': sync}
+
+
 # ---------------------------------------------------------------- 按修改意见重出一张(2026-09-26,分镜预览「✏️ 修改」→ 修改师)
 # 用户对某镜某张背景图提修改意见时,不管这张图来自九宫格拆格 / 九宫格补图 / 全景截图 / 世界模型截图 / 母图 / 手工截取,
 # 一律**不动原图**:以当前这张图为 [Image 1](机位/构图/陈设/光线的权威参考,只改用户点名的地方),按用户意见出一张新图入库
