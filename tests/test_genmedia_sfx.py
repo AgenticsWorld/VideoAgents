@@ -109,7 +109,7 @@ def test_fal_body_and_count(config, monkeypatch, tmp_path):
     config({"video": {"fal": {"api_key": "fal"}}})
     calls = []
 
-    def fake_queue(cfg, endpoint, body, timeout, label, kind="视频", poll=None):
+    def fake_queue(cfg, endpoint, body, timeout, label, kind="视频", poll=None, output=""):
         calls.append((endpoint, body, label, kind))
         return {"audio": {"url": "data:audio/mpeg;base64,QUJD"}}
     monkeypatch.setattr(g, "_fal_queue_run", fake_queue)

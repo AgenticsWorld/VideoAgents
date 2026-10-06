@@ -28,11 +28,13 @@ CLI:
   需先在 Web 控制台「设置 → 文件托管」配置渠道(火山 TOS/阿里 OSS/腾讯 COS/S3 兼容,
   生效渠道=选中的标签页;各渠道 SDK 按需安装:tos/oss2/cos-python-sdk-v5/boto3)。
 
-  python3 modules/genmedia.py reclaim --task-id <UUID|cgt-xxxx> --output out.mp4 \
+  python3 modules/genmedia.py reclaim [--task-id <UUID|cgt-xxxx>;Fal 任务可省略] --output out.mp4 \
       [--return-last-frame tail.png]
 
-  恢复已建成的视频任务:AgenticsLLM UUID 或方舟 cgt-… task ID 均可。仅查询状态并
-  下载产物,绝不重新提交、不重复计费。适用于提交后被网络/工具超时掐断的场景
+  恢复已建成的视频任务:AgenticsLLM UUID 或方舟 cgt-… task ID 均可;Fal 任务按 --output 找在途任务台账
+  (data/.videoagents/pending_tasks/,任务一建成就落盘),不必给 ID。仅查询状态并
+  下载产物,绝不重新提交、不重复计费。Fal 渠道(图像 / 视频 / 音效)另有自动续接:进程中途被掐后,
+  同一条命令原样重跑会接着等原任务,不重新提交。适用于提交后被网络/工具超时掐断的场景
   (succeeded 直接取回;排队/运行中继续轮询到完成)。任务 ID 见提交日志的
   「任务已创建」行;方舟任务也可用 code/ark_task_list.py 按创建时间核对。
 
@@ -1829,12 +1831,14 @@ def _fal_image_body(cfg, prompt, negative, refs, width, height, seed, output="",
 
 def _image_fal(cfg, prompt, negative, refs, width, height, seed, output):
     endpoint, body = _fal_image_body(cfg, prompt, negative, refs, width, height, seed, output)
-    res = _fal_queue_run(cfg, endpoint, body, IMAGE_TIMEOUT, Path(output).name, kind="图像")
+    res = _fal_queue_run(cfg, endpoint, body, IMAGE_TIMEOUT, Path(output).name, kind="图像", output=output)
     images = res.get("images") or []
     url = images[0].get("url") if images and isinstance(images[0], dict) else ""
     if not url:
         raise RuntimeError(f"Fal 任务成功但无图像 URL:{json.dumps(res, ensure_ascii=False)[:400]}")
-    return _decode_data_url(url)
+    data = _decode_data_url(url)
+    _pending_task_clear(output)
+    return data
 
 
 # ---------------- RH:RunningHub 标准模型 API(图像/视频,见 modules/rh_models.py) ----------------
@@ -5033,27 +5037,85 @@ def _fal_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
     return endpoint, body
 
 
-def _fal_queue_run(cfg, endpoint: str, body: dict, timeout: int, label: str,
-                   kind: str = "视频", poll: float | None = None) -> dict:
-    """提交 Fal 队列任务并轮询到 COMPLETED,返回 response JSON(图像/视频共用;
-    鉴权 Authorization: Key,status_url/response_url 以提交返回为准)。"""
-    headers = {"Authorization": f"Key {cfg['api_key']}"}
-    submit_url = f"{FAL_QUEUE_BASE}/{endpoint}"
-    job = _post_json(submit_url, body, headers)
-    rid = job.get("request_id")
-    if not rid:
-        raise RuntimeError(f"Fal {kind}任务创建失败:{json.dumps(job, ensure_ascii=False)[:400]}")
-    status_url = job.get("status_url") or f"{submit_url}/requests/{rid}/status"
-    response_url = job.get("response_url") or f"{submit_url}/requests/{rid}"
-    print(f"[genmedia] Fal 任务已创建 {rid}({endpoint})→ {label}", file=sys.stderr, flush=True)
+# ---- 在途任务台账(2026-10-06;目前只有 Fal 渠道用) ----
+# 任务一建成、开始轮询之前,就把 request_id / status_url / response_url 写进
+# data/.videoagents/pending_tasks/<输出绝对路径的 sha1>.json;产物下载完(或任务明确失败)才删。
+# 进程中途被掐(工具超时、Agent 寿命到)后,同一条命令原样重跑会按台账续接同一个任务,不重新提交、不重复计费;
+# `reclaim --output <原路径>` 则是「只查询 + 下载、绝不提交」的取回入口。
+# 「同一条命令」按请求指纹判:端点 + 请求体,其中预签名 URL 去掉签名参数、内联 data URI 取摘要、seed 不计
+# (不带 --seed 时每次运行随机取,计入就永远对不上)。请求内容变了 = 另一个任务,不续接。
+PENDING_TASK_DIR = RUNTIME_DIR / "pending_tasks"
+PENDING_TASK_STALE_S = 6 * 3600    # 续接时任务仍未完成、且提交已超过这么久 → 当它卡死,放弃并重新提交
+
+
+def _pending_task_path(output: str) -> Path:
+    return PENDING_TASK_DIR / (hashlib.sha1(os.path.abspath(output).encode("utf-8")).hexdigest()[:20] + ".json")
+
+
+def _pending_task_read(output: str) -> dict | None:
+    try:
+        rec = json.loads(_pending_task_path(output).read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    return rec if isinstance(rec, dict) else None
+
+
+def _pending_task_write(output: str, rec: dict) -> None:
+    path = _pending_task_path(output)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(rec, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    except OSError as e:
+        print(f"[genmedia] 在途任务记录写入失败(本次不影响生成,中断后无法自动续接):{e}", file=sys.stderr)
+
+
+def _pending_task_clear(output: str) -> None:
+    if output:
+        _pending_task_path(output).unlink(missing_ok=True)
+
+
+def _request_fingerprint(endpoint: str, body: dict) -> str:
+    def norm(value):
+        if isinstance(value, dict):
+            return {k: norm(value[k]) for k in sorted(value) if k != "seed"}
+        if isinstance(value, list):
+            return [norm(v) for v in value]
+        if isinstance(value, str):
+            if value.startswith("data:"):
+                return "data:" + hashlib.sha1(value.encode("utf-8")).hexdigest()
+            if value.startswith(("http://", "https://")):
+                return value.split("?", 1)[0]
+        return value
+    raw = json.dumps([endpoint, norm(body)], ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+
+
+class _FalRequestGone(RuntimeError):
+    """续接的旧任务已不可用(查询被拒 / 结果过期 / 卡死太久),调用方决定是否重新提交。"""
+
+
+def _fal_wait(headers: dict, rec: dict, timeout: int, kind: str, poll: float | None = None,
+              output: str = "", resumed: bool = False) -> dict:
+    """轮询 Fal 任务到 COMPLETED 并返回 response JSON。resumed=True 是续接旧任务:先查一次再等,
+    查询 / 取结果被拒(4xx)或任务过久仍未完成时抛 _FalRequestGone。"""
+    rid = rec["request_id"]
+
+    def gone(e: BaseException) -> bool:
+        return resumed and isinstance(e, _HTTPStatusError) and 400 <= e.status < 500 and e.status not in (408, 429)
+
     started = time.time()
     deadline = started + timeout
     last_status, last_beat = "", started
+    skip_sleep = resumed
     while time.time() < deadline:
-        time.sleep(poll if poll is not None else VIDEO_POLL_INTERVAL)
+        if not skip_sleep:
+            time.sleep(poll if poll is not None else VIDEO_POLL_INTERVAL)
+        skip_sleep = False
         try:
-            st = _get_json(status_url, headers)
+            st = _get_json(rec["status_url"], headers)
         except Exception as e:
+            if gone(e):
+                raise _FalRequestGone(f"查询返回 HTTP {e.status}") from e
             # 轮询瞬时失败不中止:任务已在 Fal 侧运行,中止会诱发上层重试重复计费
             print(f"[genmedia] Fal 轮询异常(继续等待):{str(e)[:200]}", file=sys.stderr, flush=True)
             continue
@@ -5066,20 +5128,114 @@ def _fal_queue_run(cfg, endpoint: str, body: dict, timeout: int, label: str,
             last_status, last_beat = status, time.time()
         if status == "COMPLETED":
             if st.get("error"):
+                _pending_task_clear(output)
                 raise RuntimeError(f"Fal {kind}任务失败({st.get('error_type') or 'error'}):"
                                    f"{str(st.get('error'))[:400]}")
-            return _get_json(response_url, headers, timeout=120)
-    raise RuntimeError(f"Fal {kind}超时({timeout}s),request={rid}")
+            try:
+                return _get_json(rec["response_url"], headers, timeout=120)
+            except Exception as e:
+                if gone(e):
+                    raise _FalRequestGone(f"取结果返回 HTTP {e.status}") from e
+                raise
+        if resumed and time.time() - float(rec.get("submitted_ts") or 0) > PENDING_TASK_STALE_S:
+            raise _FalRequestGone(f"提交已超过 {PENDING_TASK_STALE_S // 3600} 小时仍是 {status or '未知状态'}")
+    raise RuntimeError(f"Fal {kind}超时({timeout}s),request={rid};任务可能仍在 Fal 侧运行,"
+                       "原命令原样重跑会续接这条任务(不重新提交)")
 
 
-def _fal_submit_and_wait(cfg, endpoint: str, body: dict, output: str) -> str:
-    """提交 Fal 视频任务并轮询到 COMPLETED,取 response 里的 video.url 下载到 output。"""
-    res = _fal_queue_run(cfg, endpoint, body, VIDEO_TIMEOUT, Path(output).name, kind="视频")
+def _fal_queue_run(cfg, endpoint: str, body: dict, timeout: int, label: str,
+                   kind: str = "视频", poll: float | None = None, output: str = "") -> dict:
+    """提交 Fal 队列任务并轮询到 COMPLETED,返回 response JSON(图像/视频/音效共用;
+    鉴权 Authorization: Key,status_url/response_url 以提交返回为准)。
+    给了 output 就记在途任务台账:该输出路径上有同一请求的未完成任务时续接它,不重新提交;
+    调用方把产物取回后须 _pending_task_clear(output)。"""
+    headers = {"Authorization": f"Key {cfg['api_key']}"}
+    fingerprint = _request_fingerprint(endpoint, body)
+    rec = _pending_task_read(output) if output else None
+    if rec and rec.get("provider") == "fal" and not (
+            rec.get("fingerprint") == fingerprint and rec.get("request_id")
+            and rec.get("status_url") and rec.get("response_url")):
+        print(f"[genmedia] {label} 有一条未完成的 Fal 任务 {rec.get('request_id')},但本次请求内容不同,"
+              "不续接,重新提交", file=sys.stderr, flush=True)
+        rec = None
+    if rec and rec.get("provider") == "fal":
+        print(f"[genmedia] 续接未完成的 Fal 任务 {rec['request_id']}(提交于 {rec.get('submitted_at') or '?'})"
+              f"→ {label}(仅查询/下载,不重新提交不重复计费)", file=sys.stderr, flush=True)
+        try:
+            return _fal_wait(headers, rec, timeout, kind, poll, output, resumed=True)
+        except _FalRequestGone as e:
+            print(f"[genmedia] 旧任务无法续接({e}),重新提交", file=sys.stderr, flush=True)
+            _pending_task_clear(output)
+    submit_url = f"{FAL_QUEUE_BASE}/{endpoint}"
+    job = _post_json(submit_url, body, headers)
+    rid = job.get("request_id")
+    if not rid:
+        raise RuntimeError(f"Fal {kind}任务创建失败:{json.dumps(job, ensure_ascii=False)[:400]}")
+    now = time.time()
+    rec = {"schema": "pending_task/1", "provider": "fal", "kind": kind, "endpoint": endpoint,
+           "request_id": rid,
+           "status_url": job.get("status_url") or f"{submit_url}/requests/{rid}/status",
+           "response_url": job.get("response_url") or f"{submit_url}/requests/{rid}",
+           "fingerprint": fingerprint, "output": os.path.abspath(output) if output else "",
+           "submitted_at": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now)), "submitted_ts": int(now)}
+    if output:
+        _pending_task_write(output, rec)     # 写在轮询之前,进程中途被掐也不丢任务
+    print(f"[genmedia] Fal 任务已创建 {rid}({endpoint})→ {label}", file=sys.stderr, flush=True)
+    return _fal_wait(headers, rec, timeout, kind, poll, output)
+
+
+def _fal_save_video(res: dict, output: str) -> str:
     video = res.get("video")
     vurl = video.get("url") if isinstance(video, dict) else ""
     if not vurl:
         raise RuntimeError(f"Fal 任务成功但无视频 URL:{json.dumps(res, ensure_ascii=False)[:400]}")
-    return _save(_decode_data_url(vurl), output)
+    saved = _save(_decode_data_url(vurl), output)
+    _pending_task_clear(output)
+    return saved
+
+
+def _fal_submit_and_wait(cfg, endpoint: str, body: dict, output: str) -> str:
+    """提交 Fal 视频任务(或续接该输出路径上未完成的同一任务)并轮询到 COMPLETED,取 video.url 下载到 output。"""
+    res = _fal_queue_run(cfg, endpoint, body, VIDEO_TIMEOUT, Path(output).name, kind="视频", output=output)
+    return _fal_save_video(res, output)
+
+
+def _fal_reclaim_key() -> str:
+    """reclaim 只需 Fal Key:图像 / 视频段任一段填过的,或环境变量 FAL_KEY(与生效渠道无关)。"""
+    try:
+        raw = json.loads(CONFIG_PATH.read_text())
+    except Exception:
+        raw = {}
+    for kind in ("video", "image"):
+        key = str(((raw.get(kind) or {}).get("fal") or {}).get("api_key") or "").strip()
+        if key:
+            return key
+    key = os.environ.get(ENV_KEYS["fal"], "").strip()
+    if not key:
+        raise RuntimeError("reclaim Fal 任务需要 Fal API Key:请在「🎨 生成模型」页图像或视频的 Fal 标签页填入,"
+                           f"或设环境变量 {ENV_KEYS['fal']}")
+    return key
+
+
+def _fal_reclaim_video(rec: dict, output: str, return_last_frame: str = "") -> str:
+    """按在途任务台账取回 Fal 视频任务:只查询 + 下载,任何情况下都不提交。"""
+    rid = rec.get("request_id")
+    if rec.get("kind") != "视频":
+        raise RuntimeError(f"该输出路径上的在途 Fal 任务 {rid} 是{rec.get('kind') or '非视频'}任务,"
+                           "reclaim 只取视频;原生成命令原样重跑即可续接")
+    if not (rid and rec.get("status_url") and rec.get("response_url")):
+        raise RuntimeError("在途任务记录不完整,无法恢复")
+    print(f"[genmedia] 恢复 Fal 任务 {rid} → {Path(output).name}"
+          "(仅查询/下载,不重新提交不重复计费)", file=sys.stderr, flush=True)
+    headers = {"Authorization": f"Key {_fal_reclaim_key()}"}
+    try:
+        res = _fal_wait(headers, rec, VIDEO_TIMEOUT, "视频", None, output, resumed=True)
+    except _FalRequestGone as e:
+        raise RuntimeError(f"Fal 任务 {rid} 已无法恢复({e});需要重新提交时,原生成命令原样重跑") from e
+    saved = _fal_save_video(res, output)
+    if return_last_frame:
+        _extract_last_frame(saved, return_last_frame)
+    return saved
 
 
 def _video_fal(cfg, prompt, first, last, duration, resolution, aspect, seed, output,
@@ -6003,7 +6159,7 @@ def _sfx_outputs(output: str, count: int) -> list[str]:
     return [output] if count == 1 else [str(p.with_name(f"{p.stem}_{i}{p.suffix}")) for i in range(1, count + 1)]
 
 
-def _sfx_fetch_elevenlabs(cfg, prompt, duration_s, loop, influence, label) -> bytes:
+def _sfx_fetch_elevenlabs(cfg, prompt, duration_s, loop, influence, output) -> bytes:
     body = {"text": prompt, "model_id": cfg["model"], "prompt_influence": influence, "loop": bool(loop)}
     if duration_s:
         body["duration_seconds"] = duration_s
@@ -6018,17 +6174,20 @@ def _sfx_fetch_elevenlabs(cfg, prompt, duration_s, loop, influence, label) -> by
     return data
 
 
-def _sfx_fetch_fal(cfg, prompt, duration_s, loop, influence, label) -> bytes:
+def _sfx_fetch_fal(cfg, prompt, duration_s, loop, influence, output) -> bytes:
     body = {"text": prompt, "prompt_influence": influence, "loop": bool(loop),
             "output_format": SFX_SOURCE_FORMAT}
     if duration_s:
         body["duration_seconds"] = duration_s
-    res = _fal_queue_run(cfg, SFX_FAL_ENDPOINT, body, SFX_TIMEOUT, label, kind="音效", poll=3)
+    res = _fal_queue_run(cfg, SFX_FAL_ENDPOINT, body, SFX_TIMEOUT, Path(output).name, kind="音效", poll=3,
+                         output=output)
     audio = res.get("audio")
     url = audio.get("url") if isinstance(audio, dict) else ""
     if not url:
         raise RuntimeError(f"Fal 音效任务成功但无音频 URL:{json.dumps(res, ensure_ascii=False)[:400]}")
-    return _decode_data_url(url)
+    data = _decode_data_url(url)
+    _pending_task_clear(output)    # 取回即清:后处理判废(如全程静音)后重跑应重新生成,不再续接这一条
+    return data
 
 
 def _sfx_ffmpeg(args: list[str], what: str) -> str:
@@ -6912,15 +7071,20 @@ def _ark_reclaim_config() -> dict:
 
 
 def reclaim_video(task_id: str, output: str, return_last_frame: str = "") -> str:
-    """恢复 AgenticsLLM 或方舟侧已建成的视频任务，只查询并下载，绝不重新提交。
+    """恢复 AgenticsLLM / 方舟 / Fal 侧已建成的视频任务，只查询并下载，绝不重新提交。
 
     适用场景:提交或下载阶段被网络/工具超时掐断,但服务端任务已经建成——
     succeeded 直接取回产物;排队/运行中则继续轮询到完成;failed/查无此任务
-    如实报错。AgenticsLLM 使用 UUID；方舟使用 cgt-… ID。"""
+    如实报错。AgenticsLLM 使用 UUID；方舟使用 cgt-… ID;Fal 按 output 找在途任务台账
+    (task_id 可省略,给了就须与台账里的 request_id 一致)。"""
     _forbid_dispatch_layer("视频")
     task_id = str(task_id or "").strip()
+    pending = _pending_task_read(output)
+    if pending and pending.get("provider") == "fal" and task_id in ("", pending.get("request_id")):
+        return _fal_reclaim_video(pending, output, return_last_frame)
     if not task_id:
-        raise RuntimeError("reclaim 需要 --task-id(AgenticsLLM UUID 或方舟 cgt-…)")
+        raise RuntimeError("reclaim 需要 --task-id(AgenticsLLM UUID 或方舟 cgt-…);只有 Fal 任务可以省略——"
+                           "它按 --output 找在途任务记录,而该输出路径上没有未完成的 Fal 任务")
     try:
         is_agentics = str(uuid.UUID(task_id)) == task_id.lower()
     except ValueError:
@@ -7261,7 +7425,7 @@ def generate_sfx(prompt: str, output: str, duration_s: float | None = None, loop
     for out in _sfx_outputs(output, int(count)):
         p = Path(out) if Path(out).is_absolute() else Path.cwd() / out
         p.parent.mkdir(parents=True, exist_ok=True)
-        data = fetch(cfg, prompt, duration_s, loop, float(prompt_influence), p.name)
+        data = fetch(cfg, prompt, duration_s, loop, float(prompt_influence), str(p))
         src = p.with_name(f".{p.name}.src.mp3")
         src.write_bytes(data)
         try:
@@ -7698,10 +7862,11 @@ def main():
                          "缺省从 --output 路径 …/epNN/grpNNN.mp4 自动推断")
     pv.add_argument("--dry-run", action="store_true")
 
-    pr = sub.add_parser("reclaim", help="恢复 AgenticsLLM/方舟侧已建成的视频任务:"
+    pr = sub.add_parser("reclaim", help="恢复 AgenticsLLM/方舟/Fal 侧已建成的视频任务:"
                                         "仅查询+下载，不重新提交不重复计费")
-    pr.add_argument("--task-id", required=True,
-                    help="AgenticsLLM UUID 或方舟 cgt-… ID(见「任务已创建」日志)")
+    pr.add_argument("--task-id", default="",
+                    help="AgenticsLLM UUID 或方舟 cgt-… ID(见「任务已创建」日志);"
+                         "Fal 任务可省略,按 --output 找在途任务记录")
     pr.add_argument("--output", required=True, help="输出 mp4 路径")
     pr.add_argument("--return-last-frame", default="",
                     help="尾帧 PNG 落盘路径(原提交带 --return-last-frame 时才有产物)")
