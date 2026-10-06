@@ -579,7 +579,7 @@ phases:
       - { id: p11-adapt, agent: 12-publishing/platform-adapter, for_each: platform,
           outputs: ["publish/{platform}/"], validation: { auto: [platform_spec_lint] } }
       - { id: p11-seo, agent: 12-publishing/seo, depends_on: [p11-adapt],
-          outputs: [publish/seo.json], validation: { auto: [length_ok, banned_words], qa: [human_pick] } }
+          outputs: [publish/seo.json], validation: { auto: [length_ok, banned_words, description_public_only], qa: [human_pick] } }
       - { id: p11-meta, agent: 12-publishing/metadata, depends_on: [p11-adapt],
           outputs: [publish/metadata.json], validation: { auto: [schema, required_fields] } }
       - { id: p11-publish, agent: 12-publishing/publisher, depends_on: [p11-seo, p11-meta],
