@@ -782,6 +782,7 @@ def test_cli_propagates_export_failure_instead_of_claiming_saved(project,monkeyp
     ({},('16:9',960,540)),
     ({'aspect_preset':'youtube'},('16:9',960,540)),
     ({'aspect_preset':'douyin'},('9:16',540,960)),
+    ({'aspect_preset':'cinema'},('21:9',952,408)),
     ({'aspect_preset':'custom','aspect_custom':'4:3'},('4:3',960,720)),
     ({'aspect_preset':'custom','aspect_custom':'1:1'},('1:1',960,960)),
     ({'aspect_preset':'custom','aspect_custom':'2.39 : 1'},('2.39:1',956,400)),

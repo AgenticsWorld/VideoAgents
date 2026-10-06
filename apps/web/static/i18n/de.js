@@ -631,6 +631,7 @@ window.I18N_DICT = {
 "打开失败:": "Öffnen fehlgeschlagen:",
 "抖音": "Douyin",
 "抖音画幅(9:16)": "Douyin-Seitenverhältnis (9:16)",
+"电影画幅(2.35:1)": "Kino-Seitenverhältnis (2.35:1)",
 "持有者/易主链": "Besitzer/Besitzwechsel-Kette",
 "挂点定稿:": "Ankerpunkt final:",
 "指派": "Zuweisen",

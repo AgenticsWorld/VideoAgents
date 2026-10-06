@@ -631,6 +631,7 @@ window.I18N_DICT = {
 "打开失败:": "Falha ao abrir:",
 "抖音": "Douyin",
 "抖音画幅(9:16)": "Aspect ratio do Douyin (9:16)",
+"电影画幅(2.35:1)": "Aspect ratio de cinema (2.35:1)",
 "持有者/易主链": "Portador/cadeia de posse",
 "挂点定稿:": "Ponto de fixação finalizado:",
 "指派": "Atribuir",

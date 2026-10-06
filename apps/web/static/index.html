@@ -485,6 +485,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <select id="npo-aspect" style="flex:1">
           <option value="youtube">YouTube 画幅(16:9)</option>
           <option value="douyin">抖音画幅(9:16)</option>
+          <option value="cinema">电影画幅(2.35:1)</option>
           <option value="custom">自定义画幅…</option>
         </select>
         <button type="button" class="info-btn" data-info="npo-info-aspect" title="说明">i</button></div>
@@ -606,6 +607,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <select id="out-aspect" style="flex:1">
         <option value="youtube">YouTube 画幅(16:9)</option>
         <option value="douyin">抖音画幅(9:16)</option>
+        <option value="cinema">电影画幅(2.35:1)</option>
         <option value="custom">自定义画幅…</option>
       </select>
       <button type="button" class="info-btn" data-info="out-info-aspect" title="说明">i</button></div>
@@ -1858,7 +1860,7 @@ async function openOutModal(){
     const o=document.createElement('option');o.value=l;o.textContent=l;sel.appendChild(o)});
   try{
     const o=(await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config')).output||{};
-    $('#out-aspect').value=['youtube','douyin','custom'].includes(o.aspect_preset)?o.aspect_preset:'youtube';
+    $('#out-aspect').value=['youtube','douyin','cinema','custom'].includes(o.aspect_preset)?o.aspect_preset:'youtube';
     $('#out-custom').value=o.aspect_custom||'';
     sel.value=OUT_LANGS.includes(o.language)?o.language:'English';
     $('#out-draft-res').value=OUT_RESOLUTIONS.includes(o.draft_resolution)?o.draft_resolution:'480p';

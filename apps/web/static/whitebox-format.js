@@ -4,7 +4,7 @@ export function projectRenderFormat(settings) {
   const out=settings.output||{};
   const aspect=out.aspect_preset==='custom'
     ? ((out.aspect_custom||'').replace(/\s/g,'')||'16:9')
-    : out.aspect_preset==='douyin'?'9:16':'16:9';
+    : out.aspect_preset==='douyin'?'9:16':out.aspect_preset==='cinema'?'21:9':'16:9';
   if(!/^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/.test(aspect))throw Error('项目画幅无效：'+aspect);
   const fraction=s=>[Number(s.replace('.','')),10**(s.split('.')[1]?.length||0)];
   const [x,y]=aspect.split(':').map(fraction);

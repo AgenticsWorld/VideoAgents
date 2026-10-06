@@ -1117,9 +1117,9 @@ def enabled(base: Path, ep: str | None = None) -> bool:
 # ---------------------------------------------------------------- 生成式插入段 clip(Phase 7 p7-transition-clips)
 
 def _frame_size(base: Path) -> tuple[int, int]:
-    """首帧静帧尺寸:按项目输出画幅(settings.json#output.aspect,缺省 16:9)。"""
-    st = _read(Path(base) / "settings.json", {}) or {}
-    asp = str(((st.get("output") or {}).get("aspect")) or "16:9").replace("x", ":")
+    """首帧静帧尺寸:按项目输出画幅(settings.json#output.aspect_preset/aspect_custom,缺省 16:9)。"""
+    from modules.output_format import resolve_output  # noqa: PLC0415
+    asp = resolve_output(_read(Path(base) / "settings.json", {}) or {})[0]
     return {"9:16": (1080, 1920), "1:1": (1440, 1440), "4:3": (1600, 1200), "3:4": (1200, 1600), "21:9": (2520, 1080)}.get(asp, (1920, 1080))
 
 

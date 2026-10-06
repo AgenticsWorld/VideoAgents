@@ -15,7 +15,7 @@
 2. **按需补生成(仅限概念库缺口)**:组 prompt 需要而概念库确实没有的锚(特定服装状态/表情的角色照、道具细节特写、手绘分镜渲染),按 `<shot>.json` 的 image_prompt 生成 n 张候选(**道具细节特写同守道具图无人物红线**:画面无人物/手部,`--ref` 只传道具定稿图,不传角色图),meta 必记 `gap_reason`(概念库缺什么、为何非生成不可——机检 reuse_first_ok 核对);命名 `anchor_char_<id>.png` / `anchor_scene.png` / `anchor_expression_<slug>.png` 等,落 `assets/keyframes/epNN/<grp>/`。**组开场合成锚帧(anchor_opening)默认禁出(2026-07-24)**:组视频走多参考图模式且与 `--first-frame` 互斥,预先合成的开场画面进不了视频请求——实证 xiaohongmao ep01 28 组落盘 86 张 anchor_opening,进入 Seedance 请求 0 张,纯沉没成本(生成费 + 一致性校验 + 重 roll 时间全白花);仅 orchestrator 批准的拆段/首帧兜底(§7A 首帧红线)才允许出开场帧,meta 附批准依据。**一切新生成锚帧受 §7E 形象红线约束**:`--ref` 必挂画面所涉实体的在库概念图(角色三视图/场景概念图/道具图 `main_01.png`),prompt 必含 style.json 风格段(2026-08-24 起取 `style_fragment_ui`,存量项目回退 `style_fragment_en`;image prompt 正文语言随界面语言)、`--negative` 必带负面清单(保持英文,取 `negative_prompt_en`)——裸 prompt 出图 = 模型自行设计新形象,机检 repair_ref_anchored 退回;**画面含人物时 prompt 还必须显式带该角色性别词(2026-07-20)**:取 `appearance.json` 的 `gender`(有 `presented_gender` 以其为准——画面画的是对外呈现形象),仅靠参考图不写性别词,图像模型会在中性描述下自行猜性别,是跨组形象漂移源;所涉实体概念图缺失属 §6A 覆盖审计漏网,停手上报 orchestrator,严禁凭文字设定顶上。
 3. **手绘分镜渲染前置(2026-07-09 规则)**:组内有用户手绘分镜(`assets/sketches/epNN/grpNNN/`)时,**必须先据手绘稿生成一张风格化图像**——手绘稿作 `--ref` 构图参考,叠加该组角色三视图/场景概念图,style 锚点入 prompt,产出 `anchor_sketch_01..0n.png` 候选入锚点包(meta 记 `source: "sketch:<手绘稿路径>"`);**进视频生成参考图的是这张生成图,原始手绘稿严禁直接作视频 ref**。依据(ep01 实证):线稿直接软引用([Image N])视频模型反复画不对,图像模型能画出视频模型画不出的构图。**渲染图的身份是动作参考锚(软引用),不是首帧(2026-07-09 同日补充)**:手绘稿画的是导演要的某个决定性瞬间,通常在组中段而非开场;meta 的 role 一律记 `action_ref`,严禁标注成 `first_frame`/`action_strong_anchor` 等首帧强锚字样交付下游(前科:ep01 grp021/022/028/029 渲染图被当整组 first_frame,视频一开场即手绘那一幕,起手铺垫全丢、与前组尾帧续接断裂)。渲染图升级 `first_frame` 硬锁仅限两个条件同时成立:① orchestrator 批准的兜底;② 该瞬间恰为该段开场画面——组首镜开场(sketch 标注/用户注释可证),或按瞬间拆段后子段的开头(渲染图作后段首帧或前段尾帧);瞬间在组中段时必须先拆段,不得硬锁成整组第 0 帧。
 4. 锚点包总数 ≤9(官方上限;建议 4–5,素材过多会导致特征优先级混乱);组内出场角色每人至少一张可辨识锚。
-5. 严格按 anchors.aspect 设定画幅;**新生成锚统一出图规格**:16:9=2560x1440、9:16=1440x2560(平台统一规格,不跟随视频草稿分辨率出小图)。**最小像素硬限已废止(2026-09-01 实测)**:旧「进视频参考的图须 ≥3,686,400 像素=火山硬限」已不存在——复用图/前组尾帧不设像素门槛,原样可入包,不再为凑像素做超分/重生成。提交前自检:构图与 composition.json 要点对齐,剔除明显肢体畸变废片。
+5. 严格按 anchors.aspect 设定画幅;**新生成锚统一出图规格**:16:9=2560x1440、9:16=1440x2560、21:9(电影宽银幕)=2968x1272(平台统一规格,不跟随视频草稿分辨率出小图)。**最小像素硬限已废止(2026-09-01 实测)**:旧「进视频参考的图须 ≥3,686,400 像素=火山硬限」已不存在——复用图/前组尾帧不设像素门槛,原样可入包,不再为凑像素做超分/重生成。提交前自检:构图与 composition.json 要点对齐,剔除明显肢体畸变废片。
 6. 将生成参数(模型、seed、步数、参考图)与**复用来源**(哪张锚来自哪个概念图)写入 `meta.json`,保证可复现。
 7. 写回执 `<项目目录>/runs/<task_id>/result.json`(锚点清单、复用/新生成标记、自检结论)。
 
@@ -34,7 +34,7 @@
 python3 modules/genmedia.py info     # 先看当前渠道/模型,记入 meta.json
 python3 modules/genmedia.py image --prompt "<image_prompt>" --negative "<negative>" \
   --output assets/keyframes/epNN/<grp>/anchor_expression_admonition_01.png \
-  --size 2560x1440 --ref <三视图/概念图...> --n 4   # 16:9 统一出图规格(9:16 用 1440x2560)
+  --size 2560x1440 --ref <三视图/概念图...> --n 4   # 16:9 统一出图规格(9:16 用 1440x2560,21:9 用 2968x1272)
 ```
 
 仅对需要新生成的锚点调用(`--n 4` 自动生成 `_01.._04` 候选);重 roll 用 `--seed`。**reuse-only 组全程不调本工具——meta.json 登记复用引用即完工(2026-08-24 起不再复制概念图入包)。**失败如实上报,不伪造产物。详见 WORKFLOW.md §9。
@@ -99,7 +99,7 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
-- 分辨率合规(resolution_ok:新生成锚按统一出图规格 16:9=2560x1440 / 9:16=1440x2560;复用图/尾帧不设像素下限)、画幅合规(aspect_ok);锚点总数 ≤9(anchors_lte_9;上限以项目「视频模型设置」max_ref_images 为准。**超限不得自行丢弃角色/生物/场景空间锚/道具图这些必挂锚(2026-08-27):先裁按需锚(额外脸部锚→道具细节图→手绘渲染图→前组尾帧),必挂锚本身超上限 = FAIL 上报 orchestrator 转告用户手动删减或换更高上限模型,同 prompt SOUL refs_mandatory_le_cap**)。**引用式复用锚(`file: null`)解引用 `source` 路径对源文件检查;副本式存量锚检包内文件——按 `file` 有无分支(2026-08-24)。**
+- 分辨率合规(resolution_ok:新生成锚按统一出图规格 16:9=2560x1440 / 9:16=1440x2560 / 21:9=2968x1272;复用图/尾帧不设像素下限)、画幅合规(aspect_ok);锚点总数 ≤9(anchors_lte_9;上限以项目「视频模型设置」max_ref_images 为准。**超限不得自行丢弃角色/生物/场景空间锚/道具图这些必挂锚(2026-08-27):先裁按需锚(额外脸部锚→道具细节图→手绘渲染图→前组尾帧),必挂锚本身超上限 = FAIL 上报 orchestrator 转告用户手动删减或换更高上限模型,同 prompt SOUL refs_mandatory_le_cap**)。**引用式复用锚(`file: null`)解引用 `source` 路径对源文件检查;副本式存量锚检包内文件——按 `file` 有无分支(2026-08-24)。**
 - **imageref_order_bound(2026-08-24 随引用化定为规约,此前为项目局部机检)**:`anchors[]` 的 `image_index` 连续 1-based,且与组 prompt refs 逐位路径一致(复用锚取 `source` 剥 `reuse:` 前缀;新生成锚取包内文件路径)——`[Image N]` 编号契约不依赖物理副本,靠此清单核对。
 - **reuse_first_ok(2026-07-24)**:概念库已有可用图的锚不得新生成;新生成锚 meta 必记 `gap_reason`;anchor_opening 无 orchestrator 兜底批准记录不得存在(首帧红线,§7A)。
 - 组内每个出场角色有锚、场景有锚;meta.json 完整可复现(含复用来源、generation_channel)。

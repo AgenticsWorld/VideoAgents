@@ -631,6 +631,7 @@ window.I18N_DICT = {
 "打开失败:": "Mở thất bại:",
 "抖音": "Douyin",
 "抖音画幅(9:16)": "Tỷ lệ khung hình Douyin (9:16)",
+"电影画幅(2.35:1)": "Tỷ lệ khung hình điện ảnh (2.35:1)",
 "持有者/易主链": "Người nắm giữ/chuỗi đổi chủ",
 "挂点定稿:": "Chốt điểm gắn:",
 "指派": "Chỉ định",

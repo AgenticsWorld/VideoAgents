@@ -670,6 +670,7 @@ window.I18N_DICT = {
 "打开失败:": "Open failed:",
 "抖音": "Douyin",
 "抖音画幅(9:16)": "Douyin aspect ratio (9:16)",
+"电影画幅(2.35:1)": "Cinema aspect ratio (2.35:1)",
 "持有者/易主链": "Holder/ownership chain",
 "挂点定稿:": "Attachment point finalized:",
 "指派": "Assign",

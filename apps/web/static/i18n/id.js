@@ -631,6 +631,7 @@ window.I18N_DICT = {
 "打开失败:": "Gagal membuka:",
 "抖音": "Douyin",
 "抖音画幅(9:16)": "Rasio aspek Douyin (9:16)",
+"电影画幅(2.35:1)": "Rasio aspek sinema (2.35:1)",
 "持有者/易主链": "Pemilik/rantai perpindahan kepemilikan",
 "挂点定稿:": "Titik kait final:",
 "指派": "Tugaskan",

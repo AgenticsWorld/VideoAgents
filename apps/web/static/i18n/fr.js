@@ -631,6 +631,7 @@ window.I18N_DICT = {
 "打开失败:": "Échec de l'ouverture :",
 "抖音": "Douyin",
 "抖音画幅(9:16)": "Format Douyin (9:16)",
+"电影画幅(2.35:1)": "Format cinéma (2.35:1)",
 "持有者/易主链": "Détenteur / chaîne de propriété",
 "挂点定稿:": "Point d'attache finalisé :",
 "指派": "Assigner",
