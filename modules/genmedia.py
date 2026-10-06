@@ -3815,6 +3815,33 @@ def image_ref_capacity(cfg: dict) -> int | None:
     return None
 
 
+# 单图像素面积上限(2026-10-06 火山 / BytePlus 两区逐个模型实测:请求 8192x8192 读拒收报文里的上限,拒收不计费):
+#   Seedream 5.0 Pro            → "image area must be at most 4624220 pixels"
+#   Seedream 5.0 / 5.0 Lite / 4.5 / 4.0 → "image size must be at most 16777216 pixels"(4096x4096)
+IMAGE_MAX_PIXELS_SEEDREAM_PRO = 4_624_220
+IMAGE_MAX_PIXELS_4K = 4096 * 4096
+_ARK_SEEDREAM_4K_RE = re.compile(r"seedream-(?:4-0|4-5|5-0(?:-lite)?)-\d{6}$")
+
+
+def image_max_pixels(cfg: dict) -> int | None:
+    """生效图像渠道/模型单张出图的像素面积上限(「按所选模型的最高分辨率出图」用,如分镜背景图的九宫格整图);
+    None = 上限未知或该渠道不按请求宽高出图(OpenRouter / MiniMax 只收比例、GPT Image 只收枚举档、ComfyUI 原生
+    latent 另有上限等),调用方用自己的保守默认。没列进来的方舟模型(含自定义模型 ID)也按未知处理,不猜。"""
+    provider = cfg.get("provider")
+    model = str(cfg.get("model") or "").strip().lower()
+    if provider in ("volcengine", "byteplus"):
+        if "seedream-5-0-pro" in model:
+            return IMAGE_MAX_PIXELS_SEEDREAM_PRO
+        if _ARK_SEEDREAM_4K_RE.search(model):
+            return IMAGE_MAX_PIXELS_4K
+        return None
+    if provider == "fal":
+        # seedream:Fal 文档口径总像素 2560x1440..4096x4096;banana:resolution 枚举最高 4K(_fal_image_body 按长边 > 2560 取 4K 档)
+        if _fal_image_family(model) in ("seedream", "banana"):
+            return IMAGE_MAX_PIXELS_4K
+    return None
+
+
 def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
     rh = _comfy_is_rh(cfg)
     base = hdrs = None

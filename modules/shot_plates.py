@@ -35,7 +35,8 @@
     版式模板为参考出一张 3x3 宫格 <方案>_grid9.png,按版式拆成 9 张背景图 <方案>_grid9_tN.png 入库(pano_ref.kind='grid9',grid9=True,
     不是母图、不走 find_master/单应派生),每镜按白模机位事实与九格合成机位(地标 xy→白模坐标、机高按 angle、视场按 size)打分
     (pick_grid9_tile:朝向差/30° + 水平距/5 m + 机高档差×0.5 + 俯仰差/20° + 格比镜窄罚 0.5)自动选最近的一格;本镜白模帧另渲到
-    directing/<ep>/whitebox/plate_frames/ 供预览核对。宫格整图不进视频 refs;文件名不用退役的 grid_9views* 前缀(三处机检黑名单)。
+    directing/<ep>/whitebox/plate_frames/ 供预览核对。宫格整图按所选图像模型的最高分辨率出(grid_max_pixels,2026-10-06),版式/拆格框随之变;
+    宫格整图不进视频 refs;文件名不用退役的 grid_9views* 前缀(三处机检黑名单)。
   - 接线(shot_plate_bound,code/sync_shot_plates.py):组 prompt refs 在角色/生物 sheet 之后挂本组各镜背景图(俯视图/九宫格
     不再进 refs,残留自动剔除并重排 [Image N]),`Shot 1:` 前固定段 `Shot plates:` 逐镜写明「[Image N] = Shot k 起点/终点背景图」;
     两张图都走 refs,不走首尾帧模式(多镜组里首尾帧与参考图互斥)。
@@ -537,8 +538,11 @@ def set_scene_plate_mode(base: Path, sid: str, mode: str):
 # ③ 每镜按白模机位事实与九格的合成机位(地标 xy → 白模坐标,机高按 angle、视场按 size)打分,自动选最近的一格作本镜背景图。
 # 评审时提过的替代方案(格位取本集母图机位 + 白模联系表作参考)实测跨宫格不一致、空白模帧时格子雷同,用户拍板回到本方案。
 # 宫格文件名 <方案>_grid9.png(不用退役的 grid_9views* 前缀:layout_map_bound / sync_shot_plates / scene_plates 三处机检对该前缀黑名单)。
-GRID_GUTTER_PX = 24               # 格间白线像素(在宫格整图尺度上)
-GRID_MAX_PIXELS = MASTER_MAX_PIXELS   # 宫格整图面积上限(方舟 Seedream 单图硬上限 4,624,220)
+GRID_GUTTER_PX = 24               # 格间白线像素(整图面积 = GRID_MAX_PIXELS 时;面积上限变了按边长比例同步放缩,见 grid_geometry)
+# 宫格整图面积上限的默认值(方舟 Seedream 5.0 Pro 单图硬上限 4,624,220)。2026-10-06 用户指令:宫格整图按所选图像模型的最高分辨率出
+# (grid_max_pixels:genmedia.image_max_pixels 给得出上限的模型用它的上限,如 Seedream 5.0 / 5.0 Lite / 4.5 / 4.0 = 4096x4096;
+# 给不出的渠道/模型仍用这个默认值)。版式、白线、拆格框、单格存盘尺寸全部从同一份 geom 推,尺寸变了后面跟着变。
+GRID_MAX_PIXELS = MASTER_MAX_PIXELS
 GRID_INSET = 0.015                # 拆格时四边各内缩的比例(防白线渗入)
 GRID_ASPECT_TOLERANCE = 0.03      # 模型返回尺寸与宫格版式宽高比偏差超此值视为未按版式出图
 GRID_TILE_JPEG_QUALITY = 92       # 拆格另存的 JPEG 质量(文件名仍 .png,与库图约定一致)
@@ -564,9 +568,20 @@ def grid_layout(n: int) -> tuple[int, int]:
     return (1, 1) if n <= 1 else (2, 1) if n == 2 else (2, 2) if n <= 4 else (3, 2) if n <= 6 else (3, 3)
 
 
-def grid_geometry(n: int, fmt: dict, max_pixels: int = GRID_MAX_PIXELS, gutter: int = GRID_GUTTER_PX) -> dict:
-    """宫格版式:格子按项目画幅,整图面积 ≤ max_pixels(偶数边)。返回 cols/rows/tile_w/tile_h/gutter/width/height/slots。"""
+def grid_max_pixels(cfg: dict | None) -> int:
+    """宫格整图面积上限 = 所选图像模型的单图像素上限;cfg 为空或该渠道/模型上限未知时用 GRID_MAX_PIXELS。"""
+    if not cfg:
+        return GRID_MAX_PIXELS
+    from modules.genmedia import image_max_pixels
+    return image_max_pixels(cfg) or GRID_MAX_PIXELS
+
+
+def grid_geometry(n: int, fmt: dict, max_pixels: int = GRID_MAX_PIXELS, gutter: int | None = None) -> dict:
+    """宫格版式:格子按项目画幅,整图面积 ≤ max_pixels(偶数边)。返回 cols/rows/tile_w/tile_h/gutter/width/height/slots。
+    gutter 不传时按整图边长比例取(GRID_GUTTER_PX 对应 GRID_MAX_PIXELS,偶数):整图放大后白线占画面的比例不变。"""
     cols, rows = grid_layout(n)
+    if gutter is None:
+        gutter = max(2, int(round(GRID_GUTTER_PX * math.sqrt(max_pixels / GRID_MAX_PIXELS) / 2)) * 2)
     aspect = fmt['width'] / fmt['height']
     tw = int(math.sqrt(max_pixels * aspect / (cols * rows))) // 2 * 2
     while tw > 16:
@@ -610,6 +625,14 @@ def compose_grid_sheet(frames: list, geom: dict, output: Path) -> Path:
     Path(output).parent.mkdir(parents=True, exist_ok=True)
     sheet.save(output, quality=92)
     return Path(output)
+
+
+def grid_tile_size(geom: dict, fmt: dict) -> tuple[int, int]:
+    """拆格后单格的存盘尺寸:分镜图规格 plate_size(长边 1920);格子去掉内缩后的原生像素比它大时按原生存(项目画幅、偶数边),不往下缩。"""
+    pw, ph = plate_size(fmt)
+    keep = 1 - 2 * geom.get('inset', GRID_INSET)
+    scale = min(geom['tile_w'] * keep / pw, geom['tile_h'] * keep / ph)
+    return (pw, ph) if scale <= 1 else (int(pw * scale / 2) * 2, int(ph * scale / 2) * 2)
 
 
 def split_grid_sheet(sheet: Path, geom: dict, outputs: list, size: tuple[int, int]) -> list[dict]:
@@ -1211,8 +1234,18 @@ def ensure_grid9(base: Path, sid: str, scheme_key: str, scheme_id: str, *, scene
     if len(have) == 9 and not force and all((base / e['file']).is_file() for e in have):
         return have
     ex, ez, texts = axes
-    geom = grid_geometry(9, fmt)
-    pw, ph = plate_size(fmt)
+    from modules.genmedia import generate_image, get_config, image_pref_env
+    try:
+        with image_pref_env('scenes'):
+            cfg = get_config('image')
+    except Exception:
+        if not dry_run:
+            raise
+        cfg = None      # dry-run 允许没有生成模型配置:按默认上限算版式
+    channel = {'provider': cfg.get('provider'), 'model': cfg.get('model')} if cfg else None
+    max_pixels = grid_max_pixels(cfg)      # 整图按所选图像模型的最高分辨率出(2026-10-06)
+    geom = grid_geometry(9, fmt, max_pixels)
+    pw, ph = grid_tile_size(geom, fmt)
     stem = f'{scheme_key}_grid9'
     rel_dir = f'assets/concepts/scenes/{sid}/{PLATES_DIR}'
     sheet_rel, tmpl_rel = f'{rel_dir}/{stem}.png', f'{rel_dir}/{stem}.template.jpg'
@@ -1257,7 +1290,8 @@ def ensure_grid9(base: Path, sid: str, scheme_key: str, scheme_id: str, *, scene
                                      'scheme': scheme_key, 'view': t['view'],
                                      **({'station': center['station'], 'plan': plan_rel} if center else {})},
                         'plate_mode': 'grid', 'written_at': now})
-    log(f"== {sid} 九宫格 {stem}:{geom['cols']}x{geom['rows']} {geom['width']}x{geom['height']},格 {geom['tile_w']}x{geom['tile_h']} → 拆后 {pw}x{ph};"
+    log(f"== {sid} 九宫格 {stem}:{geom['cols']}x{geom['rows']} {geom['width']}x{geom['height']}"
+        f"({(channel or {}).get('model') or '未取到图像模型'} 面积上限 {max_pixels:,} px),格 {geom['tile_w']}x{geom['tile_h']} → 拆后 {pw}x{ph};"
         f"方案 {scheme_key};参考图 = {'标点俯视图' if center else '俯视图'} + 版式模板;{summary}")
     if dry_run:
         log(prompt); log('refs: ' + json.dumps(refs, ensure_ascii=False))
@@ -1267,10 +1301,6 @@ def ensure_grid9(base: Path, sid: str, scheme_key: str, scheme_id: str, *, scene
     if center:
         mark_grid9c_plan(plan_file, scene, center['station'], center['edges'], base / plan_rel)
     compose_grid_sheet([], geom, base / tmpl_rel)
-    from modules.genmedia import generate_image, get_config, image_pref_env
-    with image_pref_env('scenes'):
-        cfg = get_config('image')
-    channel = {'provider': cfg.get('provider'), 'model': cfg.get('model')}
     generate_image(prompt, str(base / sheet_rel), negative=negative, refs=[str(base / r) for r in refs],
                    size=f"{geom['width']}x{geom['height']}", seed=use_seed)
     results = split_grid_sheet(base / sheet_rel, geom, [base / e['file'] for e in entries], (pw, ph))
@@ -1279,7 +1309,7 @@ def ensure_grid9(base: Path, sid: str, scheme_key: str, scheme_id: str, *, scene
         (base / e['file']).with_suffix('.json').write_text(json.dumps(e, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     (base / sheet_rel).with_suffix('.json').write_text(json.dumps(
         {'kind': 'grid9', 'layout': layout_kind, 'scene_id': sid, 'scheme': scheme_key, 'lighting_scheme_id': scheme_id, 'prompt': prompt, 'negative': negative,
-         'refs': refs, 'seed': use_seed, 'channel': channel, 'geometry': geom,
+         'refs': refs, 'seed': use_seed, 'channel': channel, 'geometry': geom, 'max_pixels': max_pixels,
          **({'station': center['station'], 'station_basis': center['basis'], 'tilt_tile': center['tilt'], 'plan_edges': center['edges']} if center else {}),
          'tiles': [{'tile': t['tile'], 'key': e['key'], **e['pano_ref']['view']} for t, e in zip(tiles, entries)],
          'written_at': now}, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')

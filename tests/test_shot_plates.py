@@ -421,6 +421,65 @@ def test_grid_modes_and_layout():
     assert sp.grid_tile_word(geom, 0) == 'top-left' and sp.grid_tile_word(geom, 4) == 'centre' and sp.grid_tile_word(geom, 8) == 'bottom-right'
 
 
+def test_grid_geometry_follows_selected_model_max_pixels():
+    from modules import genmedia
+    pro = {'provider': 'volcengine', 'model': 'doubao-seedream-5-0-pro-260628'}
+    lite = {'provider': 'byteplus', 'model': 'seedream-5-0-lite-260128'}
+    assert genmedia.image_max_pixels(pro) == 4_624_220 and genmedia.image_max_pixels(lite) == 4096 * 4096
+    assert genmedia.image_max_pixels({'provider': 'volcengine', 'model': 'doubao-seedream-4-5-251128'}) == 4096 * 4096
+    assert genmedia.image_max_pixels({'provider': 'fal', 'model': 'fal-ai/bytedance/seedream/v5/lite'}) == 4096 * 4096
+    for unknown in ({'provider': 'volcengine', 'model': 'my-custom-endpoint'}, {'provider': 'openrouter', 'model': 'bytedance-seed/seedream-4.5'},
+                    {'provider': 'fal', 'model': 'fal-ai/flux-2-pro'}, {'provider': 'comfyui'}):
+        assert genmedia.image_max_pixels(unknown) is None and sp.grid_max_pixels(unknown) == sp.GRID_MAX_PIXELS
+    assert sp.grid_max_pixels(None) == sp.GRID_MAX_PIXELS and sp.grid_max_pixels(lite) == 4096 * 4096
+    base, big = sp.grid_geometry(9, FMT), sp.grid_geometry(9, FMT, sp.grid_max_pixels(lite))
+    assert base['gutter'] == sp.GRID_GUTTER_PX and sp.grid_geometry(9, FMT, sp.grid_max_pixels(pro))['gutter'] == sp.GRID_GUTTER_PX
+    assert sp.GRID_MAX_PIXELS < big['width'] * big['height'] <= 4096 * 4096 and big['tile_w'] > 1.8 * base['tile_w']
+    assert big['gutter'] % 2 == 0 and abs(big['gutter'] / big['width'] - base['gutter'] / base['width']) < 0.0005   # 白线占比不变
+    assert big['width'] == 3 * big['tile_w'] + 4 * big['gutter'] and big['height'] == 3 * big['tile_h'] + 4 * big['gutter']
+    assert sp.grid_tile_size(base, FMT) == sp.grid_tile_size(big, FMT) == sp.plate_size(FMT)       # 16:9 下单格原生仍小于 1920
+    wide = {'width': 2390, 'height': 1000}
+    tw, th = sp.grid_tile_size(sp.grid_geometry(9, wide, 4096 * 4096), wide)                       # 原生比分镜图规格大:按原生存,不往下缩
+    assert tw > 1920 and tw % 2 == 0 and th % 2 == 0 and abs(tw / th - 2.39) < 0.01
+
+
+def test_ensure_grid9_requests_model_max_and_splits_by_new_geometry(tmp_path, monkeypatch):
+    import json
+    from PIL import Image
+    from modules import genmedia
+    base = tmp_path; sid = 'SCN-hall'
+    sdir = base / 'assets/concepts/scenes' / sid; sdir.mkdir(parents=True)
+    Image.new('RGB', (480, 200), (40, 40, 40)).save(sdir / 'layout_top.png')
+    calls = []
+
+    def fake_generate(prompt, output, negative='', refs=None, aspect='', size='', seed=None):
+        w, h = (int(x) for x in size.split('x'))
+        tmpl = Image.open(refs[1]); assert tmpl.size == (w, h)                       # 版式模板与请求尺寸同一份 geom
+        geom = sp.grid_geometry(9, FMT, w * h + 1)
+        sheet = Image.new('RGB', (w, h), (255, 255, 255))
+        for i in range(9):
+            sheet.paste((20 * i + 10, 0, 0), sp.grid_tile_box(geom, i))
+        sheet.save(output, format='JPEG', quality=95); calls.append((w, h, geom))
+        return output
+    monkeypatch.setattr(genmedia, 'generate_image', fake_generate)
+    monkeypatch.setattr(genmedia, 'get_config', lambda kind: {'provider': 'volcengine', 'model': 'doubao-seedream-5-0-lite-260128'})
+    tiles = sp.ensure_grid9(base, sid, 'L1', 'L1', scene=_hall_scene(), layout={'scene_id': sid}, axes=AXES, fmt=FMT, style_doc={}, time_of_day='day',
+                            lighting='', seed=3, log=lambda *_: None, cameras=_hall_cams())
+    (w, h, geom), = calls
+    assert sp.GRID_MAX_PIXELS < w * h <= 4096 * 4096
+    want = sp.grid_geometry(9, FMT, 4096 * 4096)
+    assert (w, h) == (want['width'], want['height']) and geom['tile_w'] == want['tile_w'] and geom['gutter'] == want['gutter']
+    meta = json.loads((sdir / 'plates/L1_grid9.json').read_text())
+    assert meta['max_pixels'] == 4096 * 4096 and meta['geometry'] == want and meta['channel']['model'] == 'doubao-seedream-5-0-lite-260128'
+    for i, t in enumerate(tiles):
+        x0, y0, x1, y1 = t['pano_ref']['box']; bx0, by0, bx1, by1 = sp.grid_tile_box(want, i)
+        assert bx0 < x0 < x1 < bx1 and by0 < y0 < y1 < by1                           # 拆格框落在新版式的格子内(内缩去白线)
+        assert t['pano_ref']['sheet_size'] == f'{w}x{h}' and t['pano_ref']['tile_native'] == f"{want['tile_w']}x{want['tile_h']}"
+        im = Image.open(base / t['file']); assert im.size == sp.plate_size(FMT) and t['size'] == '1920x1080'
+        for xy in ((2, 2), (im.width - 3, im.height - 3), (im.width // 2, im.height // 2)):
+            r, g, b = im.getpixel(xy); assert abs(r - (20 * i + 10)) <= 6 and g <= 6 and b <= 6   # 没切到白线、没串格
+
+
 def test_grid_compose_split_roundtrip(tmp_path):
     from PIL import Image
     geom = sp.grid_geometry(9, FMT)
