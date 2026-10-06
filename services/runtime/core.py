@@ -36,7 +36,7 @@ from pathlib import Path
 
 import base64
 
-from modules.output_format import OUTPUT_ASPECTS, resolve_output
+from modules.output_format import OUTPUT_ASPECTS, ratio_value, resolve_letterbox, resolve_output
 from modules import skill_records
 from modules.prompt_layout import paragraphize
 from modules import caption_catalog as _ccat
@@ -1009,6 +1009,10 @@ DEFAULT_GENCONFIG = {
                "sketch_style": "film",
                "draft_resolution": "480p", "final_resolution": "480p",
                "subtitle_burn_in": False, "caption_enabled": False,
+               # letterbox_enabled / letterbox_aspect=上下黑边(2026-10-06,后期处理页「包装 › 上下黑边」,默认关):开启后成片封装
+               #   (code/finalize_episode.py assemble)把画面等比缩放后补黑边到「最终输出画幅」letterbox_aspect(宽:高);
+               #   生产画幅仍由 aspect_preset 决定,黑边只在封装这一步加(modules/output_format.letterbox_layout)
+               "letterbox_enabled": False, "letterbox_aspect": "16:9",
                # caption_mode / caption_types=花字策略(2026-09-24,后期处理页「花字」板块):auto(默认)=花字 Agent 按题材从
                #   modules/caption_catalog.json 目录自选用途类型;manual=只准出 caption_types 勾选的类型(选中=允许,不=必出,
                #   manual 至少勾一项);机检 caption_types_allowed / caption_types_covered / caption_policy_fresh(captions.json 顶层 caption_policy 盖章)
@@ -2096,6 +2100,10 @@ def _validate_output(o: dict):
         raise ServiceError(400, "output.subtitle_burn_in must be a boolean")
     if "caption_enabled" in o and not isinstance(o["caption_enabled"], bool):
         raise ServiceError(400, "output.caption_enabled must be a boolean")
+    if "letterbox_enabled" in o and not isinstance(o["letterbox_enabled"], bool):
+        raise ServiceError(400, "output.letterbox_enabled must be a boolean")
+    if "letterbox_aspect" in o and not ratio_value(o["letterbox_aspect"]):
+        raise ServiceError(400, "output.letterbox_aspect must be width:height, e.g. 16:9")
     for err in _ccat.validate_output(o):
         raise ServiceError(400, err)
     if "narration_enabled" in o and not isinstance(o["narration_enabled"], bool):
@@ -3160,6 +3168,16 @@ def build_role_prompt(agent_id: str, project: str,
         if out.get("caption_enabled") else
         "关闭(默认)—— 不设计、不烧录花字,caption 相关节点(p9-caption*/av2-caption/av4-caption*)"
         "一律不派发、不建卡,闸门不因未派发而 HOLD;caption Agent 被派到也只说明开关已关闭并结单")
+    letterbox_aspect = resolve_letterbox(ps)
+    letterbox_line = (
+        f"**开启,最终输出画幅 {letterbox_aspect}** —— 成片封装时宿主 CLI `code/finalize_episode.py assemble` 自动把各段画面等比缩放、"
+        f"补黑边到 {letterbox_aspect}(画布短边 = 正片短边,版式记在 edit/epNN/final_layout.json#letterbox,机检 letterbox_applied);"
+        f"**生产画幅不变**:分镜构图、关键帧、视频生成、组 clip、粗剪一律仍按上面的输出画幅 {aspect} 做,"
+        "不得把黑边画进画面,不得自写 ffmpeg pad/scale 加黑边;字幕烧录在加完黑边的成片上进行;"
+        "花字版成片由 `render_captions.py final` 按画面区域落位(不落进黑边);"
+        f"platform-adapter 以加完黑边的 final.mp4 为母版,平台画幅 = {letterbox_aspect} 的直接用,其它画幅的平台裁切时以画面区域(不含黑边)为准"
+        if letterbox_aspect else
+        "关闭(默认)—— 成片画幅 = 输出画幅,不加黑边")
     spatial_on = out.get("spatial_blocking") is True
     scene_plates_mode = out.get("scene_plates") if out.get("scene_plates") in SCENE_PLATES_MODES else "auto"
     plate_mode = out.get("plate_mode") if out.get("plate_mode") in PLATE_MODES else "grid"
@@ -3411,6 +3429,7 @@ def build_role_prompt(agent_id: str, project: str,
 - 发布平台:{plat_line}
 - 内嵌字幕:{burn_in}
 - 花字:{caption_line}
+- 上下黑边:{letterbox_line}
 - 旁白:{narration_line}
 - 对白配音:{dialogue_voice}
 - 生成对白语音:{dialogue_tts_line}
@@ -11157,7 +11176,9 @@ def _preview_post(project: str, ep: str):
         "episode_duration": round(_post_episode_duration(tl, groups), 3),
         "settings": {"packaging": settings.get("packaging") or {}, "output": {k: (settings.get("output") or {}).get(k)
                                                                               for k in ("subtitle_burn_in", "caption_enabled", "caption_mode", "caption_types",
-                                                                                        "narration_enabled", "final_resolution", "dialogue_voice")}},
+                                                                                        "narration_enabled", "final_resolution", "dialogue_voice",
+                                                                                        "letterbox_enabled", "letterbox_aspect")},
+                     "aspect": resolve_output(settings)[0]},
         # 花字用途目录(modules/caption_catalog.json)+ 本项目逐类型可用性(av 项目 / 缺数据灰显)+ 当前策略
         "caption_catalog": {**{k: _ccat.load_catalog()[k] for k in ("tiers", "categories", "types", "excluded", "presets")},
                             "availability": _ccat.availability(base), "policy": _ccat.normalize_policy(settings.get("output") or {})},

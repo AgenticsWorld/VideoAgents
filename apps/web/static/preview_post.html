@@ -1354,7 +1354,10 @@ function renderRight(){
       h+=`<div class="rec"><div class="r1"><span class="nm">${esc(t('片头片尾'))}</span><span class="sp"></span><span class="sc">${esc(t('整集 · 项目设置'))}</span></div><div class="r2"><label><input type="checkbox" data-pk="intro_enabled" ${pk.intro_enabled?'checked':''}> ${esc(t('片头'))}</label><label><input type="checkbox" data-pk="outro_enabled" ${pk.outro_enabled?'checked':''}> ${esc(t('片尾'))}</label><label><input type="checkbox" data-pk="teaser_enabled" ${pk.teaser_enabled?'checked':''}> ${esc(t('预告'))}</label><label><input type="checkbox" data-ou="subtitle_burn_in" ${ou.subtitle_burn_in?'checked':''}> ${esc(t('字幕烧录'))}</label></div></div>`;
       // 花字:独立板块(2026-09-24)——启用开关 + 模式(自动/手动)+ 手动时按分类勾选用途类型(弹窗)
       const nAvail=(cc.availability||[]).filter(a=>a.available).length,nSel=(pol.types||[]).length,on=!!ou.caption_enabled;
-      h+=`<div class="rec"><div class="r1"><span class="nm">${esc(t('花字'))}</span><span class="sp"></span><span class="sc">${esc(t('整集 · 项目设置'))}</span></div><div class="r2" style="align-items:center"><label><input type="checkbox" data-ou="caption_enabled" ${on?'checked':''}> ${esc(t('启用花字'))}</label><span>${esc(t('模式'))}</span><select data-cm ${on?'':'disabled'} style="font-size:11px"><option value="auto" ${pol.mode!=='manual'?'selected':''}>${esc(t('自动'))}</option><option value="manual" ${pol.mode==='manual'?'selected':''}>${esc(t('手动'))}</option></select>${pol.mode==='manual'?`<button class="xs" data-cap-open="edit" ${on?'':'disabled'}>${esc(I18N.f('选择类型… 已选 {n}/{m}',{n:nSel,m:nAvail}))}</button>`:`<span style="color:var(--faint)">${esc(t('由花字 Agent 按题材自选类型'))}</span><button class="xs" data-cap-open="view">${esc(t('查看目录'))}</button>`}</div></div>`;}
+      h+=`<div class="rec"><div class="r1"><span class="nm">${esc(t('花字'))}</span><span class="sp"></span><span class="sc">${esc(t('整集 · 项目设置'))}</span></div><div class="r2" style="align-items:center"><label><input type="checkbox" data-ou="caption_enabled" ${on?'checked':''}> ${esc(t('启用花字'))}</label><span>${esc(t('模式'))}</span><select data-cm ${on?'':'disabled'} style="font-size:11px"><option value="auto" ${pol.mode!=='manual'?'selected':''}>${esc(t('自动'))}</option><option value="manual" ${pol.mode==='manual'?'selected':''}>${esc(t('手动'))}</option></select>${pol.mode==='manual'?`<button class="xs" data-cap-open="edit" ${on?'':'disabled'}>${esc(I18N.f('选择类型… 已选 {n}/{m}',{n:nSel,m:nAvail}))}</button>`:`<span style="color:var(--faint)">${esc(t('由花字 Agent 按题材自选类型'))}</span><button class="xs" data-cap-open="view">${esc(t('查看目录'))}</button>`}</div></div>`;
+      // 上下黑边(2026-10-06):最终输出画幅,成片封装时等比缩放后补黑边(finalize_episode.py assemble);生产画幅不变
+      const lbOn=!!ou.letterbox_enabled,lbA=ou.letterbox_aspect||'16:9',lbOpts=LETTERBOX_ASPECTS.includes(lbA)?LETTERBOX_ASPECTS:[...LETTERBOX_ASPECTS,lbA],prodA=(D.settings||{}).aspect||'';
+      h+=`<div class="rec"><div class="r1"><span class="nm">${esc(t('上下黑边'))}</span><span class="sp"></span><span class="sc">${esc(t('整集 · 项目设置'))}</span></div><div class="r2" style="align-items:center"><label><input type="checkbox" data-ou="letterbox_enabled" ${lbOn?'checked':''}> ${esc(t('启用上下黑边'))}</label><span>${esc(t('最终输出画幅'))}</span><select data-lb ${lbOn?'':'disabled'} style="font-size:11px">${lbOpts.map(a=>`<option value="${esc(a)}" ${a===lbA?'selected':''}>${esc(a)}</option>`).join('')}</select>${prodA?`<span style="color:var(--faint)">${esc(I18N.f('输出画幅 {a}',{a:prodA}))}</span>`:''}</div><div class="r2" style="color:var(--faint)">${esc(t('出成片时把画面等比缩放后补黑边到最终输出画幅,改动后需重新出成片'))}</div></div>`;}
     h+=`</div></div>`;
   }
   h+=`</div>`;
@@ -1372,6 +1375,7 @@ function renderRight(){
     else saveOutput({caption_mode:'auto'});
   });
   $$('#right [data-cap-open]').forEach(b=>b.onclick=()=>openCapTypes(b.dataset.capOpen));
+  $$('#right select[data-lb]').forEach(sel=>sel.onchange=()=>saveOutput({letterbox_aspect:sel.value}));
   $$('#right input[data-pk],#right input[data-ou]').forEach(c=>c.onchange=async()=>{
     const body={project:proj()};
     if(c.dataset.pk)body.packaging={...((D.settings||{}).packaging||{}),[c.dataset.pk]:c.checked};
@@ -1641,6 +1645,7 @@ function pollJob(){
 let SFX=null;
 /* ---------- 花字类型(2026-09-24):目录 modules/caption_catalog.json,策略 output.caption_mode/caption_types ---------- */
 let CAPST=null;
+const LETTERBOX_ASPECTS=['16:9','9:16','4:3','3:4','1:1'];   // 上下黑边「最终输出画幅」下拉(同 modules/output_format.LETTERBOX_ASPECTS)
 async function saveOutput(patch){
   try{await J('/api/v1/projects/'+encodeURIComponent(proj())+'/config','POST',{project:proj(),output:patch});await load(true)}catch(e){alert(t('保存失败:')+e.message);await load(true)}
 }

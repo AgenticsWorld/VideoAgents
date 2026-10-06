@@ -277,6 +277,19 @@ def cmd_mux(args, proj):
     _mux(proj, args.ep, video, audio, kind, sfx_track if sfx_track.is_file() else None)
 
 
+def _picture_rect(proj: Path, ep: str, final: Path) -> list | None:
+    """成片带上下黑边(台账 final_layout.json#letterbox,finalize_episode 写)时画面所在区域 [x, y, 宽, 高];
+    台账画布与成片实测分辨率对不上(改了设置没重出成片)一律按整幅画面处理。"""
+    try:
+        lb = json.loads((proj / "edit" / ep / "final_layout.json").read_text(encoding="utf-8")).get("letterbox")
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not lb:
+        return None
+    info = chtml.probe_video_info(str(final))
+    return list(lb["picture"]) if list(lb.get("canvas") or []) == [info["width"], info["height"]] else None
+
+
 def cmd_final(args, proj):
     ep = args.ep
     try:
@@ -321,10 +334,14 @@ def cmd_final(args, proj):
         print(f"[PLAN ] {c.get('id')} {it['group_id']}「{c.get('text')}」 local {c.get('local_start')}-{c.get('local_end')} → 成片 {it['t0']:.3f}-{it['t1']:.3f}s")
     burned = ed / "final_caption.video.mp4"
     cache = proj / "assets" / "caption_cache"
+    rect = _picture_rect(proj, ep, tl.final)
+    if rect:
+        print(f"[NOTE ] 成片带上下黑边:花字按画面区域 {rect[2]}x{rect[3]}(偏移 {rect[0]},{rect[1]})落位")
     with chtml.StickerRenderer(cache) as renderer:
         r = chtml.render_episode_html(tl.final, burned, items, fonts, proj, renderer, receipt_p, force=True,
                                       receipt_extra={"timeline_fingerprint": tl.fingerprint(), "cut": _rel(proj, tl.cut),
-                                                     "cut_offset_s": tl.cut_offset_s})
+                                                     "cut_offset_s": tl.cut_offset_s, "picture_rect": rect},
+                                      picture_rect=rect)
     print(f"[BURN ] {len(items)} 条花字叠到 {_rel(proj, tl.final)} → {burned.name}")
     dur = probe_duration(str(tl.final))
     sfx = _build_sfx(proj, ep, items, dur, ed / "caption_sfx.m4a")

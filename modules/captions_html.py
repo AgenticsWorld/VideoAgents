@@ -373,10 +373,13 @@ def render_group_html(clip_path: Path, out_path: Path, captions: list[dict],
 
 def _composite(src_video: Path, out_path: Path, items: list[dict], info: dict,
                fonts_manifest: dict, proj_root: Path, renderer: StickerRenderer,
-               timeout: int = 1800) -> None:
+               timeout: int = 1800, picture_rect: list | None = None) -> None:
     """把 items(每项 {cap, t0, t1},t 为 src_video 自身时间轴秒)渲成贴片并叠到 src_video → out_path。
-    组副本与花字版成片共用:同一贴片缓存、同一叠加链、同一编码参数;音轨流拷贝、分辨率/时长不变。"""
-    W, H, fps = info["width"], info["height"], float(info["fps"])
+    组副本与花字版成片共用:同一贴片缓存、同一叠加链、同一编码参数;音轨流拷贝、分辨率/时长不变。
+    picture_rect [x, y, 宽, 高](2026-10-06 上下黑边):成片带黑边时画面所在区域,花字的字号 / 锚点 / 安全区都按它算、
+    再整体平移 (x, y),不落进黑边;None = 整幅画面。"""
+    FW, FH, fps = info["width"], info["height"], float(info["fps"])
+    ox, oy, W, H = picture_rect or (0, 0, FW, FH)
     stickers = []
     for it in items:
         c = it["cap"]
@@ -405,7 +408,7 @@ def _composite(src_video: Path, out_path: Path, items: list[dict], info: dict,
         mov, meta = renderer.render(html, c["text"], params, dur, fps, dsf,
                                     tag=str(tag))
         x, y = _anchor_xy(c.get("position") or "center", meta["bbox"], W, H)
-        stickers.append({"mov": mov, "x": x, "y": y, "ls": ls, "le": le})
+        stickers.append({"mov": mov, "x": x + ox, "y": y + oy, "ls": ls, "le": le})
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     inputs = [ffmpeg_bin(), "-v", "error", "-y", "-i", str(src_video)]
@@ -431,8 +434,8 @@ def _composite(src_video: Path, out_path: Path, items: list[dict], info: dict,
         raise RuntimeError(f"合成失败 {src_video.name}: {(p.stderr or '')[-400:]}")
 
     out_info = probe_video_info(str(out_path))
-    if (out_info["width"], out_info["height"]) != (W, H):
-        raise RuntimeError(f"合成后分辨率变化:{W}x{H} → "
+    if (out_info["width"], out_info["height"]) != (FW, FH):
+        raise RuntimeError(f"合成后分辨率变化:{FW}x{FH} → "
                            f"{out_info['width']}x{out_info['height']}")
     if abs(out_info["duration_s"] - info["duration_s"]) > 1.0 / max(1, fps) + 0.001:
         raise RuntimeError(f"合成后时长漂移:{info['duration_s']} → "
@@ -449,7 +452,7 @@ def render_episode_html(video_path: Path, out_path: Path, items: list[dict],
                         fonts_manifest: dict, proj_root: Path,
                         renderer: StickerRenderer, receipt_path: Path,
                         force: bool = False, receipt_extra: dict | None = None,
-                        timeout: int = 7200) -> dict:
+                        timeout: int = 7200, picture_rect: list | None = None) -> dict:
     """花字版成片画面(2026-09-25):在**干净版成片**上按成片时间轴把全部花字一次叠上 → out_path(无声 / 音轨流拷贝随源)。
 
     items 每项 {cap, t0, t1},t 为成片秒(caption_timeline.final_time:后期版本 + 组边界层 + 片头)。
@@ -469,7 +472,8 @@ def render_episode_html(video_path: Path, out_path: Path, items: list[dict],
         except (json.JSONDecodeError, OSError):
             pass
     info = probe_video_info(str(video_path))
-    _composite(video_path, out_path, items, info, fonts_manifest, proj_root, renderer, timeout=timeout)
+    _composite(video_path, out_path, items, info, fonts_manifest, proj_root, renderer, timeout=timeout,
+               picture_rect=picture_rect)
     receipt = {"schema": "caption.final.v1", "renderer": HTML_RENDERER_VERSION,
                "engine": "html", "protocol": PROTOCOL_VERSION,
                "src": str(video_path), "src_sha256": src_sha,

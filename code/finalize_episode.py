@@ -19,6 +19,7 @@
               subtitle_offset_all_cues  逐条 cue 起止 = 正片基准 + 片头实测(±200ms),条数一致
               subtitle_ass_offset       .ass 同上(存在时)
               subtitle_within_final     末条 cue 不超出成片
+              letterbox_applied         上下黑边开启时成片分辨率 == 最终输出画幅的版式画布
               audio_offset_measured     成片声轨 vs final_audio 互相关实测滞后 == 片头实测(±80ms),
                                         取首/中/尾三段窗口分别测,三段一致 = 无累计漂移
               placement_declared_match  placement.json 声明时长与实测一致(±100ms,WARN 不拦)
@@ -34,6 +35,11 @@
 集尾收束(2026-09-25,§9C):正片为 render_transitions 产物且台账 transitions_render.json#episode_close 在时,画面已在末尾淡出/切黑并停留
   hold_s;本 CLI 在 assemble 时对外挂声轨施加同刻处理——fade_black/fade_white 在 fade_end_s 前 duration_s 内 afade 淡出、cut_black/cut_white
   在 fade_end_s 硬切(20ms 防爆音)、hold_audio=mute 到黑即静音——其后补静音到与画面等长。停留不平移任何时刻,不进 timemap、不改混音基准。
+
+上下黑边(2026-10-06,后期处理页「包装 › 上下黑边」,settings.json#output.letterbox_enabled / letterbox_aspect):开启时
+  assemble 把成片画布改成「最终输出画幅」(画布短边 = 正片短边),各段画面等比缩放后居中补黑边(2.35:1 → 16:9、16:9 → 9:16 等);
+  正片、粗剪、组 clip 都不动,黑边只在这一步加。版式写进台账 final_layout.json#letterbox(花字版成片按其中 picture 落位),
+  check 多一项 letterbox_applied(开启时成片分辨率 ≠ 版式画布 → FAIL,重新 assemble)。
 
 约定:
   - 段序默认 intro,cut,outro,teaser(--layout 可改);settings.json#packaging 关闭的段与不存在的文件自动跳过;
@@ -59,6 +65,7 @@ from _common import parse_args  # 副作用:modules/ 入 sys.path
 from avsync import probe_duration, require_tools
 import mix_manifest
 import timemap
+from output_format import letterbox_layout, resolve_letterbox
 
 SEGMENTS = ("intro", "cut", "outro", "teaser")
 SEG_FILES = {"intro": ["intro.mp4"], "outro": ["outro.mp4"],
@@ -110,6 +117,16 @@ def _settings(proj):
 
 def _packaging(proj):
     return _settings(proj).get("packaging") or {}
+
+
+def letterbox_plan(proj, segs):
+    """上下黑边版式(output_format.letterbox_layout);未开启 / 正片画幅已与最终输出画幅一致 -> None。"""
+    aspect = resolve_letterbox(_settings(proj))
+    cut = next((s for s in segs if s["name"] == "cut"), None)
+    if not aspect or cut is None:
+        return None
+    vs = (cut.get("streams") or {}).get("video") or {}
+    return letterbox_layout(int(vs.get("width") or 0), int(vs.get("height") or 0), aspect)
 
 
 def _is_av_project(proj):
@@ -429,6 +446,7 @@ def write_ledger(proj, ep, segs, extra=None):
         "total_expected_s": round(total, 6),
         "timemap": next((s.get("timemap") for s in segs if s["name"] == "cut"), None),
         "episode_close": next((s.get("episode_close") for s in segs if s["name"] == "cut"), None),
+        "letterbox": letterbox_plan(proj, segs),
         "segments": [{
             "name": s["name"], "file": str(Path(s["path"]).relative_to(proj)),
             "audio": (str(Path(s["audio"]).relative_to(proj)) if s.get("audio") else None),
@@ -473,6 +491,12 @@ def do_assemble(proj, ep, segs, out_path, crf=18, preset="medium"):
     W, H = int(vs.get("width") or 0), int(vs.get("height") or 0)
     if not W or not H:
         raise SystemExit("[FAIL] 无法读取正片分辨率")
+    lb = letterbox_plan(proj, segs)
+    if lb:   # 上下黑边:画布改成最终输出画幅,正片按台账版式落位,其余段照常等比缩放居中
+        src_w, src_h = W, H
+        (W, H), (px, py, pw, ph) = lb["canvas"], lb["picture"]
+        print(f"[NOTE ] 上下黑边:正片 {src_w}x{src_h} → 最终输出画幅 {lb['aspect']} 画布 {W}x{H},"
+              f"画面 {pw}x{ph} 居中,黑边在{'上下' if lb['bars'] == 'top_bottom' else '左右'}")
     inputs, fc, vlabels, alabels = [], [], [], []
     idx = 0
     for s in segs:
@@ -487,8 +511,11 @@ def do_assemble(proj, ep, segs, out_path, crf=18, preset="medium"):
         elif s["has_audio"]:
             ai = vi
         pad_v = max(0.0, s["dur"] - s["v_dur"])
-        vf = (f"[{vi}:v]scale={W}:{H}:force_original_aspect_ratio=decrease,"
-              f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2,fps={FPS},setsar=1,format=yuv420p")
+        if lb and s["name"] == "cut":
+            vf = f"[{vi}:v]scale={pw}:{ph},pad={W}:{H}:{px}:{py},fps={FPS},setsar=1,format=yuv420p"
+        else:
+            vf = (f"[{vi}:v]scale={W}:{H}:force_original_aspect_ratio=decrease,"
+                  f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2,fps={FPS},setsar=1,format=yuv420p")
         if pad_v > 0.001:
             vf += f",tpad=stop_mode=clone:stop_duration={pad_v:.6f}"
         vf += f",trim=duration={s['dur']:.6f},setpts=PTS-STARTPTS[v{vi}]"
@@ -609,6 +636,23 @@ def do_check(proj, ep, segs, notes, final_path, tol_ms=80, write=True):
         rec("final_duration_layout", abs(d) <= DUR_TOL_S,
             f"{final_path.name} {fdur:.3f}s vs Σ段 {total:.3f}s(Δ{d:+.3f}s;"
             + ("片头/片尾漏拼或多拼、或正片被 -shortest 截断" if abs(d) > DUR_TOL_S else "一致") + ")")
+
+    # 1b. 上下黑边:开启时成片分辨率须 = 版式画布(改了设置没重新 assemble 即 FAIL);关闭时成片画幅与正片不同只提醒
+    if final_path is not None:
+        lb_aspect = resolve_letterbox(_settings(proj))
+        fv = _probe_streams(final_path)["video"] or {}
+        cv = cut_seg["streams"]["video"] or {}
+        fw, fh, cw, ch = (int(x.get(k) or 0) for x in (fv, cv) for k in ("width", "height"))
+        if lb_aspect:
+            lb = letterbox_plan(proj, segs)
+            want = lb["canvas"] if lb else [cw, ch]
+            rec("letterbox_applied", [fw, fh] == want,
+                f"{final_path.name} {fw}x{fh};最终输出画幅 {lb_aspect} 应为 {want[0]}x{want[1]}"
+                + ("" if [fw, fh] == want else ",重新 assemble")
+                + ("" if lb else "(正片画幅已与最终输出画幅一致,不加黑边)"))
+        elif fw and fh and cw and ch and abs((fw / fh) / (cw / ch) - 1) >= 0.01:
+            rec("letterbox_applied", True, f"上下黑边已关闭,但 {final_path.name} {fw}x{fh} 与正片 {cw}x{ch} 画幅不同;"
+                                           "若是之前加过黑边的成片请重新 assemble", warn=True)
 
     # 2. 字幕
     base_srt, fin_srt = ed / "subtitles.srt", ed / "subtitles_final.srt"
