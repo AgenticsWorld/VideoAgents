@@ -13911,6 +13911,27 @@ async def avatar_auto_manage_for_run(run: dict, message: str):
         note(f"⚠️ 虚拟人像库全自动管理失败(不阻断工单):{e}")
 
 
+async def api_fal_models(kind: str, q: str = "", refresh: bool = False) -> dict:
+    """Fal 标签页「搜索 Fal 模型」:搜 Fal 平台模型目录(modules/fal_models.py),同一模型的几个任务端点并成一条。
+    builtin=genmedia 内置了该模型的请求体映射;其余按端点参数表自动适配。配置里有 Fal Key 就带上(匿名限流较紧)。"""
+    from modules import fal_models
+    from modules.genmedia import _fal_family, _fal_image_family
+    if kind not in fal_models.KINDS:
+        raise ServiceError(400, "kind must be image or video")
+    cfg = load_genconfig()
+    key = next((str(((cfg.get(k) or {}).get("fal") or {}).get("api_key") or "").strip()
+                for k in ("image", "video") if str(((cfg.get(k) or {}).get("fal") or {}).get("api_key") or "").strip()),
+               "") or os.environ.get("FAL_KEY", "").strip()
+    try:
+        rows = await asyncio.to_thread(fal_models.search, kind, q, 40, refresh, key)
+    except fal_models.CatalogUnavailable as e:
+        raise ServiceError(502, str(e)[:500]) from e
+    family = _fal_image_family if kind == "image" else _fal_family
+    return {"kind": kind, "query": q.strip(),
+            "models": [{"id": r["id"], "name": r["name"], "tasks": r["tasks"], "description": r["description"],
+                        "builtin": family(r["id"]) != "generic"} for r in rows]}
+
+
 # ---------------- MiniMax 音色(设置页 TTS → MiniMax 用) ----------------
 
 _MINIMAX_BASES = ("https://api.minimax.io", "https://api.minimaxi.com")

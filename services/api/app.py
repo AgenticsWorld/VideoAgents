@@ -916,6 +916,11 @@ async def rhapi_models(site: str = "ai", kind: str = "video", refresh: bool = Fa
     return await core.api_rhapi_models(site, kind, refresh)
 
 
+@api.get("/providers/fal/models", tags=["providers"])
+async def fal_models(kind: str = "video", q: str = "", refresh: bool = False) -> dict[str, Any]:
+    return await core.api_fal_models(kind, q, refresh)
+
+
 @api.post("/providers/minimax/voices", tags=["providers"])
 async def minimax_voices(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_minimax_voices(body.model_dump())

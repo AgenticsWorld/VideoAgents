@@ -83,7 +83,8 @@ Python:
         FLUX.2 Pro/Max、FLUX Kontext Max、Qwen Image 3、HunyuanImage 3.0 等端点;模型 ID 填家族前缀
         (fal-ai/bytedance/seedream/v5/lite、fal-ai/nano-banana-pro、openai/gpt-image-2.5/flare…),
         无参考图走文生图端点、有 --ref 自动切 edit/multi 端点,填完整端点 ID 则原样使用;
-        尺寸/画幅/参考图上限/seed/负面提示词按家族映射;Key 与视频段 Fal 共用,环境变量兜底 FAL_KEY)
+        尺寸/画幅/参考图上限/seed/负面提示词按家族映射;Key 与视频段 Fal 共用,环境变量兜底 FAL_KEY;
+        清单以外的模型(设置页「搜索 Fal 模型」选来的)按 Fal 模型目录里该端点的参数表组请求体,见 modules/fal_models.py)
         / comfyui(本地 / Comfy Cloud / RunningHub 云托管)
   视频: agentics(登录账号 + 后端 profile) / openrouter(POST /v1/videos 异步任务;Seedance 2.0/2.5 与
         MiniMax H3(minimax/hailuo-3)支持多参考图/参考视频/参考音频 input_references,上限同各自直连,
@@ -98,7 +99,8 @@ Python:
         alibaba/wan-3.0),按输入自动补 text-to-video / image-to-video / reference-to-video 任务段,
         填完整端点 ID 则原样使用;分辨率/时长/参考素材上限随家族与官方渠道同口径,
         Seedance/Kling 无 seed 入参;Wan 3.0 时长 [2,30] 整数秒、参考 10 图/5 视频/5 音频
-        (视频与音频各合计 ≤15s);环境变量兜底 FAL_KEY)
+        (视频与音频各合计 ≤15s);环境变量兜底 FAL_KEY;清单以外的模型按 Fal 模型目录里该端点的参数表
+        组请求体:只发它收的字段,时长/分辨率/画幅取它可选值里最接近的,同模型的端点按本次输入挑)
         / comfyui(本地/Comfy Cloud/RunningHub,需配置 API 格式工作流 JSON;
         RunningHub 用工作区保存的云端工作流,占位符约定与本地一致)
   超分: ffmpeg(内置插值放大,默认)/ volcengine(Seedance 2.5 样片模式按 Draft 任务 ID 出 1080p 原片)
@@ -1736,7 +1738,8 @@ def _image_ark(cfg, prompt, negative, refs, width, height, seed):
 #   qwen      alibaba/qwen-image-3                        → /text-to-image | /edit;image_size {width,height};image_urls 1-3;
 #             seed;negative_prompt(≤500 字);output_format
 #   hunyuan   fal-ai/hunyuan-image/v3                     → /text-to-image(无编辑端点);image_size;seed;negative_prompt;output_format
-#   generic   其它端点:prompt + image_size {width,height} + seed(+ image_urls),字段名因端点而异由 Fal 侧 422 报错
+#   generic   其它端点:先按 Fal 模型目录里该端点的参数表组请求体(_fal_catalog_image_body,2026-10-06);目录里没有
+#             (私有应用等)才用 prompt + image_size {width,height} + seed(+ image_urls),字段不对由 Fal 侧 422 报错
 FAL_IMAGE_TASK_SUFFIXES = ("text-to-image", "edit", "multi", "image-to-image")
 FAL_IMAGE_ENUM_SIZES = {"1:1": "square_hd", "4:3": "landscape_4_3", "16:9": "landscape_16_9",
                         "3:4": "portrait_4_3", "9:16": "portrait_16_9"}
@@ -1792,6 +1795,30 @@ def _closest_ratio(width: int, height: int, choices) -> str:
     return min(choices, key=lambda a: abs(_val(a) - ratio))
 
 
+def _fal_catalog_notes(endpoint: str, notes: list[str]) -> None:
+    for note in notes:
+        print(f"[genmedia] Fal {endpoint}:{note}", file=sys.stderr, flush=True)
+
+
+def _fal_catalog_image_body(cfg, prompt, negative, refs, width, height, seed, output, to_url):
+    """没有内置映射的 Fal 图像模型(家族 generic,多为设置页「搜索 Fal 模型」选来的):按 Fal 模型目录里该端点的
+    参数表组请求体(modules/fal_models.py)。目录里没有这个端点(私有应用等)或目录连不上 → 返回 None,
+    调用方回落旧的通用字段映射。"""
+    from modules import fal_models
+    try:
+        entry = fal_models.resolve_image(cfg["model"], bool(refs), api_key=cfg.get("api_key") or "")
+    except fal_models.CatalogUnavailable as e:
+        print(f"[genmedia] {e};改按通用字段名组请求体", file=sys.stderr, flush=True)
+        return None
+    if not entry:
+        return None
+    body, notes = fal_models.shape_image(
+        entry, prompt=prompt, negative=negative, width=width, height=height, seed=seed,
+        fmt=_output_format(output) if output else "", refs=refs, to_url=to_url)
+    _fal_catalog_notes(entry["endpoint_id"], notes)
+    return entry["endpoint_id"], body
+
+
 def _fal_image_body(cfg, prompt, negative, refs, width, height, seed, output="",
                     to_url=None) -> tuple[str, dict]:
     """构造 Fal 图像请求体,返回 (endpoint, body);to_url 可替换参考图 URL 化(dry-run 不内联)。"""
@@ -1799,6 +1826,10 @@ def _fal_image_body(cfg, prompt, negative, refs, width, height, seed, output="",
     refs = list(refs or [])
     model = cfg["model"]
     family = _fal_image_family(model)
+    if family == "generic":
+        shaped = _fal_catalog_image_body(cfg, prompt, negative, refs, width, height, seed, output, to_url)
+        if shaped:
+            return shaped
     endpoint = _fal_image_endpoint(model, family, bool(refs))
     cap = FAL_IMAGE_MAX_REFS.get(family)
     if cap and len(refs) > cap:
@@ -4739,8 +4770,8 @@ FAL_LIPSYNC_MAX_AUDIO_S = 14.8
 
 def _fal_family(model: str) -> str:
     """按模型 ID 识别请求体家族:seedance / h3(MiniMax H3 系列)/ kling / wan(阿里 Wan 3.0)/
-    generic(其它端点,按 fal 常见字段名 prompt/image_url/end_image_url/duration/resolution/
-    aspect_ratio/seed 尽力映射)。"""
+    generic(其它端点:先按 Fal 模型目录里该端点的参数表组请求体,见 _fal_catalog_video_body;目录里没有才按 fal
+    常见字段名 prompt/image_url/end_image_url/duration/resolution/aspect_ratio/seed 尽力映射)。"""
     m = (model or "").lower()
     if "seedance" in m:
         return "seedance"
@@ -4829,6 +4860,28 @@ def _fal_lipsync_body(cfg, prompt, first, last, duration, resolution, aspect, se
     return _fal_endpoint(cfg["model"], "image-to-video"), body
 
 
+def _fal_catalog_video_body(cfg, task, prompt, first, last, duration, resolution, aspect, seed,
+                            refs, audio_refs, gen_audio, video_refs, to_url, video_to_url):
+    """没有内置映射的 Fal 视频模型(家族 generic):按 Fal 模型目录里该端点的参数表组请求体——只发它收的字段,
+    时长 / 分辨率 / 画幅取它可选值里最接近的,首尾帧与参考素材用它的字段名;同模型的端点按本次输入挑
+    (带尾帧而图生端点不收尾帧时改用 first-last-frame-to-video)。目录里没有或连不上 → None,回落旧的通用映射。"""
+    from modules import fal_models
+    try:
+        entry = fal_models.resolve_video(cfg["model"], task, needs_last=bool(last),
+                                         api_key=cfg.get("api_key") or "")
+    except fal_models.CatalogUnavailable as e:
+        print(f"[genmedia] {e};改按通用字段名组请求体", file=sys.stderr, flush=True)
+        return None
+    if not entry:
+        return None
+    body, notes = fal_models.shape_video(
+        entry, prompt=prompt, duration=duration, resolution=resolution, aspect=aspect, seed=seed,
+        gen_audio=gen_audio, first=first, last=last, refs=refs, video_refs=video_refs, audio_refs=audio_refs,
+        to_url=to_url, video_to_url=video_to_url)
+    _fal_catalog_notes(entry["endpoint_id"], notes)
+    return entry["endpoint_id"], body
+
+
 def _fal_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed,
                     refs, audio_refs, gen_audio, video_refs=None,
                     to_url=None, video_to_url=None) -> tuple[str, dict]:
@@ -4848,6 +4901,11 @@ def _fal_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
     family, task, endpoint = _fal_plan(cfg, first, last, refs, audio_refs, video_refs)
     model = cfg["model"]
     res = (resolution or "").lower()
+    if family == "generic":
+        shaped = _fal_catalog_video_body(cfg, task, prompt, first, last, duration, res, aspect, seed,
+                                         refs, audio_refs, gen_audio, video_refs, to_url, video_to_url)
+        if shaped:
+            return shaped
     body: dict = {"prompt": prompt}
     if family == "seedance":
         is_v25 = _seedance_gen(model) >= 2.5

@@ -54,6 +54,13 @@ button:disabled{opacity:.5;cursor:default}
 .hint a{color:var(--link)}
 .status{font-size:12px;margin-left:120px}
 .status.ok{color:var(--green)}
+.fal-hits{margin-left:120px;display:flex;flex-direction:column;gap:4px;max-height:260px;overflow:auto}
+.fal-hits:empty{display:none}
+.fal-hit{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px}
+.fal-hit button{padding:2px 10px;font-size:12px}
+.fal-hit-name{color:var(--text)}
+.fal-hit code{color:var(--dim);font-size:11px}
+.fal-hit-tasks,.fal-hit-tag{color:var(--dim)}
 .status.err{color:var(--red)}
 #savebar{display:flex;align-items:center;gap:14px;justify-content:flex-end}
 #save-status{font-size:13px;color:var(--green);opacity:0;transition:opacity .3s}
@@ -526,6 +533,56 @@ function buildRhApiPanel(d,kind){
   h.appendChild(el('span',{},' 创建(模型 API 仅支持企业共享 API Key;两站账号与 Key 不互通,「渠道」须与 Key 来源一致)'));
   d.appendChild(h);
 }
+/* Fal 模型发现(2026-10-06):搜 Fal 平台模型目录(GET /providers/fal/models,modules/fal_models.py),
+   点「选用」把模型 ID 填进上面的模型栏(内置清单里有的直接选中,没有的填进「自定义…」),保存后生效。
+   内置清单以外的模型由 genmedia 按该端点的参数表自动适配请求体。 */
+function buildFalSearch(d,kind){
+  const r=el('div',{className:'row'});
+  r.appendChild(el('label',{},'搜索 Fal 模型'));
+  const q=el('input',{type:'text',id:`${kind}-fal-q`,placeholder:'关键词,如 veo / kling / flux;留空列出热门模型'});
+  const b=el('button',{id:`${kind}-fal-search`},'搜索');
+  b.onclick=()=>falSearch(kind);
+  q.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();falSearch(kind)}};
+  r.appendChild(q);r.appendChild(b);d.appendChild(r);
+  d.appendChild(el('div',{className:'status',id:`${kind}-fal-status`}));
+  d.appendChild(el('div',{className:'fal-hits',id:`${kind}-fal-hits`}));
+  d.appendChild(el('div',{className:'hint'},'搜到的模型不在上面清单里时,系统按该端点的参数表组请求:时长、分辨率、画幅取它支持的最接近值,不支持的输入(如尾帧、参考图)会直接报错;这些模型尚未逐个实测。'));
+}
+async function falSearch(kind){
+  const status=$(`#${kind}-fal-status`), box=$(`#${kind}-fal-hits`), btn=$(`#${kind}-fal-search`);
+  if(btn.disabled)return;
+  btn.disabled=true;box.innerHTML='';
+  status.className='status';status.textContent=t('正在搜索 Fal 模型目录…');
+  try{
+    const r=await api(`/api/v1/providers/fal/models?kind=${kind}&q=${encodeURIComponent($(`#${kind}-fal-q`).value.trim())}`);
+    const rows=r.models||[];
+    status.className='status ok';
+    status.textContent=rows.length?I18N.f('找到 {n} 个模型,点「选用」填入上面的模型栏',{n:rows.length}):t('没有找到匹配的模型');
+    rows.forEach(m=>{
+      const row=el('div',{className:'fal-hit',title:m.description||''});
+      const pick=el('button',{},t('选用'));
+      pick.onclick=()=>falPick(kind,m);
+      row.appendChild(pick);
+      row.appendChild(el('span',{className:'fal-hit-name',textContent:m.name}));
+      row.appendChild(el('code',{textContent:m.id}));
+      row.appendChild(el('span',{className:'fal-hit-tasks',textContent:(m.tasks||[]).join(' · ')}));
+      row.appendChild(el('span',{className:'fal-hit-tag',textContent:t(m.builtin?'已内置适配':'按参数表自动适配')}));
+      box.appendChild(row);
+    });
+  }catch(e){
+    status.className='status err';status.textContent=`${t('搜索 Fal 模型目录失败')}: ${e.message||e}`;
+  }finally{btn.disabled=false}
+}
+function falPick(kind,m){
+  const sel=$(`#${kind}-fal-model`), custom=$(`#${kind}-fal-custom`);
+  const listed=[...sel.options].some(o=>o.value===m.id);
+  sel.value=listed?m.id:CUSTOM;
+  custom.style.display=listed?'none':'';
+  if(!listed)custom.value=m.id;
+  const status=$(`#${kind}-fal-status`);
+  status.className='status ok';
+  status.textContent=I18N.f('已填入 {id},点「保存设置」后生效',{id:m.id});
+}
 function rhSite(kind){return $(`#${kind}-rh-site`).value==='cn'?'cn':'ai'}
 function rhSiteUI(kind){
   const site=rhSite(kind);
@@ -801,6 +858,7 @@ function buildPanel(kind,p){
   }else if(p==='fal'){
     d.appendChild(keyRow(`${kind}-fal-key`,'Fal API Key'));
     d.appendChild(modelRow(`${kind}-fal-model`,`${kind}-fal-custom`));
+    buildFalSearch(d,kind);
     d.appendChild(el('div',{className:'hint'},(kind==='image'
       ?'Fal 图像生成 API(queue.fal.run 异步队列,托管 Seedream、Nano Banana、GPT Image、FLUX.2、Qwen Image 等端点);模型 ID 填家族前缀,无参考图走文生图端点、有参考图自动切 edit 端点,「自定义…」也可填完整端点 ID;尺寸/参考图上限/seed 按模型映射;Key 与视频段 Fal 共用(任一处填写即可),在 '
       :'Fal 视频生成 API(queue.fal.run 异步队列,托管 Seedance 2.0/2.5、MiniMax H3、Kling 3.0、Wan 3.0 等端点);模型 ID 填家族前缀,按输入自动补 text-to-video / image-to-video / reference-to-video 任务段,「自定义…」也可填完整端点 ID;分辨率/时长/参考素材上限随所选模型(与官方渠道同口径);Key 在 ')
