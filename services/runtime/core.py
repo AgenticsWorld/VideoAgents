@@ -980,7 +980,7 @@ DEFAULT_GENCONFIG = {
     # 输出设置(设置菜单「输出设置」):画幅预设 youtube=16:9(默认)/douyin=9:16/custom;
     # 语言约束剧本/台词/旁白/字幕/配音/发布物料;
     # 视频分辨率按用途分档:draft=草稿/迭代/待审版本,final=审核确认后的成片终稿;
-    # platforms=发布平台(可多选,默认全选):只决定 Phase 11 发布目标与画幅矩阵/封面/字幕的平台清单,
+    # platforms=发布平台(可多选,可不选;空数组 = 不做分平台发布):只决定 Phase 11 发布目标与画幅矩阵/封面/字幕的平台清单,
     #   主生产画幅仍由 aspect_preset 单选决定;与主画幅不同画幅的平台由 platform-adapter 发布期裁/补适配;
     # subtitle_burn_in=内嵌字幕(默认关):开启后成片终稿自动把 subtitles.srt 烧录进画面;
     # caption_enabled=花字(默认关):开启后 caption Agent 在关键节点设计花字+配套音效,
@@ -1052,7 +1052,7 @@ DEFAULT_GENCONFIG = {
                #   由用户在场景预览页用全景图 / 世界模型视窗「💾 背景图」手工截取(render_shot_plates.py 退出码 5 [manual_plate_needed])
                "plate_mode": "grid",   # 2026-09-26 默认九宫格(含自动补图);界面露 grid / grid_manual,pano/world 仍受理但界面隐藏
                # (2026-09-08 废止 whitebox_top_video:白模只导出摄影机视角 camera.mp4,不再有俯视视频;存量 settings 里的该键忽略)
-               "platforms": ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]},
+               "platforms": ["youtube", "bilibili", "tiktok", "douyin"]},   # 小红书界面隐藏(2026-10-06),不进默认;存量项目已存的值仍受理
     # 审核设置(设置菜单「审核设置」):各维度审核力度 0-100(0=不审核 100=最严格),按项目独立;
     # 默认全 0=不审核(2026-07-23 由 60 改),用户在设置中调高才生效;
     # evaluation=质量评委(00-orchestration/evaluation)验收「必须照改」合格线,
@@ -1128,7 +1128,8 @@ CAPTION_AGENTS = {"10-editing/caption", "10-editing/edit",
 
 # 输出画幅预设:preset -> (比例, 名称);custom 走 aspect_custom(格式 宽:高)
 # 发布平台:key -> (名称, 默认画幅);「输出设置」发布平台多选,只驱动 Phase 11 发布目标与
-# aspect_ratio.json 平台矩阵/thumbnail 每平台封面/subtitle 每平台字幕的清单(展示顺序即此顺序)
+# aspect_ratio.json 平台矩阵/thumbnail 每平台封面/subtitle 每平台字幕的清单(展示顺序即此顺序);
+# 小红书界面隐藏(2026-10-06,后端仍受理存量值);默认画幅只供注入给 Agent 的平台说明用,界面不显示
 OUTPUT_PLATFORMS = {
     "youtube": ("YouTube", "16:9"),
     "bilibili": ("Bilibili", "16:9"),
@@ -1158,11 +1159,12 @@ PLATE_MODES = ("pano", "world", "grid", "grid_manual")
 
 
 def resolve_platforms(cfg: dict) -> list[tuple[str, str, str]]:
-    """genconfig -> 已选发布平台 [(key, 名称, 默认画幅), ...],按注册表顺序;为空回落全选。"""
+    """genconfig -> 已选发布平台 [(key, 名称, 默认画幅), ...],按注册表顺序;
+    空数组 = 用户没选平台(返回 []);缺键 / 非数组回落默认清单。"""
     out = cfg.get("output") or {}
     sel = out.get("platforms")
-    if not isinstance(sel, list) or not sel:
-        sel = list(OUTPUT_PLATFORMS)
+    if not isinstance(sel, list):
+        sel = DEFAULT_GENCONFIG["output"]["platforms"]
     return [(k, OUTPUT_PLATFORMS[k][0], OUTPUT_PLATFORMS[k][1])
             for k in OUTPUT_PLATFORMS if k in sel]
 
@@ -2132,8 +2134,8 @@ def _validate_output(o: dict):
             raise ServiceError(400, "output.dialogue_tts_max_tempo must be a number between 1.0 and 2.0")
     if "platforms" in o:
         pf = o["platforms"]
-        if not isinstance(pf, list) or not pf:
-            raise ServiceError(400, "output.platforms must be a non-empty array (select at least one platform)")
+        if not isinstance(pf, list):   # 空数组合法:不选发布平台
+            raise ServiceError(400, "output.platforms must be an array (may be empty)")
         bad = [p for p in pf if p not in OUTPUT_PLATFORMS]
         if bad:
             raise ServiceError(400, f"output.platforms contains unknown platform {bad}; valid values: {tuple(OUTPUT_PLATFORMS)}")
@@ -3287,6 +3289,16 @@ def build_role_prompt(agent_id: str, project: str,
     platforms = resolve_platforms(ps)
     plat_list = "、".join(f"{name}({asp})" for _, name, asp in platforms)
     cross = "、".join(f"{name}({asp})" for _, name, asp in platforms if asp != aspect)
+    if platforms:
+        plat_line = (f"{plat_list} —— Phase 11 发布(platform-adapter/seo/metadata/publisher)**仅面向这些平台**;"
+                     "aspect_ratio.json 平台矩阵、thumbnail 每平台封面、subtitle 每平台字幕以此清单为准。"
+                     f"主生产画幅仍是上面的 {aspect}(母版按此原生生成)"
+                     + ("" if not cross else f";与母版画幅不同的平台【{cross}】由 platform-adapter 在发布期从母版裁/补适配,不重新生成视频(现架构单母版)"))
+    else:   # 输出设置里一个平台都没选(2026-10-06 起允许)
+        plat_line = ("未选(用户在「输出设置」没有勾选任何发布平台)—— **不做分平台发布**:"
+                     f"aspect_ratio.json 只列母版一条({aspect}),thumbnail / subtitle 只按母版出一份,"
+                     "Phase 11 的 platform-adapter(p11-adapt)与 publisher 没有目标平台、不派单,seo / metadata 只出不分平台的一份;"
+                     "不得自行假定平台清单——用户之后在输出设置选了平台,再按所选平台补派")
     dur = ps.get("duration") or {}
     brief = ""
     try:
@@ -3396,7 +3408,7 @@ def build_role_prompt(agent_id: str, project: str,
 - 输出语言:{out_lang} —— 剧本、台词、旁白、字幕、配音、成片文案、发布物料一律使用 {out_lang} 输出(剧本/对白/旁白文件里的机器锚点不随输出语言变:中文写「[事件]/[出场]/[时长]、动作:、转场:」,其它语言一律用英文规范写法「[EVENTS]/[CAST]/[DURATION]、ACTION:、TRANSITION:、[NARRATION (…)]:、[NO DIALOGUE]」,契约 docs/screenplay_anchors.md,2026-09-23);提供给生成模型的 prompt 不受此限(视频/图像 prompt 语言随界面语言,见下两条;音乐 prompt 用英文)
 - 视频生成 prompt 语言:提供给视频生成模型的 video_prompt **正文散文(镜头动作/画面/运镜描述等)用{ui_lang}书写,不必用英文**;**注入视频 prompt 的上游片段内容语言同样用{ui_lang}(2026-08-24)**——各生产方按{ui_lang}产出片段内容:art-director 的 style.json 注入用风格串 `style_fragment_ui`(英文版 style_fragment_en/negative_prompt_en 保留供负面词表与存量回退)、blocking 的 `space_fragment_en`、lighting 的 `prompt_fragment_en`、costume 的 `visual_en`、prop 的 `scale.prompt_token`、sound-effect/ambience 的 cue(字段名保留历史 `_en` 后缀,不改名);**空间布局链路字段同样用{ui_lang}(2026-08-24 二订)**——layout.json `name_en`/`desc_en`、storyboard `route_en`/`offset_en` 及站位/prompt 句内的地标词一并按{ui_lang}产出(这些词只进 prompt、不上图,无字体限制——2026-09-07 起俯视图直接引用、不再叠加人物动线标注;地标词仍逐字取 layout.json `name_en`,全链路统一写法);**逐字纪律优先于语言偏好**:下游对既有片段一律逐字拼入、严禁翻译或改写,存量片段语言与{ui_lang}不一致时以既有片段为准,要换语言须回派上游成套重出(同场景/同集一致),不得零散混语;但以下保持英文原样不翻译——结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:` 及 `[Image N]`/`[Audio N]`/`@Image N`/`@Audio N` 引用,机检与注释注入代码依赖这些英文锚点;素材指代只用这套英文锚点,禁写「图片N/音频N/视频N」等本地化变体)、固定英文约束句(Identity lock、非对白组静默句、Spatial layout 声明句、Global constraints 负面清单)、台词(按剧本冻结版);Seedance 2.5 的结构标签(`【人物】`/`【动作与声音】`/「使用：/不采用：」/`【未采用素材】`/`【保持一致】`)是官方段落标签,非中文界面用机检认可的固定英文标签(`【Characters】`/`【Action & sound】`/「Use:/Not used:」/`【Unused assets】`/`【Consistency】`),两套等价、不得自造
 - 图像生成 prompt 语言:提供给图像生成模型的 image prompt(概念图/锚点图/参考图,genmedia image)**正文同样用{ui_lang}书写(2026-08-24)**——风格段逐字取 style.json `style_fragment_ui`(存量项目缺该字段回退英文 `style_fragment_en`);**负面词表保持英文**(`--negative` 与 prompt 内负面清单取 `negative_prompt_en`,通用负面术语跨引擎稳定、机检按英文子串匹配);存量英文项目补图沿用英文,不得半中半英
-- 发布平台:{plat_list} —— Phase 11 发布(platform-adapter/seo/metadata/publisher)**仅面向这些平台**;aspect_ratio.json 平台矩阵、thumbnail 每平台封面、subtitle 每平台字幕以此清单为准。主生产画幅仍是上面的 {aspect}(母版按此原生生成){"" if not cross else f";与母版画幅不同的平台【{cross}】由 platform-adapter 在发布期从母版裁/补适配,不重新生成视频(现架构单母版)"}
+- 发布平台:{plat_line}
 - 内嵌字幕:{burn_in}
 - 花字:{caption_line}
 - 旁白:{narration_line}

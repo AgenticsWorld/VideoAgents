@@ -493,11 +493,10 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <input type="text" id="npo-custom" placeholder="宽:高,如 21:9 / 4:3"></div>
       <div class="row" style="align-items:flex-start"><label style="padding-top:4px">发布平台</label>
         <div style="flex:1;display:flex;flex-wrap:wrap;gap:6px 16px">
-          <label style="flex:none;font-weight:normal;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="npo-platform" value="youtube" style="flex:none;margin:0">YouTube <span style="color:var(--dim);font-size:12px">16:9</span></label>
-          <label style="flex:none;font-weight:normal;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="npo-platform" value="bilibili" style="flex:none;margin:0">Bilibili <span style="color:var(--dim);font-size:12px">16:9</span></label>
-          <label style="flex:none;font-weight:normal;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="npo-platform" value="tiktok" style="flex:none;margin:0">TikTok <span style="color:var(--dim);font-size:12px">9:16</span></label>
-          <label style="flex:none;font-weight:normal;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="npo-platform" value="douyin" style="flex:none;margin:0">抖音 <span style="color:var(--dim);font-size:12px">9:16</span></label>
-          <label style="flex:none;font-weight:normal;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="npo-platform" value="xiaohongshu" style="flex:none;margin:0">小红书 <span style="color:var(--dim);font-size:12px">9:16</span></label>
+          <label style="flex:none;font-weight:normal;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="npo-platform" value="youtube" style="flex:none;margin:0">YouTube</label>
+          <label style="flex:none;font-weight:normal;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="npo-platform" value="bilibili" style="flex:none;margin:0">Bilibili</label>
+          <label style="flex:none;font-weight:normal;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="npo-platform" value="tiktok" style="flex:none;margin:0">TikTok</label>
+          <label style="flex:none;font-weight:normal;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="npo-platform" value="douyin" style="flex:none;margin:0">抖音</label>
         </div></div>
       <div class="row"><label>输出语言</label>
         <select id="npo-lang" style="flex:1" data-no-i18n></select></div>
@@ -610,16 +609,15 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <option value="custom">自定义画幅…</option>
       </select>
       <button type="button" class="info-btn" data-info="out-info-aspect" title="说明">i</button></div>
-    <div class="note info-note" id="out-info-aspect">画幅约束画幅规范/分镜构图/关键帧/视频/成片;发布平台(可多选)只决定发布阶段发到哪些平台及封面/字幕/画幅矩阵的平台清单,<b>主生产画幅仍由上面的「输出画幅」决定</b>——与主画幅不同画幅的平台(如主画幅选 16:9 时的 TikTok/抖音)在发布期由 platform-adapter 从母版裁切适配,不重新生成视频;语言约束剧本/台词/旁白/字幕/配音/发布物料(给生成模型的英文 prompt 不受影响);草稿分辨率用于迭代/待审版本,成片分辨率是审核确认后终稿的目标分辨率——与草稿档不同时默认由超分(upscale)得到,不重新生成;分辨率越高视频生成费用越高(4K 仅 Seedance 2.0 标准版支持)。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
+    <div class="note info-note" id="out-info-aspect">画幅约束画幅规范/分镜构图/关键帧/视频/成片;发布平台(可多选,也可不选)只决定发布阶段发到哪些平台及封面/字幕/画幅矩阵的平台清单,<b>主生产画幅仍由上面的「输出画幅」决定</b>——与主画幅不同画幅的平台(如主画幅选 16:9 时的 TikTok/抖音)在发布期由 platform-adapter 从母版裁切适配,不重新生成视频;语言约束剧本/台词/旁白/字幕/配音/发布物料(给生成模型的英文 prompt 不受影响);草稿分辨率用于迭代/待审版本,成片分辨率是审核确认后终稿的目标分辨率——与草稿档不同时默认由超分(upscale)得到,不重新生成;分辨率越高视频生成费用越高(4K 仅 Seedance 2.0 标准版支持)。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
     <div class="row" id="out-custom-row" style="display:none"><label>自定义比例</label>
       <input type="text" id="out-custom" placeholder="宽:高,如 21:9 / 4:3"></div>
     <div class="row" style="align-items:flex-start"><label style="padding-top:4px">发布平台</label>
       <div style="flex:1;display:flex;flex-wrap:wrap;gap:6px 16px">
-        <label style="flex:none;font-weight:normal;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="out-platform" value="youtube" style="flex:none;margin:0">YouTube <span style="color:var(--dim);font-size:12px">16:9</span></label>
-        <label style="flex:none;font-weight:normal;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="out-platform" value="bilibili" style="flex:none;margin:0">Bilibili <span style="color:var(--dim);font-size:12px">16:9</span></label>
-        <label style="flex:none;font-weight:normal;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="out-platform" value="tiktok" style="flex:none;margin:0">TikTok <span style="color:var(--dim);font-size:12px">9:16</span></label>
-        <label style="flex:none;font-weight:normal;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="out-platform" value="douyin" style="flex:none;margin:0">抖音 <span style="color:var(--dim);font-size:12px">9:16</span></label>
-        <label style="flex:none;font-weight:normal;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="out-platform" value="xiaohongshu" style="flex:none;margin:0">小红书 <span style="color:var(--dim);font-size:12px">9:16</span></label>
+        <label style="flex:none;font-weight:normal;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="out-platform" value="youtube" style="flex:none;margin:0">YouTube</label>
+        <label style="flex:none;font-weight:normal;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="out-platform" value="bilibili" style="flex:none;margin:0">Bilibili</label>
+        <label style="flex:none;font-weight:normal;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="out-platform" value="tiktok" style="flex:none;margin:0">TikTok</label>
+        <label style="flex:none;font-weight:normal;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="out-platform" value="douyin" style="flex:none;margin:0">抖音</label>
       </div></div>
     <div class="row"><label>输出语言</label>
       <select id="out-lang" style="flex:1" data-no-i18n></select></div>
@@ -1485,7 +1483,7 @@ $('#npo-aspect').onchange=()=>{
 function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置的服务端默认一致)
   $('#npo-aspect').value='youtube';$('#npo-custom').value='';
   $('#npo-custom-row').style.display='none';
-  document.querySelectorAll('.npo-platform').forEach(c=>c.checked=false);   // 发布平台默认全不选,创建前须自选(≥1)
+  document.querySelectorAll('.npo-platform').forEach(c=>c.checked=false);   // 发布平台默认全不选(可不选)
   const uiLang=I18N.langs[I18N.lang];   // 输出语言默认跟随当前界面语言(自称与 OUT_LANGS 同表)
   $('#npo-lang').value=OUT_LANGS.includes(uiLang)?uiLang:'English';
   $('#npo-draft-res').value='480p';$('#npo-final-res').value='1080p';   // 新建项目成片分辨率默认 1080p(2026-09-13 用户拍板);服务端默认仍为 480p 仅作存量项目缺键回退
@@ -1519,7 +1517,6 @@ function npValidateStep(n){   // 返回错误文案,''=通过(规则与各设置
   }else if(n===4){   // 输出设置
     if($('#npo-aspect').value==='custom'&&!/^\d+\s*:\s*\d+$/.test($('#npo-custom').value.trim()))
       return '自定义画幅格式:宽:高,如 21:9';
-    if(!document.querySelectorAll('.npo-platform:checked').length)return '至少选择一个发布平台';
   }else if(n===2){   // 视频节奏(时长)
     trModeInit('npd');
     const ep=parseFloat($('#npd-ep').value),mn=parseFloat($('#npd-smin').value),mx=parseFloat($('#npd-smax').value);
@@ -1888,8 +1885,7 @@ $('#out-ok').onclick=async()=>{
   const preset=$('#out-aspect').value,custom=$('#out-custom').value.trim();
   if(preset==='custom'&&!/^\d+\s*:\s*\d+$/.test(custom)){
     $('#out-err').textContent='自定义画幅格式:宽:高,如 21:9';return}
-  const platforms=[...document.querySelectorAll('.out-platform:checked')].map(c=>c.value);
-  if(!platforms.length){$('#out-err').textContent='至少选择一个发布平台';return}
+  const platforms=[...document.querySelectorAll('.out-platform:checked')].map(c=>c.value);   // 可不选(空 = 不做分平台发布)
   try{
     await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),output:{aspect_preset:preset,aspect_custom:custom,language:$('#out-lang').value,
       draft_resolution:$('#out-draft-res').value,final_resolution:$('#out-final-res').value,
