@@ -983,3 +983,56 @@ def test_swap_shot_plate_points_slot_at_library_entry(tmp_path, monkeypatch):
     with pytest.raises(sp.PlateSwapError) as ex:
         sp.swap_shot_plate(base, ep, 'sh002', 'end', 'L1_a')
     assert ex.value.status == 404
+
+
+def test_plate_adopt_fields_drive_adoption_sentence_and_survive_rewrite():
+    """#113:单图 adopt / exclude_note 决定采用句(2.5 中英、H3、2.0);缺省文案不变;--write 幂等;字段未写进段时机检 WARN。"""
+    base_plates = [{'shot_id': 'sh003', 'shot_no': 1, 'role': 'start', 'key': 'k1', 'file': 'assets/concepts/scenes/S/plates/k1.png', 'stale': False},
+                   {'shot_id': 'sh004', 'shot_no': 2, 'role': 'start', 'key': 'k2', 'file': 'assets/concepts/scenes/S/plates/k2.png', 'stale': False,
+                    'adopt': ['layout', 'architecture', 'materials'], 'exclude_note': '不采用画面右侧的海面与眩光'}]
+    plan = {'plates': base_plates, 'missing': [], 'group': {}}
+    prompt = {'refs': ['assets/concepts/characters/CHAR-0001/sheet.png'],
+              'video_prompt': 'Overall visual style: x. 王三合@Image 1: a man. Shot 1: 他走。 Shot 2: 他停。 Global constraints: no text.'}
+    out, _ = sp.apply_prompt(prompt, plan, v25=True, zh=True)
+    vp = out['video_prompt']
+    assert '参考 [Image 2]，' in vp and '只采用空间布局、建筑、材质和光线，不采用图中任何人物' in vp                       # 缺省图文案不变
+    assert '参考 [Image 3]，' in vp and '只采用空间布局、建筑和材质，不采用图中的光线，不采用图中任何人物' in vp
+    assert '另：不采用画面右侧的海面与眩光。' in vp
+    assert not sp.check_prompt(out, plan, 'g', v25=True)[0] and not [w for w in sp.check_prompt(out, plan, 'g', v25=True)[1] if '采用口径' in w]
+    again, _ = sp.apply_prompt(out, plan, v25=True, zh=True)
+    assert again['video_prompt'] == vp
+    en, _ = sp.apply_prompt(prompt, plan, v25=True, zh=False)
+    assert 'use only its spatial layout, architecture and materials; do not take its lighting from the plate; do not use any person' in en['video_prompt']
+    assert 'Also: 不采用画面右侧的海面与眩光. ' in en['video_prompt']
+    h3, _ = sp.apply_prompt({'refs': [], 'video_prompt': 'detailed_description: Shot 1: a. Shot 2: b. Global constraints: x.'}, plan, h3=True)
+    assert 'that are not in the plate, do not take its lighting from the plate, 不采用画面右侧的海面与眩光' in h3['video_prompt']
+    v20, _ = sp.apply_prompt(prompt, plan)
+    assert 'then add the characters, do not take its lighting from the plate, 不采用画面右侧的海面与眩光' in v20['video_prompt']
+    # 字段改了但段还是旧文案 → WARN 提示 --write
+    stale_plan = {'plates': [dict(base_plates[0]), dict(base_plates[1], exclude_note='也不采用左侧的旗杆')], 'missing': [], 'group': {}}
+    assert any('采用口径' in w for w in sp.check_prompt(out, stale_plan, 'g', v25=True)[1])
+    assert sp.normalize_adopt('光线, layout') == ['layout', 'lighting'] and sp.normalize_adopt('layout,architecture,materials,lighting') is None
+    import pytest
+    with pytest.raises(ValueError):
+        sp.normalize_adopt('sky')
+
+
+def test_set_plate_adopt_writes_index_and_syncs(tmp_path, monkeypatch):
+    import json
+    base, ep = tmp_path, 'ep01'
+    f = facts((0, 1.5, 0), (0, 1.5, -10), 27)
+    idx = {'schema_version': sp.SCHEMA_EPISODE, 'ep': ep, 'shots': {'sh001': {'group_id': 'grp001', 'scene_id': 'SCN-1', 'plates': [
+        {'role': 'start', 'key': 'k', 'file': 'x.png', 'reuse': 'manual', 'camera': f}]}}}
+    sp.save_episode_index(base, ep, idx)
+    synced = []
+    monkeypatch.setattr(sp, 'sync_group', lambda b, e, g, write=False, **kw: synced.append(g) or {'group_id': g, 'errors': [], 'warnings': [], 'updated': True})
+    res = sp.set_plate_adopt(base, ep, 'sh001', 'start', adopt='layout,architecture,materials', exclude_note='不采用右侧海面')
+    assert res['adopt'] == ['layout', 'architecture', 'materials'] and res['exclude_note'] == '不采用右侧海面' and synced == ['grp001']
+    slot = sp.load_episode_index(base, ep)['shots']['sh001']['plates'][0]
+    assert slot['adopt'] == ['layout', 'architecture', 'materials'] and slot['exclude_note'] == '不采用右侧海面' and slot['camera'] == f
+    sp.set_plate_adopt(base, ep, 'sh001', 'start', exclude_note='')
+    slot = sp.load_episode_index(base, ep)['shots']['sh001']['plates'][0]
+    assert slot['adopt'] and 'exclude_note' not in slot
+    sp.set_plate_adopt(base, ep, 'sh001', 'start', clear=True)
+    slot = sp.load_episode_index(base, ep)['shots']['sh001']['plates'][0]
+    assert 'adopt' not in slot and 'exclude_note' not in slot

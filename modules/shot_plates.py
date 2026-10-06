@@ -2266,6 +2266,7 @@ def plan_group_refs(base: Path, ep: str, gid: str, idx: dict | None = None, epis
                            'stale': camera_stale(p.get('camera'), current.get((shot_id, p['role']))) if current else False,
                            'view': p.get('view') or {}, 'in_frame': ex.get('in_frame') or [], 'out_of_frame': ex.get('out_of_frame') or [],
                            'backdrop': ex.get('backdrop') or '', 'centre': ex.get('centre') or [],
+                           'adopt': p.get('adopt'), 'exclude_note': p.get('exclude_note'),
                            'layers': {k2: layers.get(k2) for k2 in ('fg', 'mg', 'bg') if layers.get(k2)} if p['role'] == 'start' else {}})
     return {'plates': plates, 'missing': missing, 'group': raw, 'openings_zh': openings_zh, 'openings_en': openings_en,
             'layer_drops': layer_drops}
@@ -2456,6 +2457,82 @@ def scene_labels(plates: list) -> dict:
     return labels
 
 
+
+# ---------------------------------------------------------------- 逐图采用口径(2026-10-05,#113)
+# 集索引单图条目可选字段:adopt = 采用项子集(缺省四项全采),exclude_note = 追加的不采用说明(用户手工换图/截图后收窄口径,
+# 如「不采用右侧海面」);各口径的采用句按字段生成,缺省回落固定文案,--write 幂等;写入走 code/plate_adopt.py 或预览页。
+ADOPT_ITEMS = (('layout', '空间布局', 'spatial layout'), ('architecture', '建筑', 'architecture'),
+               ('materials', '材质', 'materials'), ('lighting', '光线', 'lighting'))
+_ADOPT_ALIASES = {'light': 'lighting', 'material': 'materials', 'space': 'layout', 'spatial_layout': 'layout',
+                  '空间布局': 'layout', '布局': 'layout', '建筑': 'architecture', '材质': 'materials', '光线': 'lighting', '光照': 'lighting'}
+
+
+def normalize_adopt(items) -> list | None:
+    """采用项归一成 ADOPT_ITEMS 的键(保持规范顺序);None/空/全采 → None(= 缺省)。认不出的项抛 ValueError。"""
+    if items is None:
+        return None
+    if isinstance(items, str):
+        items = [x for x in re.split(r'[,，、;；\s]+', items) if x]
+    keys = []
+    for it in items:
+        k = _ADOPT_ALIASES.get(str(it).strip().lower(), str(it).strip().lower())
+        if k not in {a for a, _, _ in ADOPT_ITEMS}:
+            raise ValueError(f'未知采用项 {it!r}(可选:{", ".join(a for a, _, _ in ADOPT_ITEMS)})')
+        if k not in keys:
+            keys.append(k)
+    keys = [a for a, _, _ in ADOPT_ITEMS if a in keys]
+    return None if not keys or len(keys) == len(ADOPT_ITEMS) else keys
+
+
+def adopt_custom(p: dict) -> bool:
+    return bool(p.get('adopt')) or bool(str(p.get('exclude_note') or '').strip())
+
+
+def adopt_clause_zh(p: dict) -> str:
+    """「只采用空间布局、建筑、材质和光线，不采用图中任何人物，…」:按 adopt / exclude_note 生成,缺省固定文案。"""
+    keys = normalize_adopt(p.get('adopt')) or [a for a, _, _ in ADOPT_ITEMS]
+    take = [zh for a, zh, _ in ADOPT_ITEMS if a in keys]
+    drop = [zh for a, zh, _ in ADOPT_ITEMS if a not in keys]
+    text = '只采用' + ('、'.join(take[:-1]) + '和' + take[-1] if len(take) > 1 else take[0])
+    if drop:
+        text += '，不采用图中的' + '、'.join(drop)
+    text += '，不采用图中任何人物，不得凭空添加图中没有的陈设，尤其不得添加图中没有的窗户、门洞与家具。'
+    note = str(p.get('exclude_note') or '').strip()
+    if note:
+        text += '另：' + note.rstrip('。.;；') + '。'
+    return text
+
+
+def adopt_clause_en(p: dict) -> str:
+    """英文版采用句(build_block_v25_en);以 '. ' 收尾。"""
+    keys = normalize_adopt(p.get('adopt')) or [a for a, _, _ in ADOPT_ITEMS]
+    take = [en for a, _, en in ADOPT_ITEMS if a in keys]
+    drop = [en for a, _, en in ADOPT_ITEMS if a not in keys]
+    text = 'use only its ' + (', '.join(take[:-1]) + ' and ' + take[-1] if len(take) > 1 else take[0])
+    if drop:
+        text += '; do not take its ' + ' or '.join(drop) + ' from the plate'
+    text += '; do not use any person in the image; never invent set dressing that is not in the plate, especially windows, doorways and furniture. '
+    note = str(p.get('exclude_note') or '').strip()
+    if note:
+        text += 'Also: ' + note.rstrip('。.;；') + '. '
+    return text
+
+
+def adopt_tail_en(p: dict) -> str:
+    """H3 / 2.0 口径在固定说明后追加的收窄句(缺省空串,保持存量文案不变)。"""
+    if not adopt_custom(p):
+        return ''
+    keys = normalize_adopt(p.get('adopt')) or [a for a, _, _ in ADOPT_ITEMS]
+    drop = [en for a, _, en in ADOPT_ITEMS if a not in keys]
+    parts = []
+    if drop:
+        parts.append('do not take its ' + ' or '.join(drop) + ' from the plate')
+    note = str(p.get('exclude_note') or '').strip()
+    if note:
+        parts.append(note.rstrip('。.;；'))
+    return ''.join(', ' + x for x in parts)
+
+
 def build_block_v25(plates: list, openings_zh: str = '') -> str:
     """Seedance 2.5 口径:按官方规范把背景图定义成独立场景槽位(【场景】分组),逐镜激活由 Shot 段的「场景激活：」句承担。
     每个槽位写明本镜在母图里的位置(view_phrase_zh);夜间方案附洞口暗面句(openings_zh)。"""
@@ -2468,7 +2545,7 @@ def build_block_v25(plates: list, openings_zh: str = '') -> str:
         seen.add(p['file'])
         users = [f"Shot {q['shot_no']}" + ('落幅' if q['role'] == 'end' else '') for q in plates if q['file'] == p['file']]
         lines.append(f"场景{labels[p['file']]}（{'、'.join(users)} 的机位，空场景 background plate）参考 [Image {p['index']}]，"
-                     f"{view_phrase_zh(p)}：只采用空间布局、建筑、材质和光线，不采用图中任何人物，不得凭空添加图中没有的陈设，尤其不得添加图中没有的窗户、门洞与家具。")
+                     f"{view_phrase_zh(p)}：{adopt_clause_zh(p)}")
     return (BLOCK_KEY + ' 【场景】' + ''.join(lines)
             + '各场景只在点名的镜头里激活；同一地点的不同机位是不同场景槽位，不得合并、不得把一个镜头的场景带进另一个镜头。'
             + (_zh(openings_zh) + '。' if openings_zh else '')
@@ -2486,8 +2563,7 @@ def build_block_v25_en(plates: list, openings_en: str = '') -> str:
         seen.add(p['file'])
         users = [f"Shot {q['shot_no']}" + (' end' if q['role'] == 'end' else '') for q in plates if q['file'] == p['file']]
         lines.append(f"Scene {labels[p['file']]} (camera position of {', '.join(users)}; empty background plate) reference [Image {p['index']}], "
-                     f"{view_phrase_en(p)}: use only its spatial layout, architecture, materials and lighting; do not use any person in the image; "
-                     "never invent set dressing that is not in the plate, especially windows, doorways and furniture. ")
+                     f"{view_phrase_en(p)}: {adopt_clause_en(p)}")
     return (BLOCK_KEY + ' 【Scene】' + ''.join(lines)
             + 'Each scene is activated only in the shots that name it; different camera positions of the same location are separate scene slots — '
               'never merge them or carry one shot\'s scene into another. '
@@ -2531,7 +2607,7 @@ def build_block_h3(plates: list, openings_en: str = '') -> str:
         role = 'end-of-move composition anchor' if p['role'] == 'end' else 'composition anchor'
         parts.append(f"<Picture {n}> ([Image {n}]) is the empty background plate and {role} of [Shot {p['shot_no']}], photographed from "
                      f"that shot's camera position with nobody in it — {view_phrase_en(p)}; reference for architecture, "
-                     f"set dressing, lighting and camera space only, never invent set elements (windows, doorways, furniture) that are not in the plate")
+                     f"set dressing, lighting and camera space only, never invent set elements (windows, doorways, furniture) that are not in the plate{adopt_tail_en(p)}")
     return (BLOCK_KEY + ' ' + '; '.join(parts) + '. Each shot follows only its own plate for its set. ' + (openings_en + ' ' if openings_en else '')
             + 'The plates are set references, never frames to hold on — keep the framing, subjects and actions described in each shot.')
 
@@ -2566,7 +2642,7 @@ def build_block(plates: list, openings_en: str = '') -> str:
                          + (" (start plate, where the camera move begins)" if two else '')
                          + f", photographed from that shot's camera position with nobody in it — {view_phrase_en(p)}: "
                            "keep its place, walls, furniture, materials, camera height and lighting, frame it as the Shot describes, never invent "
-                           "set elements (windows, doorways, furniture) that are not in the plate, then add the characters"
+                           "set elements (windows, doorways, furniture) that are not in the plate, then add the characters" + adopt_tail_en(p)
                          + ((' — ' + shot_extras_en(p).rstrip('.')) if shot_extras_en(p) else ''))
         else:
             parts.append(f"[Image {n}] is the end plate of Shot {p['shot_no']} (where the camera move ends); the shot travels from a "
@@ -2692,6 +2768,8 @@ def check_prompt(prompt: dict, plan: dict, gid: str, strict: bool = False, v25: 
                 errs.append(f"{gid}/{p['shot_id']}: Shot {p['shot_no']} 段缺「Plate anchor: … <Picture {n}>」句(H3 逐镜构图锚;跑 --write)")
         elif not re.search(r'\[Image\s*%d\][^.;]*(background plate|end plate)' % n, block):
             errs.append(f"{gid}/{p['shot_id']}: {BLOCK_KEY} 段缺 [Image {n}] 的 {p['role']} 背景图说明句")
+        if adopt_custom(p) and block and not any(x and x in block for x in (adopt_clause_zh(p), adopt_clause_en(p).strip(), adopt_tail_en(p))):
+            warns.append(f"{gid}/{p['shot_id']}: {p['role']} 背景图的采用口径(adopt / exclude_note)尚未写进 {BLOCK_KEY} 段(跑 code/sync_shot_plates.py --write)")
         if p.get('stale'):
             warns.append(f"{gid}/{p['shot_id']}: {p['role']} 背景图机位与当前白模不一致(白模重调度后过期),重跑 code/render_shot_plates.py")
     if BLOCK_KEY not in vp:
@@ -2855,6 +2933,49 @@ def swap_shot_plate(base: Path, ep: str, shot_id: str, role: str, key: str) -> d
             sync = {'group_id': gid, 'errors': [f'sync 失败:{e}'], 'warnings': [], 'updated': False}
     return {'ep': ep, 'shot_id': shot_id, 'scene_id': sid, 'group_id': gid, 'role': role, 'key': key, 'file': entry['file'],
             'previous': prev, 'sync': sync}
+
+
+# ---------------------------------------------------------------- 写逐图采用口径(2026-10-05,#113;code/plate_adopt.py / 预览页)
+def set_plate_adopt(base: Path, ep: str, shot_id: str, role: str, *, adopt=None, exclude_note=None, clear: bool = False) -> dict:
+    """改本镜 role 条目的 adopt / exclude_note(None = 不动该字段;clear=True 两项都删),存集索引并 sync --write 本组。
+    返回 {ep, shot_id, group_id, role, adopt, exclude_note, sync}。找不到镜/角色抛 ValueError。"""
+    ep, shot_id = component(ep), component(shot_id)
+    role = str(role or 'start').strip().lower()
+    if role not in ('start', 'end'):
+        raise ValueError('role 只能是 start 或 end')
+    idx = load_episode_index(base, ep)
+    rec = idx['shots'].get(shot_id)
+    if not isinstance(rec, dict) or not rec.get('plates'):
+        raise ValueError(f'{ep}/{shot_id} 还没有分镜背景图记录(directing/{ep}/shot_plates.json)')
+    slot = next((p for p in rec['plates'] if isinstance(p, dict) and p.get('role') == role), None)
+    if slot is None:
+        raise ValueError(f'{ep}/{shot_id} 没有 {role} 背景图条目')
+    if clear:
+        slot.pop('adopt', None); slot.pop('exclude_note', None)
+    else:
+        if adopt is not None:
+            keys = normalize_adopt(adopt)
+            if keys:
+                slot['adopt'] = keys
+            else:
+                slot.pop('adopt', None)
+        if exclude_note is not None:
+            note = str(exclude_note).strip()
+            if note:
+                slot['exclude_note'] = note
+            else:
+                slot.pop('exclude_note', None)
+    rec['written_at'] = dt.datetime.now().isoformat(timespec='seconds')
+    save_episode_index(base, ep, idx)
+    gid = rec.get('group_id')
+    sync = None
+    if gid:
+        try:
+            sync = sync_group(base, ep, gid, write=True)
+        except Exception as e:  # noqa: BLE001
+            sync = {'group_id': gid, 'errors': [f'sync 失败:{e}'], 'warnings': [], 'updated': False}
+    return {'ep': ep, 'shot_id': shot_id, 'group_id': gid, 'role': role, 'adopt': slot.get('adopt'),
+            'exclude_note': slot.get('exclude_note'), 'sync': sync}
 
 
 # ---------------------------------------------------------------- 按修改意见重出一张(2026-09-26,分镜预览「✏️ 修改」→ 修改师)
