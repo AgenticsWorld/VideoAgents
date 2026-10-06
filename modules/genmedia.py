@@ -65,9 +65,12 @@ CLI:
       [--voice <音色;仅云渠道,旁白缺省用配置页默认音色>] \
       [--speed 1.0] [--instructions "<语气/情绪指令>"] [--dry-run]
 
+  python3 modules/genmedia.py sfx --prompt "<英文声音描述>" --output hit.wav \
+      [--duration 1.5] [--loop] [--count 1-4] [--provider elevenlabs|fal] [--dry-run]
+
 Python:
   from modules.genmedia import generate_image, generate_video, generate_upscale, \
-      generate_music, generate_tts, get_config
+      generate_music, generate_sfx, generate_tts, get_config
 
 渠道:
   图像: agentics(登录账号 + 后端 profile) / openrouter(chat completions, modalities=image)
@@ -107,6 +110,10 @@ Python:
         / minimax(POST /v1/music_generation,Music 3.0/2.6;仅 .mp3/.wav,--duration 忽略;
         force_instrumental 由「生成模型」页配置,默认纯音乐,关闭时按 prompt 自动写词演唱)
         / comfyui(本地/云端,需配置 API 格式工作流 JSON;推荐 ACE-Step,见 comfy/music-ace-step-v1-api.md)
+  音效: ElevenLabs Sound Effects v2,无独立配置段——elevenlabs(直连 POST /v1/sound-generation,用音乐 / TTS 段的
+        ElevenLabs Key;时长 0.5–30s)/ fal(托管端点 fal-ai/elevenlabs/sound-effects/v2,用图像 / 视频段的 Fal Key;
+        时长 0.5–22s、描述 ≤450 字符);有 ElevenLabs Key 走直连,否则 Fal。--loop 出可无缝循环床音;非循环音
+        自动裁首尾静音并峰值归一到 -3 dBFS(需 ffmpeg)
   TTS : 每个渠道有语音模式(2026-10-02,modules/voice_library.py):音色设计=Voice Design 模型按声纹卡描述出嗓音样本、
         Voice Clone 模型拿样本当参考出对白/旁白;音色库=从音色库给每个人物选音色(登记 casting.json)再合成。音色库不在
         界面设置,宿主自动拉取,候选见 `voices` 子命令;不带人物也没给音色的调用自动取旁白型音色。
@@ -5932,6 +5939,162 @@ def _music_comfyui(cfg, prompt, output, duration_s=None):
     return _comfy_run(base, wf, output, want_video=False, headers=hdrs)
 
 
+# ---------------- 音效:ElevenLabs Sound Effects v2(直连 / Fal 托管) ----------------
+# 2026-10-06:缺陷单兜底贴片(09-audio/sound-effect 单条音效、09-audio/ambience 可循环床音)的生成入口。
+# 没有独立的配置段:直连用音乐 / TTS 段已填的 ElevenLabs Key,Fal 托管用图像 / 视频段已填的 Fal Key。
+#   直连 POST /v1/sound-generation?output_format=…  body {text, model_id, duration_seconds?, prompt_influence, loop}
+#        → 音频字节流;duration_seconds 0.5–30
+#   Fal  fal-ai/elevenlabs/sound-effects/v2(队列)  body {text≤450, duration_seconds? 0.5–22, prompt_influence,
+#        output_format, loop} → audio.url
+# 两边都固定取 mp3_44100_128(各档账号都可用),再用 ffmpeg 转成 --output 扩展名的格式。
+# 后处理(非循环):裁掉首尾静音(中间的停顿不动,如三下敲门的间隔)+ 峰值归一到 -3 dBFS(与 modules/audiodsp.py
+# normalize_peak 同口径;成片电平由混音工位定)。循环床音不裁不调,保住首尾接缝。
+
+SFX_PROVIDERS = ("elevenlabs", "fal")
+SFX_FAL_ENDPOINT = "fal-ai/elevenlabs/sound-effects/v2"
+SFX_EL_MODEL = "eleven_text_to_sound_v2"
+SFX_SOURCE_FORMAT = "mp3_44100_128"
+SFX_FORMATS = (".wav", ".mp3", ".flac", ".opus")
+SFX_MAX_DURATION = {"elevenlabs": 30.0, "fal": 22.0}
+SFX_MIN_DURATION = 0.5
+SFX_FAL_MAX_PROMPT = 450
+SFX_MAX_COUNT = 4
+SFX_TIMEOUT = 300
+SFX_SILENCE_DB = -45.0       # 低于此电平算静音
+SFX_SILENCE_MIN_S = 0.03     # 短于此的静音不算
+SFX_TAIL_KEEP_S = 0.02       # 裁尾时留一点余量,不切在衰减尾音上
+SFX_PEAK_DBFS = -3.0
+SFX_SAMPLE_RATE = 48000      # 后处理产物统一采样率(同 modules/audiodsp.py SR)
+
+
+def _sfx_config(provider: str = "") -> dict:
+    """音效渠道与 Key:provider 为空时自动选——配置里有 ElevenLabs Key 走直连,否则有 Fal Key 走 Fal 托管。"""
+    provider = (provider or "").strip().lower()
+    if provider and provider not in SFX_PROVIDERS:
+        raise RuntimeError(f"音效渠道无效: {provider}(可选 {' / '.join(SFX_PROVIDERS)})")
+    try:
+        raw = json.loads(CONFIG_PATH.read_text())
+    except Exception:
+        raw = {}
+
+    def key_of(name: str, kinds: tuple) -> str:
+        for kind in kinds:
+            seg = (raw.get(kind) or {}).get(name)
+            key = str((seg or {}).get("api_key") or "").strip() if isinstance(seg, dict) else ""
+            if key:
+                return key
+        return os.environ.get(ENV_KEYS[name], "").strip()
+
+    keys = {"elevenlabs": key_of("elevenlabs", ("music", "tts")),
+            "fal": key_of("fal", ("image", "video"))}
+    chosen = provider or next((p for p in SFX_PROVIDERS if keys[p]), "")
+    if not chosen or not keys[chosen]:
+        where = {"elevenlabs": f"「🎨 生成模型」页音乐或 TTS 的 ElevenLabs 标签页(或环境变量 {ENV_KEYS['elevenlabs']})",
+                 "fal": f"「🎨 生成模型」页图像或视频的 Fal 标签页(或环境变量 {ENV_KEYS['fal']})"}
+        need = where[chosen] if chosen else ";或 ".join(where[p] for p in SFX_PROVIDERS)
+        raise RuntimeError(f"音效生成未找到可用的 API Key:请在{need}填入")
+    return {"provider": chosen, "api_key": keys[chosen],
+            "model": SFX_EL_MODEL if chosen == "elevenlabs" else SFX_FAL_ENDPOINT}
+
+
+def _sfx_outputs(output: str, count: int) -> list[str]:
+    """--count N 的各候选输出路径:1 条用原名,多条为 <名>_1…_N。"""
+    p = Path(output)
+    return [output] if count == 1 else [str(p.with_name(f"{p.stem}_{i}{p.suffix}")) for i in range(1, count + 1)]
+
+
+def _sfx_fetch_elevenlabs(cfg, prompt, duration_s, loop, influence, label) -> bytes:
+    body = {"text": prompt, "model_id": cfg["model"], "prompt_influence": influence, "loop": bool(loop)}
+    if duration_s:
+        body["duration_seconds"] = duration_s
+    data = _request(f"https://api.elevenlabs.io/v1/sound-generation?output_format={SFX_SOURCE_FORMAT}",
+                    json.dumps(body).encode(),
+                    {"Content-Type": "application/json", "xi-api-key": cfg["api_key"]},
+                    timeout=SFX_TIMEOUT)
+    if not data:
+        raise RuntimeError("ElevenLabs 音效返回空音频")
+    if data[:1] == b"{":
+        raise RuntimeError(f"ElevenLabs 音效生成失败:{data.decode('utf-8', 'replace')[:400]}")
+    return data
+
+
+def _sfx_fetch_fal(cfg, prompt, duration_s, loop, influence, label) -> bytes:
+    body = {"text": prompt, "prompt_influence": influence, "loop": bool(loop),
+            "output_format": SFX_SOURCE_FORMAT}
+    if duration_s:
+        body["duration_seconds"] = duration_s
+    res = _fal_queue_run(cfg, SFX_FAL_ENDPOINT, body, SFX_TIMEOUT, label, kind="音效", poll=3)
+    audio = res.get("audio")
+    url = audio.get("url") if isinstance(audio, dict) else ""
+    if not url:
+        raise RuntimeError(f"Fal 音效任务成功但无音频 URL:{json.dumps(res, ensure_ascii=False)[:400]}")
+    return _decode_data_url(url)
+
+
+def _sfx_ffmpeg(args: list[str], what: str) -> str:
+    """跑 ffmpeg 并返回 stderr(测量类滤镜的读数在 stderr);失败抛错。"""
+    try:
+        r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-nostats", *args],
+                           capture_output=True, text=True, timeout=120)
+    except FileNotFoundError as e:
+        raise RuntimeError("音效后处理需要 ffmpeg,未在 PATH 中找到") from e
+    if r.returncode != 0:
+        raise RuntimeError(f"ffmpeg {what}失败:{r.stderr.strip()[-400:]}")
+    return r.stderr
+
+
+def _sfx_analyze(path: str) -> dict:
+    """实测时长、峰值 / 平均电平、首尾静音长度(秒)。"""
+    duration = _audio_duration_s(path)
+    err = _sfx_ffmpeg(["-i", path, "-af",
+                       f"silencedetect=noise={SFX_SILENCE_DB}dB:d={SFX_SILENCE_MIN_S},volumedetect",
+                       "-f", "null", "-"], "测量")
+
+    def db(name: str):
+        m = re.search(name + r":\s*(-?(?:[0-9.]+|inf))\s*dB", err)
+        return None if not m or "inf" in m.group(1) else float(m.group(1))
+
+    starts = [float(x) for x in re.findall(r"silence_start:\s*(-?[0-9.]+)", err)]
+    ends = [float(x) for x in re.findall(r"silence_end:\s*(-?[0-9.]+)", err)]
+    lead = trail = 0.0
+    if duration:
+        if starts and starts[0] <= 0.05:
+            lead = ends[0] if ends else duration          # 没有 silence_end = 全程静音
+        if len(starts) > len(ends):                       # 最后一段静音一直到文件末尾,未闭合
+            trail = duration - starts[-1]
+        elif ends and duration - ends[-1] <= 0.05:
+            trail = duration - starts[len(ends) - 1]
+    return {"duration_s": round(duration, 3) if duration else None,
+            "peak_db": db("max_volume"), "mean_db": db("mean_volume"),
+            "leading_silence_s": round(max(0.0, lead), 3), "trailing_silence_s": round(max(0.0, trail), 3)}
+
+
+def _sfx_finish(src: str, output: str, loop: bool, postprocess: bool) -> dict:
+    """把渠道返回的 mp3 落成 output:循环音只转格式;非循环音裁首尾静音 + 峰值归一。返回处理记录。"""
+    ext = Path(output).suffix.lower()
+    if loop or not postprocess:
+        if ext == ".mp3":
+            Path(output).write_bytes(Path(src).read_bytes())    # 原样落盘,不重编码
+        else:
+            _sfx_ffmpeg(["-y", "-i", src, output], "转格式")
+        return {"postprocessed": False,
+                "reason": "循环音不裁不调,保住首尾接缝" if loop else "已用 --no-postprocess 关闭",
+                "after": _sfx_analyze(output)}
+    before = _sfx_analyze(src)
+    dur = before["duration_s"] or 0.0
+    start = before["leading_silence_s"]
+    end = dur - max(0.0, before["trailing_silence_s"] - SFX_TAIL_KEEP_S)
+    if before["peak_db"] is None or end - start < 0.05:
+        raise RuntimeError("生成的音效几乎全程静音(峰值读不到或裁完不足 0.05 s),请改描述重出")
+    gain = round(SFX_PEAK_DBFS - before["peak_db"], 2)
+    filters = f"atrim=start={start:.3f}:end={end:.3f},asetpts=PTS-STARTPTS,volume={gain}dB"
+    _sfx_ffmpeg(["-y", "-i", src, "-af", filters, "-ar", str(SFX_SAMPLE_RATE), output], "后处理")
+    after = _sfx_analyze(output)
+    return {"postprocessed": True, "filters": filters, "gain_db": gain,
+            "trimmed_s": {"leading": start, "trailing": round(dur - end, 3)},
+            "before": before, "after": after}
+
+
 # ---------------- TTS 旁白:OpenRouter(/api/v1/audio/speech) ----------------
 # OpenAI 兼容 Speech 接口:POST 后直接返回原始音频字节流(非 JSON)。
 # response_format 仅 mp3 / pcm;OpenAI 系模型可经 provider.options.openai.instructions
@@ -7063,6 +7226,62 @@ def generate_music(prompt: str, output: str, duration_s: float | None = None,
     return _music_openrouter(cfg, prompt, output)
 
 
+def generate_sfx(prompt: str, output: str, duration_s: float | None = None, loop: bool = False,
+                 count: int = 1, prompt_influence: float = 0.3, postprocess: bool = True,
+                 provider: str = "") -> list[str]:
+    """生成音效 / 环境床音(ElevenLabs Sound Effects v2),返回保存的绝对路径列表(count 条候选)。
+
+    渠道自动选:配置里有 ElevenLabs Key 走直连,否则走 Fal 托管;provider 可显式指定。
+    输出格式按 output 扩展名(.wav/.mp3/.flac/.opus)。loop=True 出可无缝循环的床音(不做后处理);
+    否则裁掉首尾静音并把峰值归一到 -3 dBFS。每条产物同名 .meta.json 的 sfx 段记来源、提示词与实测数据。"""
+    _forbid_dispatch_layer("音效")
+    prompt = (prompt or "").strip()
+    if not prompt:
+        raise RuntimeError("音效生成需要 --prompt(英文声音描述)")
+    ext = Path(output).suffix.lower()
+    if ext not in SFX_FORMATS:
+        raise RuntimeError(f"音效输出仅支持 {' / '.join(SFX_FORMATS)} 扩展名,收到 {ext or '(无)'}")
+    if not 1 <= int(count) <= SFX_MAX_COUNT:
+        raise RuntimeError(f"--count 须在 1–{SFX_MAX_COUNT} 之间")
+    if not 0 <= float(prompt_influence) <= 1:
+        raise RuntimeError("--prompt-influence 须在 0–1 之间")
+    cfg = _sfx_config(provider)
+    hi = SFX_MAX_DURATION[cfg["provider"]]
+    if duration_s is not None and not SFX_MIN_DURATION <= float(duration_s) <= hi:
+        raise RuntimeError(f"--duration 须在 {SFX_MIN_DURATION}–{hi:g} 秒之间(渠道 {cfg['provider']})")
+    if cfg["provider"] == "fal" and len(prompt) > SFX_FAL_MAX_PROMPT:
+        raise RuntimeError(f"Fal 音效描述上限 {SFX_FAL_MAX_PROMPT} 字符,当前 {len(prompt)}")
+    needs_ffmpeg = ext != ".mp3" or (postprocess and not loop)
+    if needs_ffmpeg:
+        _sfx_ffmpeg(["-version"], "自检")     # 先确认 ffmpeg 可用,再发计费请求
+    fetch = _sfx_fetch_elevenlabs if cfg["provider"] == "elevenlabs" else _sfx_fetch_fal
+    source = ("ElevenLabs Sound Effects v2(AI 生成)· " +
+              ("ElevenLabs 直连" if cfg["provider"] == "elevenlabs" else f"Fal 托管 {SFX_FAL_ENDPOINT}"))
+    saved = []
+    for out in _sfx_outputs(output, int(count)):
+        p = Path(out) if Path(out).is_absolute() else Path.cwd() / out
+        p.parent.mkdir(parents=True, exist_ok=True)
+        data = fetch(cfg, prompt, duration_s, loop, float(prompt_influence), p.name)
+        src = p.with_name(f".{p.name}.src.mp3")
+        src.write_bytes(data)
+        try:
+            analysis = _sfx_finish(str(src), str(p), loop, postprocess)
+        finally:
+            src.unlink(missing_ok=True)
+        after = analysis["after"]
+        _merge_meta(str(p), "sfx", {
+            "provider": cfg["provider"], "model": cfg["model"], "license_source": source,
+            "prompt": prompt, "loop": bool(loop), "requested_duration_s": duration_s,
+            "prompt_influence": float(prompt_influence),
+            "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"), "audio": analysis})
+        print(f"[genmedia] 音效 {p.name}:{after['duration_s']}s 峰值 {after['peak_db']} dB"
+              + (f",裁掉首 {analysis['trimmed_s']['leading']}s / 尾 {analysis['trimmed_s']['trailing']}s"
+                 if analysis.get("postprocessed") else "(未做后处理)"),
+              file=sys.stderr, flush=True)
+        saved.append(str(p))
+    return saved
+
+
 # ---------------- CLI ----------------
 
 def _check_id_digits(*paths):
@@ -7329,6 +7548,20 @@ def _cmd_music(args):
     print(f"已生成: {out}")
 
 
+def _cmd_sfx(args):
+    _check_id_digits(args.output)
+    if args.dry_run:
+        cfg = _sfx_config(args.provider)
+        outs = _sfx_outputs(args.output, args.count)
+        print(f"[dry-run] sfx via {cfg['provider']} model={cfg['model']}"
+              f" loop={'on' if args.loop else 'off'} duration={args.duration or 'auto'}"
+              f" postprocess={'off' if (args.loop or args.no_postprocess) else 'on'} → {', '.join(outs)}")
+        return
+    for out in generate_sfx(args.prompt, args.output, args.duration, args.loop, args.count,
+                            args.prompt_influence, not args.no_postprocess, args.provider):
+        print(f"已生成: {out}")
+
+
 def _cmd_upload(args):
     """上传本地文件到对象存储,stdout 只打印预签名 URL(供 core/脚本捕获)。"""
     print(_storage_upload_url(args.input))
@@ -7544,11 +7777,27 @@ def main():
                     help="歌词(AgenticsLLM profile 支持时提交；省略按纯音乐 [Instrumental])")
     pm.add_argument("--dry-run", action="store_true")
 
+    ps = sub.add_parser("sfx", help="生成音效 / 环境床音(ElevenLabs Sound Effects v2;缺陷单兜底贴片用)")
+    ps.add_argument("--prompt", required=True, help="英文声音描述:声源 / 材质 / 空间感(Fal 托管上限 450 字符);不写音乐与人声")
+    ps.add_argument("--output", required=True, help="输出音频路径(.wav/.mp3/.flac/.opus);--count>1 时为 <名>_1…_N")
+    ps.add_argument("--duration", type=float, default=None,
+                    help="时长秒(直连 0.5–30,Fal 托管 0.5–22;省略=模型按描述自定)")
+    ps.add_argument("--loop", action="store_true",
+                    help="出可无缝循环的床音(环境声用);循环音不做裁静音 / 归一")
+    ps.add_argument("--count", type=int, default=1, help=f"候选条数 1–{SFX_MAX_COUNT}(每条单独计费,默认 1)")
+    ps.add_argument("--prompt-influence", type=float, default=0.3,
+                    help="贴合描述的程度 0–1(越高越贴描述、各条越相似,默认 0.3)")
+    ps.add_argument("--no-postprocess", action="store_true", help="不裁首尾静音、不做峰值归一(只转格式)")
+    ps.add_argument("--provider", default="", choices=("", *SFX_PROVIDERS),
+                    help="渠道:elevenlabs=直连 / fal=Fal 托管;省略=有 ElevenLabs Key 走直连,否则 Fal")
+    ps.add_argument("--dry-run", action="store_true")
+
     args = ap.parse_args()
     try:
         {"info": _cmd_info, "image": _cmd_image, "video": _cmd_video,
          "reclaim": _cmd_reclaim, "upscale": _cmd_upscale, "music": _cmd_music,
-         "tts": _cmd_tts, "voices": _cmd_voices, "upload": _cmd_upload}[args.cmd](args)
+         "tts": _cmd_tts, "voices": _cmd_voices, "upload": _cmd_upload,
+         "sfx": _cmd_sfx}[args.cmd](args)
     except RuntimeError as e:
         print(f"生成失败: {e}", file=sys.stderr)
         sys.exit(1)

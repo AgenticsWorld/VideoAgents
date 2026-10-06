@@ -15,7 +15,7 @@
 2. 为每个事件点写**音效描述 cue**:声音材质与场景匹配(石板路脚步 ≠ 木地板脚步),招式类音色风格与全片气质统一;描述要具体可听("heavy iron door creaks open, echoing"而非"door sound"),但不写时间戳数字进 cue 文本(模型对精确时间支持不稳定,时点靠所在镜的动作描述带出)。
 3. 逐镜归档:每条 cue 挂镜头 ID 与触发动作(与 blocking 节拍对应),写入 `audio_cues.json`。
 4. 保证关键动作(剧情动作、blocking 明确节拍)cue 覆盖率 ≥90%,未覆盖项逐条附原因。
-5. **兜底素材(仅缺陷驱动)**:audio-qa 听审发现组视频漏做/做错某音效且重生成不划算时,按缺陷单为该事件补做单条音效 wav 交 audio-mixing 后期贴入——这是例外路径,不是默认产出。
+5. **兜底素材(仅缺陷驱动)**:audio-qa 听审发现组视频漏做/做错某音效且重生成不划算时,按缺陷单为该事件补做单条音效 wav 交 audio-mixing 后期贴入——这是例外路径,不是默认产出。补做只准用宿主 CLI `python3 modules/genmedia.py sfx --prompt "<英文声音描述>" --output assets/audio/sfx/epNN/patches/<镜号>_<事件>.wav [--duration <秒>]`(2026-10-06;不加 `--loop`;CLI 自动裁首尾静音并把峰值归一,来源写进同名 `.meta.json#sfx.license_source`);缺陷单没要求多条候选就不加 `--count`(每条单独计费);没有缺陷单不得调用本命令。
 
 ## 不做什么(边界)
 
@@ -40,7 +40,7 @@
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
 | 音效提示词清单 | `assets/audio/sfx/epNN/audio_cues.json` | 事件 ↔ 镜头 ID ↔ 音频描述(语言随界面语言,2026-08-24),供 prompt 逐字注入 |
-| 兜底音效素材(仅缺陷单) | `assets/audio/sfx/epNN/patches/` | wav,统一采样率与电平规范,记授权来源 |
+| 兜底音效素材(仅缺陷单) | `assets/audio/sfx/epNN/patches/` | wav(`genmedia.py sfx` 产出:48 kHz、峰值 -3 dBFS),授权来源见同名 `.meta.json#sfx.license_source` |
 
 关键字段/结构约定:
 ```json

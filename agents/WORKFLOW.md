@@ -1255,6 +1255,18 @@ python3 modules/genmedia.py music \
 # openrouter 时长由模型决定:Lyria 3 Pro 完整歌曲、Lyria 3 Clip 30s 片段/Loop;格式按扩展名
 # (openrouter:mp3/wav/flac/opus;elevenlabs:仅 mp3/opus,force_instrumental 由「生成模型」页配置,默认纯音乐)。
 
+# 音效 / 环境床音兜底贴片(2026-10-06;仅 sound-effect / ambience 接到缺陷单要求补做贴片时用,平时不跑——
+#          组视频的音效与环境声由视频模型随片生成,这条不是默认产出)
+python3 modules/genmedia.py sfx \
+  --prompt "<英文声音描述:声源/材质/空间感,不写音乐与人声>" \
+  --output assets/audio/sfx/ep01/patches/sh014_sword_clash.wav \
+  [--duration <秒>]                     # 直连 0.5–30、Fal 托管 0.5–22;省略=模型按描述自定
+  [--loop]                              # 环境床音:出可无缝循环的一段(写到 assets/audio/ambience/epNN/patches/)
+  [--count <1-4>]                       # 候选条数,每条单独计费;缺陷单没要求多条就用默认 1
+# ElevenLabs Sound Effects v2:配置里有 ElevenLabs Key(音乐 / TTS 段)走直连,否则用 Fal Key(图像 / 视频段)走托管端点。
+# 非循环音自动裁首尾静音并把峰值归一到 -3 dBFS(成片电平仍由 audio-mixing 定);循环音不裁不调。
+# 同名 .meta.json 的 sfx 段记来源(license_source)、提示词与实测时长 / 电平,copyright 终审按此核对。
+
 # TTS 干声(narrator 旁白后期轨、voice-generation 角色 voiceprint 样本——样本仅作 reference_audio 嗓音特点锚,严禁进成片对白,§8A 红线;
 #          角色音色先查项目级选角注册表 assets/audio/voice/casting.json,缺条目先登记,§8A;
 #          项目「对白配音=后期配音」时的对白逐句 TTS 不直接调本命令,统一走 code/dub_group.py(内部调 generate_tts 并按开口时段贴合,§8C))
