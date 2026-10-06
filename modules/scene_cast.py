@@ -111,14 +111,25 @@ def scene_reference_rows(base: Path, ep: str, source, contexts=None):
                 continue
             kind = 'creatures' if is_creature_id(cid) else 'characters'
             prefix = f'assets/concepts/{kind}/{cid}/'
-            costume = None
+            # 形态/分龄(#107,2026-10-05):组 form_by_char(shot_list 组优先,其次 prompt json)指定本组该人物取形态 sheet
+            # (如 sheet_age02.png / 魂体),命中则只挂这一张,不再按服装台账要求另一张(同组不叠挂)
+            form = None
             for i in peers:
                 peer = groups[i]; pd = prompts[peer['group_id']]
-                costume = (peer.get('costumes_by_char') or pd.get('costume_by_char') or {}).get(cid)
-                if costume:
+                form = (peer.get('form_by_char') or pd.get('form_by_char') or {}).get(cid)
+                if form:
                     break
+            costume = None
+            if not form:
+                for i in peers:
+                    peer = groups[i]; pd = prompts[peer['group_id']]
+                    costume = (peer.get('costumes_by_char') or pd.get('costume_by_char') or {}).get(cid)
+                    if costume:
+                        break
             candidates = []
-            if costume and kind == 'characters':
+            if form:
+                candidates.extend(prefix+f for f in form_sheet_names(form))
+            elif costume and kind == 'characters':
                 ledger = read_json(base/prefix/'costume_sheets.json', {})
                 sheet = next((r for r in ledger.get('sheets', []) if r.get('costume_ref') == costume), {})
                 if sheet.get('file'):
@@ -134,10 +145,22 @@ def scene_reference_rows(base: Path, ep: str, source, contexts=None):
                                       if isinstance(r, str) and r.startswith(prefix) and '/candidates/' not in r)
                 candidates.append(prefix+'sheet.png')
             ref = next((r for r in candidates if (base/r).is_file()), None)
-            rows.append({'id': cid, 'name': names.get(cid, cid), 'ref': ref, 'costume': costume,
-                         'missing': ref is None})
+            row = {'id': cid, 'name': names.get(cid, cid), 'ref': ref, 'costume': costume, 'missing': ref is None}
+            if form:
+                row['form'] = str(form)
+            rows.append(row)
         result[gid] = rows
     return result
+
+
+def form_sheet_names(form) -> list:
+    """form_by_char 的值 → 该人物目录下候选文件名(按序试):写了文件名就用它;写形态键 age02 → sheet_age02.png、age02.png。"""
+    v = str(form or '').strip().strip('/')
+    if not v:
+        return []
+    if re.search(r'\.(png|jpe?g|webp)$', v, re.I):
+        return [v]
+    return [f'sheet_{v}.png', f'{v}.png', f'sheet_{v}.jpg', f'{v}.jpg']
 
 
 _ACTOR_ID_RE = re.compile(r'(CHAR|CRE)-[A-Za-z0-9_-]+')
@@ -312,9 +335,15 @@ def check_prompt_cast(prompt, rows, presence=None):
                               "删去正文对该图的引用后运行 sync_scene_cast.py --write 移出")
             continue
         if row['missing']:
-            errors.append(f"scene_cast_ref: {row['id']} 缺少本场次身份/服装参考图")
+            errors.append(f"scene_cast_ref: {row['id']} 缺少本场次身份/服装参考图" + (f"(形态 {row['form']} 的 sheet 不存在)" if row.get('form') else ''))
         elif row['ref'] not in (prompt.get('refs') or []):
             errors.append(f"scene_cast_ref: 未关联在场人物 {row['id']} 的参考图 {row['ref']}")
+        elif row.get('form'):
+            # 形态取锚:同组只挂形态 sheet,服装 sheet / 默认 sheet 不叠挂(#107)
+            prefix = row['ref'].rsplit('/', 1)[0] + '/'
+            extra = [r for r in (prompt.get('refs') or []) if isinstance(r, str) and r.startswith(prefix) and r != row['ref'] and '/candidates/' not in r]
+            for r in extra:
+                errors.append(f"scene_cast_ref: {row['id']} 本组按形态 {row['form']} 取锚,{r} 不得与形态 sheet 叠挂(删去正文引用后运行 sync_scene_cast.py --write)")
     for cid, state in (presence or {}).items():
         if state.get('state') not in ('absent', 'remote'):
             continue
