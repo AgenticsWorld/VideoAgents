@@ -980,8 +980,9 @@ DEFAULT_GENCONFIG = {
     # 输出设置(设置菜单「输出设置」):画幅预设 youtube=16:9(默认)/douyin=9:16/cinema=电影宽银幕 2.35:1(按 21:9 档生成)/custom;
     # 语言约束剧本/台词/旁白/字幕/配音/发布物料;
     # 视频分辨率按用途分档:draft=草稿/迭代/待审版本,final=审核确认后的成片终稿;
-    # platforms=发布平台(可多选,可不选;空数组 = 不做分平台发布):只决定 Phase 11 发布目标与画幅矩阵/封面/字幕的平台清单,
-    #   主生产画幅仍由 aspect_preset 单选决定;与主画幅不同画幅的平台由 platform-adapter 发布期裁/补适配;
+    # platforms=发布渠道(2026-10-07 起在「🎞️ 成片发布」页勾选,输出设置/新建向导不再露;可多选,可不选;空数组 = 不做分平台发布):
+    #   只决定 Phase 11 发布目标与画幅矩阵/封面/字幕的平台清单,主生产画幅仍由 aspect_preset 单选决定;
+    #   与主画幅不同画幅的平台由 platform-adapter 发布期裁/补适配;成片发布页每个渠道一个「发布」按钮,派 12-publishing/publisher 走该渠道技能;
     # subtitle_burn_in=内嵌字幕(默认关):开启后成片终稿自动把 subtitles.srt 烧录进画面;
     # caption_enabled=花字(默认关):开启后 caption Agent 在关键节点设计花字+配套音效,
     #   超分后的终版组 clip 上烧录副本,另封装花字版成片 final_caption.mp4
@@ -1056,7 +1057,7 @@ DEFAULT_GENCONFIG = {
                #   由用户在场景预览页用全景图 / 世界模型视窗「💾 背景图」手工截取(render_shot_plates.py 退出码 5 [manual_plate_needed])
                "plate_mode": "grid",   # 2026-09-26 默认九宫格(含自动补图);界面露 grid / grid_manual,pano/world 仍受理但界面隐藏
                # (2026-09-08 废止 whitebox_top_video:白模只导出摄影机视角 camera.mp4,不再有俯视视频;存量 settings 里的该键忽略)
-               "platforms": ["youtube", "bilibili", "tiktok", "douyin"]},   # 小红书界面隐藏(2026-10-06),不进默认;存量项目已存的值仍受理
+               "platforms": ["youtube", "bilibili", "tiktok", "douyin"]},   # 仅供存量缺键项目回退;新建项目写空数组,渠道在成片发布页勾选(小红书 2026-10-07 回到可选清单,不进默认)
     # 审核设置(设置菜单「审核设置」):各维度审核力度 0-100(0=不审核 100=最严格),按项目独立;
     # 默认全 0=不审核(2026-07-23 由 60 改),用户在设置中调高才生效;
     # evaluation=质量评委(00-orchestration/evaluation)验收「必须照改」合格线,
@@ -1131,15 +1132,32 @@ CAPTION_AGENTS = {"10-editing/caption", "10-editing/edit",
                   "12-publishing/platform-adapter"} | DISPATCHERS | {REVISER_ID}   # 修改师代行时同样要看全量设定
 
 # 输出画幅预设:preset -> (比例, 名称);custom 走 aspect_custom(格式 宽:高)
-# 发布平台:key -> (名称, 默认画幅);「输出设置」发布平台多选,只驱动 Phase 11 发布目标与
-# aspect_ratio.json 平台矩阵/thumbnail 每平台封面/subtitle 每平台字幕的清单(展示顺序即此顺序);
-# 小红书界面隐藏(2026-10-06,后端仍受理存量值);默认画幅只供注入给 Agent 的平台说明用,界面不显示
+# 发布渠道:key -> (名称, 默认画幅);2026-10-07 起在「🎞️ 成片发布」页勾选(output.platforms,原「输出设置」发布平台多选已移走),
+# 只驱动 Phase 11 发布目标与 aspect_ratio.json 平台矩阵/thumbnail 每平台封面/subtitle 每平台字幕的清单(展示顺序即此顺序);
+# 小红书 2026-10-07 回到可选清单;默认画幅只供注入给 Agent 的平台说明用,界面不显示
 OUTPUT_PLATFORMS = {
     "youtube": ("YouTube", "16:9"),
     "bilibili": ("Bilibili", "16:9"),
     "tiktok": ("TikTok", "9:16"),
     "douyin": ("抖音", "9:16"),
     "xiaohongshu": ("小红书", "9:16"),
+}
+# 各渠道的发布执行技能(agents/12-publishing/publisher/skills/<dir>/SKILL.md,本机 Chrome CDP 半自动填草稿、用户亲手点发布);
+# 成片发布页「发布」按钮派单时写进工单,publisher 先读该文件再照做
+PUBLISHER_ID = "12-publishing/publisher"
+PUBLISH_PLATFORM_SKILLS = {
+    "youtube": "skill-youtube-cdp-draft",
+    "bilibili": "skill-bilibili-cdp-draft",
+    "tiktok": "skill-tiktok-cdp-draft",
+    "douyin": "skill-douyin-cdp-draft",
+    "xiaohongshu": "skill-xhs-cdp-draft",
+}
+# 发布回执 status → 成片发布页徽标(publisher SOUL 口径;其它值原样显示)
+PUBLISH_RECEIPT_STATUS = {
+    "draft_ready_pending_human": "草稿已填好,待人工提交",
+    "submitted_by_human": "已由人工提交",
+    "success": "发布成功",
+    "failed": "发布失败",
 }
 OUTPUT_LANGS = ("English", "中文", "日本語", "한국어", "Tiếng Việt", "Español",
                 "français", "Deutsch", "Indonesia", "Português", "русский", "عربي")
@@ -3312,11 +3330,11 @@ def build_role_prompt(agent_id: str, project: str,
                      "aspect_ratio.json 平台矩阵、thumbnail 每平台封面、subtitle 每平台字幕以此清单为准。"
                      f"主生产画幅仍是上面的 {aspect}(母版按此原生生成)"
                      + ("" if not cross else f";与母版画幅不同的平台【{cross}】由 platform-adapter 在发布期从母版裁/补适配,不重新生成视频(现架构单母版)"))
-    else:   # 输出设置里一个平台都没选(2026-10-06 起允许)
-        plat_line = ("未选(用户在「输出设置」没有勾选任何发布平台)—— **不做分平台发布**:"
+    else:   # 成片发布页一个渠道都没勾(2026-10-06 起允许;2026-10-07 选择入口由输出设置移到成片发布页)
+        plat_line = ("未选(用户在「🎞️ 成片发布」页没有勾选任何发布渠道)—— **不做分平台发布**:"
                      f"aspect_ratio.json 只列母版一条({aspect}),thumbnail / subtitle 只按母版出一份,"
                      "Phase 11 的 platform-adapter(p11-adapt)与 publisher 没有目标平台、不派单,seo / metadata 只出不分平台的一份;"
-                     "不得自行假定平台清单——用户之后在输出设置选了平台,再按所选平台补派")
+                     "不得自行假定平台清单——用户之后在成片发布页勾了渠道,再按所选渠道补派")
     dur = ps.get("duration") or {}
     brief = ""
     try:
@@ -10629,6 +10647,126 @@ def _ep_publish_info(base: Path, ep: str):
     return info
 
 
+def _ep_publish_receipt(base: Path, ep: str, platform: str) -> dict | None:
+    """publish/receipts/ 里本集 × 本渠道的最新回执(publisher SOUL:每集 × 每平台一条;
+    文件名不限,按内容 ep/platform 匹配,同时兼容 <ep>_<platform>*.json 命名)。"""
+    rdir = base / "publish" / "receipts"
+    if not rdir.is_dir():
+        return None
+    best, best_m = None, -1.0
+    for f in rdir.glob("*.json"):
+        j = _read_json_safe(f)
+        if not isinstance(j, dict):
+            continue
+        hit = (str(j.get("ep") or "") == ep and str(j.get("platform") or "") == platform) or \
+            f.name.lower().startswith(f"{ep}_{platform}".lower())
+        if not hit:
+            continue
+        m = f.stat().st_mtime
+        if m > best_m:
+            best_m, best = m, (j, f)
+    if best is None:
+        return None
+    j, f = best
+    st = str(j.get("status") or "")
+    return {"status": st, "label": PUBLISH_RECEIPT_STATUS.get(st, st), "file": f"publish/receipts/{f.name}",
+            "published_at": j.get("published_at"), "video_id": j.get("video_id"),
+            "attempt": j.get("attempt"), "updated_at": datetime.fromtimestamp(best_m).strftime("%Y-%m-%d %H:%M")}
+
+
+def _ep_publish_package_dir(base: Path, ep: str, platform: str) -> Path | None:
+    """本集 × 本渠道的发布包目录(platform-adapter 产物;项目级 publish/<platform>/package/<ep>/ 为规约,
+    兼容集级 publish/<ep>/<platform>/package/ 与单集项目 publish/<platform>/package/);含视频文件才算就绪。"""
+    cands = (base / "publish" / platform / "package" / ep,
+             base / "publish" / ep / platform / "package",
+             base / "publish" / platform / "package")
+    for d in cands:
+        if d.is_dir() and any(f.is_file() and f.suffix.lower() in VIDEO_EXTS for f in d.rglob("*")):
+            return d
+    return None
+
+
+def _ep_publish_channels(base: Path, ep: str) -> list[dict]:
+    """成片发布页「发布渠道」板块(2026-10-07,原输出设置「发布平台」多选移到这里):
+    全部可选渠道(OUTPUT_PLATFORMS 顺序)各一行——是否勾选(output.platforms)、发布技能、发布包是否就绪、最新回执。"""
+    cfg = load_project_settings(base.name)
+    sel = (cfg.get("output") or {}).get("platforms")
+    if not isinstance(sel, list):
+        sel = DEFAULT_GENCONFIG["output"]["platforms"]
+    rows = []
+    for key, (name, aspect) in OUTPUT_PLATFORMS.items():
+        pkg = _ep_publish_package_dir(base, ep, key)
+        rows.append({"key": key, "name": name, "aspect": aspect, "selected": key in sel,
+                     "skill": PUBLISH_PLATFORM_SKILLS.get(key),
+                     "package_ready": pkg is not None,
+                     "package_dir": pkg.relative_to(base).as_posix() if pkg else f"publish/{key}/package/{ep}",
+                     "receipt": _ep_publish_receipt(base, ep, key)})
+    return rows
+
+
+def publish_dispatch_message(project: str, ep: str, platform: str, package_ready: bool, finals: list[str]) -> str:
+    """成片发布页「发布到 <渠道>」按钮的工单正文(发给 12-publishing/publisher):
+    先读该渠道技能文档,按发布包 / 母版口径取素材,preflight 留痕,停在平台发布页由用户亲手提交,回执落 publish/receipts/。"""
+    name, aspect = OUTPUT_PLATFORMS[platform]
+    skill = PUBLISH_PLATFORM_SKILLS[platform]
+    pkg = f"publish/{platform}/package/{ep}/"
+    src = (f"发布包 {pkg} 已就绪,视频 / 封面 / 字幕以其 parts.json 为准"
+           if package_ready else
+           f"发布包 {pkg} 不存在(platform-adapter 未产包)——按技能文档的降级口径直接用母版成片:"
+           + ("、".join(f"edit/{ep}/{f}" for f in finals) if finals else f"edit/{ep}/final.mp4")
+           + f"(花字版 final_caption.mp4 存在时优先)+ edit/{ep}/thumbnail_*.png 封面;画幅与 {name} 默认 {aspect} 不同时不要自行裁切,原样上传并在回执注明未经 platform-adapter 适配")
+    return "\n".join([
+        f"请把 {ep} 发布到 {name}({platform})。先完整读 agents/12-publishing/publisher/skills/{skill}/SKILL.md 再照做;本单来自成片发布页「发布」按钮,只处理这一个渠道。",
+        f"- 素材:{src}。",
+        f"- 标题 / 简介 / 标签 / 元数据:取 publish/seo.json 与 publish/metadata.json 的本集({ep})条目(集级 publish/{ep}/ 下的同名文件优先);seo 的 picked 未定时按技能文档降级并在回执注明,不得自造标题。",
+        "- preflight 按 SOUL 逐项核验并留痕(H5 签字 / 发布包 lint / seo picked / metadata 必填);缺项不是拒发理由时照技能文档降级,是拒发理由时停手回报。",
+        "- 半自动红线:在本机 Chrome(专用 profile,CDP 9222)里填好草稿、截图给用户核对,停在平台发布页,永不代点「发布 / 投稿 / Post」,最后一步由用户亲手完成。",
+        f"- 回执写 publish/receipts/{ep}_{platform}_receipt.json(ep / platform / status / preflight / 所用视频路径 / 最终标题;用户已提交记 submitted_by_human,未提交记 draft_ready_pending_human),完成后回报用户需要做什么。",
+    ])
+
+
+async def api_publish_channels_set(project: str, body: dict) -> dict:
+    """成片发布页勾选发布渠道 → 写 output.platforms(与输出设置同一键,下游 aspect-ratio / thumbnail / subtitle /
+    platform-adapter 的平台清单仍从这里取);返回本集渠道行。"""
+    pf = (body or {}).get("platforms")
+    if not isinstance(pf, list) or any(not isinstance(x, str) for x in pf):
+        raise ServiceError(400, "platforms must be an array of platform keys (may be empty)")
+    pf = [k for k in OUTPUT_PLATFORMS if k in pf]
+    await api_projconfig_set({"project": project, "output": {"platforms": pf}})
+    ep = re.sub(r"[^\w\-]", "", str((body or {}).get("ep") or ""))
+    base = _proj_base(project)
+    return {"ok": True, "platforms": pf,
+            "channels": await asyncio.to_thread(_ep_publish_channels, base, ep) if ep else []}
+
+
+async def api_publish_dispatch(project: str, ep: str, body: dict) -> dict:
+    """成片发布页「发布到 <渠道>」:把本集该渠道的发布工单派给 publisher(POST /runs 同一入口);
+    渠道未勾选时顺手勾上(发布到它即视为目标渠道);没有 final 成片时拒派。"""
+    platform = str((body or {}).get("platform") or "").strip().lower()
+    if platform not in OUTPUT_PLATFORMS:
+        raise ServiceError(400, f"unknown platform {platform!r}; valid values: {tuple(OUTPUT_PLATFORMS)}")
+    ep = re.sub(r"[^\w\-]", "", ep or "")
+    if not ep:
+        raise ServiceError(400, "ep is required")
+    base = _proj_base(project)
+    edir = base / "edit" / ep
+    finals = sorted(f.name for f in edir.rglob("*") if f.is_file() and f.suffix.lower() in VIDEO_EXTS
+                    and ("final" in f.name.lower() or "master" in f.name.lower())) if edir.is_dir() else []
+    if not finals:
+        raise ServiceError(409, f"{ep} 还没有 final 成片(edit/{ep}/*final*.mp4),不能发布")
+    cfg = load_project_settings(project)
+    sel = (cfg.get("output") or {}).get("platforms")
+    sel = list(sel) if isinstance(sel, list) else list(DEFAULT_GENCONFIG["output"]["platforms"])
+    if platform not in sel:
+        sel.append(platform)
+        await api_projconfig_set({"project": project, "output": {"platforms": [k for k in OUTPUT_PLATFORMS if k in sel]}})
+    pkg = _ep_publish_package_dir(base, ep, platform)
+    message = publish_dispatch_message(project, ep, platform, pkg is not None, finals)
+    run = await api_chat({"agent": PUBLISHER_ID, "message": message, "project": project, "source": "user"})
+    return {"ok": True, "run_id": run.get("run_id"), "platform": platform, "ep": ep,
+            "package_ready": pkg is not None, "message": message}
+
+
 def _ep_whitebox_reel(base: Path, ep: str) -> dict:
     """分镜预览页「白模样片」板块(成片发布页 2026-09-13 起不再展示,接口字段 whitebox 保留供测试/兼容)(2026-09-08 起,原名白模合辑;2026-09-11 起烧入对白/旁白字幕):
     整集摄影机视角白模视频 assets/whitebox/<ep>/<ep>-camera.mp4 的现状——存在则给播放 URL,
@@ -12265,6 +12403,8 @@ def _preview_videos(project: str, ep: str):
     data["finals"] = _files(("final", "master"), VIDEO_EXTS)
     data["thumbnails"] = _files(("thumb",), IMG_EXTS)
     data["publish"] = _ep_publish_info(base, ep)
+    # 发布渠道板块(2026-10-07):全部可选渠道 + 勾选态 + 发布包/回执现状,页面每渠道一个「发布」按钮派 publisher
+    data["channels"] = _ep_publish_channels(base, ep)
     # 组 clip 超分方法标签(2026-09-23):每组终版 clip 同名 meta.json 的 upscale 段(genmedia.py upscale 写入),
     # 页面一眼分辨插值放大 / 真超分;缺段 = 未经宿主 CLI 超分(草稿档或 agent 自写命令的存量)
     data["groups"] = _ep_clip_upscale_rows(base, ep)
