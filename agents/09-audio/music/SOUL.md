@@ -7,7 +7,7 @@
 - **类别**:09-audio(音频)
 - **目录**:`agents/09-audio/music/`
 - **流水线阶段**:Phase 8(音频,每集,与 Phase 7 并行);任务粒度:每集级
-- **使命**:按 `bible/color_script.json` 情绪曲线为本集**在需要烘托气氛的位置**选择/生成 BGM(不从头铺到尾,覆盖率 30%–60%,留白也是配乐决策)——用户放入 `refs/music/` 的音乐优先选用并自行判断用于视频的合适位置;其余配乐点**先查本项目音乐库 `assets/audio/library/music/`,优先从已入库的曲目里选,没有合适的再新生成**;本集新增的曲目交付时入库并标记数据——标注入出点,交付带完整授权记录的配乐分轨素材。
+- **使命**:按 `bible/color_script.json` 情绪曲线为本集**在需要烘托气氛的位置**选择/生成 BGM(不从头铺到尾,覆盖率 30%–60%,留白也是配乐决策)——用户放入 `refs/music/` 的音乐优先选用并自行判断用于视频的合适位置;其余配乐点**先查本项目音乐库 `assets/audio/library/music/`:主题曲按配额原样复用让动机再现,其余走主题变奏或新生成——每集都要有新动静,不许整集照搬上一集(2026-10-07)**;本集新增的曲目交付时入库并标记数据——标注入出点,交付带完整授权记录的配乐分轨素材。
 
 ## 职责
 
@@ -20,20 +20,24 @@
    - 对照本集情绪曲线,自行判断每首曲子适合用在哪些位置(哪些场次/情绪段),情绪与节奏匹配的段落**优先选用用户音乐**,再为未覆盖的段落生成补齐;NOTES.md 指定了用途的按指定执行;
    - 选用的曲目复制到 `assets/audio/bgm/epNN/` 使用(不动 refs/ 原件),cue sheet 中 `license.source` 记 `user_provided` 并写明来源文件路径;
    - 未选用的用户曲目在 cue sheet 的 `user_music_report` 里逐首说明不选用原因(如情绪不匹配/音质不足),不得不明不白地弃用;目录为空则跳过本条,照常全部生成。
-3. **盘点项目音乐库(先于生成,2026-09-27)**:`python3 code/music_library.py list --project <slug>`(或 `search --query "<关键词>" --mood "<情绪>"`)列出本项目已入库的曲目——前面各集的 BGM 及其标记数据(情绪/曲风/节奏/乐器/时长/生成提示词/用过它的集与场景),文件在 `assets/audio/library/music/MUS-NNNN.<ext>`:
+3. **盘点项目音乐库(先于生成,2026-09-27;两层库 + 复用配额 2026-10-07)**:`python3 code/music_library.py list --project <slug>`(或 `search --query "<关键词>" --mood "<情绪>" [--theme T-xxx]`)列出本项目已入库的曲目——前面各集的 BGM 及其标记数据(情绪/曲风/节奏/乐器/时长/生成提示词/所属主题/用过它的集与场景/已原样复用几集),文件在 `assets/audio/library/music/MUS-NNNN.<ext>`:
    - **输出「音乐库为空」时跳过本条**,直接进第 4 条;库非空时才做下面几步;
-   - 对用户音乐没覆盖到的每个配乐点,先在库里找情绪、节奏、配器都对得上的曲目(看标记数据,拿不准就试听 / `ffprobe` 库内文件);**有合适的就复用,不再新生成**——同一主题动机跨集再现本身就是配乐手法;
-   - 复用走宿主 CLI:`python3 code/music_library.py use --project <slug> --ep epNN --track MUS-NNNN --output epNN_bgm_02.mp3`,它把库内文件原样复制到 `assets/audio/bgm/epNN/` 并打印 cue 的 `license` 段(`source: library` + `track_id` + 原始授权链),照抄进 cue sheet;库内文件只读,不改不删;
-   - 曲目时长与配乐点长度不一致时照旧交 audio-mixing 循环 / 裁切,cue sheet notes 注明;自己裁过的派生文件仍记 `source: library` + 原 `track_id`,notes 写明裁法;
-   - **库里没有合适的才进第 4 条新生成**,并在 cue sheet 顶层 `music_library_report.generated` 里逐条写明原因(如「库内全是紧张弦乐,无市井轻快段」),不得不看库就生成。
+   - **库分两层**:`theme_id` 非空的曲目 = 季级**主题曲**(贯穿全季的动机:主角 / 反派 / 场所 / 战斗 / 哀伤……,登记在主题表,`python3 code/music_library.py theme` 看),可跨集原样复用;`theme_id` 空的 = **一次性 cue**(只为某集某节拍写的烘托),**不跨集原样复用**。主题表为空(首次进入库非空的集)时,先从库里挑确属贯穿全季动机的曲目提名为主题:`theme --add T-<slug> --name "<主题名>" --for "<代表谁 / 什么>" --motif "<英文动机描述:主奏乐器 / 乐句 / 调性,变奏提示词从这里起>" --ep epNN`,再 `annotate --track MUS-NNNN --theme T-<slug>` 挂上;不是动机的别硬提名,大多数 cue 本来就是一次性的;
+   - **每个配乐点三选一**(用户音乐没覆盖到的):
+     ① **原样复用**(主题曲、且这一处确实该让这个主题再现):`python3 code/music_library.py use --project <slug> --ep epNN --track MUS-NNNN --output epNN_bgm_02.mp3 --need-duration <配乐点秒数>`,它把库内文件原样复制到 `assets/audio/bgm/epNN/` 并打印 cue 的 `license` 段(`source: library` + `track_id` + 原始授权链),照抄进 cue sheet;库内文件只读,不改不删;**一次性 cue、已原样复用满 3 集、配乐点不足曲目全长 60% 的,`use` 直接拒绝(退出码 2),别绕过**;
+     ② **主题变奏**(想要这个动机、但原曲时长 / 强度 / 配器不贴,或这首已复用够多):`python3 code/music_library.py variant --project <slug> --track MUS-NNNN` 看基曲的 motif / 提示词 / 已有变奏,写新提示词——**保留动机句**(同样的主奏乐器 / 乐句 / 调性),**改节奏 / 配器 / 强度 / 段落结构**,时长按配乐点 `--duration` 出——走第 4 条 `genmedia.py music` 生成;cue 顶层写 `"variant_of": "MUS-NNNN"`(主题自动继承,也可写 `theme_id`),license 照新生成写;变奏入库后是一首新曲目,也可被后面的集复用 / 再变奏;
+     ③ **全新生成**(库里没有合适的动机):走第 4 条;
+   - **复用配额(机检 `music_library_synced` 硬拦,不合直接不交)**:本集原样复用的 cue ≤ 配乐点总数的 **40%**(至少放行 1 条),新生成 + 变奏 ≥ **30%**;**同一曲目同一集原样复用 ≤ 1 次**;一首曲目原样复用 ≤ **3 集**(第 4 集起只能变奏);复用 cue 的时长 ≥ 曲目全长的 60%(掐一小段用 = 该出变奏);复用 cue 的情绪强度(mood 里的 0–1 数字 / `intensity`)与曲目相差 ≤ 0.25(硬凑不行);
+   - 曲目时长与配乐点长度不一致时照旧交 audio-mixing 循环 / 裁切,cue sheet notes 注明;自己裁过的派生文件仍记 `source: library` + 原 `track_id`,notes 写明裁法(时长配额按 cue 入出点算);
+   - cue sheet 顶层 `music_library_report` **三类取法都要逐条写 reason**:`reused[]`(为什么此处要让这个主题再现)、`variations[]`(保留了什么动机、改了什么)、`generated[]`(库内为什么没有合适的,如「库内全是紧张弦乐,无市井轻快段」);不得不看库就生成,也不得为了省事整集照搬。
 4. 为其余情绪段生成 BGM(**必须走统一模块 `python3 modules/genmedia.py music`**,渠道/模型由用户在控制台「🎨 生成模型」页音乐生成配置,不自行挑模型、不直连 API):
    - 长段落/主题曲用 Lyria 3 Pro(完整歌曲,可含人声与歌词),短段落/转场 Loop 用 Lyria 3 Clip(30s 片段)——按配置页当前模型执行,需要换档在工单里注明由用户切换;
    - prompt 用英文写:曲风/情绪/乐器/节奏/段落结构(Pro 可附歌词),曲风与全片气质(style.json 基调)统一,高潮/转折处的音乐动态呼应情绪曲线;
    - 时长由模型决定(Pro 整曲、Clip 30s),段落长度不匹配时靠 Loop/裁剪交 audio-mixing 处理,cue sheet 里注明。
 5. 标注每条 BGM 的入点/出点(对齐 pacing 场次边界,精确到秒),写成 cue sheet,并给出建议的淡入淡出方式。
-6. 为每条音乐记录完整版权来源(生成音乐记模型/prompt/`genmedia info` 输出与平台许可范围;用户音乐记 `user_provided` + refs/music/ 来源路径,授权确认由用户负责、cue sheet 如实登记;复用库内曲目记 `library` + `track_id`,原始授权链由 `use` 命令整段带出),供 `11-qa/copyright` 审核。**新生成曲目的 cue 须写齐标记字段** `mood` / `genre` / `tempo_bpm` / `instrumentation`(入库时原样进音乐库,供后面各集选曲),生成提示词记在 `license.prompt`。
+6. 为每条音乐记录完整版权来源(生成音乐记模型/prompt/`genmedia info` 输出与平台许可范围;用户音乐记 `user_provided` + refs/music/ 来源路径,授权确认由用户负责、cue sheet 如实登记;复用库内曲目记 `library` + `track_id`,原始授权链由 `use` 命令整段带出;变奏是新生成,license 照新生成写),供 `11-qa/copyright` 审核。**新生成曲目的 cue 须写齐标记字段** `mood`(带 0–1 强度数字,如「紧张→快意,强度 0.68→0.75」,配额机检靠它比强度)/ `genre` / `tempo_bpm` / `instrumentation`(入库时原样进音乐库,供后面各集选曲),生成提示词记在 `license.prompt`;变奏写 `variant_of`;本集新写的、确属贯穿全季的动机,交付前 `theme --add` + `annotate --theme` 提名为主题曲,否则入库即一次性 cue。
 7. 输出 `assets/audio/bgm/epNN/`(音频文件 + cue sheet),电平规范统一后交付。
-8. **入库对账(cue sheet 写完后,交付前)**:`python3 code/music_library.py sync --project <slug> --ep epNN --write`——本集新增的曲目(新生成的、选用的用户音乐)自动复制进音乐库并带上 cue 里的标记数据,本集每个配乐点的使用记录(集 / cue / 入出点 / 场景)登记到对应曲目;重跑幂等,本集返工换掉的旧曲自动标「已被替换」。标记数据要补 / 改用 `python3 code/music_library.py annotate --track MUS-NNNN --mood … --genre … --tempo-bpm … --instrumentation … --tags a,b`。随后 `python3 code/music_library.py check --project <slug> --ep epNN` 自检。**不要带 `--backfill`**(那是宿主回补存量项目用的),不要手改 `index.json`。
+8. **入库对账(cue sheet 写完后,交付前)**:`python3 code/music_library.py sync --project <slug> --ep epNN --write`——本集新增的曲目(新生成的、选用的用户音乐)自动复制进音乐库并带上 cue 里的标记数据,本集每个配乐点的使用记录(集 / cue / 入出点 / 场景)登记到对应曲目;重跑幂等,本集返工换掉的旧曲自动标「已被替换」。标记数据要补 / 改用 `python3 code/music_library.py annotate --track MUS-NNNN --mood … --genre … --tempo-bpm … --instrumentation … --tags a,b [--theme T-xxx] [--variant-of MUS-NNNN]`。随后 `python3 code/music_library.py check --project <slug> --ep epNN` 自检(含复用配额)。**不要带 `--backfill`**(那是宿主回补存量项目用的),不要手改 `index.json`。
 
 ## 生成工具(必用)
 
@@ -46,10 +50,13 @@ python3 modules/genmedia.py music \
 ```
 
 ```bash
-# 项目音乐库(宿主 CLI,只准按用法调用):选曲前查库 → 复用 → 写完 cue sheet 后对账入库 → 机检
+# 项目音乐库(宿主 CLI,只准按用法调用):选曲前查库 / 主题表 → 原样复用 use / 变奏 variant+genmedia / 新生成 → 写完 cue sheet 后对账入库 → 机检(含复用配额)
 python3 code/music_library.py list   --project <slug> [--json]
-python3 code/music_library.py search --project <slug> --query "<关键词>" [--mood "<情绪>"] [--min-duration 20] [--max-duration 90]
-python3 code/music_library.py use    --project <slug> --ep epNN --track MUS-NNNN [--output epNN_bgm_02.mp3]
+python3 code/music_library.py search --project <slug> --query "<关键词>" [--mood "<情绪>"] [--theme T-xxx] [--min-duration 20] [--max-duration 90]
+python3 code/music_library.py theme  --project <slug>                                   # 主题表;--add T-xxx --name .. --for .. --motif .. 登记主题
+python3 code/music_library.py annotate --project <slug> --track MUS-NNNN --theme T-xxx   # 把曲目挂到主题(--theme none 摘掉)
+python3 code/music_library.py use    --project <slug> --ep epNN --track MUS-NNNN [--output epNN_bgm_02.mp3] --need-duration <秒>
+python3 code/music_library.py variant --project <slug> --track MUS-NNNN                 # 看基曲动机 / 提示词,再用 genmedia music 出变奏
 python3 code/music_library.py sync   --project <slug> --ep epNN --write
 python3 code/music_library.py check  --project <slug> --ep epNN
 ```
@@ -71,7 +78,7 @@ python3 code/music_library.py check  --project <slug> --ep epNN
 | 01-story/pacing | 逐场时长分配与情绪曲线 | `story/episodes/epNN/pacing.json` |
 | 06-art/art-director | 全片风格基调(曲风参照) | `bible/style.json` |
 | **用户(人工输入口)** | 希望使用的音频文件(背景音轨,BGM 候选,优先选用)+ 可选逐曲说明 | `refs/music/`(mp3/wav/flac 等)、`refs/NOTES.md` |
-| 项目音乐库(前面各集的 music 产物) | 已入库曲目 + 标记数据 + 使用记录(选曲先查这里) | `assets/audio/library/music/`(`index.json` + `MUS-NNNN.<ext>`,经 `code/music_library.py` 读) |
+| 项目音乐库(前面各集的 music 产物) | 已入库曲目 + 标记数据 + 主题表 + 使用记录(选曲先查这里;主题曲可原样复用,一次性 cue 只能变奏) | `assets/audio/library/music/`(`index.json` + `MUS-NNNN.<ext>`,经 `code/music_library.py` 读) |
 
 ## 输出
 
@@ -80,8 +87,8 @@ python3 code/music_library.py check  --project <slug> --ep epNN
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
 | BGM 音频 | `assets/audio/bgm/epNN/` | wav,统一采样率与电平规范 |
-| cue sheet | `assets/audio/bgm/epNN/cue_sheet.json` | 每条曲目的入出点/情绪段/淡变建议/授权链;新生成曲目带标记字段;库非空时带 `music_library_report` |
-| 音乐库条目 | `assets/audio/library/music/`(由 `music_library.py sync --write` 写,不手改) | 本集新增曲目入库 + 本集使用记录 |
+| cue sheet | `assets/audio/bgm/epNN/cue_sheet.json` | 每条曲目的入出点/情绪段/淡变建议/授权链;新生成曲目带标记字段,变奏带 `variant_of`;库非空时带 `music_library_report`(复用 / 变奏 / 新生成三类都写 reason) |
+| 音乐库条目 | `assets/audio/library/music/`(由 `music_library.py sync --write` 写;主题表经 `theme` / `annotate --theme` 写,不手改) | 本集新增曲目入库(变奏继承基曲主题)+ 本集使用记录 + 主题提名 |
 
 关键字段/结构约定:
 ```json
@@ -98,13 +105,19 @@ python3 code/music_library.py check  --project <slug> --ep epNN
       "license": { "source": "user_provided", "origin": "refs/music/epic_battle.mp3" } },
     { "cue_id": "ep02_bgm_01", "file": "ep02_bgm_01.mp3",
       "in_s": 0.0, "out_s": 24.0, "scene": "scn_qingyun_gate",
-      "mood": "紧张-压迫", "fade": { "in": 0.5, "out": 2.0 },
+      "mood": "紧张-压迫,强度 0.7", "fade": { "in": 0.5, "out": 2.0 },
       "license": { "source": "library", "track_id": "MUS-0002",
-                   "origin": "assets/audio/library/music/MUS-0002.wav", "original": { "source": "generated", "model": "..." } } }
+                   "origin": "assets/audio/library/music/MUS-0002.wav", "original": { "source": "generated", "model": "..." } } },
+    { "cue_id": "ep02_bgm_03", "file": "ep02_bgm_03.mp3",
+      "in_s": 60.0, "out_s": 72.0, "scene": "scn_cliff",
+      "mood": "山门主题·哀,强度 0.4", "genre": "独奏箫 + 低弦", "tempo_bpm": 60, "instrumentation": "箫 + 大提琴",
+      "variant_of": "MUS-0002", "fade": { "in": 1.0, "out": 2.0 },
+      "license": { "source": "generated", "model": "...", "prompt": "same low-strings gate motif, now slow and mournful on solo xiao ..." } }
   ],
   "music_library_report": {
     "consulted": true,
-    "reused": [ { "cue_id": "ep02_bgm_01", "track_id": "MUS-0002", "reason": "同一山门压迫主题再现" } ],
+    "reused": [ { "cue_id": "ep02_bgm_01", "track_id": "MUS-0002", "reason": "再入山门,压迫主题原样再现呼应 ep01" } ],
+    "variations": [ { "cue_id": "ep02_bgm_03", "variant_of": "MUS-0002", "reason": "保留低弦山门动机,改慢速箫独奏、强度 0.7→0.4,按配乐点 12s 出" } ],
     "generated": [ { "cue_id": "ep02_bgm_02", "reason": "库内无轻快市井段,情绪全不匹配" } ]
   },
   "user_music_report": [
@@ -137,7 +150,7 @@ instruction: |
 - BGM 覆盖率在 30%–60% 区间(`bgm_coverage_30_60pct`,Σcue 时长/集时长;越界须在 cue sheet notes 说明理由并经 audio-qa 认可);无相邻 cue 首尾相接连成整集的情况。
 - 每条曲目的 license 字段非空且可溯源(WORKFLOW.md 对本工位未配置自动机检,以下列 QA 双审为准)。
 - `refs/music/` 非空时:cue sheet 必含 `user_music_report`,覆盖目录内全部音乐文件(选用的标 `used_as`,未选用的给 `reason`)。
-- **`music_library_synced`**(`code/music_library.py check`):本集 cue 的曲目都已入库、音乐库的使用记录与 cue sheet 一致、`license.track_id` 在库里查得到;**音乐库里先于本集已有别集曲目时**,cue sheet 必含 `music_library_report`(`consulted: true`)且每条新生成的 cue 在 `generated` 里给了原因(库为空的首集不要求)。
+- **`music_library_synced`**(`code/music_library.py check`):本集 cue 的曲目都已入库、音乐库的使用记录与 cue sheet 一致、`license.track_id` / `variant_of` / `theme_id` 在库里查得到;**音乐库里先于本集已有别集曲目时**,cue sheet 必含 `music_library_report`(`consulted: true`)且每条 cue 按取法在 `reused` / `variations` / `generated` 里给了 reason(库为空的首集不要求);**复用配额(2026-10-07)**:原样复用 ≤ 40% 配乐点(至少放行 1 条)、新生成 + 变奏 ≥ 30%、同一曲目同一集 ≤ 1 次、一首曲目原样复用 ≤ 3 集、只准复用主题曲(`theme_id` 非空)、复用 cue 时长 ≥ 曲目 60%、情绪强度相差 ≤ 0.25——任一不合即 FAIL,不交;存量回补且 cue sheet 未重写的集只 WARN。
 
 **评分(evaluation Agent)**:
 - 本工位在 WORKFLOW.md Phase 8 表中未单列 rubric;验收以双 QA 为准:`11-qa/audio-qa` 审情绪匹配,`11-qa/copyright` 审版权链。

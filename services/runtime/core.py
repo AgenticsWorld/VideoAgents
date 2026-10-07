@@ -12499,6 +12499,7 @@ def _preview_music_library(project: str):
         row["url"] = f"/projects/{base.name}/{row['path']}?v={int(f.stat().st_mtime)}" if row["exists"] else None
         row["eps"] = sorted({u.get("ep") for u in t.get("used_in") or [] if u.get("ep")})
         row["origin_ep"] = (t.get("origin") or {}).get("ep") or ""
+        row["reuse_eps"] = ml.reuse_episodes(t)          # 原样复用过的集(不含来源集),配额 ≤ TRACK_REUSE_EPS_MAX
         tracks.append(row)
     try:
         pending = ml.pending(base)
@@ -12507,7 +12508,9 @@ def _preview_music_library(project: str):
     eps = set(titles) | set(ml.list_episodes(base)) | {e for r in tracks for e in r["eps"]} \
         | {r["origin_ep"] for r in tracks if r["origin_ep"]}
     return {"project": base.name, "library": ml.LIB_REL, "updated_at": idx.get("updated_at"),
-            "tracks": tracks, "pending": pending,
+            "tracks": tracks, "pending": pending, "themes": idx.get("themes") or [],
+            "quota": {"reuse_max_ratio": ml.REUSE_MAX_RATIO, "fresh_min_ratio": ml.FRESH_MIN_RATIO,
+                      "track_reuse_eps_max": ml.TRACK_REUSE_EPS_MAX},
             "episodes": [{"ep": e, "title": titles.get(e, "")} for e in sorted(eps)]}
 
 

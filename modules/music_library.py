@@ -18,12 +18,22 @@
      "added_at": "...",
      "used_in": [{"ep", "cue_id", "in_s", "out_s", "duration_s", "scene", "mood", "file", "reused", "derived"}]}]}
 
-cue sheet 侧契约(09-audio/music SOUL):复用库内曲目的 cue 写
-  "license": {"source": "library", "track_id": "MUS-0003", "origin": "assets/audio/library/music/MUS-0003.mp3"}
-库非空时 cue sheet 顶层写 `music_library_report`:{"consulted": true, "reused": [{cue_id, track_id}], "generated": [{cue_id, reason}]}。
+主题表与变奏(2026-10-07):台账顶层 `themes[]` = 季级主题动机表 [{theme_id: "T-hero", name, for, motif, mood, created_ep}],
+曲目的 `theme_id` 非空 = 主题曲(可跨集原样复用),空 = 一次性 cue(只出本集,不跨集复用);`variant_of` = 本曲是库内某首的
+主题变奏(同一动机、换节奏 / 配器 / 强度 / 时长重新生成),入库时继承基曲的 theme_id。
+
+cue sheet 侧契约(09-audio/music SOUL):
+  原样复用:"license": {"source": "library", "track_id": "MUS-0003", "origin": "assets/audio/library/music/MUS-0003.mp3"}
+  主题变奏:新生成的 cue 顶层写 "variant_of": "MUS-0003"(可选 "theme_id");license 照新生成写
+  库非空时顶层写 `music_library_report`:{"consulted": true,
+    "reused": [{cue_id, track_id, reason}], "variations": [{cue_id, variant_of, reason}], "generated": [{cue_id, reason}]}
+  三种取法的 reason 都必填。
 
 机检 `music_library_synced`(`code/music_library.py check`):本集 cue 的曲目都已入库、`used_in` 与 cue sheet 一致、
-library 引用的 track_id 有效、库里先于本集已有别集曲目时 cue sheet 带 `music_library_report` 且每条新生成的 cue 给了原因。
+library 引用的 track_id 有效、库里先于本集已有别集曲目时 cue sheet 带 `music_library_report` 且每条 cue 给了取法原因;
+复用配额(2026-10-07,只对库里先于本集已有别集曲目的集生效):原样复用 ≤ 40% 配乐点(至少放行 1 条)、新生成 + 变奏 ≥ 30%、
+同一曲目同一集原样复用 ≤ 1 次、一首曲目原样复用 ≤ 3 集、只准复用主题曲(theme_id 非空)、复用 cue 时长 ≥ 曲目时长 60%、
+情绪强度(mood 里的 0–1 数字 / intensity)与曲目相差 ≤ 0.25;存量回补且 cue sheet 未重写的集只 WARN。
 只依赖标准库 + ffprobe(缺 ffprobe 时时长留空,不报错)。
 """
 from __future__ import annotations
@@ -42,7 +52,17 @@ INDEX_NAME = "index.json"
 BGM_REL = "assets/audio/bgm"
 CHECK_NAME = "music_library_synced"
 AUDIO_EXTS = (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".opus")
-META_FIELDS = ("title", "mood", "genre", "tempo_bpm", "instrumentation", "intensity", "tags", "description", "prompt")
+META_FIELDS = ("title", "mood", "genre", "tempo_bpm", "instrumentation", "intensity", "tags", "description", "prompt",
+               "theme_id", "variant_of")
+THEME_FIELDS = ("name", "for", "motif", "mood")
+# 复用配额(2026-10-07):同一首曲子跨集反复原样铺,听感就是「每集同一首」;配额逼着每集至少有新动静,主题靠变奏延续
+REUSE_MAX_RATIO = 0.40          # 原样复用 cue 数 / 本集铺了的 cue 数 ≤ 40%(至少放行 1 条,免得 2 条 cue 的集一条也不能复用)
+FRESH_MIN_RATIO = 0.30          # 新生成 + 变奏 ≥ 30%(向上取整)
+SAME_TRACK_PER_EP_MAX = 1       # 同一曲目同一集原样复用 ≤ 1 次
+TRACK_REUSE_EPS_MAX = 3         # 一首曲目原样复用的集数 ≤ 3(不含来源集)
+REUSE_MIN_COVER = 0.60          # 复用 cue 时长 ≥ 曲目时长 60%(28s 的曲掐 6s 用 = 该走变奏按需时长出)
+INTENSITY_MAX_DIFF = 0.25       # cue 情绪强度区间与曲目强度区间的间距 ≤ 0.25
+_THEME_RE = re.compile(r"^T-[A-Za-z0-9_-]+$")
 _RETIRED = {"retired", "removed", "dropped", "deleted", "cancelled"}
 _EP_RE = re.compile(r"^ep\d+$")
 
@@ -76,12 +96,15 @@ def load_index(proj: Path) -> dict:
     idx["tracks"] = [t for t in (idx.get("tracks") or []) if isinstance(t, dict) and t.get("track_id")]
     if not isinstance(idx.get("episodes"), dict):
         idx["episodes"] = {}
+    idx["themes"] = [th for th in (idx.get("themes") or []) if isinstance(th, dict) and th.get("theme_id")]
     for t in idx["tracks"]:
         t.setdefault("status", "active")
         if not isinstance(t.get("used_in"), list):
             t["used_in"] = []
         if not isinstance(t.get("tags"), list):
             t["tags"] = []
+        t["theme_id"] = _text(t.get("theme_id")).upper()
+        t["variant_of"] = _text(t.get("variant_of")).upper()
     return idx
 
 
@@ -150,6 +173,72 @@ def find_by_hash(idx: dict, sha: str) -> dict | None:
     return next((t for t in idx["tracks"] if t.get("sha256") == sha), None)
 
 
+def find_theme(idx: dict, theme_id: str) -> dict | None:
+    tid = _text(theme_id).upper()
+    return next((th for th in idx.get("themes") or [] if _text(th.get("theme_id")).upper() == tid), None)
+
+
+def add_theme(idx: dict, theme_id: str, meta: dict | None = None, created_ep: str = "") -> tuple[dict, bool]:
+    """登记 / 更新一个主题动机(theme_id 形如 T-hero)。返回 (theme, created)。"""
+    tid = _text(theme_id).upper()
+    if not _THEME_RE.match(tid):
+        raise ValueError(f"theme_id 须形如 T-hero(字母 / 数字 / - / _):{theme_id}")
+    th = find_theme(idx, tid)
+    created = th is None
+    if created:
+        th = {"theme_id": tid, "name": "", "for": "", "motif": "", "mood": "", "created_ep": created_ep or "",
+              "created_at": now_iso()}
+        idx.setdefault("themes", []).append(th)
+    for k in THEME_FIELDS:
+        if (meta or {}).get(k) is not None:
+            th[k] = _text((meta or {}).get(k))
+    return th, created
+
+
+def theme_tracks(idx: dict, theme_id: str, include_superseded: bool = False) -> list[dict]:
+    tid = _text(theme_id).upper()
+    return [t for t in idx["tracks"] if t.get("theme_id") == tid and (include_superseded or t.get("status") != "superseded")]
+
+
+def is_theme_track(track: dict) -> bool:
+    return bool(_text(track.get("theme_id")))
+
+
+def intensity_range(track_or_cue: dict) -> tuple[float, float] | None:
+    """情绪强度区间:intensity 数值优先,否则取 mood 文本里 0–1 的数字(「敬畏→好奇,强度 0.20→0.42」→ (0.20, 0.42));没有 = None。"""
+    v = _num(track_or_cue.get("intensity"))
+    if v is not None and 0 <= v <= 1:
+        return (v, v)
+    nums = [float(x) for x in re.findall(r"(?<![\d.])(?:0?\.\d+|[01](?:\.\d+)?)(?![\d.])", _text(track_or_cue.get("mood")))]
+    nums = [x for x in nums if 0 <= x <= 1]
+    return (min(nums), max(nums)) if nums else None
+
+
+def intensity_gap(a: tuple[float, float] | None, b: tuple[float, float] | None) -> float | None:
+    if a is None or b is None:
+        return None
+    return max(0.0, a[0] - b[1], b[0] - a[1])
+
+
+def reuse_quota(n_active: int) -> tuple[int, int]:
+    """(本集最多可原样复用的 cue 数, 至少要新生成 / 变奏的 cue 数)。"""
+    if n_active <= 0:
+        return 0, 0
+    max_reuse = max(1, int(REUSE_MAX_RATIO * n_active + 1e-9))
+    min_fresh = int(-(-FRESH_MIN_RATIO * n_active // 1))      # ceil
+    return max_reuse, min_fresh
+
+
+def _ep_no(ep: str) -> int:
+    m = re.search(r"(\d+)", str(ep or ""))
+    return int(m.group(1)) if m else 0
+
+
+def reuse_episodes(track: dict) -> list[str]:
+    """原样复用过这首曲目的集(不含来源集),按 used_in 推导。"""
+    return sorted({u.get("ep") for u in track.get("used_in") or [] if u.get("reused") and u.get("ep")})
+
+
 def track_no(track: dict) -> int:
     m = re.match(r"^MUS-(\d+)$", str(track.get("track_id")))
     return int(m.group(1)) if m else 0
@@ -214,6 +303,8 @@ def cue_meta(cue: dict) -> dict:
         "tags": [_text(x) for x in tags if _text(x)],
         "description": first("description", "role", "rationale", "notes"),
         "prompt": first("prompt_en", "prompt") or first("prompt", "prompt_en", src=lic),
+        "theme_id": (first("theme_id") or first("theme_id", src=lic)).upper(),
+        "variant_of": (first("variant_of") or first("variant_of", src=lic)).upper(),
     }
 
 
@@ -233,6 +324,21 @@ def cue_source(cue: dict) -> str:
 def cue_track_id(cue: dict) -> str:
     lic = cue.get("license") if isinstance(cue.get("license"), dict) else {}
     return str(lic.get("track_id") or cue.get("track_id") or "").strip().upper()
+
+
+def cue_variant_of(cue: dict) -> str:
+    return cue_meta(cue)["variant_of"]
+
+
+def cue_kind(cue: dict, reused_cues: set | None = None) -> str:
+    """配乐点取法:reuse(原样复用库内曲目)/ variation(主题变奏新生成)/ fresh(全新生成)/ user(用户音乐)。
+    reused_cues = sync 按内容指纹认出的复用(license 没写 library 也算)。"""
+    src = cue_source(cue)
+    if src == "library" or (reused_cues and str(cue.get("cue_id")) in reused_cues):
+        return "reuse"
+    if src == "user_provided":
+        return "user"
+    return "variation" if cue_variant_of(cue) else "fresh"
 
 
 def list_episodes(proj: Path) -> list[str]:
@@ -293,8 +399,8 @@ def sync_episode(proj: Path, idx: dict, ep: str, write: bool = True, backfill: b
     当时 cue sheet 的指纹,机检对其 music_library_report 缺失只 WARN;cue sheet 之后被重写过(指纹变了)即恢复按 FAIL。
     """
     proj = Path(proj)
-    rep = {"ep": ep, "added": [], "reused": [], "usage": 0, "missing_files": [], "unknown_tracks": [],
-           "derived": [], "superseded": [], "changed": False}
+    rep = {"ep": ep, "added": [], "reused": [], "variations": [], "usage": 0, "missing_files": [], "unknown_tracks": [],
+           "unknown_variants": [], "unknown_themes": [], "derived": [], "superseded": [], "changed": False}
     sheet, cues = load_cue_sheet(proj, ep)
     if sheet is None:
         rep["error"] = "no_cue_sheet"
@@ -325,16 +431,26 @@ def sync_episode(proj: Path, idx: dict, ep: str, write: bool = True, backfill: b
                     rep["missing_files"].append(rel)
                 continue
             lic = cue.get("license") if isinstance(cue.get("license"), dict) else {}
+            meta = cue_meta(cue)
+            base = find_track(idx, meta["variant_of"]) if meta["variant_of"] else None
+            if meta["variant_of"] and base is None:
+                rep["unknown_variants"].append({"cue_id": cue.get("cue_id"), "variant_of": meta["variant_of"]})
+            if base is not None and not meta["theme_id"]:
+                meta["theme_id"] = _text(base.get("theme_id")).upper()     # 变奏继承基曲的主题
+            if meta["theme_id"] and find_theme(idx, meta["theme_id"]) is None:
+                rep["unknown_themes"].append({"cue_id": cue.get("cue_id"), "theme_id": meta["theme_id"]})
             track, created = add_track(
-                proj, idx, path, meta=cue_meta(cue), write=write, license_=lic,
+                proj, idx, path, meta=meta, write=write, license_=lic,
                 origin={"ep": ep, "cue_id": cue.get("cue_id"), "file": rel},
                 source="user_provided" if src_kind == "user_provided" else "generated")
             if created:
                 rep["added"].append({"track_id": track["track_id"], "cue_id": cue.get("cue_id"), "file": rel})
             else:
-                for k, v in cue_meta(cue).items():       # 已在库:只补空字段,不覆盖已有标记
+                for k, v in meta.items():               # 已在库:只补空字段,不覆盖已有标记
                     if track.get(k) in (None, "", []) and v not in (None, "", []):
                         track[k] = v
+            if base is not None and (track.get("origin") or {}).get("ep") == ep:
+                rep["variations"].append({"cue_id": cue.get("cue_id"), "track_id": track["track_id"], "variant_of": base["track_id"]})
         referenced.add(track["track_id"])
         if track.get("status") == "superseded":
             track["status"] = "active"
@@ -453,6 +569,12 @@ def check_episode(proj: Path, ep: str) -> dict:
         add("library_in_sync", "PASS")
     for d in rep["derived"]:
         add("library_file_identical", "WARN", f"{d['cue_id']} 的文件与库内 {d['track_id']} 不是同一份(裁剪 / 循环过的派生文件,须在 cue notes 说明)")
+    if rep["unknown_variants"]:
+        add("library_variant_valid", "FAIL", "variant_of 在音乐库里查不到:"
+            + ", ".join(f"{x['cue_id']}→{x['variant_of']}" for x in rep["unknown_variants"]))
+    if rep["unknown_themes"]:
+        add("library_theme_valid", "FAIL", "theme_id 不在主题表里(先 music_library.py theme --add):"
+            + ", ".join(f"{x['cue_id']}→{x['theme_id']}" for x in rep["unknown_themes"]))
     # 先于本集已在库的别集曲目(按本集首次同步时库里已有到第几首算;本集还没同步过 = 当前全部)
     since = (rec or {}).get("first_track_no")
     if not isinstance(since, int):
@@ -461,26 +583,98 @@ def check_episode(proj: Path, ep: str) -> dict:
                and (t.get("origin") or {}).get("ep") != ep and track_no(t) <= since]
     if not earlier:
         add("library_report", "PASS", "本集之前库里没有别集曲目,无需 music_library_report")
+        return _verdict(ep, items)
+    # 存量回补的集且 cue sheet 自回补后没被重写过 = 音乐库上线前的产物,只提醒
+    soft = bool((rec or {}).get("backfilled")) and \
+        (rec or {}).get("backfill_sheet_sha") == sha256_file(proj / BGM_REL / ep / "cue_sheet.json")
+    bad = "WARN" if soft else "FAIL"
+    report = sheet.get("music_library_report") if isinstance(sheet.get("music_library_report"), dict) else None
+    reused_cues = {str(u["cue_id"]) for u in rep["reused"]}
+    active = [c for c in cues if is_active(c)]
+    kinds = {str(c.get("cue_id")): cue_kind(c, reused_cues) for c in active}
+    if report is None or report.get("consulted") is not True:
+        add("library_report", bad, f"库里先于本集已有 {len(earlier)} 首别集曲目,cue sheet 须写 music_library_report(consulted: true)"
+            + ("(存量回补的集,只提醒)" if soft else ""))
     else:
-        # 存量回补的集且 cue sheet 自回补后没被重写过 = 音乐库上线前的产物,只提醒
-        soft = bool((rec or {}).get("backfilled")) and \
-            (rec or {}).get("backfill_sheet_sha") == sha256_file(proj / BGM_REL / ep / "cue_sheet.json")
-        report = sheet.get("music_library_report") if isinstance(sheet.get("music_library_report"), dict) else None
-        if report is None or report.get("consulted") is not True:
-            add("library_report", "WARN" if soft else "FAIL",
-                f"库里先于本集已有 {len(earlier)} 首别集曲目,cue sheet 须写 music_library_report(consulted: true)"
-                + ("(存量回补的集,只提醒)" if soft else ""))
+        def reasons_of(key):
+            return {str(g.get("cue_id")): _text(g.get("reason")) for g in (report.get(key) or []) if isinstance(g, dict)}
+        gen_r, re_r, var_r = reasons_of("generated"), reasons_of("reused"), reasons_of("variations")
+        lacking = [cid for cid, k in kinds.items() if k == "fresh" and not gen_r.get(cid)]
+        if lacking:
+            add("library_report", bad, "新生成的 cue 未在 music_library_report.generated 写明库内无合适曲目的原因:" + ", ".join(lacking))
         else:
-            reasons = {str(g.get("cue_id")): _text(g.get("reason")) for g in (report.get("generated") or []) if isinstance(g, dict)}
-            reused_cues = {str(u["cue_id"]) for u in rep["reused"]}
-            lacking = [str(c.get("cue_id")) for c in cues
-                       if is_active(c) and cue_source(c) not in ("library", "user_provided")
-                       and str(c.get("cue_id")) not in reused_cues and not reasons.get(str(c.get("cue_id")))]
-            if lacking:
-                add("library_report", "WARN" if soft else "FAIL",
-                    "新生成的 cue 未在 music_library_report.generated 写明库内无合适曲目的原因:" + ", ".join(lacking))
-            else:
-                add("library_report", "PASS")
+            add("library_report", "PASS")
+        lacking = [cid for cid, k in kinds.items() if k == "reuse" and not re_r.get(cid)]
+        if lacking:
+            add("library_reuse_reason", bad, "原样复用的 cue 未在 music_library_report.reused 写 reason(为什么此处要让这个主题再现):" + ", ".join(lacking))
+        else:
+            add("library_reuse_reason", "PASS")
+        lacking = [cid for cid, k in kinds.items() if k == "variation" and not var_r.get(cid)]
+        if lacking:
+            add("library_variation_reason", bad, "主题变奏的 cue 未在 music_library_report.variations 写 reason(保留了什么动机、改了什么):" + ", ".join(lacking))
+        elif any(k == "variation" for k in kinds.values()):
+            add("library_variation_reason", "PASS")
+    # 复用配额(2026-10-07)
+    n = len(active)
+    n_reuse = sum(1 for k in kinds.values() if k == "reuse")
+    n_fresh = sum(1 for k in kinds.values() if k in ("fresh", "variation"))
+    max_reuse, min_fresh = reuse_quota(n)
+    if n_reuse > max_reuse:
+        add("library_reuse_quota", bad, f"原样复用 {n_reuse}/{n} 条,超过 {REUSE_MAX_RATIO:.0%} 配额(本集最多 {max_reuse} 条);多出的改走主题变奏或新生成")
+    else:
+        add("library_reuse_quota", "PASS", f"原样复用 {n_reuse}/{n} 条(上限 {max_reuse})")
+    if n and n_fresh < min_fresh:
+        add("library_fresh_quota", bad, f"新生成 + 变奏只有 {n_fresh}/{n} 条,少于 {FRESH_MIN_RATIO:.0%}(本集至少 {min_fresh} 条)")
+    else:
+        add("library_fresh_quota", "PASS", f"新生成 + 变奏 {n_fresh}/{n} 条(下限 {min_fresh})")
+    per_track: dict[str, list[str]] = {}
+    for c in active:
+        if kinds[str(c.get("cue_id"))] != "reuse":
+            continue
+        tid = cue_track_id(c)
+        if not tid:        # license 没写 library、按指纹认出来的:从 trial 里反查
+            hit = next((u for u in rep["reused"] if u["cue_id"] == c.get("cue_id")), None)
+            tid = hit["track_id"] if hit else ""
+        if tid:
+            per_track.setdefault(tid, []).append(str(c.get("cue_id")))
+    dup = {tid: cids for tid, cids in per_track.items() if len(cids) > SAME_TRACK_PER_EP_MAX}
+    if dup:
+        add("library_track_once_per_episode", bad, "同一曲目同一集原样复用超过 1 次:"
+            + "; ".join(f"{tid}←{', '.join(cids)}" for tid, cids in dup.items()))
+    else:
+        add("library_track_once_per_episode", "PASS")
+    span, no_theme, cover, inten = [], [], [], []
+    for tid, cids in per_track.items():
+        trk = find_track(trial, tid) or find_track(idx, tid)
+        if trk is None:
+            continue
+        eps = [e for e in reuse_episodes(trk) if _ep_no(e) <= _ep_no(ep)]     # 只数到本集为止,后面的集不追溯本集
+        if ep not in eps:
+            eps.append(ep)
+        if len(eps) > TRACK_REUSE_EPS_MAX:
+            span.append(f"{tid} 已在 {', '.join(sorted(eps))} 原样复用")
+        if not is_theme_track(trk):
+            no_theme.append(f"{tid}←{', '.join(cids)}")
+        d_trk = _num(trk.get("duration_s"))
+        for c in active:
+            if str(c.get("cue_id")) not in cids:
+                continue
+            d_cue = (_num(c.get("out_s")) or 0) - (_num(c.get("in_s")) or 0)
+            if d_trk and d_cue < REUSE_MIN_COVER * d_trk:
+                cover.append(f"{c.get('cue_id')} 只用 {d_cue:.1f}s / {tid} 全长 {d_trk:.1f}s")
+            gap = intensity_gap(intensity_range(c), intensity_range(trk))
+            if gap is not None and gap > INTENSITY_MAX_DIFF + 1e-9:
+                cover_r, trk_r = intensity_range(c), intensity_range(trk)
+                inten.append(f"{c.get('cue_id')} 强度 {cover_r[0]:.2f}–{cover_r[1]:.2f} vs {tid} {trk_r[0]:.2f}–{trk_r[1]:.2f}")
+    add("library_track_reuse_span", bad if span else "PASS",
+        ("一首曲目原样复用超过 3 集,后面的集改走变奏:" + "; ".join(span)) if span else "")
+    add("library_reuse_theme_only", bad if no_theme else "PASS",
+        ("只准原样复用主题曲(theme_id 非空),一次性 cue 不跨集:" + "; ".join(no_theme)
+         + " → 确是主题动机就先 music_library.py theme --add + annotate --theme,否则改走变奏 / 新生成") if no_theme else "")
+    add("library_reuse_cover", bad if cover else "PASS",
+        (f"复用 cue 时长不足曲目的 {REUSE_MIN_COVER:.0%},掐一小段用 = 该按需时长出变奏:" + "; ".join(cover)) if cover else "")
+    add("library_reuse_intensity", bad if inten else "PASS",
+        (f"复用 cue 的情绪强度与曲目相差超过 {INTENSITY_MAX_DIFF},硬凑:" + "; ".join(inten)) if inten else "")
     return _verdict(ep, items)
 
 

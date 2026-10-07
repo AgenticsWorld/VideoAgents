@@ -70,6 +70,9 @@ table.ml td.play button.on{background:var(--accent);border-color:var(--accent);c
 .tag.user{color:var(--purple);border-color:var(--purple)}
 .tag.old{color:var(--yellow);border-color:var(--yellow)}
 .tag.miss{color:var(--red);border-color:var(--red)}
+.tag.thm{color:var(--accent);border-color:var(--accent);font-weight:600}
+.tag.var{color:var(--purple);border-color:var(--purple)}
+.tag.over{color:var(--red);border-color:var(--red)}
 tr.detail td{background:var(--bg);padding:12px 14px}
 tr.detail audio{width:100%;max-width:560px;height:34px;margin-bottom:8px;display:block}
 tr.detail .kv{margin:4px 0;font-size:12.5px}
@@ -95,6 +98,8 @@ table.use td{padding:4px 8px;border-bottom:1px solid var(--border);vertical-alig
 /* 音乐库页(项目设置 → 音乐库,2026-09-27):本项目 assets/audio/library/music/ 已入库的配乐。
  * 每集新增的 BGM 由配乐工位交付时入库并标记数据;之后的剧集先在库里选曲,没有合适的再新生成。
  * 「谁在用」由各集 cue sheet 推导;页面只读 + 「同步入库」(宿主对账,回补音乐库上线前已交付的集)。
+ * 2026-10-07 两层库:theme_id 非空 = 主题曲(可跨集原样复用,配额 ≤ 40% 配乐点 / 一曲 ≤ 3 集);空 = 一次性 cue(只出本集);
+ * variant_of = 该曲是库内某首的主题变奏。主题表 / 挂主题由配乐工位经 code/music_library.py theme / annotate 写,页面只展示。
  * 每行末列「修改」= 右下角浮窗(/static/edit-popup.js)预填曲目定位,直发配乐工位 09-audio/music。 */
 const MUSIC_AGENT='09-audio/music';
 const $=s=>document.querySelector(s);
@@ -102,7 +107,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const _q=new URLSearchParams(location.search);
 const PROJ=_q.get('project')||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';
 // 过滤:SCOPE = ''(全部)| epNN(该集用到或该集新增的曲目);SRC = '' | generated | user_provided | reused(跨集复用)
-let SCOPE=_q.get('ep')||'',SRC='',KW='',SHOW_OLD=false,LAST=null,SHOWN=[],OPEN=new Set(),MSG=null;
+let SCOPE=_q.get('ep')||'',SRC='',THM='',KW='',SHOW_OLD=false,LAST=null,SHOWN=[],OPEN=new Set(),MSG=null;
 const PLAYER=new Audio();let PLAYING='';
 $('#proj-name').textContent=PROJ;
 
@@ -110,7 +115,18 @@ const tc=s=>{if(s==null||s==='')return '—';s=Math.max(0,+s);const m=Math.floor
 const dur=s=>s==null||s===''?'—':(+s).toFixed(1)+'s';
 const isReused=x=>new Set((x.eps||[]).concat(x.origin_ep?[x.origin_ep]:[])).size>1;
 function srcTag(x){
-  return x.source==='user_provided'?`<span class="tag user">${esc(t('用户提供'))}</span>`:`<span class="tag">${esc(t('新生成'))}</span>`;
+  return (x.source==='user_provided'?`<span class="tag user">${esc(t('用户提供'))}</span>`:`<span class="tag">${esc(t('新生成'))}</span>`)
+    +(x.variant_of?`<span class="tag var" data-no-i18n title="${esc(t('主题变奏:同一动机换节奏 / 配器 / 强度重新生成'))}">${esc(t('变奏自'))} ${esc(x.variant_of)}</span>`:'');
+}
+function themeName(id){const th=((LAST&&LAST.themes)||[]).find(x=>x.theme_id===id);return th&&th.name?th.name:''}
+function themeCell(x){
+  if(!x.theme_id)return `<span class="tag" title="${esc(t('一次性 cue:只出本集,不跨集原样复用'))}">${esc(t('一次性'))}</span>`;
+  const nm=themeName(x.theme_id);
+  return `<span class="tag thm" data-no-i18n title="${esc(nm)}">${esc(x.theme_id)}</span>${nm?`<span class="dim" data-no-i18n> ${esc(nm)}</span>`:''}`;
+}
+function reuseCell(x){
+  const n=(x.reuse_eps||[]).length,m=(LAST&&LAST.quota&&LAST.quota.track_reuse_eps_max)||3;
+  return `<span class="${n>=m?'tag over':''}" data-no-i18n title="${esc(I18N.f('原样复用过的集:{eps}',{eps:(x.reuse_eps||[]).join(', ')||'—'}))}">${n}/${m}</span>`;
 }
 
 function usageTable(x){
@@ -132,6 +148,8 @@ function rows(list){
     const detail=(x.url?`<audio controls preload="none" src="${esc(x.url)}"></audio>`:'')
       +kv('曲目标题',x.title)+kv('情绪',x.mood)+kv('曲风',x.genre)+kv('曲目节奏',x.tempo_bpm?x.tempo_bpm+' bpm':'')
       +kv('乐器',x.instrumentation)+kv('情绪强度',x.intensity)+kv('曲目标签',x.tags)+kv('曲目说明',x.description)
+      +kv('所属主题',x.theme_id?x.theme_id+(themeName(x.theme_id)?' · '+themeName(x.theme_id):''):t('一次性'))+kv('变奏自',x.variant_of)
+      +kv('原样复用的分集',(x.reuse_eps||[]).join(' · '))
       +kv('生成提示词',x.prompt)+kv('库内文件',x.path)+kv('入库来源',[o.ep,o.cue_id,o.file].filter(Boolean).join(' · '))
       +kv('入库时间',String(x.added_at||'').replace('T',' '))
       +kv('音频规格',x.format?[x.format.codec,x.format.sample_rate?x.format.sample_rate+' Hz':'',x.format.channels?x.format.channels+' ch':''].filter(Boolean).join(' · '):'')
@@ -142,26 +160,30 @@ function rows(list){
       <td class="play"><button type="button" class="pl${PLAYING===x.track_id?' on':''}" data-i="${i}" ${x.url?'':'disabled'} title="${esc(t('试听'))}">${PLAYING===x.track_id?'■':'▶'}</button></td>
       <td class="id" data-no-i18n>${esc(x.track_id)}</td>
       <td class="ell" data-no-i18n title="${esc(x.mood||x.title||'')}">${esc(x.mood||x.title||'')}</td>
+      <td class="ell">${themeCell(x)}</td>
       <td class="ell dim" data-no-i18n title="${esc(feel)}">${esc(feel)}</td>
       <td class="ell" data-no-i18n>${dur(x.duration_s)}</td>
       <td>${srcTag(x)}${old?`<span class="tag old" title="${esc(t('来源集重做配乐后不再使用的旧曲:文件保留,选曲时默认不列'))}">${esc(t('已被替换'))}</span>`:''}${x.exists?'':`<span class="tag miss">${esc(t('文件缺失'))}</span>`}</td>
       <td class="ell" data-no-i18n>${esc(x.origin_ep||'—')}</td>
       <td>${(x.eps||[]).map(e=>`<span class="tag ep${e!==x.origin_ep?' re':''}" data-no-i18n>${esc(e)}</span>`).join('')||'<span class="tag">'+esc(t('暂未使用'))+'</span>'}</td>
       <td class="ell" data-no-i18n>${(x.used_in||[]).length}</td>
+      <td class="ell">${reuseCell(x)}</td>
       <td class="edit"><button type="button" class="ed" data-i="${i}" title="${esc(t('修改'))}">${esc(t('修改'))}</button></td>
     </tr>
-    <tr class="detail" data-for="${esc(x.track_id)}" style="display:${OPEN.has(x.track_id)?'':'none'}"><td colspan="10">${detail}</td></tr>`;
+    <tr class="detail" data-for="${esc(x.track_id)}" style="display:${OPEN.has(x.track_id)?'':'none'}"><td colspan="12">${detail}</td></tr>`;
   }).join('');
 }
 
 function render(d){
   LAST=d;
-  const all=d.tracks||[],eps=d.episodes||[],pend=d.pending||{};
+  const all=d.tracks||[],eps=d.episodes||[],pend=d.pending||{},themes=d.themes||[];
   if(SCOPE&&!eps.some(e=>e.ep===SCOPE))SCOPE='';
+  if(THM&&THM!=='_none'&&!themes.some(x=>x.theme_id===THM))THM='';
   const kw=KW.trim().toLowerCase().split(/[\s,,、]+/).filter(Boolean);
   SHOWN=all.filter(x=>SHOW_OLD||x.status!=='superseded')
     .filter(x=>!SCOPE||(x.eps||[]).includes(SCOPE)||x.origin_ep===SCOPE)
-    .filter(x=>SRC===''?true:SRC==='reused'?isReused(x):SRC==='user_provided'?x.source==='user_provided':x.source!=='user_provided')
+    .filter(x=>SRC===''?true:SRC==='reused'?isReused(x):SRC==='variant'?!!x.variant_of:SRC==='user_provided'?x.source==='user_provided':x.source!=='user_provided')
+    .filter(x=>THM===''?true:THM==='_none'?!x.theme_id:x.theme_id===THM)
     .filter(x=>{if(!kw.length)return true;
       const hay=[x.track_id,x.title,x.mood,x.genre,x.instrumentation,x.description,x.prompt,(x.tags||[]).join(' ')].join(' ').toLowerCase();
       return kw.every(w=>hay.includes(w))});
@@ -177,20 +199,27 @@ function render(d){
       <option value="">${esc(t('全部来源'))}</option>
       <option value="generated"${SRC==='generated'?' selected':''}>${esc(t('新生成'))}</option>
       <option value="user_provided"${SRC==='user_provided'?' selected':''}>${esc(t('用户提供'))}</option>
-      <option value="reused"${SRC==='reused'?' selected':''}>${esc(t('跨集复用过的'))}</option></select>
+      <option value="reused"${SRC==='reused'?' selected':''}>${esc(t('跨集复用过的'))}</option>
+      <option value="variant"${SRC==='variant'?' selected':''}>${esc(t('主题变奏'))}</option></select>
+    <select id="thm" title="按主题过滤">
+      <option value="">${esc(t('全部主题'))}</option>
+      ${themes.map(x=>`<option value="${esc(x.theme_id)}"${x.theme_id===THM?' selected':''} data-no-i18n>${esc(x.theme_id)}${x.name?' '+esc(x.name):''}</option>`).join('')}
+      <option value="_none"${THM==='_none'?' selected':''}>${esc(t('一次性曲目'))}</option></select>
     <input type="search" id="kw" placeholder="搜索情绪 / 曲风 / 乐器 / 提示词" value="${esc(KW)}">
     <label><input type="checkbox" id="showold" ${SHOW_OLD?'checked':''}>显示已被替换的旧曲</label>
-    <span>${esc(I18N.f('共 {n} 首 · 跨集复用 {m} 首',{n:live.length,m:live.filter(isReused).length}))}</span></div>`;
+    <span>${esc(I18N.f('共 {n} 首 · 跨集复用 {m} 首',{n:live.length,m:live.filter(isReused).length}))} · ${esc(I18N.f('主题曲 {k} 首(主题 {t} 个)· 一次性 {o} 首 · 变奏 {v} 首',{k:live.filter(x=>x.theme_id).length,t:themes.length,o:live.filter(x=>!x.theme_id).length,v:live.filter(x=>x.variant_of).length}))}</span>
+    <span title="${esc(t('配乐工位每集的复用配额:原样复用不超过 40% 配乐点、新生成或变奏不少于 30%、同一曲目同一集 1 次、一首曲目最多 3 集,只复用主题曲;超出由机检 music_library_synced 拦下'))}">${esc(t('复用配额:≤40% 原样复用 · ≥30% 新生成/变奏 · 一曲 ≤3 集'))}</span></div>`;
   h+=SHOWN.length?`<table class="ml">
-    <colgroup><col style="width:5%"><col style="width:9%"><col style="width:21%"><col style="width:19%"><col style="width:6%"><col style="width:10%"><col style="width:7%"><col style="width:12%"><col style="width:5%"><col style="width:6%"></colgroup>
+    <colgroup><col style="width:4%"><col style="width:8%"><col style="width:17%"><col style="width:11%"><col style="width:15%"><col style="width:6%"><col style="width:10%"><col style="width:6%"><col style="width:10%"><col style="width:4%"><col style="width:4%"><col style="width:5%"></colgroup>
     <thead><tr>
-      <th></th><th>曲目ID</th><th>情绪</th><th>曲风 / 节奏 / 乐器</th><th>曲目时长</th><th>来源</th><th>入库分集</th><th>使用的分集</th><th>使用次数</th><th>修改</th>
+      <th></th><th>曲目ID</th><th>情绪</th><th>主题</th><th>曲风 / 节奏 / 乐器</th><th>曲目时长</th><th>来源</th><th>入库分集</th><th>使用的分集</th><th>使用次数</th><th>复用集数</th><th>修改</th>
     </tr></thead><tbody>${rows(SHOWN)}</tbody></table>`
     :`<div class="none">${esc(t(all.length?'没有匹配的曲目':'音乐库还是空的:配乐工位交付一集后曲目会自动入库;已有配乐的项目点右上角「同步入库」回补'))}</div>`;
   const box=$('#content'),top=box.scrollTop,focus=document.activeElement&&document.activeElement.id==='kw';
   box.innerHTML=h;box.scrollTop=top;
   $('#scope').onchange=()=>{SCOPE=$('#scope').value;syncUrl();render(LAST)};
   $('#src').onchange=()=>{SRC=$('#src').value;render(LAST)};
+  $('#thm').onchange=()=>{THM=$('#thm').value;render(LAST)};
   $('#showold').onchange=()=>{SHOW_OLD=$('#showold').checked;render(LAST)};
   const kwEl=$('#kw');
   kwEl.oninput=()=>{KW=kwEl.value;render(LAST)};
