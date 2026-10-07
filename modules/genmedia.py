@@ -531,7 +531,7 @@ def apply_nsfw_route(kind: str, cfg: dict, group: str = "") -> dict:
 def is_moderation_error(exc: BaseException) -> bool:
     """渠道内容审核拒收(而非网络/鉴权/额度/参数错误)。方舟 *SensitiveContentDetected、MiniMax 1026、
     Fal/OpenRouter content_policy、RunningHub/ComfyUI 审核文案等按错误文本判定;
-    PrivacyInformation(真人脸拒收)不算 NSFW,走人像库/彩铅化流程。"""
+    PrivacyInformation(含人脸参考图拒收)不算 NSFW,是提交路径问题:走虚拟人像库 asset:// 提交,不改图。"""
     if isinstance(exc, _TransportError):
         return False
     if isinstance(exc, _HTTPStatusError) and exc.status in (401, 402, 404, 408, 429) or \
