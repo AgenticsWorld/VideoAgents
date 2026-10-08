@@ -131,7 +131,7 @@ def _scene_names(base: Path) -> dict[str, str]:
 
 
 def _speaker_id(ln: dict) -> str:
-    m = re.search(r"((?:CHAR|CRE)-\d+)", " ".join(str(ln.get(k) or "") for k in ("speaker", "char", "character_id", "speaker_char")))
+    m = re.search(r"((?:CHAR|CRE)-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)", " ".join(str(ln.get(k) or "") for k in ("speaker", "char", "character_id", "speaker_char")))
     return m.group(1) if m else ""
 
 

@@ -22,7 +22,7 @@ import json
 import re
 from pathlib import Path
 
-_VP_NAME = re.compile(r"^((?:CHAR|CRE)-\d+)(?:_(.+))?_voiceprint$")
+_VP_NAME = re.compile(r"^((?:CHAR|CRE)-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)(?:_(.+))?_voiceprint$")
 _CH_NUM = re.compile(r"(\d+)")
 SOURCES = ("prompt", "timeline", "episode", "sole", "default")
 

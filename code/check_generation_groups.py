@@ -223,7 +223,7 @@ def shot_onscreen_lines(shot: dict) -> list:
             if str(ln.get("text") or ln.get("line") or "").strip() and line_placement(ln) == "on":
                 out.append(ln)
         elif isinstance(ln, str) and ln.strip():
-            out.append({"text": ln.strip(), "speaker": (re.match(r"^(?:S\d+/)?(CHAR-\d+)", ln.strip()) or [None, None])[1]})
+            out.append({"text": ln.strip(), "speaker": (re.match(r"^(?:S\d+/)?(CHAR-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)", ln.strip()) or [None, None])[1]})
     return out
 
 
@@ -242,11 +242,11 @@ def shot_has_onscreen_dialogue(shot: dict) -> bool:
 
 def _speaker_of(ln, names: dict | None) -> str:
     raw = str(ln.get("speaker") or ln.get("char") or ln.get("character_id") or "").strip()
-    m = re.search(r"((?:CHAR|CRE)-\d+)", raw)
+    m = re.search(r"((?:CHAR|CRE)-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)", raw)
     if m:
         return m.group(1)
     for k in ("speaker_char", "character_id"):
-        m = re.search(r"((?:CHAR|CRE)-\d+)", str(ln.get(k) or ""))
+        m = re.search(r"((?:CHAR|CRE)-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)", str(ln.get(k) or ""))
         if m:
             return m.group(1)
     if names:

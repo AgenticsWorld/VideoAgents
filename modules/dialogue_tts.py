@@ -50,7 +50,7 @@ from pathlib import Path
 SCHEMA = "dialogue_tts/v1"
 MANIFEST = "tts_manifest.json"
 LIB_REL = "assets/audio/voice/{ep}/tts"
-_ID_RE = re.compile(r"^(CHAR|CRE)-\d+$")
+_ID_RE = re.compile(r"^(CHAR|CRE)-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$")
 EST_TOLERANCE = 0.30      # 实测/估时偏差超过该比例记 WARN
 RAW_DIR = "_raw"          # 合成原声(未修剪)存放子目录
 TRIM_NOISE_DB = -35.0     # 静音判定阈值
@@ -189,7 +189,7 @@ def _name_index(base: Path) -> dict[str, str]:
 
 name_index = _name_index   # 公共名:check_dialogue_fit 等机检共用同一套别名表(#58)
 
-_SPK_ID_RE = re.compile(r"((?:CHAR|CRE)-\d+)")
+_SPK_ID_RE = re.compile(r"((?:CHAR|CRE)-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)")  # 数字编号 CHAR-0001 与拼音 slug CHAR-jie-rui-er 都认
 
 
 def resolve_speaker(ln: dict, names: dict[str, str]) -> tuple[str, str]:

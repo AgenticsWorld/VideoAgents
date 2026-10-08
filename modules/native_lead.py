@@ -38,7 +38,7 @@ TRIGGERS = {"N1": "插入镜 / 主观镜起声(前镜无人物)", "N2": "听者�
 MARK_ZH, MARK_EN = "【原生先入】", "Native lead:"
 MARK_RE = re.compile(r"[ \t]*(?:【原生先入】|Native lead:)[^\n]*?[。.](?=[ \t]*(?:\n|$))")
 _SPLIT_RE = re.compile(r"[,，、;；]")
-_ID_RE = re.compile(r"((?:CHAR|CRE)-\d+)")
+_ID_RE = re.compile(r"((?:CHAR|CRE)-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)")
 
 
 # ---------------------------------------------------------------- 读取

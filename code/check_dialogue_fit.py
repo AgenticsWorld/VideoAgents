@@ -77,7 +77,7 @@ _META_RE = re.compile(r"\s*\{[^{}]*\}\s*$")
 _EST_RE = re.compile(r"(est_duration_s\s*[:：]\s*)([0-9]+(?:\.[0-9]+)?)")
 _PACE_RE = re.compile(r"\bpace\s*[:：]\s*(fast|medium|slow)\b", re.I)
 _EMO_RE = re.compile(r"emotion\s*[:：]\s*([^,，}]+)")
-_CHAR_RE = re.compile(r"(CHAR-\d+)")
+_CHAR_RE = re.compile(r"(CHAR-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)")
 # screenplay 对白行:- **老道儿(CHAR-0002)**(括注):台词 {emotion: …, est_duration_s: 1.6, …}
 _SP_LINE_RE = re.compile(r"^\s*[-*]\s*\*\*(?P<who>[^*]+?)\*\*\s*(?P<paren>(?:[(（][^()（）]*[)）]\s*)*)[:：]\s*(?P<body>.+?)\s*$")
 # dialogue.md 编号形态(与 services/runtime/core.py _dialogue_index 同口径)
@@ -317,7 +317,7 @@ def shot_lines(shot: dict, dlg_idx: dict, names: dict | None = None) -> list:
                                 "placement_trigger": str(pr.get("trigger") or "").strip(),
                                 "line_index": raw_i})
             elif isinstance(ln, str) and ln.strip():
-                mm = re.match(r"^(?:S\d+/)?(CHAR-\d+)\s*[:：]\s*(.+)$", ln.strip())
+                mm = re.match(r"^(?:S\d+/)?(CHAR-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)\s*[:：]\s*(.+)$", ln.strip())
                 out.append({"speaker": mm.group(1) if mm else None, "text": mm.group(2) if mm else ln.strip(),
                             "est_recorded": None, "ref": None, "placement": "on"})
         return out

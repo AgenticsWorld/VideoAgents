@@ -41,7 +41,7 @@ GAP_S = 0.3                 # 同一窗口多句画外之间的间隔
 PLAN_FACTOR = 1.15          # 估时级:est × 1.15 ≤ 可用窗口(同旁白 narration_window_gte_est_x1.15)
 FIT_FACTOR = 0.9            # 实测级:实测 ≤ 可用窗口 × 0.9(同 narration_fit 留呼吸空隙)
 MIN_WINDOW_S = 0.5
-_ID_RE = re.compile(r"((?:CHAR|CRE)-\d+)")
+_ID_RE = re.compile(r"((?:CHAR|CRE)-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)")
 
 # 声处理预设:ffmpeg -af 滤镜链(干声 → .fx.wav)。plain 只做重采样;电话=窄带 + 压缩;隔门=低通 + 衰减 + 短回声;
 # 远处=低通 + 衰减 + 较长回声;内心=贴耳(轻压缩)+ 淡混响;回忆=低通 + 长混响(与 inner 区分:更远、更虚)
