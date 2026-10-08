@@ -36,7 +36,9 @@
 .wb-host figure{margin:0;width:100%;max-width:none}
 .wb-host figcaption{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0 0;color:#99a8bb}
 .wb-host figcaption select{padding:1px 6px;font-size:11px}
-.wb-host canvas{width:100%;height:auto;aspect-ratio:var(--wb-aspect);border-radius:6px;display:block}
+/* 竖幅(9:16 等)画面按宽铺满会极高:限最大高度,宽度按比例缩、居中;横幅不受影响(2026-10-08) */
+.wb-host{--wb-max-h:min(60vh,520px)}
+.wb-host canvas{width:auto;max-width:100%;height:auto;max-height:var(--wb-max-h);aspect-ratio:var(--wb-aspect);border-radius:6px;display:block;margin:0 auto}
 /* 待决项(2026-09-09):Agent 调度时拿不准的取舍,用户看现场后点选项 */
 .wb-issues[hidden]{display:none}
 .wb-issues-box{border:1px solid #5a4a2a;border-radius:7px;padding:6px 10px;background:#1b1a17;color:#dde3ee;max-height:320px;overflow:auto}

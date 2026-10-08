@@ -328,7 +328,7 @@ export function mountGroups(root,project,ep){
   // 减少懒建时上方内容撑高把页面推走的位移(导航跳转靠 preview_storyboard.html jumpTo 再校正)
   projectSettings(project).then(settings=>{
     const f=projectRenderFormat(settings);
-    for(const h of hosts)if(h.isConnected&&!h.classList.contains('wb-panel')){const w=Math.max(0,h.clientWidth-24);h.style.minHeight=`${Math.round(2*w*f.height/f.width+160)}px`;}
+    for(const h of hosts)if(h.isConnected&&!h.classList.contains('wb-panel')){const w=Math.max(0,h.clientWidth-24),ch=Math.min(w*f.height/f.width,innerHeight*0.6,520);h.style.minHeight=`${Math.round(2*ch+160)}px`;}
   }).catch(()=>{});
   pending=new Map();
   groupObserver=new IntersectionObserver(entries=>{
