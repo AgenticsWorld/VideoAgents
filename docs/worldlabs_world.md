@@ -28,7 +28,7 @@ Key 在 https://platform.worldlabs.ai/api-keys 创建,也可用环境变量 `WOR
   多于一个时默认的那个带「★ 默认」角标。
 - 点卡片打开**全屏视窗**(`apps/web/static/world-viewer.js` 的 `openWorld`,Spark `vendor/spark/spark.module.js`,MIT;Esc / ✕ 关闭):
   拖动转头,W/S/A/D/Q/E 漫游,滚轮前进;「⟲」回到全景机位;
-  「💾 背景图」把虚线框里的画面按项目画幅存为本场景一张新背景图(`POST …/plates/manual`,台账 `pano_ref.world_key` 记来自哪个世界模型);
+  「💾 背景图」把虚线框里的画面按 16:9(不随项目画幅)存为本场景一张新背景图(`POST …/plates/manual`,台账 `pano_ref.world_key` 记来自哪个世界模型);
   「⚙ 设置」:精度(500k / full_res …)、白模线框、yaw / 尺度微调及「保存对齐微调」(写该世界模型 `world.json#alignment.yaw_fix_deg / scale_fix`)、
   「设为默认世界模型」、「在 Marble 中打开」(`world_marble_url`)。设置写回走 `POST …/scenes/<sid>/worlds/<key> {default?: true, yaw_fix_deg?, scale_fix?}`。
 - **默认世界模型** = 背景图模式 `world` 的截图(`render_world_views`)与导演台世界背景所用的那个:`world/index.json#default`,没记时取第一个。

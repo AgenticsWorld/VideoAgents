@@ -536,7 +536,7 @@ function mountWorldSection(whitebox,s){
   }
   const openCard=fig=>{
     const w=worlds[+fig.dataset.i];if(!w)return;
-    import('/static/world-viewer.js?v=20261004').then(m=>m.openWorld(proj,s.id,w,{format:FORMAT||null,sourceLabel:srcOf(w),onSaved:()=>reloadKeep(),onChanged:()=>reloadKeep()}))
+    import('/static/world-viewer.js?v=20261008').then(m=>m.openWorld(proj,s.id,w,{format:FORMAT||null,sourceLabel:srcOf(w),onSaved:()=>reloadKeep(),onChanged:()=>reloadKeep()}))
       .catch(e=>{status.className='wb-status ws-status err';status.textContent=t('世界模型加载失败:')+(e.message||e);});
   };
   sec.querySelectorAll('.world-card').forEach(fig=>{fig.onclick=()=>openCard(fig);fig.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openCard(fig);}};});
@@ -965,12 +965,12 @@ function closeFolder(){openFolder(null)}
 function zoom(src){$('#lightbox img').src=src;$('#lightbox').style.display='flex'}
 $('#lightbox').onclick=()=>$('#lightbox').style.display='none';
 // 全景图(2:1 等距柱状)点击 → 可拖动的 360° 预览(pano-viewer.js,three 内翻球);模块加载失败时退回平面灯箱
-function zoomPano(src){import('/static/pano-viewer.js?v=20260926b').then(m=>m.openPano360(src)).catch(()=>zoom(src))}
+function zoomPano(src){import('/static/pano-viewer.js?v=20261008').then(m=>m.openPano360(src)).catch(()=>zoom(src))}
 // 正式全景(带锚点数据)进 360° 视窗:附 project/sid/画幅与保存回调,视窗显示「💾 背景图」(2026-09-26)
 function zoomPanoAnchor(img){
   let pm={};try{pm=JSON.parse(img.dataset.pano||'{}');}catch(e){pm={};}
   const info={...pm,project:$('#project').value.trim()||'demo',sid:CUR,format:FORMAT||null,onSaved:()=>reloadKeep()};
-  import('/static/pano-viewer.js?v=20260926b').then(m=>m.openPano360(img.src,info)).catch(()=>zoom(img.src));
+  import('/static/pano-viewer.js?v=20261008').then(m=>m.openPano360(img.src,info)).catch(()=>zoom(img.src));
 }
 
 // ✂ 裁剪分镜背景图(2026-09-15):选区用归一化坐标 {l,t,w,h}(0..1,相对原图),与显示缩放无关;比例固定 = 项目画幅(预览数据 format,

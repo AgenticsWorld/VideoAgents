@@ -7941,7 +7941,8 @@ def _scene_plate_manual(project: str, sid: str, body: dict) -> dict:
         raise ServiceError(400, "camera.target 不能与 position 重合")
     scheme = re.sub(r"[^\w\-]", "", str(body.get("scheme") or "")) or "nolight"
     anchor_id = re.sub(r"[^\w\-]", "", str(body.get("anchor_id") or ""))
-    fmt = _wb_fmt(_wb_read(base / "settings.json", {}))
+    # 手工截取不受项目画幅限制,一律 16:9(2026-10-08)
+    fmt = {**_wb_fmt(_wb_read(base / "settings.json", {})), "width": 1920, "height": 1080}
     pw, ph = shot_plates.plate_size(fmt)
     layout = _wb_read(base / "assets/concepts/scenes" / sid / "layout.json", {}) or {}
     scene = _wb_read(base / "assets/concepts/scenes" / sid / "whitebox.scene.json", {}) or {}
@@ -7958,7 +7959,7 @@ def _scene_plate_manual(project: str, sid: str, body: dict) -> dict:
         if min(W, H) < 64:
             raise ServiceError(400, "图片太小")
         if abs(W / H - pw / ph) > 0.02:
-            raise ServiceError(400, f"图片宽高比 {W}x{H} 与项目画幅 {pw}x{ph} 不符")
+            raise ServiceError(400, f"图片宽高比 {W}x{H} 须为 16:9({pw}x{ph})")
         if (W, H) != (pw, ph):
             im = im.resize((pw, ph), Image.LANCZOS)
         now = datetime.now()

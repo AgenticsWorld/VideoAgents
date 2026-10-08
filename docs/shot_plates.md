@@ -77,9 +77,9 @@ Agent 把出图脚本丢到后台就结单，进程随任务结束被杀，9 组
 
 全景图与世界模型自 2026-09-26 起不再作为自动出图模式(界面隐藏),改为**手工补背景图**的来源:
 
-- 场景预览页「🌐 全景图」板块点正式全景进 360° 视窗(`apps/web/static/pano-viewer.js`,`openPano360(src, meta)`,meta 带 project/sid/anchor_id/scheme/锚点 position/yaw_deg/画幅),右上角「💾 背景图」把当前画面按项目画幅(长边 1920)离屏渲一帧,连同换算出的白模机位 `camera{position, target, fov_v_deg}` `POST /projects/<p>/scenes/<sid>/plates/manual`。方向换算:全景图中心列 = 锚点 yaw(与 `modules/scene_panos.py` 投影约定一致,`fwd = (−sin yaw, 0, −cos yaw)`),视窗 `lon` 与贴图 u 的关系 `u = lon/360`(LON0 = 180 正对中心列)→ 世界 yaw = yaw0 − (lon − 180);`lat` 为仰角。虚线框 = 将保存的画幅范围(屏幕比 ≥ 画幅比时同垂直视场左右裁,否则以屏幕水平视场为准上下裁)。
-- 「🌍 世界模型」板块的 Spark 视窗(`world-viewer.js`)默认**不显示白模线框、不画全景机位红球**,工具栏「💾 背景图」同样按画幅离屏渲一帧,相机方向直接取 three 相机(已在白模坐标系),`view` 记 yaw(罗盘,北 0 · 东 90)/pitch/fov/精度。
-- 服务端 `_scene_plate_manual`(services/runtime/core.py):校验宽高比与项目画幅一致(不一致 400)、按 `camera_facts` 算机位事实(朝向/机高/俯仰/视场/罗盘/standing),存 `plates/<plate_key>_hand<时间戳>.png`(JPEG 内容)+ 同名 `.json`,库条目 `master: true`、`manual: true`、`pano_ref = {kind: pano_manual | world_manual, anchor_id, scheme, view, source_file}`、`plate_mode: manual`。`is_legacy` 为否;分镜预览页「换图」候选列表自动包含,母图制 `find_master` 也能复用。场景预览页 caption 显示「手工截取(全景 A3)」/「手工截取(世界模型)」。
+- 场景预览页「🌐 全景图」板块点正式全景进 360° 视窗(`apps/web/static/pano-viewer.js`,`openPano360(src, meta)`,meta 带 project/sid/anchor_id/scheme/锚点 position/yaw_deg/画幅),右上角「💾 背景图」把当前画面按 16:9(1920×1080,不随项目画幅,2026-10-08)离屏渲一帧,连同换算出的白模机位 `camera{position, target, fov_v_deg}` `POST /projects/<p>/scenes/<sid>/plates/manual`。方向换算:全景图中心列 = 锚点 yaw(与 `modules/scene_panos.py` 投影约定一致,`fwd = (−sin yaw, 0, −cos yaw)`),视窗 `lon` 与贴图 u 的关系 `u = lon/360`(LON0 = 180 正对中心列)→ 世界 yaw = yaw0 − (lon − 180);`lat` 为仰角。虚线框 = 将保存的画幅范围(屏幕比 ≥ 画幅比时同垂直视场左右裁,否则以屏幕水平视场为准上下裁)。
+- 「🌍 世界模型」板块的 Spark 视窗(`world-viewer.js`)默认**不显示白模线框、不画全景机位红球**,工具栏「💾 背景图」同样按 16:9 离屏渲一帧,相机方向直接取 three 相机(已在白模坐标系),`view` 记 yaw(罗盘,北 0 · 东 90)/pitch/fov/精度。
+- 服务端 `_scene_plate_manual`(services/runtime/core.py):校验宽高比为 16:9(不一致 400;手工截取不随项目画幅,机位事实的水平视场也按 16:9 算)、按 `camera_facts` 算机位事实(朝向/机高/俯仰/视场/罗盘/standing),存 `plates/<plate_key>_hand<时间戳>.png`(JPEG 内容)+ 同名 `.json`,库条目 `master: true`、`manual: true`、`pano_ref = {kind: pano_manual | world_manual, anchor_id, scheme, view, source_file}`、`plate_mode: manual`。`is_legacy` 为否;分镜预览页「换图」候选列表自动包含,母图制 `find_master` 也能复用。场景预览页 caption 显示「手工截取(全景 A3)」/「手工截取(世界模型)」。
 - 保存后页面原位重载(`reloadKeep`)以刷新「分镜背景图」板块;世界模型视窗重挂后状态行保留保存提示 60 s。隔离实例(8730/8740)无头实测:全景 A1/A3、世界模型各保存成功,候选列表可见。
 
 ## 按修改意见重出一张(2026-09-26:分镜预览「✏️ 修改」→ 修改师)
