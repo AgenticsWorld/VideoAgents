@@ -459,6 +459,22 @@ def save_library(base: Path, sid: str, lib: dict):
     os.replace(tmp, d/'index.json')
 
 
+def upsert_library_entry(base: Path, sid: str, entry: dict, lib: dict | None = None) -> dict:
+    """出图后入库:保存前重读磁盘上的库,只替换/追加这一条再写回。出图要几十秒到几分钟,期间别的进程(九宫格/补图/修改)
+    可能已写过库;拿出图前读的旧库整份写回会把它们覆盖掉(2026-10-08 jidi 九宫格 9 格两次丢失)。
+    传 lib 时同步更新这份内存副本,供本次运行后续查库。"""
+    import fcntl
+    d = library_dir(base, sid); d.mkdir(parents=True, exist_ok=True)
+    with open(d/'index.json.lock', 'w') as lk:
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        fresh = load_library(base, sid)
+        fresh['plates'] = [e for e in fresh['plates'] if e.get('key') != entry['key']] + [entry]
+        save_library(base, sid, fresh)
+    if lib is not None:
+        lib['plates'] = [e for e in lib['plates'] if e.get('key') != entry['key']] + [entry]
+    return fresh
+
+
 def plate_key(scheme: str, facts: dict) -> str:
     """母图库键:<方案>_b<朝向°>_h<机高档>_x<机位x>_z<机位z>_w<母图视场°>(w = wide master;2026-09-14 前逐镜直出的键用 _f<fov>)。"""
     scheme = re.sub(r'[^A-Za-z0-9_-]+', '-', scheme or 'nolight')
@@ -1313,9 +1329,12 @@ def ensure_grid9(base: Path, sid: str, scheme_key: str, scheme_id: str, *, scene
          **({'station': center['station'], 'station_basis': center['basis'], 'tilt_tile': center['tilt'], 'plan_edges': center['edges']} if center else {}),
          'tiles': [{'tile': t['tile'], 'key': e['key'], **e['pano_ref']['view']} for t, e in zip(tiles, entries)],
          'written_at': now}, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    lib = load_library(base, sid)
-    lib['plates'] = [e for e in lib['plates'] if not (e.get('grid9') and (e.get('pano_ref') or {}).get('scheme') == scheme_key)] + entries
-    save_library(base, sid, lib)
+    import fcntl
+    with open(library_dir(base, sid)/'index.json.lock', 'w') as lk:
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        lib = load_library(base, sid)
+        lib['plates'] = [e for e in lib['plates'] if not (e.get('grid9') and (e.get('pano_ref') or {}).get('scheme') == scheme_key)] + entries
+        save_library(base, sid, lib)
     log(f'saved: {sheet_rel}(+9 格)')
     return entries
 
@@ -1847,6 +1866,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                 continue
             if not dry_run:
                 stats.setdefault('grids', []).append(tiles[0]['pano_ref']['sheet'])
+                libs[sid] = load_library(base, sid)   # ensure_grid9 已把 9 格写进库;不重读的话后面补图 save_library 会用旧库把 9 格覆盖掉
             sheet_rel = tiles[0]['pano_ref']['sheet']
             fb_pending = []   # 本次运行决定新出的补图(pending),后续相近机位的镜复用
             for d in sds:
@@ -2043,8 +2063,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                     stats['errors'].append(f'{shot_id}/{role}: 九宫格补图出图失败 {error}')
                     continue
                 (base/out_rel).with_suffix('.json').write_text(json.dumps(entry, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
-                lib['plates'] = [e for e in lib['plates'] if e['key'] != entry['key']] + [entry]
-                save_library(base, sid, lib)
+                upsert_library_entry(base, sid, entry, lib)
             d['entry'] = entry; d['file'] = out_rel
             by_key[entry['key']] = entry
             stats['new'] += 1
@@ -2135,8 +2154,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                 stats['errors'].append(f'{shot_id}/{role}: 母图出图失败 {error}')
                 continue
             (base/out_rel).with_suffix('.json').write_text(json.dumps(entry, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
-            lib['plates'] = [e for e in lib['plates'] if e['key'] != entry['key']] + [entry]   # --force 同 key 覆盖
-            save_library(base, sid, lib)
+            upsert_library_entry(base, sid, entry, lib)   # --force 同 key 覆盖
         d['entry'] = entry; d['file'] = out_rel; d['view'] = view_info(entry, d['facts'])
         by_key[entry['key']] = entry
         stats['new'] += 1
@@ -3144,8 +3162,7 @@ def revise_shot_plate(base: Path, ep: str, shot_id: str, role: str, change: str,
     genmedia.generate_image(prompt, str(base/out_rel), negative=negative, refs=[str(base/src_rel)], aspect=fmt['aspect_ratio'],
                             size=f'{width}x{height}', seed=seed)
     (base/out_rel).with_suffix('.json').write_text(json.dumps(entry, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
-    lib['plates'] = [e for e in lib['plates'] if e.get('key') != key] + [entry]
-    save_library(base, sid, lib)
+    upsert_library_entry(base, sid, entry, lib)
     log(f"saved: {out_rel}")
     # 只改本镜该角色的条目:原图、库里原条目、引用同一原图的其它镜都不动
     slot.update({'key': key, 'file': out_rel, 'reuse': 'revised', 'crop': None, 'view': None, 'whitebox_frame': entry['whitebox_frame'],
