@@ -198,6 +198,7 @@ window.I18N_DICT = {
 "约束每个生成组(generation group)的总时长与参考素材数量上限。这些数值需要与所选视频生成模型的能力对应(Seedance 2.0 系列:组时长 ≤15s、参考图 ≤9、参考视频 ≤3、参考音频 ≤3;Seedance 2.5:组时长 ≤30s、参考图 ≤30、参考视频 ≤10、参考音频 ≤10),如果不清楚建议不要修改。": "Membatasi total durasi dan jumlah materi referensi setiap grup generasi. Nilai-nilai ini harus sesuai dengan kemampuan model generasi video yang dipilih (seri Seedance 2.0: durasi grup ≤15s, gambar ≤9, video ≤3, audio ≤3; Seedance 2.5: durasi ≤30s, gambar ≤30, video ≤10, audio ≤10). Jika ragu, jangan diubah.",
 "选择 Seedance 2.0 时自动关闭「白模」,其他模型默认开启;可在下一步「输出设置」再手动调整。": "Memilih Seedance 2.0 otomatis menonaktifkan “Whitebox”; model lain default aktif. Bisa diubah manual di langkah berikutnya, “Pengaturan output”.",
 "⚠ 生成模型设置里当前生效的视频模型是 {model}(对应 {family} 口径),与此处所选 {preset} 不同。不影响下一步,但建议两边保持一致,否则分镜组上限会与实际生成模型的能力不符": "⚠ Model video yang aktif di pengaturan model generasi adalah {model} (sesuai preset {family}), berbeda dengan {preset} yang dipilih di sini. Anda tetap bisa lanjut, tetapi sebaiknya keduanya sama; jika tidak, batas grup shot tidak akan cocok dengan kemampuan model sebenarnya",
+"⚠ 生成模型设置里当前生效的视频模型 {model} 不属于以上预设口径,已按默认 {preset} 填入,请按该模型实际能力核对下面四个上限": "⚠ Model video yang aktif di pengaturan model generasi, {model}, tidak cocok dengan preset mana pun di atas, jadi diisi preset bawaan {preset}. Periksa empat batas di bawah sesuai kemampuan model tersebut yang sebenarnya",
 "手动值": "Nilai manual",
 "最大分镜组时长需为 4-30 的数值": "Durasi grup maks harus angka antara 4-30",
 "最大参考图数量需为 0-30 的整数": "Maks gambar referensi harus bilangan bulat 0-30",

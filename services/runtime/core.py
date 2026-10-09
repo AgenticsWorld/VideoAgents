@@ -14595,31 +14595,78 @@ async def api_globalmodel_get():
     return {"global_model": global_model_pref()}
 
 
-def video_model_family(cfg: dict | None = None) -> str:
-    """生效视频模型对应的「模型限制」预设口径:sd25 / sd20(含 fast/mini)/ mmh3(任何渠道跑 H3,
-    含 ComfyUI/RunningHub 工作流)/ wan30(Fal 托管阿里 Wan 3.0);无法判定(其他模型或无模型渠道)返 ""。"""
-    cfg = cfg or load_genconfig()
-    if is_minimax_h3_active(cfg):
+def video_family_for(*names: str) -> str:
+    """按模型 id / 名称 / 工作流名关键字归入「模型限制」预设口径(2026-10-09):sd25 / sd20 / mmh3 / wan30,
+    不命中返 ""。先小写、非字母数字一律折成 "-" 再按序匹配,先中先得。各渠道实际写法:
+      mmh3  名字同时含 minimax 与 h3(minimax/h3[-max]、MiniMax-H3、minimax/hailuo-h3/…、
+            rhart-video/minimax-h3-oss/…、工作流节点 MiniMaxH3ReferenceToVideo),或 hailuo-3 / hailuo-h3
+            (OpenRouter minimax/hailuo-3[-max] 不含 h3 字样)
+      sd25  seedance-2.5 各写法(doubao-/dreamina-seedance-2-5-…、bytedance/seedance-2.5[-global]-token/…)
+      sd20  其余 seedance-2.x(含 fast/mini/global),及 RunningHub 给 Seedance 2.0 起的别名 sparkvideo-2.0
+      wan30 wan-3.x(alibaba/wan-3.0[-prime]/…)
+    Seedance 1.x、Hailuo 2.3、Wan 2.x、Kling、Veo、Vidu、PixVerse、LTX 等不命中。"""
+    t = re.sub(r"[^a-z0-9]+", "-", " ".join(n for n in names if n).lower())
+    if ("minimax" in t and "h3" in t) or re.search(r"hailuo-?h?3(?![0-9])", t):
         return "mmh3"
-    m = effective_video_model(cfg)
-    if is_seedance25(m):
+    if re.search(r"(?:seedance|sparkvideo)-?v?2-5(?![0-9])", t):
         return "sd25"
-    if is_seedance20(m):
+    if re.search(r"(?:seedance|sparkvideo)-?v?2(?![0-9])", t):
         return "sd20"
-    if is_wan30(m):
+    if re.search(r"(?<![a-z])wan-?3(?![0-9])", t):
         return "wan30"
     return ""
 
 
+def _comfy_video_family(comfy: dict) -> str:
+    """ComfyUI 渠道无模型 id:先看工作流名(本地/Comfy Cloud = 工作流文件名,RunningHub = 所选工作流的备注),
+    不命中再看工作流 JSON 全文(RunningHub 只读本地缓存,不发网络请求)。"""
+    mode = comfy.get("mode") or "local"
+    if mode in RH_BASES:
+        wf_id = str(comfy.get("rh_workflow_id") or "")
+        name = next((str(w.get("note") or "") for w in comfy.get("rh_workflows") or []
+                     if isinstance(w, dict) and wf_id and str(w.get("id")) == wf_id), "")
+        fam = video_family_for(name)
+        return fam or video_family_for(_rh_cached_workflow(comfy))
+    wf = str(comfy.get("workflow") or "").strip()
+    fam = video_family_for(Path(wf).name)
+    if fam or not wf:
+        return fam
+    try:
+        from modules.genmedia import _resolve_comfy_workflow_path
+        return video_family_for(_resolve_comfy_workflow_path(wf).read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _effective_video_names(cfg: dict) -> tuple[str, str, str]:
+    """生效视频渠道 → (provider, 模型 id, 名称)。Agentics 未选 profile 时与 genmedia 同口径取目录首项,
+    名称取 profile 名(profile 代号未必含模型名);目录须已登录桌面端账号,拉不到时 id/名称为空。"""
+    prov = active_video_provider(cfg)
+    model = effective_video_model(cfg)
+    if prov != "agentics":
+        return prov, model, video_model_label(model, prov) if model else _video_model_label(cfg)
+    rows = agentics_video_profiles()
+    model = model or (rows[0]["id"] if rows else "")
+    return prov, model, next((r["label"] for r in rows if r["id"] == model), model)
+
+
+def video_model_family(cfg: dict | None = None) -> str:
+    """生效视频模型对应的「模型限制」预设口径(规则见 video_family_for);无法判定返 ""。"""
+    cfg = cfg or load_genconfig()
+    if active_video_provider(cfg) == "comfyui":
+        return _comfy_video_family((cfg.get("video") or {}).get("comfyui") or {})
+    return video_family_for(*_effective_video_names(cfg)[1:])
+
+
 async def api_video_model_get():
     """「生成模型」页当前生效的视频模型(video-generation 工位口径)及其预设口径;
-    新建向导「模型限制」步据此在所选预设与生效模型不一致时给提示(不拦下一步)。"""
-    cfg = load_genconfig()
-    model = effective_video_model(cfg)
-    prov = active_video_provider(cfg)
-    return {"provider": prov, "model": model,
-            "label": video_model_label(model, prov) if model else _video_model_label(cfg),
-            "family": video_model_family(cfg)}
+    新建向导「模型限制」步打开时据 family 自动选中对应预设,不命中保留默认并提示核对。"""
+    def work():
+        cfg = load_genconfig()
+        prov, model, label = _effective_video_names(cfg)
+        return {"provider": prov, "model": model, "label": label or prov,
+                "family": video_model_family(cfg)}
+    return await asyncio.to_thread(work)
 
 
 async def api_globalmodel_set(body: dict):

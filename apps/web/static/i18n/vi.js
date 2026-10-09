@@ -198,6 +198,7 @@ window.I18N_DICT = {
 "约束每个生成组(generation group)的总时长与参考素材数量上限。这些数值需要与所选视频生成模型的能力对应(Seedance 2.0 系列:组时长 ≤15s、参考图 ≤9、参考视频 ≤3、参考音频 ≤3;Seedance 2.5:组时长 ≤30s、参考图 ≤30、参考视频 ≤10、参考音频 ≤10),如果不清楚建议不要修改。": "Giới hạn tổng thời lượng và số lượng tư liệu tham chiếu của mỗi nhóm tạo sinh. Các giá trị này phải phù hợp với khả năng của mô hình tạo video đã chọn (dòng Seedance 2.0: thời lượng nhóm ≤15s, ảnh ≤9, video ≤3, audio ≤3; Seedance 2.5: thời lượng ≤30s, ảnh ≤30, video ≤10, audio ≤10). Nếu không rõ, không nên thay đổi.",
 "选择 Seedance 2.0 时自动关闭「白模」,其他模型默认开启;可在下一步「输出设置」再手动调整。": "Chọn Seedance 2.0 sẽ tự động tắt “Whitebox”; các mô hình khác mặc định bật. Bạn có thể chỉnh tay ở bước tiếp theo “Cài đặt đầu ra”.",
 "⚠ 生成模型设置里当前生效的视频模型是 {model}(对应 {family} 口径),与此处所选 {preset} 不同。不影响下一步,但建议两边保持一致,否则分镜组上限会与实际生成模型的能力不符": "⚠ Mô hình video đang có hiệu lực trong cài đặt mô hình tạo sinh là {model} (tương ứng preset {family}), khác với {preset} đã chọn ở đây. Vẫn có thể tiếp tục, nhưng nên giữ hai bên nhất quán; nếu không, giới hạn nhóm cảnh sẽ không khớp với năng lực thực tế của mô hình",
+"⚠ 生成模型设置里当前生效的视频模型 {model} 不属于以上预设口径,已按默认 {preset} 填入,请按该模型实际能力核对下面四个上限": "⚠ Mô hình video đang có hiệu lực trong cài đặt mô hình tạo sinh là {model}, không thuộc preset nào ở trên nên đã điền mặc định {preset}. Hãy kiểm tra bốn giới hạn bên dưới theo năng lực thực tế của mô hình đó",
 "手动值": "Giá trị thủ công",
 "最大分镜组时长需为 4-30 的数值": "Thời lượng nhóm tối đa phải là số từ 4-30",
 "最大参考图数量需为 0-30 的整数": "Số ảnh tham chiếu tối đa phải là số nguyên từ 0-30",

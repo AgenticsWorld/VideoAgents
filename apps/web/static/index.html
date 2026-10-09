@@ -1505,14 +1505,16 @@ function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置�
   $('#npd-ep').value=5;$('#npd-ep-auto').checked=false;$('#npd-ep').disabled=false;
   $('#npd-smin').value=0.5;$('#npd-smax').value=15;$('#npd-extend').value=50;
   $('#npd-longtake').checked=false;$('#npd-longtake-mode').value='last_frame';npdLongtakeWarn();   // 长镜头默认关闭,连接方式默认尾帧图片
-  sgApplyPreset('npsg','sd25');   // 分镜组默认按 Seedance 2.5 口径(30s/30图/10视频/10音频,2026-09-09);同时按模型联动白模开关
+  sgApplyPreset('npsg','mmh3');   // 分镜组兜底按 MiniMax H3 口径(15s/9图/3视频/3音频;2026-10-09 用户拍板,原 Seedance 2.5);
+                                  // 同时按模型联动白模开关;打开向导后由 npsgFromVideoModel 按生效视频模型改选对应预设
 }
 function openNpModal(){
   npInitOnce();
   $('#np-name').value='';$('#np-novel').value='';$('#np-brief').value='';$('#np-style').value='';
   npResetDefaults();
-  NP_VIDEO_MODEL=null;npsgModelHint();
-  api('/api/v1/config/video-model').then(m=>{NP_VIDEO_MODEL=m;npsgModelHint()}).catch(()=>{});
+  NP_VIDEO_MODEL=null;NP_SG_TOUCHED=false;npsgModelHint();
+  const vmReq=++NP_VM_REQ;
+  api('/api/v1/config/video-model').then(m=>{if(vmReq===NP_VM_REQ){NP_VIDEO_MODEL=m;npsgFromVideoModel()}}).catch(()=>{});
   rhythmInit('np').then(()=>rhythmApply('np',null));
   npShowStep(1);
   trModeApply('npd',{mode:'classic'});   // 过场模式(2026-09-24):新项目默认经典
@@ -2148,13 +2150,27 @@ function sgSyncPreset(pfx){   // 按点选/当前值高亮预设按钮(同一时
   document.querySelectorAll('[data-sg-presets="'+pfx+'"] button').forEach(b=>b.classList.toggle('active',b.dataset.preset===active));
   if(pfx==='npsg')npsgModelHint();
 }
-// 新建向导「模型限制」步:所选预设与「生成模型」页当前生效视频模型(GET /config/video-model,
-// video-generation 工位口径)不一致时给黄字提示,只提示不拦下一步;生效模型无法归入预设口径时不提示
+// 新建向导「模型限制」步(2026-10-09 改):默认预设跟随「生成模型」页当前生效视频模型(GET /config/video-model,
+// video-generation 工位口径;服务端 core.video_family_for 按模型 id/名称/工作流名关键字归入 sd25|sd20|mmh3|wan30),
+// 打开向导时自动选中;归不进预设口径时保留默认 MiniMax H3 并黄字提示核对。用户在此步点选/改值后不再被覆盖,
+// 所选与生效模型不一致时黄字提示,只提示不拦下一步
 let NP_VIDEO_MODEL=null;   // {provider,model,label,family:sd20|sd25|mmh3|wan30|''};openNpModal 时拉取
+let NP_VM_REQ=0,NP_SG_TOUCHED=false;   // 防迟到响应覆盖新一次打开;用户动过模型限制步后不再自动套用
 const SG_PRESET_NAMES={sd20:'Seedance 2.0',sd25:'Seedance 2.5',mmh3:'MiniMax H3',wan30:'Wan 3.0'};
+function npsgFromVideoModel(){
+  const fam=NP_VIDEO_MODEL&&NP_VIDEO_MODEL.family;
+  if(SG_PRESETS[fam]&&!NP_SG_TOUCHED)sgApplyPreset('npsg',fam);   // 同时按模型联动白模开关
+  else npsgModelHint();
+}
 function npsgModelHint(){
   const el=$('#npsg-model-hint');if(!el)return;
   const m=NP_VIDEO_MODEL,active=sgActivePreset('npsg');
+  // 未识别:Agentics 未登录拉不到 profile 时 label 即渠道名,无从核对,不提示
+  if(m&&!m.family&&m.label&&m.label!==m.provider&&!NP_SG_TOUCHED){
+    el.textContent=I18N.f('⚠ 生成模型设置里当前生效的视频模型 {model} 不属于以上预设口径,已按默认 {preset} 填入,请按该模型实际能力核对下面四个上限',
+      {model:m.label,preset:active?SG_PRESET_NAMES[active]:t('手动值')});
+    el.style.display='';return;
+  }
   if(!m||!m.family||m.family===active){el.style.display='none';return}
   el.textContent=I18N.f('⚠ 生成模型设置里当前生效的视频模型是 {model}(对应 {family} 口径),与此处所选 {preset} 不同。不影响下一步,但建议两边保持一致,否则分镜组上限会与实际生成模型的能力不符',
     {model:m.label||m.model||m.provider,family:SG_PRESET_NAMES[m.family],preset:active?SG_PRESET_NAMES[active]:t('手动值')});
@@ -2202,8 +2218,8 @@ function npSpatialFromModel(){
 }
 document.querySelectorAll('[data-sg-presets]').forEach(box=>{
   const pfx=box.dataset.sgPresets;
-  box.querySelectorAll('button').forEach(b=>b.onclick=()=>sgApplyPreset(pfx,b.dataset.preset));
-  for(const id of Object.values(SG_FIELDS))$('#'+pfx+'-'+id).addEventListener('input',()=>{sgSyncPreset(pfx);if(pfx==='npsg')npSpatialFromModel()});
+  box.querySelectorAll('button').forEach(b=>b.onclick=()=>{if(pfx==='npsg')NP_SG_TOUCHED=true;sgApplyPreset(pfx,b.dataset.preset)});
+  for(const id of Object.values(SG_FIELDS))$('#'+pfx+'-'+id).addEventListener('input',()=>{if(pfx==='npsg')NP_SG_TOUCHED=true;sgSyncPreset(pfx);if(pfx==='npsg')npSpatialFromModel()});
 });
 sgSyncPreset('npsg');
 function sgValidate(gs,ni,nv,na){   // 返回错误文案,''=通过(与服务端 _validate_shot_group 同口径)
