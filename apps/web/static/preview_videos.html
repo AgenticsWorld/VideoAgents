@@ -55,7 +55,11 @@ details.fold[open] .fold-hint::before{content:"▾ "}
 /* 成片视频卡 */
 .vids{display:flex;gap:16px;flex-wrap:wrap}
 .vcard{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px;max-width:560px;flex:1 1 480px}
-.vcard video{width:100%;border-radius:6px;background:#000;display:block}
+.vcard video{width:100%;max-height:min(70vh,640px);border-radius:6px;background:#000;display:block}
+/* 竖幅(9:16 等)按宽铺满过高:读到元数据后标 tall,视频按限高定尺寸、卡片收窄到视频宽(说明行不撑宽卡片) */
+.vcard.tall{flex:0 0 auto}
+.vcard.tall video{width:auto;max-width:100%;height:min(70vh,640px);margin:0 auto}
+.vcard.tall .cap{width:0;min-width:100%}
 .vcard .cap{font-size:12px;color:var(--dim);margin-top:6px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
 .vcard .cap .fn{color:var(--text);font-weight:600}
 /* 组 clip 超分方法标签 */
@@ -203,6 +207,9 @@ function pubHtml(p,ep){
   return h+'</div>';
 }
 
+// 竖幅成片(高 > 宽)标 tall:限高并收窄卡片,横幅不变
+function vidFit(v){if(v.videoHeight>v.videoWidth)v.closest('.vcard').classList.add('tall')}
+
 function render(d){
   LAST=d;
   renderEps(d.episodes||[]);
@@ -212,7 +219,7 @@ function render(d){
 
   h+=`<h3 class="sec">▶ 成片视频(final)<span class="n">${esc(I18N.f('{n} 个 · edit/{ep}/',{n:finals.length,ep:d.ep}))}</span></h3>`;
   h+=finals.length?`<div class="vids">${finals.map(f=>
-    `<div class="vcard"><video controls preload="metadata" src="${esc(f.url)}"></video>
+    `<div class="vcard"><video controls preload="metadata" onloadedmetadata="vidFit(this)" src="${esc(f.url)}"></video>
      <div class="cap"><span class="fn">${esc(f.name)}</span><span>${f.size_mb} MB</span></div></div>`).join('')}</div>`
     :'<div class="none">'+esc(I18N.f('该集还没有 final 成片(edit/{ep}/*final*.mp4)',{ep:d.ep}))+'</div>';
 
