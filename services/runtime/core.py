@@ -3172,11 +3172,13 @@ def build_role_prompt(agent_id: str, project: str,
     burn_in = (
         "**开启** —— 成片终稿必须内嵌字幕:subtitle 产出 subtitles.srt(正片 0 秒基准)后,由 edit 在封装终版时"
         "先用宿主 CLI `code/finalize_episode.py shift`(或 assemble 自动跑)按片头实测时长整体平移生成成片基准"
-        " subtitles_final.srt,再把**平移后的字幕**烧录进画面(ffmpeg subtitles 滤镜等),烧录后 `finalize_episode.py check`"
-        " 须全 PASS——final.mp4 含片头时严禁直接烧正片基准 SRT,否则字幕整体偏早;"
-        "烧录样式严格按 subtitle SOUL.md 的烧录样式规范"
-        "(小字号贴底、≤2 行、白字黑描边、禁大面积底板);orchestrator 排期须把该烧录步骤纳入本集必做项,"
-        "platform-adapter 发布物料一律基于烧录版母版"
+        " subtitles_final.srt,`finalize_episode.py check` 全 PASS 后**只准**用宿主 CLI"
+        " `python3 code/burn_subtitles.py burn --project <slug> --ep epNN`(附加语言版本加 `--lang <code>`)把平移后的字幕"
+        "烧进成片副本 final_sub[.<lang>].mp4(干净版 final.mp4 不动、音轨流拷贝;PIL 字幕带 + overlay,不依赖 ffmpeg libass),"
+        "禁止自写 ffmpeg subtitles / ass / drawtext 滤镜或在项目 code/ 下写替代脚本——final.mp4 含片头时严禁直接烧正片基准 SRT;"
+        "烧录样式按 subtitle SOUL.md 的烧录样式规范(小字号贴底、≤2 行、白字黑描边、禁大面积底板),由该 CLI 内置机检"
+        " subtitle_style_ok 把关,FAIL 即不交付;orchestrator 排期须把该烧录步骤纳入本集必做项,"
+        "platform-adapter 发布物料一律基于烧录版母版 final_sub[.<lang>].mp4"
         if out.get("subtitle_burn_in") else
         "关闭(默认)—— 成片不烧录字幕,字幕仅以外挂形式交付:final.mp4 含片头时交付 edit 用 `code/finalize_episode.py shift`"
         " 平移后的成片基准 subtitles_final.srt(严禁把正片 0 秒基准的 subtitles.srt 直接配 final.mp4,"

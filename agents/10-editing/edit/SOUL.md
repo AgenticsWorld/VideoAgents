@@ -20,7 +20,7 @@
    - **封装**:`python3 code/finalize_episode.py assemble --project <slug> --ep epNN`——intro + 正片画面 + final_audio + outro + teaser 一次 concat 成 `final.mp4`,声轨随正片段一起拼接,片头偏移由拼接天然产生;**禁止自写 concat 后再 `-itsoffset`/`adelay` 手算声轨偏移,禁止 `-shortest`**;正片段时长按画面/声轨较长者,画面不足用末帧补齐;
    - **字幕**:同一 CLI 的 `shift` 子命令(assemble 已自动跑)把 `subtitles.srt`/`.ass` 整体 +片头实测时长(`ffprobe intro.mp4`,与 `placement.json` 声明值交叉核对,不一致以实测为准并上报)生成 `subtitles_final.srt`/`.ass`;未启用片头 = 原样拷贝;**仅当**后期删段集 shift/assemble 报 `subtitle_basis` FAIL(字幕末条超出正片)时:先确认 subtitles.srt 的基准——仍是原粗剪基准就加 `--subs-basis original` 重跑(写 `edit/epNN/subtitles.basis.json`,之后 check 同口径);已按后期版本出却仍超出,回派 subtitle 按 final_audio 重出;不手改 subtitles_final;
    - **机检**:`python3 code/finalize_episode.py check --project <slug> --ep epNN`(机检 `intro_offset_ok`;不带 `--cut` 时正片按台账 `final_layout.json` → 后期拼片 `cut_post*` → 最新 `cut_v*` 自动解析)全 PASS 才算封装完成——它逐条核对字幕平移量、按成片声轨与 final_audio 互相关实测片头偏移(±80ms,首/中/尾三窗一致)、核对成片总时长 = Σ各段实测;FAIL 即不交付、不烧录、不发布;台账落 `edit/epNN/final_layout.json`;
-   - 已有 final.mp4 由别的路径产出(如花字版、外部返修)时,至少 `shift` + `check` 必跑。**烧录字幕、交付发布一律用 subtitles_final 版,严禁把正片基准的 subtitles.srt 直接配 final.mp4**。
+   - 已有 final.mp4 由别的路径产出(如花字版、外部返修)时,至少 `shift` + `check` 必跑。**烧录字幕、交付发布一律用 subtitles_final 版,严禁把正片基准的 subtitles.srt 直接配 final.mp4**。**仅当 `output.subtitle_burn_in` 开启**:check 全 PASS 后跑 `python3 code/burn_subtitles.py burn --project <slug> --ep epNN`(附加语言版本另加 `--lang <code>`,读 `subtitles_final.<lang>.srt`)产 `final_sub[.<lang>].mp4`,内置机检 `subtitle_style_ok` FAIL 即不交付;禁止自写 ffmpeg subtitles / ass / drawtext 滤镜或在项目 code/ 下写替代脚本。
 7. **花字版成片封装(caption-final 工单,花字开关开启时)**:干净版 `final.mp4` 照常产出后,另出花字版 `edit/epNN/final_caption.mp4`——**唯一工序 `python3 code/render_captions.py final --project <slug> --ep epNN`(2026-09-25)**:
    - **视频**:宿主在干净版 `final.mp4` 上按**成片时间轴**把全部花字一次叠上(每条按 `group_id + local` 经花字时间轴换算:后期采纳版本的删段 / 变速、组边界层的定格 / 黑场 / 字卡、片头偏移都由 `modules/caption_timeline.py` 算,干净版本身就是同一 EDL)——**不再用 clips_caption 副本重拼**,我不自写 concat / overlay / 偏移;
    - **音轨(2026-08-08 定,不可变更)**:MP4 多音轨是互斥备选流,播放器默认只播 a:0 且**不会叠加混播**——所以 `a:0 = 声轨权威 + 花字 SFX 预混`(AAC,开箱即听),`a:1 = 声轨权威原样流拷贝`(存档轨,零重编码机检对它逐帧校验);声轨权威 = 干净版 final.mp4 自带声轨(av 项目且无片头 / 无时长编辑时 = 母带);SFX 轨同轴落点由 `final` 内部生成(`sfx-track` / `mux --video` 只留作画面由别的路径产出时的旧式封装),禁止自写混音滤镜;
@@ -88,7 +88,7 @@ instruction: |
 - timeline.json 中每个 group_id 均能在 generation_groups 命中,组序无遗漏、无重复;镜级条目的 in/out 落在该组 boundary_map 区间内;
 - **fps 口径统一 24**(与 Seedance 输出一致;aspect_ratio.json 若写 25 以 24 为准并上报修正);
 - 音画偏移逐镜 <80ms;
-- **intro_offset_ok(终版封装时,`code/finalize_episode.py check` 全 PASS)**:成片时长 = Σ各段实测(±0.25s);有 `subtitles.srt` 就必须有 `subtitles_final.srt`,且**逐条** cue = 正片基准 + intro 实测(±200ms,条数一致;`.ass` 同);成片声轨与 final_audio 互相关实测滞后 = intro 实测(±80ms,首/中/尾三窗一致);开启烧录时另抽帧核对首句出现时刻与音频一致。
+- **intro_offset_ok(终版封装时,`code/finalize_episode.py check` 全 PASS)**:成片时长 = Σ各段实测(±0.25s);有 `subtitles.srt` 就必须有 `subtitles_final.srt`,且**逐条** cue = 正片基准 + intro 实测(±200ms,条数一致;`.ass` 同);成片声轨与 final_audio 互相关实测滞后 = intro 实测(±80ms,首/中/尾三窗一致);开启烧录时另由 `burn_subtitles.py` 的 `subtitle_style_ok` 把关(字高 / 边距 / 行数 / 字幕区 / 时长音轨 / 首句抽帧)。
 
 **评分(evaluation Agent,rubric `edit_v1`,阈值 80)**:
 - 节奏(35):逐场时长与 pacing.json 分配吻合,情绪曲线不塌;

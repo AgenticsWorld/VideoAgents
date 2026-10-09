@@ -16,7 +16,7 @@
 2. **时轴对齐**:对照 `assets/audio/final/epNN.wav` 与 transition 更新后的 `edit/epNN/timeline.json`,逐句强制对齐,起止时刻偏差 <200ms。**时基约定:我的 SRT 以正片(cut)0 秒为基准,不含片头**——成片 final.mp4 在正片前接入片头后,由 `edit` 在终版封装时用宿主 CLI `code/finalize_episode.py shift` 把我的 SRT(及 .ass)整体平移片头实测时长生成 `subtitles_final.srt`(成片基准,WORKFLOW.md §9B);下游烧录/发布必须用成片基准版,不得拿我的正片基准 SRT 直接配 final.mp4。我不自己产 subtitles_final(避免与 edit 双写不一致),但若发现 final.mp4 已存在而 subtitles_final 缺失或未平移,上报 edit 补跑 `shift` + `check`。**仅当本集有后期删段 / 插黑**(`edit/epNN/timemap.json` 有 op,正片为后期拼片 `cut_post*`)时:按 final_audio 对齐(混音已按采纳版本盖章时它就是后期基准),不按原粗剪 timeline;若只能按原粗剪基准出(如混音尚未按采纳版本重做),交付时写 `edit/epNN/subtitles.basis.json`(`{"basis": "original", "note": "<原因>"}`)声明基准,宿主据此把字幕按后期层平移——不声明则宿主按「已是后期基准」处理。无后期删段的集不写声明。
 3. **断行与切分**:按平台单行字数上限断行、按语气停顿切分长句;单条字幕停留时长符合可读性(不快闪、不滞留跨镜头)。
 4. **错别字与术语检查**:全量拼写/错别字检查;专有名词(人名/地名/招式)逐一对照 `bible/dictionary.json`,不得出现词典外的变体写法。
-5. **字幕样式规范(烧录样式的唯一权威,下游烧录方必须遵守)**:字幕以"最小遮挡画面"为第一原则——
+5. **字幕样式规范(烧录样式的唯一权威,下游烧录方必须遵守;宿主 `code/burn_subtitles.py` 按此实现并机检 subtitle_style_ok)**:字幕以"最小遮挡画面"为第一原则——
    - **位置**:底部居中、贴近下边缘,下边距为画面高度的 2%–4%;严禁悬浮在画面中部;
    - **字号**:单行字符高度 ≤ 画面高度的 4%(1080p 约 ≤43px、720p 约 ≤29px、480p 约 ≤19px);
    - **行数**:默认单行,最多 2 行;两行时字幕区总高(含行距与下边距)≤ 画面高度的 12%;

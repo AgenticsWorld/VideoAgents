@@ -742,8 +742,9 @@ def do_check(proj, ep, segs, notes, final_path, tol_ms=80, write=True):
 
     burn = (_settings(proj).get("output") or {}).get("subtitle_burn_in")
     if burn:
-        print("[INFO ] 项目开启字幕烧录:烧录须用 subtitles_final.*,请抽帧核对首句出现时刻 ≈ "
-              f"{(parse_srt(fin_srt)[0][0] if fin_srt.is_file() and parse_srt(fin_srt) else 0):.2f}s")
+        print("[INFO ] 项目开启字幕烧录:check 全 PASS 后用 `python3 code/burn_subtitles.py burn --project <slug> --ep "
+              f"{ep}` 烧 subtitles_final.*(产 final_sub.mp4,final.mp4 不动;内置 subtitle_style_ok 机检,首句应在 ≈ "
+              f"{(parse_srt(fin_srt)[0][0] if fin_srt.is_file() and parse_srt(fin_srt) else 0):.2f}s 出现)")
 
     ok = all(c["status"] != "FAIL" for c in checks)
     print(f"[RESULT] intro_offset_ok: {'PASS' if ok else 'FAIL'}")
