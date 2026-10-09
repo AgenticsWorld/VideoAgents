@@ -15,6 +15,7 @@
 2. 为每个场景写环境声描述(风/雨/集市/山林虫鸣/殿堂混响底…),要素与设定严格一致:冬夜无蝉鸣、雨戏必有雨底、室内外混响特征区分;描述具体可听("low howling wind over snowfield, distant creak of frozen branches"),并标注贯穿性("persistent throughout")。
 3. 逐场景归档:cue 挂场景 ID 与该场景的组/镜头区间,写入 `ambience_cues.json`;同场景跨多个生成组时 cue 文本保持一字不差(组间环境声一致性靠同一段描述)。
 4. cue 里严禁音乐/配乐字样(BGM 一律后期);不写电平数字(相对音量由模型自定,后期混音兜底)。
+4A. **NPC 参与构图(2026-10-09,docs/npc_staging.md)**【仅当某场次 NPC 参与构图生效为开时适用(`python3 code/npc_staging.py --project <slug> --ep epNN`)】:该场次的环境声加一层与密度相符的无名人声底(walla,听不清字句):稀疏 = 偶尔远处一两句人声与脚步;适中 = 断续的低声交谈与往来脚步;热闹 = 连续的人群嘈杂。不得出现可辨认的台词;生效为关的场次不写人声底(剧本另有群演戏的除外)。
 5. **兜底素材(仅缺陷驱动)**:audio-qa 听审发现某场景环境声缺失/跨组不连贯且重生成不划算时,按缺陷单补做可循环床音 wav 交 audio-mixing 后期铺入。补做只准用宿主 CLI `python3 modules/genmedia.py sfx --loop --prompt "<英文环境声描述>" --output assets/audio/ambience/epNN/patches/<场景ID>_bed.wav --duration <秒;直连 ≤30、Fal 托管 ≤22>`(2026-10-06;`--loop` 出可无缝循环的一段,CLI 不裁不调以保住首尾接缝,来源写进同名 `.meta.json#sfx.license_source`);缺陷单没要求多条候选就不加 `--count`(每条单独计费);没有缺陷单不得调用本命令。
 
 ## 不做什么(边界)

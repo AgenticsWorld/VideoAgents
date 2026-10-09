@@ -207,6 +207,13 @@ def test_check_cli_and_preview_api(project, monkeypatch):
     bd["source"] = "agent"
     write(sb.breakdown_path(project, "ep01"), bd)
     r = subprocess.run(cli + ["--json"], capture_output=True, text=True)
+    out = json.loads(r.stdout)      # 2026-10-09 起新拆解表每场须有 NPC 参与构图判定(npc_judged)
+    assert r.returncode == 1 and any("npc_judged" in e for e in out["errors"]), r.stdout + r.stderr
+    for sc in bd["scenes"]:
+        if not sc.get("pacing_only"):
+            sc["npc"] = {"on": False, "density": None, "reason": "测试"}
+    write(sb.breakdown_path(project, "ep01"), bd)
+    r = subprocess.run(cli + ["--json"], capture_output=True, text=True)
     out = json.loads(r.stdout)
     assert r.returncode == 0 and out["pass"] and out["scenes"] == 3, r.stdout + r.stderr
     from services.runtime import core

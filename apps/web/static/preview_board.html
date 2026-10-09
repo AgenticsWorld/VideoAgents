@@ -15,6 +15,7 @@
 <script src="/static/image-models.js?v=20260911"></script>
 <script src="/static/image-model-picker.js?v=20260912"></script>
 <script src="/static/print-page.js?v=20261001b"></script>
+<script src="/static/npc-switch.js?v=20261009b"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -219,6 +220,9 @@ td.c .ln.un .v{color:var(--yellow);white-space:pre-wrap}
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let EP='',LAST=null,SK={},JOBS={},REDRAW={},LOCAL_REDRAW={},POLL=null,PORTRAIT=false,ANIM={},GATE={},NOTES={};
+// NPC 参与构图(2026-10-09):场次头 🚶 开关(与剧本预览页同一份 scene_npc.json);保存后重画各场头(带「分镜未按此设定」标记)
+NpcSwitch.init({project:()=>$('#project').value.trim()||'demo',ep:()=>(LAST&&LAST.ep)||EP||'',data:()=>(LAST&&LAST.npc)||null,
+  onSaved:npc=>{if(npc&&LAST){LAST.npc=npc;(LAST.scenes||[]).forEach(sc=>renderSceneHead(sc.scene_no))}}});
 // 页面位置记忆(2026-09-11,同分镜预览):#content 滚动位置按 项目:集 记进 localStorage,刷新/重开回到原位;
 // 页内刷新(load(true)/轮询重渲)保持原位;切集/切项目回顶。load 清空内容瞬间浏览器会把滚动条归零,SCROLL_HOLD 期间不记
 let SCROLL_FIRST=true,SCROLL_TICK=null,SCROLL_HOLD=false;
@@ -360,7 +364,7 @@ function render(d){
     box.innerHTML=h;restoreScroll(box,ep);return;
   }
   (d.scenes||[]).forEach(sc=>{h+=sceneCard(sc,d)});
-  h+=`<div class="legend"><span>💬 ${esc(t('对白'))}</span><span>🎙 ${esc(t('旁白(正文·估时;灰标 = 宿主推定的挂点)'))}</span><span>🎬 ${esc(t('动作'))}</span><span>🧍 ${esc(t('姿态'))}</span><span>📐 ${esc(t('构图草描'))}</span><span>📝 ${esc(t('备注'))}</span><span>🗒 ${esc(t('注释(用户写,分镜设计参考)'))}</span><span>${esc(t('绿色 shNNN = 镜头表定稿镜号/时长/组'))}</span></div>`;
+  h+=`<div class="legend"><span>💬 ${esc(t('对白'))}</span><span>🎙 ${esc(t('旁白(正文·估时;灰标 = 宿主推定的挂点)'))}</span><span>🎬 ${esc(t('动作'))}</span><span>🧍 ${esc(t('姿态'))}</span><span>📐 ${esc(t('构图草描'))}</span><span>👥 ${esc(t('群演'))}</span><span>🚶 ${esc(t('NPC 参与构图'))}</span><span>📝 ${esc(t('备注'))}</span><span>🗒 ${esc(t('注释(用户写,分镜设计参考)'))}</span><span>${esc(t('绿色 shNNN = 镜头表定稿镜号/时长/组'))}</span></div>`;
   box.innerHTML=h;restoreScroll(box,ep);renderNav(d);
   // 从剧本/分镜预览跳来:#scene=S01 → 场次卡,#shot=S01-03 → 镜行
   JumpAnchor.go({find:(k,id)=>document.getElementById((k==='scene'?'sc-':k==='shot'?'sh-':'')+id),box,scroll:el=>PreviewStickbar.jumpTo(el)});
@@ -473,6 +477,7 @@ function sceneCard(sc,d){
   hd+=JumpAnchor.group([
     (d.script_scenes||[]).includes(sc.scene_no)?JumpAnchor.link('script',proj0,ep,'scene',sc.scene_no):'',
     (d.shot_scenes||[]).includes(sc.scene_no)?JumpAnchor.link('storyboard',proj0,ep,'scene',sc.scene_no):'']);
+  if(d.npc)hd+=NpcSwitch.chip(sc.scene_no);   // NPC 参与构图(2026-10-09)
   hd+=`<span class="meta" title="${esc(t('已出草图 / 镜数;整集批量出图在上方标题行'))}">🖊 ${nDone}/${sc.shots.length}</span>`;
   hd+=editBtn(I18N.f('故事板 {ep} 场次 {no}{name}(文件 directing/{ep}/storyboard.json scenes[{no}])',{ep,no:sc.scene_no,name:sc.location?' '+sc.location:''}))+noteBtn(sc.scene_no)+`</div>`;
   let as='';
@@ -521,6 +526,8 @@ function shotContentHtml(sh,full){   // full = 打印页:备注不截断
   });
   if(sh.sketch)c+=`<div class="ln"><span class="k">📐</span><span class="v dim">${esc(sh.sketch)}</span></div>`;   // 构图草描用 📐,✏️ 留给「修改/反馈」按钮
   if(sh.extras)c+=`<div class="ln"><span class="k">👥</span><span class="v dim">${esc(sh.extras)}</span></div>`;
+  // NPC 氛围层(2026-10-09):npc[] = [{layer: fg|mg|bg, what}],逐层一行
+  (sh.npc||[]).forEach(x=>{c+=`<div class="ln"><span class="k">🚶</span><span class="v dim"><span>${esc(t(NPC_LAYER[x.layer]||x.layer))}</span> · <span data-no-i18n>${esc(x.what)}</span></span></div>`});
   if((sh.cast||[]).length)c+=`<div class="ln"><span class="k">👤</span><span class="v cast">${sh.cast.map(cname).map(esc).join('、')}</span></div>`;
   const PZ=sh.poses||{},pk=Object.keys(PZ);   // 分镜层结构化姿态/动作(2026-09-14;2026-09-15 移到 👤 人物下方):每角色 体位·动作
   if(pk.length)c+=`<div class="ln"><span class="k">🧍</span><span class="v">${pk.map(id=>{const r=PZ[id]||{};const pz=POSE_ZH[r.pose]?t(POSE_ZH[r.pose]):(r.pose||'');return esc([cname(id),[pz,r.action].filter(Boolean).join('·')].filter(Boolean).join(' '))}).join('；')}</span></div>`;
@@ -538,6 +545,7 @@ function shotRow(sc,sh,ep){
   return `<tr data-stick-shot="${esc(JSON.stringify([...new Set([sh.shot_id||sh.key,...(sh.final||[]).map(f=>f.shot_id)].filter(Boolean))]))}" data-row="${esc(sh.key)}" id="sh-${esc(sh.key)}"><td class="no">${no}</td><td class="c" data-no-i18n>${c}</td><td class="s ${PORTRAIT?'portrait':''}" data-cell="${esc(sh.key)}">${sketchCell(sc,sh,ep)}</td><td class="e">${jumps}${editBtn(loc,'sm')}${noteBtn(sh.key,'sm')}</td></tr>`;
 }
 
+const NPC_LAYER={fg:'前景层',mg:'中景层',bg:'背景层'};
 const POSE_ZH={stand:'站',sit:'坐',lie:'躺',kneel:'跪',crouch:'蹲',prone:'趴'};   // 与 modules/storyboard_board.POSE_ZH 一致
 function sketchCell(sc,sh,ep){
   const r=SK[sh.key]||{};

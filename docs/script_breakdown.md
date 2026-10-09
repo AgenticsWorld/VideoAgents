@@ -32,6 +32,7 @@
     "emotion": {"type": "倦怠→被勾起的好奇", "intensity": 0.35},   // intensity ∈ [0,1]
     "tempo": "medium", "tempo_label": "中", "color": "ep01-seg1(暖砂灰黄昏)",
     "transition": "CUT TO", "hooks": ["oh-1"], "narration_ids": ["N-01"],
+    "npc": {"on": true, "density": "medium", "reason": "原文「下班高峰,马路上人来车往」→ 公共空间开·适中"},   // NPC 参与构图判定(2026-10-09,docs/npc_staging.md)
     "blocks": [                            // 场内小块,按剧本原文顺序(页面左列逐块显示,每块一个反馈按钮)
       {"type": "action", "text": "夕阳压在楼群的边线上。…"},
       {"type": "narration", "id": "N-01", "text": "…", "est_s": 9.5, "tone": "平实", "anchor": "S01开场·…", "final": true},   // final=false 为剧本内候选、未进 narration.md
@@ -64,7 +65,7 @@
 }
 ```
 
-必填:`schema_version`、`ep`、`scenes[].no`(唯一);`scenes[].summary` 缺则 WARN。`emotion.intensity`、`emotion_curve[].intensity` ∈ [0,1];`alloc_s/dialogue_s/narration_s/silent_s` 非负;`tempo` ∈ {slow, medium, fast};`dialogue[]` 每句 `speaker` + `text`;`narration[].scene` 须在场次表内;`scene_id`/`cast` 对照 Bible 索引(WARN)。`events[].content_flags` 可选数组(枚举 `nudity / sex / gore / extreme_violence / drugs / self_harm`),**仅当运行提示词含「## NSFW 模式:开启」时必填**(无则 `[]`),按原文判定、不得编造;shot-planning 据此给场景所属组写 `nsfw`,宿主按标记路由到备用模型(WORKFLOW.md §6/§9)。
+必填:`schema_version`、`ep`、`scenes[].no`(唯一);`scenes[].summary` 缺则 WARN。`scenes[].npc`(NPC 参与构图判定,2026-10-09):项目总开关 `output.npc_staging` 不是 off 时每场必填 `{on, density(开启时 sparse|medium|dense,关闭时 null), reason}`(机检 npc_judged,存量拆解表缺判定只 WARN;口径见 `docs/npc_staging.md`);用户在页面改的开关另存 `scene_npc.json`,不写回本文件。`emotion.intensity`、`emotion_curve[].intensity` ∈ [0,1];`alloc_s/dialogue_s/narration_s/silent_s` 非负;`tempo` ∈ {slow, medium, fast};`dialogue[]` 每句 `speaker` + `text`;`narration[].scene` 须在场次表内;`scene_id`/`cast` 对照 Bible 索引(WARN)。`events[].content_flags` 可选数组(枚举 `nudity / sex / gore / extreme_violence / drugs / self_harm`),**仅当运行提示词含「## NSFW 模式:开启」时必填**(无则 `[]`),按原文判定、不得编造;shot-planning 据此给场景所属组写 `nsfw`,宿主按标记路由到备用模型(WORKFLOW.md §6/§9)。
 
 ## 页面:一张表,左列读剧本、右列看关联信息
 
@@ -73,7 +74,7 @@
 | 行 | 左列(剧本) | 右列(这一块对应的信息) | ✏️ 反馈发给 |
 |---|---|---|---|
 | 本集 | 看点 logline、叙述人称、分集概要与节拍 | ⏱ 预算/预计时长 · 📖 章节范围 · 🧩 覆盖事件 · 🪝 已选钩子(小 ✏️ → hook)· 🗂 分集计划(小 ✏️ → episode-planner)· ⚠ issues | `01-story/screenplay` |
-| 场次头 | `S01` 场景名 · SCN id · 🏠内/🌳外 · ☀️🌇🌙 时段 · 出场人物色点 chip | ⏱ 时长三色条(对白黄/旁白紫/无声灰)+ 起始时刻 · 🎭 情绪脸谱 😌🙂😮😨😱 + 强度条 + 类型 + 🐢▶️⚡ 节奏(小 ✏️ → pacing)· 🎯 节拍/戏剧功能 · 🧩 事件卡摘要(小 ✏️ → event)· 🪝 落在本场的钩子(小 ✏️ → hook)· ✂️ 删减建议(小 ✏️ → pacing)· 🔒 不可压缩项 · 📝 改编注记 | `01-story/screenplay` |
+| 场次头 | `S01` 场景名 · SCN id · 🏠内/🌳外 · ☀️🌇🌙 时段 · 出场人物色点 chip | ⏱ 时长三色条(对白黄/旁白紫/无声灰)+ 起始时刻 · 🚶 NPC 参与构图开关(开·密度 / 关 · 自动/手动/未判定,点开改三态与密度,写 `scene_npc.json`)· 🎭 情绪脸谱 😌🙂😮😨😱 + 强度条 + 类型 + 🐢▶️⚡ 节奏(小 ✏️ → pacing)· 🎯 节拍/戏剧功能 · 🧩 事件卡摘要(小 ✏️ → event)· 🪝 落在本场的钩子(小 ✏️ → hook)· ✂️ 删减建议(小 ✏️ → pacing)· 🔒 不可压缩项 · 📝 改编注记 | `01-story/screenplay` |
 | 动作段 | 画面/动作原文(连续段落并成一块) | — | `01-story/screenplay` |
 | 对白块 | 连续台词(说话人色点 + 括注 + 台词) | 逐句对齐:情绪 · 估时 · ✓风格命中;多句时 Σ 合计 | `01-story/dialogue-rewrite` |
 | 旁白 | 🎙 旁白正文(定稿文本;剧本候选未进定稿时标注) | N-id · 估时 · 语气 · 📍挂点 | `01-story/narration` |

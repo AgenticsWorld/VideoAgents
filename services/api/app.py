@@ -317,6 +317,13 @@ async def storyboard_prompt_signoff(project: str, ep: str, body: dict[str, Any])
     return await core.api_prompt_signoff(project, ep, body)
 
 
+@api.post("/projects/{project}/episodes/{ep}/npc", tags=["artifacts"])
+async def npc_staging_set(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
+    """剧本预览页 / 故事板页场次头「👥 NPC 参与构图」开关(2026-10-09):{scene, mode: auto|on|off, density?}
+    → story/episodes/<ep>/scene_npc.json;返回本集最新生效表。"""
+    return await core.api_npc_set(project, ep, body or {})
+
+
 @api.post("/projects/{project}/script/{ep}/notes", tags=["artifacts"])
 async def script_note(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
     """剧本预览页「🗒 注释」(2026-09-27):{key, text, label?}(空 text = 删除)→ story/episodes/<ep>/script_notes.json。"""

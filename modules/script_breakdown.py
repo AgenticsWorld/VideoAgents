@@ -1073,6 +1073,9 @@ def validate(bd: dict, base: Path | None = None, ep: str | None = None) -> tuple
                 errors.append(f"{no}.{k} 须为非负数")
         if sc.get("tempo") not in (None, "slow", "medium", "fast"):
             errors.append(f"{no}.tempo 须为 slow|medium|fast")
+        # NPC 参与构图判定(2026-10-09,docs/npc_staging.md):字段存在时查格式;缺判定由 check_script_breakdown 的 npc_judged 管
+        from modules.npc_staging import judgment_errors
+        errors.extend(judgment_errors(no, sc.get("npc")))
         for k, b in enumerate(sc.get("blocks") or []):
             if not isinstance(b, dict) or b.get("type") not in ("action", "sound", "dialogue", "narration", "transition"):
                 errors.append(f"{no}.blocks[{k}].type 须为 action|sound|dialogue|narration|transition")

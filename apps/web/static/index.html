@@ -530,6 +530,13 @@ a.hdr-icon:hover{border-color:var(--accent)}
         </select>
         <button type="button" class="info-btn" data-info="npo-scene-plates-hint" title="说明">i</button></div>
       <div class="note info-note" id="npo-scene-plates-hint">白模关闭时的场景一致性方案:每场景一张正向图(门口往内看),分镜看回望方向时再补一张反向图;平面动画/单面布景选「只出正向」</div>
+      <div class="row"><label>NPC 参与构图</label>
+        <select id="npo-npc" style="flex:1">
+          <option value="auto">按场次判定(默认)</option>
+          <option value="off">全部关闭</option>
+        </select>
+        <button type="button" class="info-btn" data-info="npo-info-npc" title="说明">i</button></div>
+      <div class="note info-note" id="npo-info-npc">在画面里加入路人、前景物体等 NPC 元素补充空间,让场景有前中后三层。按场次判定=剧本拆解时逐场自动判断是否开启与密度(稀疏/适中/热闹),可在剧本预览页或故事板页按场次改为开或关;全部关闭=所有场次都不加。剧本里点名的群演不受影响</div>
       <div class="row"><label>旁白</label>
         <input type="checkbox" id="npo-narration" style="flex:none">
         <button type="button" class="info-btn" data-info="npo-info-narration" title="说明">i</button></div>
@@ -646,6 +653,13 @@ a.hdr-icon:hover{border-color:var(--accent)}
       </select>
       <button type="button" class="info-btn" data-info="out-scene-plates-hint" title="说明">i</button></div>
     <div class="note info-note" id="out-scene-plates-hint">白模关闭时的场景一致性方案:每场景一张正向图(门口往内看),分镜看回望方向时再补一张反向图;平面动画/单面布景选「只出正向」</div>
+    <div class="row"><label>NPC 参与构图</label>
+      <select id="out-npc" style="flex:1">
+        <option value="auto">按场次判定(默认)</option>
+        <option value="off">全部关闭</option>
+      </select>
+      <button type="button" class="info-btn" data-info="out-info-npc" title="说明">i</button></div>
+    <div class="note info-note" id="out-info-npc">在画面里加入路人、前景物体等 NPC 元素补充空间,让场景有前中后三层。按场次判定=剧本拆解时逐场自动判断是否开启与密度(稀疏/适中/热闹),可在剧本预览页或故事板页按场次改为开或关;全部关闭=所有场次都不加。剧本里点名的群演不受影响</div>
     <div class="row"><label>旁白</label>
       <input type="checkbox" id="out-narration" style="flex:none">
       <button type="button" class="info-btn" data-info="out-info-narration" title="说明">i</button></div>
@@ -1479,6 +1493,7 @@ function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置�
   $('#npo-dialogue-voice').value='native';   // 花字/内嵌字幕开关 2026-09-13 移到后期处理页,新建默认关由服务端兜底
   $('#npo-dialogue-tts').checked=false;syncDialogueTtsLock('npo');   // 生成对白语音默认关(2026-09-13);后期配音时锁死为开
   $('#npo-sound-split').value='off';   // 声画分离默认关(2026-10-03 用户拍板)
+  $('#npo-npc').value='auto';   // NPC 参与构图(2026-10-09):默认按场次判定
   $('#npo-narration').checked=false;   // 新建项目旁白默认关闭(2026-09-01 用户拍板);存量项目缺省仍为开
   $('#npd-ep').value=5;$('#npd-ep-auto').checked=false;$('#npd-ep').disabled=false;
   $('#npd-smin').value=0.5;$('#npd-smax').value=15;$('#npd-extend').value=50;
@@ -1529,6 +1544,7 @@ function npCollectSettings(){   // 不含 review:新建项目审核全 0(评委 
       dialogue_voice:$('#npo-dialogue-voice').value,
       dialogue_tts:$('#npo-dialogue-tts').checked,
       sound_split:$('#npo-sound-split').value,
+      npc_staging:$('#npo-npc').value,
       spatial_blocking:$('#npo-spatial').checked,
       scene_plates:$('#npo-scene-plates').value,
       plate_mode:$('#npo-plate-mode').value,
@@ -1839,6 +1855,7 @@ const OUT_LANGS=['English','中文','日本語','한국어','Tiếng Việt','Es
 const OUT_RESOLUTIONS=['360p','480p','720p','1080p','2k','4k'];   // 2k 仅成片档下拉提供(2026-09-23,MiniMax Regenerate-2K 原生档)
 const DIALOGUE_VOICE_MODES=['native','dubbing'];
 const SOUND_SPLIT_MODES=['off','script_only','auto'];   // 声画分离(2026-10-03):关(默认)/ 仅剧本标记 / 自动
+const NPC_STAGING_MODES=['auto','off'];   // NPC 参与构图总开关(2026-10-09):按场次判定(默认)/ 全部关闭
 async function openOutModal(){
   $('#out-err').textContent='';
   $('#out-proj').textContent=curProj();
@@ -1856,6 +1873,7 @@ async function openOutModal(){
     $('#out-dialogue-voice').value=DIALOGUE_VOICE_MODES.includes(o.dialogue_voice)?o.dialogue_voice:'native';
     $('#out-dialogue-tts').checked=o.dialogue_tts===true;syncDialogueTtsLock('out');   // 后期配音时勾上并锁死
     $('#out-sound-split').value=SOUND_SPLIT_MODES.includes(o.sound_split)?o.sound_split:'off';
+    $('#out-npc').value=NPC_STAGING_MODES.includes(o.npc_staging)?o.npc_staging:'auto';
     $('#out-spatial').checked=o.spatial_blocking===true;syncSpatialHint('out-spatial');
     $('#out-scene-plates').value=SCENE_PLATES_MODES.includes(o.scene_plates)?o.scene_plates:'auto';   // 场景图(2026-09-17,仅白模关闭时生效)
     $('#out-plate-mode').value=PLATE_MODES.includes(o.plate_mode)?o.plate_mode:'grid';   // 背景图模式(2026-09-22,仅白模开启时显示;2026-09-26 默认九宫格,pano/world 选项隐藏但保留)
@@ -1877,7 +1895,7 @@ $('#out-ok').onclick=async()=>{
       draft_resolution:$('#out-draft-res').value,final_resolution:$('#out-final-res').value,
       narration_enabled:$('#out-narration').checked,
       dialogue_voice:$('#out-dialogue-voice').value,dialogue_tts:$('#out-dialogue-tts').checked,
-      sound_split:$('#out-sound-split').value,
+      sound_split:$('#out-sound-split').value,npc_staging:$('#out-npc').value,
       spatial_blocking:$('#out-spatial').checked,scene_plates:$('#out-scene-plates').value,plate_mode:$('#out-plate-mode').value}});   // 发布渠道(output.platforms)由成片发布页维护,这里不动
     $('#out-modal').style.display='none';
   }catch(e){$('#out-err').textContent='保存失败:'+e.message}

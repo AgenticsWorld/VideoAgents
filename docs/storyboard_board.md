@@ -6,7 +6,7 @@
 
 1. **导演计划** `directing/<ep>/directing_plan.md`:从分镜预览页移到这里,Markdown 渲染(`/static/mini-md.js`,无第三方库),默认折叠;标题栏「✏️ 修改」发总制片。
 2. **每场一张卡**:场次头 = 场号 / 地点 / 场景 id / 时段 / ⏱ 分配·草案·定稿秒数 / 镜数·组数 / 🖊 已出草图数 + 资产条(场景缩略、出场人物 sheet 缩略、生物、道具)+ 场次备注(`unit_note` 等)与色彩段;右侧「✏️ 修改」(总制片)。批量出草图的按钮在**单集标题行最后**(「🖊 出草图(N)」,见下)。
-3. **逐镜表**:编号(序号、景别、时长建议、草案镜号、镜头表定稿 shNNN·时长·景别·组号,绿色)| 内容(画面内容、🎬 动作、🧍 姿态(分镜层 `poses`:每角色 体位·动作,2026-09-14)、💬 台词(优先取 shot_list 定稿 `dialogue_lines`,缺则解析草案 `dialogue_ref`)、🎙 旁白(N-id + 正文 + 估时;挂镜见下节「旁白显示」)、📐 构图草描、👥 群演、👤 出场、📝 备注)| 草图(按项目画幅的小图 + 状态角标 + 「出图/重出」「✏️ 改草图」)| 🗒 注释(用户,见下「用户注释」)+ ✏️ 反馈(总制片)。
+3. **逐镜表**:编号(序号、景别、时长建议、草案镜号、镜头表定稿 shNNN·时长·景别·组号,绿色)| 内容(画面内容、🎬 动作、🧍 姿态(分镜层 `poses`:每角色 体位·动作,2026-09-14)、💬 台词(优先取 shot_list 定稿 `dialogue_lines`,缺则解析草案 `dialogue_ref`)、🎙 旁白(N-id + 正文 + 估时;挂镜见下节「旁白显示」)、📐 构图草描、👥 群演、🚶 NPC 氛围层(`npc[]` 逐层一行,2026-10-09)、👤 出场、📝 备注)| 草图(按项目画幅的小图 + 状态角标 + 「出图/重出」「✏️ 改草图」)| 🗒 注释(用户,见下「用户注释」)+ ✏️ 反馈(总制片)。
 
 数据接口 `GET /api/v1/projects/<p>/previews/board?ep=epNN`(`services/runtime/core.py` `_preview_board`);归一化逻辑在 `modules/storyboard_board.py` `load_board`——storyboard.json 的字段名历经多版(`shots_draft/shots`、`content/subject_action`、`cast/characters`、`unit_alloc_s/alloc_s/…`),统一成一套供页面与 CLI 共用,并按 `shot_list.json` 的 `storyboard_ref`(`S01/order:1`,兼容 `/split:a`、`/shots_draft/`)把定稿镜对回草案镜。
 
@@ -65,3 +65,8 @@
 ## 预览页互跳(2026-09-12)
 
 剧本预览、故事板、分镜预览三页在场次头行右侧、故事板镜行右侧和分镜镜卡首行右侧放图标链接(📜 剧本 / 📋 故事板 / 🎦 分镜,只显示图标,tooltip 带编号),点击跳到目标页并定位、高亮 2 秒。链接只对目标真实存在的场次/镜显示,存在性由端点给出:剧本端点 `board_scenes`/`shot_scenes`,故事板端点 `script_scenes`/`shot_scenes` + `shots[].final[].shot_id`,分镜端点 `script_scenes`/`board_scene_nos` + `shots[].board_key`(经 storyboard_ref 反查的故事板镜行键 S01-03)。URL 契约 `?project=&ep=#scene=S01 | #shot=sh020 | #shot=S01-03 | #group=grpNNN`,由 `static/jump-anchor.js` 在页面加载前读走 hash、渲染并恢复滚动位置后定位;找不到目标时页顶提示。场次以 `scene_no`(S01 式)对齐,三边写法不一致的场次(如 `S03(续)` vs `S03-cont`)或老 shot_list 没写 `scene_no` 的项目不出链接。
+
+## NPC 参与构图开关(2026-10-09)
+
+场次头「🚶 NPC」chip 与剧本预览页是同一个开关(`npc-switch.js`,写 `story/episodes/<ep>/scene_npc.json`):显示本场生效值(开·稀疏/适中/热闹 或 关)与来源(自动 / 手动 / 未判定;项目总开关 off 时显示「总开关关」),点开可改「自动 / 开 / 关」与密度,并看到自动判定理由与关键词建议。本场 storyboard 的 `npc[]` / `npc_applied` 与生效值不符时 chip 后标「⚠ 分镜未按此设定」(`modules/npc_staging.applied_state`),改开关不会自动重做分镜,用本场「✏️ 修改」让分镜师补写。草图提示词自动带上 `npc[]`(无名松散人形)。口径见 `docs/npc_staging.md`。
+

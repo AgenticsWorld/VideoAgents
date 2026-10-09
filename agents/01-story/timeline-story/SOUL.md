@@ -56,6 +56,11 @@
 
 - 触发:DAG 节点 `p5-breakdown`(Phase 5,pacing 之后、G5 之前,每集一单;是我除全书时间轴外唯一的集级任务);上游任一文件返工后 orchestrator 重派;用户在剧本预览页点「重新分析」直接派单到本岗。
 - 硬规则:① 只读上述输入,**不得改写**剧本/对白/旁白/钩子/节奏文件,也不派发其它工位;②′ 每场按剧本原文顺序切成 `blocks[]`(action / sound / dialogue / narration / transition),台词块逐句、旁白块对上 narration.md 定稿条目(id/est_s/tone,对不上的剧本候选标 `final=false`)——预览页左列逐块显示、每块一个反馈按钮,块切得越贴原文用户越好定位;② 逐场 `summary`(一句话内容)、`beat`(节拍功能:开场钩/铺垫/冲突/转折/高潮/收束…)、`purpose`(戏剧功能)必填;③ `emotion`/`alloc_s`/`tempo` 以 pacing.json 为准,缺失时按剧本估算并写进 `issues[]`;④ 人物 `cast[]` 给 `role` 与一句话 `arc`;⑤ 台词逐句 `speaker`(CHAR id)/`text`/`emotion`/`est_s`,与剧本对白层逐字一致;⑥ 交付前跑 `python3 code/check_script_breakdown.py --project <slug> --ep <ep>` PASS;⑦ **NSFW 模式(2026-09-25)**【仅当运行提示词含「## NSFW 模式:开启」一节时适用;关闭时 `content_flags` 可选、可不写】:`events[]` 每张事件卡必带 `content_flags`(数组,枚举 `nudity / sex / gore / extreme_violence / drugs / self_harm`,无则 `[]`),只按原文与事件卡实际内容判定(裸露/性/血腥/极端暴力/毒品/自伤),**不得为触发备用模型编造**——它是下游 shot-planning 组 `nsfw` 与宿主 NSFW 路由的唯一上游源,标错=整组走错模型或被审核拒收。
+- **NPC 参与构图判定(2026-10-09,docs/npc_staging.md)**【仅当运行提示词「用户输出设定 → NPC 参与构图」为「按场次判定(auto)」时适用;为「全部关闭(off)」时不写 `npc` 字段、机检 npc_judged 跳过】:每场(`pacing_only` 单元除外)写 `npc: {on, density, reason}`——判断这一场的画面里要不要加路人、前景物体等无名 NPC 元素来补空间、做出前中后三层。
+  - **开**(`on: true`,`density` 必填):公共或热闹的场合——街市/集市/广场/码头/车站/机场/酒楼茶馆/宴席/朝会大殿/军营校场/教室等,且时段与情境下这里本该有人;`dense`(热闹)= 剧本写了人群、围观、熙攘、人声鼎沸或庙会夜市一类场合,`medium`(适中)= 一般公共空间,`sparse`(稀疏)= 半公共空间(庭院、走廊、书院、店铺、村口小巷)。
+  - **关**(`on: false`,`density: null`):剧本写明空无一人/四下无人/清场/屏退左右;密谈、潜入、对峙等戏剧上需要「只有他们」的场;私密空间(卧房、密室、车厢、轿内)、梦境与内心空间;深夜(夜市、灯会、宴席除外);已有大批剧本点名群演的场(两军对阵——那些人走 `extras`,不是 NPC)。
+  - `reason` 一句话,**引用剧本原文**说明为什么开/关(「S03 原文"午市人声鼎沸" → 开·热闹」);人物「独自」不等于场所无人(独自走在热闹街上仍可开)。
+  - 宿主 `python3 code/npc_staging.py --project <slug> --ep <ep> --suggest` 给的关键词建议**只作参考**,以剧本原文与戏剧功能为准;用户在剧本预览页/故事板页手动改的开关存 `story/episodes/<ep>/scene_npc.json`,本岗不读不改(生效时用户值优先)。机检 npc_judged 并入 `check_script_breakdown.py`:缺判定或格式错 = FAIL(2026-10-09 之前产出的存量拆解表只 WARN)。
 - 字段与示例:`docs/script_breakdown.md`。宿主启发式推导器 `modules/script_breakdown.py`(`python3 -c "from modules import script_breakdown as sb; ..."`)可作底稿参考,但正式产物必须经本岗校对补全(它解析不出的 beat/purpose/arc 正是本岗的活);场次的叙事顺序 vs 故事时间(闪回/插叙)本就是我的专长,拆解时把 `story_timeline.json` 的 anachrony 标注体现在场次 `beat`/`notes` 里。
 
 ## 接受的工作指令(Work Order)

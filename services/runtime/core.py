@@ -1041,6 +1041,11 @@ DEFAULT_GENCONFIG = {
                #   白名单自动转画外(反应镜承接 / 时间尺超限 / 群戏第四人 / 出画后续说 / 定场镜首句),每条须写 placement_reason。
                #   与旁白开关正交:旁白只管旁白者声线;人物 V.O. 归本项。
                "sound_split": "off",
+               # npc_staging=NPC 参与构图总开关(2026-10-09,docs/npc_staging.md):auto(默认)=按场次判定——剧本拆解(p5-breakdown)
+               #   逐场写 scenes[].npc {on, density, reason},用户可在剧本预览页 / 故事板页按场次改「自动 / 开 / 关」与密度
+               #   (story/episodes/<ep>/scene_npc.json,modules/npc_staging.py);生效为开的场次由故事板起在画面里加路人、前景物体做出
+               #   前中后三层(npc[] → 构图 layers → 白模 EXTRA-NPC → 组 prompt 固定段);off=全部场次关闭。没有判定的场次(存量)按关处理
+               "npc_staging": "auto",
                "spatial_blocking": False,
                # scene_plates=场景图(2026-09-17,仅白模关闭时生效;A 方案 docs/scene_plates.md):auto(默认)=每场景必出正向图(站在入口往内看的主视角图,
                #   environment-concept 登记 assets/concepts/scenes/<sid>/scene_plates.json),分镜定稿后各集 shot_list 有镜 plate_view=reverse 才由
@@ -1171,6 +1176,7 @@ UPSCALE_FFMPEG_FILTERS = ("lanczos", "bicubic", "spline", "bilinear")
 UPSCALE_FFMPEG_PRESETS = ("ultrafast", "fast", "medium", "slow", "veryslow")
 # 对白配音方式:native=视频原声(默认)/dubbing=后期配音(TTS 按画面开口时段贴合,workflow p7-dub)
 DIALOGUE_VOICE_MODES = ("native", "dubbing")
+NPC_STAGING_MODES = ("auto", "off")   # 输出设置「NPC 参与构图」总开关(2026-10-09,与 modules.npc_staging.MASTER_MODES 同步)
 SOUND_SPLIT_MODES = ("off", "script_only", "auto")   # 输出设置「声画分离」(2026-10-03,docs/sound_split.md):关(默认)/ 仅剧本标记 / 自动(与 modules.offscreen_lines.SOUND_SPLIT_MODES 同步)
 SCENE_PLATES_MODES = ("auto", "single", "pair")   # 输出设置「场景图」(2026-09-17,仅白模关闭时生效):正向必出;反向按需 / 不出 / 全出
 PLATE_MODE_LABELS = {"pano": "全景图 pano", "world": "世界模型 world", "grid": "九宫格自动补图 grid", "grid_manual": "九宫格手动补图 grid_manual"}
@@ -2140,6 +2146,8 @@ def _validate_output(o: dict):
         raise ServiceError(400, f"output.plate_mode must be one of {PLATE_MODES}")
     if "sound_split" in o and o["sound_split"] not in SOUND_SPLIT_MODES:
         raise ServiceError(400, f"output.sound_split must be one of {SOUND_SPLIT_MODES}")
+    if "npc_staging" in o and o["npc_staging"] not in NPC_STAGING_MODES:
+        raise ServiceError(400, f"output.npc_staging must be one of {NPC_STAGING_MODES}")
     if "dialogue_tts" in o and not isinstance(o["dialogue_tts"], bool):
         raise ServiceError(400, "output.dialogue_tts must be a boolean")
     # 对白配音=后期配音时「生成对白语音」为必选(2026-09-23 用户拍板):UI 勾上锁死,这里兜底归一,
@@ -3262,6 +3270,22 @@ def build_role_prompt(agent_id: str, project: str,
         if sound_split == "script_only" else
         "**关闭(off,默认)** —— 全部台词画内开口(存量口径):剧本不写 `(O.S.)`/`(V.O.)`(声源不在画内的话改写成画内句或交旁白 / 剧本变更),"
         "shot_list 不写 placement(视同 on),不派 offscreen_lines,offscreen 系列机检报 skipped: sound_split off;旁白开关逻辑不受影响")
+    # NPC 参与构图(2026-10-09,docs/npc_staging.md):项目总开关 + 场次级三态/密度;条件式写法——只有生效为开的场次才加 NPC
+    npc_line = (
+        "**全部关闭(off)** —— 剧本拆解不写 `scenes[].npc` 判定,故事板/镜头表不写 `npc[]`、不写 `npc_applied`,构图/白模/prompt 不加路人与前景氛围物;"
+        "剧本点名的群演照常走 `extras`;npc 系列机检报 skipped"
+        if out.get("npc_staging") == "off" else
+        "**按场次判定(auto,默认)** —— 目的:在画面里加路人、前景物体等 NPC 元素补空间,让场景有前中后三层。"
+        "① p5-breakdown(timeline-story)逐场在 `script_breakdown.json` 写 `npc: {on, density: sparse|medium|dense|null, reason}`"
+        "(按剧本原文判:公共/热闹场合开,写明无人/密谈/私密/内心空间/深夜(夜市等除外)关;reason 引原文;"
+        "`python3 code/npc_staging.py --project <slug> --ep epNN --suggest` 的关键词建议只作参考;机检 npc_judged);"
+        "② 用户可在剧本预览页 / 故事板页按场次改「自动/开/关」与密度(`story/episodes/<ep>/scene_npc.json`,宿主自有,Agent 不改);"
+        "**以 `python3 code/npc_staging.py --project <slug> --ep epNN` 输出的生效值为准**(用户值 > 自动判定 > 未判定=关);"
+        "③ **仅生效为开的场次**:storyboard 按景别给镜写 `npc: [{layer: fg|mg|bg, what}]` 并在场块写回执 `npc_applied: {on, density}`"
+        "(机检 npc_staging_applied = `--check storyboard`),shot-planning 把 `npc[]` 照抄到定稿镜,composition 把 NPC 写进 `layers` 对应层"
+        "(npc_layers_bound),白模开启时 whitebox-staging 用 `EXTRA-NPC-xx` 群演摆位,prompt 产出后跑 `python3 code/npc_staging.py --project <slug> --ep epNN --write`"
+        "写宿主固定段 `Background figures (NPC): … End background figures.` 并把身份锁收窄到具名角色(npc_prompt_bound);"
+        "生效为关的场次一律不写 `npc[]`。NPC 是无名氛围层,与剧本点名的群演(`extras`)不同,不进角色集合、不挂参考图、不说话")
     # 过场模式(2026-09-24 设置项;2026-09-26 二期工位):项目级 settings.json#transitions,集级 episode.json#transitions_mode 可覆盖
     try:
         from modules import transition_design as _td_prompt
@@ -3412,6 +3436,7 @@ def build_role_prompt(agent_id: str, project: str,
 - 对白配音:{dialogue_voice}
 - 生成对白语音:{dialogue_tts_line}
 - 声画分离:{sound_split_line}
+- NPC 参与构图:{npc_line}
 - 过场模式:{transitions_line}
 - 人物精确空间位置:{spatial_line}
 - 视频分辨率:一切视频生成(首次/重 roll/兜底重做)一律 `--resolution {draft_res}`(草稿档);成片分辨率({final_res})与草稿档不同时,终版**默认且仅由 upscale 超分**得到——不询问用户、严禁按成片档重新生成(重生成贵、慢且画面随机);成片档 `--resolution {final_res}` 重出仅限一种情形——QA 判定超分不达标的兜底重出(WORKFLOW.md §7B)—— 分辨率直接决定生成费用,严禁擅自调高(genmedia 有硬闸门,越档自动压回草稿档)
@@ -8952,6 +8977,9 @@ def _preview_script(project: str, ep: str):
     data["notes"] = scn.load_notes(base, ep)["notes"]      # 用户注释(2026-09-27):* / S01 / S01/b3 / nar:ID / hook:ID / event:ID / pacing:S01 / trim:S01/n / plan
     out = (load_project_settings(base.name).get("output") or {})
     data["narration_enabled"] = out.get("narration_enabled") is True
+    # NPC 参与构图(2026-10-09):场次头 👥 开关——总开关 + 逐场生效值/来源/自动判定/用户覆盖/关键词建议
+    from modules import npc_staging as npcs
+    data["npc"] = npcs.resolve(base, ep, breakdown=res["breakdown"] or {}, zh=_notes_submit_zh())
     # 本集拆解是否已派单在跑(页面刷新后仍能显示「分析中」并继续轮询)
     data["reanalyze_run"] = next(
         (r["id"] for r in reversed(list(RUNS.values()))
@@ -9307,7 +9335,42 @@ def _preview_board(project: str, ep: str):
     data["animatic"] = _board_animatic(base, ep)
     data["gate"] = _board_gate(base, ep)
     data["notes"] = sbb.load_notes(base, ep)["notes"]      # 用户注释(2026-09-15):整集 * / 场次 S01 / 镜 S01-03
+    data["npc"] = _board_npc(base, ep, board)               # NPC 参与构图(2026-10-09):场次头 👥 开关 + 本场分镜是否按生效值写了 npc[]
     return data
+
+
+def _board_npc(base: Path, ep: str, board: dict) -> dict:
+    from modules import npc_staging as npcs
+    nos = [sc.get("scene_no") for sc in board.get("scenes") or [] if sc.get("scene_no")]
+    res = npcs.resolve(base, ep, zh=_notes_submit_zh(), extra_scene_nos=nos)
+    if board.get("has_storyboard"):
+        _, _, states = npcs.check_storyboard(base, ep, res)
+        for no, st in states.items():
+            if no in res["scenes"]:
+                res["scenes"][no]["applied"] = st
+    return res
+
+
+def _npc_set(project: str, ep: str, body: dict) -> dict:
+    """剧本预览页 / 故事板页场次头 👥 开关:{scene, mode: auto|on|off, density?: sparse|medium|dense|''}
+    → story/episodes/<ep>/scene_npc.json(宿主自有);返回本集最新生效表(故事板页另带 applied 状态)。"""
+    from modules import npc_staging as npcs
+    base = _proj_base(project)
+    ep = re.sub(r"[^\w\-]", "", ep)
+    if not ep or not ((base / "story" / "episodes" / ep).is_dir() or (base / "directing" / ep).is_dir()):
+        raise ServiceError(404, f"episode {ep} not found")
+    try:
+        npcs.set_override(base, ep, str(body.get("scene") or ""), str(body.get("mode") or "auto"),
+                          (str(body.get("density")) if body.get("density") else None))
+    except ValueError as e:
+        raise ServiceError(400, str(e)) from None
+    from modules import storyboard_board as sbb
+    board = sbb.load_board(base, ep)
+    return {"ok": True, "npc": _board_npc(base, ep, board)}
+
+
+async def api_npc_set(project: str, ep: str, body: dict):
+    return await asyncio.to_thread(_npc_set, project, ep, body or {})
 
 
 async def api_preview_board(project: str = "demo", ep: str = ""):

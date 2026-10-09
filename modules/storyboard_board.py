@@ -802,6 +802,8 @@ def load_board(base: Path, ep: str, catalog: dict | None = None) -> dict:
                 "cast": cast,
                 "poses": normalize_poses(_first(d, "poses", "figure_states", default=None)),
                 "extras": str(_first(d, "extras", default="")),
+                # NPC 参与构图(2026-10-09,modules/npc_staging):无名氛围层 [{layer: fg|mg|bg, what}],与剧本点名的群演 extras 分开
+                "npc": _npc_rows(d),
                 "panel_en": str(_first(d, "panel_en", default="") or ""),
                 "accent": d.get("accent"),
                 "dialogue": dialogue,
@@ -848,6 +850,7 @@ def load_board(base: Path, ep: str, catalog: dict | None = None) -> dict:
             "cast": _scene_cast(sc, cast_union, shots),
             "creatures": creatures, "props": props,
             "group_count": len(groups),
+            "npc_applied": sc.get("npc_applied") if isinstance(sc.get("npc_applied"), dict) else None,
             "shots": shots,
         })
     narration = load_narration(base, ep)
@@ -864,6 +867,26 @@ def load_board(base: Path, ep: str, catalog: dict | None = None) -> dict:
                    "final_total_s": sl.get("total_duration_s"), "budget_s": sl.get("budget_s"),
                    "final_shots": sl.get("shot_count"), "final_groups": sl.get("group_count")},
     }
+
+
+def _npc_rows(d: dict) -> list[dict]:
+    from modules.npc_staging import shot_npc
+    return shot_npc(d)
+
+
+_NPC_LAYER_EN = {"fg": "foreground", "mg": "midground", "bg": "background"}
+
+
+def npc_sentence(shot: dict, grid: bool = False, max_chars: int | None = None) -> str:
+    """草图里的 NPC 氛围层(2026-10-09):按层逐条,画成无名的松散人形/物体,不画成登记角色。"""
+    rows = [x for x in shot.get("npc") or [] if isinstance(x, dict) and x.get("layer") in _NPC_LAYER_EN and x.get("what")]
+    if not rows:
+        return ""
+    body = "; ".join(f"{_NPC_LAYER_EN[x['layer']]}: {clean_prose(x['what'])}" for x in rows)
+    if max_chars:
+        body = _short(body, max_chars)
+    return (f"NPC: {body}." if grid else
+            f"Anonymous NPC figures and objects for depth (loose, unnamed, never one of the named characters): {body}.")
 
 
 def _scene_cast(sc: dict, cast_union: list, shots: list) -> list:
@@ -1600,6 +1623,9 @@ def _shot_parts(shot: dict, names: dict, clip: dict | None = None, grid: bool = 
         out.append((f"Expressions: {ex}." if grid else f"Expressions and gestures to make readable: {ex}."))
     if shot.get("extras") and not grid:
         out.append(f"Background extras (loose figures only): {clean_prose(shot['extras'])}")
+    npc = npc_sentence(shot, grid=grid, max_chars=max(40, clip.get("sketch") or 0) if clip else (120 if grid else None))
+    if npc:
+        out.append(npc)
     return out
 
 

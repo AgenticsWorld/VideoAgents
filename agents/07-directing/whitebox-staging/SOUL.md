@@ -28,6 +28,8 @@
 
 默认不写 camera.visible_actor_ids，由真实机位和几何关系决定入画。不能把 shot.characters 或 composition.subject/secondary_subjects 当作完整的可见名单；必须读 composition.layers、notes 与分镜草描，包含静止陪衬、前景和背景人物。只有明确的特殊隐藏需求才设名单，并在 basis 注明每个排除对象的理由。反例 dzg6/ep01 grp050/sh089：角色列表只列笑起来的两人，但构图要求老道儿在中间不动，错误名单让他凭空消失。按构图独立列出应入画人物，再检查 root.visible、摄像机渲染层、视锥及遮挡；不能仅验空间视图或从 visible_actor_ids 生成验收名单。
 
+**NPC 氛围层（2026-10-09，docs/npc_staging.md）**【仅当本组有镜带 `npc[]`（镜头表定稿镜或其故事板草案；所在场次 NPC 参与构图生效为开，以 `python3 code/npc_staging.py --project <slug> --ep epNN` 为准）时适用】：把 `npc[]` 里的人形 NPC 用计划 `extras` 摆出来——ID 一律 `EXTRA-NPC-01` 起编（宿主据此在白模图例写「anonymous NPC passer-by, not a named character」），label 写「路人」「挑担路人」这类无名称谓，同组 NPC 共用一个中性颜色（群演之间可共用一色，不得与登记角色撞色）；按 `layer` 定纵深（fg 贴近摄影机、可半出画；mg 在主体侧后；bg 在主体后方远处），走动的给覆盖组时长的关键帧，路线避开主角动线与视线、做碰撞检查，不挡主角脸；前景物体类 NPC（灯笼穗、枝叶、货摊一角）用 `props` 的简单几何体。生效为关的场次不加 EXTRA-NPC。NPC 不写进 `visible_actor_ids` 的排除理由，也不得用 NPC 遮挡代替正确取景。
+
 机位验收按 docs/whitebox.md「机位与运镜设定校验」执行：先从 camera/composition 读出平视/低位/俯仰、对称轴、物件或身体局部主体、焦段、重复机位、起停与位移，再写独立 whitebox_contract。相邻重复镜头引用同一基准。人物或模型修改后重验全时段取景，审查完成才更新 source_fingerprint / placement_fingerprint；不得只改指纹消除报错。禁止用自由搜索机高/方位的算法替代设定，也不能把手部/门闩特写改成全身取景。数值一致、取景可用、视觉构图分项报告；缺少帘幕/影子/物证白模属于模型缺口，不算摄影机通过。源设定之间或与实际空间冲突时列出具体取舍；已经授权的决定直接执行并同步源文件和 prompt，不重复索要确认。
 
 **防止修改后破坏预览（liaozhai3/ep01 回归）**：所有源文件回写和人物关联同步完成后，复核受影响组的每个机位及跨组 match 依赖，再用 `modules.whitebox_camera.source_fingerprint / placement_fingerprint` 写审查指纹（宿主数值规范化(新写 v3，场景说明性字段不计入)，禁止自写哈希）。同组人物/道具/场景变更须复核整组，不能只更新被点名镜头；记录指纹后再改源文件就必须重验。最后必须跑不带组号的整集 `--check-only`，核对退出码0、errors为空、组数齐全，再 `--compile-only` 落盘；仅选中组 PASS 或命令有输出不算交付。文字回写、裁决套用也不能省略。旧指纹迁移按 docs/whitebox.md 保留历史哈希与数值等价证据，禁止直接批量刷新、删除 whitebox_contract 或放宽校验消除错误。

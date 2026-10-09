@@ -12,6 +12,7 @@
 <script src="/static/preview-nav.js?v=20260913" defer></script>
 <script src="/static/edit-popup.js?v=20260927a-reviser"></script>
 <script src="/static/print-page.js?v=20261001b"></script>
+<script src="/static/npc-switch.js?v=20261009b"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -309,6 +310,9 @@ document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if($('#lb').s
 const epFile=(ep,f)=>`story/episodes/${ep}/${f}`;
 const clip=(s,n)=>{s=String(s||'').replace(/\s+/g,' ');return s.length>n?s.slice(0,n)+'…':s};
 
+// NPC 参与构图(2026-10-09):场次头 🚶 开关,保存后只刷新各场 chip(接口返回整集最新生效表)
+NpcSwitch.init({project:()=>$('#project').value.trim()||'demo',ep:()=>EP||(LAST&&LAST.ep)||'',data:()=>(LAST&&LAST.npc)||null,
+  onSaved:npc=>{if(npc&&LAST)LAST.npc=npc;document.querySelectorAll('[data-npc-scene]').forEach(el=>{el.outerHTML=NpcSwitch.chip(el.dataset.npcScene)})}});
 function render(d){
   LAST=d;NOTES=d.notes||{};
   $('#printbtn').hidden=!(d.ep&&d.breakdown);
@@ -333,7 +337,7 @@ function render(d){
   h+=episodeRow(d,bd,ep,A);
   (bd.scenes||[]).forEach(sc=>{h+=sceneRows(sc,bd,ep,A)});
   h+=`</tbody></table>`;
-  h+=`<div class="legend"><span><i style="background:var(--c-dlg)"></i>${esc(t('对白'))}</span><span><i style="background:var(--c-narr)"></i>${esc(t('旁白'))}</span><span><i style="background:var(--c-silent)"></i>${esc(t('无声画面'))}</span><span>😌🙂😮😨😱 ${esc(t('情绪强度'))}</span><span>🐢 ${esc(t('慢'))} · ▶️ ${esc(t('中'))} · ⚡ ${esc(t('快'))}</span><span>🪝 ${esc(t('钩子'))} · ✂️ ${esc(t('删减建议'))}</span></div>`;
+  h+=`<div class="legend"><span><i style="background:var(--c-dlg)"></i>${esc(t('对白'))}</span><span><i style="background:var(--c-narr)"></i>${esc(t('旁白'))}</span><span><i style="background:var(--c-silent)"></i>${esc(t('无声画面'))}</span><span>😌🙂😮😨😱 ${esc(t('情绪强度'))}</span><span>🐢 ${esc(t('慢'))} · ▶️ ${esc(t('中'))} · ⚡ ${esc(t('快'))}</span><span>🪝 ${esc(t('钩子'))} · ✂️ ${esc(t('删减建议'))}</span><span>🚶 ${esc(t('NPC 参与构图'))}</span></div>`;
   box.innerHTML=h;restoreScroll(box,ep);renderNav(bd);
   ScriptKeypoints.render(d,$('#project').value.trim()||'demo',()=>load(true));
   // 从故事板/分镜预览跳来:定位到 #scene=S01 对应场次行(表头置顶,留出其高度)
@@ -402,6 +406,10 @@ function sceneRows(sc,bd,ep,A){
     if(e){const i=e.intensity;v+=`${face(i)}${i!=null?`<span class="ib"><i class="${i>0.75?'hi':i>0.5?'mid':''}" style="width:${Math.round(i*100)}%"></i></span>${num(i,2)}`:''} ${esc(e.type||'')}`;}
     if(tp||sc.tempo_label)v+=`${v?' · ':''}${tp?tp[0]+' '+esc(tp[1]):'▫️'}${sc.tempo_label&&(!tp||sc.tempo_label!==tp[1])?' '+esc(clip(sc.tempo_label,24)):''}`;
     r.push(['🎭',v+' '+editBtn(A.pacing,I18N.f('节奏/情绪 {ep} 场次 {no}(文件 {f})',{ep,no:sc.no,f:epFile(ep,'pacing.json')}),'sm','','pacing:'+sc.no)+noteHtml('pacing:'+sc.no,true)]);
+  }
+  if(LAST.npc&&!sc.pacing_only){   // NPC 参与构图(2026-10-09):自动判定理由跟在 chip 后
+    const nr=(LAST.npc.scenes||{})[sc.no]||{};
+    r.push(['🚶',NpcSwitch.chip(sc.no)+(LAST.npc.master!=='off'&&nr.source==='auto'&&nr.reason?` <span data-no-i18n>${esc(clip(nr.reason,70))}</span>`:'')]);
   }
   if(sc.beat||sc.purpose)r.push(['🎯',`${sc.beat?`<b>${esc(sc.beat)}</b> `:''}${sc.purpose&&sc.purpose!==sc.beat?esc(clip(sc.purpose,90)):''}`]);
   (sc.events||[]).forEach(id=>{const ev=evs[id];r.push(['🧩',`<span class="chip ev">${esc(id)}</span>${ev?esc(clip(ev.process,90)):''}${ev?' '+editBtn(A.events,I18N.f('事件卡 {id}(文件 story/events.json;本集 {ep})',{id,ep}),'sm','','event:'+id)+noteHtml('event:'+id,true):''}`])});
