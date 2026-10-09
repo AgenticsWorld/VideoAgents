@@ -334,8 +334,14 @@ def lean_hip(pose):
     return .175 if pose in ('crouch', 'kneel') else .35
 
 
+# 手部通道按人物解剖学左右(#121):面朝局部 +Z、+Y 朝上时人物右侧在局部 −X;shoulder_point 的 side 是肩点的
+# 局部 X 符号。2026-10 前的计划按「right_hand = +X」写,由 code/whitebox_hand_migrate.py 互换键名迁移(计划标 hand_convention)。
+HAND_SIDES = (('left_hand', 1), ('right_hand', -1))
+HAND_CONVENTION = 'anatomical'
+
+
 def shoulder_point(size_m, key, side):
-    """肩点(人物本体局部坐标,未计 torso_yaw/yaw);side 左 -1 右 +1。"""
+    """肩点(人物本体局部坐标,未计 torso_yaw/yaw);side 为局部 X 符号(+1 = 人物左肩,−1 = 人物右肩,见 HAND_SIDES)。"""
     pose = key.get('pose') or 'stand'
     h = size_m[1]
     bend, hip = lean_bend(key), h*lean_hip(pose)
@@ -353,7 +359,7 @@ def pose_channel_warnings(actor):
             ignored.add(pose)
         if actor.get('kind', 'person') == 'creature':
             continue
-        for side, name in ((-1, 'left_hand'), (1, 'right_hand')):
+        for name, side in HAND_SIDES:
             if isinstance(key.get(name), list) and len(key[name]) == 3:
                 gap = math.dist(key[name], shoulder_point(size, key, side)) - 2*ARM_SEGMENT*size[1]
                 if gap > 1e-6 and gap > reach.get(name, (0, 0))[1]:

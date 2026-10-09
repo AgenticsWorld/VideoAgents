@@ -411,8 +411,11 @@ def test_lean_shoulder_matches_renderer_and_reach_warnings():
     """#77:肩点算法 Python/JS 一致;非前俯姿态写 bend、手够不着只报 WARN。"""
     import shutil
     import subprocess
-    from modules.whitebox import pose_channel_warnings, shoulder_point
+    from modules.whitebox import HAND_SIDES, pose_channel_warnings, shoulder_point
     size=[.48,1.7,.38]
+    # #121:手部通道按人物解剖学左右——面朝 +Z(yaw=0)时 right_hand 挂局部 −X 肩、left_hand 挂 +X 肩
+    sides=dict(HAND_SIDES)
+    assert shoulder_point(size,{},sides['right_hand'])[0]<0<shoulder_point(size,{},sides['left_hand'])[0]
     cases=[{'pose':p,**({'bend':b} if b is not None else {})} for p in ('stand','crouch','kneel','sit','lie') for b in (None,0,.7,1.4)]
     py=[shoulder_point(size,k,s) for k in cases for s in (-1,1)]
     kneel=shoulder_point(size,{'pose':'kneel','bend':1.2},1)
@@ -423,16 +426,23 @@ def test_lean_shoulder_matches_renderer_and_reach_warnings():
         script=f'import {{shoulderPoint}} from {json.dumps(module)};const c={json.dumps(cases)};console.log(JSON.stringify(c.flatMap(k=>[-1,1].map(s=>shoulderPoint({json.dumps(size)},k,s)))));'
         js=json.loads(subprocess.check_output(['node','--input-type=module','-e',script],text=True,stderr=subprocess.DEVNULL))
         for a,b in zip(py,js):assert a==pytest.approx(b,abs=1e-12)
-    far=[.2,.05,1.6]
+        js_sides=json.loads(subprocess.check_output(['node','--input-type=module','-e',f'import {{HAND_SIDES}} from {json.dumps(module)};console.log(JSON.stringify(HAND_SIDES));'],text=True,stderr=subprocess.DEVNULL))
+        assert [tuple(x) for x in js_sides]==list(HAND_SIDES)
+    far=[-.2,.05,1.6]
     actor={'id':'CHAR-1','kind':'person','size_m':size,'keyframes':[
-        {'t':0,'position':[0,0,0],'pose':'sit','bend':.5,'right_hand':[.25,.9,.3]},
+        {'t':0,'position':[0,0,0],'pose':'sit','bend':.5,'right_hand':[-.25,.9,.3]},
         {'t':2,'position':[0,0,0],'pose':'kneel','bend':1.2,'right_hand':far}]}
     warns=pose_channel_warnings(actor)
     assert any('sit' in w and 'bend' in w for w in warns)
     assert any('right_hand' in w and 't=2' in w for w in warns)
-    actor['keyframes'][1]['right_hand']=[.25,.3,.6]
+    actor['keyframes'][1]['right_hand']=[-.25,.3,.6]
     actor['keyframes'][0].pop('bend')
     assert pose_channel_warnings(actor)==[]
+    # 同一目标写在左手通道:+X 肩够不着(手停在伸直方向)才报,说明可达性按解剖学一侧的肩算
+    mirrored=[.25,.3,.6]
+    assert math.dist(mirrored,shoulder_point(size,{'pose':'kneel','bend':1.2},sides['left_hand']))<2*.21*1.7
+    actor['keyframes']=[{**k,'left_hand':[-.6,.9,.3] if k['t']==0 else [-.6,.3,.6]} for k in actor['keyframes']]
+    assert any('left_hand' in w for w in pose_channel_warnings(actor))
 
 
 def test_actor_bounds_follow_lean():
@@ -461,16 +471,18 @@ import * as T from THREE_MODULE;
 import {WhiteboxRenderer,shoulderPoint} from RENDERER_MODULE;
 const r=Object.create(WhiteboxRenderer.prototype);
 Object.assign(r,{width:960,height:540,scene:null,controls:null,camera:new T.PerspectiveCamera(),overview:new T.PerspectiveCamera(),top:new T.OrthographicCamera()});
-const h=1.7,size=[.48,h,.38],far=[.2,.05,1.6];
+const h=1.7,size=[.48,h,.38],far=[-.2,.05,1.6];
 r.load({dimensions_m:[8,3,6],objects:[]},{duration_s:2,actors:[{id:'a',kind:'person',color:'#cc4444',size_m:size,keyframes:[
-  {t:0,position:[0,0,0],pose:'kneel',right_hand:[.25,.5,.2]},{t:2,position:[0,0,0],pose:'kneel',bend:1.2,right_hand:far}]}],
+  {t:0,position:[0,0,0],pose:'kneel',right_hand:[-.25,.5,.2]},{t:2,position:[0,0,0],pose:'kneel',bend:1.2,right_hand:far}]}],
   cameras:[{start:0,duration_s:2,keyframes:[{t:0,position:[0,2,5],target:[0,1,0],fov:45}]}]});
 const a=r.actors[0],arm=a.arms[0];
+assert.equal(arm.key,'right_hand');assert.equal(arm.side,-1);   // #121: the actor's right hand hangs from the local -X shoulder
 const st=t=>{r.setTime(t);r.scene.updateMatrixWorld(true);return {head:a.head.getWorldPosition(new T.Vector3()),knees:a.legs.map(l=>l.thigh.getWorldPosition(new T.Vector3()))};};
 const up=st(0),bent=st(2);
 assert.ok(bent.head.y<up.head.y-.2&&bent.head.z>up.head.z+.3);
 for(let i=0;i<2;i++)assert.ok(bent.knees[i].distanceTo(up.knees[i])<1e-9);
-const sh=new T.Vector3(...shoulderPoint(size,{pose:'kneel',bend:1.2},1));
+const sh=new T.Vector3(...shoulderPoint(size,{pose:'kneel',bend:1.2},-1));
+assert.ok(sh.x<0);
 assert.ok(new T.Vector3(0,-.5,0).applyMatrix4(arm.upper.matrix).distanceTo(sh)<1e-9);
 for(const m of [arm.upper,arm.lower])assert.ok(Math.abs(m.scale.y-.21*h)<1e-12);
 assert.ok(Math.abs(arm.hand.position.distanceTo(sh)-.42*h)<1e-9);

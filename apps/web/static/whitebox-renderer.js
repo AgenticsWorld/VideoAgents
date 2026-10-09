@@ -48,6 +48,9 @@ export function sample(keys, time) {
 export const ARM_SEGMENT=.21;
 export function leanBend(k){const pose=k.pose||'stand';return pose==='stand'||pose==='kneel'?(k.bend||0):pose==='crouch'?(k.bend??.6):0;}
 export function leanHip(pose){return pose==='crouch'||pose==='kneel'?.175:.35;}
+// Hand channels follow the actor's own anatomy (#121): facing local +Z with +Y up, the actor's right
+// side is local -X. `side` below is the local X sign of the shoulder (modules/whitebox.py HAND_SIDES).
+export const HAND_SIDES=[['left_hand',1],['right_hand',-1]];
 // Shoulder (body-local, before torso_yaw/yaw) rotated about the hip by the lean, like torso and head.
 export function shoulderPoint(size,k,side){
   const pose=k.pose||'stand',h=size[1],low=pose==='sit'||pose==='kneel'||pose==='crouch';
@@ -223,7 +226,7 @@ export class WhiteboxRenderer {
         neck=new THREE.Mesh(new THREE.CylinderGeometry(ah*.06,ah*.06,1,12),mat);neck.name='neck';body.add(neck);
       }
       const arms=[];
-      if(actor.kind!=='creature')for(const [side,key] of [[-1,'left_hand'],[1,'right_hand']]){
+      if(actor.kind!=='creature')for(const [key,side] of HAND_SIDES){
         if(!actor.keyframes.some(k=>k[key]))continue;
         const upper=box(ah*.055,1,ah*.055,0,0,0),lower=box(ah*.05,1,ah*.05,0,0,0);
         upper.name=key+'-upper-arm';lower.name=key+'-forearm';

@@ -1,7 +1,7 @@
 import { projectRenderFormat } from './whitebox-format.js?v=20260908-bedfoot-pour';
 import { wbText as t, wbMessage } from './whitebox-i18n.js?v=20260908-bedfoot-pour';
 let rendererModule;
-const loadRenderer=()=>rendererModule ||= import('./whitebox-renderer.js?v=20260926-flykeys');
+const loadRenderer=()=>rendererModule ||= import('./whitebox-renderer.js?v=20261009-hand121');
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const api=project=>'/api/v1/projects/'+encodeURIComponent(project)+'/whitebox';
 const artifactBase=project=>'/api/v1/projects/'+encodeURIComponent(project)+'/artifacts/';
