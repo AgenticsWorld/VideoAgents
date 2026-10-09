@@ -12897,7 +12897,11 @@ async def api_genconfig_set(body: dict):
                                 f"or one of {sorted(RH_BASES)}")
     if up_comfy.get("rh_instance_type") not in {"standard", "plus", "ultra"}:
         raise ServiceError(400, "upscale.comfyui.rh_instance_type must be standard, plus or ultra")
+    # 选中 Agentics 渠道须已登录桌面端账号;只校验本次新切到 agentics 的类别。图像/视频/音乐/语音/
+    # 数字人/deepagents 默认渠道都是 agentics,若按合并后整份配置校验,浏览器版(无桌面登录)
+    # 保存任何无关设置(界面语言、模型分配策略…)都会 401
     if any((cfg.get(kind) or {}).get("provider") == "agentics"
+           and (old.get(kind) or {}).get("provider") != "agentics"
            for kind in ("image", "video", "music", "tts", "digital_human", "upscale", "deepagents")):
         resolve_agentics_connection()
     dh_comfy = (cfg.get("digital_human") or {}).get("comfyui") or {}
