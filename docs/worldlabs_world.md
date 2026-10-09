@@ -1,20 +1,13 @@
-# 世界模型(World Labs Marble / Atlas,2026-09-12;Atlas 2026-10-09)
+# 世界模型(World Labs Marble,2026-09-12)
 
 按场景白模/全景生成可漫游的 3D world(高斯泼溅),在场景预览页里用 Spark 渲染、按白模坐标对齐、WASD 漫游。支持「生成 + 场景预览 + 导演台对象运动预览」;
 在 world 里按分镜机位截图、全景重投影作背景图参考等试验流程(`dev-eric-worldlabs` 分支)**不并入**。
 
 ## 配置
 
-控制台「🎨 生成模型」→「🌍 世界模型」板块(`genconfig.json#world`):两个标签页 **Marble**(默认)/ **Atlas**,选中的标签页即生效渠道
-(`world.provider` = `marble` | `atlas`,保存后生效;场景预览页「➕ 生成世界模型」按钮旁显示当前渠道)。
-
-**Marble**:`marble.api_key`(「验证 Key」查余额),
+控制台「🎨 生成模型」→「🌍 世界模型」板块(`genconfig.json#world`):渠道固定 Marble(World Labs);`marble.api_key`(「验证 Key」查余额),
 `marble.model`:`marble-1.1`(默认)/ `marble-1.1-plus`(室外/大空间自动出更大世界,耗更多 credits)/ `marble-1.0` / `marble-1.0-draft`,可自定义 ID。
 Key 在 https://platform.worldlabs.ai/api-keys 创建,也可用环境变量 `WORLDLABS_API_KEY`;API 文档 https://docs.worldlabs.ai/api(鉴权头 `WLT-Api-Key`)。
-
-**Atlas**(World Labs Marble 2 beta):只有 `atlas.api_key`(无模型可选,固定任务 `atlasChisel`);「验证 Key」读一条本项目操作记录
-(Atlas 没有余额接口)。Key 在 https://atlas-beta.worldlabs.ai/api-keys 创建,须勾选 `tasks.create` / `operations.read` / `assets.create` / `assets.read`;
-也可用环境变量 `ATLAS_API_KEY`;API 根地址默认 `https://api.atlas-beta.worldlabs.ai/api/v2`(beta,`ATLAS_API_BASE_URL` 可覆盖)。见下文「Atlas 渠道」。
 
 ## 入口
 
@@ -49,31 +42,6 @@ Key 在 https://platform.worldlabs.ai/api-keys 创建,也可用环境变量 `WOR
 `depth_pano.png` / `whitebox_pano.jpg`(depth2rgb)、`generate.json`、`world.json`(world 响应 + `semantics_metadata` + `alignment` + `input`)、
 `splats_<res>.spz`、`collider.glb`、`world_pano.jpg`、`thumbnail.jpg`(正面预览图)。旧版 `--force` 留下的 `world/variants/<label>/` 归档不再列出。
 `world/` 子目录不进概念图库;预览 API 以 `scenes[].worlds`(全部)与 `scenes[].world`(默认)带出,`scenes[].world_sources` 列可用全景来源。
-
-## Atlas 渠道(2026-10-09,`modules/worldlabs_atlas.py`)
-
-Atlas 没有「一次出整个 3D 世界」的任务,它按机位出图。为了让场景预览视窗、背景图模式「世界模型」的截图、导演台世界背景都照旧可用,
-本渠道自己把多机位视图融合成与 Marble 同格式的高斯泼溅,产物目录、`world.json` 字段、默认 / 对齐 / 截图逻辑与 Marble 完全共用
-(`world.json#provider = atlas`,旧记录没有该字段 = marble)。流程(`code/worldlabs_world.py --provider atlas`,页面按钮自动带上):
-
-1. **视图规划**(`plan_views`,至多 28 个目标机位 = 单次上限;`--views N` 可减):全景锚点处 6 向平视环 + 3 向俯视环(-40°);
-   本场景各集白模分镜机位(镜首/镜尾,按母图视场 55°,同位同向去重后按位姿最远点取样,至多占剩余预算一半);余下在白模空地上按最远点取站位,每站 4 向。
-2. **输入**:每个目标机位的白模 z 深度(`scene_panos.raycast` 纯 numpy 求交,1280×720,约 3 s/张)编码为反向 log 8bit PNG(白 = 近)作
-   `contextFrames`;所选全景图在锚点处切 6 张平视 + 1 张俯视透视图作 `sourceFrames`(机位精确已知,让生成视图沿用全景的材质与光照);
-   提示词 = 场景设定卡描述(不写「360 全景」和以全景中心为准的方位)。请求体约 2 MB,内联 base64。
-3. **提交** `POST /tasks:atlasChisel`(带 Idempotency-Key;429/5xx 按 Retry-After 重试)→ 轮询 `GET /operations/{id}` → 下载各视图
-   (读链接过期时按 assetId `:createReadUrl` 重签)。
-4. **融合**:每张视图按本机位白模深度反投影(隔 2 像素取一点,深度断层处剔除;无几何处放到 200 m 外并稀疏取样),分级体素去重
-   (同格留离机位最近的点),写 SPZ v2:`splats_full_res.spz`(≤ 300 万点)与 `splats_500k.spz`(≤ 50 万点,视窗默认)。
-   坐标约定同 Marble(以全景相机为原点、OpenCV 轴),`alignment` 填 `metric_scale_factor = 1`、`ground_plane_offset = 0`、`scale_fix = 1`——
-   深度来自白模,本身就是米制、与白模对齐,不需要尺度标定。正面预览图取锚点正前方那张视图。
-
-本目录下另有 `atlas/`:`request.json`(机位清单 / 提示词 / 幂等键)、`ctx_NN_depth.png`、`src_NN.jpg`、`view_NN.png`(生成视图)。
-中断后 `--resume <operation_id> --world <key>` 续接:按 `request.json` 重算白模深度后下载融合。Atlas 只支持 `--source scene_pano`。
-
-画质:融合出的是按视图贴出来的点云,机位附近清楚、远离所有机位处有空洞;规划已含本场景分镜机位附近的视图,背景图截图主要落在这些位置。
-费率按 Atlas 平台当前价目(1000 credits = 1 美元,文档未公开每视图价格),一次生成 = 一次 atlasChisel(至多 28 个目标视图)。
-实测(2026-10-09):假 API 全链(alices SCN-long-hall,26 机位)出图对齐无误、视窗 / 无头截图可用;真实接口只验证到鉴权(假 Key 401),**真实生成未跑**。
 
 ## 坐标对齐
 

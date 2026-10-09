@@ -28,7 +28,7 @@
     CLI 退出码 2),由 Agent 上报用户换模型。母图长边 2880 且面积 ≤ 4,600,000 px(方舟 Seedream 单图上限 4,624,220),画幅固定 16:9
     (PLATE_FMT,2026-10-09,不随项目画幅;九宫格/补图/世界模型截图/手工截取同此);渠道 = 控制台默认图像模型。
   - 背景图模式(2026-09-22,项目输出设置 output.plate_mode,白模开启时显示;场景级可在场景预览页覆盖,存库 index.json#mode):
-    pano(默认)= 上面的全景制;world = 用户先在场景预览页按自选锚点创建全景图、再基于它生成世界模型(World Labs Marble / Atlas,
+    pano(默认)= 上面的全景制;world = 用户先在场景预览页按自选锚点创建全景图、再基于它生成世界模型(World Labs Marble,
     modules/worldlabs.py),出图时在 world 里按母图机位截图 <key>.world.jpg 作 [Image 1] 二次生成(modules/worldlabs.py#render_world_views,
     无头 Chromium + Spark);场景没有 world 时整条链停下(WorldMissing,CLI 退出码 4 [world_missing]),不自动生成世界模型(计费,用户决定)。
     库条目 pano_ref.kind = pano|world 记来源;两种模式的母图同库同键,复用判定不分模式。

@@ -898,13 +898,10 @@ DEFAULT_GENCONFIG = {
     },
     # 世界模型(2026-09-12):World Labs Marble,按场景全景生成可漫游 3D world(高斯泼溅);
     # 场景预览页「🌍 世界模型」板块用(仅项目「白模」选项开启时显示)。API 文档 https://docs.worldlabs.ai/api,
-    # Key 在 https://platform.worldlabs.ai/api-keys 创建;model 与 docs.worldlabs.ai/api/models 一致。
-    # 2026-10-09 加 Atlas(World Labs Marble 2 beta,modules/worldlabs_atlas.py):白模深度 + 全景切图 → atlasChisel 多机位出图 →
-    # 按白模深度融合成高斯泼溅,产物与 Marble 同格式;Key 在 https://atlas-beta.worldlabs.ai/api-keys 创建,无模型可选
+    # Key 在 https://platform.worldlabs.ai/api-keys 创建;model 与 docs.worldlabs.ai/api/models 一致
     "world": {
-        "provider": "marble",   # marble | atlas
+        "provider": "marble",   # marble
         "marble": {"api_key": "", "model": "marble-1.1", "custom_model": ""},
-        "atlas": {"api_key": ""},
     },
     # deepagents 文字模型:local=OpenAI 兼容本地端点(LM Studio/Ollama/vLLM…);
     # cloud=OpenAI 兼容云端端点(默认 DeepSeek 官方 API,可换任意兼容服务商);
@@ -1052,7 +1049,7 @@ DEFAULT_GENCONFIG = {
                "scene_plates": "auto",
                # plate_mode=背景图模式(2026-09-22,仅白模开启时显示/生效;docs/shot_plates.md「背景图模式」;2026-09-26 起默认 grid,界面只露九宫格):pano=分镜背景图由
                #   场景全景按母图机位重投影后二次生成(锚点按白模机位自动规划);world=用户在场景预览页自选锚点创建全景图 → 基于它
-               #   生成世界模型(World Labs Marble / Atlas)→ 出图时在世界模型里按母图机位截图作参考二次生成;场景级可在场景预览页
+               #   生成世界模型(World Labs Marble)→ 出图时在世界模型里按母图机位截图作参考二次生成;场景级可在场景预览页
                #   「分镜背景图」板块覆盖(库 plates/index.json#mode)。世界模型模式的场景没有 world 时 render_shot_plates.py 退出码 4
                #   [world_missing],由用户生成(计费),Agent 不得自行生成;grid(九宫格自动补图,默认)=不出全景不出母图,每场景每方案以俯视图为参考
                #   出一张 3x3 宫格(2026-10-04 起中心点九宫格:同一站位 8 向 + 1 格仰拍,站位/机高按本集机位推)、拆 9 张入库,每镜按白模机位
@@ -3176,7 +3173,7 @@ def build_role_prompt(agent_id: str, project: str,
         "prompt 工位写完必跑两个 sync 的 `--write`(sync_whitebox_refs / sync_shot_plates),机检 whitebox_ref_bound / shot_plate_bound;video-generation 按 video_refs 顺序传 `--ref-video`,方舟/MiniMax 参考视频须公网 URL——「设置 → 文件托管」未配置即报错),video-generation 开跑前复核——以上 SOUL.md/WORKFLOW.md 标注 2026-08-19 / 2026-09-07 的条款全部生效。"
         f"**背景图模式(2026-09-22)= {PLATE_MODE_LABELS.get(plate_mode, plate_mode)}**(项目输出设置 output.plate_mode;场景级可在场景预览页「分镜背景图」板块覆盖,以 `render_shot_plates.py` 日志里各场景实际生效的模式为准):"
         "pano = 分镜背景图由场景全景按母图机位重投影后二次生成(锚点按白模机位自动规划,`render_scene_panos.py`);"
-        "world = 用户在场景预览页自选锚点创建全景图 → 基于它生成世界模型(World Labs Marble / Atlas)→ `render_shot_plates.py` 在世界模型里按母图机位截图作参考二次生成——"
+        "world = 用户在场景预览页自选锚点创建全景图 → 基于它生成世界模型(World Labs Marble)→ `render_shot_plates.py` 在世界模型里按母图机位截图作参考二次生成——"
         "**世界模型模式的场景没有世界模型时脚本退出码 4 并打印 `[world_missing]`,一张背景图也不出:原文上报,请用户到场景预览页该场景「🌍 世界模型」板块生成(计费)或改回全景图模式;Agent 不得自行跑 `worldlabs_world.py` 生成世界模型、不得改模式绕过**;"
         "grid(九宫格自动补图,默认)/ grid_manual(九宫格手动补图,2026-10-04)= 不出全景、不用世界模型、不出母图:`render_shot_plates.py` 每场景每光照方案以俯视图为参考出一张 3x3 宫格 `<方案>_grid9.png`"
         "(2026-10-04 起默认「中心点九宫格」:九格共用一个站位原地转头,站位/机高/第 9 格仰拍方向由脚本按本集该场景的白模机位自动推,不依赖 `layout.json#views`;库里已有九格时直接复用),"
@@ -7669,13 +7666,8 @@ def _preview_scenes(project: str):
         plate_mode = _pm(base)
     except Exception:  # noqa: BLE001
         plate_mode = "pano"
-    try:
-        from modules.worldlabs import world_provider as _wp
-        world_provider = _wp()
-    except Exception:  # noqa: BLE001
-        world_provider = "marble"
     return {"project": base.name, "scenes": scenes, "whitebox_enabled": whitebox_enabled, "format": fmt,
-            "scene_plates_mode": scene_plates_mode, "plate_mode": plate_mode, "world_provider": world_provider}
+            "scene_plates_mode": scene_plates_mode, "plate_mode": plate_mode}
 
 
 async def api_preview_scenes(project: str = "demo"):
@@ -8027,7 +8019,7 @@ async def api_shot_plate_swap(project: str, ep: str, shot_id: str, body: dict):
     return await asyncio.to_thread(_shot_plate_swap, project, ep, shot_id, body)
 
 
-# ---------------- 世界模型(World Labs Marble / Atlas,2026-09-12;Atlas 2026-10-09) ----------------
+# ---------------- 世界模型(World Labs Marble,2026-09-12) ----------------
 # 场景预览页「🌍 世界模型」板块:后台线程跑宿主 CLI code/worldlabs_world.py(约 5–10 分钟,含 Marble 轮询),
 # 逐行收集输出并发 SSE scene_world 事件;页面按事件刷新日志,done 后重载场景数据挂 Spark 视窗
 WORLD_JOBS: dict[str, dict] = {}      # "<project>/<sid>" -> {status, log[], started_at, finished_at, error, params}
@@ -8265,23 +8257,20 @@ async def api_scene_world_start(project: str, sid: str, body: dict):
         raise ServiceError(400, "世界模型必须基于全景图(source=scene_pano);白模深度转世界模型选项已去掉")
     if not any(a.get("schemes") for a in worldlabs.list_sources(base, sid).get("anchors") or []):
         raise ServiceError(409, f"{sid} 还没有全景图:请先在场景预览页「🌐 全景图」板块创建全景图,再生成世界模型")
-    provider = worldlabs.world_provider()
-    if not worldlabs.provider_api_key(provider):
-        name = "Atlas" if provider == "atlas" else "Marble"
-        raise ServiceError(400, f"{name} API Key 未配置:请到控制台「🎨 生成模型」→「🌍 世界模型」→ {name} 填写")
+    if not worldlabs.marble_config().get("api_key"):
+        raise ServiceError(400, "World Labs API Key 未配置:请到控制台「🎨 生成模型」→「🌍 世界模型」填写")
     anchor = re.sub(r"[^\w\-]", "", str(body.get("anchor") or ""))
     scheme = re.sub(r"[^\w\-]", "", str(body.get("scheme") or ""))
     jobkey = f"{base.name}/{sid}"
     if (WORLD_JOBS.get(jobkey) or {}).get("status") == "running":
         raise ServiceError(409, f"{sid} 的世界模型正在生成中")
-    cmd = [sys.executable, "-u", str(ROOT / "code" / "worldlabs_world.py"), "--project", base.name, "--scene", sid, "--source", source, "--new",
-           "--provider", provider]
+    cmd = [sys.executable, "-u", str(ROOT / "code" / "worldlabs_world.py"), "--project", base.name, "--scene", sid, "--source", source, "--new"]
     if anchor:
         cmd += ["--anchor", anchor]
     if scheme:
         cmd += ["--scheme", scheme]
     WORLD_JOBS[jobkey] = {"status": "running", "log": [], "started_at": time.time(), "finished_at": None, "error": "",
-                          "params": {"source": source, "anchor": anchor, "scheme": scheme, "provider": provider}}
+                          "params": {"source": source, "anchor": anchor, "scheme": scheme}}
     threading.Thread(target=_scene_world_worker, args=(base.name, sid, jobkey, cmd), daemon=True).start()
     HUB.publish({"type": "scene_world", "project": base.name, "scene": sid, "status": "running", "line": ""})
     return {"ok": True, "job": jobkey}
@@ -8333,22 +8322,13 @@ async def api_scene_world_update(project: str, sid: str, key: str, body: dict):
 
 
 async def api_test_worldlabs(body: dict):
-    """验证世界模型 API Key:provider=marble(缺省)查 GET /marble/v1/credits 回余额;provider=atlas 列一条操作记录
-    (Atlas 没有余额接口,能读即 Key 有效且带 operations.read 权限)。"""
-    from modules import worldlabs, worldlabs_atlas
-    provider = "atlas" if body.get("provider") == "atlas" else "marble"
-    zh = (ui_lang_code() or "zh") == "zh"
+    """验证 World Labs API Key(GET /marble/v1/credits,回余额)。"""
+    from modules import worldlabs
     key = (body.get("api_key") or "").strip()
     if not key:
-        name = "Atlas" if provider == "atlas" else "World Labs"
-        return {"ok": False, "error": f"{name} API Key 未填写" if zh else f"{name} API key is empty"}
+        return {"ok": False, "error": "World Labs API Key 未填写"}
     try:
-        if provider == "atlas":
-            await asyncio.to_thread(worldlabs_atlas.check_key, key)
-            return {"ok": True, "provider": "atlas"}
         credits = await asyncio.to_thread(worldlabs.get_credits, key)
-    except worldlabs_atlas.AtlasError as e:
-        return {"ok": False, "error": (str(e) if zh else e.english())[:240]}
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": str(e)[:240]}
     return {"ok": True, "provider": "marble", "remaining_credits": credits}

@@ -25,10 +25,6 @@ OpenCV 系(y 向下、z 向前 = 全景中心列);metric_scale_factor 乘坐标�
 
 配置:控制台「🎨 生成模型」→「🌍 世界模型」板块(genconfig.json#world.marble:api_key / model / custom_model);
 Key 也可用环境变量 WORLDLABS_API_KEY。API 文档 https://docs.worldlabs.ai/api,Key 在 https://platform.worldlabs.ai/api-keys 创建。
-
-渠道(2026-10-09):板块里选中的标签页生效(world.provider):marble(默认,本模块)| atlas(World Labs Atlas / Marble 2 beta,
-modules/worldlabs_atlas.py:按白模深度 + 全景切图在多机位出视图,再按白模深度融合成高斯泼溅)。两条渠道产物同目录同格式,
-world.json#provider 记来源(旧记录没有 = marble);目录、默认、对齐、截图(render_world_views)等本模块函数两者共用。
 """
 from __future__ import annotations
 
@@ -53,7 +49,6 @@ WORLD_DIR = 'world'
 WORLDS_SUBDIR = 'worlds'        # world/worlds/<key>/:每个世界模型一个目录(2026-10-04)
 LEGACY_KEY = 'W1'              # world/ 根下的旧版单世界模型,原地读取不搬动
 PROVIDER = 'marble'
-PROVIDERS = ('marble', 'atlas')  # atlas = World Labs Atlas(Marble 2 beta),见 modules/worldlabs_atlas.py
 DEFAULT_MODEL = 'marble-1.1'
 # 与 docs.worldlabs.ai/api/models 一致;models.html 的 WORLD_MODELS 同步维护
 MODELS = ('marble-1.1-plus', 'marble-1.1', 'marble-1.0', 'marble-1.0-draft')
@@ -83,25 +78,10 @@ def marble_config() -> dict:
     return cfg
 
 
-def world_provider() -> str:
-    """生效的世界模型渠道 = 生成模型页「🌍 世界模型」选中的标签页(world.provider):marble(默认)| atlas。"""
-    world = _genconfig().get('world') or {}
-    p = str(world.get('provider') or PROVIDER) if isinstance(world, dict) else PROVIDER
-    return p if p in PROVIDERS else PROVIDER
-
-
-def provider_api_key(provider: str) -> str:
-    """该渠道配置的 API Key(含环境变量回落);没填返回空串。"""
-    if provider == 'atlas':
-        from modules import worldlabs_atlas
-        return worldlabs_atlas.atlas_config().get('api_key') or ''
-    return marble_config().get('api_key') or ''
-
-
 def api_key() -> str:
     key = marble_config().get('api_key') or ''
     if not key:
-        raise WorldLabsError('缺少 Marble API Key:请到控制台「🎨 生成模型」→「🌍 世界模型」→ Marble 填写(或设环境变量 WORLDLABS_API_KEY)')
+        raise WorldLabsError('缺少 World Labs API Key:请到控制台「🎨 生成模型」→「🌍 世界模型」填写(或设环境变量 WORLDLABS_API_KEY)')
     return key
 
 
@@ -459,7 +439,7 @@ def encode_depth_png(adir: Path, target: Path) -> tuple[bytes, float, float]:
     depth[~valid] = z_max                        # 无几何(漏天/漏地)按最远处理
     norm = (np.log(np.clip(depth, z_min, z_max)) - math.log(z_min)) / max(math.log(z_max) - math.log(z_min), 1e-5)
     png8 = np.round((1.0 - norm) * 255).astype(np.uint8)
-    Image.fromarray(png8).save(target)
+    Image.fromarray(png8, mode='L').save(target)
     return target.read_bytes(), z_min, z_max
 
 
@@ -567,9 +547,8 @@ def finish_world(base: Path, sid: str, operation_id: str, *, log=print, out: Pat
 
 
 # ---------------------------------------------------------------- prompt
-def default_prompt(base: Path, sid: str, *, panorama: bool = True) -> str:
-    """从场景设定卡拼英文描述:空场景声明 + 布局图四边说明 + 光照方案 + 建筑材质;不写人物。
-    panorama=False(Atlas 按机位出视图):不写「360 全景」与以全景中心为准的四向方位。"""
+def default_prompt(base: Path, sid: str) -> str:
+    """从场景设定卡拼英文描述:空场景声明 + 布局图四边说明 + 光照方案 + 建筑材质;不写人物。"""
     sdir = scene_dir(base, sid)
     bdir = base / 'bible/scenes' / component(sid)
     layout = read(sdir / 'layout.json', {}) or {}
@@ -579,14 +558,12 @@ def default_prompt(base: Path, sid: str, *, panorama: bool = True) -> str:
     o = layout.get('orientation') or {}
     from modules import scene_panos as sp
     kind = 'interior' if sp.is_indoor(base, sid) else 'exterior'
-    lead = f'A 360 panorama of an empty real {kind} location' if panorama else f'Views of an empty real {kind} location'
-    parts = [f'{lead}, photographed with nobody present, realistic live-action film look.',
-             f"Location: {layout.get('scene_name_en') or layout.get('scene_name') or sid}, {layout.get('sub_space') or ''}.".replace(' ,', ',')]
-    if panorama:
-        parts += ['Looking straight ahead (image centre) is ' + (o.get('top_of_map') or 'the far side') + '.',
-                  'To the right is ' + (o.get('right_of_map') or 'the right side') + '.',
-                  'Behind the camera is ' + (o.get('bottom_of_map') or 'the near side') + '.',
-                  'To the left is ' + (o.get('left_of_map') or 'the left side') + '.']
+    parts = [f'A 360 panorama of an empty real {kind} location, photographed with nobody present, realistic live-action film look.',
+             f"Location: {layout.get('scene_name_en') or layout.get('scene_name') or sid}, {layout.get('sub_space') or ''}.".replace(' ,', ','),
+             'Looking straight ahead (image centre) is ' + (o.get('top_of_map') or 'the far side') + '.',
+             'To the right is ' + (o.get('right_of_map') or 'the right side') + '.',
+             'Behind the camera is ' + (o.get('bottom_of_map') or 'the near side') + '.',
+             'To the left is ' + (o.get('left_of_map') or 'the left side') + '.']
     if o.get('note_en'):
         parts.append(o['note_en'])
     if scheme.get('prompt_fragment_en'):
@@ -603,7 +580,6 @@ def _summary(base: Path, w: dict, url_prefix: str, is_default: bool) -> dict:
     wj, wdir = w['record'], w['dir']
     files = wj.get('files') or {}
     world = {k: wj.get(k) for k in ('world_id', 'model', 'world_marble_url', 'caption', 'written_at', 'semantics_metadata', 'alignment')}
-    world['provider'] = wj.get('provider') or PROVIDER
     world['key'] = w['key']
     world['default'] = is_default
     world['input'] = {k: (wj.get('input') or {}).get(k) for k in ('source', 'anchor_id', 'scheme', 'camera')}
