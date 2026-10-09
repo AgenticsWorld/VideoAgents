@@ -333,7 +333,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div id="messages"><div class="empty">左侧选择 Agent;跟「总制片」对话可自动调度整个团队</div></div>
     <div id="soul-view"></div>
     <div id="composer">
-      <textarea id="input" placeholder="输入工作指令… (Shift+Enter 发送,Enter 换行)"></textarea>
+      <textarea id="input" placeholder="输入工作指令… (Enter 发送,Shift+Enter 换行)"></textarea>
       <button class="primary" id="send">发送</button>
     </div>
   </div>
@@ -3052,7 +3052,7 @@ async function selectAgent(id){
   $('#c-title').textContent=agentName(a.name); $('#c-sub').textContent=id;
   $('#composer').classList.toggle('dispatcher',!!a.dispatcher);   // 总制片输入框加 grow 光晕,便于识别
   $('#composer').classList.toggle('member',!a.dispatcher);          // 其它 Agent 输入框改暖琥珀色
-  $('#input').placeholder=I18N.f('给{name}发送工作指令… (Shift+Enter 发送,Enter 换行)',{name:agentName(a.name)});
+  $('#input').placeholder=I18N.f('给{name}发送工作指令… (Enter 发送,Shift+Enter 换行)',{name:agentName(a.name)});
   updateModelBtn();updateSkillBtn();
   $('#soul-view').style.display='none'; $('#messages').style.display='flex';
   OPEN_GROUPS.add(agentGroup(a));   // 展开该 Agent 所在组
@@ -3149,7 +3149,7 @@ async function send(){
   }
 }
 $('#send').onclick=send;
-$('#input').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.shiftKey){e.preventDefault();send()}});
+$('#input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();send()}});   // Enter 发送、Shift+Enter 换行;输入法选词中的 Enter 不发送
 $('#input').addEventListener('input',saveDraft);
 VoiceInput.attach($('#input'));   // 语音输入按钮:仅设置「语音输入」开启时显示
 const ATTACH=FileAttach.attach($('#input'),{storageKey:'webui_draft_files'});   // 输入框右上角「+」附件按钮(语音按钮在右下角):附件随草稿留存
