@@ -22,7 +22,12 @@ import json
 import re
 from pathlib import Path
 
-_VP_NAME = re.compile(r"^((?:CHAR|CRE)-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)(?:_(.+))?_voiceprint$")
+try:
+    from modules.entity_ids import ACTOR_ID_PAT
+except ImportError:                                      # 脚本直跑时无包前缀
+    from entity_ids import ACTOR_ID_PAT
+
+_VP_NAME = re.compile(rf"^({ACTOR_ID_PAT})(?:_(.+))?_voiceprint$")   # 编号口径见 modules/entity_ids(#117)
 _CH_NUM = re.compile(r"(\d+)")
 SOURCES = ("prompt", "timeline", "episode", "sole", "default")
 

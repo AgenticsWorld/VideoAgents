@@ -34,7 +34,7 @@ import re
 import time
 from pathlib import Path
 
-from modules.entity_ids import is_creature_id
+from modules.entity_ids import CHAR_ID_PAT, is_creature_id
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -364,7 +364,7 @@ def resolve_sketch_style(base: Path) -> str:
 
 
 _REF_RE = re.compile(r"^(.+?)(?:/shots_draft)?/order:(\d+)(?:/split:[^/]+)?$")
-_DLG_RE = re.compile(r"^\s*(?:S\d+[A-Za-z]?\s*[/·:\-]\s*)?(CHAR-\d+|NARRATOR|[^:：/·「」]{1,12})\s*[:：]\s*(.+?)\s*$")
+_DLG_RE = re.compile(r"^\s*(?:S\d+[A-Za-z]?\s*[/·:\-]\s*)?(" + CHAR_ID_PAT + r"|NARRATOR|[^:：/·「」]{1,12})\s*[:：]\s*(.+?)\s*$")   # slug 编号见 entity_ids(#117)
 
 
 # ---------------- 通用 ----------------

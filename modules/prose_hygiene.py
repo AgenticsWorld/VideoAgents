@@ -9,12 +9,14 @@ video_prompt。它们只能是画面散文(谁在哪、朝哪、怎么走);裁�
 """
 import re
 
+from modules.entity_ids import ACTOR_ID_PAT
+
 # (标签, 严重度, 正则):error = 必须清理(prompt 机检 FAIL);warn = 提示
 _RULES = [
     ('裁决/修订批注', 'error', re.compile(r'裁决|暂案|审看|本批|WBI-|(?<![A-Za-z])issue|用户(?:白模)?(?:修正|修订|纠正|要求|裁定)|按用户|导演台', re.I)),
     ('选项引用', 'error', re.compile(r'(?<![A-Za-z0-9])\d{3}-[A-F](?![A-Za-z])|选[A-F](?![A-Za-z])|方案[A-F](?![A-Za-z])')),
     ('白模/关键帧术语', 'error', re.compile(r'白模|关键帧|keyframe|whitebox|visible\s*[:=]|yaw\s*[:=]|pitch\s*[:=]|fov\s*[:=]', re.I)),
-    ('内部编号', 'error', re.compile(r'(?<![A-Za-z])(?:grp|sh)\d{3,}|(?<![A-Za-z])(?:CHAR|CRE|PROP|SCN)-\d+|(?<![A-Za-z])N-\d{4}|20\d\d-\d\d-\d\d')),
+    ('内部编号', 'error', re.compile(r'(?<![A-Za-z])(?:grp|sh)\d{3,}|(?<![A-Za-z])(?:' + ACTOR_ID_PAT + r'|(?:PROP|SCN)-\d+)|(?<![A-Za-z])N-\d{4}|20\d\d-\d\d-\d\d')),
     ('坐标', 'error', re.compile(r'[\[(（]\s*-?\d+(?:\.\d+)?\s*[,，]\s*-?\d+(?:\.\d+)?(?:\s*[,，]\s*-?\d+(?:\.\d+)?)?\s*[\])）]')),
     ('时间码', 'error', re.compile(r'组内\s*\d|镜内\s*\d|\d+(?:\.\d+)?\s*[-–~～至到]\s*\d+(?:\.\d+)?\s*秒|\d+\.\d+\s*(?:秒|s\b)|\d+\s*秒(?:后|起|时|前|内|末|处)|\bt\s*=\s*\d')),
     ('小数米数', 'warn', re.compile(r'\d+\.\d+\s*(?:米|m\b)')),

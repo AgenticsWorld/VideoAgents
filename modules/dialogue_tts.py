@@ -47,10 +47,14 @@ import subprocess
 import time
 from pathlib import Path
 
+try:
+    from modules.entity_ids import extract_actor_id, known_actor_ids
+except ImportError:                                      # 脚本直跑时无包前缀
+    from entity_ids import extract_actor_id, known_actor_ids
+
 SCHEMA = "dialogue_tts/v1"
 MANIFEST = "tts_manifest.json"
 LIB_REL = "assets/audio/voice/{ep}/tts"
-_ID_RE = re.compile(r"^(CHAR|CRE)-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$")
 EST_TOLERANCE = 0.30      # 实测/估时偏差超过该比例记 WARN
 RAW_DIR = "_raw"          # 合成原声(未修剪)存放子目录
 TRIM_NOISE_DB = -35.0     # 静音判定阈值
@@ -167,7 +171,8 @@ def voice_mode(provider: str, model: str) -> tuple[str, str]:
 
 
 def _name_index(base: Path) -> dict[str, str]:
-    """规范名/别名 → CHAR-/CRE- 编号(speaker 写成人名的兜底解析)。"""
+    """规范名/别名 → CHAR-/CRE- 编号(speaker 写成人名的兜底解析)。
+    编号本身与 original_name(英文 / 原著名,如 jidi「Hari Seldon」)也登记为键,排在规范名与别名之后(#117)。"""
     out: dict[str, str] = {}
     cidx = _read(Path(base) / "bible" / "characters" / "index.json") or {}
     for c in cidx.get("characters") or []:
@@ -184,26 +189,29 @@ def _name_index(base: Path) -> dict[str, str]:
     for c in cr.get("creatures") or []:
         if isinstance(c, dict) and c.get("id") and c.get("name"):
             out.setdefault(str(c["name"]).strip(), c["id"])
+    for c in [*(cidx.get("characters") or []), *(cr.get("creatures") or [])]:
+        if isinstance(c, dict) and isinstance(c.get("id"), str) and c["id"].strip():
+            out.setdefault(c["id"].strip(), c["id"].strip())
+            if isinstance(c.get("original_name"), str) and c["original_name"].strip():
+                out.setdefault(c["original_name"].strip(), c["id"].strip())
     return out
 
 
 name_index = _name_index   # 公共名:check_dialogue_fit 等机检共用同一套别名表(#58)
 
-_SPK_ID_RE = re.compile(r"((?:CHAR|CRE)-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)")  # 数字编号 CHAR-0001 与拼音 slug CHAR-jie-rui-er 都认
-
-
-def resolve_speaker(ln: dict, names: dict[str, str]) -> tuple[str, str]:
+def resolve_speaker(ln: dict, names: dict[str, str], known: frozenset | None = None) -> tuple[str, str]:
     """对白行 → (说话人编号 或 '', 原始说话人文本)。与 code/check_dialogue_fit.py 共用口径(#58):
     ① speaker / char 中的 CHAR-/CRE- 编号 → ② 同级 speaker_char / character_id 编号
-    → ③ 规范名/别名表反查 speaker(全文,再去括注)→ 仍无返回 ''。"""
+    → ③ 规范名/别名表反查 speaker(全文,再去括注)→ 仍无返回 ''。
+    编号口径见 modules/entity_ids(#117):数字编号与拼音 slug(CHAR-jie-rui-er)都认,known 给了时 slug 取最长已知编号。"""
     raw = str(ln.get("speaker") or ln.get("char") or ln.get("character_id") or "").strip()
-    m = _SPK_ID_RE.search(raw)
-    if m:
-        return m.group(1), raw
+    cid = extract_actor_id(raw, known)
+    if cid:
+        return cid, raw
     for k in ("speaker_char", "character_id"):
-        m = _SPK_ID_RE.search(str(ln.get(k) or "").strip())
-        if m:
-            return m.group(1), raw
+        cid = extract_actor_id(str(ln.get(k) or "").strip(), known)
+        if cid:
+            return cid, raw
     hit = names.get(raw) or names.get(re.sub(r"[〔【(\[（].*$", "", raw).strip())
     return (hit or ""), raw
 
@@ -220,6 +228,7 @@ def collect_lines(base: Path, ep: str, shot_list: dict | None = None) -> list[di
                 if isinstance(sid, str):
                     group_of[sid] = g["group_id"]
     names = _name_index(base)
+    known = known_actor_ids(base)
     out: list[dict] = []
     seq = 0
     for s in sl.get("shots") or []:
@@ -232,7 +241,7 @@ def collect_lines(base: Path, ep: str, shot_list: dict | None = None) -> list[di
             text = str(ln.get("text") or ln.get("line") or "").strip()
             if not text:
                 continue
-            speaker, raw = resolve_speaker(ln, names)
+            speaker, raw = resolve_speaker(ln, names, known)
             item = {"seq": seq, "shot_id": s["shot_id"], "idx": idx, "group_id": group_of.get(s["shot_id"], ""),
                     "speaker": speaker, "speaker_raw": raw, "text": text,
                     "emotion": str(ln.get("emotion") or ln.get("tone") or "").strip(),

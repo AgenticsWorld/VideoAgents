@@ -58,6 +58,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import parse_args  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from modules.dialogue_tts import name_index, resolve_speaker  # noqa: E402  与逐句语音库同一套说话人解析(#58)
+from modules.entity_ids import CHAR_ID_PAT, extract_actor_id, is_actor_id, known_actor_ids  # noqa: E402  编号口径(#117)
 from modules import time_cost as tc  # noqa: E402  时间尺(2026-10-03)
 try:
     from modules import offscreen_lines as osl  # noqa: E402  声画分离(2026-10-03):placement on|os|vo
@@ -77,7 +78,6 @@ _META_RE = re.compile(r"\s*\{[^{}]*\}\s*$")
 _EST_RE = re.compile(r"(est_duration_s\s*[:：]\s*)([0-9]+(?:\.[0-9]+)?)")
 _PACE_RE = re.compile(r"\bpace\s*[:：]\s*(fast|medium|slow)\b", re.I)
 _EMO_RE = re.compile(r"emotion\s*[:：]\s*([^,，}]+)")
-_CHAR_RE = re.compile(r"(CHAR-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)")
 # screenplay 对白行:- **老道儿(CHAR-0002)**(括注):台词 {emotion: …, est_duration_s: 1.6, …}
 _SP_LINE_RE = re.compile(r"^\s*[-*]\s*\*\*(?P<who>[^*]+?)\*\*\s*(?P<paren>(?:[(（][^()（）]*[)）]\s*)*)[:：]\s*(?P<body>.+?)\s*$")
 # dialogue.md 编号形态(与 services/runtime/core.py _dialogue_index 同口径)
@@ -102,6 +102,15 @@ def strip_meta(body: str) -> str:
 def meta_est(body: str):
     m = _EST_RE.search(body or "")
     return float(m.group(2)) if m else None
+
+
+def recorded_est(v):
+    """记录的估时 → 正数秒;缺失 / 非数字 / ≤0(初稿占位 0)一律视为没有记录(#127)。"""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f if f > 0 else None
 
 
 def meta_pace(body: str) -> str:
@@ -152,11 +161,13 @@ def sound_split_mode(proj_root: Path) -> str:
     return m if m in ("off", "script_only", "auto") else "off"
 
 
-def speaker_id(who: str, names: dict | None = None):
-    """说话人文本 → CHAR 编号;抓不到编号时按规范名/别名表反查(names,#58),仍无返回去括注的名字。"""
-    m = _CHAR_RE.search(who or "")
-    if m:
-        return m.group(1)
+def speaker_id(who: str, names: dict | None = None, known: frozenset | None = None):
+    """说话人文本 → CHAR 编号;抓不到编号时按规范名/别名表反查(names,#58),仍无返回去括注的名字。
+    编号口径见 modules/entity_ids(#117):数字编号只取到数字段(`CHAR-0093-v1` → CHAR-0093),
+    slug 编号按 known(项目已登记编号)取最长已知前缀。"""
+    cid = extract_actor_id(who, known, char_only=True)
+    if cid:
+        return cid
     name = re.sub(r"[〔【(\[（].*$", "", who or "").strip() or None
     if names:
         return names.get((who or "").strip()) or names.get(name or "") or name
@@ -203,7 +214,7 @@ def est_seconds(text: str, cpm: float, pace: str = "", legacy: bool = False) -> 
 
 
 # ---------------------------------------------------------------- 剧本对白层
-def parse_screenplay_lines(md_text: str) -> list:
+def parse_screenplay_lines(md_text: str, known: frozenset | None = None) -> list:
     """screenplay.md 【对白】小节内的对白行 → [{scene, speaker, who, text, est_recorded, pace, placement, lineno}]。"""
     # 对白行可能出现在【对白】小节,也可能穿插在【画面/动作】小节里(前科:dzg5 ep01 S02 L76);
     # 只排除【旁白】小节(旁白者文本),其余带 `- **谁**:` 形态且能定位说话人的行都算对白。
@@ -230,20 +241,20 @@ def parse_screenplay_lines(md_text: str) -> list:
         text = strip_meta(body)
         if not text:
             continue
-        out.append({"scene": scene, "speaker": speaker_id(who), "who": who,
+        out.append({"scene": scene, "speaker": speaker_id(who, known=known), "who": who,
                     "text": text, "est_recorded": meta_est(body), "pace": meta_pace(body),
                     "placement": source_placement(who, m.group("paren")), "lineno": i})
     return out
 
 
-def parse_dialogue_md(md_text: str) -> tuple:
+def parse_dialogue_md(md_text: str, known: frozenset | None = None) -> tuple:
     """dialogue.md → (编号索引 {id: {speaker,text}}, 无编号对白行列表[{speaker,text,est_recorded,lineno}])。"""
     idx, bullets = {}, []
 
     def _put(did, spk, line):
         line = strip_meta((line or "").strip().strip("*").strip())
         if did and line and did not in idx:
-            idx[did] = {"speaker": speaker_id(spk or ""), "text": line}
+            idx[did] = {"speaker": speaker_id(spk or "", known=known), "text": line}
 
     text_col = spk_col = None
     cur_id = cur_spk = None
@@ -286,14 +297,14 @@ def parse_dialogue_md(md_text: str) -> tuple:
             body = mb.group("body")
             text = strip_meta(body)
             if text:
-                bullets.append({"speaker": speaker_id(mb.group("who")), "who": mb.group("who").strip(),
+                bullets.append({"speaker": speaker_id(mb.group("who"), known=known), "who": mb.group("who").strip(),
                                 "text": text, "est_recorded": meta_est(body), "pace": meta_pace(body),
                                 "placement": source_placement(mb.group("who"), mb.group("paren")), "lineno": i})
     return idx, bullets
 
 
 # ---------------------------------------------------------------- shot_list 台词
-def shot_lines(shot: dict, dlg_idx: dict, names: dict | None = None) -> list:
+def shot_lines(shot: dict, dlg_idx: dict, names: dict | None = None, known: frozenset | None = None) -> list:
     """一镜的台词 [{speaker, speaker_name, text, est_recorded, ref}];内嵌 dialogue_lines 优先,
     其次编号 dialogue_refs/dialogue_ref 回查 dialogue.md。
     说话人按 modules.dialogue_tts.resolve_speaker 同一口径(#58):speaker/char 中的编号 → speaker_char /
@@ -305,7 +316,7 @@ def shot_lines(shot: dict, dlg_idx: dict, names: dict | None = None) -> list:
             if isinstance(ln, dict):
                 text = ln.get("text") or ln.get("line") or ""
                 if text:
-                    sid, raw = resolve_speaker(ln, names or {})
+                    sid, raw = resolve_speaker(ln, names or {}, known)
                     pr = ln.get("placement_reason") if isinstance(ln.get("placement_reason"), dict) else {}
                     out.append({"speaker": sid or raw or None, "speaker_name": raw or None, "text": text,
                                 "est_recorded": ln.get("est_duration_s"), "ref": ln.get("id") or ln.get("ref"),
@@ -317,7 +328,7 @@ def shot_lines(shot: dict, dlg_idx: dict, names: dict | None = None) -> list:
                                 "placement_trigger": str(pr.get("trigger") or "").strip(),
                                 "line_index": raw_i})
             elif isinstance(ln, str) and ln.strip():
-                mm = re.match(r"^(?:S\d+/)?(CHAR-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)\s*[:：]\s*(.+)$", ln.strip())
+                mm = re.match(rf"^(?:S\d+/)?({CHAR_ID_PAT})\s*[:：]\s*(.+)$", ln.strip())
                 out.append({"speaker": mm.group(1) if mm else None, "text": mm.group(2) if mm else ln.strip(),
                             "est_recorded": None, "ref": None, "placement": "on"})
         return out
@@ -347,6 +358,7 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
 
     speeds = load_speeds(proj_root)
     names = name_index(proj_root)
+    known_ids = known_actor_ids(proj_root)
     try:
         st = json.loads((proj_root / "settings.json").read_text())
         shot_max_s = float((st.get("duration") or {}).get("shot_max_s") or DEFAULT_SHOT_MAX_S)
@@ -366,8 +378,8 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
     legacy = tc.is_legacy(tc.doc_date(sl_doc) if sl_doc else tc.frontmatter_date(sp_text))
     if legacy_override is not None:
         legacy = legacy_override
-    sp_lines = parse_screenplay_lines(sp_text) if sp_text else []
-    dlg_idx, dm_bullets = parse_dialogue_md(dm_text) if dm_text else ({}, [])
+    sp_lines = parse_screenplay_lines(sp_text, known_ids) if sp_text else []
+    dlg_idx, dm_bullets = parse_dialogue_md(dm_text, known_ids) if dm_text else ({}, [])
     source_name = "screenplay.md" if sp_lines else ("dialogue.md" if dm_bullets or dlg_idx else None)
     source_lines = sp_lines if sp_lines else dm_bullets
     if not source_lines and dlg_idx:
@@ -375,7 +387,7 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
                         for v in dlg_idx.values()]
     # 对白层说话人同样按别名表归一到编号(与 shot_list 侧同口径;认不出的保留名字)
     for ln in source_lines:
-        if ln.get("speaker") and not _CHAR_RE.fullmatch(ln["speaker"]):
+        if ln.get("speaker") and not is_actor_id(ln["speaker"], char_only=True):
             ln["speaker"] = names.get(ln["speaker"]) or ln["speaker"]
     if source_name is None:
         warns.append("source_unparsed: 未找到可解析的对白层(screenplay.md 【对白】小节 / dialogue.md),跳过文本一致性核对")
@@ -399,8 +411,8 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
         cpm = cpm_of(spk)
         est = est_seconds(ln["text"], cpm, ln.get("pace") or "", legacy)
         rec = ln.get("est_recorded")
-        if not known and rec is not None:
-            est = round(float(rec), 1)   # 无语速设定的说话人:信记录值
+        if not known and recorded_est(rec):
+            est = round(float(rec), 1)   # 无语速设定的说话人:信记录值(初稿占位 0 不算记录,#127)
         ln["est"], ln["cpm"], ln["chars"] = est, cpm, eff_chars(ln["text"])
         src_keys.setdefault((spk, norm_key(ln["text"])), []).append(ln)
         if est > line_cap_s + 1e-9:
@@ -468,7 +480,7 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
                 errs.append(f"{gid} shot_missing: 组引用的镜 {sid} 不在 shots[]")
                 continue
             dur = float(s.get("duration_s") or 0)
-            lines = shot_lines(s, dlg_idx, names)
+            lines = shot_lines(s, dlg_idx, names, known_ids)
             sest = 0.0
             srec = {"shot_id": sid, "duration_s": dur, "est_s": 0.0, "ratio": 0.0, "status": "ok", "lines": []}
             for ln in lines:
@@ -480,12 +492,12 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
                     errs.append(f"{gid}/{sid} placement_valid: 「{ln['text'][:24]}」placement={pl},但项目「声画分离」已关闭"
                                 f"(改回画内或在输出设置开启)")
                     pl = "on"
-                spk = speaker_id(ln.get("speaker") or "", names)
+                spk = speaker_id(ln.get("speaker") or "", names, known_ids)
                 known = spk in speeds
                 cpm = cpm_of(spk)
                 est = est_seconds(ln["text"], cpm, ln.get("pace") or "", legacy)
-                if not known and ln.get("est_recorded") is not None:
-                    est = round(float(ln["est_recorded"]), 1)   # 无语速设定的说话人:信记录值,只报 WARN
+                if not known and recorded_est(ln.get("est_recorded")):
+                    est = round(float(ln["est_recorded"]), 1)   # 无语速设定的说话人:信记录值,只报 WARN(占位 0 不算,#127)
                 chars = eff_chars(ln["text"])
                 lines_total += 1
                 if pl == "on":
@@ -503,7 +515,7 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
                 key = (spk, norm_key(ln["text"]))
                 if source_name and key not in src_keys and ln.get("speaker_name"):
                     # 编号来自 speaker_char 而对白层仍写显示名(别名表未登记):按显示名比对,不新增 FAIL
-                    alt_key = (speaker_id(ln["speaker_name"]), key[1])
+                    alt_key = (speaker_id(ln["speaker_name"], known=known_ids), key[1])
                     if alt_key in src_keys:
                         key = alt_key
                 if source_name:

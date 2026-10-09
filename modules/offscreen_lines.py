@@ -31,6 +31,11 @@ import subprocess
 import time
 from pathlib import Path
 
+try:
+    from modules.entity_ids import extract_actor_id
+except ImportError:                                      # 脚本直跑时无包前缀
+    from entity_ids import extract_actor_id
+
 SCHEMA = "offscreen_lines/v1"
 MANIFEST = "offscreen_manifest.json"
 LIB_REL = "assets/audio/voice/{ep}/offscreen"
@@ -41,7 +46,6 @@ GAP_S = 0.3                 # 同一窗口多句画外之间的间隔
 PLAN_FACTOR = 1.15          # 估时级:est × 1.15 ≤ 可用窗口(同旁白 narration_window_gte_est_x1.15)
 FIT_FACTOR = 0.9            # 实测级:实测 ≤ 可用窗口 × 0.9(同 narration_fit 留呼吸空隙)
 MIN_WINDOW_S = 0.5
-_ID_RE = re.compile(r"((?:CHAR|CRE)-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)")
 
 # 声处理预设:ffmpeg -af 滤镜链(干声 → .fx.wav)。plain 只做重采样;电话=窄带 + 压缩;隔门=低通 + 衰减 + 短回声;
 # 远处=低通 + 衰减 + 较长回声;内心=贴耳(轻压缩)+ 淡混响;回忆=低通 + 长混响(与 inner 区分:更远、更虚)
@@ -228,9 +232,9 @@ def audio_plan_ok(actual: str, expected: str) -> bool:
 
 def _speaker_id(ln: dict) -> str:
     for k in ("speaker", "char", "character_id", "speaker_char"):
-        m = _ID_RE.search(str(ln.get(k) or ""))
-        if m:
-            return m.group(1)
+        cid = extract_actor_id(ln.get(k))          # 编号口径见 modules/entity_ids(#117)
+        if cid:
+            return cid
     return ""
 
 

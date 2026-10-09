@@ -26,6 +26,7 @@ import os
 import re
 from pathlib import Path
 
+from modules.entity_ids import extract_actor_id
 from modules.shot_timing import KIND_H3, KIND_SD25, group_kind, shot_paragraphs, ui_lang_is_zh
 from modules.whitebox import component, read
 
@@ -38,7 +39,6 @@ TRIGGERS = {"N1": "插入镜 / 主观镜起声(前镜无人物)", "N2": "听者�
 MARK_ZH, MARK_EN = "【原生先入】", "Native lead:"
 MARK_RE = re.compile(r"[ \t]*(?:【原生先入】|Native lead:)[^\n]*?[。.](?=[ \t]*(?:\n|$))")
 _SPLIT_RE = re.compile(r"[,，、;；]")
-_ID_RE = re.compile(r"((?:CHAR|CRE)-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)")
 
 
 # ---------------------------------------------------------------- 读取
@@ -87,9 +87,9 @@ def _placement(ln) -> str:
 
 def _speaker(ln) -> str:
     for k in ("speaker", "char", "character_id", "speaker_char"):
-        m = _ID_RE.search(str((ln or {}).get(k) or ""))
-        if m:
-            return m.group(1)
+        cid = extract_actor_id((ln or {}).get(k))  # 编号口径见 modules/entity_ids(#117)
+        if cid:
+            return cid
     return str((ln or {}).get("speaker") or "").strip()
 
 

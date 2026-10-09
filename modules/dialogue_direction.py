@@ -22,6 +22,7 @@ import re
 import time
 from pathlib import Path
 
+from modules.entity_ids import extract_actor_id
 from modules import time_cost as _tc                     # 时间尺(2026-10-03):估时口径唯一来源
 try:
     from modules import offscreen_lines as _osl           # 声画分离(2026-10-03):placement on|os|vo
@@ -131,8 +132,7 @@ def _scene_names(base: Path) -> dict[str, str]:
 
 
 def _speaker_id(ln: dict) -> str:
-    m = re.search(r"((?:CHAR|CRE)-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)", " ".join(str(ln.get(k) or "") for k in ("speaker", "char", "character_id", "speaker_char")))
-    return m.group(1) if m else ""
+    return extract_actor_id(" ".join(str(ln.get(k) or "") for k in ("speaker", "char", "character_id", "speaker_char"))) or ""
 
 
 def _placement(ln: dict) -> str:

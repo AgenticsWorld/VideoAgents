@@ -40,6 +40,7 @@ from modules import skill_records
 from modules.prompt_layout import paragraphize
 from modules import caption_catalog as _ccat
 from modules import id_scheme
+from modules.entity_ids import extract_actor_id
 from modules.volc_openapi import signed_call as _volc_signed_call
 from modules import voice_library as _voice_library
 from services.runtime import rhythm as narrative_rhythm
@@ -7115,8 +7116,8 @@ def _dialogue_index(text: str) -> dict[str, dict]:
         if not did or not line or did in idx:
             return
         spk = (speaker or "").strip()
-        m = re.search(r"(CHAR-\d+)", spk)
-        idx[did] = {"speaker": m.group(1) if m else re.sub(r"[〔【(\[].*$", "", spk).strip() or None,
+        cid = extract_actor_id(spk, char_only=True)          # 数字编号与拼音 slug 都认,口径见 modules/entity_ids(#117)
+        idx[did] = {"speaker": cid or re.sub(r"[〔【(\[].*$", "", spk).strip() or None,
                     "text": line}
 
     text_col = spk_col = None

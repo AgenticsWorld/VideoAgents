@@ -60,3 +60,71 @@ def test_display_name_source_still_matches(tmp_path):
     assert not any("source_unparsed" in w for w in rep["warnings"]), rep["warnings"]
     assert not any("lines_text_match_source" in e for e in rep["errors"]), rep["errors"]
     assert not any("source_lines_covered" in w for w in rep["warnings"]), rep["warnings"]
+
+
+def _slug_project(tmp_path, lines, screenplay):
+    cdir = tmp_path / "bible" / "characters"
+    for cid, speed in (("CHAR-jie-rui-er", 300), ("CHAR-alice", 200), ("CHAR-alice-sister", 240)):
+        (cdir / cid).mkdir(parents=True)
+        (cdir / cid / "voice.json").write_text(json.dumps({"speed_cpm": speed}))
+    (cdir / "index.json").write_text(json.dumps({"characters": [
+        {"id": "CHAR-jie-rui-er", "name": "杰瑞尔", "original_name": "Jerril"},
+        {"id": "CHAR-alice", "name": "Alice"}, {"id": "CHAR-alice-sister", "name": "Alice's Sister"}]}, ensure_ascii=False))
+    d = tmp_path / "directing" / "ep01"
+    d.mkdir(parents=True)
+    d.joinpath("shot_list.json").write_text(json.dumps({
+        "shots": [{"shot_id": "sh001", "duration_s": 10, "dialogue_lines": lines}],
+        "generation_groups": [{"group_id": "grp001", "shots": ["sh001"], "audio_plan": "dialogue",
+                               "total_duration_s": 10}]}, ensure_ascii=False))
+    s = tmp_path / "story" / "episodes" / "ep01"
+    s.mkdir(parents=True)
+    s.joinpath("screenplay.md").write_text(screenplay)
+    return tmp_path
+
+
+def test_slug_ids_speed_and_source_match(tmp_path):
+    """#117:slug 编号(CHAR-jie-rui-er)剧本括注与 shot_list 两侧同 key,取得到语速;-v1 形态后缀归到已登记编号。"""
+    sp = ("## S01\n\n### 对白\n\n- **Jerril (CHAR-jie-rui-er)**: First time here? {pace: medium}\n"
+          "- **Alice (CHAR-alice-v1)**: Curiouser and curiouser. {pace: medium}\n"
+          "- **Alice's Sister (CHAR-alice-sister)**: Wake up. {pace: medium}\n")
+    lines = [{"speaker": "CHAR-jie-rui-er", "text": "First time here?"},
+             {"speaker": "CHAR-alice", "text": "Curiouser and curiouser."},
+             {"speaker": "CHAR-alice-sister", "text": "Wake up."}]
+    rep = cdf.run(_slug_project(tmp_path, lines, sp), "ep01")
+    assert not any("lines_text_match_source" in e for e in rep["errors"]), rep["errors"]
+    assert not any("speaker_speed_unknown" in w or "source_lines_covered" in w for w in rep["warnings"]), rep["warnings"]
+    assert {ln["speaker"]: ln["cpm"] for ln in rep["groups"][0]["lines"]} == {
+        "CHAR-jie-rui-er": 300, "CHAR-alice": 200, "CHAR-alice-sister": 240}
+
+
+def test_numeric_suffix_speaker_stays_numeric(tmp_path):
+    """#117 回归:数字编号带形态后缀(CHAR-0007-v1)仍归到 CHAR-0007(2026-10-08 之前的口径)。"""
+    sp = "## S01\n\n### 对白\n\n- **掌柜(CHAR-0007-v1)**:再对一遍 {est_duration_s: 0.8}\n"
+    lines = [{"speaker": "CHAR-0007", "text": "再对一遍", "est_duration_s": 0.8}]
+    rep = cdf.run(_project(tmp_path, lines, sp), "ep01")
+    assert not any("lines_text_match_source" in e for e in rep["errors"]), rep["errors"]
+    assert not any("source_lines_covered" in w for w in rep["warnings"]), rep["warnings"]
+
+
+def test_unknown_speaker_zero_est_is_not_trusted(tmp_path):
+    """#127:无语速设定的说话人,初稿占位 est 0 不当记录,按项目中位语速估(--write-est 才能回写真值)。"""
+    sp = "## S01\n\n### 对白\n\n- **路人甲**:今天的账对不上啊 {est_duration_s: 0}\n"
+    lines = [{"speaker": "路人甲", "text": "今天的账对不上啊", "est_duration_s": 0}]
+    rep = cdf.run(_project(tmp_path, lines, sp), "ep01")
+    est = rep["groups"][0]["lines"][0]["est_s"]
+    assert est > 1.0, rep["groups"][0]["lines"]
+    sp_lines = cdf.parse_screenplay_lines(sp)
+    assert cdf.recorded_est(sp_lines[0]["est_recorded"]) is None and cdf.recorded_est("1.5") == 1.5
+
+
+def test_name_index_registers_id_and_original_name(tmp_path):
+    """#117:英文原名(original_name)与编号本身也能反查到编号;规范名 / 别名优先。"""
+    c = tmp_path / "bible" / "characters"
+    c.mkdir(parents=True)
+    (c / "index.json").write_text(json.dumps({"characters": [
+        {"id": "CHAR-hari-seldon", "name": "哈里・谢顿", "original_name": "Hari Seldon"},
+        {"id": "cao-cao", "name": "曹操"}]}, ensure_ascii=False))
+    names = dialogue_tts.name_index(tmp_path)
+    assert names["Hari Seldon"] == "CHAR-hari-seldon" and names["哈里・谢顿"] == "CHAR-hari-seldon"
+    assert names["cao-cao"] == "cao-cao"
+    assert dialogue_tts.resolve_speaker({"speaker": "Hari Seldon"}, names)[0] == "CHAR-hari-seldon"

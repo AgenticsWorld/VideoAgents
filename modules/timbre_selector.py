@@ -10,6 +10,11 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import quote
 
+try:
+    from modules.entity_ids import known_actor_ids, normalize_actor_id
+except ImportError:                                      # 脚本直跑时无包前缀
+    from entity_ids import known_actor_ids, normalize_actor_id
+
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(
@@ -37,8 +42,12 @@ def _strings(value):
 
 
 def _normalize_character(value: str) -> str:
-    match = re.search(r"CHAR[-_](\d+)", value or "", re.IGNORECASE)
-    return f"CHAR-{match.group(1)}" if match else ""
+    """人物参数 / 输出文件名 → CHAR 编号:数字编号 `CHAR-0001` / `char_0001`(下划线旧写法)照旧;
+    拼音 / 英文 slug `CHAR-jie-rui-er`(连字符分段,遇 `_` 截断:`CHAR-alice-sister_young_voiceprint`)也认(#117)。"""
+    match = re.search(r"CHAR(?:[-_](\d+)|-([A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*))", value or "", re.IGNORECASE)
+    if not match:
+        return ""
+    return f"CHAR-{match.group(1)}" if match.group(1) else f"CHAR-{match.group(2)}"
 
 
 def infer_character(output: str) -> str:
@@ -228,6 +237,8 @@ def rank_timbres(text: str, output: str, character: str = "", variant: str = "",
     """本地音色库按人物内容打分排序 → (人物画像, [(分数, 条目, 理由列表)] 高分在前)。"""
     character = _normalize_character(character) or infer_character(output)
     project_root = _resolve_project(project, output)
+    if character and project_root:
+        character = normalize_actor_id(character, known_actor_ids(project_root))   # slug 后缀形态 → 已登记编号
     profile = _profile(project_root, character, variant, text, instructions)
     _, entries = load_catalog(timbre_dir, catalog_path)
 

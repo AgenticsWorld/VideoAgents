@@ -16,6 +16,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from modules.entity_ids import CHAR_ID_PAT
+
 SCHEMA_VERSION = "script_breakdown/1.0"
 OWNER_AGENT = "01-story/timeline-story"    # 拆解表产出/「重新分析」承接工位(2026-09-11 用户指定)
 BREAKDOWN_REL = "story/episodes/{ep}/script_breakdown.json"
@@ -43,7 +45,7 @@ INPUT_FILES = ("story/episodes/{ep}/screenplay.md", "story/episodes/{ep}/dialogu
 # 剧本机器锚点契约(docs/screenplay_anchors.md,2026-09-23):方括号标签/行首关键词/场头字段位置固定不随输出语言变,
 # 中文旧写法与英文规范写法等价(EVENTS/CAST/DURATION、ACTION/TRANSITION/TIME/SOUND/SFX/MUSIC/NARRATION、NO DIALOGUE…)
 _SCENE_TOKEN = re.compile(r"^(S\d{1,3}[A-Za-z]?(?:[-–]\d+)?(?:[（(](?:续|cont'?d|continued)[)）])?|\d{1,2}-\d{1,2}|OH|EC|FRAME[-_]\w+)(?=$|[\s|｜·:：—\-])", re.I)
-_CHAR_RE = re.compile(r"CHAR-\d+")
+_CHAR_RE = re.compile(CHAR_ID_PAT)        # 数字编号与拼音 slug(CHAR-jie-rui-er)都认,口径见 modules/entity_ids(#117)
 _SCN_RE = re.compile(r"SCN-\d+")
 _EV_RE = re.compile(r"\bev[a-z]*[-_]?(?:ch\d+[-_])?\d+\b", re.I)
 _DUR_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:s\b|秒)")
@@ -284,7 +286,7 @@ _DLG_PATTERNS = [
     # [LN-ep01-01] 章墨(CHAR-0001)〔OV〕(擦汗)：台词(括注/〔〕次序不限,在 _speaker 里拆)
     re.compile(r"^(?:[-*]\s*)?\[(?P<id>[A-Za-z][\w-]*-[\w-]+)\]\s*(?P<spk>[^:：]+?)\s*[:：]\s*(?P<text>.+)$"),
     # CHAR-0002:「佳宁？」 {…}   /  CHAR-0011:「早安，九位。」
-    re.compile(r"^(?:[-*]\s*)?(?P<spk>CHAR-\d+)\s*(?P<paren>[（(][^()（）]*[)）])?\s*[:：]\s*(?P<text>.+)$"),
+    re.compile(r"^(?:[-*]\s*)?(?P<spk>" + CHAR_ID_PAT + r")\s*(?P<paren>[（(][^()（）]*[)）])?\s*[:：]\s*(?P<text>.+)$"),
     # 老者：「……」(仅接受引号包裹的台词,避免把「动作:」「声音:」当说话人)
     re.compile(r"^(?:[-*]\s*)?(?P<spk>[^\s:：「「\[\]*|#>][^:：「「\[\]*|#>]{0,19}?)\s*(?P<paren>[（(][^()（）]*[)）])?\s*[:：]\s*(?P<text>[「“\"].+)$"),   # 英文名可含空格(Old Man)
 ]

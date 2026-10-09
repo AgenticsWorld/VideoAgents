@@ -289,6 +289,17 @@ def test_parse_english_anchor_screenplay():
     assert [(d["speaker_name"], d["text"]) for d in b["dialogue"]] == [("Old Man", "Sleep.")]
 
 
+
+def test_slug_ids_cast_and_speaker():
+    """#117:拼音 / 英文 slug 编号(CHAR-jie-rui-er)在 [CAST] 行、对白括注、行首编号三种写法里都认;数字编号带 -v1 后缀仍取到数字段。"""
+    sp = sb.parse_screenplay(EN_ANCHORS.replace("CHAR-0001, CHAR-0002 | [DURATION] 40s", "CHAR-jie-rui-er, CHAR-gaal-dornick | [DURATION] 40s")
+                             .replace('CHAR-0001: "Who', 'CHAR-jie-rui-er: "Who')
+                             .replace("Old Man (CHAR-0002)", "Old Man (CHAR-gaal-dornick)"), {"Old Man"})
+    a = sp["scenes"][0]
+    assert a["cast"] == ["CHAR-jie-rui-er", "CHAR-gaal-dornick"]
+    assert [d["speaker_id"] for d in a["dialogue"]] == ["CHAR-jie-rui-er", "CHAR-gaal-dornick"]
+    assert sb._speaker("车夫甲(CHAR-0093-v1)")[:2] == ("CHAR-0093", "车夫甲")
+
 def test_english_int_ext_aliases_and_inference():
     from modules import scene_int_ext as ie
     assert ie.norm("Interior") == "INT" and ie.norm("EXT.") == "EXT" and ie.norm("int./ext.") == "INT/EXT"
