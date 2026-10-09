@@ -1997,7 +1997,7 @@ document.addEventListener('click',async e=>{
 // 白模模块只 import 一次并复用同一个 promise:首屏时 render 里 resetWhitebox 与 mountGroups 各自 import() 的回调顺序不保证,
 // 曾出现 mountGroups 先跑、随后 resetWhitebox 把刚建的观察器断掉,面板永远停在「正在加载」(2026-09-22 无头实测复现)
 let WB_MOD=null;
-const wbModule=()=>WB_MOD||(WB_MOD=import('/static/whitebox-ui.js?v=20261008-maxh'));
+const wbModule=()=>WB_MOD||(WB_MOD=import('/static/whitebox-ui.js?v=20261009-scene169'));
 function render(d){
   const wbKeep=!WB_INVALIDATE;WB_INVALIDATE=false;
   WB_ON=d.whitebox_enabled===true;

@@ -303,7 +303,7 @@ function renderList(){
 }
 
 function renderDetail(s){
-  import('/static/whitebox-ui.js?v=20261008-maxh').then(m=>m.resetWhitebox());
+  import('/static/whitebox-ui.js?v=20261009-scene169').then(m=>m.resetWhitebox());
   const box=$('#detail');
   const m=s.meta||{};
   const aliases=(m.aliases||[]).map(a=>a.name||a).filter(Boolean);
@@ -468,7 +468,7 @@ function renderDetail(s){
   const gallery=box.querySelector('.blk[data-blk="gallery"]');
   if(gallery)gallery.after(whitebox);
   else box.insertBefore(whitebox,box.querySelector('.doc'));
-  import('/static/whitebox-ui.js?v=20261008-maxh').then(m=>m.mountScene(whitebox,$('#project').value.trim()||'demo',s.id));
+  import('/static/whitebox-ui.js?v=20261009-scene169').then(m=>m.mountScene(whitebox,$('#project').value.trim()||'demo',s.id));
   // 🌍 世界模型(2026-09-12;2026-09-22 挪到「分镜背景图」板块之上):有背景图板块插其前,否则白模之后(全景图板块随后插到白模与它之间)
   mountWorldSection(whitebox,s);
   // 🌐 全景图(2026-09-10):3D 白模之下,按锚点列全景 + 每个锚点中心在俯视图中的坐标;始终显示 + 「创建全景图」(2026-09-13)

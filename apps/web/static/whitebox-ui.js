@@ -40,10 +40,15 @@ async function previewData(url,fallback,minStagingVersion=0){
 
 // 「状态」弹出层:点面板外任意处收起
 document.addEventListener('click',e=>{if(!e.target.closest('.wb-statuswrap'))document.querySelectorAll('.wb-statuspop.open').forEach(x=>{x.classList.remove('open');x.previousElementSibling?.setAttribute('aria-expanded','false');});});
+// 场景预览的 3D 白模只是看空间,与视频画幅无关:固定 16:9(2026-10-09,同背景图/场景图画幅);组面板仍按项目画幅(摄像机视角 = 成片构图)
+const SCENE_FORMAT={aspect_ratio:'16:9',width:960,height:540};
 async function mount(host,project,scene,group=null,ep='') {
-  const settings=await json(`/api/v1/projects/${encodeURIComponent(project)}/config`);
-  if(!host.isConnected)return;
-  const format=projectRenderFormat(settings);
+  let format=SCENE_FORMAT;
+  if(group){
+    const settings=await json(`/api/v1/projects/${encodeURIComponent(project)}/config`);
+    if(!host.isConnected)return;
+    format=projectRenderFormat(settings);
+  }
   const fileState=value=>value===true?t('已有'):value===false?t('未生成'):t('未知');
   const statusItems=[t('场景模型：{state}',{state:fileState(scene.artifact_status?.model)})];
   if(group)statusItems.push(
