@@ -44,6 +44,7 @@ from modules.volc_openapi import signed_call as _volc_signed_call
 from modules import voice_library as _voice_library
 from services.runtime import rhythm as narrative_rhythm
 from services.runtime import engine_setup
+from services.runtime import dagcheck
 
 # ---------------- 配置 ----------------
 ROOT = Path(__file__).resolve().parents[2]             # 工作区根目录
@@ -506,6 +507,34 @@ def whitebox_selfcheck_setting() -> bool:
     """白模自检开关(默认开;设置菜单「高级→Agent 高级设置」):开启时白模调度工位编译后
     用宿主 `render_whitebox.py --stills` 出静帧联系表并读图核对取景,关闭时只做数值自检。"""
     return bool(STATE.get("whitebox_selfcheck", True))
+
+
+def episode_parallel_setting() -> bool:
+    """多集并行开关(默认关;设置菜单「高级→Agent 高级设置」):关闭时总制片按集顺序推进——
+    当前集全部节点结束(发布环节 p11-* 不计)才派下一集,集内各组/镜/场景照常并行扇出;
+    看门狗与闸门补建签字单同口径剔除后续集节点(services/runtime/dagcheck.py episode_serial_hold)。"""
+    return bool(STATE.get("episode_parallel", False))
+
+
+def episode_order_prompt_section(project: str) -> str:
+    """调度型 Agent 的「多集推进设定」段(按开关二选一注入)。"""
+    head = "\n\n## 多集推进设定(Web 客户端「设置→高级→Agent 高级设置」全局设置,实时生效)\n"
+    if episode_parallel_setting():
+        return head + ("- 多集并行:**开启** —— 按试点集策略:首集全流程过 H4 后,后续各集节点依赖满足即可同时推进;"
+                       f"可派前沿看 `python3 services/runtime/dagcheck.py --project {project} --frontier`")
+    return head + (
+        "- 多集并行:**关闭**(默认)—— 按集顺序推进,同一时刻只推进一集。**当前集** = 集号最小、仍有节点未到终态"
+        "(done/passed/passed_human_override/skipped/cancelled/waived;发布环节 `p11-*` 不计)的那一集。"
+        "带集号的节点(`pX-*-epNN`、`gX-epNN` 及其组/镜/场景级扇出实例,含 Phase 5 剧本类分集节点)只派当前集的,"
+        "当前集内各组/镜/场景照常按依赖并行扇出;当前集全部节点结束后才派下一集的第一个节点。不带集号的项目级节点不受此限\n"
+        "- 当前集停在人工签字、重跑确认、blocker 或用户暂缓时,**不改推后续集**:守则「继续派发无依赖任务」只指项目级节点"
+        "与当前集内的其他节点;没有可派的就按守则发起签字 / 升级后正常结束运行\n"
+        f"- 可派前沿以宿主命令为准:`python3 services/runtime/dagcheck.py --project {project} --frontier`"
+        "(实时读本设定,输出当前集、可派节点与「按集顺序暂缓」的后续集节点);结束前巡检同样看它,暂缓清单里的节点不算漏派\n"
+        "- 已完成的集被修改记录 / 缺陷单标脏回到未结束时,它集号更小即成为当前集:先补完它再继续后面的集\n"
+        "- 用户给出集范围(如「推进 ep03-ep10」)= 按集序逐集做,不等于要求并行;只有用户在对话里明确要求多集同时推进时"
+        "才照用户指令执行,并提示可在「Agent 高级设置」打开「多集并行」\n"
+        "- 「试点集策略」(首集过 H4 后批量并行)在本设定下不适用:每一集都等前一集结束再开始")
 
 
 def confirm_timeout_setting() -> int:
@@ -3775,11 +3804,13 @@ def build_role_prompt(agent_id: str, project: str,
    不得因 GraphRecursionError/超时/API 5xx 等报错改用 claude/codex/kimi/pi/opencode/grok/deepagents 中的另一个)。
    报错后重试一律沿用原引擎与 Agent/全局模型配置——不要在同一条路上串行耗死,也不要用换引擎当兜底
 9. 【结束前 DAG 前沿巡检】每次准备结束当前运行前,必须先运行
-   `python3 services/runtime/dagcheck.py --project {project} --strict` 并检查依赖已满足的节点:
+   `python3 services/runtime/dagcheck.py --project {project} --strict --frontier` 并检查它列出的依赖已满足节点
+   (按下方「多集推进设定」,按集顺序暂缓的后续集节点不在可派之列):
    有非人工待办就继续派单;有已解锁 `human:true` 的 H 门就必须当场执行
    `python3 services/runtime/dispatch.py --confirm "【<checkpoint>】<审阅要点与放行影响>" --sign --project {project}`。
    只有签字单已经发起、确有 blocker/暂缓，或 DAG 全部完成时才可结束。严禁只回复“后续必须签字”后关单，
    严禁自行把人工节点写成 passed；服务端漏单守卫只负责补建同类永久签字单，不替代本项职责"""
+        p += episode_order_prompt_section(project)
         plugs = active_plugins()
         if plugs:
             lines = []
@@ -15979,6 +16010,7 @@ async def api_stop_run(run_id: str):
 _HUMAN_GATE_NOTIFIED: dict[str, float] = {}   # project -> 上次提醒时刻(防刷屏)
 _DAG_RECONCILE_NOTIFIED: dict[str, float] = {}   # project -> 上次唤醒补展开 DAG 的时刻
 _DAG_INVALID_NOTIFIED: dict[str, float] = {}   # project -> 上次唤醒修复 DAG 的时刻
+_EPISODE_HOLD_NOTIFIED: dict[str, float] = {}   # project -> 上次提醒「按集顺序推进卡在当前集」的时刻
 
 _DONE_STATES = {"done", "passed", "passed_human_override"}
 
@@ -15998,34 +16030,19 @@ def _dag_load_nodes(dag_path) -> list[dict]:
     return [{**n, "id": n.get("id") or n.get("task_id", "")} for n in nodes]
 
 
-def _dag_runnable(proj: str) -> tuple[list[str], list[str]]:
-    """读 runs/dag.json,返回 (依赖已满足的非人工待办节点, 依赖已满足的人工签字节点)。"""
+def _dag_frontier(proj: str) -> dict:
+    """读 runs/dag.json 的待办前沿(dagcheck.frontier,与总制片 `dagcheck.py --frontier` 同口径):
+    skipped/cancelled/waived 终态、blocked(用户明确暂缓)、template/expanded 扇出骨架(#72)都不算待办,
+    否则看门狗每轮都会据此空唤醒总制片;多集并行关闭时另把按集顺序暂缓的后续集节点剔出(held)。"""
     dag_path = PROJECTS_DIR / proj / "runs" / "dag.json"
-    if not dag_path.is_file():
-        return [], []
-    nodes = _dag_load_nodes(dag_path)
-    done = {n["id"] for n in nodes if n.get("state") in _DONE_STATES}
-    runnable, human_waiting = [], []
-    for n in nodes:
-        if n.get("state") in _DONE_STATES:
-            continue
-        # skipped/cancelled/waived 是不再执行的终态(如已下线的 p0-version-init)、
-        # blocked 是用户明确暂缓:都不算待办,否则看门狗每轮都会据此空唤醒总制片
-        if n.get("state") in _WF_TERMINAL_SKIP or n.get("state") == "blocked":
-            continue
-        # #72:template/expanded 是 for_each 扇出骨架(已按实例扇出,本身不可派单),人工/非人工一律不算待办
-        if n.get("state") in ("template", "expanded"):
-            continue
-        if not all(d in done for d in (n.get("depends_on") or [])):
-            continue
-        if n.get("human"):
-            # expanded/template 只是待实例化骨架，blocked 是用户明确暂缓；只有
-            # pending 人工节点能够发起新的签字。
-            if n.get("state") == "pending":
-                human_waiting.append(n["id"])
-        else:
-            runnable.append(n["id"])
-    return runnable, human_waiting
+    nodes = _dag_load_nodes(dag_path) if dag_path.is_file() else []
+    return dagcheck.frontier(nodes, episode_parallel_setting())
+
+
+def _dag_runnable(proj: str) -> tuple[list[str], list[str]]:
+    """返回 (依赖已满足的非人工待办节点, 依赖已满足的 pending 人工签字节点),已剔除按集顺序暂缓的节点。"""
+    f = _dag_frontier(proj)
+    return f["runnable"], f["human_waiting"]
 
 
 def _gate_checkpoint(node: dict) -> str:
@@ -16297,13 +16314,17 @@ def _approval_project(c: dict) -> str | None:
 
 
 async def ensure_human_gate_approvals(proj: str, parent: str | None = None) -> list[str]:
-    """为已解锁人工闸门补建持久签字单；只建单，不放行 DAG。"""
+    """为已解锁人工闸门补建持久签字单；只建单，不放行 DAG。多集并行关闭时，
+    按集顺序暂缓的后续集闸门不新建（已有签字单的续跑照常）。"""
     created = []
+    held = set(_dag_frontier(proj)["held"])
     for node in _ready_human_gates(proj):
         gate_id = node["id"]
         existing = [c for c in CONFIRMS.values()
                     if c.get("kind") == "sign" and _approval_project(c) == proj
                     and c.get("gate_id") == gate_id]
+        if not existing and gate_id in held:
+            continue
         if existing:
             # 服务若恰在签字落盘后、续跑派单前退出，重启后由核对钩子补唤醒。
             signed = next((c for c in reversed(existing)
@@ -16591,11 +16612,16 @@ async def idle_watchdog():
                         mark_revisions_consumed(proj, "watchdog")
                         print(f"[watchdog] 唤醒 {orch}:{proj} DAG {state}", flush=True)
                     continue
-                runnable, human_waiting = _dag_runnable(proj)
+                fr = _dag_frontier(proj)
+                runnable, human_waiting = fr["runnable"], fr["human_waiting"]
+                cur_ep = fr["current_episode"]
+                hold_note = (f"(多集并行已关闭:按集顺序只推进当前集 ep{cur_ep:02d} 与项目级节点,"
+                             f"后续集 {len(fr['held'])} 个节点待本集结束后再派)"
+                             ) if fr["held"] and cur_ep is not None else ""
                 if runnable:
                     msg = (f"[自动运行·状态检查] 项目 {proj} 当前没有任何任务在运行,"
                            f"但 runs/dag.json 仍有依赖已满足的待办节点(如:{', '.join(runnable[:6])}"
-                           f"{' 等' if len(runnable) > 6 else ''})。"
+                           f"{' 等' if len(runnable) > 6 else ''}){hold_note}。"
                            "请按 DAG 与派单守则继续推进;若确在等待人工或有原因暂停,简要说明后结束。"
                            + orders_note)
                     await api_chat({"agent": orch, "message": msg,
@@ -16637,6 +16663,12 @@ async def idle_watchdog():
                         _HUMAN_GATE_NOTIFIED[proj] = now
                         notify_user(f"项目 {proj} 流水线停在人工签字点:"
                                     f"{', '.join(human_waiting[:3])},等你确认")
+                elif fr["held"] and cur_ep is not None \
+                        and now - _EPISODE_HOLD_NOTIFIED.get(proj, 0) > 3600:
+                    # 多集并行关闭:当前集剩下的节点都暂缓/阻塞(没有可派也没有待签),后续集按集顺序不开始
+                    _EPISODE_HOLD_NOTIFIED[proj] = now
+                    notify_user(f"项目 {proj} 按集顺序推进停在 ep{cur_ep:02d}:该集仍有未结束节点(暂缓或阻塞),"
+                                "后续集暂不开始")
         except Exception as e:  # noqa: BLE001
             print(f"[watchdog] 异常(忽略):{e}\n{traceback.format_exc()}", flush=True)
 
@@ -16691,6 +16723,7 @@ async def api_agent_advanced_get():
               "thinking_effort_default": THINKING_EFFORT_DEFAULT,
               "thinking_effort_levels": list(THINKING_EFFORT_LEVELS),
               "whitebox_selfcheck": whitebox_selfcheck_setting(),
+              "episode_parallel": episode_parallel_setting(),
               "debug_mode": debug_mode(),
               "max_turns": max_turns_setting(),
               "max_turns_default": MAX_TURNS_DEFAULT,
@@ -16711,6 +16744,9 @@ async def api_agent_advanced_set(body: dict):
       派单时按引擎翻译成推理强度参数;持久化,对后续启动的运行生效
     - whitebox_selfcheck:白模自检开关(布尔,默认开):开启时经运行提示词让白模调度工位在编译后
       跑 `render_whitebox.py --stills` 读静帧联系表核对取景;持久化,对后续启动的运行生效
+    - episode_parallel:多集并行开关(布尔,默认关):关闭时总制片按集顺序推进,当前集全部节点结束
+      (发布环节 p11-* 不计)才开始下一集,集内照常并行扇出;经调度型 Agent 运行提示词注入,
+      看门狗与 `dagcheck.py --frontier` 实时读取;持久化
     - max_turns:单次运行引擎轮次上限(MAX_TURNS_MIN..MAX_TURNS_MAX;仅 claude/grok
       引擎有 --max-turns 参数,撞上限即被切断且无续跑,大批量工位需放宽);持久化,
       对后续启动的运行生效
@@ -16733,6 +16769,8 @@ async def api_agent_advanced_set(body: dict):
         updates["thinking_effort"] = lv
     if body.get("whitebox_selfcheck") is not None:
         updates["whitebox_selfcheck"] = bool(body.get("whitebox_selfcheck"))
+    if body.get("episode_parallel") is not None:
+        updates["episode_parallel"] = bool(body.get("episode_parallel"))
     if body.get("debug_mode") is not None:
         updates["debug_mode"] = bool(body.get("debug_mode"))
     if body.get("max_retries") is not None:
@@ -16764,7 +16802,7 @@ async def api_agent_advanced_set(body: dict):
     conc = {k: body.get(k) for k in ("global_concurrency", "agent_concurrency", "run_timeout", "idle_timeout")
             if body.get(k) is not None}
     if not updates and not conc:
-        raise ServiceError(400, "nothing to update: pass global_concurrency / agent_concurrency / run_timeout / idle_timeout / agent_memory_kb / max_retries / confirm_timeout / thinking_effort / max_turns / whitebox_selfcheck / debug_mode")
+        raise ServiceError(400, "nothing to update: pass global_concurrency / agent_concurrency / run_timeout / idle_timeout / agent_memory_kb / max_retries / confirm_timeout / thinking_effort / max_turns / whitebox_selfcheck / episode_parallel / debug_mode")
     if conc:
         await api_agent_concurrency_set(conc)   # 自带校验;校验失败则整单不落盘
     if updates:

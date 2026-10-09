@@ -226,7 +226,7 @@ refs/
 
 立项时生成的 dag.json 允许先用**阶段级模板节点**(p0–p11 各一套,不带集号)。但 `story/episode_plan.json` 通过 G5 后,orchestrator 必须**立即把「按集推进」的阶段展开为逐集节点**,此后模板节点不得再承接任何工单:
 
-1. **展开范围**:Phase 5 的每集任务(screenplay/dialogue/narration/hook/pacing)与 Phase 6–10 全部节点,按 `pX-<task>-epNN` 逐集生成;每集自带闸门节点 `g6-epNN`(H3A 分镜签字,human)、`g7p-epNN`(H3V 视频提示词签字,human;依赖本集全部组的 `p7-prompt`,本集各组 `p7-image` / `p7-video` 依赖它,2026-10-05)、`g7-epNN`(H3B 视觉生成签字,human)、`g8-epNN`、`g9-epNN`(H4 仅首集 human)、`g10-epNN`(H5 发布签字,human)。Phase 11 按发布单元展开。集间依赖遵循试点策略(首集全链路过 H4 后,后续集方可批量推进)。
+1. **展开范围**:Phase 5 的每集任务(screenplay/dialogue/narration/hook/pacing)与 Phase 6–10 全部节点,按 `pX-<task>-epNN` 逐集生成;每集自带闸门节点 `g6-epNN`(H3A 分镜签字,human)、`g7p-epNN`(H3V 视频提示词签字,human;依赖本集全部组的 `p7-prompt`,本集各组 `p7-image` / `p7-video` 依赖它,2026-10-05)、`g7-epNN`(H3B 视觉生成签字,human)、`g8-epNN`、`g9-epNN`(H4 仅首集 human)、`g10-epNN`(H5 发布签字,human)。Phase 11 按发布单元展开。集间推进按用户「Agent 高级设置→多集并行」(见 §8「集间推进」):关闭(默认)按集顺序逐集推进,开启时遵循试点策略(首集全链路过 H4 后,后续集方可批量推进)。
 2. **模板节点处置**:被展开覆盖的模板节点(如 `p6-plan`、`g6`)在展开时置为 `state: expanded` 并在 `note` 里指向逐集节点;**严禁拿单套模板节点跨集复用**——首集跑完把模板标 passed、后续集工单游离于 DAG 之外,会让空转看门狗失明。
 3. **补录回填**:若展开时该集已有既往工单(历史修复场景),按 `runs/<task_id>/` 实际记录回填节点 `state` 与 `run_id`,changelog 标注 `backfill`。
 4. **一致性机检**:episode_plan 中的每个 epNN 在 DAG 中必须至少有一个节点;未完结的 epNN 必须存在可跑或待签节点。任一不满足即视为调度缺陷(同 §6.1 三方不一致)。Web 控制台空转看门狗会对「plan 有集、DAG 无节点」自动告警并唤醒 orchestrator 补展开。
@@ -1167,7 +1167,10 @@ orchestrator 派 for_each 批处理单时在 `instruction` 末尾明写一句「
 
 > 成片方式**不设人工确认点**:G7/H3B 后终版组 clip 自动走默认路径(成片分辨率与草稿档不同时仅 upscale 超分,严禁成片档重生成;见 §7B)——H3B 签的是组内容质量,不是成片方式。
 
-**试点集策略**:第 1 集全流程走通并经 H4 签字后,后续集才批量并行,以免风格/质量问题被放大到全季。
+**集间推进(2026-10-09,用户设置「Agent 高级设置→多集并行」,默认关)**:
+- **多集并行关闭(默认)= 按集顺序**:同一时刻只推进一集。当前集 = 集号最小、仍有节点未到终态(done/passed/passed_human_override/skipped/cancelled/waived)的那一集,发布环节 `p11-*` 不计;带集号的节点(含 Phase 5 剧本类分集节点)只派当前集的,集内各组/镜/场景照常按依赖并行扇出;当前集全部节点结束才派下一集。当前集停在签字点、暂缓或 blocker 时不改推后续集(总制片守则「blocker 挂起 ≠ 停机」在此只指项目级节点与当前集内节点);已完成的集被标脏回到未结束时它即成为当前集,先补完再继续。不带集号的项目级节点不受限。
+- **多集并行开启 = 试点集策略**:第 1 集全流程走通并经 H4 签字后,后续集才批量并行,以免风格/质量问题被放大到全季。
+- 宿主口径:`python3 services/runtime/dagcheck.py --project <slug> --frontier` 实时读该设置,列当前集、可派节点与「按集顺序暂缓」的后续集节点;空转看门狗唤醒与闸门补建签字单同口径剔除暂缓节点,当前集卡住(无可派、无待签)时按小时提醒用户。
 
 ## 9. 生成模型调用(genmedia 统一模块)
 

@@ -299,7 +299,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <div class="dd-sub">
         <a href="#" onclick="return false" title="不常用的进阶功能">◂ 高级</a>
         <div class="dd-sub-menu dropdown-box">
-          <a href="#" id="menu-agent-adv" title="Agent 高级设置:扇出型 Agent 并发额度、运行/无输出超时、跨轮对话记忆额度、自动重跑次数上限、重跑等待确认时间、思考深度、白模自检、Debug 模式">Agent 高级设置</a>
+          <a href="#" id="menu-agent-adv" title="Agent 高级设置:扇出型 Agent 并发额度、运行/无输出超时、跨轮对话记忆额度、自动重跑次数上限、重跑等待确认时间、思考深度、白模自检、Debug 模式、多集并行">Agent 高级设置</a>
           <a href="/avatars" title="火山方舟私域虚拟人像素材库:人物形象图入库后,生成视频时自动以资产 URI 提交,规避人脸参考图审核拦截">虚拟人像资产库</a>
           <a href="/footage" title="素材库:上传视频或粘贴 YouTube/Bilibili 链接,自动镜头分割成分镜 clip、语音转文字,并可让默认 CLI 引擎看图写出画面含义;产物为 clip 视频 + 结构化 JSON">素材库</a>
           <a href="/live" title="直播:参考图 + 提示词交给 Fal 渠道视频模型循环生成 480p 短段,每段带上一段尾帧续接,页面把新段接在已播内容之后连续播放">直播</a>
@@ -816,6 +816,10 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <input type="number" id="conc-num" min="1" max="8" step="1" style="width:64px">
     <button type="button" class="info-btn" data-info="conc-info-conc" title="说明">i</button></div>
     <div class="note info-note" id="conc-info-conc">扇出型 Agent(场景资产、视频生成、审核、验收评分等按场景/组一单的工位)同一 Agent 可同时运行的工单数上限,默认 5,最大不超过上方「跨 Agent 并发额度」。创作型 Agent 为保护会话连续性恒为串行,不受此值影响;全部运行仍受跨 Agent 并发额度总闸。每个并发 = 一个真实的模型 CLI 进程,调大会成倍加快额度消耗,网络代理高并发下也更易断连,建议逐步上调。</div>
+    <div class="row"><label>多集并行</label>
+      <span style="display:flex;align-items:center;gap:8px;flex:1"><input type="checkbox" id="conc-eppar" style="flex:none;width:auto;margin:0"><span onclick="$('#conc-eppar').click()" style="cursor:pointer">多集同时推进(关闭时一集做完再做下一集)</span></span>
+    <button type="button" class="info-btn" data-info="conc-info-eppar" title="说明">i</button></div>
+    <div class="note info-note" id="conc-info-eppar">默认关:总制片按集顺序推进,同一时刻只做一集——当前集的全部节点(含该集各签字点,发布环节不计)结束后才开始下一集,剧本、分镜、出图、视频、后期都等前一集做完;集内各组/镜/场景照常并行扇出,速度由上方并发额度决定。当前集停在签字点、被暂缓或有阻塞时,后续集不会开始,开启自动运行时会提醒你。勾选后恢复试点集策略:首集全流程过 H4 签字后,后续各集可同时推进,吞吐更高,但 token 消耗、同时运行的进程与待你审看的内容会成倍增加。不带集号的项目级任务不受影响。全局设置,通过运行提示词注入总制片,自动运行巡检同口径,保存后对后续启动的运行生效。</div>
     <div class="row"><label>运行超时(分钟)</label>
       <input type="number" id="conc-rt" min="10" max="1440" step="10" style="width:90px">
     </div>
@@ -2503,7 +2507,7 @@ $('#wdt-ok').onclick=async()=>{
   }catch(e){$('#wdt-err').textContent='保存失败:'+e.message}
 };
 
-/* ---------- Agent 高级设置弹窗(设置菜单「高级」:并发/超时 + 重跑次数 + 重跑等待确认 + 思考深度 + 白模自检 + Debug 模式 + 对话记忆) ---------- */
+/* ---------- Agent 高级设置弹窗(设置菜单「高级」:并发/超时 + 多集并行 + 重跑次数 + 重跑等待确认 + 思考深度 + 白模自检 + Debug 模式 + 对话记忆) ---------- */
 let gconcMax=50,concMax=8,concRtMin=10,concRtMax=1440,concItMax=360,concRetryMax=10,memMax=256,concTurnsMin=10,concTurnsMax=1000,concCfMin=5,concCfMax=3600;
 function memSt(){const v=parseInt($('#mem-num').value);$('#mem-st').textContent=v>0?I18N.f('✓ 会话恢复生效中:单会话超过 {kb} KB 自动新开',{kb:v}):t('已关闭:每次运行全新会话')}
 $('#mem-range').oninput=()=>{$('#mem-num').value=$('#mem-range').value;memSt()};
@@ -2537,11 +2541,12 @@ async function openConcModal(){
     $('#conc-turns').value=c.max_turns==null?(c.max_turns_default||250):c.max_turns;
     $('#conc-effort').value=c.thinking_effort==null?'':c.thinking_effort;
     $('#conc-wbcheck').checked=c.whitebox_selfcheck!==false;
+    $('#conc-eppar').checked=!!c.episode_parallel;
     $('#conc-debug').checked=!!c.debug_mode;
     memMax=c.agent_memory_kb_max||256;$('#mem-range').max=memMax;$('#mem-num').max=memMax;
     const mk=c.agent_memory_kb==null?(c.agent_memory===false?0:16):c.agent_memory_kb;
     $('#mem-range').value=mk;$('#mem-num').value=mk;
-  }catch(e){$('#gconc-range').value=8;$('#gconc-num').value=8;syncConcMax(8);$('#conc-range').value=5;$('#conc-num').value=5;$('#conc-rt').value=120;$('#conc-it').value=30;$('#conc-retry').value=0;$('#conc-confirm').value=60;$('#conc-turns').value=250;$('#conc-effort').value='';$('#conc-wbcheck').checked=true;$('#conc-debug').checked=DEBUG_MODE;$('#mem-range').value=16;$('#mem-num').value=16}
+  }catch(e){$('#gconc-range').value=8;$('#gconc-num').value=8;syncConcMax(8);$('#conc-range').value=5;$('#conc-num').value=5;$('#conc-rt').value=120;$('#conc-it').value=30;$('#conc-retry').value=0;$('#conc-confirm').value=60;$('#conc-turns').value=250;$('#conc-effort').value='';$('#conc-wbcheck').checked=true;$('#conc-eppar').checked=false;$('#conc-debug').checked=DEBUG_MODE;$('#mem-range').value=16;$('#mem-num').value=16}
   memSt();
   $('#conc-modal').style.display='flex';
 }
@@ -2582,7 +2587,7 @@ $('#conc-ok').onclick=async()=>{
   const mk=parseInt($('#mem-num').value);
   if(!(mk>=0&&mk<=memMax)){$('#conc-err').textContent=I18N.f('对话记忆需为 0-{max} 的整数(KB,0=关闭)',{max:memMax});return}
   try{
-    const r=await api('/api/v1/config/agent-advanced',{global_concurrency:g,agent_concurrency:v,run_timeout:rt*60,idle_timeout:it*60,max_retries:retry,confirm_timeout:cf,max_turns:turns,agent_memory_kb:mk,thinking_effort:$('#conc-effort').value,whitebox_selfcheck:$('#conc-wbcheck').checked,debug_mode:$('#conc-debug').checked});
+    const r=await api('/api/v1/config/agent-advanced',{global_concurrency:g,agent_concurrency:v,run_timeout:rt*60,idle_timeout:it*60,max_retries:retry,confirm_timeout:cf,max_turns:turns,agent_memory_kb:mk,thinking_effort:$('#conc-effort').value,whitebox_selfcheck:$('#conc-wbcheck').checked,episode_parallel:$('#conc-eppar').checked,debug_mode:$('#conc-debug').checked});
     DEBUG_MODE=!!(r&&r.debug_mode);applyDebugMode();   // Debug 模式随保存立即生效(SOUL.md 入口显隐)
     $('#conc-modal').style.display='none';
   }catch(e){$('#conc-err').textContent='保存失败:'+e.message}
