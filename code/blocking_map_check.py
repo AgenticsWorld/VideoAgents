@@ -40,6 +40,8 @@ label 机检(label_ok,2026-08-27):每角色 `label` 必填,= 短规范名——�
   python3 code/blocking_map_check.py --project <slug> --ep ep01 --source storyboard   # 草案期
   python3 code/blocking_map_check.py --project <slug> --scene SCN-0012          # 只查场景布局包
 退出码:0=通过(可含 WARN),1=有违规。
+俯视图像素下限(--scene / 布局包)按文件头读尺寸(modules/whitebox.image_size,纯标准库,PNG 与 JPEG 载荷均可),
+不依赖 Pillow(缺 Pillow 的解释器下闸门照常执行);读不到尺寸按违规「像素闸门未执行」(#132)。
 """
 import json
 import math
@@ -52,6 +54,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from modules.prose_hygiene import annotation_hits, describe, prompt_annotation_hits  # noqa: E402
 from _common import parse_args, spatial_blocking_enabled  # noqa: E402
 from modules.entity_ids import is_creature_id  # noqa: E402
+from modules.whitebox import image_size  # noqa: E402
 
 MIN_PIXELS = 3_686_400          # 布局包出图规格下限(2560x1440 当量,平台统一出图规格;旧火山硬限 2026-09-01 已废止)
 LAYOUT_SCHEMA = "scene_layout.v1"
@@ -108,14 +111,15 @@ def load_layout(proj_root: Path, sid: str):
         if not f.is_file():
             errs.append(f"{sid}: 缺 {key} 图 {f.name}")
             continue
-        try:
-            from PIL import Image
-            with Image.open(f) as im:
-                w, h = im.size
-            if w * h < MIN_PIXELS:
-                errs.append(f"{sid}: {f.name} 仅 {w}x{h}={w*h} 像素 < {MIN_PIXELS}(布局包出图规格)")
-        except Exception as e:  # noqa: BLE001
-            warns.append(f"{sid}: 无法读取 {f.name}({e})")
+        # 像素下限是硬判据(#132):纯标准库读文件头(PNG IHDR / JPEG SOFn;layout_top.png 常是 JPEG 载荷),
+        # 不依赖 Pillow;读不到尺寸 = 闸门未执行,按违规处理,不得降级为 WARN 放行
+        size = image_size(f)
+        if size is None:
+            errs.append(f"{sid}: 像素闸门未执行(无法读取图片尺寸:{f.name} 不是可解析的 PNG/JPEG)")
+            continue
+        w, h = size
+        if w * h < MIN_PIXELS:
+            errs.append(f"{sid}: {f.name} 仅 {w}x{h}={w*h} 像素 < {MIN_PIXELS}(布局包出图规格)")
     lms = lay.get("landmarks") or []
     ids = set()
     for lm in lms:
