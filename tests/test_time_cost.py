@@ -50,7 +50,11 @@ def test_beat_costs_prose_and_phrase():
 
 def test_sequence_connectors_and_blocking_beats():
     assert tc.count_sequence_connectors("他先收肘,随后甩臂,再抖腕;接着转身。then he runs. 再次 先生") == 5   # 再次/先生 不算
-    bj = {"characters": [{"id": "A", "beats": [{"t": 0.2, "action": "撞在石壁上"}, {"t": 0.5, "action": "滑倒"},
+    # #119:否定 / 程度用法的「再」不是下一拍动作
+    for s in ("她转身离开,不再回头看我", "再也没动", "别再说了", "没再出声", "一再后退", "再不许来", "再度亮起", "再三叮嘱"):
+        assert tc.count_sequence_connectors(s) == 0, s
+    assert tc.count_sequence_connectors("他收剑,再转身") == 1 and tc.count_sequence_connectors("停住,再") == 1
+    bj ={"characters": [{"id": "A", "beats": [{"t": 0.2, "action": "撞在石壁上"}, {"t": 0.5, "action": "滑倒"},
                                                {"t": 0.6, "action": "幡杆歪了"}, {"t": 1.0, "action": "点名", "sync": "台词『哪吒,』起"}]}]}
     beats = tc.blocking_beats(bj)
     assert [b["cost_s"] for b in beats] == [1.2, 1.2, 0.7, 0.0] and beats[-1]["kind"] == "synced"
