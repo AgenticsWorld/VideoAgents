@@ -1594,6 +1594,21 @@ def _avatar_asset_uri(path: str) -> str | None:
     return None
 
 
+def _continuity_asset_resolver(cfg):
+    """长镜头续接素材(前组尾帧图片 / 尾段视频)自动入虚拟人像库的解析函数(modules/ark_assets.py):
+    path → asset://<id> | None。仅火山方舟 + Seedance 2.x 适用(asset:// 只有这条链路认),其余返回 None;
+    资产库未启用、项目长镜头关闭、非续接素材或入库未成时解析为 None,照原方式提交。"""
+    if cfg.get("provider") != "volcengine" or _seedance_gen(cfg.get("model") or "") < 2.0:
+        return None
+    from modules import ark_assets
+
+    def log(msg):
+        print(f"[genmedia] {msg}", file=sys.stderr, flush=True)
+    return lambda path: ark_assets.continuity_asset_uri(
+        path, config_path=CONFIG_PATH, ledger_path=AVATAR_LEDGER_PATH,
+        upload=_storage_upload_url, log=log)
+
+
 # ---------------- 图像:OpenRouter ----------------
 
 # 专用图像 API 目录(/images/models,公开免鉴权):纯出图模型(gpt-image / grok-imagine-image /
@@ -4286,11 +4301,14 @@ def _draft_mode_active(cfg, resolution: str) -> bool:
 
 def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed,
                     refs, audio_refs, gen_audio, want_last_frame,
-                    video_refs=None, to_url=None, video_to_url=None, draft=False):
+                    video_refs=None, to_url=None, video_to_url=None, draft=False,
+                    asset_uri_for=None):
     """构造方舟视频任务请求体(独立函数便于 dry-run 校验;to_url 可替换文件内联逻辑,
     video_to_url 单独指定参考视频的 URL 化方式——方舟要求 reference_video 为公网 URL)。
     draft=True 为 Seedance 2.5 样片模式:请求体顶层 draft=true + resolution=480p(官方样例写法),
-    文本参数串里不再重复 --resolution,避免两处分辨率冲突。"""
+    文本参数串里不再重复 --resolution,避免两处分辨率冲突。
+    asset_uri_for(path) → asset://<id> | None:参数校验通过后逐份解析参考图/参考视频的资产 URI
+    (长镜头续接素材自动入虚拟人像库,见 _continuity_asset_resolver;dry-run 不传,不入库)。"""
     to_url = to_url or _file_to_data_url
     video_to_url = video_to_url or to_url
     gen = _seedance_gen(cfg["model"])
@@ -4335,15 +4353,17 @@ def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
             raise RuntimeError(_avatar_required_msg(
                 path, f"当前模型 {cfg['model']} 不支持 asset:// 资产 URI(仅 Seedance 2.x 支持),"
                       "可换用 Seedance 2.x 视频模型"))
-        asset_uri = _avatar_asset_uri(path) if is_v2 else None
+        asset_uri = ((asset_uri_for(path) if asset_uri_for else None)
+                     or (_avatar_asset_uri(path) if is_v2 else None))
         if asset_uri:
             print(f"[genmedia] 参考图已入虚拟人像库,以资产 URI 提交:"
                   f"{Path(path).name} → {asset_uri}", file=sys.stderr, flush=True)
         content.append({"type": "image_url", "role": "reference_image",
                         "image_url": {"url": asset_uri or to_url(path)}})
     for path in video_refs or []:
+        asset_uri = asset_uri_for(path) if asset_uri_for else None
         content.append({"type": "video_url", "role": "reference_video",
-                        "video_url": {"url": video_to_url(path)}})
+                        "video_url": {"url": asset_uri or video_to_url(path)}})
     for path in audio_refs or []:
         content.append({"type": "audio_url", "role": "reference_audio",
                         "audio_url": {"url": to_url(path)}})
@@ -4507,7 +4527,8 @@ def _video_ark(cfg, prompt, first, last, duration, resolution, aspect, seed, out
     draft = _draft_mode_active(cfg, resolution)
     body = _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed,
                            refs, audio_refs, gen_audio, bool(return_last_frame),
-                           video_refs=video_refs, video_to_url=_storage_upload_url, draft=draft)
+                           video_refs=video_refs, video_to_url=_storage_upload_url, draft=draft,
+                           asset_uri_for=_continuity_asset_resolver(cfg))
     if draft:
         print("[genmedia] Seedance 2.5 样片模式(draft=true,480p):成片阶段按本任务 ID 生成 1080p 原片",
               file=sys.stderr, flush=True)

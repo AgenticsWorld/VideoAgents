@@ -15,6 +15,7 @@ prompt 写完必跑 `python3 code/sync_continuity_refs.py --project <slug> --ep 
 链依赖及重 roll 前向接缝必须同时检查 refs 尾帧与 video_refs 尾段/continuity_ref.from_group，
 不能再仅凭“refs 无尾帧”判硬断点。前组重生成后后组重新 prepare，已成片的后组复查接缝。
 边界不足2秒、预算不足或不支持视频参考回退尾帧并记录原因；完全不支持参考素材的端点走既有拆段首尾帧兜底。
+虚拟人像资产库启用时（火山方舟 + Seedance 2.x），genmedia 提交前自动把本组的续接素材（尾帧图片 / 尾段视频）入库、等审核 Active 后以 asset:// 提交（2026-10-09，`docs/continuity.md`），不需要自己入库；入库未成会在生成日志告警并按原方式提交。
 
 
 场次人物前置检查：开跑前执行 `python code/sync_scene_cast.py --project <slug> --ep <ep> <grp>`（检查模式）及 refs_referenced_check.py，核对同场次所有人物的身份/服装图均关联，即使无对白或在当前镜头外；**白模项目例外(2026-09-09)**:只有在本组白模摄影机视频里实际出现的人物才挂图，输出里 `whitebox_hidden` 的人物不挂图是正确状态，反之其图仍在 refs 属违规(退回 prompt 删正文引用后跑 `--write`)。不能从 prompt 已列人物反推验收名单；缺图/缺引用退回 prompt 执行场次同步，超上限按现有 refs_cap 处理。人物参考存在不代表每镜都必须入画，也不允许给沉默者新增音轨或台词。
@@ -121,7 +122,7 @@ Seedance 2.0 不支持 --seed,重跑靠 prompt 微调。仅当生效渠道为 mi
 - **已知误伤雷区**(内容完全无害也会被确定性拒,同 payload 重试无效):
   - 单人**全身**图(ep01 当时的三视图 front.png;2026-08-04 二订后角色锚为整版 sheet.png,含全身格同属此雷区,遇拒同样按探测法定位)——手部/体态参照改用过审记录良好的姿态图(pose_penitent.png 类);portrait 胸像从未被拒;
   - **递交钱币/手部特写**构图(grp027 尾帧及其 t≥6s 各帧全部被拒)——续接锚改取同 clip 内**构图不同的早段帧**(ffmpeg 抽帧逐帧探测,grp027 t=2s 帧过审),场景连续性保留、精确尾帧续接降级并记 notes。
-- **含人脸参考图被拒(`InputImageSensitiveContentDetected.PrivacyInformation`,"may contain real person")**:这是提交路径问题,不是画面内容问题——该图未入「虚拟人像资产库」(asset:// 提交的入库图次次过审,2026-08-13 / 2026-09-05 实测)。处置=原文上报 orchestrator/用户(开启全自动管理或手动入库后重提),**不得**回派 character-concept 改画风/彩铅化/去脸,也不得自行改图。
+- **含人脸参考图被拒(`InputImageSensitiveContentDetected.PrivacyInformation`,"may contain real person")**:这是提交路径问题,不是画面内容问题——该图未入「虚拟人像资产库」(asset:// 提交的入库图次次过审,2026-08-13 / 2026-09-05 实测)。处置=原文上报 orchestrator/用户(开启全自动管理或手动入库后重提),**不得**回派 character-concept 改画风/彩铅化/去脸,也不得自行改图。被拒的是长镜头续接素材(前组尾帧图 / 尾段视频)时,先看生成日志里「虚拟人像库:」那几行入库没成的原因(未启用资产库、未配文件托管、审核未过、等待超时),原文上报;不得自行把该组改 anchor none 断开续接。
 - 换锚后必须同步更新 keyframes 锚点包映射(meta.json 的 source 字段),否则 refs 解析断链。
 
 ### 对白组人物 Voice 样本范式(§8A 改版,2026-07-20)

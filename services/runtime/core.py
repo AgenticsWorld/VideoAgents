@@ -9,7 +9,6 @@
 import asyncio
 import gzip
 import hashlib
-import hmac
 import importlib.util
 import io
 import json
@@ -41,6 +40,7 @@ from modules import skill_records
 from modules.prompt_layout import paragraphize
 from modules import caption_catalog as _ccat
 from modules import id_scheme
+from modules.volc_openapi import signed_call as _volc_signed_call
 from modules import voice_library as _voice_library
 from services.runtime import rhythm as narrative_rhythm
 
@@ -2930,46 +2930,6 @@ def _openrouter_balance() -> dict | None:
         return {"balance": round(credits - usage, 4), "currency": "USD"}
     except Exception:
         return None
-
-
-def _volc_signed_call(ak: str, sk: str, action: str, version: str,
-                      body: dict | None = None,
-                      service: str = "billing", region: str = "cn-north-1",
-                      host: str = "open.volcengineapi.com") -> dict:
-    """火山引擎 OpenAPI 调用(HMAC-SHA256 签名,同官方 SDK Signer);
-    body 为 None 走 GET,否则 POST JSON。"""
-    method = "GET" if body is None else "POST"
-    payload = b"" if body is None else json.dumps(body).encode()
-    query = urllib.parse.urlencode(sorted({"Action": action, "Version": version}.items()))
-    xdate = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
-    payload_hash = hashlib.sha256(payload).hexdigest()
-    headers = {"host": host, "x-date": xdate, "x-content-sha256": payload_hash}
-    if body is not None:
-        headers["content-type"] = "application/json; charset=utf-8"
-    signed = ";".join(sorted(headers))
-    canon = "\n".join([method, "/", query,
-                       "".join(f"{k}:{headers[k]}\n" for k in sorted(headers)),
-                       signed, payload_hash])
-    scope = f"{xdate[:8]}/{region}/{service}/request"
-    sts = "\n".join(["HMAC-SHA256", xdate, scope,
-                     hashlib.sha256(canon.encode()).hexdigest()])
-
-    def h(key: bytes, msg: str) -> bytes:
-        return hmac.new(key, msg.encode(), hashlib.sha256).digest()
-    k_sign = h(h(h(h(sk.encode(), xdate[:8]), region), service), "request")
-    sig = hmac.new(k_sign, sts.encode(), hashlib.sha256).hexdigest()
-    req_headers = {
-        "Authorization": (f"HMAC-SHA256 Credential={ak}/{scope}, "
-                          f"SignedHeaders={signed}, Signature={sig}"),
-        "X-Date": xdate, "X-Content-Sha256": payload_hash,
-    }
-    if body is None:
-        return _http_get_json(f"https://{host}/?{query}", headers=req_headers)
-    req_headers["Content-Type"] = "application/json; charset=utf-8"
-    req = urllib.request.Request(f"https://{host}/?{query}", data=payload,
-                                 headers=req_headers, method="POST")
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.loads(r.read().decode("utf-8", "replace"))
 
 
 def _volc_balance() -> dict | None:
