@@ -22,7 +22,12 @@ metadata:
   > `--disable-blink-features=AutomationControlled`，一般可正常登录;若仍被拦，
   > 让用户先在手机/日常浏览器确认账号活动，或换「使用手机登录」方式。
 - 脚本挑 tab 的规则：优先复用已有 studio.youtube.com 标签页 → 空白页 → 新开标签页，
-  **不会碰其它流程占用的标签页**（如小红书草稿页）。
+  **不会碰其它流程占用的标签页**（如小红书草稿页）。`check-login` / `upload` 复用前会探测该标签：
+  开着上传对话框（上一集停在「公开范围」页等用户点保存;URL 带 `d=ud` 或页面有 `ytcp-uploads-dialog`）
+  或 5 秒内不响应（如卡在「离开网站？」弹窗）的标签一律跳过、留给用户，改用空白页或新开标签。
+  `screenshot` 不跳过（它要截的正是这种标签）。
+- 每次运行都会打印 `TAB_ID: <id>`（本次附着的标签）;`--new-tab` 强制新开标签，`--tab-id <id>` 指定标签,
+  两者互斥;选项写在子命令前后均可。脚本只断开连接、**从不关闭标签**（用户要在里面点保存）。
 
 ## 标准操作流程
 
@@ -83,8 +88,18 @@ python3 <skills>/skill-youtube-cdp-draft/scripts/ytstudio_draft.py upload \
 ### 6) 截图给用户确认
 
 ```bash
-python3 <skills>/skill-youtube-cdp-draft/scripts/ytstudio_draft.py screenshot /tmp/yt-<ep>/preview_draft.png
+python3 <skills>/skill-youtube-cdp-draft/scripts/ytstudio_draft.py screenshot /tmp/yt-<ep>/preview_draft.png \
+  --tab-id <upload 打印的 TAB_ID>
 ```
+
+- 只开着一个 Studio 标签时可省略 `--tab-id`;同时开着多集草稿时必须带，否则可能截到别集（脚本会告警）。
+
+### 多集连续上传（同一频道一次发多集时）
+
+- 每集各占一个标签：每集 `upload` 加 `--new-tab`（upload 自身会校验登录;前一集若停在「公开范围」页，不加也会被自动跳过，加上更明确），
+  记下每集打印的 `TAB_ID`,截图用 `screenshot --tab-id <该集 TAB_ID>`。
+- 前一集等用户点保存期间，不要对它的标签再跑 `upload` / `check-login`（会导航走对话框或被「离开网站？」弹窗卡住）。
+- 交还用户时逐集列出标签对应关系（集号 → 标题 → TAB_ID），请用户逐个标签核对后点「保存/发布」,保存后标签由用户自行关闭。
 
 ### 7) 最后一步：交还给用户
 
@@ -109,4 +124,5 @@ python3 <skills>/skill-youtube-cdp-draft/scripts/ytstudio_draft.py screenshot /t
 - **字幕入口是灰的**：视频语言没设,Add subtitles 不解禁——确认 `--language` 生效（Details 页 Show more 里能看到已选语言）。
 - **点了 Continue 没弹文件选择框、也没报错**：触发点击缺 user gesture,Chrome 静默忽略——脚本已用 `evaluate(..., user_gesture=True)`;手动调试时记得 `Runtime.evaluate` 带 `userGesture: true`。
 - **字幕编辑器上残留"file type"弹窗**：脚本会自动点 Cancel 关掉再点 Done;字幕分段在编辑器里可见即已载入成功。
+- **`Page.enable: no response within 30s` / 上一集对话框被导航走**：附着到了停在上传对话框的旧标签（旧版脚本只按 URL 复用）。现行脚本会自动跳过这类标签;仍遇到时改用 `--new-tab`。
 - **Done 按钮没找到**：该按钮无稳定 id,按文本匹配（Done/完成）;Studio UI 是其它语言时把对应词加进 `add_subtitles` 的 names 列表。
