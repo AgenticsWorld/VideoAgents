@@ -187,13 +187,22 @@ button:disabled{opacity:.5;cursor:default}
   <div class="card" id="card-world">
     <h2>🌍 世界模型 <span class="cur">场景预览页「生成世界模型」按钮使用(仅项目「白模」开启时);生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
     <div class="tabs" id="world-tabs">
-      <div class="tab active" id="tab-world-marble">✅ World Labs</div>
+      <div class="tab active" id="tab-world-marble">✅ Marble</div>
+      <div class="tab" id="tab-world-atlas">Atlas</div>
     </div>
     <div class="panel show" id="panel-world-marble">
       <div class="row"><label>API Key</label><input type="password" id="world-marble-key" placeholder="World Labs API Key"><button onclick="testWorldLabs()">验证 Key</button></div>
       <div class="status" id="world-marble-status"></div>
       <div class="row" id="world-marble-model-row"></div>
       <div class="hint">按场景白模/全景图生成可漫游的 3D 世界(高斯泼溅),在场景预览页「🌍 世界模型」板块查看;Key 在 <a href="https://platform.worldlabs.ai/api-keys" target="_blank">platform.worldlabs.ai</a> 创建。</div>
+    </div>
+    <!-- Atlas(World Labs Marble 2 beta,2026-10-09,modules/worldlabs_atlas.py):无模型可选,固定 atlasChisel -->
+    <div class="panel" id="panel-world-atlas">
+      <div class="row"><label>API Key</label><input type="password" id="world-atlas-key" placeholder="Atlas API Key"><button onclick="testAtlas()">验证 Key</button></div>
+      <div class="status" id="world-atlas-status"></div>
+      <div class="hint">以场景白模深度为几何、全景图为外观参考,在全景机位、分镜机位与场景空地上生成一组视图,再按白模深度融合成可漫游的 3D 世界(高斯泼溅);用法与 Marble 相同,在场景预览页「🌍 世界模型」板块生成和查看。</div>
+      <div class="hint">Key 在 <a href="https://atlas-beta.worldlabs.ai/api-keys" target="_blank">atlas-beta.worldlabs.ai</a> 创建。</div>
+      <div class="hint">创建 Key 时勾选 tasks.create、operations.read、assets.create、assets.read 四项权限。</div>
     </div>
   </div>
   <div class="card" id="card-text">
@@ -1336,6 +1345,29 @@ async function testWorldLabs(){
   st.className='status '+(r.ok?'ok':'err');
   st.textContent=r.ok?I18N.f('✓ Key 有效 · 余额 {c} credits',{c:r.remaining_credits}):'✗ '+(r.error||t('验证失败'));
 }
+/* Atlas 没有余额接口:验证 = 读一条本项目操作记录(同一接口带 provider=atlas) */
+async function testAtlas(){
+  const st=$('#world-atlas-status');st.className='status';st.textContent=t('验证中…');
+  const r=await api('/api/v1/providers/worldlabs/test',{provider:'atlas',api_key:$('#world-atlas-key').value.trim()}).catch(e=>({ok:false,error:e.message}));
+  st.className='status '+(r.ok?'ok':'err');
+  st.textContent=r.ok?t('✓ Key 有效'):'✗ '+(r.error||t('验证失败'));
+}
+/* 世界模型渠道:生效渠道 = 当前选中的标签页(✅),默认 Marble */
+const WORLD_PROVIDERS=['marble','atlas'];
+let WORLD_PROVIDER='marble';
+function showWorldPanel(provider){
+  WORLD_PROVIDER=provider;
+  const labels={marble:'Marble',atlas:'Atlas'};
+  WORLD_PROVIDERS.forEach(p=>{
+    const tab=$(`#tab-world-${p}`);
+    tab.classList.toggle('active',p===provider);
+    tab.textContent=(p===provider?'✅ ':'')+labels[p];
+    $(`#panel-world-${p}`).classList.toggle('show',p===provider);
+  });
+}
+WORLD_PROVIDERS.forEach(p=>{
+  $(`#tab-world-${p}`).onclick=()=>showWorldPanel(p);
+});
 
 const DH_PROVIDERS=['agentics','heygen','klingai','comfyui'];
 function showDigitalHumanPanel(provider){
@@ -1671,6 +1703,8 @@ function loadIntoForm(){
   const wm=(CFG.world||{}).marble||{};
   $('#world-marble-key').value=wm.api_key||'';
   fillSelect($('#world-marble-model'),WORLD_MODELS,wm.model||WORLD_MODELS[0][0],wm.custom_model);
+  $('#world-atlas-key').value=((CFG.world||{}).atlas||{}).api_key||'';
+  showWorldPanel(WORLD_PROVIDERS.includes((CFG.world||{}).provider)?CFG.world.provider:'marble');
   loadDeepagentsForm();
 }
 
@@ -1798,8 +1832,9 @@ function collect(){
     minimax:{api_key_io:$('#scale-mm-key-io').value.trim(),api_key_cn:$('#scale-mm-key-cn').value.trim(),
              api_base:$('#scale-mm-base').value,model:$('#scale-mm-model').value||'MiniMax-H3'},
     comfyui:collectComfy('scale')};
-  out.world={provider:'marble',
-    marble:{api_key:$('#world-marble-key').value.trim(),...pickModel('#world-marble-model','#world-marble-custom')}};
+  out.world={provider:WORLD_PROVIDER,
+    marble:{api_key:$('#world-marble-key').value.trim(),...pickModel('#world-marble-model','#world-marble-custom')},
+    atlas:{api_key:$('#world-atlas-key').value.trim()}};
   // 生效渠道 = 当前选中的标签页(AgenticsLLM/本地模型/云端模型/OpenRouter)
   out.deepagents={provider:TEXT_PROVIDER,
     agentics:{model:$('#text-agentics-model').value||'',custom_model:''},
