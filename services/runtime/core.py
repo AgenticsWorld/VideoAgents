@@ -43,6 +43,7 @@ from modules import id_scheme
 from modules.volc_openapi import signed_call as _volc_signed_call
 from modules import voice_library as _voice_library
 from services.runtime import rhythm as narrative_rhythm
+from services.runtime import engine_setup
 
 # ---------------- 配置 ----------------
 ROOT = Path(__file__).resolve().parents[2]             # 工作区根目录
@@ -128,7 +129,14 @@ def resolve_cli_executable(engine: str) -> str | None:
     to the npm-generated ``claude.cmd`` shim, even when a shell can find it.
     """
     configured = CLI_BINS.get(engine)
-    return shutil.which(configured) if configured else None
+    if not configured:
+        return None
+    found = shutil.which(configured)
+    if found or os.environ.get(CLI_ENV_VARS.get(engine, "")):
+        return found
+    # 一键安装后服务进程 PATH 未含官方脚本的安装目录(脚本只改用户 shell rc / 用户 PATH):
+    # 按各家默认安装位置兜底,装完不重启服务即可检测、派单
+    return engine_setup.fallback_executable(engine)
 
 
 def cli_not_found_error(engine: str) -> str:
@@ -14916,13 +14924,91 @@ async def api_soul(agent: str):
 
 
 async def api_enginecheck(engine: str):
-    """检测执行引擎 CLI 是否已安装(顶栏切换 claude/codex/kimi/pi/opencode/grok 时前端调用)。
+    """检测执行引擎 CLI 是否已安装、是否已登录(顶栏切换 claude/codex/kimi/pi/opencode/grok
+    时前端调用;一键安装 / 登录后前端轮询)。logged_in:True/False/None(判断不了,不打扰)。
     deepagents 为进程内 runner,无 CLI 依赖,视为始终可用。"""
     if engine not in CLI_BINS:
         return {"engine": engine, "available": True, "bin": ""}
     path = await asyncio.to_thread(resolve_cli_executable, engine)
-    return {"engine": engine, "available": bool(path),
-            "bin": CLI_BINS[engine], "path": path or ""}
+    plan = engine_setup.install_plan(engine)
+    out = {"engine": engine, "available": bool(path),
+           "bin": CLI_BINS[engine], "path": path or "",
+           "label": CLI_LABELS.get(engine, engine),
+           "install_command": plan.get("display", ""),
+           "install_unsupported": plan.get("unsupported", ""),
+           "install": engine_setup.install_snapshot(engine),
+           "logged_in": None, "login_method": ""}
+    if path:
+        st = await asyncio.to_thread(engine_setup.login_status, engine, path)
+        out.update(logged_in=st["logged_in"], login_method=st["method"])
+    return out
+
+
+ENGINE_SETUP_DIR = RUNTIME_DIR / "engine-setup"     # 弹出终端运行的登录 / 安装脚本(不含任何密钥)
+
+
+def _engine_setup_engine(engine: str) -> str:
+    if engine not in CLI_BINS or not engine_setup.supported(engine):
+        raise ServiceError(404, f"Unknown engine: {engine}")
+    return engine
+
+
+def _engine_terminal_path_dirs(exe: str | None) -> list[str]:
+    """终端脚本前置的 PATH:CLI 所在目录 + 服务进程 PATH(桌面端已补常见安装目录;
+    Terminal.app 新开的登录 shell 不继承服务进程环境)。"""
+    dirs = [str(Path(exe).parent)] if exe else []
+    return dirs + [d for d in (os.environ.get("PATH") or "").split(os.pathsep) if d and d not in dirs]
+
+
+async def api_engine_install(engine: str, body: dict | None = None):
+    """一键安装:mode=background(默认)后台跑官方安装脚本,前端轮询 GET 取进度;
+    mode=terminal 弹出终端跑同一条命令(脚本有交互提问时用)。"""
+    engine = _engine_setup_engine(engine)
+    body = body or {}
+    if (body.get("mode") or "background") == "terminal":
+        plan = engine_setup.install_plan(engine)
+        if plan.get("unsupported"):
+            raise ServiceError(400, plan["unsupported"])
+        zh = (ui_lang_code() or "zh") == "zh"
+        script = engine_setup.terminal_script(
+            engine_setup.install_lines(CLI_LABELS[engine], plan["display"], zh),
+            plan["terminal_line"], zh, path_dirs=_engine_terminal_path_dirs(None))
+        await asyncio.to_thread(_engine_open_terminal, f"install-{engine}", script, plan.get("env"))
+        return {"engine": engine, "mode": "terminal", "opened": True}
+    snap = await asyncio.to_thread(engine_setup.start_install, engine,
+                                   lambda: resolve_cli_executable(engine))
+    return {"engine": engine, "mode": "background", "install": snap}
+
+
+async def api_engine_install_status(engine: str):
+    engine = _engine_setup_engine(engine)
+    return {"engine": engine, "install": engine_setup.install_snapshot(engine)}
+
+
+async def api_engine_login(engine: str):
+    """弹出终端运行该 CLI 自己的登录命令;用户在浏览器完成授权,前端轮询 availability。
+    本程序不经手、不保存任何令牌。"""
+    engine = _engine_setup_engine(engine)
+    exe = await asyncio.to_thread(resolve_cli_executable, engine)
+    if not exe:
+        raise ServiceError(409, "not_installed")
+    zh = (ui_lang_code() or "zh") == "zh"
+    script = engine_setup.terminal_script(
+        engine_setup.login_lines(engine, CLI_LABELS[engine], zh),
+        engine_setup.login_command_line(engine, exe), zh,
+        path_dirs=_engine_terminal_path_dirs(exe))
+    await asyncio.to_thread(_engine_open_terminal, f"login-{engine}", script, None)
+    return {"engine": engine, "opened": True}
+
+
+def _engine_open_terminal(name: str, script: str, extra_env: dict | None):
+    try:
+        engine_setup.open_terminal(ENGINE_SETUP_DIR, name, script,
+                                   env=engine_setup.installer_env(extra_env))
+    except engine_setup.TerminalUnavailable as e:
+        raise ServiceError(501, f"terminal_unavailable: {e}") from None
+    except OSError as e:
+        raise ServiceError(500, f"terminal_failed: {e}") from None
 
 
 async def api_projects():

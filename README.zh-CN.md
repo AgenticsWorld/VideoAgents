@@ -57,6 +57,8 @@ Python 运行时与 Electron 应用完全分开版本化。运行时写入用户
 
 macOS 桌面端从 Finder 启动时会读取用户登录 Shell 的 `PATH`，并补充 Homebrew、`~/.local/bin`、Kimi、OpenCode、Grok、Volta、pnpm 等常见 CLI 目录。因此终端中已安装的 `claude`、`codex`、`kimi`、`pi`、`opencode`、`grok` 会被本地 Python 服务及其 Agent 子进程继承，无需把第三方 CLI 打入客户端安装包。切换到 `pi` 引擎后，语言模型下拉会通过 `pi --list-models` 动态读取当前 Pi 登录凭证实际可用的渠道与模型。`opencode` 引擎同样通过 `opencode models` 动态读取；`grok` 引擎（Grok Build CLI，安装见 https://grok.com/build，`grok login` 登录）通过 `grok models` 动态读取。各引擎（deepagents 除外）的语言模型下拉均默认「智能分配」：按 Agent 任务复杂度自动选模型（如 opencode 引擎把创作核心 Agent 派给 DeepSeek V4 Pro、其余派给 DeepSeek V4 Flash），切换引擎或语言模型会自动同步全部 Agent 的模型设置。
 
+顶栏切到某个 CLI 引擎（或开屏）时若检测到命令未安装或未登录，会弹出引导窗口：「一键安装」在后台运行该 CLI 的官方安装命令（`curl -fsSL <官方脚本> | bash`，Windows 为 `irm <官方脚本> | iex`；OpenCode 在 Windows 上走 `npm install -g opencode-ai`），日志实时显示，失败可「在终端中安装」以便回答脚本的交互提问；装好后「登录」会弹出终端窗口运行该 CLI 自己的登录命令（如 `claude auth login`、`codex login`、`kimi login`），用户在浏览器中用自己的账号授权，程序轮询到已登录即关窗，全程不经手令牌。安装子进程不带本程序与各渠道的密钥环境变量；一键安装与登录只对本机访问开放。
+
 本地 `make desktop` 默认设置 `CSC_IDENTITY_AUTO_DISCOVERY=false`，不会读取 macOS Keychain 中的 Apple 开发者证书，也不会签名或公证。正式发布签名只由 GitHub Actions 在显式提供 `CSC_LINK`、Apple ID 等 secrets 时启用。
 
 如需无人值守的全自动流水线，用全自动模式启动，`claude` 引擎的 Agent 执行

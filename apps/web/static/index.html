@@ -168,6 +168,10 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .modal .rhythm-detail b{color:var(--text);font-weight:500}
 .np-step{display:flex;flex-direction:column;gap:12px}
 .modal .actions{display:flex;justify-content:flex-end;gap:10px}
+#eng-modal .box{width:520px}
+#eng-modal .eng-cmd{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:6px 8px;word-break:break-all;user-select:all}
+#eng-modal .eng-log{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;line-height:1.45;background:#0b0e14;color:#b9c2d6;border:1px solid var(--border);border-radius:6px;padding:6px 8px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin:0}
+#eng-modal .eng-status{font-size:12.5px;color:var(--dim)}
 /* 风格库选择弹窗(设计风格字段) */
 #style-filter{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .style-chip{border-radius:16px;padding:4px 14px;cursor:pointer;font-size:13px;background:var(--panel);border:1px solid var(--border);user-select:none}
@@ -356,8 +360,11 @@ a.hdr-icon:hover{border-color:var(--accent)}
   <div class="box">
     <h3 id="eng-title"></h3>
     <div class="note" id="eng-note"></div>
+    <div class="eng-cmd" id="eng-cmd" data-no-i18n style="display:none"></div>
+    <pre class="eng-log" id="eng-log" data-no-i18n style="display:none"></pre>
+    <div class="eng-status" id="eng-status"></div>
     <div class="err" id="eng-err"></div>
-    <div class="actions"><button id="eng-close">稍后再说</button><button class="primary" id="eng-recheck">重新检测</button></div>
+    <div class="actions"><button id="eng-close">稍后再说</button><button id="eng-term" style="display:none" title="弹出终端窗口运行同一条官方安装命令;安装脚本有提问(如需要先装 Node.js)时可在终端里回答">在终端中安装</button><button id="eng-recheck">重新检测</button><button class="primary" id="eng-install" style="display:none">一键安装</button><button class="primary" id="eng-login" style="display:none">登录</button></div>
   </div>
 </div>
 <div id="plug-modal" class="modal">
@@ -1681,35 +1688,202 @@ async function setDaModel(model){
   }catch(e){await uiAlert('切换失败:'+e.message);renderDaModels()}
   savePrefs();   // effective_model 随之更新到服务端副本
 }
-/* ---------- 引擎 CLI 检测(顶栏切到 claudecode/codex/kimi/pi 时确认命令已安装,缺失则引导安装) ---------- */
+/* ---------- 引擎 CLI 检测 + 一键安装 / 登录(2026-10-09)----------
+   顶栏切到 claudecode/codex/kimi/pi/opencode/grok 或开屏时检测:未安装 → 「一键安装」(服务端后台跑官方
+   安装脚本,日志实时显示;失败可「在终端中安装」);已安装未登录 → 「登录」(服务端弹出终端跑 CLI 自己的
+   登录命令,用户在浏览器授权,这里轮询到已登录即关窗)。一键安装 / 登录只对本机后端开放;
+   logged_in 为 null(判断不了,如改用自定义 Key)时不打扰。 */
 const ENGINE_CLI={
-  claude:{bin:'claude',cli:'Claude Code',label:'claudecode',url:'https://code.claude.com/docs/en/quickstart'},
-  codex:{bin:'codex',cli:'Codex CLI',label:'codex',url:'https://learn.chatgpt.com/docs/codex/cli#getting-started'},
-  kimi:{bin:'kimi',cli:'Kimi Code',label:'kimicode',url:'https://www.kimi.com/code'},
-  pi:{bin:'pi',cli:'Pi Coding Agent',label:'pi',url:'https://pi.dev/docs/latest/quickstart'},
-  opencode:{bin:'opencode',cli:'OpenCode',label:'opencode',url:'https://opencode.ai/docs/'},
-  grok:{bin:'grok',cli:'Grok Build',label:'grok',url:'https://grok.com/build'},
+  claude:{bin:'claude',cli:'Claude Code',label:'claudecode',url:'https://code.claude.com/docs/en/quickstart',login:'claude auth login'},
+  codex:{bin:'codex',cli:'Codex CLI',label:'codex',url:'https://learn.chatgpt.com/docs/codex/cli#getting-started',login:'codex login'},
+  kimi:{bin:'kimi',cli:'Kimi Code',label:'kimicode',url:'https://www.kimi.com/code',login:'kimi login'},
+  pi:{bin:'pi',cli:'Pi Coding Agent',label:'pi',url:'https://pi.dev/docs/latest/quickstart',login:'pi → /login'},
+  opencode:{bin:'opencode',cli:'OpenCode',label:'opencode',url:'https://opencode.ai/docs/',login:'opencode auth login'},
+  grok:{bin:'grok',cli:'Grok Build',label:'grok',url:'https://grok.com/build',login:'grok login'},
 };
+const ENG={engine:'',av:null,timer:null,waitStart:0};
+const engApi=(engine,tail)=>'/api/v1/engines/'+encodeURIComponent(engine)+'/'+tail;
+function engStop(){if(ENG.timer){clearTimeout(ENG.timer);ENG.timer=null}}
+function engShowButtons(o){
+  $('#eng-install').style.display=o.install?'':'none';
+  $('#eng-login').style.display=o.login?'':'none';
+  $('#eng-term').style.display=o.term?'':'none';
+  $('#eng-recheck').className=(o.install||o.login)?'':'primary';
+}
+function engErrText(msg,info){   // 服务端 detail 代号 → 界面文案
+  if(msg==='local_only')return t('一键安装与登录只能在运行本服务的电脑上操作');
+  if(String(msg).startsWith('terminal_unavailable'))return t('无法打开终端窗口,请在本机终端手动运行下面的命令');
+  if(msg==='not_installed')return I18N.f('仍未检测到 {bin} 命令',{bin:info.bin});
+  return t('操作失败:')+msg;
+}
+function engRender(engine,r){
+  const info=ENGINE_CLI[engine];
+  ENG.engine=engine;ENG.av=r;
+  const local=!!r.local_backend;
+  $('#eng-err').textContent='';$('#eng-status').textContent='';
+  $('#eng-log').style.display='none';
+  const cmd=$('#eng-cmd');
+  if(!r.available){
+    $('#eng-title').textContent='⚠️ '+I18N.f('未检测到 {bin} 命令',{bin:info.bin});
+    const canInstall=local&&!r.install_unsupported;
+    $('#eng-note').innerHTML=esc(I18N.f('引擎「{label}」通过本机 {bin} 命令执行 Agent 任务,需先安装 {cli}。',{label:info.label,bin:info.bin,cli:info.cli}))
+      +'<br>'+esc(canInstall?I18N.f('点「一键安装」会在后台运行 {cli} 官方安装命令(通常几分钟,网速慢时更久):',{cli:info.cli})
+                            :t('请在本机终端运行官方安装命令:'))
+      +`<br><span style="font-size:12px">${esc(t('官方安装指引:'))}<a href="${info.url}" target="_blank" rel="noopener">${info.url}</a></span>`;
+    cmd.textContent=r.install_command||'';cmd.style.display=r.install_command?'':'none';
+    engShowButtons({install:canInstall});
+    $('#eng-install').textContent=t('一键安装');
+    if(r.install_unsupported)$('#eng-err').textContent=engReasonText(r.install_unsupported,info,null);
+    if(r.install&&(r.install.state==='running'||r.install.state==='error'))engShowInstall(engine,r.install);
+    if(r.install&&r.install.state==='running')engPollInstall(engine);
+  }else{
+    $('#eng-title').textContent='🔑 '+I18N.f('{cli} 尚未登录',{cli:info.cli});
+    $('#eng-note').innerHTML=esc(I18N.f('{cli} 已安装,但还没有登录账号,派单会失败。',{cli:info.cli}))+'<br>'
+      +esc(local?t('点「登录」会打开一个终端窗口运行下面的命令,按提示在浏览器中用你自己的账号完成授权;完成后此窗口会自动检测。')
+                :t('请在本机终端运行下面的命令完成登录,然后点「重新检测」。'));
+    cmd.textContent=info.login;cmd.style.display='';
+    engShowButtons({login:local});
+  }
+}
+function engReasonText(reason,info,s){
+  const M={
+    exit:I18N.f('安装命令失败(退出码 {code})',{code:s&&s.exit_code!=null?s.exit_code:'?'}),
+    timeout:I18N.f('安装超时(超过 {m} 分钟)已中止',{m:Math.round(((s&&s.timeout_s)||7200)/60)}),
+    stalled:I18N.f('安装命令 {m} 分钟没有任何进展(无输出、下载也不再增长),已中止',{m:Math.round(((s&&s.stall_s)||600)/60)}),
+    not_found_after_install:I18N.f('安装脚本已结束,但仍找不到 {bin} 命令',{bin:info.bin}),
+    spawn_failed:t('无法启动安装命令'),
+    need_node:I18N.f('在 Windows 上安装 {cli} 需要先安装 Node.js(含 npm)',{cli:info.cli}),
+    need_curl:t('本机缺少 curl 命令,无法下载安装脚本'),
+    platform:t('当前系统不支持一键安装,请按官方安装指引手动安装'),
+  };
+  return M[reason]||reason;
+}
+function engHintText(hint){
+  return {region:t('无法访问官方安装地址:可能是所在地区不在该服务的支持范围内(如 Claude Code 仅在 Anthropic 支持的国家和地区提供),可换用其他引擎。'),
+          network:t('无法连接官方下载地址,请检查网络或代理(设置 → 高级 → 网络检测 可查看命令行环境能否访问)。'),
+          node:t('需要 Node.js 22.19 或更新版本:点「在终端中安装」,安装脚本会询问是否代为安装 Node.js;也可先到 nodejs.org 安装。')}[hint]||'';
+}
+function engShowInstall(engine,s){
+  if(!s||engine!==ENG.engine)return;
+  const info=ENGINE_CLI[engine],log=$('#eng-log');
+  if(s.log&&s.log.length){
+    const atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<24;
+    log.textContent=s.log.join('\n');log.style.display='';
+    if(atBottom||s.state!=='running')log.scrollTop=log.scrollHeight;
+  }
+  if(s.state==='running'){
+    let st=I18N.f('正在安装 {cli}… 已用 {s} 秒',{cli:info.cli,s:Math.round(s.elapsed_s||0)});
+    if(s.downloaded_bytes>0)st+=' · '+I18N.f('已下载 {mb} MB',{mb:(s.downloaded_bytes/1048576).toFixed(1)});
+    if((s.quiet_s||0)>45)st+=' — '+t('官方安装脚本下载时不输出进度,网速慢时可能需要十几分钟,请耐心等待');   // claude 二进制约 240 MB
+    $('#eng-status').textContent=st;
+    $('#eng-err').textContent='';
+    $('#eng-install').disabled=true;
+  }else if(s.state==='error'){
+    $('#eng-status').textContent='';
+    $('#eng-err').textContent=[engReasonText(s.reason,info,s),engHintText(s.hint)].filter(Boolean).join(' ');
+    $('#eng-install').disabled=false;$('#eng-install').textContent=t('重试');
+    if(ENG.av&&ENG.av.local_backend&&!['need_node','need_curl','platform'].includes(s.reason))$('#eng-term').style.display='';
+  }else if(s.state==='ok'){
+    $('#eng-install').disabled=false;
+    $('#eng-status').textContent='✅ '+I18N.f('{cli} 安装完成',{cli:info.cli});
+  }
+}
+function engPollInstall(engine){
+  engStop();
+  const tick=async()=>{
+    if(engine!==ENG.engine||$('#eng-modal').style.display==='none')return;
+    let s=null;try{s=(await api(engApi(engine,'install'))).install}catch(e){}
+    engShowInstall(engine,s);
+    if(s&&s.state==='running'){ENG.timer=setTimeout(tick,1500);return}
+    if(s&&s.state==='ok')engAfterInstalled(engine);
+  };
+  tick();
+}
+async function engAfterInstalled(engine){   // 装好 → 查登录:未登录切到登录步骤,已登录 / 判断不了即关窗
+  let r=null;try{r=await api(engApi(engine,'availability'))}catch(e){}
+  if(!r||!r.available)return;
+  const info=ENGINE_CLI[engine];
+  if(r.logged_in===false){
+    engRender(engine,r);
+    $('#eng-status').textContent='✅ '+I18N.f('{cli} 安装完成',{cli:info.cli})+' · '+t('下一步:登录账号');
+    return;
+  }
+  $('#eng-status').textContent='✅ '+I18N.f('{cli} 已就绪',{cli:info.cli});
+  engShowButtons({});
+  setTimeout(()=>{if(ENG.engine===engine)engClose()},1500);
+}
+function engWait(engine,done,limitS,waitingKey){   // 轮询 availability 直到 done(r) 或超时
+  engStop();ENG.waitStart=Date.now();
+  const tick=async()=>{
+    if(engine!==ENG.engine||$('#eng-modal').style.display==='none')return;
+    let r=null;try{r=await api(engApi(engine,'availability'))}catch(e){}
+    if(r&&done(r)){engWaitDone(engine,r);return}
+    const sec=Math.round((Date.now()-ENG.waitStart)/1000);
+    if(sec>limitS){$('#eng-status').textContent=t('等待超时;完成后请点「重新检测」');return}
+    $('#eng-status').textContent=I18N.f(waitingKey,{s:sec});
+    ENG.timer=setTimeout(tick,3000);
+  };
+  ENG.timer=setTimeout(tick,3000);
+}
+function engWaitDone(engine,r){
+  if(r.available&&r.logged_in!==false){
+    $('#eng-status').textContent='✅ '+I18N.f('{cli} 已就绪',{cli:ENGINE_CLI[engine].cli});
+    engShowButtons({});
+    setTimeout(()=>{if(ENG.engine===engine)engClose()},1500);
+  }else engRender(engine,r);   // 终端里装好了但还没登录 → 切到登录步骤
+}
+function engClose(){engStop();$('#eng-modal').style.display='none'}
 async function checkEngineCli(engine){
   const info=ENGINE_CLI[engine];if(!info)return;
-  try{if((await api('/api/v1/engines/'+encodeURIComponent(engine)+'/availability')).available)return}
+  let r;
+  try{r=await api(engApi(engine,'availability'))}
   catch(e){return}   // 检测接口异常不打扰用户,真缺命令时派单日志会报错
-  $('#eng-title').textContent='⚠️ '+I18N.f('未检测到 {bin} 命令',{bin:info.bin});
-  $('#eng-note').innerHTML=
-    I18N.f('引擎「{label}」通过本机 {bin} 命令执行 Agent 任务,需先安装 {cli},安装指引:',
-           {label:info.label,bin:info.bin,cli:info.cli})
-    +`<br><a href="${info.url}" target="_blank">${info.url}</a><br>`
-    +t('安装完成后点击「重新检测」;也可暂时换用其他引擎。');
-  $('#eng-err').textContent='';
+  if(r.available&&r.logged_in!==false)return;
+  if($('#engine').value!==engine)return;   // 检测期间用户又切了引擎
+  engStop();
+  $('#eng-install').disabled=false;
+  engRender(engine,r);
   $('#eng-modal').style.display='flex';
 }
-$('#eng-close').onclick=()=>$('#eng-modal').style.display='none';
+$('#eng-close').onclick=engClose;
+$('#eng-install').onclick=async()=>{
+  const engine=ENG.engine,info=ENGINE_CLI[engine];
+  $('#eng-err').textContent='';$('#eng-term').style.display='none';
+  $('#eng-install').disabled=true;
+  try{
+    const r=await api(engApi(engine,'install'),{mode:'background'});
+    engShowInstall(engine,r.install);
+    if(r.install&&r.install.state==='running')engPollInstall(engine);
+    else if(r.install&&r.install.state==='ok')engAfterInstalled(engine);
+  }catch(e){$('#eng-install').disabled=false;$('#eng-err').textContent=engErrText(e.message,info)}
+};
+$('#eng-term').onclick=async()=>{
+  const engine=ENG.engine,info=ENGINE_CLI[engine];
+  try{
+    await api(engApi(engine,'install'),{mode:'terminal'});
+    $('#eng-err').textContent='';
+    $('#eng-status').textContent=t('已在终端窗口中运行安装命令;如有提问请在终端里回答,装好后这里会自动检测。');
+    engWait(engine,r=>r.available,1800,'等待终端里的安装完成… 已等待 {s} 秒');
+  }catch(e){$('#eng-err').textContent=engErrText(e.message,info)}
+};
+$('#eng-login').onclick=async()=>{
+  const engine=ENG.engine,info=ENGINE_CLI[engine];
+  try{
+    await api(engApi(engine,'login'),{});
+    $('#eng-err').textContent='';
+    $('#eng-status').textContent=t('已打开终端窗口,请按提示在浏览器中完成登录…');
+    engWait(engine,r=>r.available&&r.logged_in!==false,900,'等待登录完成… 已等待 {s} 秒');
+  }catch(e){$('#eng-err').textContent=engErrText(e.message,info)}
+};
 $('#eng-recheck').onclick=async()=>{
-  const engine=$('#engine').value,info=ENGINE_CLI[engine];
-  let ok=true;
-  if(info){ok=false;try{ok=(await api('/api/v1/engines/'+encodeURIComponent(engine)+'/availability')).available}catch(e){}}
-  if(ok){$('#eng-modal').style.display='none';return}
-  $('#eng-err').textContent=I18N.f('仍未检测到 {bin} 命令;若刚装好,请重启本服务让 PATH 生效',{bin:info.bin});
+  const engine=ENG.engine,info=ENGINE_CLI[engine];
+  if(!info){engClose();return}
+  let r=null;try{r=await api(engApi(engine,'availability'))}catch(e){}
+  if(!r||(r.available&&r.logged_in!==false)){engClose();return}
+  engStop();engRender(engine,r);
+  $('#eng-err').textContent=!r.available
+    ?I18N.f('仍未检测到 {bin} 命令;若刚装好,请重启本服务让 PATH 生效',{bin:info.bin})
+    :I18N.f('仍未检测到 {cli} 的登录',{cli:info.cli});
 };
 /* ---------- 创作定调弹窗(编辑当前项目 brief.md:内容定位(文件小节标题仍为「主要构想」) + 画面风格) ---------- */
 async function openBriefModal(){
@@ -3506,12 +3680,12 @@ function liveBox(runId){
   $('#search').oninput=renderAgents;
   $('#engine').onchange=async()=>{
     await populateModels($('#engine').value);savePrefs();   // 非 deepagents 复位到首项「智能分配」
+    checkEngineCli($('#engine').value);   // 先于下面的配置同步:同步失败(如浏览器版未登录 Agentics 时保存配置 401)也照常引导安装 / 登录
     if($('#engine').value==='deepagents')syncDaProvider();
     await applyAmMode();   // 切引擎即同步全部 Agent 策略(deepagents 无智能分配→回 global)
     // 资源消耗面板随当前引擎自动显示对应用量(pi 计入 codex):
     // 等 savePrefs 的服务端偏好同步(400ms 防抖)落定后再刷新
     setTimeout(()=>renderResources(),700);
-    checkEngineCli($('#engine').value);
   };
   $('#model').onchange=async()=>{
     if($('#engine').value==='deepagents'){   // 下拉即生效渠道开关:写回 genconfig(与图像/视频渠道同逻辑)
@@ -3547,9 +3721,9 @@ function liveBox(runId){
     Object.keys(DA_LISTS).forEach(k=>delete DA_LISTS[k]);
     syncDaProvider();
   });
-  await restorePrefs();
+  try{await restorePrefs()}
+  finally{checkEngineCli($('#engine').value)}   // 上次选的引擎若命令已缺失 / 未登录(新装、换机、卸载)开屏即提示;偏好同步出错也照常检测
   loadDebugMode();   // Debug 模式开关(Agent 高级设置,默认关):决定 SOUL.md 按钮显隐,不阻塞启动
-  checkEngineCli($('#engine').value);   // 上次选的引擎若命令已缺失(如换机/卸载)开屏即提示
   // 外部入口预填通道:?project=xx&compose=预填指令(选中总制片并填入输入框);预览页「✏️ 修改」已改为页内编辑浮窗(edit-popup.js)直发,不再经此跳转;
   // 可带 &agent=<id> 改选具体 Agent(如白模面板直发 07-directing/whitebox-staging),id 不存在则仍落总制片
   const qp=new URLSearchParams(location.search);

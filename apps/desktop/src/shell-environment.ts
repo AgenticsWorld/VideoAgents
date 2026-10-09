@@ -29,11 +29,18 @@ function loginShellPath(environment: NodeJS.ProcessEnv): string {
 function commonExecutableDirectories(environment: NodeJS.ProcessEnv): string[] {
   const home = environment.HOME || homedir()
   if (process.platform === 'win32') {
+    // 执行引擎 CLI 官方安装脚本的默认位置(一键安装后写进用户 PATH,但对已运行的本进程不生效)
+    const profile = environment.USERPROFILE || home
     return [
       environment.LOCALAPPDATA && path.join(environment.LOCALAPPDATA, 'Microsoft', 'WinGet', 'Links'),
       environment.LOCALAPPDATA && path.join(environment.LOCALAPPDATA, 'Microsoft', 'WindowsApps'),
       environment.ProgramFiles && path.join(environment.ProgramFiles, 'WinGet', 'Links'),
       environment.APPDATA && path.join(environment.APPDATA, 'npm'),
+      path.join(profile, '.local', 'bin'),
+      path.join(profile, '.kimi-code', 'bin'),
+      path.join(profile, '.grok', 'bin'),
+      path.join(profile, '.pi', 'agent', 'bin'),
+      environment.LOCALAPPDATA && path.join(environment.LOCALAPPDATA, 'Programs', 'OpenAI', 'Codex', 'bin'),
     ].filter(Boolean) as string[]
   }
   return [
@@ -41,6 +48,7 @@ function commonExecutableDirectories(environment: NodeJS.ProcessEnv): string[] {
     path.join(home, '.kimi-code', 'bin'),
     path.join(home, '.opencode', 'bin'),
     path.join(home, '.grok', 'bin'),
+    path.join(home, '.pi', 'agent', 'bin'),
     path.join(home, '.volta', 'bin'),
     path.join(home, '.bun', 'bin'),
     path.join(home, 'Library', 'pnpm'),

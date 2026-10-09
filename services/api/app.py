@@ -119,10 +119,27 @@ async def health() -> HealthResponse:
     return HealthResponse(version=__version__)
 
 
+_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+
+def _is_local_request(request: Request) -> bool:
+    """请求是否来自本机:直连须回环地址;经 Web 代理转发时(代理恒为回环)再看代理
+    覆写的 X-Forwarded-For(代理丢弃客户端自带的同名头,无法伪造)。"""
+    host = request.client.host if request.client else ""
+    if host not in _LOOPBACK_HOSTS:
+        return False
+    forwarded = (request.headers.get("x-forwarded-for") or "").strip()
+    return not forwarded or forwarded in _LOOPBACK_HOSTS
+
+
+def _require_local(request: Request) -> None:
+    if not _is_local_request(request):
+        raise core.ServiceError(403, "local_only")
+
+
 @api.get("/capabilities", response_model=CapabilityResponse, tags=["system"])
 async def capabilities(request: Request) -> CapabilityResponse:
-    host = request.client.host if request.client else ""
-    return CapabilityResponse(local_backend=host in {"127.0.0.1", "::1", "localhost"})
+    return CapabilityResponse(local_backend=_is_local_request(request))
 
 
 @api.get("/projects", tags=["projects"])
@@ -804,8 +821,29 @@ async def set_generation_config(body: dict[str, Any]) -> dict[str, Any]:
 
 
 @api.get("/engines/{engine}/availability", tags=["configuration"])
-async def engine_availability(engine: str) -> dict[str, Any]:
-    return await core.api_enginecheck(engine)
+async def engine_availability(engine: str, request: Request) -> dict[str, Any]:
+    out = await core.api_enginecheck(engine)
+    out["local_backend"] = _is_local_request(request)   # 一键安装 / 登录只对本机开放
+    return out
+
+
+@api.post("/engines/{engine}/install", tags=["configuration"])
+async def engine_install(engine: str, request: Request, body: dict[str, Any]) -> dict[str, Any]:
+    """一键安装执行引擎 CLI(官方安装脚本;mode=terminal 改为弹出终端运行)。仅本机。"""
+    _require_local(request)
+    return await core.api_engine_install(engine, body)
+
+
+@api.get("/engines/{engine}/install", tags=["configuration"])
+async def engine_install_status(engine: str) -> dict[str, Any]:
+    return await core.api_engine_install_status(engine)
+
+
+@api.post("/engines/{engine}/login", tags=["configuration"])
+async def engine_login(engine: str, request: Request, body: dict[str, Any]) -> dict[str, Any]:
+    """弹出终端运行执行引擎 CLI 自己的登录命令。仅本机。"""
+    _require_local(request)
+    return await core.api_engine_login(engine)
 
 
 @api.get("/engines/pi/models", tags=["configuration"])

@@ -330,6 +330,10 @@ async def proxy_api(path: str, request: Request):
     headers = {key: value for key, value in request.headers.items() if key.lower() not in HOP_HEADERS}
     headers["X-Forwarded-Host"] = request.headers.get("host", "")
     headers["X-Forwarded-Proto"] = request.url.scheme
+    # 覆写(不追加)客户端地址:API 据此判断本机请求(一键安装 / 弹出终端登录只对本机开放),
+    # 客户端自带的 X-Forwarded-For 一律丢弃,无法伪造
+    headers = {k: v for k, v in headers.items() if k.lower() != "x-forwarded-for"}
+    headers["X-Forwarded-For"] = request.client.host if request.client else "unknown"
     try:
         upstream = await asyncio.to_thread(_upstream_request, request.method, url, headers, body)
     except (OSError, urllib.error.URLError) as error:
