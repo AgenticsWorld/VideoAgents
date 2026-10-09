@@ -11,8 +11,10 @@
   语速 = 该说话角色 bible/characters/<CHAR>/voice.json#speed_cpm 中点 ÷ 60 × 语速档倍率(对白行 `pace: fast|medium|slow`,
   由 dialogue-rewrite 随情绪写;没写按情绪标签猜,猜不出 medium);
   有效字符 = 汉字/假名/谚文 + 拉丁字母数字(每字符 1),标点、空白、括注不计;
-  无 voice.json / 无 speed_cpm 的说话人(群演等):有记录 est_duration_s 则信记录值,否则按本项目各角色语速中点的中位数估
-  (项目无 voice.json 时 240);一律报 WARN speaker_speed_unknown,不参与 line_est_consistent。
+  英文等按空格分词的句子(句中没有汉字/假名/谚文)按词计(#124):词数 ÷ 词速,词速 = voice.json#speed_wpm 中点
+  > speed_cpm 换算 > 默认 130 wpm,再乘语速档倍率;精简目标给 target_words;
+  无 voice.json / 无 speed_cpm 的说话人(群演等):有记录 est_duration_s(> 0,初稿占位 0 不算)则信记录值,否则按本项目
+  各角色语速中点的中位数估(项目无 voice.json 时 240);一律报 WARN speaker_speed_unknown,不参与 line_est_consistent。
   存量(剧本 generated_at / shot_list 日期早于 2026-10-03)沿用旧公式「字数 ÷ 语速」比对,镜级只 WARN。
 
 机检项(FAIL 退出码 1;WARN 不影响退出码):
@@ -73,7 +75,7 @@ DEFAULT_SHOT_MAX_S = 10.0   # settings.json 缺 duration.shot_max_s 时
 EST_TOL_S = 0.25           # 估时一致性绝对容差
 EST_TOL_REL = 0.10         # 估时一致性相对容差
 
-_EFF_RE = re.compile(r"[0-9A-Za-z぀-ヿ㐀-䶿一-鿿豈-﫿가-힯]")
+_EFF_RE = tc._EFF_RE          # 有效字符口径与时间尺共用(#124)
 _META_RE = re.compile(r"\s*\{[^{}]*\}\s*$")
 _EST_RE = re.compile(r"(est_duration_s\s*[:：]\s*)([0-9]+(?:\.[0-9]+)?)")
 _PACE_RE = re.compile(r"\bpace\s*[:：]\s*(fast|medium|slow)\b", re.I)
@@ -87,8 +89,8 @@ _DLG_SPK_COL = ("说话人", "角色", "speaker", "char")
 
 
 def eff_chars(text: str) -> int:
-    """有效字符数:汉字/假名/谚文 + 拉丁字母数字,标点空白不计(与 dialogue.md 估时口径一致)。"""
-    return len(_EFF_RE.findall(unicodedata.normalize("NFKC", text or "")))
+    """有效字符数:汉字/假名/谚文 + 拉丁字母数字,标点空白不计(时间尺 modules/time_cost.eff_chars)。"""
+    return tc.eff_chars(text)
 
 
 def norm_key(text: str) -> str:
@@ -176,41 +178,28 @@ def speaker_id(who: str, names: dict | None = None, known: frozenset | None = No
 
 # ---------------------------------------------------------------- 语速
 def load_speeds(proj_root: Path) -> dict:
-    """{CHAR-id: cpm 中点};voice.json#speed_cpm 支持数值 / [lo,hi] / {min,max}。"""
-    out = {}
-    cdir = proj_root / "bible" / "characters"
-    if not cdir.is_dir():
-        return out
-    for vj in sorted(cdir.glob("*/voice.json")):
-        try:
-            v = json.loads(vj.read_text())
-        except Exception:
-            continue
-        sp = v.get("speed_cpm")
-        if sp is None:
-            sp = (v.get("speech_rate") or {}).get("cpm") if isinstance(v.get("speech_rate"), dict) else None
-        cpm = None
-        if isinstance(sp, (int, float)):
-            cpm = float(sp)
-        elif isinstance(sp, (list, tuple)) and len(sp) >= 2:
-            try:
-                cpm = (float(sp[0]) + float(sp[1])) / 2
-            except (TypeError, ValueError):
-                cpm = None
-        elif isinstance(sp, dict):
-            lo, hi = sp.get("min"), sp.get("max")
-            if lo is not None and hi is not None:
-                cpm = (float(lo) + float(hi)) / 2
-        if cpm and cpm > 0:
-            out[vj.parent.name] = cpm
-    return out
+    """{CHAR-id: cpm 中点};voice.json#speed_cpm 支持数值 / [lo,hi] / {min,max}(时间尺 character_cpm,check_time_budget 共用)。"""
+    return tc.character_cpm(proj_root)
 
 
-def est_seconds(text: str, cpm: float, pace: str = "", legacy: bool = False) -> float:
-    """台词估时:新口径走时间尺(起止余量 + 字数 ÷ 语速档 + 停顿);legacy=True 沿用旧公式(字数 ÷ 语速)。"""
+def load_wpms(proj_root: Path) -> dict:
+    """{CHAR-id: wpm 中点}(voice.json#speed_wpm;英文等按词计的台词用,#124)。"""
+    return tc.character_wpm(proj_root)
+
+
+def est_seconds(text: str, cpm: float, pace: str = "", legacy: bool = False, wpm: float | None = None) -> float:
+    """台词估时:新口径走时间尺(起止余量 + 字数 ÷ 语速档 + 停顿;英文等按词 ÷ 词速,#124);legacy=True 沿用旧公式(字数 ÷ 语速)。"""
     if legacy:
         return tc.line_est_legacy(text, cpm)
-    return tc.line_est(text, pace, cpm)
+    return tc.line_est(text, pace, cpm, wpm)
+
+
+def rate_desc(text: str, cpm, wpm=None, legacy: bool = False) -> str:
+    """机检文案里的「长度 × 语速」:按字计的句子 `N 字 × C cpm`(原文案),按词计的句子 `N 词 × W wpm`。"""
+    if not legacy and tc.is_word_text(text):
+        w = wpm if wpm and wpm > 0 else (tc.cpm_to_wpm(cpm) or tc.DEFAULT_WPM)
+        return f"{tc.word_count(text):g} 词 × {w:.0f} wpm"
+    return f"{eff_chars(text)} 字 × {cpm:.0f} cpm"
 
 
 # ---------------------------------------------------------------- 剧本对白层
@@ -357,6 +346,7 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
     errs, warns = [], []
 
     speeds = load_speeds(proj_root)
+    wpms = load_wpms(proj_root)
     names = name_index(proj_root)
     known_ids = known_actor_ids(proj_root)
     try:
@@ -395,31 +385,39 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
     unknown_speakers = set()
     # 无语速设定的说话人(群演等):取本项目各角色语速中点的中位数,项目无 voice.json 时退 DEFAULT_CPM
     fallback_cpm = round(sorted(speeds.values())[len(speeds) // 2], 1) if speeds else DEFAULT_CPM
+    # 英文等按词计的台词(#124):无 speed_wpm 的说话人取各角色词速中位数,项目没写 speed_wpm 时按 speed_cpm 换算
+    fallback_wpm = round(sorted(wpms.values())[len(wpms) // 2], 1) if wpms else None
 
     def cpm_of(spk):
         if spk in speeds:
             return speeds[spk]
-        unknown_speakers.add(spk or "?")
+        if spk not in wpms:
+            unknown_speakers.add(spk or "?")
         return fallback_cpm
+
+    def wpm_of(spk):
+        if spk in wpms:
+            return wpms[spk]
+        return None if spk in speeds else fallback_wpm
 
     # ---- 剧本层:单句上限 + 记录估时一致性
     src_keys = {}
     src_over_cap = []
     for ln in source_lines:
         spk = ln.get("speaker")
-        known = spk in speeds
-        cpm = cpm_of(spk)
-        est = est_seconds(ln["text"], cpm, ln.get("pace") or "", legacy)
+        known = spk in speeds or spk in wpms
+        cpm, wpm = cpm_of(spk), wpm_of(spk)
+        est = est_seconds(ln["text"], cpm, ln.get("pace") or "", legacy, wpm)
         rec = ln.get("est_recorded")
         if not known and recorded_est(rec):
             est = round(float(rec), 1)   # 无语速设定的说话人:信记录值(初稿占位 0 不算记录,#127)
-        ln["est"], ln["cpm"], ln["chars"] = est, cpm, eff_chars(ln["text"])
+        ln["est"], ln["cpm"], ln["wpm"], ln["chars"] = est, cpm, wpm, eff_chars(ln["text"])
         src_keys.setdefault((spk, norm_key(ln["text"])), []).append(ln)
         if est > line_cap_s + 1e-9:
             src_over_cap.append(ln)
         if known and rec is not None and abs(rec - est) > max(EST_TOL_S, EST_TOL_REL * est):
             errs.append(f"{source_name}:L{ln.get('lineno')} line_est_consistent: {spk} 「{ln['text'][:24]}」记录 {rec}s,"
-                        f"按 {ln['chars']} 字 × {cpm:.0f} cpm 重算 {est}s(--write-est 可回写)")
+                        f"按 {rate_desc(ln['text'], cpm, wpm, legacy)} 重算 {est}s(--write-est 可回写)")
     for ln in src_over_cap:
         errs.append(f"{source_name}:L{ln.get('lineno')} line_le_cap: {ln.get('speaker')} 「{ln['text'][:30]}」估时 {ln['est']}s"
                     f" > 单句上限 {line_cap_s}s(shot_max {shot_max_s:g}s × {ratio});需拆句或精简")
@@ -431,9 +429,11 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
         "line_cap_s": line_cap_s, "shot_max_s": shot_max_s,
         "est_formula": ("eff_chars / (speed_cpm_mid / 60); eff_chars = CJK + [A-Za-z0-9]  [legacy]" if legacy else
                         f"{tc.ONSET_S} + eff_chars / (speed_cpm_mid / 60 × pace_factor) + {tc.PAUSE_S} × inner_pauses; "
-                        f"shot: Σest + {tc.PRE_SPEECH_S} + {tc.POST_SPEECH_S} per line ≤ duration (modules/time_cost.py)"),
+                        f"shot: Σest + {tc.PRE_SPEECH_S} + {tc.POST_SPEECH_S} per line ≤ duration (modules/time_cost.py); "
+                        f"Latin-script lines: words / (speed_wpm_mid or speed_cpm × {tc.WPM_PER_CPM:.3f} or {tc.DEFAULT_WPM:g} wpm)"),
         "legacy": legacy, "pre_speech_s": tc.PRE_SPEECH_S, "post_speech_s": tc.POST_SPEECH_S,
-        "speed_source": "bible/characters/<CHAR>/voice.json#speed_cpm midpoint", "fallback_cpm": fallback_cpm,
+        "speed_source": "bible/characters/<CHAR>/voice.json#speed_cpm midpoint (speed_wpm for Latin-script lines)",
+        "fallback_cpm": fallback_cpm, "fallback_wpm": fallback_wpm,
         "dialogue_source": source_name, "source_lines_total": len(source_lines),
         "mode": "full" if sl_path.exists() else "source_only",
         "groups": [], "trim_targets": [], "checks": {}, "summary": {},
@@ -442,8 +442,8 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
     if not sl_path.exists():
         warns.append(f"shot_list_missing: 未找到 {sl_path},仅做剧本层检查(line_le_cap / line_est_consistent)")
         if write_est:
-            _write_est_md(sp_path, sp_lines, speeds, legacy=legacy)
-            _write_est_md(dm_path, dm_bullets, speeds, legacy=legacy)
+            _write_est_md(sp_path, sp_lines, speeds, legacy=legacy, wpms=wpms)
+            _write_est_md(dm_path, dm_bullets, speeds, legacy=legacy, wpms=wpms)
         return _finish(report, errs, warns, unknown_speakers, ddir, strict, fallback_cpm)
 
     sl = sl_doc if sl_doc is not None else json.loads(sl_path.read_text())
@@ -493,9 +493,9 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
                                 f"(改回画内或在输出设置开启)")
                     pl = "on"
                 spk = speaker_id(ln.get("speaker") or "", names, known_ids)
-                known = spk in speeds
-                cpm = cpm_of(spk)
-                est = est_seconds(ln["text"], cpm, ln.get("pace") or "", legacy)
+                known = spk in speeds or spk in wpms
+                cpm, wpm = cpm_of(spk), wpm_of(spk)
+                est = est_seconds(ln["text"], cpm, ln.get("pace") or "", legacy, wpm)
                 if not known and recorded_est(ln.get("est_recorded")):
                     est = round(float(ln["est_recorded"]), 1)   # 无语速设定的说话人:信记录值,只报 WARN(占位 0 不算,#127)
                 chars = eff_chars(ln["text"])
@@ -505,7 +505,7 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
                     g_on += 1
                 else:
                     g_off += 1
-                lrec = {"shot_id": sid, "speaker": spk, "text": ln["text"], "chars": chars, "cpm": cpm,
+                lrec = {"shot_id": sid, "speaker": spk, "text": ln["text"], "chars": chars, "cpm": cpm, "wpm": wpm,
                         "est_s": est, "est_recorded_s": ln.get("est_recorded"), "placement": pl,
                         "line_index": ln.get("line_index")}
                 if pl != "on":
@@ -546,7 +546,7 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
                 rec = ln.get("est_recorded")
                 if known and rec is not None and abs(float(rec) - est) > max(EST_TOL_S, EST_TOL_REL * est):
                     errs.append(f"{gid}/{sid} line_est_consistent: {spk} 「{ln['text'][:24]}」shot_list 记录 {rec}s,"
-                                f"重算 {est}s({chars} 字 × {cpm:.0f} cpm;--write-est 可回写)")
+                                f"重算 {est}s({rate_desc(ln['text'], cpm, wpm, legacy)};--write-est 可回写)")
                 if est > line_cap_s + 1e-9:
                     errs.append(f"{gid}/{sid} line_le_cap: {spk} 「{ln['text'][:30]}」估时 {est}s > 单句上限 {line_cap_s}s")
             sest = round(sest, 1)
@@ -634,8 +634,8 @@ def run(proj_root: Path, ep: str, groups_filter=None, ratio=GROUP_RATIO, shot_ra
         if not groups_filter:
             sl["dialogue_est_total_s"] = round(sum(gr["est_s"] for gr in report["groups"]), 1)
         sl_path.write_text(json.dumps(sl, ensure_ascii=False, indent=2) + "\n")
-        _write_est_md(sp_path, sp_lines, speeds, legacy=legacy)
-        _write_est_md(dm_path, dm_bullets, speeds, legacy=legacy)
+        _write_est_md(sp_path, sp_lines, speeds, legacy=legacy, wpms=wpms)
+        _write_est_md(dm_path, dm_bullets, speeds, legacy=legacy, wpms=wpms)
         report["write_est"] = True
 
     report["summary"] = {"groups_total": len(groups), "dialogue_groups_checked": g_checked, "groups_over": g_over,
@@ -650,25 +650,36 @@ def _trim_target(grec: dict) -> dict:
     need = max(0.0, est - cap)
     on_lines = [ln for ln in grec["lines"] if ln.get("placement", "on") == "on"]   # 画外句不占承载,不进精简目标
     # 短句(<6 有效字,应答/感叹)豁免;削减秒数按估时占比摊到其余句;长句不够摊时再摊到全部句
-    cands = [ln for ln in on_lines if ln["chars"] >= 6]
+    # 英文等按词计的句子(#124)按词给目标:<3 词短句豁免,目标 = 剩余秒数 × 词速
+    def _short(ln):
+        return tc.word_count(ln["text"]) < 3 if tc.is_word_text(ln["text"]) else ln["chars"] < 6
+    cands = [ln for ln in on_lines if not _short(ln)]
     if sum(ln["est_s"] for ln in cands) <= need + 1e-9:
         cands = list(on_lines)
     pool = sum(ln["est_s"] for ln in cands) or 1.0
     lines = []
     for ln in on_lines:
         cut_s = need * ln["est_s"] / pool if ln in cands else 0.0
+        if tc.is_word_text(ln["text"]):
+            words = int(tc.word_count(ln["text"]))
+            w = ln.get("wpm") or tc.cpm_to_wpm(ln["cpm"]) or tc.DEFAULT_WPM
+            tgt = max(0, min(words, int(max(0.0, ln["est_s"] - cut_s) * w / 60.0)))
+            lines.append({"shot_id": ln["shot_id"], "speaker": ln["speaker"], "text": ln["text"], "unit": "words",
+                          "words": words, "est_s": ln["est_s"], "target_words": tgt, "cut_words": words - tgt})
+            continue
         tgt_chars = int(max(0.0, ln["est_s"] - cut_s) * ln["cpm"] / 60.0)  # 向下取整保证 Σ ≤ cap(新口径含余量,偏保守)
         tgt_chars = max(0, min(ln["chars"], tgt_chars))
         lines.append({"shot_id": ln["shot_id"], "speaker": ln["speaker"], "text": ln["text"], "chars": ln["chars"],
                       "est_s": ln["est_s"], "target_chars": tgt_chars, "cut_chars": ln["chars"] - tgt_chars})
-    lines.sort(key=lambda x: -x["cut_chars"])
+    lines.sort(key=lambda x: -x.get("cut_chars", x.get("cut_words", 0)))
     return {"group_id": grec["group_id"], "total_duration_s": grec["total_duration_s"], "capacity_s": cap,
             "est_s": est, "need_cut_s": grec["over_s"],
-            "hint": "按 target_chars 逐句精简(文本层,语义与人设不丢;<6 字短句已豁免);合并/删句亦可,Σ估时 ≤ capacity_s 即通过",
+            "hint": "按 target_chars(英文等按词计的句子为 target_words)逐句精简(文本层,语义与人设不丢;<6 字 / <3 词短句已豁免);合并/删句亦可,Σ估时 ≤ capacity_s 即通过",
             "lines": lines}
 
 
-def _write_est_md(path: Path, lines: list, speeds: dict, fallback: float = DEFAULT_CPM, legacy: bool = False):
+def _write_est_md(path: Path, lines: list, speeds: dict, fallback: float = DEFAULT_CPM, legacy: bool = False,
+                  wpms: dict | None = None):
     """把对白行 `{… est_duration_s: X …}` 的数字按重算值回写(只改数字,其余一字不动)。"""
     if not path.exists() or not lines:
         return
@@ -680,7 +691,8 @@ def _write_est_md(path: Path, lines: list, speeds: dict, fallback: float = DEFAU
             continue
         est = ln.get("est")
         if est is None:
-            est = est_seconds(ln["text"], speeds.get(ln.get("speaker"), fallback), ln.get("pace") or "", legacy)
+            est = est_seconds(ln["text"], speeds.get(ln.get("speaker"), fallback), ln.get("pace") or "", legacy,
+                              (wpms or {}).get(ln.get("speaker")))
         new = _EST_RE.sub(lambda m: f"{m.group(1)}{est}", src[i - 1], count=1)
         if new != src[i - 1]:
             src[i - 1] = new

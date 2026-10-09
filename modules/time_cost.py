@@ -12,6 +12,10 @@
 
 台词估时 = ONSET_S + 有效字数 ÷ 语速 + PAUSE_S × 句中停顿数
   语速 = 角色 voice.json speed_cpm 中点 ÷ 60 × 语速档倍率(fast/medium/slow),无角色语速时直接取档位字/秒。
+  拉丁 / 西里尔等按空格分词的文字(句中没有汉字 / 假名 / 谚文)按词计(#124):有效字数 → 词数(can't 算一词,
+  单个长词按 字母数 ÷ 6 兜底),语速 = speed_wpm 中点 > speed_cpm 换算(× 130/252,保持角色相对快慢;> 400 的
+  speed_cpm 是按字母 / 分钟写的,÷ 3.8)> 默认 130 wpm,再乘语速档倍率;Dr. / Mr. 等缩写与小数点不算句中停顿。
+  含汉字 / 假名 / 谚文的句子与只有数字标点的句子仍按字计,与 2026-10-03 口径逐字相同。
   参数来源:ep07 对白语音库 44 句自然时长拟合 dur = 0.68 + 字数/4.8 + 0.41×停顿(MAE 0.41s;旧公式 0.9s)。
   旧公式(字数 ÷ 语速,无余量)只给 legacy 文件做一致性比对,新写的集一律用新公式。
 动作估时 = 节拍单价表(按动作关键词取最大匹配,缺省 0.7s;停住/保持类 0.3s)。
@@ -34,7 +38,17 @@ POST_SPEECH_S = 0.3                    # 对白镜:说完后余量
 SHOT_MARGIN_S = 0.2                    # 动作镜:首尾各留
 MIN_LINE_S = 0.6                       # 再短模型出不稳
 
-_EFF_RE = re.compile(r"[0-9A-Za-z぀-ヿ㐀-䶿一-鿿豈-﫿가-힯]")
+_EFF_RE = re.compile(r"[0-9A-Za-z\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af]")   # 转义写:直接写「豈」会被编辑器规范化成 U+8C48
+_CJK_RE = re.compile(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af]")
+
+# 按词计的文字(#124):英文等拉丁文字原按字母逐个计数再除以中文字速,一句英文高估约 2 倍(alices 真实 TTS 样本 1.72 词/秒)
+DEFAULT_WPM = 130.0                    # 无 speed_wpm / speed_cpm 时的英文等词速(用户 2026-10-09 拍板,偏保守)
+WPM_PER_CPM = DEFAULT_WPM / DEFAULT_CPM  # 只有中文口径 speed_cpm 时按此换算,保持角色相对快慢(252 字/分 ↔ 130 词/分)
+LETTER_CPM_MIN = 400.0                 # speed_cpm 超过此值 = 按字母 / 分钟写的(alices / jidi 新卡 = speed_wpm × 3.8)
+LETTERS_PER_WORD = 3.8
+LONG_WORD_LETTERS = 6.0                # 词数兜底:字母数 ÷ 6(单个长词 / 不用空格分词的文字不至于估成一词)
+_ABBR_RE = re.compile(r"\b(?:Dr|Mr|Mrs|Ms|Mx|St|Jr|Sr|Prof|Mt|Ft|Capt|Col|Gen|Lt|Sgt|Rev|Gov|Sen|Rep|Hon|No|vs|etc|e\.g|i\.e)\.", re.I)
+_DECIMAL_DOT_RE = re.compile(r"(?<=\d)[.,](?=\d)")
 _PAUSE_RE = re.compile(r"[,,、;;:：。.!!??—…]+")
 # 句末标点后可跟收尾引号/括号:剧本对白行写成「木吒!」,外层引号不该让句末那处被算成句中停顿(#104)
 _END_RE = re.compile(r"[。.!!??—…]+[\s」』”’\"')）】》]*$")
@@ -51,9 +65,35 @@ def eff_chars(text: str) -> int:
     return len(_EFF_RE.findall(unicodedata.normalize("NFKC", str(text or ""))))
 
 
+def is_word_text(text: str) -> bool:
+    """按词计的句子:没有汉字 / 假名 / 谚文、且有字母(拉丁 / 西里尔 / 带重音字母…)。只有数字标点的仍按字计。"""
+    t = unicodedata.normalize("NFKC", str(text or ""))
+    return not _CJK_RE.search(t) and any(ch.isalpha() for ch in t)
+
+
+def word_count(text: str) -> float:
+    """词数:按空白切、含字母或数字的片段算一词(can't / well-known 各一词);字母数 ÷ 6 兜底。"""
+    t = unicodedata.normalize("NFKC", str(text or ""))
+    words = sum(1 for tok in t.split() if any(ch.isalnum() for ch in tok))
+    letters = sum(1 for ch in t if ch.isalpha())
+    return max(float(words), letters / LONG_WORD_LETTERS)
+
+
+def line_units(text: str) -> tuple[float, str]:
+    """台词长度与单位:按词计的句子 (词数, 'words'),其余 (有效字数, 'chars')。精简目标等按这个单位给。"""
+    return (word_count(text), "words") if is_word_text(text) else (float(eff_chars(text)), "chars")
+
+
+def _word_pause_text(text: str) -> str:
+    """按词计的句子数停顿前去掉缩写点与小数点(Dr. Seldon / 3.5 不是句中停顿)。"""
+    return _DECIMAL_DOT_RE.sub("", _ABBR_RE.sub(lambda m: m.group(0)[:-1], str(text or "")))
+
+
 def inner_pauses(text: str) -> int:
     """句中停顿数:标点串个数,不算句末那一处。"""
     s = str(text or "").strip()
+    if is_word_text(s):
+        s = _word_pause_text(s).strip()
     marks = _PAUSE_RE.findall(s)
     return max(0, len(marks) - (1 if _END_RE.search(s) else 0))
 
@@ -83,12 +123,29 @@ def speech_rate(pace: str = "", cpm: float | None = None) -> float:
     return PACE_RATE[p]
 
 
-def line_est(text: str, pace: str = "", cpm: float | None = None) -> float:
-    """新口径台词估时(秒,两位小数)。"""
-    n = eff_chars(text)
+def cpm_to_wpm(cpm: float | None) -> float | None:
+    """只有 speed_cpm 时换算词速:> 400 视为按字母 / 分钟写的(÷ 3.8),否则按中文字速 × 130/252。"""
+    if not cpm or cpm <= 0:
+        return None
+    return cpm / LETTERS_PER_WORD if cpm > LETTER_CPM_MIN else cpm * WPM_PER_CPM
+
+
+def word_rate(pace: str = "", cpm: float | None = None, wpm: float | None = None) -> float:
+    """词/秒:speed_wpm > speed_cpm 换算 > 默认 130 wpm,乘语速档倍率。"""
+    p = norm_pace(pace) or "medium"
+    w = wpm if wpm and wpm > 0 else (cpm_to_wpm(cpm) or DEFAULT_WPM)
+    return w / 60.0 * PACE_FACTOR[p]
+
+
+def line_est(text: str, pace: str = "", cpm: float | None = None, wpm: float | None = None) -> float:
+    """新口径台词估时(秒,两位小数)。含汉字 / 假名 / 谚文的句子按字 ÷ 字速;拉丁等文字按词 ÷ 词速(wpm 只对这类句子生效)。"""
+    if is_word_text(text):
+        n, rate = word_count(text), word_rate(pace, cpm, wpm)
+    else:
+        n, rate = eff_chars(text), None
     if n <= 0:
         return 0.0
-    return round(max(MIN_LINE_S, ONSET_S + n / speech_rate(pace, cpm) + PAUSE_S * inner_pauses(text)), 2)
+    return round(max(MIN_LINE_S, ONSET_S + n / (rate or speech_rate(pace, cpm)) + PAUSE_S * inner_pauses(text)), 2)
 
 
 def line_est_legacy(text: str, cpm: float | None = None) -> float:
@@ -97,7 +154,7 @@ def line_est_legacy(text: str, cpm: float | None = None) -> float:
 
 
 def dialogue_need(lines: list[dict], legacy: bool = False) -> float:
-    """一镜/一场的台词总需求:Σ估时 + 每句开口前后余量。lines: [{text, pace?, cpm?, est?}]。"""
+    """一镜/一场的台词总需求:Σ估时 + 每句开口前后余量。lines: [{text, pace?, cpm?, wpm?, est?}]。"""
     total = 0.0
     for ln in lines or []:
         text = str(ln.get("text") or "")
@@ -105,7 +162,7 @@ def dialogue_need(lines: list[dict], legacy: bool = False) -> float:
             continue
         est = ln.get("est")
         if est is None:
-            est = line_est_legacy(text, ln.get("cpm")) if legacy else line_est(text, ln.get("pace") or "", ln.get("cpm"))
+            est = line_est_legacy(text, ln.get("cpm")) if legacy else line_est(text, ln.get("pace") or "", ln.get("cpm"), ln.get("wpm"))
         total += float(est) + PRE_SPEECH_S + POST_SPEECH_S
     return round(total, 2)
 
@@ -328,8 +385,25 @@ def budget_plan(base_budget_s: float, need_s: float, pct: float) -> dict:
 
 
 # ---------------------------------------------------------------- 角色语速
-def character_cpm(base) -> dict[str, float]:
-    """{CHAR-id: speed_cpm 中点}(bible/characters/<id>/voice.json;数值 / [lo,hi] / {min,max} 都认)。"""
+def _speed_mid(sp) -> float | None:
+    """语速字段中点:数值 / [lo,hi] / {min,max} 都认;非法或 ≤0 返回 None。"""
+    try:
+        if isinstance(sp, bool):
+            return None
+        if isinstance(sp, (int, float)):
+            v = float(sp)
+        elif isinstance(sp, (list, tuple)) and len(sp) >= 2:
+            v = (float(sp[0]) + float(sp[1])) / 2
+        elif isinstance(sp, dict) and sp.get("min") is not None and sp.get("max") is not None:
+            v = (float(sp["min"]) + float(sp["max"])) / 2
+        else:
+            return None
+    except (TypeError, ValueError):
+        return None
+    return v if v > 0 else None
+
+
+def _character_speed(base, key: str, alt: str) -> dict[str, float]:
     import json
     from pathlib import Path
     out: dict[str, float] = {}
@@ -341,22 +415,23 @@ def character_cpm(base) -> dict[str, float]:
             v = json.loads(vj.read_text(encoding="utf-8"))
         except Exception:
             continue
-        sp = v.get("speed_cpm")
+        sp = v.get(key)
         if sp is None and isinstance(v.get("speech_rate"), dict):
-            sp = v["speech_rate"].get("cpm")
-        cpm = None
-        try:
-            if isinstance(sp, (int, float)):
-                cpm = float(sp)
-            elif isinstance(sp, (list, tuple)) and len(sp) >= 2:
-                cpm = (float(sp[0]) + float(sp[1])) / 2
-            elif isinstance(sp, dict) and sp.get("min") is not None and sp.get("max") is not None:
-                cpm = (float(sp["min"]) + float(sp["max"])) / 2
-        except (TypeError, ValueError):
-            cpm = None
-        if cpm and cpm > 0:
-            out[vj.parent.name] = cpm
+            sp = v["speech_rate"].get(alt)
+        mid = _speed_mid(sp)
+        if mid:
+            out[vj.parent.name] = mid
     return out
+
+
+def character_cpm(base) -> dict[str, float]:
+    """{CHAR-id: speed_cpm 中点}(bible/characters/<id>/voice.json;数值 / [lo,hi] / {min,max} 都认)。"""
+    return _character_speed(base, "speed_cpm", "cpm")
+
+
+def character_wpm(base) -> dict[str, float]:
+    """{CHAR-id: speed_wpm 中点}(英文等按词计的台词用;没写的人物按 speed_cpm 换算,见 word_rate)。"""
+    return _character_speed(base, "speed_wpm", "wpm")
 
 
 # ---------------------------------------------------------------- 存量判定

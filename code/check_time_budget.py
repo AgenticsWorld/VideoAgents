@@ -66,11 +66,16 @@ class Report:
 
 
 # ---------------------------------------------------------------- 台词行 → 估时输入
+def _load_speeds(base: Path) -> dict:
+    """{"cpm": {CHAR: speed_cpm 中点}, "wpm": {CHAR: speed_wpm 中点}}(英文等按词计的台词用词速,#124)。"""
+    return {"cpm": load_speeds(base), "wpm": tc.character_wpm(base)}
+
+
 def _line_input(text: str, spk: str, speeds: dict, pace: str = "", emotion: str = "") -> dict:
-    cpm = speeds.get(spk)
+    cpm, wpm = speeds["cpm"].get(spk), speeds["wpm"].get(spk)
     p = tc.norm_pace(pace) or tc.guess_pace(emotion)
     return {"text": text, "speaker": spk, "pace": p or "medium", "pace_source": "line" if tc.norm_pace(pace) else ("emotion" if p else "default"),
-            "cpm": cpm, "est": tc.line_est(text, p, cpm)}
+            "cpm": cpm, "wpm": wpm, "est": tc.line_est(text, p, cpm, wpm)}
 
 
 # ================================================================ script
@@ -88,7 +93,7 @@ def run_script(base: Path, ep: str, rep_all: dict, strict: bool) -> Report:
     parsed = sb.parse_screenplay(md)
     settings = _read_json(base / "settings.json") or {}
     pct = tc.extend_pct(settings)
-    speeds = load_speeds(base)
+    speeds = _load_speeds(base)
     names = name_index(base)
     pacing = _read_json(sdir / "pacing.json") or {}
     policy = pacing.get("duration_policy") if isinstance(pacing.get("duration_policy"), dict) else None
@@ -210,19 +215,27 @@ def _trim_targets(scenes: list[dict], need_cut: float) -> list[dict]:
         if not s["lines_detail"]:
             continue
         cut_s = need_cut * s["dialogue_s"] / pool
-        cands = [ln for ln in s["lines_detail"] if tc.eff_chars(ln["text"]) >= 6] or list(s["lines_detail"])
+        # 英文等按词计的句子(#124)按词给目标(<3 词短句豁免),其余按字(<6 字豁免)
+        cands = [ln for ln in s["lines_detail"] if tc.line_units(ln["text"])[0] >= (3 if tc.is_word_text(ln["text"]) else 6)] \
+            or list(s["lines_detail"])
         lpool = sum(ln["est"] for ln in cands) or 1.0
         lines = []
         for ln in s["lines_detail"]:
             c = cut_s * ln["est"] / lpool if ln in cands else 0.0
-            rate = tc.speech_rate(ln["pace"], ln["cpm"])
             keep_s = max(0.0, ln["est"] - c - tc.ONSET_S - tc.PAUSE_S * tc.inner_pauses(ln["text"]))
+            if tc.is_word_text(ln["text"]):
+                words = int(tc.word_count(ln["text"]))
+                tgt = max(0, min(words, int(keep_s * tc.word_rate(ln["pace"], ln["cpm"], ln.get("wpm")))))
+                lines.append({"speaker": ln["speaker"], "text": ln["text"], "unit": "words", "words": words, "est_s": ln["est"],
+                              "target_words": tgt, "cut_words": words - tgt})
+                continue
+            rate = tc.speech_rate(ln["pace"], ln["cpm"])
             tgt = max(0, min(tc.eff_chars(ln["text"]), int(keep_s * rate)))
             lines.append({"speaker": ln["speaker"], "text": ln["text"], "chars": tc.eff_chars(ln["text"]), "est_s": ln["est"],
                           "target_chars": tgt, "cut_chars": tc.eff_chars(ln["text"]) - tgt})
-        lines.sort(key=lambda x: -x["cut_chars"])
+        lines.sort(key=lambda x: -x.get("cut_chars", x.get("cut_words", 0)))
         out.append({"scene": s["scene"], "need_cut_s": round(cut_s, 1), "lines": lines,
-                    "hint": "按 target_chars 逐句精简(文本层;<6 字短句已豁免);合并/删句亦可,Σ估时降到位即通过"})
+                    "hint": "按 target_chars(英文等按词计的句子为 target_words)逐句精简(文本层;<6 字 / <3 词短句已豁免);合并/删句亦可,Σ估时降到位即通过"})
     return out
 
 
@@ -293,7 +306,7 @@ def run_shots(base: Path, ep: str, rep_all: dict, strict: bool, source: str | No
         return r
     legacy = tc.is_legacy(tc.doc_date(doc))
     r = Report(legacy and not strict)
-    speeds, names = load_speeds(base), name_index(base)
+    speeds, names = _load_speeds(base), name_index(base)
     shots_out, groups_out = [], []
     if src_name == "shot_list":
         shots = {s.get("shot_id"): s for s in doc.get("shots") or [] if isinstance(s, dict)}
@@ -362,7 +375,7 @@ def run_blocking(base: Path, ep: str, rep_all: dict, strict: bool, groups_filter
         return r
     legacy = tc.is_legacy(tc.doc_date(sl))
     r = Report(legacy and not strict)
-    speeds, names = load_speeds(base), name_index(base)
+    speeds, names = _load_speeds(base), name_index(base)
     shots = {s.get("shot_id"): s for s in sl.get("shots") or [] if isinstance(s, dict)}
     group_of = {sid: g.get("group_id") for g in sl.get("generation_groups") or [] for sid in g.get("shots") or []}
     out = []

@@ -272,7 +272,7 @@ def group_timeline(sl: dict) -> tuple[dict, dict]:
     return shots_by_id, info
 
 
-def _line_est(base: Path, ln: dict, speaker: str, cpms: dict) -> float:
+def _line_est(base: Path, ln: dict, speaker: str, cpms: dict, wpms: dict | None = None) -> float:
     e = _f(ln.get("est_duration_s"))
     if e and e > 0:
         return round(e, 2)
@@ -281,7 +281,8 @@ def _line_est(base: Path, ln: dict, speaker: str, cpms: dict) -> float:
             from modules import time_cost as tc
         except ImportError:
             import time_cost as tc
-        return tc.line_est(line_text(ln), str(ln.get("pace") or "") or tc.guess_pace(str(ln.get("emotion") or "")), cpms.get(speaker))
+        return tc.line_est(line_text(ln), str(ln.get("pace") or "") or tc.guess_pace(str(ln.get("emotion") or "")), cpms.get(speaker),
+                           (wpms or {}).get(speaker))           # 英文等按词计的台词用 speed_wpm(#124)
     except Exception:
         return round(max(0.7, len(line_text(ln)) / 4.2 + 0.7), 2)
 
@@ -300,15 +301,15 @@ def collect(base: Path, ep: str, shot_list: dict | None = None, durations: dict 
             from modules import time_cost as tc
         except ImportError:
             import time_cost as tc
-        cpms = tc.character_cpm(base)
+        cpms, wpms = tc.character_cpm(base), tc.character_wpm(base)
     except Exception:
-        cpms = {}
+        cpms, wpms = {}, {}
     anchors = [a for a in sl.get("narration_anchors") or [] if isinstance(a, dict)]
     allow = bridge_allowances(sl)
     # 画内句占时按镜累计(扣窗口用)
     on_by_shot: dict[str, float] = {}
     for sid, s in shots_by_id.items():
-        on_by_shot[sid] = round(sum(_line_est(base, ln, resolve_speaker(ln, names), cpms) for ln in onscreen_lines(s)), 2)
+        on_by_shot[sid] = round(sum(_line_est(base, ln, resolve_speaker(ln, names), cpms, wpms) for ln in onscreen_lines(s)), 2)
     out: list[dict] = []
     for s in sl.get("shots") or []:
         if not isinstance(s, dict) or not s.get("shot_id"):
@@ -345,7 +346,7 @@ def collect(base: Path, ep: str, shot_list: dict | None = None, durations: dict 
                 if (ash and set(ash) & set(good)) or (not ash and a.get("anchor_group") == gid and gid):
                     narr += _f(a.get("est_duration_s"), 0.0) or 0.0
             off = offset_s(ln, floor=-lead, default=(-lead if lead > 0 else None))
-            est = _line_est(base, ln, spk, cpms)
+            est = _line_est(base, ln, spk, cpms, wpms)
             reason = ln.get("placement_reason") if isinstance(ln.get("placement_reason"), dict) else None
             out.append({
                 "shot_id": sid, "idx": idx, "group_id": gid, "speaker": spk,

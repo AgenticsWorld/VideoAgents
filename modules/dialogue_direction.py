@@ -32,6 +32,7 @@ except Exception:  # pragma: no cover
 PACES = dict(_tc.PACE_RATE)                              # 字/秒(有效字符,不含标点);有角色语速时按倍率 _tc.PACE_FACTOR
 PAUSE_S = _tc.PAUSE_S                                    # 句中每个停顿标点另加的时长
 RATE_MIN, RATE_MAX = 2.5, 6.5                            # 可接受的语速范围(字/秒)
+WORD_RATE_MIN, WORD_RATE_MAX = 1.2, 4.0                  # 英文等按词计的台词(#124):可接受的语速范围(词/秒,72–240 wpm)
 TARGET_MIN = _tc.MIN_LINE_S                              # 再短模型出不稳
 LEAD_S, GAP_S = 0.10, 0.15                               # 与 modules/dialogue_track 排轨口径一致:镜首留白、句间间隔
 DIRECTION_MAX, SCENE_MAX = 200, 120
@@ -66,13 +67,18 @@ def inner_pauses(text: str) -> int:
     return max(0, len(marks) - (1 if re.search(r"[。.!!??—…]+\s*$", str(text or "").strip()) else 0))
 
 
-def paced_target(text: str, pace: str, cpm: float | None = None) -> float:
-    """按语速档算的自然时长 = 时间尺 line_est(起止余量 + 有效字数 ÷ 语速档 + 句中停顿);有角色语速按倍率。"""
-    return _tc.line_est(text, pace or "medium", cpm)
+def paced_target(text: str, pace: str, cpm: float | None = None, wpm: float | None = None) -> float:
+    """按语速档算的自然时长 = 时间尺 line_est(起止余量 + 有效字数 ÷ 语速档 + 句中停顿);有角色语速按倍率。
+    英文等按词计的句子按词 ÷ 词速(speed_wpm,#124)。"""
+    return _tc.line_est(text, pace or "medium", cpm, wpm)
 
 
 def bounds(text: str) -> tuple[float, float]:
-    """这句台词可接受的时长范围(由语速范围换算,含起止余量)。"""
+    """这句台词可接受的时长范围(由语速范围换算,含起止余量)。英文等按词计的句子按词速范围(#124)。"""
+    if _tc.is_word_text(text):
+        n = max(1.0, _tc.word_count(text))
+        return (round(max(TARGET_MIN, _tc.ONSET_S + n / WORD_RATE_MAX), 2),
+                round(max(TARGET_MIN, _tc.ONSET_S + n / WORD_RATE_MIN + PAUSE_S * _tc.inner_pauses(text)), 2))
     n = max(1, effective_chars(text))
     return (round(max(TARGET_MIN, _tc.ONSET_S + n / RATE_MAX), 2),
             round(max(TARGET_MIN, _tc.ONSET_S + n / RATE_MIN + PAUSE_S * inner_pauses(text)), 2))
@@ -199,7 +205,7 @@ def context(base: Path, ep: str, shot_list: dict | None = None) -> list[dict]:
     base = Path(base)
     sl = shot_list if shot_list is not None else (_read(base / "directing" / ep / "shot_list.json") or {})
     emo, names, scenes = script_emotions(base, ep), _names(base), _scene_names(base)
-    cpms = _tc.character_cpm(base)
+    cpms, wpms = _tc.character_cpm(base), _tc.character_wpm(base)
     group_of = {sid: g.get("group_id") for g in sl.get("generation_groups") or [] if isinstance(g, dict)
                 for sid in g.get("shots") or []}
     shots_by_id = {s["shot_id"]: s for s in sl.get("shots") or [] if isinstance(s, dict) and s.get("shot_id")}
@@ -233,7 +239,7 @@ def context(base: Path, ep: str, shot_list: dict | None = None) -> list[dict]:
                 "placement_reason": ln.get("placement_reason") if isinstance(ln.get("placement_reason"), dict) else None,
                 "placement_source": str(ln.get("placement_source") or ""),
                 "line_pace": _tc.norm_pace(ln.get("pace")),   # 对白层写的语速档(dialogue-rewrite,2026-10-03);分镜估时已按它算
-                "pace_seconds": {p: paced_target(text, p, cpms.get(spk)) for p in PACES},
+                "pace_seconds": {p: paced_target(text, p, cpms.get(spk), wpms.get(spk)) for p in PACES},
                 "delivery": cur, "status": status,
             }
             out.append(item)
@@ -250,7 +256,7 @@ def context(base: Path, ep: str, shot_list: dict | None = None) -> list[dict]:
 # ---------------------------------------------------------------- 写入
 
 def resolve_target(text: str, pace: str = "", target_s=None, limit_s: float | None = None,
-                   cpm: float | None = None) -> tuple[float, list[str]]:
+                   cpm: float | None = None, wpm: float | None = None) -> tuple[float, list[str]]:
     """目标时长:工位给了秒数用秒数,否则按语速档算;再按可接受语速范围与本镜上限收口。→ (秒, 提示)
     镜长已按同一时间尺定(分镜规划读对白层 pace 估时 + 开口前后余量),正常不会再被镜长截短;截短说明镜长没按口径定。"""
     notes = []
@@ -260,12 +266,13 @@ def resolve_target(text: str, pace: str = "", target_s=None, limit_s: float | No
     except (TypeError, ValueError):
         t = None
     if t is None or t <= 0:
-        t = paced_target(text, pace, cpm)
+        t = paced_target(text, pace, cpm, wpm)
     if t < lo:
         notes.append(f"目标 {t:g}s 太短(这句最快也要 {lo:g}s),已放宽到 {lo:g}s")
         t = lo
     if t > hi:
-        notes.append(f"目标 {t:g}s 太长(语速不到 {RATE_MIN:g} 字/秒),已收到 {hi:g}s")
+        slow = f"{WORD_RATE_MIN:g} 词/秒" if _tc.is_word_text(text) else f"{RATE_MIN:g} 字/秒"
+        notes.append(f"目标 {t:g}s 太长(语速不到 {slow}),已收到 {hi:g}s")
         t = hi
     if limit_s is not None and t > limit_s:
         if limit_s >= lo:
@@ -329,12 +336,13 @@ def apply(base: Path, ep: str, items: list[dict], by: str = "") -> dict:
     if errors:
         return {"written": 0, "errors": errors}
     stamp = time.strftime("%Y-%m-%dT%H:%M:%S")
-    cpms = _tc.character_cpm(base)
+    cpms, wpms = _tc.character_cpm(base), _tc.character_wpm(base)
     for shot, lines, idx, ln, direction, scene, pace, target_s in staged:
         ln.pop("delivery", None)                              # 先摘掉旧值,算上限时不把自己算进「其它句子」
         # 工位没给档位时沿用对白层写的 pace(分镜镜长就是按它定的),再没有才 medium
         pace = pace or _tc.norm_pace(ln.get("pace"))
-        target, ns = resolve_target(line_text(ln), pace, target_s, _line_limit(shot, lines, idx, shots), cpms.get(_speaker_id(ln)))
+        spk = _speaker_id(ln)
+        target, ns = resolve_target(line_text(ln), pace, target_s, _line_limit(shot, lines, idx, shots), cpms.get(spk), wpms.get(spk))
         notes += [f"{shot['shot_id']}/l{idx:02d}:{n}" for n in ns]
         ln["delivery"] = {"direction": direction, "scene": scene, "target_s": target,
                           **({"pace": pace} if pace else {}),

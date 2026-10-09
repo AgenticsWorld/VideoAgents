@@ -548,7 +548,7 @@ refs/
 >     逐句 target_chars);PASS 即关单,超限由 dialogue-rewrite **按报告逐句精简**(只动对白文本层:screenplay.md 对白层
 >     + dialogue.md + shot_list `dialogue_lines[].text` 镜像,镜/组结构不动),`--write-est` 同步估时后复检至 PASS;3 轮
 >     仍装不下才走分镜变更(shot-planning 调镜时长/拆组)。p6-blocking(表演触发词取自台词)与 H3A 签字以该节点
->     PASS 为前置。估时口径统一:有效字符(汉字+英数字)÷(角色 voice.json `speed_cpm` 中点÷60),无语速设定的
+>     PASS 为前置。估时口径统一:有效字符(汉字+英数字)÷(角色 voice.json `speed_cpm` 中点÷60;英文等拉丁文字的句子按词数 ÷ `speed_wpm`,#124),无语速设定的
 >     群演信记录值并 WARN。
 >   - **①″ 时间尺:台词 + 动作统一估时(2026-10-03,docs/time_cost.md,`modules/time_cost.py`,`python3 code/check_time_budget.py
 >     --project <slug> --ep epNN --scope script|shots|blocking|prompt`)**:前科 fengshen3 ep07 grp011(28s/21 镜)——视频丢了一句
