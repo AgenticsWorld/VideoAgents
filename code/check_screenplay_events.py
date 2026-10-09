@@ -10,6 +10,8 @@
                               (场 = 同一空间 + 连续时间,2026-09-29;generated_at 早于该日或缺失的存量剧本只 WARN)
 WARN:场次引用本集之外的事件;场次无 [事件] 行;场次数 > dramatize 事件数 ×2(平铺信号);
       episode_plan 本集无 treatments(旧格式)→ 全部事件按 dramatize 核,不阻断存量项目。
+衍生(原创)模式(episode_plan 顶层 derivative_mode: true,2026-10-09,WORKFLOW §5A):事件三项报 SKIPPED,
+  场次元信息行写 `[EVENTS] none` / `[事件] 无` 为合法占位(挂了 ev… 反而 WARN);scene_spacetime_continuous 照常。
 
 用法:python3 code/check_screenplay_events.py --project <slug> --ep ep01 [--strict] [--json]
 退出码:0 PASS(--strict 时 WARN 也算失败)、1 FAIL、2 文件缺失。只 print,不改任何文件。

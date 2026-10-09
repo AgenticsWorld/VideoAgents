@@ -9,7 +9,7 @@
 | 要素 | 中文写法(存量) | 英文规范写法(非中文输出语言) | 解析要点 |
 |---|---|---|---|
 | 场头 | `## S03 \| INT \| SCN-0012 藏经阁 \| 夜` | `## S03 \| INT \| SCN-0012 Sutra hall \| night` | 场次号 `S03`(`(续)`/`(cont'd)`);内外景 `INT/EXT/INT/EXT`(也认 `内/外/INT./EXT./INTERIOR/EXTERIOR`);`SCN-xxxx` 后接场景名;**末段按位置认作时段**,任何语言都行 |
-| 元信息行 | `**[事件] ev0021 \| [出场] CHAR-0001 \| [时长] 40s**` | `**[EVENTS] ev0021 \| [CAST] CHAR-0001 \| [DURATION] 40s**` | 方括号标签是锚点;事件/人物只认 `ev…`/`CHAR-…` ID |
+| 元信息行 | `**[事件] ev0021 \| [出场] CHAR-0001 \| [时长] 40s**` | `**[EVENTS] ev0021 \| [CAST] CHAR-0001 \| [DURATION] 40s**` | 方括号标签是锚点;事件/人物只认 `ev…`/`CHAR-…` ID。**衍生模式**(episode_plan 顶层 `derivative_mode: true`,2026-10-09)事件位写占位 `none`(中文 `无`):`**[EVENTS] none \| [CAST] CHAR-0001 \| [DURATION] 40s**`,`check_screenplay_events.py` 认作合法;非衍生模式不得写 |
 | 动作 | `动作:…` / `△…` | `ACTION: …` / `△ …` | 无前缀的普通段落也算动作 |
 | 台词 | `CHAR-0001:「…」` / `- **名(CHAR-0001)**(括注):… {emotion, est_duration_s}` | `CHAR-0001: "…"` / `- **Name (CHAR-0001)**(paren): "…" {emotion: …, est_duration_s: …}` | 说话人必须带 `CHAR-` ID;只有名字时台词须加引号(`「」“”""`) |
 | 旁白候选 | `〔旁白候选(旁白)〕:…` | `[NARRATION (narrator)]: …` / `[V.O.]: …`(无 CHAR 说话人) | 旁白者文本归旁白候选;**带 CHAR 说话人的 `(O.S.)` / `(V.O.)` 括注(2026-10-03 声画分离,docs/sound_split.md)仍是对白行,拆解表 / 对白适配保留并带 `placement` os / vo** |

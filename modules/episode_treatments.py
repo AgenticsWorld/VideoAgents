@@ -24,6 +24,11 @@
     scene_has_dramatized_event 每场 [事件] 至少含一个 dramatize 事件(纯 mention/merge 事件不得独立成场)
   旧格式(episode_plan 无 treatments)剧本侧回退为「全部视为 dramatize」并 WARN,不阻断存量项目。
 
+衍生(原创)模式(2026-10-09,#128/#123):项目只借原著世界观、不改编原著情节时,episode_plan 顶层写
+`derivative_mode: true` + `derivative_note`(准写条件见 WORKFLOW.md §5A),各集 events / treatments 全空。
+此时事件对账类机检(拆集六项、剧本三项)报 SKIPPED,改核 derivative_mode_consistent(note 必填、各集
+events / treatments 必须全空,防半改编半豁免);duration_in_budget / ids_valid / scene_spacetime_continuous 照常。
+
 兼容各家 episode_plan 写法:集号键 episode_id|ep|episode;事件键 events|event_ids|event_refs;
 treatment 既收 `treatments: [{event, treatment, reason?, merge_into?}]`,也收 `event_treatment: {ev: "演"}` 字典形。
 """
@@ -50,6 +55,17 @@ _ALIASES = {
 
 _EP_KEYS = ("episode_id", "ep", "episode", "id")
 _EVENT_KEYS = ("events", "event_ids", "event_refs")
+
+# 衍生模式下不评的事件对账类机检(报 SKIPPED)
+PLAN_EVENT_CHECKS = ("events_classified_once", "treatments_complete", "dramatize_within_cap",
+                     "hook_points_dramatized", "cut_not_on_causal_chain", "merge_target_valid")
+SCREENPLAY_EVENT_CHECKS = ("dramatized_events_covered", "cut_events_absent", "scene_has_dramatized_event")
+DERIVATIVE_SKIP_REASON = "衍生模式:episode_plan derivative_mode=true,不对账原著事件"
+
+
+def is_derivative(plan: Any) -> bool:
+    """episode_plan 顶层 derivative_mode 恰为 true(字符串 "true" 等不算,verify_plan 另报 WARN)。"""
+    return isinstance(plan, dict) and plan.get("derivative_mode") is True
 
 
 # ---------------------------------------------------------------- 读取/归一
@@ -200,9 +216,73 @@ def events_in_scope(plan: dict, events: list[dict]) -> tuple[list[str], str]:
 
 # ---------------------------------------------------------------- episode_plan 机检
 
+def _plan_default_budget(plan: dict) -> float | None:
+    v = plan.get("default_duration_budget_s")
+    return float(v) if isinstance(v, (int, float)) and v > 0 else None
+
+
+def _foreshadowing_ids(graph: dict | None) -> set:
+    return {f.get("id") for f in (graph or {}).get("foreshadowing") or [] if isinstance(f, dict)}
+
+
+def _carry_over_ok(ep: dict, eid: str, fs_ids: set, errors: list[str]) -> bool:
+    ok = True
+    for f in ep.get("carry_over") or []:
+        if fs_ids and isinstance(f, str) and f not in fs_ids:
+            errors.append(f"{eid}: carry_over 非法伏笔 ID {f}")
+            ok = False
+    return ok
+
+
+def _load_within_budget(plan: dict, ep: dict, eid: str, budget: float | None, default_budget: float | None,
+                        errors: list[str], warns: list[str]) -> bool:
+    """预算与总表默认不一致 WARN;内容负荷估 > 预算 110% FAIL。budget 为 None 的提示由调用方写。"""
+    if budget is not None and default_budget and abs(budget - default_budget) > 1e-6 and not plan.get("duration_policy"):
+        warns.append(f"{eid}: 预算 {budget:.0f}s ≠ 总表默认 {default_budget:.0f}s")
+    load = ep.get("content_load_estimate_s") or ep.get("estimated_duration_s") or ep.get("est_duration_s")
+    if isinstance(load, (int, float)) and budget and load > budget * 1.1:
+        errors.append(f"{eid}: 内容负荷估 {load:.0f}s 超预算 {budget:.0f}s 的 110%")
+        return False
+    return True
+
+
+def _verify_derivative_plan(plan: dict, eps: list[dict], graph: dict | None) -> dict:
+    """衍生模式:事件对账类六项 SKIPPED;核 derivative_mode_consistent + duration_in_budget + ids_valid。"""
+    errors: list[str] = []
+    warns: list[str] = []
+    note = plan.get("derivative_note")
+    consistent = True
+    if not (isinstance(note, str) and note.strip()):
+        errors.append("derivative_mode: true 须在顶层写 derivative_note(依据:brief.md 或用户指令里「不改编原著情节」的原话与出处)")
+        consistent = False
+    leaked = [episode_id(ep) or "?" for ep in eps if episode_events(ep) or episode_treatments(ep)[0]]
+    if leaked:
+        errors.append(f"衍生模式下各集 events / treatments 必须为空(不得半改编半豁免;要改编原著事件就去掉 derivative_mode),"
+                      f"非空: {leaked}")
+        consistent = False
+    default_budget = _plan_default_budget(plan)
+    fs_ids = _foreshadowing_ids(graph)
+    dur_ok = ids_ok = True
+    per_ep: list[dict] = []
+    for ep in eps:
+        eid = episode_id(ep) or "?"
+        budget = episode_budget(ep, default_budget)
+        if budget is None:
+            warns.append(f"{eid}: 无时长预算")
+        dur_ok = _load_within_budget(plan, ep, eid, budget, default_budget, errors, warns) and dur_ok
+        ids_ok = _carry_over_ok(ep, eid, fs_ids, errors) and ids_ok
+        per_ep.append({"ep": eid, "budget_s": budget, "n_events": 0, "n_dramatize": 0, "cap": None,
+                       "n_mention": 0, "n_merge": 0, "n_cut": 0, "hook": hook_events(ep)})
+    checks = {"derivative_mode_consistent": consistent, "duration_in_budget": dur_ok, "ids_valid": ids_ok}
+    return {"checks": checks, "skipped": list(PLAN_EVENT_CHECKS), "skip_reason": DERIVATIVE_SKIP_REASON,
+            "derivative": True, "errors": errors, "warns": warns, "episodes": per_ep,
+            "scope": "衍生模式,不对账原著事件", "n_scope_events": 0, "n_assigned": 0}
+
+
 def verify_plan(plan: dict, events_doc: dict | list | None, graph: dict | None,
                 sec_per_event: float = DEFAULT_SEC_PER_DRAMATIZED_EVENT) -> dict:
-    """→ {checks: {name: bool}, errors: [], warns: [], episodes: [{ep, budget, n_events, n_dramatize, cap, ...}]}。"""
+    """→ {checks: {name: bool}, errors: [], warns: [], episodes: [{ep, budget, n_events, n_dramatize, cap, ...}]}。
+    衍生模式另带 skipped: [机检名](不评,不算 FAIL)与 derivative: True。"""
     errors: list[str] = []
     warns: list[str] = []
     checks: dict[str, bool] = {}
@@ -213,6 +293,10 @@ def verify_plan(plan: dict, events_doc: dict | list | None, graph: dict | None,
     if not eps:
         errors.append("episodes 为空")
         return {"checks": {"schema": False}, "errors": errors, "warns": warns, "episodes": []}
+    if is_derivative(plan):
+        return _verify_derivative_plan(plan, eps, graph)
+    if plan.get("derivative_mode") not in (None, False):
+        warns.append(f"derivative_mode={plan.get('derivative_mode')!r} 不是布尔 true,按改编模式对账事件")
 
     # 1. 归类唯一
     scope_ids, scope_desc = events_in_scope(plan, events)
@@ -233,10 +317,9 @@ def verify_plan(plan: dict, events_doc: dict | list | None, graph: dict | None,
     checks["events_classified_once"] = not (dups or missing or extra)
 
     # 2. 每集 treatment
-    default_budget = plan.get("default_duration_budget_s")
-    default_budget = float(default_budget) if isinstance(default_budget, (int, float)) and default_budget > 0 else None
+    default_budget = _plan_default_budget(plan)
     treat_ok = cap_ok = hook_ok = cut_ok = merge_ok = dur_ok = ids_ok = True
-    fs_ids = {f.get("id") for f in (graph or {}).get("foreshadowing") or [] if isinstance(f, dict)}
+    fs_ids = _foreshadowing_ids(graph)
     all_treat: dict[str, str] = {}
     per_ep: list[dict] = []
     ep_treats: list[tuple[dict, dict[str, dict]]] = []
@@ -284,10 +367,7 @@ def verify_plan(plan: dict, events_doc: dict | list | None, graph: dict | None,
             elif hv and hv in evs and tr and tr.get(hv, {}).get("treatment") not in (None, "dramatize"):
                 errors.append(f"{eid}: hook_point.{k}={hv} 是 {tr[hv]['treatment']},卡点事件必须 dramatize")
                 hook_ok = False
-        for f in ep.get("carry_over") or []:
-            if fs_ids and isinstance(f, str) and f not in fs_ids:
-                errors.append(f"{eid}: carry_over 非法伏笔 ID {f}")
-                ids_ok = False
+        ids_ok = _carry_over_ok(ep, eid, fs_ids, errors) and ids_ok
         # merge 目标
         for e, t in tr.items():
             if t["treatment"] == "merge":
@@ -301,12 +381,7 @@ def verify_plan(plan: dict, events_doc: dict | list | None, graph: dict | None,
         # 时长
         if budget is None:
             warns.append(f"{eid}: 无时长预算,跳过 dramatize 上限")
-        elif default_budget and abs(budget - default_budget) > 1e-6 and not plan.get("duration_policy"):
-            warns.append(f"{eid}: 预算 {budget:.0f}s ≠ 总表默认 {default_budget:.0f}s")
-        load = ep.get("content_load_estimate_s") or ep.get("estimated_duration_s") or ep.get("est_duration_s")
-        if isinstance(load, (int, float)) and budget and load > budget * 1.1:
-            errors.append(f"{eid}: 内容负荷估 {load:.0f}s 超预算 {budget:.0f}s 的 110%")
-            dur_ok = False
+        dur_ok = _load_within_budget(plan, ep, eid, budget, default_budget, errors, warns) and dur_ok
         per_ep.append({"ep": eid, "budget_s": budget, "n_events": len(evs), "n_dramatize": n_dram, "cap": cap,
                        "n_mention": sum(1 for e in evs if tr.get(e, {}).get("treatment") == "mention"),
                        "n_merge": sum(1 for e in evs if tr.get(e, {}).get("treatment") == "merge"),
@@ -387,6 +462,20 @@ def adjacent_same_spacetime(parsed_scenes: list[dict]) -> list[str]:
     return out
 
 
+def _spacetime_ok(parsed_scenes: list[dict], screenplay_text: str, errors: list[str], warns: list[str]) -> bool:
+    """scene_spacetime_continuous:相邻场同时空被拆 → FAIL;generated_at 早于 SPACETIME_RULE_SINCE 或缺失的存量剧本只 WARN。"""
+    split = adjacent_same_spacetime(parsed_scenes)
+    gen = _generated_at(screenplay_text)
+    legacy_split = not gen or gen < SPACETIME_RULE_SINCE
+    msg = ("相邻场同一空间 + 连续时间被拆成多场(场 = 同一空间 + 连续时间;人物进出、动作回合写成场内【节拍】,"
+           "确需分场在后一场写 `(split_note: 理由)`): " + "; ".join(split))
+    if split and legacy_split:
+        warns.append(msg + f"(存量剧本 generated_at={gen or '缺失'} 早于 {SPACETIME_RULE_SINCE},只 WARN)")
+    elif split:
+        errors.append(msg)
+    return not split or legacy_split
+
+
 def verify_screenplay(screenplay_text: str, plan: dict | None, ep: str) -> dict:
     """剧本 vs 本集 treatment。→ {checks, errors, warns, scenes: [{scene, events}], treatments}"""
     from modules import script_breakdown as sb   # 复用剧本解析(场次/[事件] 行)
@@ -403,6 +492,15 @@ def verify_screenplay(screenplay_text: str, plan: dict | None, ep: str) -> dict:
         return {"checks": {"dramatized_events_covered": True, "cut_events_absent": True, "scene_has_dramatized_event": True,
                            "scene_spacetime_continuous": True},
                 "errors": errors, "warns": warns, "scenes": scenes, "treatments": {}, "legacy": True}
+    if is_derivative(plan):
+        # 衍生模式:场次 [事件] 行写 none(`[EVENTS] none` / `[事件] 无`)是合法占位,事件三项不评
+        cited = [f"{s['scene'] or '?'}({', '.join(s['events'])})" for s in scenes if s["events"]]
+        if cited:
+            warns.append("衍生模式下场次 [事件] 行应写 none,不挂原著事件: " + "; ".join(cited))
+        checks["scene_spacetime_continuous"] = _spacetime_ok(parsed.get("scenes") or [], screenplay_text, errors, warns)
+        return {"checks": checks, "skipped": list(SCREENPLAY_EVENT_CHECKS), "skip_reason": DERIVATIVE_SKIP_REASON,
+                "derivative": True, "errors": errors, "warns": warns, "scenes": scenes, "treatments": {}, "legacy": False,
+                "n_scenes": len(scenes), "n_dramatize": 0}
     evs = episode_events(ep_plan)
     tr, ferrs = episode_treatments(ep_plan)
     legacy = not has_treatments(ep_plan)
@@ -448,16 +546,7 @@ def verify_screenplay(screenplay_text: str, plan: dict | None, ep: str) -> dict:
     no_event_scenes = [s["scene"] or "?" for s in scenes if not s["events"]]
     if no_event_scenes:
         warns.append(f"场次无 [事件] 行,无法核对: {no_event_scenes}")
-    split = adjacent_same_spacetime(parsed.get("scenes") or [])
-    gen = _generated_at(screenplay_text)
-    legacy_split = not gen or gen < SPACETIME_RULE_SINCE
-    msg = ("相邻场同一空间 + 连续时间被拆成多场(场 = 同一空间 + 连续时间;人物进出、动作回合写成场内【节拍】,"
-           "确需分场在后一场写 `(split_note: 理由)`): " + "; ".join(split))
-    if split and legacy_split:
-        warns.append(msg + f"(存量剧本 generated_at={gen or '缺失'} 早于 {SPACETIME_RULE_SINCE},只 WARN)")
-    elif split:
-        errors.append(msg)
-    checks["scene_spacetime_continuous"] = not split or legacy_split
+    checks["scene_spacetime_continuous"] = _spacetime_ok(parsed.get("scenes") or [], screenplay_text, errors, warns)
     if dram and len(scenes) > len(dram) * 2:
         warns.append(f"场次 {len(scenes)} 场 > dramatize 事件 {len(dram)} 个的 2 倍,疑似平铺(每个演的事件平均 ≤2 场为宜)")
     return {"checks": checks, "errors": errors, "warns": warns, "scenes": scenes, "treatments": treat, "legacy": legacy,
@@ -468,6 +557,8 @@ def format_report(res: dict, title: str) -> str:
     lines = [f"=== {title} ==="]
     for k, v in res.get("checks", {}).items():
         lines.append(f"[CHECK] {k:<28}: {'PASS' if v else 'FAIL'}")
+    for k in res.get("skipped") or []:
+        lines.append(f"[CHECK] {k:<28}: SKIPPED({res.get('skip_reason') or '不适用'})")
     for e in res.get("errors", []):
         lines.append(f"FAIL  {e}")
     for w in res.get("warns", []):

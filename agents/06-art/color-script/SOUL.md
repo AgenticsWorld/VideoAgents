@@ -78,7 +78,7 @@
 | `episodes[].episode_id` | ✓ | 字符串 `"epNN"`,与 `episode_plan.json` 的集号一一对应(不写 `ep: 1` / `episode`) |
 | `episodes[].key_palette` | ✓ | 整集 3–6 个主色,`#RRGGBB` |
 | `episodes[].acts[]` | ✓ | 段落一律叫 `acts`(不叫 segments / beats);`act` 为集内序号 |
-| `acts[].event_refs` | ✓ | 本段对应 `episode_plan` 的事件 id——剧本场次号此时还不存在(剧本在 Phase 5),不要写 `S01` |
+| `acts[].event_refs` | ✓(衍生模式除外) | 本段对应 `episode_plan` 的事件 id——剧本场次号此时还不存在(剧本在 Phase 5),不要写 `S01`。**仅当** episode_plan 顶层 `derivative_mode: true`(衍生 / 原创模式,各集没有原著事件)时写 `[]`,剧情依据写进 `rationale`(对应 episode_plan 该集的哪个 beat / 卡点),机检不核此项 |
 | `acts[].scene_ids` | ✓ | 本段发生的场景圣经 id `SCN-…`(事件地点;下游按场景取色板)。确无固定场景的段落写 `[]` 并在 rationale 说明 |
 | `acts[].palette` | ✓ | **直接写色值** `#RRGGBB`(2–5 个,主色在前);色名另放 `palette_names`,不得只写色名 |
 | `acts[].mood` / `rationale` | ✓ | 情绪标签;剧情依据(对应哪条弧线 / 哪个转折,可回查) |
@@ -110,7 +110,7 @@ instruction: |
 
 **机检 `color_script_ok`(`python3 code/check_color_script.py --project <slug> --strict`,交付前必跑,不过直接退回)**:
 - episode_plan 中的每一集都有条目(`episode_id: "epNN"`),每集有 `key_palette` 与 `acts[]`;
-- 每段落 `palette`(直接写色值)/ `mood` / `rationale` 非空,`event_refs` 与 `scene_ids` 齐备;
+- 每段落 `palette`(直接写色值)/ `mood` / `rationale` 非空,`event_refs` 与 `scene_ids` 齐备(episode_plan `derivative_mode: true` 时不核 `event_refs`);
 - `variant` 在枚举内,用到的变体在顶层 `variants.<kind>` 有定义且带色值与 `grade` 数值;`peaks` 指向存在的集。
 - 存量项目的旧结构宿主仍能读(`modules/color_script.py` 兼容),不带 `--strict` 时契约字段只 WARN;**重跑 / 增补集数时按新契约整份写回**,不要新旧混写。
 

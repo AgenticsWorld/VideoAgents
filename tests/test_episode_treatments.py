@@ -161,3 +161,70 @@ def test_cli_roundtrip(tmp_path):
     r = subprocess.run([sys.executable, str(REPO / "code" / "check_screenplay_events.py"), "--out-root", str(tmp_path),
                         "--ep", "ep01"], capture_output=True, text=True, cwd=REPO)
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+# ---------------------------------------------------------------- 衍生(原创)模式(2026-10-09,#128/#123)
+
+def _derivative_plan(note="brief.md:基于原著世界观衍生,不围绕原小说情节", ep_events=(), ep_treatments=()):
+    return {"derivative_mode": True, "derivative_note": note, "default_duration_budget_s": 90,
+            "episodes": [{"ep": "ep01", "duration_budget_s": 90, "events": list(ep_events), "treatments": list(ep_treatments),
+                          "carry_over": []},
+                         {"ep": "ep02", "duration_budget_s": 90, "events": [], "treatments": []}]}
+
+
+SP_DERIVATIVE = ("---\ngenerated_at: 2026-10-09\n---\n"
+                 "## S01 | EXT | SCN-0001 Observation deck | day\n**[EVENTS] none | [CAST] CHAR-guide | [DURATION] 46s**\n"
+                 "ACTION: The roof of the world.\n\n"
+                 "## S02 | INT | SCN-0002 Lift | day\n**[EVENTS] none | [CAST] CHAR-guide | [DURATION] 44s**\nACTION: Down.\n")
+
+
+def test_plan_derivative_skips_event_checks():
+    res = et.verify_plan(_derivative_plan(), None, None)
+    assert res["derivative"] and set(res["skipped"]) == set(et.PLAN_EVENT_CHECKS)
+    assert res["checks"] == {"derivative_mode_consistent": True, "duration_in_budget": True, "ids_valid": True}, res["errors"]
+    assert not res["errors"] and "SKIPPED" in et.format_report(res, "t")
+    over = _derivative_plan()
+    over["episodes"][0]["content_load_estimate_s"] = 200          # 时长照常核
+    assert et.verify_plan(over, None, None)["checks"]["duration_in_budget"] is False
+
+
+def test_plan_derivative_requires_note_and_empty_events():
+    res = et.verify_plan(_derivative_plan(note=""), None, None)
+    assert res["checks"]["derivative_mode_consistent"] is False and any("derivative_note" in e for e in res["errors"])
+    half = _derivative_plan(ep_events=["ev0001"], ep_treatments=[{"event": "ev0001", "treatment": "dramatize"}])
+    res = et.verify_plan(half, _events(), None)                    # 半改编半豁免
+    assert res["checks"]["derivative_mode_consistent"] is False and any("ep01" in e for e in res["errors"])
+    # derivative_mode 不是布尔 true → 按改编模式对账,另报 WARN
+    loose = _plan(GOOD)
+    loose["derivative_mode"] = "true"
+    res = et.verify_plan(loose, _events(), None)
+    assert "events_classified_once" in res["checks"] and any("不是布尔 true" in w for w in res["warns"])
+
+
+def test_screenplay_derivative_none_placeholder():
+    res = et.verify_screenplay(SP_DERIVATIVE, _derivative_plan(), "ep01")
+    assert res["checks"] == {"scene_spacetime_continuous": True} and not res["errors"] and not res["warns"]
+    assert set(res["skipped"]) == set(et.SCREENPLAY_EVENT_CHECKS)
+    cited = SP_DERIVATIVE.replace("[EVENTS] none | [CAST] CHAR-guide | [DURATION] 46s", "[EVENTS] ev0001 | [CAST] CHAR-guide | [DURATION] 46s")
+    assert any("应写 none" in w for w in et.verify_screenplay(cited, _derivative_plan(), "ep01")["warns"])
+    split = SP_DERIVATIVE.replace("## S02 | INT | SCN-0002 Lift | day", "## S02 | EXT | SCN-0001 Observation deck | day")
+    assert et.verify_screenplay(split, _derivative_plan(), "ep01")["checks"]["scene_spacetime_continuous"] is False
+
+
+def test_cli_derivative_without_events_json(tmp_path):
+    story = tmp_path / "story"
+    (story / "episodes" / "ep01").mkdir(parents=True)
+    (story / "episode_plan.json").write_text(json.dumps(_derivative_plan(), ensure_ascii=False), encoding="utf-8")
+    (story / "episodes" / "ep01" / "screenplay.md").write_text(SP_DERIVATIVE, encoding="utf-8")
+    r = subprocess.run([sys.executable, str(REPO / "code" / "verify_episode_plan.py"), "--out-root", str(tmp_path)],
+                       capture_output=True, text=True, cwd=REPO)
+    assert r.returncode == 0 and "events_classified_once      : SKIPPED" in r.stdout, r.stdout + r.stderr
+    r = subprocess.run([sys.executable, str(REPO / "code" / "check_screenplay_events.py"), "--out-root", str(tmp_path),
+                        "--ep", "ep01", "--strict"], capture_output=True, text=True, cwd=REPO)
+    assert r.returncode == 0, r.stdout + r.stderr
+    plan = _derivative_plan()
+    plan.pop("derivative_mode")                                   # 改编模式缺 events.json 仍是文件缺失
+    (story / "episode_plan.json").write_text(json.dumps(plan, ensure_ascii=False), encoding="utf-8")
+    r = subprocess.run([sys.executable, str(REPO / "code" / "verify_episode_plan.py"), "--out-root", str(tmp_path)],
+                       capture_output=True, text=True, cwd=REPO)
+    assert r.returncode == 2
