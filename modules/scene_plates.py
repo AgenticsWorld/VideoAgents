@@ -413,18 +413,12 @@ def build_reverse_prompt(base: Path, sid: str, rec: dict) -> tuple[str, str]:
     return '\n'.join(parts), negative
 
 
+PLATE_SIZE = '2560x1440'
+
+
 def plate_size(base: Path) -> str:
-    """按项目画幅取长边 2560 的尺寸。"""
-    try:
-        from modules.whitebox import render_format
-        fmt = render_format(read(base / 'settings.json', {}) or {}, width=2560)
-        w, h = int(fmt['width']), int(fmt['height'])
-        if h > w:
-            fmt = render_format(read(base / 'settings.json', {}) or {}, height=2560)
-            w, h = int(fmt['width']), int(fmt['height'])
-        return f'{w}x{h}'
-    except Exception:  # noqa: BLE001
-        return '2560x1440'
+    """场景图(正向 / 反向 / 光照变体)尺寸:一律 16:9 长边 2560,不随项目(视频)画幅(2026-10-09 用户定;与分镜背景图 shot_plates.PLATE_FMT 同口径)。"""
+    return PLATE_SIZE
 
 
 def render_reverse(base: Path, sid: str, *, force: bool = False, dry_run: bool = False, seed: int | None = None, log=print) -> dict:

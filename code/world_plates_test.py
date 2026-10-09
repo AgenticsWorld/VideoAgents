@@ -50,16 +50,16 @@ def image_stats(path: Path) -> dict:
     return {'sharpness': round(float(lap.var()), 1), 'dark_fraction': round(float((im < 12).mean()), 3)}
 
 
-def capture(base: Path, sid: str, jobs: list, fmt: dict, *, fov: float, res=None, force=False, log=print) -> dict:
+def capture(base: Path, sid: str, jobs: list, *, fov: float, res=None, force=False, log=print) -> dict:
     out = base / 'assets/concepts/scenes' / sid / DIRNAME
     rel = f'assets/concepts/scenes/{sid}/{DIRNAME}'
+    pw, ph = sp.plate_size()   # 截图一律 16:9(sp.PLATE_FMT,2026-10-09),不随项目画幅
     idx = read(out / 'index.json', {}) or {}
-    if idx.get('fov_v_deg') != fov:
+    if idx.get('fov_v_deg') != fov or idx.get('size') != [pw, ph]:
         idx = {}
     shots = {} if force else dict(idx.get('shots') or {})
     wj = worldlabs.read_world(base, sid) or {}
     anchor = ((wj.get('alignment') or {}).get('camera') or {}).get('position') or [0, 0, 0]
-    pw, ph = sp.plate_size(fmt)
     by_key, requests = {}, []
     for j in jobs:
         name = f"{j['shot_id']}_{j['role']}"
@@ -253,7 +253,7 @@ def main():
             print(f'{sid}: 还没有世界模型截图,先去掉 --compare-only', file=sys.stderr)
             return 1
     else:
-        idx = capture(base, sid, jobs, plan['fmt'], fov=args.fov, res=args.res, force=args.force)
+        idx = capture(base, sid, jobs, fov=args.fov, res=args.res, force=args.force)
     frames, reqs = {}, []
     for j in jobs:
         rel = next((p for p in (f'qa/grid4_compare/frames/{sid}/{j["shot_id"]}_{j["role"]}.whitebox.jpg',) if (base / p).is_file()),

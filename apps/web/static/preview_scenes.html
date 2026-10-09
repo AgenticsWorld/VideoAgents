@@ -178,7 +178,7 @@ ul.arr>li{margin:2px 0}
 .world-card .world-badge{position:absolute;z-index:1;left:14px;top:14px;font-size:11px;line-height:1;padding:3px 6px;border-radius:4px;background:var(--accent);color:#fff;pointer-events:none}
 #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:99;cursor:zoom-out}
 #lightbox img{max-width:96vw;max-height:96vh;border-radius:6px}
-/* ✂ 裁剪分镜背景图(2026-09-15):比例固定为项目画幅的框选浮层,拖选框移动、拖四角缩放,确认后服务端裁切覆盖原图 */
+/* ✂ 裁剪分镜背景图(2026-09-15):比例固定 16:9(2026-10-09 起不随项目画幅)的框选浮层,拖选框移动、拖四角缩放,确认后服务端裁切覆盖原图 */
 .cropbtn,.pcopybtn,.pflipbtn{font-size:11px;line-height:16px;padding:1px 7px;flex:none;background:var(--panel2);border:1px solid var(--border);border-radius:5px;color:var(--dim);cursor:pointer}
 .cropbtn:hover,.pcopybtn:hover,.pflipbtn:hover{color:var(--accent);border-color:var(--accent)}
 .cropbtn.ok,.pcopybtn.ok,.pflipbtn.ok{color:var(--green);border-color:var(--green)}
@@ -411,10 +411,10 @@ function renderDetail(s){
         const src=!p.pano_ref?t('旧法(非全景制)'):(p.pano_ref.kind==='grid9'||p.pano_ref.kind==='grid')?I18N.f('九宫格 {g} 第 {n} 格',{g:(p.pano_ref.sheet||'').split('/').pop().replace(/\.png$/,''),n:(p.pano_ref.tile|0)+1}):p.pano_ref.kind==='grid9_fallback'?t('九宫格补图(格子不合适,按本镜机位以俯视图+九宫格出图)'):p.pano_ref.kind==='revision'?I18N.f('按修改意见重出(基于 {k})',{k:p.pano_ref.source_key||'-'}):p.pano_ref.kind==='copy'?I18N.f('副本(复制自 {k})',{k:p.pano_ref.source_key||'-'}):p.pano_ref.kind==='pano_manual'?I18N.f('手工截取(全景 {a})',{a:p.pano_ref.anchor_id||'-'}):p.pano_ref.kind==='world_manual'?t('手工截取(世界模型)'):p.pano_ref.kind==='world'?(p.pano_ref.anchor_id?I18N.f('世界模型(全景 {a})',{a:p.pano_ref.anchor_id}):t('世界模型')):I18N.f('全景 {a}',{a:p.pano_ref.anchor_id});
         const cap=[cam.facing?I18N.f('朝向 {d}',{d:cam.facing}):'',cam.height_m!=null?I18N.f('机高 {h} m',{h:cam.height_m}):'',cam.lens_mm_equiv?`${cam.lens_mm_equiv}mm`:'',p.time_of_day||'',
           src].filter(Boolean).join(' · ');
-        // ✂ 裁剪(2026-09-15):手动框选(比例固定为项目画幅)→ 服务端裁切覆盖同一文件;按钮与「修改」分开(不走 .editbtn 的修改师浮窗)
+        // ✂ 裁剪(2026-09-15):手动框选(比例固定 16:9,不随项目画幅)→ 服务端裁切覆盖同一文件;按钮与「修改」分开(不走 .editbtn 的修改师浮窗)
         // ⧉ 复制 / ⇋ 翻转(2026-09-28):复制 = 库里新增一张副本;翻转 = 水平翻转并覆盖这张图。三个按钮单独一行
         return `<figure title="${esc(p.key||'')}" data-key="${esc(p.key||'')}"><img src="${esc(bust(p.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption><span class="fn">${esc(cap||p.key||'')}</span></figcaption>`
-          +`<figcaption class="pl-ops"><button type="button" class="cropbtn" data-sid="${esc(s.id)}" data-key="${esc(p.key||'')}" title="${esc(t('手动框选区域(比例固定为项目画幅)裁剪这张背景图,确认后覆盖原图'))}">✂ ${esc(t('裁剪'))}</button>`
+          +`<figcaption class="pl-ops"><button type="button" class="cropbtn" data-sid="${esc(s.id)}" data-key="${esc(p.key||'')}" title="${esc(t('手动框选区域(比例固定 16:9)裁剪这张背景图,确认后覆盖原图'))}">✂ ${esc(t('裁剪'))}</button>`
           +`<button type="button" class="pcopybtn" data-sid="${esc(s.id)}" data-key="${esc(p.key||'')}" title="${esc(t('创建这张背景图的副本(库里新增一张,原图不动;副本可在分镜预览「换图」里选用)'))}">⧉ ${esc(t('复制'))}</button>`
           +`<button type="button" class="pflipbtn" data-sid="${esc(s.id)}" data-key="${esc(p.key||'')}" title="${esc(t('水平翻转这张背景图并覆盖原图(再点一次翻回;首次改动保留 .orig 备份)'))}">⇋ ${esc(t('翻转'))}</button></figcaption>`
           +`<figcaption><span class="fn">${esc(used?I18N.f('用于分镜:{s}',{s:used}):t('尚未被分镜引用'))}</span></figcaption></figure>`;
@@ -973,7 +973,7 @@ function zoomPanoAnchor(img){
   import('/static/pano-viewer.js?v=20261008').then(m=>m.openPano360(img.src,info)).catch(()=>zoom(img.src));
 }
 
-// ✂ 裁剪分镜背景图(2026-09-15):选区用归一化坐标 {l,t,w,h}(0..1,相对原图),与显示缩放无关;比例固定 = 项目画幅(预览数据 format,
+// ✂ 裁剪分镜背景图(2026-09-15):选区用归一化坐标 {l,t,w,h}(0..1,相对原图),与显示缩放无关;比例固定 = 背景图画幅 16:9(预览数据 format,
 // 缺失时退回图片自身比例);拖选框移动、拖四角缩放(对角固定);确认 → POST scenes/<sid>/plates/crop,服务端裁切覆盖原图后原地换图,不整页重载。
 let FORMAT=null;
 const CROP={sid:null,key:null,W:0,H:0,aspect:1,sel:null,drag:null};
@@ -1005,7 +1005,7 @@ function openCrop(sid,key,url){
     CROP.aspect=(FORMAT&&FORMAT.width>0&&FORMAT.height>0)?FORMAT.width/FORMAT.height:CROP.W/CROP.H;
     const gcd=(a,b)=>b?gcd(b,a%b):a;
     const ar=(FORMAT&&FORMAT.width>0&&FORMAT.height>0)?(g=>`${FORMAT.width/g}:${FORMAT.height/g}`)(gcd(FORMAT.width,FORMAT.height)):CROP.aspect.toFixed(3);
-    CR.querySelector('.cr-hint').textContent=I18N.f('拖动选框移动,拖四角缩放;比例固定 {ar}(项目画幅),确认后覆盖原图并保留 .orig 备份',{ar});
+    CR.querySelector('.cr-hint').textContent=I18N.f('拖动选框移动,拖四角缩放;比例固定 {ar}(背景图画幅,不随项目画幅),确认后覆盖原图并保留 .orig 备份',{ar});
     const w0=.8;const f=crFit(0,0,w0);CROP.sel=crFit((1-f.w)/2,(1-f.h)/2,f.w);
     CR_BOX.style.display='';crLayout();crMsg('');ok.disabled=false;
   };

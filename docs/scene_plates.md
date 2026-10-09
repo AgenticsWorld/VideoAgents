@@ -8,7 +8,7 @@ offer ep02 grp003/grp004 的俯视布局图被当成场景渲进成片（8 月�
 
 ## 做法
 
-1. **正向图 front**：`06-art/environment-concept` 在 p6-env-concept（每集开头，本集用到且库里还没有的场景）出 `assets/concepts/scenes/<sid>/main_01.png`——站在入口（门口）往内看的主视角，整间主体陈设一次入画，无人，平视不倾斜；并登记 `scene_plates.json`：
+1. **正向图 front**：`06-art/environment-concept` 在 p6-env-concept（每集开头，本集用到且库里还没有的场景）出 `assets/concepts/scenes/<sid>/main_01.png`（`--size 2560x1440`；场景图正向 / 反向 / 光照变体**一律 16:9，不随项目画幅**，2026-10-09，宿主 `scene_plates.PLATE_SIZE`）——站在入口（门口）往内看的主视角，整间主体陈设一次入画，无人，平视不倾斜；并登记 `scene_plates.json`：
    ```json
    {"schema_version": "scene_plates.v1", "scene_id": "SCN-0006", "mode": "inherit",
     "front": {"file": "main_01.png", "standing_en": "just inside the west doorway", "looking_en": "east across the hall toward the idol on the far wall",

@@ -60,7 +60,7 @@ def pano_view(pano, yaw_deg: float, direction, fov_v: float, width: int, height:
     return cv2.remap(pano, u, v, cv2.INTER_CUBIC, borderMode=cv2.BORDER_WRAP)
 
 
-def capture(base: Path, sid: str, jobs: list, fmt: dict, scheme_key: str, *, fov: float, force=False, whitebox=False, log=print) -> dict:
+def capture(base: Path, sid: str, jobs: list, scheme_key: str, *, fov: float, force=False, whitebox=False, log=print) -> dict:
     import cv2
     out = base / 'assets/concepts/scenes' / sid / DIRNAME
     rel = f'assets/concepts/scenes/{sid}/{DIRNAME}'
@@ -69,11 +69,11 @@ def capture(base: Path, sid: str, jobs: list, fmt: dict, scheme_key: str, *, fov
     anchors = [a for a in pidx.get('anchors', []) if (pdir / a['anchor_id'] / f'{scheme_key}.png').is_file()]
     if not anchors:
         raise FileNotFoundError(f'{sid}: 方案 {scheme_key} 还没有已出图的全景锚点')
+    pw, ph = sp.plate_size()   # 截图一律 16:9(sp.PLATE_FMT,2026-10-09),不随项目画幅
     idx = read(out / 'index.json', {}) or {}
-    if idx.get('fov_v_deg') != fov or idx.get('whitebox') != whitebox:
+    if idx.get('fov_v_deg') != fov or idx.get('whitebox') != whitebox or idx.get('size') != [pw, ph]:
         idx = {}
     shots = {} if force else dict(idx.get('shots') or {})
-    pw, ph = sp.plate_size(fmt)
     panos, done, n_new = {}, {}, 0
     for j in jobs:
         name = f"{j['shot_id']}_{j['role']}"
@@ -239,7 +239,7 @@ def main():
             print(f'{sid}: 还没有全景截图,先去掉 --compare-only', file=sys.stderr)
             return 1
     else:
-        idx = capture(base, sid, jobs, plan['fmt'], scheme_key, fov=args.fov, force=args.force, whitebox=args.whitebox)
+        idx = capture(base, sid, jobs, scheme_key, fov=args.fov, force=args.force, whitebox=args.whitebox)
     frames, reqs = {}, []
     for j in jobs:
         name = f'{j["shot_id"]}_{j["role"]}.whitebox.jpg'

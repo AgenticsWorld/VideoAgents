@@ -50,7 +50,17 @@ Agent 把出图脚本丢到后台就结单，进程随任务结束被杀，9 组
 - 只对母图出图（2026-09-14）：refs `[Image 1]` = 场景全景按**母图机位**（广角）用白模几何重投影的透视图 `<key>.pano.jpg`（内容与位置权威，画质与空洞不作数，提示词要求重绘清晰、视场以它为准不外扩、不添画外天花/家具、全幅深焦）；镜尾母图再加 `[Image 2]` 镜首母图。机位事实里的镜头口径按水平视场写（wide-angle / moderately wide / normal-lens / long-lens），不再用人物景别词；画内清单剔除只擦到画幅边缘一线的几何。**白模干净帧与俯视图不再进 refs**（多张背景图各自基于白模帧出图互不一致，是改全景制的直接原因）；白模帧仍渲作 `<key>.whitebox.jpg` 供预览核对。库条目 `pano_ref{anchor_id, scheme, hole_fraction, distance_from_anchor_m}`；无 `pano_ref` 的旧条目为 legacy，不再被新决策复用，`--status` 列 WARN，`--repano` 整体重出（有费用，用户决定）。
 - 旧口径（2026-09-09，已废止）：`[Image 1]` 白模干净帧 → `[Image 2]` 场景俯视图；镜尾图在两者之间插镜首成图。
 - 提示词：空场景声明 + 组 `time_of_day` + 光照方案 `prompt_fragment_en` + 机位事实（景别、等效焦距、机高档、俯仰、机位落在哪个几何上、罗盘朝向、画左/画右/身后各是什么——由 `layout.json#orientation` 把白模坐标映射到东南西北）+ 白模帧用法 + 俯视图用法 + 画内自左向右清单（白模几何盒采样投影，按基名/地标归并）+ **画外不可见清单**（在画幅外/身后的地标，明令不画——实测没有这句时场景描述会把身后的大门院墙带进画面）+ 场景描述（architecture.json 的 form / arch_style / era_region / scale / materials / details，声明只作材质与年代参考）+ 禁人/禁网格/禁俯视 + `style_fragment_en`。negative = `negative_prompt_en` + architecture.negative + 人物/网格/俯视词。**空场景图去人物用语(2026-09-20)**:`style_fragment_en` 过 `plate_style()` 剔除描述人物的分句(subject / hair / skin / 服装面料),`negative_prompt_en` 过 `plate_negative()` 剔除人脸/人物/服装类条目及「须有前景/比例参照物」类条目——方舟等渠道没有独立负面通道,negative 以「避免出现:…」并进正文,参考图几乎全空(仰拍天空/大片水雾)时这些词会被当内容画出来(实证 fengshen3 SCN-0110 母图画出白须老人);场景视角图 `scene_plates.py` / `scene_pair_plates.py` 同用这两个函数。可选 `--sun <罗盘>` 写太阳相对机位方向。
-- 分辨率：母图长边 2880、派生分镜图长边 1920，按项目画幅；渠道 = 场景预览页顶栏「🎨 图像模型」的选择，空则控制台默认图像模型（`modules.genmedia.generate_image` 按输出目录自动套用，不写死）；场景全景另按同页「🌐 全景模型」，两者独立（2026-09-12）。Seedream 5.0 pro 口径：1920×1080 落 0.3 元档 + 参考图首张免费、之后 0.02 元/张。
+- 分辨率：母图长边 2880、派生分镜图长边 1920，**画幅一律 16:9，不随项目画幅**（2026-10-09，见下节「背景图画幅固定 16:9」）；渠道 = 场景预览页顶栏「🎨 图像模型」的选择，空则控制台默认图像模型（`modules.genmedia.generate_image` 按输出目录自动套用，不写死）；场景全景另按同页「🌐 全景模型」，两者独立（2026-09-12）。Seedream 5.0 pro 口径：1920×1080 落 0.3 元档 + 参考图首张免费、之后 0.02 元/张。
+
+## 背景图画幅固定 16:9（2026-10-09，用户定）
+
+九宫格（整图与拆出的格子）、九宫格补图、母图（全景重投影 `<key>.pano.jpg` / 世界模型自动截图 `<key>.world.jpg` 及据此出的母图）、按修改意见重出、手工截取（全景 / 世界模型视窗「💾 背景图」）、场景预览页「✂ 裁剪」选框，以及白模关闭项目的场景图（正向 / 反向 / 光照变体，`docs/scene_plates.md`）**一律 16:9，不随项目（视频）画幅变化**。常量 `modules/shot_plates.py#PLATE_FMT`（1920×1080；母图 `master_size()` 2858×1608，九宫格整图按所选模型上限 `grid_geometry(9, PLATE_FMT, …)`）；场景图 `modules/scene_plates.py#PLATE_SIZE` = 2560x1440。
+
+- **本镜机位事实仍按项目画幅**：集索引 `camera`、`camera_stale`、组 prompt 的画内/画外/背景机器句（`shot_view_extras`）描述的是视频画面本身；背景图自己的机位事实（库条目 `camera`、出图提示词里的水平视场 / 焦距 / 画内清单）按 16:9 算。
+- **装得下本镜**：母图视场 = max(55°, `plate_fov_v(本镜)` + 4°)；`plate_fov_v` 在本镜不比 16:9 宽时就是本镜垂直视场，比 16:9 宽（如 2.39:1）时放宽到水平视场装得下。`view_fits(master, shot, 本镜画幅, master_aspect=母图画幅)` 两个画幅分开判；母图画幅按库条目 `size` 取（`entry_aspect`），2026-10-09 前按项目画幅出的旧图照常按其实际画幅复用。九宫格补图机位 = 本镜机位、视场按 `plate_fov_v`。
+- **组 prompt 写画幅差**：本镜画幅 ≠ 16:9 时集索引 `view` 多记 `fraction_w`（占背景图宽的比例；`fraction` 为占高的比例）——母图按视场算（`view_info(..., aspect)`）；九宫格格子 / 补图 / 手工截图按画幅近似（`aspect_view`，带 `aspect_only`）。`view_phrase_zh/en` 宽高不同时分开写（「宽约占背景图的3成、高度占满」/ `about 32% of its width and its full height`）；16:9 项目不记 `fraction_w`，文案与以前逐字相同。
+- **试验脚本同口径**：`code/pano_plates_test.py`（全景截图）、`code/world_plates_test.py`（世界模型截图）的截图尺寸、`code/grid9_center_test.py` / `code/grid4_test.py` 的宫格与格子同样按 16:9；两个截图试验的缓存 `index.json#size` 与之不符即整批重截（本地渲染无费用）。
+- **存量**：已出的竖屏等非 16:9 背景图不自动重出（有费用，用户决定）；记录仍新鲜的镜照旧沿用。要换成 16:9：九宫格 `render_shot_plates.py --no-grid-fallback --force`（重出宫格）、母图 `--force <镜号>` 或预览页逐张「✏️ 修改」（重出一律 16:9）。
 
 ## 背景图模式（2026-09-22：全景图 | 世界模型；2026-09-25 加九宫格；2026-10-04 九宫格分自动补图 / 手动补图）
 

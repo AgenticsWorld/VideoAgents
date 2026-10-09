@@ -1095,3 +1095,114 @@ def test_set_plate_adopt_writes_index_and_syncs(tmp_path, monkeypatch):
     sp.set_plate_adopt(base, ep, 'sh001', 'start', clear=True)
     slot = sp.load_episode_index(base, ep)['shots']['sh001']['plates'][0]
     assert 'adopt' not in slot and 'exclude_note' not in slot
+
+
+# ---------------------------------------------------------------- 背景图画幅固定 16:9(2026-10-09)
+TALL = 9 / 16
+
+
+def test_plate_format_fixed_16x9_helpers():
+    assert sp.PLATE_FMT['aspect_ratio'] == '16:9' and sp.plate_size() == (1920, 1080)
+    w, h = sp.master_size()
+    assert abs(w / h - 16 / 9) < .01 and w * h <= sp.MASTER_MAX_PIXELS
+    assert sp.plate_size({'width': 9, 'height': 16}) == (1080, 1920)           # 显式传画幅(白模帧)仍按其画幅
+    assert sp.plate_fov_v(40, TALL) == 40 and sp.plate_fov_v(40, 16 / 9) == 40   # 不比 16:9 宽:视场不变
+    wide = sp.plate_fov_v(40, 2.39)
+    assert math.isclose(math.tan(math.radians(wide / 2)) * 16 / 9, math.tan(math.radians(20)) * 2.39, rel_tol=1e-9)
+    assert sp.aspect_view(16 / 9) == {} and sp.aspect_view(1.776) == {}
+    assert sp.aspect_view(TALL) == {'fraction': 1.0, 'fraction_w': 0.316, 'aspect_only': True}
+    assert sp.aspect_view(2.39) == {'fraction': 0.744, 'fraction_w': 1.0, 'aspect_only': True}
+    assert sp.entry_aspect({'size': '1080x1920'}) == TALL and sp.entry_aspect({}) == sp.PLATE_ASPECT
+
+
+def test_plan_master_and_fits_with_project_aspect_other_than_16x9():
+    def job(deg, fov=40.0, aspect_fmt=FMT):
+        return {'facts': sp.camera_facts(cam((0, 1.5, 0), turned((0, 1.5, 0), deg), fov), aspect_fmt, *AXES)}
+    # 竖屏 9:16:母图 16:9、视场同常规(55°),本镜与 ±20° 的同伴都装得下
+    j = job(0)
+    m = sp.plan_master(j, [job(20), job(-20)], TALL)
+    assert m['fov'] == sp.MASTER_FOV_V_DEG
+    mcam = {'position': m['position'], 'target': m['target'], 'fov_v_deg': m['fov']}
+    for p in (j, job(20), job(-20)):
+        assert sp.view_fits(mcam, sp.cam_of_facts(p['facts']), TALL, master_aspect=sp.PLATE_ASPECT)
+    # 2.39:1 宽银幕:本镜 50° 按 16:9 母图换算要 >55°,母图视场随之放宽且装得下
+    w = job(0, 50.0)
+    m = sp.plan_master(w, [], 2.39)
+    assert m['fov'] == sp.plate_fov_v(50.0, 2.39) + sp.MASTER_FOV_MARGIN_DEG > sp.MASTER_FOV_V_DEG
+    assert sp.view_fits({'position': m['position'], 'target': m['target'], 'fov_v_deg': m['fov']}, sp.cam_of_facts(w['facts']), 2.39,
+                        master_aspect=sp.PLATE_ASPECT)
+    # 旧按项目画幅出的竖屏母图(size 1080x1920)按其实际画幅判复用:窄母图装不下 ±20° 偏转的镜
+    base = Path('.')
+    legacy = {'key': 'old', 'master': True, 'file': 'x.png', 'lighting_scheme_id': 'L1', 'pano_ref': {'kind': 'pano'}, 'size': '1080x1920',
+              'camera': sp.camera_facts(cam((0, 1.5, 0), (0, 1.5, -10), 55.0), {'width': 9, 'height': 16}, *AXES)}
+    assert sp.find_master({'plates': [legacy]}, 'L1', job(0, 40.0)['facts'], TALL, base, require_file=False) is legacy
+    assert sp.find_master({'plates': [legacy]}, 'L1', job(20, 40.0)['facts'], TALL, base, require_file=False) is None
+    assert sp.find_master({'plates': [{**legacy, 'size': '2858x1608'}]}, 'L1', job(20, 40.0)['facts'], TALL, base, require_file=False) is not None
+
+
+def test_view_info_and_phrases_split_width_height_only_when_aspect_differs():
+    master = {'key': 'M', 'size': '2858x1608', 'camera': facts((0, 1.5, 0), (0, 1.5, -10), 55.0)}
+    shot = facts((0, 1.5, 0), (0, 1.5, -10), 40.0)
+    same = sp.view_info(master, shot, 16 / 9)
+    assert 'fraction_w' not in same and same == sp.view_info(master, shot)
+    p = {'view': same, 'centre': []}
+    assert sp.view_phrase_en(p) == f"the shot frames a tighter view inside this plate (about {int(round(same['fraction'] * 100))}% of its width and height, centred in the middle)"
+    assert sp.view_phrase_zh(p) == f"这是该机位的广角母图，镜头画面是其中更紧的一块（约占母图宽高的{round(same['fraction'] * 10)}成，中心居中）"
+    tall = sp.view_info(master, shot, TALL)
+    assert math.isclose(tall['fraction_w'], round(tall['fraction'] * TALL / (2858 / 1608), 3))
+    p = {'view': tall, 'centre': []}
+    assert f"about {int(round(tall['fraction_w'] * 100))}% of its width and about {int(round(tall['fraction'] * 100))}% of its height" in sp.view_phrase_en(p)
+    assert f"宽约占母图的{round(tall['fraction_w'] * 10)}成、高约占母图的{round(tall['fraction'] * 10)}成" in sp.view_phrase_zh(p)
+    p = {'view': {'grid9': {}, **sp.aspect_view(TALL)}, 'centre': []}
+    assert sp.view_phrase_en(p) == 'the shot frames a tighter view inside this plate (about 32% of its width and its full height, centred in the middle)'
+    assert sp.view_phrase_zh(p) == '这是该机位的背景图，镜头画面是其中的一块（宽约占背景图的3成、高度占满，中心居中）'
+    assert sp.view_phrase_en({'view': {'grid9': {}}}) == 'the shot frames almost exactly this view'      # 16:9 项目:与以前相同
+
+
+def test_run_episode_vertical_project_makes_16x9_grid_fallback(tmp_path, monkeypatch):
+    import json
+    base, ep, sid = _manual_project(tmp_path, monkeypatch, 'grid')
+    (base / 'settings.json').write_text(json.dumps({'output': {'plate_mode': 'grid', 'spatial_blocking': True,
+                                                               'aspect_preset': 'custom', 'aspect_custom': '9:16'}}), encoding='utf-8')
+    for rel in ('layout_top.png', 'plates/L1_grid9.png'):
+        (base / 'assets/concepts/scenes' / sid / rel).write_bytes(b'x')
+    calls = []
+    monkeypatch.setattr('modules.genmedia.generate_image', lambda prompt, out, **k: (calls.append(k), Path(out).write_bytes(b'x')), raising=False)
+    monkeypatch.setattr('modules.genmedia.get_config', lambda *a, **k: {'provider': 'test', 'model': 'm'})
+    stats = sp.run_episode(base, ep, log=lambda *_: None)
+    assert not stats['errors'] and stats.get('grid9_fallback_new') == 1 and len(calls) == 1
+    assert calls[0]['size'] == '1920x1080' and calls[0]['aspect'] == '16:9'                     # 竖屏项目的补图也是 16:9
+    shots = sp.load_episode_index(base, ep)['shots']
+    v1, p2 = shots['sh001']['plates'][0]['view'], shots['sh002']['plates'][0]
+    assert v1['fraction_w'] == 0.316 and v1['aspect_only']                                      # 九宫格格子:写明本镜只占中间一条
+    assert p2['reuse'] == 'grid9_fallback' and p2['view']['fraction_w'] == 0.316
+    assert abs(p2['camera']['fov_h_deg'] - sp.camera_facts(cam((0, 0, 0), (0, 0, -1), 40.0), {'width': 9, 'height': 16}, *AXES)['fov_h_deg']) < .1   # 索引记本镜
+    entry = next(e for e in sp.load_library(base, sid)['plates'] if e['key'] == p2['key'])
+    assert entry['size'] == '1920x1080' and entry['camera']['fov_v_deg'] == 40.0
+    assert abs(entry['camera']['fov_h_deg'] - sp.camera_facts(cam((0, 0, 0), (0, 0, -1), 40.0), sp.PLATE_FMT, *AXES)['fov_h_deg']) < .1     # 库图记 16:9
+
+
+def test_revise_legacy_vertical_plate_comes_out_16x9(tmp_path, monkeypatch):
+    import json
+    from PIL import Image
+    from modules import genmedia
+    base, sid, ep = tmp_path, 'SCN-1', 'ep01'
+    (base/'settings.json').write_text(json.dumps({'output': {'spatial_blocking': True, 'aspect_preset': 'custom', 'aspect_custom': '9:16'}}))
+    (base/'assets/concepts/scenes'/sid/'plates').mkdir(parents=True)
+    src_rel = f'assets/concepts/scenes/{sid}/plates/old.png'
+    Image.new('RGB', (108, 192), 'gray').save(base/src_rel, format='JPEG')         # 旧口径:按竖屏项目画幅出的图
+    f = sp.camera_facts(cam((0, 1.5, 0), (0, 1.5, -10), 40.0), {'width': 9, 'height': 16}, *AXES)
+    sp.save_library(base, sid, {'schema_version': sp.SCHEMA_LIBRARY, 'scene_id': sid, 'plates': [
+        {'key': 'old', 'file': src_rel, 'master': True, 'camera': f, 'lighting_scheme_id': 'L1', 'size': '108x192', 'pano_ref': {'kind': 'pano'}}]})
+    sp.save_episode_index(base, ep, {'schema_version': sp.SCHEMA_EPISODE, 'ep': ep, 'shots': {'sh001': {'group_id': 'grp001', 'scene_id': sid, 'plates': [
+        {'role': 'start', 'key': 'old', 'file': src_rel, 'reuse': 'library', 'camera': f}]}}})
+    calls = []
+    monkeypatch.setattr(genmedia, 'generate_image', lambda prompt, output, **k: (calls.append({'prompt': prompt, **k}),
+                                                                                  Image.new('RGB', (192, 108)).save(output, format='JPEG')))
+    monkeypatch.setattr(genmedia, 'get_config', lambda kind: {'provider': 'test', 'model': 'm'})
+    sp.revise_shot_plate(base, ep, 'sh001', 'start', 'remove the lantern', seed=1, log=lambda *_: None)
+    assert calls[0]['size'] == '1920x1080' and calls[0]['aspect'] == '16:9'
+    hfov = sp.camera_facts(cam((0, 1.5, 0), (0, 1.5, -10), 40.0), sp.PLATE_FMT, *AXES)['fov_h_deg']
+    assert f"({hfov} degrees horizontal field of view)" in calls[0]['prompt']             # 机位句按 16:9 重算
+    slot = sp.load_episode_index(base, ep)['shots']['sh001']['plates'][0]
+    assert slot['camera'] == f and slot['view'] == sp.aspect_view(9 / 16)                # 索引仍记本镜;写明本镜只占中间一条

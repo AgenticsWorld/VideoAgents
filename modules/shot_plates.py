@@ -14,7 +14,8 @@
       不满足另出母图。旧口径(朝向 ±20°/机位 6 m/fov ±15° 容差复用 + 中心裁切、逐镜按本镜焦距重投影直出)废止:
       窄焦距直接按全景重投影出图时参考图只剩一块纹理,模型把整间屋重造(liaozhai3 SCN-0005 反例)。
   - 集索引(分镜只记指纹):directing/<ep>/shot_plates.json —— 每镜 plates[]{role:start|end, key(母图), file(母图), reuse:new|library,
-      view{master_key, master_fov, fov, fraction, bearing_delta_deg, pitch_delta_deg, distance_m}(本镜在母图里的位置,只记录), camera(本镜)}
+      view{master_key, master_fov, fov, fraction, bearing_delta_deg, pitch_delta_deg, distance_m}(本镜在母图里的位置,只记录;
+      项目画幅不是 16:9 时另有 fraction_w = 占母图宽的比例,fraction 为占高的比例), camera(本镜)}
   - 运镜分档(按 camera.json movement + 白模机位几何):静态/推拉变焦/摇俯仰 = 只出镜首一张;横移跟拍 = 位移 < 机位到主体距离的
     10% 按静态、否则镜首 + 镜尾两张;复杂轨迹 = 镜首 + 镜尾。镜尾图以镜尾白模帧为第一参考图、镜首成图为第二参考图、同 seed。
   - 出图(2026-09-10 起全景制,2026-09-14 起只出母图):先保证场景全景齐备(modules/scene_panos.py:锚点规划 → 白模深度全景 →
@@ -24,8 +25,8 @@
     (只擦到画幅边缘一线的几何不列)+ 风格串(剔除浅景深/虚化子句);白模干净帧仍渲(<key>.whitebox.jpg,预览/核对用)但不进 refs,
     俯视图不进 refs。库条目 pano_ref 记来源锚点/方案/空洞比;非母图的旧条目(legacy:无 pano_ref 的白模帧直出、或逐镜直出)
     不再被新决策复用,--repano 可把集内 legacy 记录整体重出。图像模型不支持 2:1 全景时整条链停下(PanoUnsupported,
-    CLI 退出码 2),由 Agent 上报用户换模型。母图长边 2880 且面积 ≤ 4,600,000 px(方舟 Seedream 单图上限 4,624,220),按项目画幅;
-    渠道 = 控制台默认图像模型。
+    CLI 退出码 2),由 Agent 上报用户换模型。母图长边 2880 且面积 ≤ 4,600,000 px(方舟 Seedream 单图上限 4,624,220),画幅固定 16:9
+    (PLATE_FMT,2026-10-09,不随项目画幅;九宫格/补图/世界模型截图/手工截取同此);渠道 = 控制台默认图像模型。
   - 背景图模式(2026-09-22,项目输出设置 output.plate_mode,白模开启时显示;场景级可在场景预览页覆盖,存库 index.json#mode):
     pano(默认)= 上面的全景制;world = 用户先在场景预览页按自选锚点创建全景图、再基于它生成世界模型(World Labs Marble,
     modules/worldlabs.py),出图时在 world 里按母图机位截图 <key>.world.jpg 作 [Image 1] 二次生成(modules/worldlabs.py#render_world_views,
@@ -75,6 +76,11 @@ MASTER_HEIGHT_M = 0.5             # 机高差 ≤ 此值即可共用(不再要�
 # (2026-09-14 实跑 2880×1620=4,665,600 全部被拒 "image area must be at most 4624220 pixels");16:9 下落到 2858×1608
 MASTER_LONG_SIDE = 2880
 MASTER_MAX_PIXELS = 4_600_000
+# 背景图画幅(2026-10-09 用户定):母图(全景重投影 / 世界模型截图)、九宫格整图与格子、九宫格补图、按意见重出、手工截取一律 16:9,
+# 不随项目(视频)画幅变化。本镜机位事实(视场 / 画内清单 / 视频 prompt 的机器句)仍按项目画幅算;两者画幅不同时,
+# 母图 / 补图的垂直视场放宽到装得下本镜(plate_fov_v),组 prompt 写明本镜占背景图宽 / 高各几成(view.fraction / fraction_w)。
+PLATE_FMT = {'aspect_ratio': '16:9', 'width': 1920, 'height': 1080}
+PLATE_ASPECT = PLATE_FMT['width'] / PLATE_FMT['height']
 TRACK_STATIC_RATIO = 0.10         # 横移/跟拍位移 < 机位到主体距离的 10% 按静态
 
 COMPASS16 = ['north', 'north-north-east', 'north-east', 'east-north-east', 'east', 'east-south-east',
@@ -593,7 +599,7 @@ def grid_max_pixels(cfg: dict | None) -> int:
 
 
 def grid_geometry(n: int, fmt: dict, max_pixels: int = GRID_MAX_PIXELS, gutter: int | None = None) -> dict:
-    """宫格版式:格子按项目画幅,整图面积 ≤ max_pixels(偶数边)。返回 cols/rows/tile_w/tile_h/gutter/width/height/slots。
+    """宫格版式:格子按 fmt 画幅(出图一律传 PLATE_FMT = 16:9),整图面积 ≤ max_pixels(偶数边)。返回 cols/rows/tile_w/tile_h/gutter/width/height/slots。
     gutter 不传时按整图边长比例取(GRID_GUTTER_PX 对应 GRID_MAX_PIXELS,偶数):整图放大后白线占画面的比例不变。"""
     cols, rows = grid_layout(n)
     if gutter is None:
@@ -644,7 +650,7 @@ def compose_grid_sheet(frames: list, geom: dict, output: Path) -> Path:
 
 
 def grid_tile_size(geom: dict, fmt: dict) -> tuple[int, int]:
-    """拆格后单格的存盘尺寸:分镜图规格 plate_size(长边 1920);格子去掉内缩后的原生像素比它大时按原生存(项目画幅、偶数边),不往下缩。"""
+    """拆格后单格的存盘尺寸:分镜图规格 plate_size(长边 1920);格子去掉内缩后的原生像素比它大时按原生存(fmt 画幅、偶数边),不往下缩。"""
     pw, ph = plate_size(fmt)
     keep = 1 - 2 * geom.get('inset', GRID_INSET)
     scale = min(geom['tile_w'] * keep / pw, geom['tile_h'] * keep / ph)
@@ -1356,10 +1362,34 @@ def _tans(cam: dict, aspect: float):
     return tv, tv*aspect
 
 
-def view_fits(master_cam: dict, shot_cam: dict, aspect: float, margin: float = 0.0) -> bool:
-    """分镜视锥(四角)是否整个落在母图画幅内(纯旋转:直线保持直线,查四角即够)。margin 为 NDC 内缩。"""
+def entry_aspect(entry: dict, default: float = PLATE_ASPECT) -> float:
+    """库条目图片的宽高比:按条目 size(WxH)取,缺省 default。2026-10-09 前按项目画幅出的旧图(如竖屏 1080x1920)按其实际画幅判。"""
+    m = re.fullmatch(r'\s*(\d+)\s*x\s*(\d+)\s*', str(entry.get('size') or ''))
+    return int(m.group(1)) / int(m.group(2)) if m and int(m.group(2)) else default
+
+
+def plate_fov_v(fov_v: float, shot_aspect: float, plate_aspect: float = PLATE_ASPECT) -> float:
+    """同轴装得下本镜画幅所需的背景图垂直视场:本镜不比背景图宽 → 同 fov_v;更宽(如 2.39:1)→ 放宽到水平视场装得下。"""
+    if shot_aspect <= plate_aspect:
+        return float(fov_v)
+    return math.degrees(2 * math.atan(math.tan(math.radians(fov_v / 2)) * shot_aspect / plate_aspect))
+
+
+def aspect_view(shot_aspect: float, plate_aspect: float = PLATE_ASPECT) -> dict:
+    """背景图与本镜画幅不同、视场同轴装得下(plate_fov_v)时,本镜在背景图里占的高 / 宽比例({fraction, fraction_w,
+    aspect_only: True});画幅相同返回 {}(组 prompt 文案保持原样)。九宫格格子 / 补图 / 手工截图按此近似记录。"""
+    if abs(shot_aspect / plate_aspect - 1) <= .01:
+        return {}
+    if shot_aspect < plate_aspect:
+        return {'fraction': 1.0, 'fraction_w': round(shot_aspect / plate_aspect, 3), 'aspect_only': True}
+    return {'fraction': round(plate_aspect / shot_aspect, 3), 'fraction_w': 1.0, 'aspect_only': True}
+
+
+def view_fits(master_cam: dict, shot_cam: dict, aspect: float, margin: float = 0.0, master_aspect: float | None = None) -> bool:
+    """分镜视锥(四角)是否整个落在母图画幅内(纯旋转:直线保持直线,查四角即够)。margin 为 NDC 内缩。
+    aspect = 本镜(项目)画幅;master_aspect = 母图画幅(缺省同 aspect;母图固定 16:9 后两者可以不同)。"""
     f1, r1, u1 = camera_basis(master_cam); f2, r2, u2 = camera_basis(shot_cam)
-    tv1, th1 = _tans(master_cam, aspect); tv2, th2 = _tans(shot_cam, aspect)
+    tv1, th1 = _tans(master_cam, aspect if master_aspect is None else master_aspect); tv2, th2 = _tans(shot_cam, aspect)
     for sx in (-1, 1):
         for sy in (-1, 1):
             d = [f2[i] + sx*th2*r2[i] + sy*tv2*u2[i] for i in range(3)]
@@ -1369,14 +1399,19 @@ def view_fits(master_cam: dict, shot_cam: dict, aspect: float, margin: float = 0
     return True
 
 
-def view_info(master: dict, facts: dict) -> dict:
-    """本镜在母图里的位置(只记录,不裁切;2026-09-14 三订):本镜视场占母图的比例与朝向/俯仰偏差,供预览与排查。"""
+def view_info(master: dict, facts: dict, aspect: float | None = None) -> dict:
+    """本镜在母图里的位置(只记录,不裁切;2026-09-14 三订):本镜视场占母图的比例与朝向/俯仰偏差,供预览与排查。
+    aspect = 本镜(项目)画幅;与母图画幅(entry_aspect)不同时另记 fraction_w(占母图宽的比例,fraction 为占高的比例)。"""
     mc = master['camera']
     frac = math.tan(math.radians(facts['fov_v_deg']/2))/math.tan(math.radians(mc['fov_v_deg']/2))
-    return {'master_key': master['key'], 'master_fov': mc['fov_v_deg'], 'fov': facts['fov_v_deg'], 'fraction': round(frac, 3),
-            'bearing_delta_deg': round(((facts['bearing_deg'] - mc['bearing_deg'] + 180) % 360) - 180, 1),   # 带符号:正 = 本镜视轴在母图右侧
-            'pitch_delta_deg': round(facts['pitch_deg'] - mc.get('pitch_deg', 0), 1),
-            'distance_m': round(math.dist(mc['position'], facts['position']), 2)}
+    out = {'master_key': master['key'], 'master_fov': mc['fov_v_deg'], 'fov': facts['fov_v_deg'], 'fraction': round(frac, 3),
+           'bearing_delta_deg': round(((facts['bearing_deg'] - mc['bearing_deg'] + 180) % 360) - 180, 1),   # 带符号:正 = 本镜视轴在母图右侧
+           'pitch_delta_deg': round(facts['pitch_deg'] - mc.get('pitch_deg', 0), 1),
+           'distance_m': round(math.dist(mc['position'], facts['position']), 2)}
+    ma = entry_aspect(master)
+    if aspect and abs(aspect / ma - 1) > .01:
+        out['fraction_w'] = round(frac * aspect / ma, 3)
+    return out
 
 
 def same_station(station: dict, facts: dict) -> bool:
@@ -1401,7 +1436,7 @@ def find_master(lib: dict, scheme: str, facts: dict, aspect: float, base: Path, 
             continue
         if require_file and not e.get('pending') and not (base/e['file']).is_file():
             continue
-        if not view_fits(cam_of_facts(c), shot_cam, aspect):
+        if not view_fits(cam_of_facts(c), shot_cam, aspect, master_aspect=entry_aspect(e)):
             continue
         dist = math.dist(c['position'], facts['position'])
         score = dist + angle_diff(c['bearing_deg'], facts['bearing_deg'])/90
@@ -1410,16 +1445,19 @@ def find_master(lib: dict, scheme: str, facts: dict, aspect: float, base: Path, 
     return best[1] if best else None
 
 
-def plan_master(job: dict, peers: list, aspect: float) -> dict:
+def plan_master(job: dict, peers: list, aspect: float, master_aspect: float = PLATE_ASPECT) -> dict:
     """母图机位 {'position','target','fov'}:视场 ≥ MASTER_FOV_V_DEG 且 ≥ 本镜视场 + 余量;朝向/俯仰取「同一机位范围内待出各镜」的
-    平均方向,装不下的同伴逐个剔除(先剔离均值最远的);位置取留下各镜机位的质心(离质心超出 same_station 的再剔除),最少剩本镜自己。"""
-    fov = max(MASTER_FOV_V_DEG, job['facts']['fov_v_deg'] + MASTER_FOV_MARGIN_DEG)
+    平均方向,装不下的同伴逐个剔除(先剔离均值最远的);位置取留下各镜机位的质心(离质心超出 same_station 的再剔除),最少剩本镜自己。
+    aspect = 本镜(项目)画幅,master_aspect = 母图画幅(固定 16:9);本镜比母图宽时「本镜视场」按 plate_fov_v 换算成母图垂直视场。"""
+    def need(j):
+        return plate_fov_v(j['facts']['fov_v_deg'], aspect, master_aspect) + MASTER_FOV_MARGIN_DEG
+    fov = max(MASTER_FOV_V_DEG, need(job))
     reach = job['facts']['subject_distance_m'] or 1.0
     def direction(j):
         return norm(sub(j['facts']['target'], j['facts']['position']))
     def centroid(js):
         return [sum(j['facts']['position'][i] for j in js)/len(js) for i in range(3)]
-    group = [job] + [p for p in peers if p['facts']['fov_v_deg'] + MASTER_FOV_MARGIN_DEG <= fov and same_station(job['facts'], p['facts'])]
+    group = [job] + [p for p in peers if need(p) <= fov and same_station(job['facts'], p['facts'])]
     while True:
         # ① 方向:均值方向下装不下的逐个剔除
         while True:
@@ -1427,7 +1465,7 @@ def plan_master(job: dict, peers: list, aspect: float) -> dict:
             mean = norm(mean) if math.hypot(*mean) > 1e-6 else direction(job)
             pos = centroid(group)
             cam = {'position': pos, 'target': [pos[i] + mean[i]*reach for i in range(3)], 'fov_v_deg': fov}
-            bad = [j for j in group if not view_fits(cam, cam_of_facts(j['facts']), aspect)]
+            bad = [j for j in group if not view_fits(cam, cam_of_facts(j['facts']), aspect, master_aspect=master_aspect)]
             if not bad or len(group) == 1:
                 if bad:   # 只剩本镜仍装不下(不会发生:视场 ≥ 本镜 + 余量且同轴),兜底同轴
                     cam['target'] = [pos[i] + direction(job)[i]*reach for i in range(3)]
@@ -1591,14 +1629,14 @@ def save_episode_index(base: Path, ep: str, idx: dict):
     os.replace(tmp, p)
 
 
-def plate_size(fmt: dict) -> tuple[int, int]:
-    """分镜背景图尺寸:长边 1920 按项目画幅(偶数)。"""
+def plate_size(fmt: dict = PLATE_FMT) -> tuple[int, int]:
+    """分镜背景图尺寸:长边 1920 按 fmt 画幅(偶数);缺省 PLATE_FMT = 1920x1080。传项目画幅只用于跟随分镜画幅的白模帧。"""
     w, h = fmt['width'], fmt['height']; scale = 1920/max(w, h)
     return int(round(w*scale/2))*2, int(round(h*scale/2))*2
 
 
-def master_size(fmt: dict) -> tuple[int, int]:
-    """母图尺寸:长边 MASTER_LONG_SIDE 按项目画幅,面积不超 MASTER_MAX_PIXELS(偶数边)。"""
+def master_size(fmt: dict = PLATE_FMT) -> tuple[int, int]:
+    """母图尺寸:长边 MASTER_LONG_SIDE 按 fmt 画幅(缺省 PLATE_FMT = 16:9),面积不超 MASTER_MAX_PIXELS(偶数边)。"""
     w, h = fmt['width'], fmt['height']
     scale = min(MASTER_LONG_SIDE/max(w, h), math.sqrt(MASTER_MAX_PIXELS/(w*h)))
     mw, mh = int(w*scale/2)*2, int(h*scale/2)*2
@@ -1709,11 +1747,11 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
     ep = component(ep)
     plan = plan_episode(base, ep, only)
     episode, fmt, libs, layouts, axes = plan['episode'], plan['fmt'], plan['libs'], plan['layouts'], plan['axes']
-    aspect = fmt['width']/fmt['height']
-    width, height = plate_size(fmt)
-    mwidth, mheight = master_size(fmt)
-    try:
-        wb_fmt = render_format(read(base/'settings.json', {}), width, height)
+    aspect = fmt['width']/fmt['height']           # 本镜(项目)画幅:本镜机位事实、母图装不装得下本镜
+    width, height = plate_size()                   # 背景图一律 16:9(PLATE_FMT,2026-10-09),不随项目画幅
+    mwidth, mheight = master_size()
+    try:   # 白模帧是本镜视角(预览核对用,不进 refs),仍按项目画幅、长边 1920
+        wb_fmt = render_format(read(base/'settings.json', {}), *plate_size(fmt))
     except ValueError:
         wb_fmt = fmt
     style_doc = read(base/'bible/style.json', {}) or {}
@@ -1771,7 +1809,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                      and same_station(facts, p['facts'])]
             mkey = plan_master(j, peers, aspect)
             ex, ez, texts = axes[sid]
-            mfacts = camera_facts(mkey, fmt, ex, ez, texts)
+            mfacts = camera_facts(mkey, PLATE_FMT, ex, ez, texts)
             mfacts['standing'] = standing_on(episode['scenes'][sid], layouts[sid], mkey)
             key = plate_key(scheme, mfacts)
             if any(e['key'] == key for e in view['plates']) and not (force and any(e['key'] == key for e in lib['plates'])):
@@ -1854,7 +1892,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             cams = [j['facts'] for j in (all_jobs if only else plan['jobs']) if j['scene_id'] == sid
                     and scene_panos.scheme_slug(j['scheme'], j['raw_group'].get('time_of_day')) == scheme_key]
             try:
-                tiles = ensure_grid9(base, sid, scheme_key, d0['scheme'], scene=scene, layout=layout, axes=axes[sid], fmt=fmt, style_doc=style_doc,
+                tiles = ensure_grid9(base, sid, scheme_key, d0['scheme'], scene=scene, layout=layout, axes=axes[sid], fmt=PLATE_FMT, style_doc=style_doc,
                                      time_of_day=d0['raw_group'].get('time_of_day') or '', lighting=lighting_fragment(base, sid, d0['scheme']),
                                      force=force and not grid_fallback, dry_run=dry_run, seed=seed, log=log,   # --force 只重新决策(自动补图模式下重出补图);重出宫格须 --no-grid-fallback --force(两种模式相同)
                                      cameras=cams, layout_kind=grid_layout)
@@ -1874,7 +1912,8 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                 if entry is None:
                     d['grid_error'] = '九宫格无可选格'
                     continue
-                d['entry'] = entry; d['file'] = entry['file']; d['view'] = {'grid9': info, 'tile_camera': {k: entry['camera'].get(k) for k in ('facing', 'height_m', 'lens_mm_equiv', 'pitch_deg')}}
+                d['entry'] = entry; d['file'] = entry['file']; d['view'] = {'grid9': info, 'tile_camera': {k: entry['camera'].get(k) for k in ('facing', 'height_m', 'lens_mm_equiv', 'pitch_deg')},
+                                                                **aspect_view(aspect, entry_aspect(entry))}
                 d['shot_frame'] = f"directing/{ep}/whitebox/plate_frames/{d['shot_id']}_{d['role']}.whitebox.jpg"
                 grid9_frames.append({'group_id': d['group_id'], 't': d['t'], 'output': base / d['shot_frame']})
                 log(f"== {d['shot_id']} {d['role']} ({d['group_id']}) 九宫格选第 {info['tile']} 格 {entry['key']}:朝向差 {info['bearing_delta_deg']}° "
@@ -1891,6 +1930,8 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                     cap, cinfo = find_manual_capture(libs[sid]['plates'], scheme_key, d['facts'], base)
                     if cap is not None:
                         d['mode'] = 'grid9_manual_library'; d['entry'] = cap; d['file'] = cap['file']; d['reuse'] = 'grid9_manual'
+                        d['view'] = {k: v for k, v in d['view'].items() if k not in ('fraction', 'fraction_w', 'aspect_only')}
+                        d['view'].update(aspect_view(aspect, entry_aspect(cap)))
                         d['view']['manual'] = {'reasons': reasons, 'key': cap['key'], 'kind': (cap.get('pano_ref') or {}).get('kind'), 'fit': cinfo}
                         log(f"   ↳ 格子不合适({'; '.join(reasons)}),选用手工截取的背景图 {cap['key']}(朝向差 {cinfo['bearing_delta_deg']}° 距 {cinfo['distance_m']} m)")
                     else:
@@ -1900,18 +1941,25 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                             f"世界模型视窗按本镜机位(位置 {d['facts']['position']},朝向 {d['facts']['bearing_deg']}°,俯仰 {d['facts']['pitch_deg']}°)用「💾 背景图」截取后重跑")
                     continue
                 d['nearest_tile'] = entry; d['sheet_rel'] = sheet_rel; d['reuse'] = 'grid9_fallback'
-                fb = None if force else find_grid9_fallback(libs[sid]['plates'] + fb_pending, scheme_key, d['facts'], base, require_file=not dry_run)
+                # 补图机位 = 本镜机位,画幅 16:9(本镜比 16:9 宽时垂直视场放宽到装得下,plate_fov_v)
+                pkey = {**d['keyframe'], 'fov': plate_fov_v(float(d['keyframe']['fov']), aspect)}
+                d['plate_key'] = pkey
+                d['plate_facts'] = {**camera_facts(pkey, PLATE_FMT, *axes[sid]), 'standing': d['facts'].get('standing', '')}
+                d['view'] = {k: v for k, v in d['view'].items() if k not in ('fraction', 'fraction_w', 'aspect_only')}
+                fb = None if force else find_grid9_fallback(libs[sid]['plates'] + fb_pending, scheme_key, d['plate_facts'], base, require_file=not dry_run)
                 if fb is not None:
                     d['mode'] = 'grid9_fb_library'; d['entry'] = fb; d['file'] = fb['file']
+                    d['view'].update(aspect_view(aspect, entry_aspect(fb)))
                     d['view']['fallback'] = {'reasons': reasons, 'key': fb['key'], 'source': 'library'}
                     log(f"   ↳ 格子不合适({'; '.join(reasons)}),复用库里相近机位的补图 {fb['key']}")
                     continue
-                key = plate_key(scheme_key, d['facts']) + GRID9_FB_SUFFIX
+                key = plate_key(scheme_key, d['plate_facts']) + GRID9_FB_SUFFIX
                 if any(e['key'] == key for e in fb_pending) or (not force and any(e['key'] == key for e in libs[sid]['plates'])):
                     key = f"{key}_{d['shot_id']}{'e' if d['role'] == 'end' else ''}"
                 d['mode'] = 'grid9_new'; d['entry'] = None; d['file'] = None; d['key'] = key
+                d['view'].update(aspect_view(aspect))
                 d['view']['fallback'] = {'reasons': reasons, 'key': key, 'source': 'new'}
-                fb_pending.append({'key': key, 'file': f"assets/concepts/scenes/{sid}/{PLATES_DIR}/{key}.png", 'camera': d['facts'],
+                fb_pending.append({'key': key, 'file': f"assets/concepts/scenes/{sid}/{PLATES_DIR}/{key}.png", 'camera': d['plate_facts'],
                                    'grid9_fallback': True, 'pano_ref': {'kind': 'grid9_fallback', 'scheme': scheme_key}, 'pending': True})
                 log(f"   ↳ 格子不合适({'; '.join(reasons)}),按本镜机位单独出图 {key}(参考图 = 俯视图 + 九宫格整图)")
     if grid9_frames:
@@ -1966,7 +2014,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                     stats['plates'] -= 1
                     continue
                 d['entry'] = entry
-            d['file'] = entry['file']; d['view'] = view_info(entry, d['facts'])
+            d['file'] = entry['file']; d['view'] = view_info(entry, d['facts'], aspect)
             stats['library'] += 1
             generated[(shot_id, role)] = entry; by_key[entry['key']] = entry
             group_first.setdefault(d['group_id'], entry)
@@ -2007,8 +2055,8 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             continue
         if d['mode'] == 'grid9_new':   # 九宫格补图(2026-09-26):俯视图 + 九宫格整图为参考,按本镜机位单独出一张
             layout = layouts[sid]; scene = episode['scenes'][sid]
-            facts = d['facts']
-            items, phrases, out_of_frame = inventory(scene, layout, d['keyframe'], fmt)
+            facts = d['plate_facts']
+            items, phrases, out_of_frame = inventory(scene, layout, d['plate_key'], PLATE_FMT)
             stand = facts.get('standing', '')
             facts['standing_hidden'] = bool(stand.startswith('on ')) and not any(it['name'] == stand[3:] for it in items)
             lighting = lighting_fragment(base, sid, d['scheme'])
@@ -2058,7 +2106,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                 entry['channel'] = channel
                 try:
                     generate_image(prompt, str(base/out_rel), negative=negative, refs=[str(base/r) for r in refs],
-                                   aspect=fmt['aspect_ratio'], size=f'{width}x{height}', seed=use_seed)
+                                   aspect=PLATE_FMT['aspect_ratio'], size=f'{width}x{height}', seed=use_seed)
                 except Exception as error:  # noqa: BLE001
                     stats['errors'].append(f'{shot_id}/{role}: 九宫格补图出图失败 {error}')
                     continue
@@ -2075,7 +2123,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             continue
         layout = layouts[sid]; scene = episode['scenes'][sid]
         mfacts = d['master_facts']
-        items, phrases, out_of_frame = inventory(scene, layout, d['master_key'], fmt)
+        items, phrases, out_of_frame = inventory(scene, layout, d['master_key'], PLATE_FMT)
         stand = mfacts.get('standing', '')
         mfacts['standing_hidden'] = bool(stand.startswith('on ')) and not any(it['name'] == stand[3:] for it in items)
         lighting = lighting_fragment(base, sid, d['scheme'])
@@ -2149,13 +2197,13 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             entry['channel'] = channel
             try:
                 generate_image(prompt, str(base/out_rel), negative=negative, refs=[str(base/r) for r in refs],
-                               aspect=fmt['aspect_ratio'], size=f'{mwidth}x{mheight}', seed=use_seed)
+                               aspect=PLATE_FMT['aspect_ratio'], size=f'{mwidth}x{mheight}', seed=use_seed)
             except Exception as error:  # noqa: BLE001
                 stats['errors'].append(f'{shot_id}/{role}: 母图出图失败 {error}')
                 continue
             (base/out_rel).with_suffix('.json').write_text(json.dumps(entry, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
             upsert_library_entry(base, sid, entry, lib)   # --force 同 key 覆盖
-        d['entry'] = entry; d['file'] = out_rel; d['view'] = view_info(entry, d['facts'])
+        d['entry'] = entry; d['file'] = out_rel; d['view'] = view_info(entry, d['facts'], aspect)
         by_key[entry['key']] = entry
         stats['new'] += 1
         log(f"saved: {out_rel}")
@@ -2458,13 +2506,23 @@ def shot_extras_en(p: dict, with_layers: bool = False) -> str:
     return ' '.join(parts)
 
 
+def _view_fracs(v: dict):
+    """本镜占背景图的(高, 宽)比例;旧记录只有 fraction(宽高同比),都没有 → (None, None)。"""
+    fh, fw = v.get('fraction'), v.get('fraction_w')
+    if not fh and not fw:
+        return None, None
+    fh = fh or 1.0
+    return fh, fw or fh
+
+
 def view_phrase_zh(p: dict) -> str:
-    """本镜在母图里的位置(view.fraction / 带符号朝向偏差 / 中央几件)。"""
+    """本镜在母图里的位置(view.fraction / fraction_w / 带符号朝向偏差 / 中央几件)。
+    背景图 16:9 而本镜画幅不同时(2026-10-09)宽、高分开写;九宫格格子 / 补图 / 手工截图(aspect_only)只写画幅差。"""
     v = p.get('view') or {}
-    f = v.get('fraction')
-    if not f:
+    fh, fw = _view_fracs(v)
+    if not fh:
         return '这是该机位的背景图'
-    if f >= .85:
+    if min(fh, fw) >= .85:
         return '这是该机位的背景图，镜头取景与它基本一致'
     pos = []
     bd, pd = float(v.get('bearing_delta_deg') or 0), float(v.get('pitch_delta_deg') or 0)
@@ -2473,14 +2531,20 @@ def view_phrase_zh(p: dict) -> str:
     if abs(pd) >= 3:
         pos.append('偏上' if pd > 0 else '偏下')
     centre = '、'.join(_zh(n) for n in (p.get('centre') or [])[:2])
-    return (f"这是该机位的广角母图，镜头画面是其中更紧的一块（约占母图宽高的{max(1, round(f * 10))}成，中心{''.join(pos) or '居中'}"
-            + (f"，以{centre}为中心" if centre else '') + '）')
+    what = '背景图' if v.get('aspect_only') else '母图'
+    if abs(fw - fh) < .05:
+        size = f"约占{what}宽高的{max(1, round(fh * 10))}成"
+    else:
+        size = '、'.join(('宽度占满' if fw >= .97 else f'宽约占{what}的{max(1, round(fw * 10))}成',
+                          '高度占满' if fh >= .97 else f'高约占{what}的{max(1, round(fh * 10))}成'))
+    head = '这是该机位的背景图，镜头画面是其中的一块' if v.get('aspect_only') else '这是该机位的广角母图，镜头画面是其中更紧的一块'
+    return (f"{head}（{size}，中心{''.join(pos) or '居中'}" + (f"，以{centre}为中心" if centre else '') + '）')
 
 
 def view_phrase_en(p: dict) -> str:
     v = p.get('view') or {}
-    f = v.get('fraction')
-    if not f or f >= .85:
+    fh, fw = _view_fracs(v)
+    if not fh or min(fh, fw) >= .85:
         return 'the shot frames almost exactly this view'
     pos = []
     bd, pd = float(v.get('bearing_delta_deg') or 0), float(v.get('pitch_delta_deg') or 0)
@@ -2489,7 +2553,12 @@ def view_phrase_en(p: dict) -> str:
     if abs(pd) >= 3:
         pos.append('up' if pd > 0 else 'down')
     centre = ', '.join(_zh(n) for n in (p.get('centre') or [])[:2])
-    return (f"the shot frames a tighter view inside this plate (about {int(round(f * 100))}% of its width and height, "
+    if abs(fw - fh) < .05:
+        size = f"about {int(round(fh * 100))}% of its width and height"
+    else:
+        size = ' and '.join(('its full width' if fw >= .97 else f"about {int(round(fw * 100))}% of its width",
+                             'its full height' if fh >= .97 else f"about {int(round(fh * 100))}% of its height"))
+    return (f"the shot frames a tighter view inside this plate ({size}, "
             f"centred {'/'.join(pos) if pos else 'in the middle'}" + (f", on {centre}" if centre else '') + ')')
 
 
@@ -2962,8 +3031,13 @@ def swap_shot_plate(base: Path, ep: str, shot_id: str, role: str, key: str) -> d
         raise PlateSwapError(400, '选的就是当前这张图,无需替换')
     view = None
     try:
+        fmt = render_format(read(base/'settings.json', {}))
+        aspect = fmt['width'] / fmt['height']
+    except Exception:  # noqa: BLE001
+        aspect = None
+    try:
         if slot.get('camera') and entry.get('camera'):
-            view = view_info(entry, slot['camera'])
+            view = view_info(entry, slot['camera'], aspect)
     except Exception:  # noqa: BLE001
         view = None
     now = dt.datetime.now().isoformat(timespec='seconds')
@@ -3105,8 +3179,13 @@ def revise_shot_plate(base: Path, ep: str, shot_id: str, role: str, change: str,
     src_entry = next((e for e in lib['plates'] if e.get('key') == slot.get('key')), None) or {}
     facts = slot.get('camera') or src_entry.get('camera') or {}
     fmt = render_format(read(base/'settings.json', {}))
+    aspect = fmt['width'] / fmt['height']
     layout = read(base/'assets/concepts/scenes'/sid/'layout.json', {}) or {}
     scene = read(base/'assets/concepts/scenes'/sid/'whitebox.scene.json', {}) or {}
+    if facts.get('position') and facts.get('target') and facts.get('fov_v_deg'):
+        # 重出的图是 16:9:机位句(水平视场 / 焦距)按 16:9 背景图重算,本镜比 16:9 宽时视场放宽到装得下(同 run_episode 补图)
+        pkey = {'position': facts['position'], 'target': facts['target'], 'fov': plate_fov_v(float(facts['fov_v_deg']), aspect)}
+        facts = {**facts, **camera_facts(pkey, PLATE_FMT, *orientation_axes(layout))}
     try:
         from modules.scene_panos import scene_name_of
         bible_name = scene_name_of(base, sid)
@@ -3122,15 +3201,19 @@ def revise_shot_plate(base: Path, ep: str, shot_id: str, role: str, change: str,
     _, scene_neg = scene_description(base, sid)
     prompt = build_revision_prompt(facts, scene_name, time_of_day, lighting, change, role, style_doc.get('style_fragment_en') or '', note)
     negative = ', '.join(x for x in (plate_negative(style_doc.get('negative_prompt_en') or ''), scene_neg, NEGATIVE_EXTRA) if x)
-    # 尺寸随原图(母图 2880 级 / 分镜图 1920 级都可能),面积不超母图上限
+    # 尺寸随原图(母图 2880 级 / 分镜图 1920 级都可能),面积不超母图上限;画幅一律 16:9(PLATE_FMT,2026-10-09)——
+    # 原图不是 16:9(此前按项目画幅出的竖屏等旧图)时按面积档改出 16:9 的母图 / 分镜图尺寸
     try:
         from PIL import Image
         with Image.open(base/src_rel) as im:
             width, height = im.size
     except Exception:  # noqa: BLE001
-        width, height = plate_size(fmt)
+        width, height = plate_size()
+    if abs(width / height / PLATE_ASPECT - 1) > .01:
+        pw, ph = plate_size()
+        width, height = master_size() if width * height > pw * ph * 1.2 else (pw, ph)
     if width * height > MASTER_MAX_PIXELS:
-        width, height = master_size(fmt)
+        width, height = master_size()
     key = revision_key(lib, str(slot.get('key') or Path(src_rel).stem))
     out_rel = f"assets/concepts/scenes/{sid}/{PLATES_DIR}/{key}.png"
     if seed is None:
@@ -3159,13 +3242,13 @@ def revise_shot_plate(base: Path, ep: str, shot_id: str, role: str, change: str,
         entry['channel'] = {'provider': cfg.get('provider'), 'model': cfg.get('model')}
     except Exception:  # noqa: BLE001
         entry['channel'] = None
-    genmedia.generate_image(prompt, str(base/out_rel), negative=negative, refs=[str(base/src_rel)], aspect=fmt['aspect_ratio'],
+    genmedia.generate_image(prompt, str(base/out_rel), negative=negative, refs=[str(base/src_rel)], aspect=PLATE_FMT['aspect_ratio'],
                             size=f'{width}x{height}', seed=seed)
     (base/out_rel).with_suffix('.json').write_text(json.dumps(entry, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
     upsert_library_entry(base, sid, entry, lib)
     log(f"saved: {out_rel}")
     # 只改本镜该角色的条目:原图、库里原条目、引用同一原图的其它镜都不动
-    slot.update({'key': key, 'file': out_rel, 'reuse': 'revised', 'crop': None, 'view': None, 'whitebox_frame': entry['whitebox_frame'],
+    slot.update({'key': key, 'file': out_rel, 'reuse': 'revised', 'crop': None, 'view': aspect_view(aspect) or None, 'whitebox_frame': entry['whitebox_frame'],
                  'revised_from': prev, 'revised_at': entry['written_at'], 'revision': {'change': change.strip(), 'note': (note or '').strip()}})
     rec['written_at'] = entry['written_at']
     save_episode_index(base, ep, idx)

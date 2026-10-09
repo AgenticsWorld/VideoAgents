@@ -3440,7 +3440,7 @@ def build_role_prompt(agent_id: str, project: str,
 - 每组参考素材数量上限(项目「视频模型设置」,优先级高于文档示例值):参考图 ≤{sg_img} 张、参考视频 ≤{sg_vid} 个、参考音频 ≤{sg_aud} 段 —— 这是**全局视频模型**的口径;模型侧硬限(Seedance 2.0:9图/3视频/3音频、参考音视频总时长各≤15s;Seedance 2.5:30图/10视频/10音频、总时长各≤30s)由 genmedia 提交前强制校验。**refs 按实际需要挂齐(2026-08-30 改):必挂项(每角色 sheet、每生物 sheet、场景干净俯视图+9 宫格、道具图 main_01.png——每道具一张,不挂比例锚图 scale_ref_01.png,道具尺寸靠 prompt_token 文字)与本组确需的按需项(额外脸部锚/道具细节图/手绘渲染图/前组尾帧)一律写入 refs,不得为凑上限省略必挂图、不得自行拆组;张数超过本组生效上限时照常落盘完整 refs 并标 `status: "blocked_refs_cap"` + `blocked_reason`(逐张路径与所属实体、上限值、超出张数),上报 orchestrator 转告用户——由用户在分镜预览决定:①「🎛 模型」给该组单独换参考图上限更高的视频模型(如 Seedance 2.5 ≤30 张,渠道不变),或 ②手动删减该组参考图;用户拍板后重派本组。视频生成工位对 `blocked_refs_cap` 或 refs 超本组生效上限的组禁开跑(refs_mandatory_le_cap);组级覆盖了模型的组,上限以该组模型硬限为准(见下方「组级覆盖」段,如有)**
 
 ## 用户输出设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档示例与项目内旧规范)
-- 输出画幅:{aspect}({aspect_name})—— 画幅规范(aspect_ratio.json)、分镜构图、关键帧、视频生成、剪辑成片一律按该画幅执行(生成时 genmedia 传 --aspect {aspect});发现项目内既有产物或规范与此冲突,新产出以本设定为准并在汇报中注明
+- 输出画幅:{aspect}({aspect_name})—— 画幅规范(aspect_ratio.json)、分镜构图、关键帧、视频生成、剪辑成片一律按该画幅执行(生成时 genmedia 传 --aspect {aspect});发现项目内既有产物或规范与此冲突,新产出以本设定为准并在汇报中注明。**例外(2026-10-09):场景图(正向 main_01 / 反向 / 光照变体)、俯视布局图、九宫格、分镜背景图(母图 / 补图 / 手工截取)、全景重投影与世界模型截图一律 16:9,不随本画幅**——场景图 `--size 2560x1440`,其余由宿主脚本定尺寸,不得手传 --aspect 改画幅
 - 输出语言:{out_lang} —— 剧本、台词、旁白、字幕、配音、成片文案、发布物料一律使用 {out_lang} 输出(剧本/对白/旁白文件里的机器锚点不随输出语言变:中文写「[事件]/[出场]/[时长]、动作:、转场:」,其它语言一律用英文规范写法「[EVENTS]/[CAST]/[DURATION]、ACTION:、TRANSITION:、[NARRATION (…)]:、[NO DIALOGUE]」,契约 docs/screenplay_anchors.md,2026-09-23);提供给生成模型的 prompt 不受此限(视频/图像 prompt 语言随界面语言,见下两条;音乐 prompt 用英文)
 - 视频生成 prompt 语言:提供给视频生成模型的 video_prompt **正文散文(镜头动作/画面/运镜描述等)用{ui_lang}书写,不必用英文**;**注入视频 prompt 的上游片段内容语言同样用{ui_lang}(2026-08-24)**——各生产方按{ui_lang}产出片段内容:art-director 的 style.json 注入用风格串 `style_fragment_ui`(英文版 style_fragment_en/negative_prompt_en 保留供负面词表与存量回退)、blocking 的 `space_fragment_en`、lighting 的 `prompt_fragment_en`、costume 的 `visual_en`、prop 的 `scale.prompt_token`、sound-effect/ambience 的 cue(字段名保留历史 `_en` 后缀,不改名);**空间布局链路字段同样用{ui_lang}(2026-08-24 二订)**——layout.json `name_en`/`desc_en`、storyboard `route_en`/`offset_en` 及站位/prompt 句内的地标词一并按{ui_lang}产出(这些词只进 prompt、不上图,无字体限制——2026-09-07 起俯视图直接引用、不再叠加人物动线标注;地标词仍逐字取 layout.json `name_en`,全链路统一写法);**逐字纪律优先于语言偏好**:下游对既有片段一律逐字拼入、严禁翻译或改写,存量片段语言与{ui_lang}不一致时以既有片段为准,要换语言须回派上游成套重出(同场景/同集一致),不得零散混语;但以下保持英文原样不翻译——结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:` 及 `[Image N]`/`[Audio N]`/`@Image N`/`@Audio N` 引用,机检与注释注入代码依赖这些英文锚点;素材指代只用这套英文锚点,禁写「图片N/音频N/视频N」等本地化变体)、固定英文约束句(Identity lock、非对白组静默句、Spatial layout 声明句、Global constraints 负面清单)、台词(按剧本冻结版);Seedance 2.5 的结构标签(`【人物】`/`【动作与声音】`/「使用：/不采用：」/`【未采用素材】`/`【保持一致】`)是官方段落标签,非中文界面用机检认可的固定英文标签(`【Characters】`/`【Action & sound】`/「Use:/Not used:」/`【Unused assets】`/`【Consistency】`),两套等价、不得自造
 - 图像生成 prompt 语言:提供给图像生成模型的 image prompt(概念图/锚点图/参考图,genmedia image)**正文同样用{ui_lang}书写(2026-08-24)**——风格段逐字取 style.json `style_fragment_ui`(存量项目缺该字段回退英文 `style_fragment_en`);**负面词表保持英文**(`--negative` 与 prompt 内负面清单取 `negative_prompt_en`,通用负面术语跨引擎稳定、机检按英文子串匹配);存量英文项目补图沿用英文,不得半中半英
@@ -7692,14 +7692,9 @@ def _preview_scenes(project: str):
                        "world_job": _scene_world_job_view(base.name, sid)})
     # 项目「白模」选项(output.spatial_blocking,默认关):关闭时场景预览页不显示「生成世界模型」按钮与世界模型板块
     whitebox_enabled = (load_project_settings(base.name).get("output") or {}).get("spatial_blocking") is True
-    # 项目画幅(2026-09-15):预览页「✂ 裁剪」分镜背景图的固定选框比例(母图按项目画幅出图,裁后仍须同比例才能继续作组视频参考图)
-    fmt = None
-    try:
-        from modules.whitebox import read as _wb_read, render_format as _wb_fmt
-        _f = _wb_fmt(_wb_read(base / "settings.json", {}))
-        fmt = {"width": _f["width"], "height": _f["height"]}
-    except Exception as e:  # noqa: BLE001
-        print(f"[preview-scenes] 项目画幅读取失败(忽略):{e}", flush=True)
+    # 背景图画幅:预览页「✂ 裁剪」分镜背景图的固定选框比例。2026-10-09 起背景图一律 16:9(shot_plates.PLATE_FMT),不随项目画幅
+    from modules.shot_plates import PLATE_FMT as _plate_fmt
+    fmt = {"width": _plate_fmt["width"], "height": _plate_fmt["height"]}
     try:
         from modules.scene_plates import project_mode as _sp_project_mode
         scene_plates_mode = _sp_project_mode(base)
@@ -7770,12 +7765,11 @@ async def api_scene_plate_mode(project: str, sid: str, body: dict):
 
 
 def _scene_plate_crop(project: str, sid: str, body: dict) -> dict:
-    """场景预览页「✂ 裁剪」分镜背景图(2026-09-15):{key, left, top, width, height}(选区,0..1 归一化到当前图)→ 按项目画幅比例
-    吸附/收进画幅后裁切母图并**原地覆盖同一文件**(首次裁剪把原图留作 <key>.orig.<ext> 便于回退),更新库 index.json 与 <key>.json
+    """场景预览页「✂ 裁剪」分镜背景图(2026-09-15):{key, left, top, width, height}(选区,0..1 归一化到当前图)→ 按背景图画幅 16:9
+    (2026-10-09 起不随项目画幅)吸附/收进画幅后裁切母图并**原地覆盖同一文件**(首次裁剪把原图留作 <key>.orig.<ext> 便于回退),更新库 index.json 与 <key>.json
     条目的 size / manual_crops。集索引 directing/<ep>/shot_plates.json 与组 prompt refs 都只记 key/路径,不必改动,下次 sync/出图自动用新图。
     不放大回母图尺寸:裁切不会增加信息,保留原生像素。"""
     from modules import shot_plates
-    from modules.whitebox import read as _wb_read, render_format as _wb_fmt
     try:
         from PIL import Image
     except ImportError:  # pragma: no cover
@@ -7802,18 +7796,12 @@ def _scene_plate_crop(project: str, sid: str, body: dict) -> dict:
         raise ServiceError(400, "left/top/width/height(选区,0..1 归一化)必填且须为数字") from None
     if not all(math.isfinite(v) for v in (left, top, width, height)) or width <= 0 or height <= 0:
         raise ServiceError(400, "选区宽高须为正数")
-    try:
-        _fmt = _wb_fmt(_wb_read(base / "settings.json", {}))
-        aspect = _fmt["width"] / _fmt["height"]
-    except Exception:  # noqa: BLE001
-        aspect = None
+    aspect = shot_plates.PLATE_ASPECT
     with Image.open(f) as im:
         im.load()
         src_fmt = im.format or "PNG"
         W, H = im.size
-        if aspect is None:
-            aspect = W / H
-        # 归一化 → 像素;以宽为准按项目画幅算高,越界则反过来以高为准;再整体收进画幅
+        # 归一化 → 像素;以宽为准按背景图画幅算高,越界则反过来以高为准;再整体收进画幅
         l, t = min(max(left, 0.0), 1.0) * W, min(max(top, 0.0), 1.0) * H
         w = min(width * W, W)
         h = w / aspect
@@ -7907,7 +7895,7 @@ def _scene_plate_manual(project: str, sid: str, body: dict) -> dict:
     import base64 as _b64
     import io as _io
     from modules import shot_plates
-    from modules.whitebox import read as _wb_read, render_format as _wb_fmt
+    from modules.whitebox import read as _wb_read
     try:
         from PIL import Image
     except ImportError:  # pragma: no cover
@@ -7941,8 +7929,8 @@ def _scene_plate_manual(project: str, sid: str, body: dict) -> dict:
         raise ServiceError(400, "camera.target 不能与 position 重合")
     scheme = re.sub(r"[^\w\-]", "", str(body.get("scheme") or "")) or "nolight"
     anchor_id = re.sub(r"[^\w\-]", "", str(body.get("anchor_id") or ""))
-    # 手工截取不受项目画幅限制,一律 16:9(2026-10-08)
-    fmt = {**_wb_fmt(_wb_read(base / "settings.json", {})), "width": 1920, "height": 1080}
+    # 手工截取不受项目画幅限制,一律 16:9(2026-10-08;与自动出图同一常量 PLATE_FMT)
+    fmt = shot_plates.PLATE_FMT
     pw, ph = shot_plates.plate_size(fmt)
     layout = _wb_read(base / "assets/concepts/scenes" / sid / "layout.json", {}) or {}
     scene = _wb_read(base / "assets/concepts/scenes" / sid / "whitebox.scene.json", {}) or {}
