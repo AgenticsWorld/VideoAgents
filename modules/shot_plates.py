@@ -3106,7 +3106,14 @@ def set_plate_adopt(base: Path, ep: str, shot_id: str, role: str, *, adopt=None,
 # (key = <原 key 去掉已有 _revN 后缀>_rev<N>,条目 revised=True / pano_ref.kind='revision' 记来源与意见),再把**仅本镜该角色**的
 # 集索引条目改指向新图(reuse='revised',记 revised_from),并 sync 本组 prompt refs;引用同一张原图的其它镜不受影响。
 # 非 --force 的 render_shot_plates 按「记录仍新鲜」保留(同换图);is_legacy 对 revised 条目为否(--status 不报 WARN)。
+# 2026-10-09 加两项:① 场景预览页「分镜背景图」板块每张库图的「✏️ 修改」(直发本岗)走 revise_library_plate——以这张库图为 [Image 1]
+# 新出 _revN 入库,原图不动,再把**引用这张原图的分镜**(可用 only 限定、library_only 只入库)改指向新图;② 用户附的参考图(浮窗「+」
+# 附本机图片路径)以 [Image 2…] 传入(refs,最多 REVISION_MAX_REFS 张,复制进 plates/revision_refs/ 留档)。
+# 修改后的图一律按九宫格补图的尺寸出(plate_size() = 1920x1080,16:9;用户 2026-10-09 拍板),不随原图尺寸(母图 2880 级)。
 REVISION_KEY_RE = re.compile(r'_rev\d+$')
+REVISION_MAX_REFS = 4
+REVISION_REFS_DIR = 'revision_refs'
+REVISION_REF_FORMATS = {'PNG': '.png', 'JPEG': '.jpg', 'WEBP': '.webp'}   # 原样复制;其它格式(BMP/TIFF/GIF…)转存 PNG
 
 
 def revision_key(lib: dict, source_key: str) -> str:
@@ -3121,23 +3128,32 @@ def revision_key(lib: dict, source_key: str) -> str:
 
 
 def build_revision_prompt(facts: dict, scene_name: str, time_of_day: str, lighting: str, change: str, role: str, style: str,
-                          note: str = '') -> str:
-    """修订提示词:[Image 1] = 本镜当前背景图(同机位,权威),只改「Requested change」点名的内容,其余原样保留;机位句同母图口径。"""
+                          note: str = '', n_refs: int = 0) -> str:
+    """修订提示词:[Image 1] = 当前背景图(同机位,权威),只改「Requested change」点名的内容,其余原样保留;机位句同母图口径。
+    role = start / end(分镜预览按镜修改)或空(场景预览按库图修改,不针对某一镜);n_refs = 用户附的参考图张数([Image 2…])。"""
     head = f"Empty location background plate for one film shot, photographed with nobody present. Location: {scene_name}."
     if time_of_day:
         head += f" Time of day: {time_of_day}."
     if lighting:
         head += f" Lighting: {lighting}."
+    which = "of this exact shot, " if role in ('start', 'end') else ""
     lines = [head,
-             "[Image 1] is the current background plate of this exact shot, taken from this exact camera. It is the authoritative reference "
+             f"[Image 1] is the current background plate {which}taken from this exact camera. It is the authoritative reference "
              "for the camera position, framing, perspective, horizon line, spatial layout, architecture, set dressing, materials, weather, "
              "light direction and colour grade: keep all of them exactly as they are and change only what is requested below. Do not move "
-             "the camera, do not widen or tighten the view, do not add or remove anything that the request does not mention.",
-             f"Requested change: {change.strip().rstrip('.')}."]
+             "the camera, do not widen or tighten the view, do not add or remove anything that the request does not mention."]
+    if n_refs:
+        imgs = "[Image 2] is a reference image" if n_refs == 1 else f"[Image 2] to [Image {n_refs + 1}] are reference images"
+        it, its = ("it", "its") if n_refs == 1 else ("them", "their")
+        lines.append(f"{imgs} supplied by the director for the requested change. Take from {it} only what the requested change asks for "
+                     "(for example an object's design, a material, a colour or a texture) and build that into the scene of [Image 1] at the "
+                     f"right scale, perspective and lighting; do not copy {its} camera, framing or layout, and do not paste {it} in as a flat picture.")
+    lines.append(f"Requested change: {change.strip().rstrip('.')}.")
     if note and note.strip() and note.strip() != change.strip():
         lines.append(f"Original request from the director, verbatim: {note.strip()}")
     if facts:
-        cam = (f"Camera ({'end of the camera move' if role == 'end' else 'start of the shot'}): {lens_word(facts.get('fov_h_deg', 60))}, "
+        when = {'end': ' (end of the camera move)', 'start': ' (start of the shot)'}.get(role, '')
+        cam = (f"Camera{when}: {lens_word(facts.get('fov_h_deg', 60))}, "
                f"{facts.get('lens_mm_equiv', '')}mm-equivalent lens ({facts.get('fov_h_deg', '')} degrees horizontal field of view), "
                f"camera height {facts.get('height_m', '')} m ({facts.get('height_word', '')}), {facts.get('tilt_word', '')}, "
                f"facing {facts.get('facing', '')}; frame left is {facts.get('frame_left', '')}, frame right is {facts.get('frame_right', '')}.")
@@ -3151,10 +3167,129 @@ def build_revision_prompt(facts: dict, scene_name: str, time_of_day: str, lighti
     return '\n'.join(lines)
 
 
-def revise_shot_plate(base: Path, ep: str, shot_id: str, role: str, change: str, *, note: str = '', dry_run: bool = False,
+def resolve_revision_refs(base: Path, refs) -> list[Path]:
+    """用户附的参考图:绝对路径或项目内相对路径,须是能打开的图片,去重后最多 REVISION_MAX_REFS 张;不合格抛 ValueError(CLI 原文上报)。"""
+    from PIL import Image
+    out: list[Path] = []
+    for raw in refs or []:
+        s = str(raw or '').strip()
+        if not s:
+            continue
+        p = Path(s).expanduser()
+        p = (p if p.is_absolute() else base/p).resolve()
+        if not p.is_file():
+            raise ValueError(f'参考图不存在:{s}')
+        try:
+            with Image.open(p) as im:
+                im.verify()
+        except Exception as error:  # noqa: BLE001
+            raise ValueError(f'参考图不是可读取的图片:{s}({error})') from None
+        if p not in out:
+            out.append(p)
+    if len(out) > REVISION_MAX_REFS:
+        raise ValueError(f'参考图最多 {REVISION_MAX_REFS} 张(收到 {len(out)} 张)')
+    return out
+
+
+def store_revision_refs(base: Path, sid: str, key: str, paths: list[Path]) -> list[str]:
+    """参考图复制进 assets/concepts/scenes/<sid>/plates/revision_refs/<key>_ref<N>.<ext>(项目内留档,原文件可能随后被删/改);
+    已在项目内的同样复制一份(条目 refs 只引用留档副本)。返回项目相对路径。"""
+    import shutil
+    from PIL import Image
+    d = library_dir(base, sid)/REVISION_REFS_DIR
+    d.mkdir(parents=True, exist_ok=True)
+    out = []
+    for i, p in enumerate(paths, 1):
+        with Image.open(p) as im:
+            fmt = im.format or ''
+            ext = REVISION_REF_FORMATS.get(fmt)
+            dst = d/f'{key}_ref{i}{ext or ".png"}'
+            if ext:
+                shutil.copyfile(p, dst)
+            else:
+                im.convert('RGBA' if im.mode in ('RGBA', 'LA', 'P') else 'RGB').save(dst, format='PNG')
+        out.append(str(dst.relative_to(base)))
+    return out
+
+
+def _revision_source_kind(src_entry: dict) -> str:
+    return (src_entry.get('pano_ref') or {}).get('kind') or ('manual' if src_entry.get('manual') else ('master' if src_entry.get('master') else 'legacy'))
+
+
+def _render_revision(base: Path, sid: str, *, src_rel: str, src_key: str, src_entry: dict, lib: dict, facts: dict, role: str,
+                     time_of_day: str, scheme_id: str, change: str, note: str, refs, whitebox_frame, created_by: dict,
+                     dry_run: bool, seed: int | None, log) -> dict:
+    """两种修改入口共用:拼提示词 → 以原图 + 用户参考图出一张 <src_key 去 _revN>_rev<N>(1920x1080)入库。
+    返回 {key, file, entry, prompt, negative, refs, size, seed};dry_run 只算不出图、不复制参考图。"""
+    ref_paths = resolve_revision_refs(base, refs)
+    layout = read(base/'assets/concepts/scenes'/sid/'layout.json', {}) or {}
+    scene = read(base/'assets/concepts/scenes'/sid/'whitebox.scene.json', {}) or {}
+    try:
+        from modules.scene_panos import scene_name_of
+        bible_name = scene_name_of(base, sid)
+    except Exception:  # noqa: BLE001
+        bible_name = ''
+    scene_name = re.sub(r'[(（].*?[)）]', '', layout.get('scene_name_en') or layout.get('scene_name') or scene.get('name') or bible_name or sid).strip() or sid
+    lighting = lighting_fragment(base, sid, scheme_id) if scheme_id else ''
+    style_doc = read(base/'bible/style.json', {}) or {}
+    _, scene_neg = scene_description(base, sid)
+    prompt = build_revision_prompt(facts, scene_name, time_of_day, lighting, change, role, style_doc.get('style_fragment_en') or '', note,
+                                   n_refs=len(ref_paths))
+    negative = ', '.join(x for x in (plate_negative(style_doc.get('negative_prompt_en') or ''), scene_neg, NEGATIVE_EXTRA) if x)
+    width, height = plate_size()   # 同九宫格补图:1920x1080(16:9),不随原图尺寸
+    key = revision_key(lib, src_key)
+    out_rel = f"assets/concepts/scenes/{sid}/{PLATES_DIR}/{key}.png"
+    if seed is None:
+        import random
+        seed = random.randint(1, 2**31-1)
+    src_kind = _revision_source_kind(src_entry)
+    log(f"== {created_by.get('label') or sid} 按修改意见重出 {key} ← {src_key} [{src_kind}] ({width}x{height});"
+        f"参考图 = 当前背景图" + (f" + 用户参考图 {len(ref_paths)} 张" if ref_paths else ''))
+    log(f"修改要求: {change.strip()}")
+    res = {'key': key, 'file': out_rel, 'prompt': prompt, 'negative': negative, 'size': f'{width}x{height}', 'seed': seed,
+           'refs': [src_rel] + [str(p) for p in ref_paths]}
+    if dry_run:
+        log(prompt); log('refs: ' + json.dumps(res['refs'], ensure_ascii=False))
+        return res
+    user_refs = store_revision_refs(base, sid, key, ref_paths)
+    res['refs'] = [src_rel] + user_refs
+    entry = {'key': key, 'master': False, 'revised': True, 'file': out_rel, 'whitebox_frame': whitebox_frame,
+             'lighting_scheme_id': scheme_id or None, 'time_of_day': time_of_day or None, 'camera': facts, 'size': res['size'], 'seed': seed,
+             'refs': res['refs'], 'prompt': prompt, 'negative': negative,
+             'pano_ref': {'kind': 'revision', 'source_key': src_key, 'source_file': src_rel, 'source_kind': src_kind,
+                          'change': change.strip(), 'note': (note or '').strip(), 'user_refs': user_refs,
+                          'user_refs_from': [str(p) for p in ref_paths]},
+             'plate_mode': 'revision', 'created_by': {k: v for k, v in created_by.items() if k != 'label'},
+             'written_at': dt.datetime.now().isoformat(timespec='seconds')}
+    from modules import genmedia
+    try:
+        with genmedia.image_pref_env('scenes'):   # 场景预览页选的图像模型(空=全局),与母图/补图同一口径
+            cfg = genmedia.get_config('image')
+        entry['channel'] = {'provider': cfg.get('provider'), 'model': cfg.get('model')}
+    except Exception:  # noqa: BLE001
+        entry['channel'] = None
+    genmedia.generate_image(prompt, str(base/out_rel), negative=negative, refs=[str(base/r) for r in res['refs']],
+                            aspect=PLATE_FMT['aspect_ratio'], size=res['size'], seed=seed)
+    (base/out_rel).with_suffix('.json').write_text(json.dumps(entry, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+    upsert_library_entry(base, sid, entry, lib)
+    log(f"saved: {out_rel}")
+    res['entry'] = entry
+    return res
+
+
+def _revision_sync(base: Path, ep: str, gid) -> dict | None:
+    if not gid:
+        return None
+    try:
+        return sync_group(base, ep, gid, write=True)
+    except Exception as e:  # noqa: BLE001
+        return {'group_id': gid, 'errors': [f'sync 失败:{e}'], 'warnings': [], 'updated': False}
+
+
+def revise_shot_plate(base: Path, ep: str, shot_id: str, role: str, change: str, *, note: str = '', refs=None, dry_run: bool = False,
                       seed: int | None = None, log=print) -> dict:
     """按用户修改意见重出本镜某张背景图并替换集索引条目(原图与库条目不动)。返回 {ok, key, file, previous, sync, prompt, …};
-    找不到镜/角色/原图时抛 ValueError(CLI 原文上报)。"""
+    找不到镜/角色/原图、参考图不合格时抛 ValueError(CLI 原文上报)。"""
     ep, shot_id = component(ep), component(shot_id)
     role = (role or 'start').strip().lower()
     if role not in ('start', 'end'):
@@ -3181,85 +3316,133 @@ def revise_shot_plate(base: Path, ep: str, shot_id: str, role: str, change: str,
     fmt = render_format(read(base/'settings.json', {}))
     aspect = fmt['width'] / fmt['height']
     layout = read(base/'assets/concepts/scenes'/sid/'layout.json', {}) or {}
-    scene = read(base/'assets/concepts/scenes'/sid/'whitebox.scene.json', {}) or {}
     if facts.get('position') and facts.get('target') and facts.get('fov_v_deg'):
         # 重出的图是 16:9:机位句(水平视场 / 焦距)按 16:9 背景图重算,本镜比 16:9 宽时视场放宽到装得下(同 run_episode 补图)
         pkey = {'position': facts['position'], 'target': facts['target'], 'fov': plate_fov_v(float(facts['fov_v_deg']), aspect)}
         facts = {**facts, **camera_facts(pkey, PLATE_FMT, *orientation_axes(layout))}
-    try:
-        from modules.scene_panos import scene_name_of
-        bible_name = scene_name_of(base, sid)
-    except Exception:  # noqa: BLE001
-        bible_name = ''
-    scene_name = re.sub(r'[(（].*?[)）]', '', layout.get('scene_name_en') or layout.get('scene_name') or scene.get('name') or bible_name or sid).strip() or sid
     shot_list = read(base/'directing'/ep/'shot_list.json', {}) or {}
     group = next((g for g in shot_list.get('generation_groups', []) if g.get('group_id') == rec.get('group_id')), {}) or {}
     time_of_day = group.get('time_of_day') or src_entry.get('time_of_day') or ''
     scheme_id = rec.get('lighting_scheme_id') or src_entry.get('lighting_scheme_id') or ''
-    lighting = lighting_fragment(base, sid, scheme_id) if scheme_id else ''
-    style_doc = read(base/'bible/style.json', {}) or {}
-    _, scene_neg = scene_description(base, sid)
-    prompt = build_revision_prompt(facts, scene_name, time_of_day, lighting, change, role, style_doc.get('style_fragment_en') or '', note)
-    negative = ', '.join(x for x in (plate_negative(style_doc.get('negative_prompt_en') or ''), scene_neg, NEGATIVE_EXTRA) if x)
-    # 尺寸随原图(母图 2880 级 / 分镜图 1920 级都可能),面积不超母图上限;画幅一律 16:9(PLATE_FMT,2026-10-09)——
-    # 原图不是 16:9(此前按项目画幅出的竖屏等旧图)时按面积档改出 16:9 的母图 / 分镜图尺寸
-    try:
-        from PIL import Image
-        with Image.open(base/src_rel) as im:
-            width, height = im.size
-    except Exception:  # noqa: BLE001
-        width, height = plate_size()
-    if abs(width / height / PLATE_ASPECT - 1) > .01:
-        pw, ph = plate_size()
-        width, height = master_size() if width * height > pw * ph * 1.2 else (pw, ph)
-    if width * height > MASTER_MAX_PIXELS:
-        width, height = master_size()
-    key = revision_key(lib, str(slot.get('key') or Path(src_rel).stem))
-    out_rel = f"assets/concepts/scenes/{sid}/{PLATES_DIR}/{key}.png"
-    if seed is None:
-        import random
-        seed = random.randint(1, 2**31-1)
-    src_kind = (src_entry.get('pano_ref') or {}).get('kind') or ('manual' if src_entry.get('manual') else ('master' if src_entry.get('master') else 'legacy'))
-    entry = {'key': key, 'master': False, 'revised': True, 'file': out_rel, 'whitebox_frame': slot.get('whitebox_frame') or src_entry.get('whitebox_frame'),
-             'lighting_scheme_id': scheme_id or None, 'time_of_day': time_of_day or None, 'camera': facts, 'size': f'{width}x{height}', 'seed': seed,
-             'refs': [src_rel], 'prompt': prompt, 'negative': negative,
-             'pano_ref': {'kind': 'revision', 'source_key': slot.get('key'), 'source_file': src_rel, 'source_kind': src_kind,
-                          'change': change.strip(), 'note': (note or '').strip()},
-             'plate_mode': 'revision', 'created_by': {'ep': ep, 'shot_id': shot_id, 'group_id': rec.get('group_id'), 'role': role, 'tool': 'revise_shot_plate'},
-             'written_at': dt.datetime.now().isoformat(timespec='seconds')}
-    log(f"== {shot_id} {role} ({rec.get('group_id')}) 按修改意见重出 {key} ← {slot.get('key')} [{src_kind}] ({width}x{height});参考图 = 当前背景图")
-    log(f"修改要求: {change.strip()}")
+    r = _render_revision(base, sid, src_rel=src_rel, src_key=str(slot.get('key') or Path(src_rel).stem), src_entry=src_entry, lib=lib,
+                         facts=facts, role=role, time_of_day=time_of_day, scheme_id=scheme_id, change=change, note=note, refs=refs,
+                         whitebox_frame=slot.get('whitebox_frame') or src_entry.get('whitebox_frame'),
+                         created_by={'ep': ep, 'shot_id': shot_id, 'group_id': rec.get('group_id'), 'role': role, 'tool': 'revise_shot_plate',
+                                     'label': f"{shot_id} {role} ({rec.get('group_id')})"},
+                         dry_run=dry_run, seed=seed, log=log)
     prev = {'key': slot.get('key'), 'file': slot.get('file'), 'reuse': slot.get('reuse')}
-    result = {'ok': True, 'ep': ep, 'shot_id': shot_id, 'scene_id': sid, 'group_id': rec.get('group_id'), 'role': role, 'key': key, 'file': out_rel,
-              'previous': prev, 'prompt': prompt, 'negative': negative, 'refs': [src_rel], 'size': entry['size'], 'seed': seed, 'dry_run': dry_run}
+    result = {'ok': True, 'ep': ep, 'shot_id': shot_id, 'scene_id': sid, 'group_id': rec.get('group_id'), 'role': role, 'key': r['key'], 'file': r['file'],
+              'previous': prev, 'prompt': r['prompt'], 'negative': r['negative'], 'refs': r['refs'], 'size': r['size'], 'seed': r['seed'], 'dry_run': dry_run}
     if dry_run:
-        log(prompt); log('refs: ' + json.dumps([src_rel], ensure_ascii=False))
         return result
-    from modules import genmedia
-    try:
-        with genmedia.image_pref_env('scenes'):   # 场景预览页选的图像模型(空=全局),与母图/补图同一口径
-            cfg = genmedia.get_config('image')
-        entry['channel'] = {'provider': cfg.get('provider'), 'model': cfg.get('model')}
-    except Exception:  # noqa: BLE001
-        entry['channel'] = None
-    genmedia.generate_image(prompt, str(base/out_rel), negative=negative, refs=[str(base/src_rel)], aspect=PLATE_FMT['aspect_ratio'],
-                            size=f'{width}x{height}', seed=seed)
-    (base/out_rel).with_suffix('.json').write_text(json.dumps(entry, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
-    upsert_library_entry(base, sid, entry, lib)
-    log(f"saved: {out_rel}")
+    entry = r['entry']
     # 只改本镜该角色的条目:原图、库里原条目、引用同一原图的其它镜都不动
-    slot.update({'key': key, 'file': out_rel, 'reuse': 'revised', 'crop': None, 'view': aspect_view(aspect) or None, 'whitebox_frame': entry['whitebox_frame'],
+    slot.update({'key': r['key'], 'file': r['file'], 'reuse': 'revised', 'crop': None, 'view': aspect_view(aspect) or None, 'whitebox_frame': entry['whitebox_frame'],
                  'revised_from': prev, 'revised_at': entry['written_at'], 'revision': {'change': change.strip(), 'note': (note or '').strip()}})
     rec['written_at'] = entry['written_at']
     save_episode_index(base, ep, idx)
-    sync = None
-    if rec.get('group_id'):
-        try:
-            sync = sync_group(base, ep, rec['group_id'], write=True)
-        except Exception as e:  # noqa: BLE001
-            sync = {'group_id': rec['group_id'], 'errors': [f'sync 失败:{e}'], 'warnings': [], 'updated': False}
-    result['sync'] = sync
+    result['sync'] = _revision_sync(base, ep, rec.get('group_id'))
     result['index'] = str(episode_index_path(base, ep).relative_to(base))
+    return result
+
+
+SHOT_SPEC_RE = re.compile(r'(ep[\w-]+)/(sh[\w-]+?)(?:\((start|end)\)|:(start|end))?')
+
+
+def plate_users(base: Path, sid: str, key: str) -> list[dict]:
+    """各集集索引里引用场景 sid 库图 key 的条目:[{ep, shot_id, role, group_id}],按集/镜/角色排序。"""
+    out = []
+    for f in sorted((base/'directing').glob('ep*/shot_plates.json')):
+        idx = read(f, None)
+        if not isinstance(idx, dict):
+            continue
+        for shot_id, rec in sorted((idx.get('shots') or {}).items()):
+            if not isinstance(rec, dict) or str(rec.get('scene_id') or '') != sid:
+                continue
+            for p in rec.get('plates') or []:
+                if isinstance(p, dict) and p.get('key') == key:
+                    out.append({'ep': f.parent.name, 'shot_id': shot_id, 'role': p.get('role') or 'start', 'group_id': rec.get('group_id')})
+    return out
+
+
+def _parse_shot_specs(only) -> list[tuple[str, str, str | None]]:
+    specs = []
+    for raw in only or []:
+        for tok in re.split(r'[,\s]+', str(raw or '')):
+            if not tok:
+                continue
+            m = SHOT_SPEC_RE.fullmatch(tok)
+            if not m:
+                raise ValueError(f'--only 写法不对:{tok}(应为 ep01/sh010、ep01/sh010(end) 或 ep01/sh010:end)')
+            specs.append((m.group(1), m.group(2), m.group(3) or m.group(4)))
+    return specs
+
+
+def revise_library_plate(base: Path, sid: str, key: str, change: str, *, note: str = '', refs=None, only=None, library_only: bool = False,
+                         dry_run: bool = False, seed: int | None = None, log=print) -> dict:
+    """场景预览页按库图修改(2026-10-09):以场景 sid 库图 key 为 [Image 1](+ 用户参考图)按意见新出 <key>_rev<N> 入库,原图与原条目不动;
+    再把引用这张原图的分镜条目改指向新图(reuse='revised';only=[ep01/sh010, ep01/sh012(end)…] 只换点名的,library_only 一个都不换),
+    并 sync 受影响的组。机位指纹与条目 view/crop 不动(新图与原图同机位同构图)。找不到库图/参考图不合格/only 点了不引用它的镜抛 ValueError。"""
+    sid = component(sid)
+    if not (change or '').strip():
+        raise ValueError('缺少修改要求(--change)')
+    lib = load_library(base, sid)
+    src_entry = next((e for e in lib['plates'] if e.get('key') == key), None)
+    if not src_entry:
+        raise ValueError(f'{sid} 的背景图库里没有 {key}')
+    src_rel = str(src_entry.get('file') or '')
+    if not src_rel or not (base/src_rel).is_file():
+        raise ValueError(f'{sid}/{key} 的背景图文件不存在:{src_rel or "(空)"}')
+    users = plate_users(base, sid, key)
+    if library_only:
+        targets = []
+    elif only:
+        specs = _parse_shot_specs(only)
+        hit = lambda u, e, s, r: u['ep'] == e and u['shot_id'] == s and (r is None or u['role'] == r)   # noqa: E731
+        targets = [u for u in users if any(hit(u, *sp) for sp in specs)]
+        missed = [f'{e}/{s}' + (f'({r})' if r else '') for e, s, r in specs if not any(hit(u, e, s, r) for u in users)]
+        if missed:
+            raise ValueError(f"{', '.join(missed)} 没有引用 {sid}/{key}(引用它的分镜:"
+                             f"{', '.join(u['ep'] + '/' + u['shot_id'] + ('(end)' if u['role'] == 'end' else '') for u in users) or '无'})")
+    else:
+        targets = users
+    facts = src_entry.get('camera') or {}
+    layout = read(base/'assets/concepts/scenes'/sid/'layout.json', {}) or {}
+    if facts.get('position') and facts.get('target') and facts.get('fov_v_deg'):
+        # 库图自己的机位;旧竖图(按项目画幅出的)按 16:9 重出时视场同轴装得下(同按镜修改)
+        pkey = {'position': facts['position'], 'target': facts['target'], 'fov': plate_fov_v(float(facts['fov_v_deg']), entry_aspect(src_entry))}
+        facts = {**facts, **camera_facts(pkey, PLATE_FMT, *orientation_axes(layout))}
+    r = _render_revision(base, sid, src_rel=src_rel, src_key=key, src_entry=src_entry, lib=lib, facts=facts, role='',
+                         time_of_day=src_entry.get('time_of_day') or '', scheme_id=src_entry.get('lighting_scheme_id') or '',
+                         change=change, note=note, refs=refs, whitebox_frame=src_entry.get('whitebox_frame'),
+                         created_by={'source': 'scene_preview', 'scene_id': sid, 'tool': 'revise_shot_plate', 'label': f'{sid}/{key}'},
+                         dry_run=dry_run, seed=seed, log=log)
+    tgt_names = [t['ep'] + '/' + t['shot_id'] + ('(end)' if t['role'] == 'end' else '') for t in targets]
+    log(f"替换分镜:{', '.join(tgt_names) if tgt_names else '无(只入库,可在分镜预览「换图」手选)'}")
+    result = {'ok': True, 'scene_id': sid, 'source_key': key, 'key': r['key'], 'file': r['file'], 'prompt': r['prompt'], 'negative': r['negative'],
+              'refs': r['refs'], 'size': r['size'], 'seed': r['seed'], 'dry_run': dry_run, 'replaced': tgt_names,
+              'users': [u['ep'] + '/' + u['shot_id'] + ('(end)' if u['role'] == 'end' else '') for u in users]}
+    if dry_run:
+        return result
+    entry = r['entry']
+    syncs = []
+    for ep in sorted({t['ep'] for t in targets}):
+        idx = load_episode_index(base, ep)   # 出图期间别的进程可能写过集索引:出图后重读再改
+        gids = []
+        for t in (t for t in targets if t['ep'] == ep):
+            rec = idx['shots'].get(t['shot_id'])
+            slot = next((p for p in (rec or {}).get('plates') or [] if isinstance(p, dict) and p.get('role') == t['role'] and p.get('key') == key), None)
+            if slot is None:
+                continue
+            prev = {'key': slot.get('key'), 'file': slot.get('file'), 'reuse': slot.get('reuse')}
+            slot.update({'key': r['key'], 'file': r['file'], 'reuse': 'revised', 'revised_from': prev, 'revised_at': entry['written_at'],
+                         'revision': {'change': change.strip(), 'note': (note or '').strip(), 'scope': 'library'}})
+            rec['written_at'] = entry['written_at']
+            if rec.get('group_id') and rec['group_id'] not in gids:
+                gids.append(rec['group_id'])
+        save_episode_index(base, ep, idx)
+        syncs += [s for s in (_revision_sync(base, ep, g) for g in gids) if s]
+    result['syncs'] = syncs
     return result
 
 

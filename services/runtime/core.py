@@ -7545,15 +7545,16 @@ def _preview_scenes(project: str):
         if d.is_dir():
             ids |= {x.name for x in d.iterdir()
                     if x.is_dir() and not x.name.startswith(".")}
-    # 分镜背景图(2026-09-09):场景库 assets/concepts/scenes/<sid>/plates/index.json,按各集 shot_plates.json 反查被哪些镜引用
-    used_by: dict[str, list] = {}
+    # 分镜背景图(2026-09-09):场景库 assets/concepts/scenes/<sid>/plates/index.json,按各集 shot_plates.json 反查被哪些镜引用;
+    # 按 (场景, key) 计——九宫格等 key 按光照方案命名,不同场景库里会重名(2026-10-09 jidi LS01_grid9_t9 曾把别的场景的镜算进来)
+    used_by: dict[tuple, list] = {}
     manual_needed: dict[str, list] = {}   # 场景 → 九宫格手动补图模式下待用户手工截取的镜(2026-10-04,集索引 view.manual_needed)
     for f in sorted((base / "directing").glob("ep*/shot_plates.json")):
         sp = _read_json_safe(f) or {}
         for sp_sid, rec in (sp.get("shots") or {}).items():
             for p in (rec.get("plates") or []) if isinstance(rec, dict) else []:
                 if isinstance(p, dict) and p.get("key"):
-                    used_by.setdefault(p["key"], []).append(f"{f.parent.name}/{sp_sid}" + ("(end)" if p.get("role") == "end" else ""))
+                    used_by.setdefault((rec.get("scene_id"), p["key"]), []).append(f"{f.parent.name}/{sp_sid}" + ("(end)" if p.get("role") == "end" else ""))
                     if p.get("reuse") == "grid9" and isinstance(p.get("view"), dict) and p["view"].get("manual_needed") and rec.get("scene_id"):
                         cam = p.get("camera") or {}
                         manual_needed.setdefault(rec["scene_id"], []).append({
@@ -7589,7 +7590,7 @@ def _preview_scenes(project: str):
                            # 全景制(2026-09-10):来源锚点/空洞比;无 pano_ref = legacy 旧法出图
                            # 2026-09-22 kind = pano|world(世界模型截图作参考出的母图)
                            "pano_ref": {k: pr.get(k) for k in ("kind", "anchor_id", "scheme", "hole_fraction", "source_key")} if pr else None,
-                           "created_by": p.get("created_by"), "used_by": used_by.get(p.get("key"), [])})
+                           "created_by": p.get("created_by"), "used_by": used_by.get((sid, p.get("key")), [])})
         # 场景全景锚点(2026-09-10):assets/concepts/scenes/<sid>/panos/index.json,预览页「全景图」板块(3D 白模之下)
         panos = None
         try:
@@ -8006,7 +8007,9 @@ def _shot_plate_candidates(project: str, ep: str, shot_id: str) -> dict:
     for f in sorted((base / "directing").glob("ep*/shot_plates.json")):
         sp = _read_json_safe(f) or {}
         for sp_sid, r in (sp.get("shots") or {}).items():
-            for p in (r.get("plates") or []) if isinstance(r, dict) else []:
+            if not isinstance(r, dict) or r.get("scene_id") != sid:   # 只算本场景的镜:不同场景库里 key 会重名
+                continue
+            for p in r.get("plates") or []:
                 if isinstance(p, dict) and p.get("key"):
                     used_by.setdefault(p["key"], []).append(f"{f.parent.name}/{sp_sid}" + ("(end)" if p.get("role") == "end" else ""))
     current = {p.get("role"): p.get("key") for p in rec["plates"] if isinstance(p, dict)}

@@ -23,7 +23,8 @@ from modules import shot_plates as sp  # noqa: E402
 from modules.whitebox import component  # noqa: E402
 
 
-def _used_by(base: Path) -> dict:
+def _used_by(base: Path, scene_id: str) -> dict:
+    """本场景库 key → 引用它的镜;只算本场景的镜(九宫格等 key 按光照方案命名,不同场景库里会重名)。"""
     out: dict = {}
     for f in sorted((base / 'directing').glob('ep*/shot_plates.json')):
         try:
@@ -31,7 +32,9 @@ def _used_by(base: Path) -> dict:
         except Exception:  # noqa: BLE001
             continue
         for sid, r in (idx.get('shots') or {}).items():
-            for p in (r.get('plates') or []) if isinstance(r, dict) else []:
+            if not isinstance(r, dict) or r.get('scene_id') != scene_id:
+                continue
+            for p in r.get('plates') or []:
                 if isinstance(p, dict) and p.get('key'):
                     out.setdefault(p['key'], []).append(f"{f.parent.name}/{sid}" + ('(end)' if p.get('role') == 'end' else ''))
     return out
@@ -57,7 +60,7 @@ def main():
         return 1
     sid = component(str(rec.get('scene_id') or ''))
     if args.list:
-        used = _used_by(base)
+        used = _used_by(base, sid)
         rows = [{'key': e['key'], 'file': e.get('file'), 'lighting_scheme_id': e.get('lighting_scheme_id'), 'master': bool(e.get('master')),
                  'manual': bool(e.get('manual')), 'legacy': sp.is_legacy(e), 'used_by': used.get(e['key'], [])}
                 for e in sp.load_library(base, sid)['plates'] if e.get('file') and (base / e['file']).is_file()]

@@ -691,7 +691,7 @@ def test_revise_shot_plate_keeps_source_and_swaps_only_this_role(tmp_path, monke
     assert dry['dry_run'] and dry['key'] == 'L1_grid9_t8_rev1' and not calls
     assert sp.load_episode_index(base, ep)['shots']['sh001']['plates'][0]['key'] == 'L1_grid9_t8'   # dry-run 不改索引
     res = sp.revise_shot_plate(base, ep, 'sh001', 'start', 'remove the lantern', note='去掉灯笼', seed=7, log=lambda *_: None)
-    assert len(calls) == 1 and calls[0]['refs'] == [str(base/src_rel)] and calls[0]['size'] == '192x108'
+    assert len(calls) == 1 and calls[0]['refs'] == [str(base/src_rel)] and calls[0]['size'] == '1920x1080'   # 同九宫格补图尺寸
     assert 'Requested change: remove the lantern.' in calls[0]['prompt'] and '去掉灯笼' in calls[0]['prompt']
     assert res['key'] == 'L1_grid9_t8_rev1' and (base/res['file']).is_file() and (base/res['file']).with_suffix('.json').is_file()
     assert (base/src_rel).is_file()                                                   # 原图不动
@@ -709,6 +709,119 @@ def test_revise_shot_plate_keeps_source_and_swaps_only_this_role(tmp_path, monke
     assert res2['key'] == 'L1_grid9_t8_rev2' and calls[-1]['refs'] == [str(base/res['file'])]
     assert sp.load_episode_index(base, ep)['shots']['sh001']['plates'][0]['revised_from']['key'] == 'L1_grid9_t8_rev1'
 
+
+
+def _library_revision_fixture(tmp_path, monkeypatch):
+    """库图 L1_t3(九宫格格子)被 ep01 sh001 起点/终点、ep02 sh005 起点引用,另一场景同名 key 不算。"""
+    import json
+    from PIL import Image
+    from modules import genmedia
+    base, sid = tmp_path, 'SCN-1'
+    (base/'settings.json').write_text(json.dumps({'output': {'spatial_blocking': True}}))
+    (base/'assets/concepts/scenes'/sid/'plates').mkdir(parents=True)
+    src_rel = f'assets/concepts/scenes/{sid}/plates/L1_t3.png'
+    Image.new('RGB', (192, 108), 'gray').save(base/src_rel, format='JPEG')
+    f = facts((0, 1.5, 0), (0, 1.5, -10), 27)
+    src_entry = {'key': 'L1_t3', 'file': src_rel, 'grid9': True, 'master': False, 'camera': f, 'lighting_scheme_id': 'L1', 'time_of_day': 'dusk',
+                 'size': '192x108', 'pano_ref': {'kind': 'grid9', 'tile': 2, 'scheme': 'L1'}}
+    sp.save_library(base, sid, {'schema_version': sp.SCHEMA_LIBRARY, 'scene_id': sid, 'plates': [src_entry]})
+    slot = lambda role, key='L1_t3': {'role': role, 'key': key, 'file': src_rel, 'reuse': 'grid9', 'camera': f, 'view': {'fraction': .5}}   # noqa: E731
+    sp.save_episode_index(base, 'ep01', {'schema_version': sp.SCHEMA_EPISODE, 'ep': 'ep01', 'shots': {
+        'sh001': {'group_id': 'grp001', 'scene_id': sid, 'plates': [slot('start'), slot('end')]},
+        'sh002': {'group_id': 'grp001', 'scene_id': sid, 'plates': [slot('start', 'other')]},
+        'sh003': {'group_id': 'grp002', 'scene_id': 'SCN-2', 'plates': [slot('start')]}}})
+    sp.save_episode_index(base, 'ep02', {'schema_version': sp.SCHEMA_EPISODE, 'ep': 'ep02', 'shots': {
+        'sh005': {'group_id': 'grp003', 'scene_id': sid, 'plates': [slot('start')]}}})
+    calls, synced = [], []
+
+    def fake_generate(prompt, output, negative='', refs=None, aspect='', size='', seed=None):
+        calls.append({'prompt': prompt, 'refs': refs, 'size': size, 'aspect': aspect})
+        Image.new('RGB', (192, 108), 'blue').save(output, format='JPEG')
+        return output
+    monkeypatch.setattr(genmedia, 'generate_image', fake_generate)
+    monkeypatch.setattr(genmedia, 'get_config', lambda kind: {'provider': 'test', 'model': 'm'})
+    monkeypatch.setattr(sp, 'sync_group', lambda base, ep, gid, write=False, **k: synced.append((ep, gid)) or {'group_id': gid, 'errors': []})
+    return base, sid, src_rel, src_entry, calls, synced
+
+
+def test_revise_library_plate_replaces_all_users_and_keeps_source(tmp_path, monkeypatch):
+    base, sid, src_rel, src_entry, calls, synced = _library_revision_fixture(tmp_path, monkeypatch)
+    assert [(u['ep'], u['shot_id'], u['role']) for u in sp.plate_users(base, sid, 'L1_t3')] == \
+        [('ep01', 'sh001', 'start'), ('ep01', 'sh001', 'end'), ('ep02', 'sh005', 'start')]          # 别的场景同名 key 不算
+    dry = sp.revise_library_plate(base, sid, 'L1_t3', 'remove the lantern', dry_run=True, log=lambda *_: None)
+    assert dry['key'] == 'L1_t3_rev1' and dry['replaced'] == ['ep01/sh001', 'ep01/sh001(end)', 'ep02/sh005'] and not calls
+    assert sp.load_episode_index(base, 'ep01')['shots']['sh001']['plates'][0]['key'] == 'L1_t3'
+    res = sp.revise_library_plate(base, sid, 'L1_t3', 'remove the lantern', note='去掉灯笼', seed=3, log=lambda *_: None)
+    assert len(calls) == 1 and calls[0]['refs'] == [str(base/src_rel)] and calls[0]['size'] == '1920x1080' and calls[0]['aspect'] == '16:9'
+    p = calls[0]['prompt']
+    assert '[Image 1] is the current background plate taken from this exact camera' in p and 'this exact shot' not in p
+    assert 'Requested change: remove the lantern.' in p and '去掉灯笼' in p and 'Time of day: dusk.' in p and '[Image 2]' not in p
+    assert 'Camera: ' in p and 'start of the shot' not in p
+    lib = sp.load_library(base, sid)['plates']
+    assert lib[0] == src_entry and (base/src_rel).is_file()                                      # 原图/原条目不动
+    new = lib[1]
+    assert new['key'] == 'L1_t3_rev1' and new['revised'] and not new['master'] and new['pano_ref']['source_kind'] == 'grid9'
+    assert new['created_by']['source'] == 'scene_preview' and 'label' not in new['created_by'] and new['size'] == '1920x1080'
+    e1 = sp.load_episode_index(base, 'ep01')['shots']
+    assert [s['key'] for s in e1['sh001']['plates']] == ['L1_t3_rev1', 'L1_t3_rev1'] and e1['sh002']['plates'][0]['key'] == 'other'
+    assert e1['sh003']['plates'][0]['key'] == 'L1_t3'                                            # 别的场景不动
+    s0 = e1['sh001']['plates'][0]
+    assert s0['reuse'] == 'revised' and s0['revised_from']['key'] == 'L1_t3' and s0['view'] == {'fraction': .5}   # 同机位同构图:view 不动
+    assert sp.load_episode_index(base, 'ep02')['shots']['sh005']['plates'][0]['key'] == 'L1_t3_rev1'
+    assert sorted(synced) == [('ep01', 'grp001'), ('ep02', 'grp003')] and res['replaced'] == dry['replaced']
+
+
+def test_revise_library_plate_only_and_library_only(tmp_path, monkeypatch):
+    import pytest
+    base, sid, _, _, calls, synced = _library_revision_fixture(tmp_path, monkeypatch)
+    res = sp.revise_library_plate(base, sid, 'L1_t3', 'add moss', only=['ep01/sh001(end)'], seed=1, log=lambda *_: None)
+    e1 = sp.load_episode_index(base, 'ep01')['shots']['sh001']['plates']
+    assert res['replaced'] == ['ep01/sh001(end)'] and [s['key'] for s in e1] == ['L1_t3', 'L1_t3_rev1']
+    assert sp.load_episode_index(base, 'ep02')['shots']['sh005']['plates'][0]['key'] == 'L1_t3' and synced == [('ep01', 'grp001')]
+    res2 = sp.revise_library_plate(base, sid, 'L1_t3', 'add rain', library_only=True, seed=2, log=lambda *_: None)
+    assert res2['key'] == 'L1_t3_rev2' and res2['replaced'] == [] and len(synced) == 1
+    assert any(e['key'] == 'L1_t3_rev2' for e in sp.load_library(base, sid)['plates'])
+    with pytest.raises(ValueError, match='ep01/sh002 没有引用'):
+        sp.revise_library_plate(base, sid, 'L1_t3', 'x', only=['ep01/sh002'], log=lambda *_: None)
+    with pytest.raises(ValueError, match='写法不对'):
+        sp.revise_library_plate(base, sid, 'L1_t3', 'x', only=['sh001'], log=lambda *_: None)
+    with pytest.raises(ValueError, match='没有 nope'):
+        sp.revise_library_plate(base, sid, 'nope', 'x', log=lambda *_: None)
+    assert len(calls) == 2
+
+
+def test_revise_with_user_reference_images(tmp_path, monkeypatch):
+    import pytest
+    from PIL import Image
+    base, sid, src_rel, _, calls, _ = _library_revision_fixture(tmp_path, monkeypatch)
+    ext = tmp_path/'outside'; ext.mkdir()
+    Image.new('RGB', (64, 64), 'red').save(ext/'door.jpg', format='JPEG')
+    Image.new('RGB', (64, 64), 'green').save(ext/'moss.bmp', format='BMP')
+    (ext/'not_image.png').write_text('x')
+    with pytest.raises(ValueError, match='不是可读取的图片'):
+        sp.revise_library_plate(base, sid, 'L1_t3', 'x', refs=[str(ext/'not_image.png')], log=lambda *_: None)
+    with pytest.raises(ValueError, match='参考图不存在'):
+        sp.revise_library_plate(base, sid, 'L1_t3', 'x', refs=[str(ext/'missing.png')], log=lambda *_: None)
+    many = []
+    for i in range(sp.REVISION_MAX_REFS + 1):
+        Image.new('RGB', (8, 8)).save(ext/f'r{i}.png'); many.append(str(ext/f'r{i}.png'))
+    with pytest.raises(ValueError, match='最多'):
+        sp.revise_library_plate(base, sid, 'L1_t3', 'x', refs=many, log=lambda *_: None)
+    dry = sp.revise_library_plate(base, sid, 'L1_t3', 'use the door in [Image 2]', refs=[str(ext/'door.jpg')], dry_run=True, log=lambda *_: None)
+    assert dry['refs'] == [src_rel, str((ext/'door.jpg').resolve())] and not (base/'assets/concepts/scenes'/sid/'plates/revision_refs').exists()
+    res = sp.revise_library_plate(base, sid, 'L1_t3', 'use the door in [Image 2] and the moss in [Image 3]',
+                                  refs=[str(ext/'door.jpg'), str(ext/'moss.bmp'), str(ext/'door.jpg')], seed=5, log=lambda *_: None)
+    keep = [f'assets/concepts/scenes/{sid}/plates/revision_refs/L1_t3_rev1_ref1.jpg', f'assets/concepts/scenes/{sid}/plates/revision_refs/L1_t3_rev1_ref2.png']
+    assert res['refs'] == [src_rel] + keep and all((base/k).is_file() for k in keep)          # 去重;BMP 转存 PNG
+    assert calls[-1]['refs'] == [str(base/r) for r in res['refs']]
+    p = calls[-1]['prompt']
+    assert '[Image 2] to [Image 3] are reference images supplied by the director' in p and 'do not copy their camera' in p
+    new = next(e for e in sp.load_library(base, sid)['plates'] if e['key'] == 'L1_t3_rev1')
+    assert new['pano_ref']['user_refs'] == keep and new['refs'] == res['refs']
+    # 按镜模式同样收参考图
+    res2 = sp.revise_shot_plate(base, 'ep01', 'sh001', 'start', 'paint it [Image 2] red', refs=[str(ext/'door.jpg')], seed=6, log=lambda *_: None)
+    assert res2['key'] == 'L1_t3_rev2' and len(res2['refs']) == 2 and '[Image 2] is a reference image' in calls[-1]['prompt']
+    assert 'do not copy its camera' in calls[-1]['prompt'] and 'start of the shot' in calls[-1]['prompt']
 
 def test_copy_key_chains_from_root():
     lib = {'plates': [{'key': 'X'}, {'key': 'X_copy1'}, {'key': 'X_copy3'}, {'key': 'Y_copy9'}]}

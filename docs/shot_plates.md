@@ -101,10 +101,24 @@ python code/revise_shot_plate.py --project <slug> --ep <ep> --shot <shNNN> [--ro
 ```
 
 - **原图不动**:不管这张图来自九宫格拆格(`grid9`)、九宫格补图(`grid9_fallback`)、全景截图 / 世界模型截图(`pano_manual` / `world_manual`)、母图(`pano` / `world`)还是旧法图,库里原条目与文件原样保留,引用同一张原图的其它镜不受影响;「🔁 换图」随时能换回。
-- **以当前图为参考新出**:`[Image 1]` = 本镜当前这张背景图(`modules/shot_plates.py#build_revision_prompt`:机位/构图/地平线/布局/陈设/材质/天气/光向/调色的权威参考,只改「Requested change」点名的内容,不移机位、不扩/缩视场、不增删未提及的东西),再附本镜机位句(集索引 `camera`)、光照方案片段、组 `time_of_day`、禁人/禁字/禁宫格、风格串;`--note` 的用户原话逐字附在末尾。尺寸随原图(面积超母图上限时落到母图规格),渠道同母图/补图(场景预览页「🎨 图像模型」,空则全局)。
+- **以当前图为参考新出**:`[Image 1]` = 本镜当前这张背景图(`modules/shot_plates.py#build_revision_prompt`:机位/构图/地平线/布局/陈设/材质/天气/光向/调色的权威参考,只改「Requested change」点名的内容,不移机位、不扩/缩视场、不增删未提及的东西),再附本镜机位句(集索引 `camera`)、光照方案片段、组 `time_of_day`、禁人/禁字/禁宫格、风格串;`--note` 的用户原话逐字附在末尾。尺寸同九宫格补图:一律 `plate_size()` = 1920x1080(16:9,2026-10-09 用户拍板,此前随原图尺寸),渠道同母图/补图(场景预览页「🎨 图像模型」,空则全局)。
 - **入库**:`plates/<原 key 去掉已有 _revN>_rev<N>.png`(+ 同名 `.json`),条目 `revised: true`、`master: false`、`pano_ref = {kind: 'revision', source_key, source_file, source_kind, change, note}`、`plate_mode: revision`;链式修改 `X_rev1 → X_rev2`(N 取库里同根最大修订号 + 1)。`is_legacy` 对 revised 条目为否(`--status` 不报 legacy WARN);不参与 `find_master` 派生(它只服务这一镜)。
 - **只替换本镜该角色**:集索引 `plates[]` 该条目改为 `key/file` 指向新图、`reuse: revised`、`view/crop: null`、`revised_from = {key, file, reuse}`、`revised_at`、`revision = {change, note}`;机位指纹 `camera` 不动,非 `--force` 的 `render_shot_plates` 按「记录仍新鲜」保留(同换图)。随后 `sync_group(write=True)` 把新图接进本组 prompt refs / `Shot plates:` 段与逐镜激活句。
 - 预览:分镜页显示「起点 · 按修改意见重出」;场景页与换图弹窗 caption「按修改意见重出(基于 <原 key>)」。`--dry-run` 只打印提示词与参考图。一条修改意见出一张,不赛马;用户不满意再发一条修改单(头里带上次修改记录)再出一张。
+
+### 场景预览页按库图修改 + 用户参考图(2026-10-09)
+
+场景预览页「分镜背景图」板块每张库图在「✂ 裁剪 / ⧉ 复制 / ⇋ 翻转」后有「✏️ 修改」:右下角浮窗(`edit-popup.js`)**直发** `08-video-gen/shot-plates`(不经修改师),定位文本带场景 / 库 key / 文件 / 引用它的分镜与库图模式命令;浮窗底部提示可用输入框右上角「+」附参考图(`file-attach.js`,不上传,只把本机绝对路径拼在消息末尾「附件」段)。
+
+```sh
+python code/revise_shot_plate.py --project <slug> --scene <sid> --key <库 key> --change "<英文修改要求>" [--note "<用户原话>"] \
+    [--ref <参考图>]… [--only ep01/sh010,ep01/sh012(end)] [--library-only] [--dry-run] [--seed N]
+```
+
+- `modules/shot_plates.py#revise_library_plate`:以这张库图为 `[Image 1]`(机位句用库条目自己的 `camera`,不写起点/终点),新出 `<key>_rev<N>` 入库(条目同上,`created_by.source = scene_preview`),原图与原条目不动。
+- **替换范围**:`plate_users` 扫各集 `directing/ep*/shot_plates.json`,同场景、`key` 相同的条目都算引用;默认全部改指向新图(`reuse: revised`、`revised_from`、`revision.scope = library`),**`view/crop` 与机位指纹不动**(新图与原图同机位同构图),按集重读索引后再写,再 `sync_group` 受影响的组。`--only` 只换点名的镜(`ep01/sh010` = 该镜引用它的起点与终点;`(end)` / `:end` 只换终点;点了没引用它的镜报错),`--library-only` 只入库。
+- 修订图不带 `master/grid9` 标记,之后新跑的集按机位自动选图时仍会选到原图;要用修订图须在分镜预览「换图」手选或再发修改。
+- **用户参考图(两种模式通用)**:`--ref` 可重复,最多 `REVISION_MAX_REFS` = 4 张,须能被 PIL 打开(去重);按顺序成为 `[Image 2]…`,提示词加一句「只取修改要求点名的东西(物件造型/材质/颜色/纹理),按 `[Image 1]` 的比例、透视、光线融入场景,不抄参考图的机位/构图/布局,不当平面图片贴入」;`--change` 里用编号写明要取什么。出图时复制进 `plates/revision_refs/<新 key>_ref<N>.<ext>`(PNG/JPEG/WEBP 原样,其它格式转 PNG),条目 `refs` 与 `pano_ref.user_refs` 记留档副本、`pano_ref.user_refs_from` 记原路径;`--dry-run` 不复制。
 
 ## 提示词的几条防偏规则（2026-09-09，dzg6 grp003 反例）
 

@@ -1,6 +1,6 @@
 /* 预览页「✏️ 编辑/修改」浮窗(所有预览页共用)
  * 用法:<script src="/static/edit-popup.js"></script>(放 i18n.js 之后),
- *      EditPopup.open({project, compose, agent, dispatcher, target, onSent})
+ *      EditPopup.open({project, compose, agent, dispatcher, target, onSent, hint})
  *   project = 项目 slug;compose = 预填进输入框的定位文本(如「修改 <对象>\n修改意见:」);
  *   agent   = 目标 Agent id;缺省或不存在时落**修改师**(00-orchestration/reviser,一人把相关改动全做完,
  *             无状态可并发、不排队在总制片后面);修改师不存在(旧服务端)时再落总制片;
@@ -10,6 +10,7 @@
  *             非修改师目标时该字段被服务端忽略;
  *   onSent  = 可选回调 (runJson) => void,派单成功后拿到 /api/v1/runs 的返回(含 run_id),
  *             供页面就地标记「处理中」并轮询(故事板页草图重绘用)。
+ *   hint    = 可选,替换底部提示文字(缺省「发出后到控制台可看 Agent 回复」;如场景预览背景图「修改」提示可用「+」附参考图),每次 open 重置。
  * 行为:在当前页右下角弹出非模态浮窗(无遮罩,不抢页面其它区域的点击/选择/复制),
  *      标头显示目标 Agent,输入框预填定位文本、光标落尾,用户接着写修改意见,
  *      目标为修改师时多一行「顺带重跑受影响的下游任务」勾选(默认不勾:只改用户指的这一处,
@@ -174,6 +175,7 @@
     el.querySelector('.ep-send').disabled=false;
     var optRow=el.querySelector('.ep-opt');optRow.hidden=true;el.querySelector('.ep-rerun').checked=false;
     var b=el.querySelector('.ep-agent b');b.textContent='…';
+    var hint=el.querySelector('.ep-hint');hint.textContent=opt.hint||T('发出后到控制台可看 Agent 回复');hint.title=opt.hint||'';
     cur={project:opt.project||'demo',agent:{id:opt.agent||'',name:opt.agent||''},text:opt.compose||'',
          target:cleanTarget(opt.target),dispatcher:!!opt.dispatcher,
          onSent:typeof opt.onSent==='function'?opt.onSent:null};
