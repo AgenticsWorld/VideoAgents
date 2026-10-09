@@ -445,6 +445,36 @@ def test_lean_shoulder_matches_renderer_and_reach_warnings():
     assert any('left_hand' in w for w in pose_channel_warnings(actor))
 
 
+def test_hand_cross_body_warning():
+    """#121:手通道过半帧落在身体中线另一侧、最远越过 > HAND_CROSS_MIN·宽 → 横穿胸前 WARN(疑似旧口径);只 WARN。"""
+    from modules.whitebox import HAND_CROSS_MIN, HAND_HOLD_SPAN, pose_channel_warnings
+    size=[.48,1.7,.38]; edge=HAND_CROSS_MIN*size[0]
+    def actor(rights, lefts=None):
+        keys=[]
+        for i,x in enumerate(rights):
+            k={'t':i,'position':[0,0,0],'right_hand':[x,1.0,.3]}
+            if lefts:k['left_hand']=[lefts[i],1.0,.3]
+            keys.append(k)
+        return {'id':'CHAR-1','kind':'person','size_m':size,'keyframes':keys}
+    crossed=lambda a:[w for w in pose_channel_warnings(a) if '手臂横穿胸前' in w]
+    # 旧口径:right_hand 整条轨写在 +X(人物左侧)
+    warns=crossed(actor([.2,.22,.24]))
+    assert len(warns)==1 and '手臂横穿胸前:right_hand' in warns[0] and '3/3' in warns[0] and '旧口径' in warns[0]
+    # 新口径同侧、手在身前中线附近:不报
+    assert crossed(actor([-.2,-.22,-.24]))==[] and crossed(actor([0,.02,-.01]))==[]
+    # 阈值边界:最远越过中线恰在阈值内不报,超过即报
+    assert crossed(actor([edge-.001]*3))==[]
+    assert len(crossed(actor([edge+.001]*3)))==1
+    # 临时越过中线(少于半数帧,如伸手够门沿)不报;过半即报
+    assert crossed(actor([-.2,-.2,.2]))==[]
+    assert len(crossed(actor([-.2,.2,.2])))==1
+    # 双手同持一物(两手相距 < HAND_HOLD_SPAN·高)的帧不计
+    assert HAND_HOLD_SPAN*size[1]>.1
+    assert crossed(actor([.2,.2,.2],[.25,.25,.25]))==[]
+    # 生物不查手部
+    assert crossed({**actor([.2,.22,.24]),'kind':'creature'})==[]
+
+
 def test_actor_bounds_follow_lean():
     from modules.whitebox_refs import actor_bounds
     actor={'size_m':[.48,1.7,.38]}

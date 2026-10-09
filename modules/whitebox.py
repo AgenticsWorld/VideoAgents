@@ -338,6 +338,11 @@ def lean_hip(pose):
 # 局部 X 符号。2026-10 前的计划按「right_hand = +X」写,由 code/whitebox_hand_migrate.py 互换键名迁移(计划标 hand_convention)。
 HAND_SIDES = (('left_hand', 1), ('right_hand', -1))
 HAND_CONVENTION = 'anatomical'
+# 手臂横穿胸前 WARN(#121,防 Agent 照 2026-10 前的 blocking.json / shot_list 镜像把旧口径写回):某手通道过半关键帧
+# 的目标落在身体中线另一侧(局部 x 与该肩异号),且最远越过中线 > HAND_CROSS_MIN·宽。双手相距 < HAND_HOLD_SPAN·高的帧
+# 视为双手同持一物(横握长兵、捧物),不计。旧口径数据整条轨都在另一侧,临时伸手越过中线(够门沿、交叉一拍)不报。
+HAND_CROSS_MIN = .25
+HAND_HOLD_SPAN = .2
 
 
 def shoulder_point(size_m, key, side):
@@ -350,8 +355,9 @@ def shoulder_point(size_m, key, side):
 
 
 def pose_channel_warnings(actor):
-    """bend 写在不支持前俯的姿态上 → 提示被忽略;手目标超出两段臂长 → 可达性 WARN(不改数据、不报错)。"""
-    out = []; ignored = set(); reach = {}
+    """bend 写在不支持前俯的姿态上 → 提示被忽略;手目标超出两段臂长 → 可达性 WARN;手目标整条轨在身体另一侧 →
+    横穿胸前 WARN(疑似旧口径,#121)。均不改数据、不报错。"""
+    out = []; ignored = set(); reach = {}; cross = {}
     size = actor.get('size_m') or [.5, 1.7, .4]
     for key in actor.get('keyframes', []):
         pose = key.get('pose') or 'stand'
@@ -359,16 +365,32 @@ def pose_channel_warnings(actor):
             ignored.add(pose)
         if actor.get('kind', 'person') == 'creature':
             continue
+        hands = {name: key[name] for name, _ in HAND_SIDES if isinstance(key.get(name), list) and len(key[name]) == 3}
+        held = len(hands) == 2 and math.dist(*hands.values()) < HAND_HOLD_SPAN*size[1]
         for name, side in HAND_SIDES:
-            if isinstance(key.get(name), list) and len(key[name]) == 3:
-                gap = math.dist(key[name], shoulder_point(size, key, side)) - 2*ARM_SEGMENT*size[1]
+            if name in hands:
+                gap = math.dist(hands[name], shoulder_point(size, key, side)) - 2*ARM_SEGMENT*size[1]
                 if gap > 1e-6 and gap > reach.get(name, (0, 0))[1]:
                     reach[name] = (key['t'], gap)
+                if not held:
+                    rec = cross.setdefault(name, [0, 0, 0.0, None])   # 计入帧数, 越过中线帧数, 最远越过 m, 其 t
+                    over = -side*hands[name][0]
+                    rec[0] += 1
+                    if over > 0:
+                        rec[1] += 1
+                        if over > rec[2]:
+                            rec[2], rec[3] = over, key['t']
     if ignored:
         out.append(f"{actor['id']}: bend 只对 stand/crouch/kneel 生效,{'/'.join(sorted(ignored))} 姿态上的 bend 已忽略。")
     for name, (t, gap) in reach.items():
         out.append(f"{actor['id']}: {name} 在 t={t:g}s 距肩超出臂长 {gap:.2f} m(两段臂各 {ARM_SEGMENT:g}h),"
                    '渲染时手停在伸直方向上;请加 bend 前俯、移近人物或改手部坐标。')
+    for name, (total, n, over, t) in cross.items():
+        if 2*n >= total and over > HAND_CROSS_MIN*size[0]:
+            out.append(f"{actor['id']}: 手臂横穿胸前:{name} 目标在人物另一侧({n}/{total} 帧,t={t:g}s 越过身体中线 "
+                       f'{over:.2f} m),疑似按旧口径(+X=右)书写——手部通道按人物解剖学左右,面朝局部 +Z 时 right_hand '
+                       'x 取负;从 2026-10 前的 blocking.json / shot_list 等镜像抄手部关键帧须互换键名。'
+                       '若是有意交叉(如持物横胸)可忽略。')
     return out
 
 
