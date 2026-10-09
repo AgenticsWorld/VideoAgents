@@ -284,7 +284,7 @@ refs/
 | workflow-orchestrator | 为小说 `<slug>` 立项:初始化目录、生成全流程 DAG、登记全部工单 | 小说原文、本文档、workflow.yaml | `<项目目录>/runs/dag.json`、工单队列 | 机检:DAG 无环、每个任务的依赖/产物路径合法 |
 | memory-bible | 初始化空 Bible 骨架与写入规则 | 项目目录 | `bible/` 骨架 | 机检:骨架 schema 齐全 |
 | novel-parser(p0-scan) | 扫描 `novel/` 章节文件并分批:整章归组,每批 1–1.5 万字,短章合并、超长章独立成批,**不拆章** | `novel/`(仅目录与字数,不读正文) | `story/chapter_manifest.json` | 机检:schema;章节文件覆盖率 100%;批字数在目标区间 |
-| novel-parser(p0-parse,每章节批并行) | 解析本批章节:章节切分、场景切分、对白提取(带说话人)、实体标注(人/地/物/招式);跨批指代判不准标 UNKNOWN | 本批章节原文、chapter_manifest | `story/structured_story/chNNN.json`(每章一分片) | 机检:分片 schema;本批章节覆盖率 100%;说话人缺失率 <2%。评分:extraction_v1 ≥85(按批)。QA:抽样 3 章人工比对原文 |
+| novel-parser(p0-parse,每章节批并行) | 解析本批章节:章节切分、场景切分、对白提取(带说话人)、实体标注(人/地/物/招式);跨批指代判不准标 UNKNOWN | 本批章节原文、chapter_manifest | `story/structured_story/chNNN.json`(每章一分片) | 机检:分片 schema;本批章节覆盖率 100%;每条 UNKNOWN 附候选与判不准理由(unknown_speaker_annotated;**批级不判 UNKNOWN 占比**,全书 <2% 在 p0-merge 判,#130;本批 ≥5 条且 ≥10% 只在回执 WARN)。评分:extraction_v1 ≥85(按批)。QA:抽样 3 章人工比对原文 |
 | novel-parser(p0-merge) | 按 manifest 顺序把分片机械拼装为总表;只拼装校验不改写,分片缺漏退回对应批 | 全部章节分片、chapter_manifest | `story/structured_story.json`(下游契约不变;分片保留) | 机检:总表 schema;全书章节覆盖率 100%(章数+总字数与 `novel/` 对账);ID 全局唯一;全书 UNKNOWN <2% |
 
 > 分章 map + 全局 merge(2026-07-23 改版):治整本单任务「原文+产物」上下文溢出;不设字数阈值分支,短篇即少数几批,统一走此路,粒度由 p0-scan 分批逻辑控制。

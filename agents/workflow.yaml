@@ -72,7 +72,9 @@ phases:
         depends_on: [p0-scan]
         outputs: ["story/structured_story/"]   # 本批各章分片 chNNN.json,每章一文件
         validation:
-          auto: [schema, batch_chapter_coverage_100, speaker_missing_lt_2pct]
+          # 批级不判 UNKNOWN 占比(批分母常 <50 条,1 条即越 2% 线,与「判不准就标 UNKNOWN」互斥,#130);
+          # 只核每条 UNKNOWN 附候选 + 理由;占比留给 p0-merge 全书判。本批 UNKNOWN ≥5 条且 ≥10% 时只在回执 WARN
+          auto: [schema, batch_chapter_coverage_100, unknown_speaker_annotated]
           rubric: extraction_v1
           threshold: 85
       - id: p0-merge
