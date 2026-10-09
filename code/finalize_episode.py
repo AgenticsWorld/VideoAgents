@@ -31,6 +31,11 @@
   本 CLI 在正片 = 转场产物(out_cut)或后期拼片(cut_post*)时把两层复合成一张总表:外挂声轨按表重映射为
   edit/epNN/final_audio_timemapped.wav(黑场声音按 hold_audio:延续/淡出/静音)再进 concat;字幕逐条按表平移再 +片头;
   check 的 subtitle_offset_all_cues / audio_offset_measured 按表对位(期望滞后仍 = 片头)。无表 = 行为与以前完全一致。
+  字幕基准(2026-10-09,issue #114):混音已按采纳版本盖章时 final_audio 不再套后期层,字幕默认也视同已按后期版本出;
+  subtitles.srt 其实仍是原粗剪基准(未减删段)时用 --subs-basis original(写 edit/epNN/subtitles.basis.json,之后
+  shift/assemble/check 都按它)让字幕照套后期层;字幕已按后期版本出而混音未盖章时用 --subs-basis post;
+  --subs-basis auto 删除声明。未声明且后期层被跳过、字幕末条却超出正片 → shift/assemble 直接 FAIL 并提示此参数
+  (以前静默原样拷贝,成片末段字幕错位)。
 
 集尾收束(2026-09-25,§9C):正片为 render_transitions 产物且台账 transitions_render.json#episode_close 在时,画面已在末尾淡出/切黑并停留
   hold_s;本 CLI 在 assemble 时对外挂声轨施加同刻处理——fade_black/fade_white 在 fade_end_s 前 duration_s 内 afade 淡出、cut_black/cut_white
@@ -48,8 +53,8 @@
 
 用法:
   python3 code/finalize_episode.py probe    --project <slug> --ep epNN
-  python3 code/finalize_episode.py shift    --project <slug> --ep epNN
-  python3 code/finalize_episode.py assemble --project <slug> --ep epNN [--cut cut_v2.mp4] [--audio ...] [--out final.mp4]
+  python3 code/finalize_episode.py shift    --project <slug> --ep epNN [--subs-basis auto|original|post]
+  python3 code/finalize_episode.py assemble --project <slug> --ep epNN [--cut cut_v2.mp4] [--audio ...] [--out final.mp4] [--subs-basis …]
   python3 code/finalize_episode.py check    --project <slug> --ep epNN [--final ep01_final_v6.mp4] [--tol-ms 80]
 退出码:全 PASS=0,任一 FAIL=1(WARN 不影响退出码)。
 """
@@ -210,7 +215,7 @@ def _declared_duration(placement, seg):
     return None, node.get("file")
 
 
-from timemap_layers import load_timemap, _apply_mix_basis, resolve_cut  # noqa: E402,F401  2026-09-25 抽到 modules/,与 render_captions 共用
+from timemap_layers import load_timemap, _apply_mix_basis, resolve_cut, write_subtitle_basis, SUBS_BASES  # noqa: E402,F401  2026-09-25 抽到 modules/,与 render_captions 共用
 
 
 def load_episode_close(proj, ep, cut):
@@ -256,7 +261,7 @@ def timemapped_audio(proj, ep, audio, ops, notes=None):
     return out
 
 
-def resolve_layout(proj, ep, layout, cut_override=None, audio_override=None, notes=None):
+def resolve_layout(proj, ep, layout, cut_override=None, audio_override=None, notes=None, subs_basis=None):
     """返回有序段列表:[{name, path, v_dur, a_dur, dur, has_audio, declared}]。"""
     notes = notes if notes is not None else []
     pk = _packaging(proj)
@@ -269,7 +274,7 @@ def resolve_layout(proj, ep, layout, cut_override=None, audio_override=None, not
             if not cut_override:
                 notes.append(f"正片未指定 --cut,自动解析为 {cut.name}(台账 final_layout.json 优先,台账过期时取后期拼片 cut_post*/更新的 cut_v*)")
             audio = find_audio(proj, ep, audio_override)
-            ops, tm_info = load_timemap(proj, ep, cut, notes, audio_used=audio is not None)
+            ops, tm_info = load_timemap(proj, ep, cut, notes, audio_used=audio is not None, subs_basis=subs_basis)
             audio_src = audio
             audio_ops = tm_info.get("audio_ops", ops)   # 混音已含组边界层时 = 去掉边界层的表(2026-09-24)
             if audio is not None and audio_ops:
@@ -404,6 +409,32 @@ def shift_ass_text(text, delta):
             line = f"{m.group(1)}: {m.group(2)},{s_to_ass(a)},{s_to_ass(b)},{m.group(5)}"
         out.append(line)
     return "\n".join(out) + "\n"
+
+
+def _subs_basis_overrun(proj, ep, segs):
+    """未声明字幕基准、后期层因混音盖章对字幕被跳过,而 subtitles.* 末条(按字幕表映射后)超出正片 >0.5s:
+    字幕八成仍是原粗剪基准(issue #114)。返回 (末条秒, 正片秒, 后期层 Δ) 或 None。"""
+    cut = next(s for s in segs if s["name"] == "cut")
+    tm = cut.get("timemap") or {}
+    sb = tm.get("subs_basis") or {}
+    if sb.get("basis") != "auto" or sb.get("post_layer") != "skipped":
+        return None
+    ed = proj / "edit" / ep
+    cues = parse_srt(ed / "subtitles.srt") if (ed / "subtitles.srt").is_file() else (
+        parse_ass(ed / "subtitles.ass") if (ed / "subtitles.ass").is_file() else [])
+    if not cues:
+        return None
+    last = timemap.map_time(tm.get("ops") or [], max(e for _, e in cues))
+    if last > cut["v_dur"] + 0.5:
+        return last, cut["v_dur"], float(sb.get("post_delta_s") or 0.0)
+    return None
+
+
+def _subs_basis_hint(ep, over):
+    last, vdur, d = over
+    return (f"字幕末条止于正片 {last:.3f}s,超出正片 {vdur:.3f}s;混音已按后期采纳版本盖章,字幕默认视同已按后期版本出、不再套后期层"
+            f"(Δ{d:+.3f}s)——subtitles.srt 若仍是原粗剪基准,用 `finalize_episode.py shift --project <slug> --ep {ep} --subs-basis original` "
+            "声明后重跑(assemble 同参数);若字幕本应按后期版本出,请让 subtitle 按 final_audio 重出")
 
 
 def do_shift(proj, ep, intro_s, ops=None):
@@ -665,8 +696,9 @@ def do_check(proj, ep, segs, notes, final_path, tol_ms=80, write=True):
             if fdur is not None:
                 fin = parse_srt(fin_srt)
                 last = max((e for _, e in fin), default=0.0)
+                over = _subs_basis_overrun(proj, ep, segs) if last > fdur + 0.5 else None
                 rec("subtitle_within_final", last <= fdur + 0.5,
-                    f"末条 cue 止于 {last:.3f}s,成片 {fdur:.3f}s")
+                    f"末条 cue 止于 {last:.3f}s,成片 {fdur:.3f}s" + (f";{_subs_basis_hint(ep, over)}" if over else ""))
     else:
         rec("subtitles_final_present", True, "无 subtitles.srt(subtitle 未交付,跳过字幕项)", warn=True)
     base_ass, fin_ass = ed / "subtitles.ass", ed / "subtitles_final.ass"
@@ -765,12 +797,20 @@ def main(argv=None):
         ap.add_argument("--crf", type=int, default=18)
         ap.add_argument("--preset", default="medium")
         ap.add_argument("--force", action="store_true", help="assemble:av 项目也允许重编码封装")
+        ap.add_argument("--subs-basis", choices=SUBS_BASES, default=None,
+                        help="字幕时间码基准:original = 原粗剪基准(照套后期层)/ post = 已按后期版本 / auto = 跟混音基准(删除声明);"
+                             "shift/assemble 时写入 edit/epNN/subtitles.basis.json,probe/check 时只本次生效")
 
     args, proj = parse_args(__doc__.splitlines()[0], configure=configure, argv=argv)
     require_tools("ffprobe")
     layout = [x.strip() for x in args.layout.split(",") if x.strip()]
     notes = []
-    segs = resolve_layout(proj, args.ep, layout, args.cut, args.audio, notes)
+    subs_override = args.subs_basis
+    if args.subs_basis and args.cmd in ("shift", "assemble"):
+        p = write_subtitle_basis(proj, args.ep, args.subs_basis, note=f"finalize_episode.py {args.cmd} --subs-basis")
+        print(f"[INFO ] 字幕基准声明 {args.subs_basis}" + (f" → {p.relative_to(proj)}" if p else "(已删除声明文件)"))
+        subs_override = None
+    segs = resolve_layout(proj, args.ep, layout, args.cut, args.audio, notes, subs_basis=subs_override)
     has_pack = any(s["name"] != "cut" for s in segs)
 
     if args.cmd == "probe":
@@ -780,6 +820,11 @@ def main(argv=None):
         return 0
 
     cut_ops = ((next(s for s in segs if s["name"] == "cut").get("timemap") or {}).get("ops")) or []
+    if args.cmd in ("shift", "assemble"):
+        over = _subs_basis_overrun(proj, args.ep, segs)
+        if over:
+            print_layout(proj, segs, notes)
+            raise SystemExit("[FAIL] subtitle_basis:" + _subs_basis_hint(args.ep, over))
     if args.cmd == "shift":
         print_layout(proj, segs, notes)
         do_shift(proj, args.ep, offsets_of(segs)[0]["cut"], cut_ops)
