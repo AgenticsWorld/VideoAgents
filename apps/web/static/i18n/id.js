@@ -4218,4 +4218,10 @@ window.I18N_DICT = {
 "已由人工提交": "Dikirim secara manual",
 "发布成功": "Berhasil dipublikasikan",
 "发布失败": "Publikasi gagal",
+"片头内容": "Konten pembuka",
+"片尾内容": "Konten penutup",
+"未填写内容,由系统自行发挥": "Konten tidak diisi — sistem akan berimprovisasi",
+"可留空:留空则由系统按项目风格自行发挥。署名、网址、版权声明等文字会原样呈现;引用 refs/ 下的素材(厂标 / Logo / 二维码)请写明路径。": "Opsional: kosongkan dan sistem berimprovisasi sesuai gaya proyek. Nama kredit, URL, dan pemberitahuan hak cipta ditampilkan apa adanya; sebutkan path bila memakai aset di refs/ (logo studio / logo / kode QR).",
+"例如:3 秒内出剧名「XXX」,水墨晕开,配一声古琴;左下角挂 refs/logo.png": "mis.: judul «XXX» dalam 3 detik, tinta menyebar, satu petikan guqin; refs/logo.png di kiri bawah",
+"例如:滚动演职员表,结尾停在「感谢观看 · 关注不迷路」,右下角放 refs/qrcode.png": "mis.: kredit bergulir, berakhir di «Terima kasih sudah menonton · Ikuti kami», refs/qrcode.png di kanan bawah",
 };

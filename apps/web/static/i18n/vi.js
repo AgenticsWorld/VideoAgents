@@ -4218,4 +4218,10 @@ window.I18N_DICT = {
 "已由人工提交": "Bạn đã gửi",
 "发布成功": "Phát hành thành công",
 "发布失败": "Phát hành thất bại",
+"片头内容": "Nội dung mở đầu",
+"片尾内容": "Nội dung kết thúc",
+"未填写内容,由系统自行发挥": "Chưa nhập nội dung — hệ thống sẽ tự sáng tạo",
+"可留空:留空则由系统按项目风格自行发挥。署名、网址、版权声明等文字会原样呈现;引用 refs/ 下的素材(厂标 / Logo / 二维码)请写明路径。": "Có thể để trống: để trống thì hệ thống tự sáng tạo theo phong cách dự án. Tên tác giả, địa chỉ web, thông báo bản quyền sẽ hiển thị nguyên văn; khi dùng tư liệu trong refs/ (logo hãng / logo / mã QR) hãy ghi rõ đường dẫn.",
+"例如:3 秒内出剧名「XXX」,水墨晕开,配一声古琴;左下角挂 refs/logo.png": "VD: hiện tên phim «XXX» trong 3 giây, mực loang, một tiếng đàn cổ cầm; góc dưới trái đặt refs/logo.png",
+"例如:滚动演职员表,结尾停在「感谢观看 · 关注不迷路」,右下角放 refs/qrcode.png": "VD: danh đề chạy, dừng ở «Cảm ơn đã xem · Hãy theo dõi», góc dưới phải đặt refs/qrcode.png",
 };

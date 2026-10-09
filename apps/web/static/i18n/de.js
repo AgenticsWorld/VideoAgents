@@ -4218,4 +4218,10 @@ window.I18N_DICT = {
 "已由人工提交": "Manuell eingereicht",
 "发布成功": "Veröffentlicht",
 "发布失败": "Veröffentlichung fehlgeschlagen",
+"片头内容": "Intro-Inhalt",
+"片尾内容": "Outro-Inhalt",
+"未填写内容,由系统自行发挥": "Kein Inhalt angegeben – das System gestaltet frei",
+"可留空:留空则由系统按项目风格自行发挥。署名、网址、版权声明等文字会原样呈现;引用 refs/ 下的素材(厂标 / Logo / 二维码)请写明路径。": "Optional: leer lassen, dann gestaltet das System frei im Projektstil. Namensnennungen, URLs und Copyright-Hinweise werden wörtlich übernommen; bei Assets unter refs/ (Studiologo / Logo / QR-Code) bitte den Pfad angeben.",
+"例如:3 秒内出剧名「XXX」,水墨晕开,配一声古琴;左下角挂 refs/logo.png": "z. B. Titel „XXX“ innerhalb von 3 s, Tuschverlauf, ein Guqin-Ton; refs/logo.png unten links",
+"例如:滚动演职员表,结尾停在「感谢观看 · 关注不迷路」,右下角放 refs/qrcode.png": "z. B. Rolltitel, Ende auf „Danke fürs Zuschauen · Folgt uns“, refs/qrcode.png unten rechts",
 };

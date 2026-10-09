@@ -4220,4 +4220,10 @@ window.I18N_DICT = {
 "已由人工提交": "Enviado manualmente",
 "发布成功": "Publicado",
 "发布失败": "Publicación fallida",
+"片头内容": "Contenido de la intro",
+"片尾内容": "Contenido del cierre",
+"未填写内容,由系统自行发挥": "Sin contenido: el sistema improvisará",
+"可留空:留空则由系统按项目风格自行发挥。署名、网址、版权声明等文字会原样呈现;引用 refs/ 下的素材(厂标 / Logo / 二维码)请写明路径。": "Opcional: si lo dejas vacío, el sistema improvisa según el estilo del proyecto. Firmas, URL y avisos de copyright se muestran tal cual; indica la ruta si usas recursos de refs/ (logo del estudio / logo / código QR).",
+"例如:3 秒内出剧名「XXX」,水墨晕开,配一声古琴;左下角挂 refs/logo.png": "p. ej.: título «XXX» en 3 s, tinta que se difumina, una nota de guqin; refs/logo.png abajo a la izquierda",
+"例如:滚动演职员表,结尾停在「感谢观看 · 关注不迷路」,右下角放 refs/qrcode.png": "p. ej.: créditos en desplazamiento, terminar en «Gracias por ver · Síguenos», refs/qrcode.png abajo a la derecha",
 };

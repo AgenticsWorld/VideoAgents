@@ -4220,4 +4220,10 @@ window.I18N_DICT = {
 "已由人工提交": "Envoyé manuellement",
 "发布成功": "Publié",
 "发布失败": "Échec de la publication",
+"片头内容": "Contenu du générique de début",
+"片尾内容": "Contenu du générique de fin",
+"未填写内容,由系统自行发挥": "Aucun contenu fourni — le système improvise",
+"可留空:留空则由系统按项目风格自行发挥。署名、网址、版权声明等文字会原样呈现;引用 refs/ 下的素材(厂标 / Logo / 二维码)请写明路径。": "Facultatif : laissez vide et le système improvise selon le style du projet. Signatures, URL et mentions de copyright sont affichées telles quelles ; indiquez le chemin pour les ressources sous refs/ (logo studio / logo / QR code).",
+"例如:3 秒内出剧名「XXX」,水墨晕开,配一声古琴;左下角挂 refs/logo.png": "ex. : titre « XXX » en 3 s, encre qui se diffuse, une note de guqin ; refs/logo.png en bas à gauche",
+"例如:滚动演职员表,结尾停在「感谢观看 · 关注不迷路」,右下角放 refs/qrcode.png": "ex. : générique déroulant, fin sur « Merci d’avoir regardé · Abonnez-vous », refs/qrcode.png en bas à droite",
 };
