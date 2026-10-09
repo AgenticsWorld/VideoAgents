@@ -6360,6 +6360,12 @@ def _sketchgen_size(aspect: str) -> str:
     return f"{w}x{h}"
 
 
+# 单张出图子进程(genmedia image / storyboard_sketch)的外层超时:须大于 genmedia 内最长的图像等待
+# (IMAGE_TIMEOUT / COMFY_TIMEOUT 1800s)并留上传参考图与下载产物余量,否则外层先杀子进程,
+# 远端任务既不取消也不落盘
+IMAGE_SUBPROCESS_TIMEOUT = 2100
+
+
 def _sketchgen_worker(project: str, ep: str, grp: str, png: Path, text: str):
     """后台线程:genmedia 子进程生图(线稿+组 refs 作参考,项目风格串入 prompt),
     成图加入组 refs;进度经 SKETCHGEN_JOBS + SSE sketchgen 事件对外。"""
@@ -6389,7 +6395,7 @@ def _sketchgen_worker(project: str, ep: str, grp: str, png: Path, text: str):
         neg = str(st.get("negative_prompt_string_en") or "").strip()
         if neg:
             cmd += ["--negative", neg]
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=900, cwd=str(ROOT))
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=IMAGE_SUBPROCESS_TIMEOUT, cwd=str(ROOT))
         if r.returncode != 0 or not out.is_file():
             raise RuntimeError((r.stderr or r.stdout or "").strip()[-500:]
                                or f"genmedia exit {r.returncode}")
@@ -6519,7 +6525,7 @@ def _board_hand_ai_worker(project: str, ep: str, key: str, scene: dict, shot: di
     cmd += ["--note", text] if text else ["--clear-note"]
     status, err = "done", ""
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=900, cwd=str(ROOT))
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=IMAGE_SUBPROCESS_TIMEOUT, cwd=str(ROOT))
         if r.returncode != 0:
             rec = sbb.load_index(base, ep)["shots"].get(key) or {}
             err = str(rec.get("error") or "") or (r.stderr or r.stdout or "").strip()[-500:] or f"exit {r.returncode}"
@@ -9626,7 +9632,7 @@ def _board_sketch_worker(project: str, ep: str, scene: str, jobkey: str, targets
             cmd.append("--force")
         status, err = "done", ""
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=900, cwd=str(ROOT))
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=IMAGE_SUBPROCESS_TIMEOUT, cwd=str(ROOT))
             if r.returncode != 0:
                 status = "failed"
                 err = (r.stderr or r.stdout or "").strip()[-500:] or f"exit {r.returncode}"
@@ -9804,7 +9810,7 @@ def _board_sketch_batch_worker(project: str, ep: str, jobkey: str, targets: list
             cmd += ["--model", model]
         err = ""
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=1200, cwd=str(ROOT))
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=IMAGE_SUBPROCESS_TIMEOUT, cwd=str(ROOT))
             if r.returncode != 0:
                 err = (r.stderr or r.stdout or "").strip()[-500:] or f"exit {r.returncode}"
         except Exception as e:  # noqa: BLE001

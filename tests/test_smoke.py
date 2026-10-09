@@ -441,6 +441,37 @@ def test_agentics_video_local_deadline_preserves_task_for_reclaim(monkeypatch):
         genmedia._agentics_wait("video", "task-1", {"task_id": "task-1", "status": 1})
 
 
+def test_agentics_image_waits_past_old_600s_timeout(monkeypatch):
+    """FLUX.2 多参考 profile 实测 ~706s;图像等待不能在原 600s 上限处提前取消。"""
+    from modules import genmedia
+
+    clock = {"now": 0.0}
+
+    def fake_time():
+        clock["now"] += 50
+        return clock["now"]
+
+    polls = []
+
+    def agentics_json(path):
+        polls.append(path)
+        if clock["now"] < 1000:
+            return {"task": {"task_id": "task-1", "status": 1}}
+        return {"task": {"task_id": "task-1", "status": 2,
+                         "result": {"artifacts": [{"url": "https://files.example/out.png"}]}}}
+
+    monkeypatch.setattr(genmedia.time, "time", fake_time)
+    monkeypatch.setattr(genmedia.time, "sleep", lambda _: None)
+    monkeypatch.setattr(genmedia, "_agentics_json", agentics_json)
+    monkeypatch.setattr(genmedia, "_agentics_download", lambda task_id, url, deadline: b"image")
+    monkeypatch.setattr(genmedia, "_agentics_cancel", lambda task_id: (
+        (_ for _ in ()).throw(AssertionError("image task cancelled before IMAGE_TIMEOUT"))))
+
+    assert genmedia.IMAGE_TIMEOUT == 1800
+    assert genmedia._agentics_wait("image", "task-1") == b"image"
+    assert clock["now"] > 600 and polls
+
+
 def test_agentics_tts_voice_id_profile_does_not_select_reference_audio(monkeypatch):
     from modules import genmedia
 
