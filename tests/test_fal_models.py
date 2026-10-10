@@ -47,6 +47,17 @@ ENDPOINTS = {
         "resolution": {"type": "string", "enum": ["1K", "2K", "4K"]}})),
     "acme/single/image-to-image": ("image-to-image", _openapi("acme/single/image-to-image", {
         "prompt": STR, "image_url": STR}, required=("prompt", "image_url"))),
+    # 编辑端点叫 edit-image 的模型(如 FLUX.3)
+    "acme/paint/text-to-image": ("text-to-image", _openapi("acme/paint/text-to-image", {
+        "prompt": STR, "aspect_ratio": {"type": "string", "enum": ["auto", "16:9", "2:1"]},
+        "resolution": {"type": "string", "enum": ["512sq", "1k", "2k", "4k"]}})),
+    "acme/paint/edit-image": ("image-to-image", _openapi("acme/paint/edit-image", {
+        "prompt": STR, "image_urls": {"type": "array", "items": STR},
+        "aspect_ratio": {"type": "string", "enum": ["auto", "16:9", "2:1"]}}, required=("prompt", "image_urls"))),
+    # 必填一张底图、另有参考图列表位的编辑端点(如 Ideogram)
+    "acme/retouch/edit": ("image-to-image", _openapi("acme/retouch/edit", {
+        "prompt": STR, "image_url": STR, "reference_image_urls": {"type": "array", "items": STR}},
+        required=("prompt", "image_url"))),
 }
 
 
@@ -82,7 +93,8 @@ def test_search_groups_task_endpoints_into_one_model(catalog):
     assert rows["acme/vid"]["tasks"] == ["first-last-frame-to-video", "image-to-video", "reference-to-video", "text-to-video"]
     assert rows["acme/vid"]["description"] == "desc acme/vid"
     images = {r["id"]: r["tasks"] for r in fm.search("image")}
-    assert images == {"acme/img": ["edit", "text-to-image"], "acme/single": ["image-to-image"]}
+    assert images == {"acme/img": ["edit", "text-to-image"], "acme/single": ["image-to-image"],
+                      "acme/paint": ["edit-image", "text-to-image"], "acme/retouch": ["edit"]}
     n = len(catalog)
     fm.search("video")                                   # 10 分钟内同一查询走缓存
     assert len(catalog) == n
@@ -165,6 +177,24 @@ def test_shape_image_sizes_and_refs(catalog):
     with pytest.raises(RuntimeError, match="只有单个 image_url 位"):
         fm.shape_image(single, prompt="p", width=1024, height=1024, refs=["a.png", "b.png"])
     assert fm.resolve_image("acme/single", False) is None      # 没有文生图端点
+
+
+def test_edit_image_suffix_and_primary_image_slot(catalog):
+    assert fm.split_endpoint("acme/paint/edit-image", "image") == ("acme/paint", "edit-image")
+    edit = fm.resolve_image("acme/paint", True)
+    assert edit["endpoint_id"] == "acme/paint/edit-image"
+    body, _ = fm.shape_image(edit, prompt="p", width=2880, height=1440, refs=["a.png", "b.png"], to_url=U)
+    assert body == {"prompt": "p", "aspect_ratio": "2:1", "image_urls": ["URL:a.png", "URL:b.png"]}
+    assert fm.resolve_image("acme/paint", False)["endpoint_id"] == "acme/paint/text-to-image"
+    assert fm.resolve_image("acme/paint/edit-image", False)["endpoint_id"] == "acme/paint/edit-image"   # 完整端点原样用
+
+    retouch = fm.resolve_image("acme/retouch", True)
+    body, _ = fm.shape_image(retouch, prompt="p", width=1024, height=1024, refs=["a.png", "b.png", "c.png"], to_url=U)
+    assert body == {"prompt": "p", "image_url": "URL:a.png", "reference_image_urls": ["URL:b.png", "URL:c.png"]}
+    assert fm.shape_image(retouch, prompt="p", width=1024, height=1024, refs=["a.png"], to_url=U)[0] == {
+        "prompt": "p", "image_url": "URL:a.png"}
+    with pytest.raises(RuntimeError, match="必填参数 image_url"):
+        fm.shape_image(retouch, prompt="p", width=1024, height=1024)
 
 
 def test_enum_only_image_size_picks_closest_named_size():

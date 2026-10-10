@@ -942,11 +942,13 @@ def pano_support(cfg: dict) -> tuple[bool, str]:
     if provider in ('comfyui', 'agentics'):
         return True, '按 width/height 传入工作流'
     if provider == 'fal':
-        if 'nano-banana' in m or 'gpt-image' in m or 'kontext' in m:
+        if 'nano-banana' in m or 'kontext' in m:
             return False, 'Fal 该家族只接受固定宽高比枚举(无 2:1)'
         if 'hunyuan-image' in m:
             return False, 'Fal HunyuanImage 无参考图端点'
-        return True, 'image_size {width,height}'
+        if 'flux-3' in m:
+            return True, 'aspect_ratio 枚举含 2:1'
+        return True, 'image_size {width,height}'      # 含 GPT Image(2026-10-10 起按请求宽高出图,2880x1440 合规)
     if provider in ('minimax', 'openrouter'):
         return False, f'{provider} 图像模型只接受固定宽高比,不支持 2:1 全景'
     return False, f'{provider} 渠道未验证支持 2:1 全景'

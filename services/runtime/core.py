@@ -776,7 +776,7 @@ DEFAULT_GENCONFIG = {
         "openrouter": {"api_key": "", "model": "bytedance-seed/seedream-4.5",
                        "custom_model": ""},
         # Fal(queue.fal.run 托管图像端点):model 存家族前缀(fal-ai/bytedance/seedream/v5/lite、
-        # fal-ai/nano-banana-pro、openai/gpt-image-2.5/flare、fal-ai/flux-2-pro、alibaba/qwen-image-3…),
+        # google/nano-banana-2.1、openai/gpt-image-2.5/sunburst、fal-ai/flux-2-pro、alibaba/qwen-image-3…),
         # genmedia 无参考图走文生图端点、有 --ref 自动切 edit/multi;custom_model 可填完整端点 ID;
         # api_key 与视频段 Fal 共用(任一段填过即可,genmedia.get_config 互相兜底)
         "fal": {"api_key": "", "model": "fal-ai/bytedance/seedream/v5/lite", "custom_model": ""},
