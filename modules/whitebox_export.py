@@ -57,8 +57,71 @@ def renderer_fingerprint():
     return digest.hexdigest()
 
 
-def ensure_videos(base, episode, group_ids=None, *, width=None, height=None, fps=24, progress=None, force=False):
-    """Save missing/stale camera videos automatically after a modeling update."""
+# ---------------- 预览版组视频(2026-10-10:H3W 签字前出白模样片) ----------------
+# 用户要靠整集白模样片判断签不签 H3W,样片又要逐组摄影机视角视频。正式导出(assets/whitebox/<ep>/<grp>/ + manifest.json)
+# 是「用户已签字」的凭证——分镜背景图(render_shot_plates.py,有出图费用)与参考视频接线(whitebox_refs)都认它,签字前不能写。
+# 预览版与正式版同一渲染器、同一规格,只是落在 directing/<ep>/whitebox/preview/<grp>/:下游不认、不接线、没有生成费用。
+# 签字后正式导出时,预览版指纹仍是当前值就直接转正(挪文件),不重渲。
+# 不变量:某组有预览版 ⇒ 它比该组正式版新(只在正式版缺/过期时才渲染;正式版重出、转正或已是当前值时即删)。
+PREVIEW_DIR = 'preview'
+
+
+def export_folder(base, ep, gid):
+    return base/'assets/whitebox'/ep/gid
+
+
+def preview_folder(base, ep, gid):
+    return base/'directing'/ep/'whitebox'/PREVIEW_DIR/gid
+
+
+def _video_files(ep, gid, preview=False):
+    return [f'directing/{ep}/whitebox/{PREVIEW_DIR}/{gid}/camera.mp4' if preview else f'assets/whitebox/{ep}/{gid}/camera.mp4']
+
+
+def _load_record(folder):
+    try:
+        record = read(folder/'manifest.json', {})
+    except (ValueError, OSError):
+        record = {}
+    return record if isinstance(record, dict) else {}
+
+
+def _drop_preview(base, ep, gid):
+    shutil.rmtree(preview_folder(base, ep, gid), ignore_errors=True)
+
+
+def _promote_preview(base, ep, gid, record):
+    """预览版转正:视频挪进 assets/whitebox/<ep>/<grp>/ 并改写清单(文件路径换成正式路径、去掉 preview 标记)。"""
+    source, target = preview_folder(base, ep, gid), export_folder(base, ep, gid)
+    official = {**{k: v for k, v in record.items() if k != 'preview'}, 'files': _video_files(ep, gid)}
+    with _EXPORT_LOCK:
+        target.mkdir(parents=True, exist_ok=True)
+        staged = target/'.manifest.promote.json'
+        staged.write_text(json.dumps(official, indent=2), encoding='utf-8')
+        os.replace(source/'camera.mp4', target/'camera.mp4')
+        os.replace(staged, target/'manifest.json')
+        stale = target/'top.mp4'
+        if stale.exists():
+            stale.unlink()
+    _drop_preview(base, ep, gid)
+    return official
+
+
+def reel_clip(base, ep, gid):
+    """白模样片取哪一份组视频:预览版在就用预览版(按不变量它比正式版新),否则正式版 → (kind, folder);都没有返回 None。"""
+    for kind, folder in (('preview', preview_folder(base, ep, gid)), ('export', export_folder(base, ep, gid))):
+        video = folder/'camera.mp4'
+        if video.is_file() and video.stat().st_size > 0:
+            return kind, folder
+    return None
+
+
+def ensure_videos(base, episode, group_ids=None, *, width=None, height=None, fps=24, progress=None, force=False, preview=False):
+    """Save missing/stale camera videos automatically after a modeling update.
+
+    preview=True(签字前白模样片):只补「正式版缺/源指纹已不是当前白模」的组,渲到预览目录,不碰正式导出;
+    preview=False(正式导出):预览版指纹仍是当前值的组直接转正(返回值 promoted),其余照旧渲染。
+    """
     fmt = render_format(read(base/'settings.json', {}), width, height)
     if isinstance(fps, bool) or not isinstance(fps, int) or not 1 <= fps <= 60:
         raise ValueError('Export fps must be an integer within 1..60')
@@ -69,26 +132,44 @@ def ensure_videos(base, episode, group_ids=None, *, width=None, height=None, fps
     if not groups or (group_ids is not None and set(group_ids) != {g['group_id'] for g in groups}):
         raise ValueError('Requested groups are unavailable; check compilation errors')
     renderer_hash = renderer_fingerprint()
-    pending, skipped = [], []
+
+    def is_current(record, files, group):
+        return (fingerprint_matches(record.get('source_sha256'), episode, group)
+                and record.get('renderer_sha256') == renderer_hash and record.get('fps') == fps
+                and all(record.get(k) == v for k, v in fmt.items())
+                and record.get('files') == files
+                and all((base/path).is_file() and (base/path).stat().st_size > 0 for path in files))
+
+    def exported(group, gid):
+        """预览模式下「正式版还能用」的口径 = 机检 whitebox_videos_exported:源指纹仍是当前白模 + camera.mp4 在。
+        不看渲染器指纹/规格——已签字导出的那份就是下游在用的参考视频,渲染器代码更新不该让已签字的集冒出一批预览版。"""
+        video = export_folder(base, ep, gid)/'camera.mp4'
+        return (fingerprint_matches(_load_record(export_folder(base, ep, gid)).get('source_sha256'), episode, group)
+                and video.is_file() and video.stat().st_size > 0)
+
+    pending, skipped, promoted = [], [], []
     for group in groups:
         gid = component(group['group_id'])
-        folder = base/'assets/whitebox'/ep/gid
-        try:
-            record = read(folder/'manifest.json', {})
-        except (ValueError, OSError):
-            record = {}
-        files = [f'assets/whitebox/{ep}/{gid}/camera.mp4']
-        current = (isinstance(record, dict) and fingerprint_matches(record.get('source_sha256'), episode, group)
-                   and record.get('renderer_sha256') == renderer_hash and record.get('fps') == fps
-                   and all(record.get(k) == v for k, v in fmt.items())
-                   and record.get('files') == files
-                   and all((base/path).is_file() and (base/path).stat().st_size > 0 for path in files))
-        (skipped if current and not force else pending).append(gid)
-    rendered = render_videos(base, episode, pending, width=width, height=height, fps=fps, progress=progress) if pending else []
-    return {'rendered': [r['group_id'] for r in rendered], 'skipped': skipped}
+        current = exported(group, gid) if preview else is_current(_load_record(export_folder(base, ep, gid)), _video_files(ep, gid), group)
+        draft = _load_record(preview_folder(base, ep, gid))
+        draft_current = is_current(draft, _video_files(ep, gid, preview=True), group)
+        if current and (preview or not force):
+            # 正式版已是当前值:残留的预览版只会更旧,清掉以免样片取错源
+            _drop_preview(base, ep, gid)
+            skipped.append(gid)
+        elif draft_current and not force:
+            if preview:
+                skipped.append(gid)
+            else:
+                _promote_preview(base, ep, gid, draft)
+                promoted.append(gid)
+        else:
+            pending.append(gid)
+    rendered = render_videos(base, episode, pending, width=width, height=height, fps=fps, progress=progress, preview=preview) if pending else []
+    return {'rendered': [r['group_id'] for r in rendered], 'skipped': skipped, 'promoted': promoted}
 
 
-def render_videos(base, episode, group_ids=None, *, width=None, height=None, fps=24, progress=None):
+def render_videos(base, episode, group_ids=None, *, width=None, height=None, fps=24, progress=None, preview=False):
     fmt = render_format(read(base / 'settings.json', {}), width, height)
     if episode.get('render', {}).get('aspect_ratio', fmt['aspect_ratio']) != fmt['aspect_ratio']:
         raise ValueError('Project aspect changed; recompile the episode before exporting')
@@ -123,7 +204,7 @@ def render_videos(base, episode, group_ids=None, *, width=None, height=None, fps
                 page.wait_for_function('window.whiteboxReady === true',timeout=60000)
                 for group in groups:
                     gid=component(group['group_id']);duration=group['duration_s'];frames=math.ceil(duration*fps-1e-7)
-                    output=base/'assets/whitebox'/ep/gid;output.mkdir(parents=True,exist_ok=True)
+                    output=preview_folder(base,ep,gid) if preview else export_folder(base,ep,gid);output.mkdir(parents=True,exist_ok=True)
                     page.evaluate('(gid)=>window.whiteboxExport.load(gid)',gid)
                     # Stage the camera video before publishing; failed jobs retain prior valid exports.
                     with tempfile.TemporaryDirectory(prefix='.render-',dir=output) as staging:
@@ -145,13 +226,16 @@ def render_videos(base, episode, group_ids=None, *, width=None, height=None, fps
                                 if proc.poll() is None:proc.kill();proc.wait()
                         record={'schema_version':'whitebox_export.v1','group_id':gid,'duration_s':duration,'fps':fps,'frames':frames,
                                 **fmt,'source_sha256':fingerprint(episode,group),'renderer_sha256':renderer_fingerprint(),
-                                'files':[f'assets/whitebox/{ep}/{gid}/camera.mp4']}
+                                'files':_video_files(ep,gid,preview)}
+                        if preview:record['preview']=True
                         os.replace(staging/'camera.mp4',output/'camera.mp4')
                         # 旧版双视角导出遗留的 top.mp4 不再维护,顺手清掉以免被误当参考视频
                         stale=output/'top.mp4'
                         if stale.exists():stale.unlink()
                         (staging/'manifest.json').write_text(json.dumps(record,indent=2),encoding='utf-8')
                         os.replace(staging/'manifest.json',output/'manifest.json');results.append(record)
+                    # 正式版刚重出:该组预览版已不比它新,清掉(样片优先取预览版)
+                    if not preview:_drop_preview(base,ep,gid)
             finally:
                 browser.close()
         return results
@@ -161,6 +245,8 @@ def render_videos(base, episode, group_ids=None, *, width=None, height=None, fps
 # 分镜预览页「白模样片」板块(成片发布页 2026-09-13 起不再展示):把本集全部分镜组的 camera.mp4 按 shot_list 组序拼成一份
 # 整集摄影机视角视频 assets/whitebox/<ep>/<ep>-camera.mp4,便于连续查看;
 # 清单 episode-manifest.json 记录组序/各组源指纹/字幕指纹,预览页据此判断样片是否过期。
+# 2026-10-10:各组视频取源 = 预览版优先、否则正式版(reel_clip),H3W 签字前即可出样片;清单另记 preview_groups(成片时哪些组用的预览版)
+# 与 whitebox_sources(成片时已落盘编译结果的各组指纹)——之后白模又改过(重编译 / 导演台覆盖层)即判过期(stale_reason=whitebox)。
 EPISODE_MANIFEST = 'episode-manifest.json'
 
 
@@ -187,22 +273,39 @@ def episode_group_order(base, ep):
             if d.is_dir() and (d/'camera.mp4').is_file()]
 
 
+def whitebox_fingerprints(base, ep):
+    """已落盘编译结果(directing/<ep>/whitebox/episode.json:--compile-only / 导演台覆盖层 / 正式导出都会写)里各组的视频源指纹;
+    没有或读不了返回 {}。只读,不现场编译(预览页每次加载都会问样片状态)。"""
+    try:
+        episode = read(base/'directing'/component(ep)/'whitebox'/'episode.json', {}) or {}
+    except (ValueError, OSError):
+        return {}
+    out = {}
+    for group in episode.get('groups') or []:
+        try:
+            out[component(group['group_id'])] = fingerprint(episode, group)
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out
+
+
 def episode_reel_status(base, ep):
     """合辑现状(预览页/机检共用):文件是否存在、组就绪数、与当前各组 camera.mp4 指纹是否一致。"""
     ep = component(ep)
     paths = episode_reel_paths(ep)
     order = episode_group_order(base, ep)
-    ready, missing, sources = [], [], {}
+    ready, missing, sources, folders, records, previews = [], [], {}, {}, {}, []
     for item in order:
         gid = item['group_id']
-        video = base/'assets/whitebox'/ep/gid/'camera.mp4'
-        if video.is_file() and video.stat().st_size > 0:
+        hit = reel_clip(base, ep, gid)
+        if hit:
+            kind, folder = hit
             ready.append(gid)
-            try:
-                record = read(base/'assets/whitebox'/ep/gid/'manifest.json', {}) or {}
-            except (ValueError, OSError):
-                record = {}
-            sources[gid] = record.get('source_sha256') or f'mtime:{int(video.stat().st_mtime)}'
+            folders[gid] = folder
+            if kind == 'preview':
+                previews.append(gid)
+            records[gid] = _load_record(folder)
+            sources[gid] = records[gid].get('source_sha256') or f"mtime:{int((folder/'camera.mp4').stat().st_mtime)}"
         else:
             missing.append(gid)
     video = base/paths['video']
@@ -215,8 +318,8 @@ def episode_reel_status(base, ep):
     durations = {}
     for gid in ready:
         try:
-            durations[gid] = float((read(base/'assets/whitebox'/ep/gid/'manifest.json', {}) or {}).get('duration_s') or 0)
-        except (ValueError, OSError, TypeError):
+            durations[gid] = float(records[gid].get('duration_s') or 0)
+        except (ValueError, TypeError):
             durations[gid] = 0.0
     # 对白语音库(2026-09-13,输出设置「生成对白语音」):库里可用的逐句音频按镜起点排到样片时间轴,作对白轨;
     # 字幕按实际音频起止显示;库指纹进清单,任一句音频换了样片判过期(stale_reason=audio)。这里只读库不合成,合成在 concat_episode
@@ -234,10 +337,18 @@ def episode_reel_status(base, ep):
         cues = []
     subtitles_sha = cues_fingerprint(cues) if cues else ''
     stale_reason = ''
+    whitebox_changed = []
     if exists:
         rec_audio = manifest.get('audio') if isinstance(manifest.get('audio'), dict) else {}
+        # 白模在样片生成之后又改过(重编译 / 导演台覆盖层):组视频还是旧的,样片不代表当前白模。旧清单没记 whitebox_sources 的不判
+        built = manifest.get('whitebox_sources') if isinstance(manifest.get('whitebox_sources'), dict) else {}
+        if built:
+            now = whitebox_fingerprints(base, ep)
+            whitebox_changed = [g['group_id'] for g in order if g['group_id'] in built and now.get(g['group_id']) != built[g['group_id']]]
         if manifest.get('group_sources') != sources or manifest.get('group_order') != [g['group_id'] for g in order]:
             stale_reason = 'groups'
+        elif whitebox_changed:
+            stale_reason = 'whitebox'
         elif (manifest.get('subtitles') or {}).get('sha256', '') != subtitles_sha:
             stale_reason = 'subtitles'
         # #75:无对白轨的无声样片(发布时无可用逐句音频、如全部 unbound)当下也无可排音频 → 声轨不会变,不判过期;
@@ -247,6 +358,7 @@ def episode_reel_status(base, ep):
     return {'ep': ep, 'path': paths['video'], 'manifest_path': paths['manifest'], 'exists': exists,
             'stale': bool(stale_reason), 'stale_reason': stale_reason, 'groups_total': len(order), 'groups_ready': ready,
             'groups_missing': missing, 'sources': sources, 'order': order, 'manifest': manifest if exists else {},
+            'folders': folders, 'records': records, 'preview_groups': previews, 'whitebox_changed': whitebox_changed,
             'durations': durations, 'cues': cues, 'subtitles_sha256': subtitles_sha,
             'dialogue_audio': {'enabled': audio_on, 'lines': len(placements), 'sha256': audio_sha, 'overflow': overflow,
                                'placements': placements}}
@@ -268,7 +380,7 @@ def concat_episode(base, ep, *, allow_missing=False, subtitles=True):
     """把本集各组 camera.mp4 按组序拼成 <ep>-camera.mp4(白模样片);同规格且无字幕时流 copy 拼接,
     有对白/旁白字幕时烧入字幕带重编码(mode=burn),规格不一致时统一缩放后重编码。
 
-    缺组默认报错(样片必须是整集);allow_missing=True 时跳过缺组并在清单里记录。
+    各组视频取源见 reel_clip(预览版优先、否则正式版);缺组默认报错(样片必须是整集);allow_missing=True 时跳过缺组并在清单里记录。
     先在临时目录成片再 os.replace 发布,失败保留旧样片。
     """
     ep = component(ep)
@@ -280,7 +392,7 @@ def concat_episode(base, ep, *, allow_missing=False, subtitles=True):
     if not status['groups_total']:
         raise ValueError(f'{ep} 没有分镜组或白模视频,无法生成样片')
     if status['groups_missing'] and not allow_missing:
-        raise ValueError(f"{ep} 缺少分镜组白模视频: {', '.join(status['groups_missing'])};先用 render_whitebox.py 补出,或 --allow-missing 跳过")
+        raise ValueError(f"{ep} 缺少分镜组白模视频: {', '.join(status['groups_missing'])};concat_whitebox.py 默认会补出预览版(组编译报错或带了 --no-render 才会缺),或 --allow-missing 跳过")
     if not status['groups_ready']:
         raise ValueError(f'{ep} 没有任何分镜组白模视频可合并')
     ffmpeg = shutil.which('ffmpeg')
@@ -288,13 +400,9 @@ def concat_episode(base, ep, *, allow_missing=False, subtitles=True):
         raise RuntimeError('未找到 FFmpeg，请先安装并加入 PATH。')
     folder = base/'assets/whitebox'/ep
     folder.mkdir(parents=True, exist_ok=True)
-    clips = [folder/gid/'camera.mp4' for gid in status['groups_ready']]
-    records = {}
-    for gid in status['groups_ready']:
-        try:
-            records[gid] = read(folder/gid/'manifest.json', {}) or {}
-        except (ValueError, OSError):
-            records[gid] = {}
+    clips = [status['folders'][gid]/'camera.mp4' for gid in status['groups_ready']]
+    records = {gid: status['records'][gid] for gid in status['groups_ready']}
+    whitebox_sources = {gid: sha for gid, sha in whitebox_fingerprints(base, ep).items() if gid in records}
     specs = {(r.get('width'), r.get('height'), r.get('fps')) for r in records.values()}
     uniform = len(specs) == 1 and None not in next(iter(specs))
     fmt = records[status['groups_ready'][0]] if uniform else render_format(read(base/'settings.json', {}), None, None)
@@ -358,7 +466,8 @@ def concat_episode(base, ep, *, allow_missing=False, subtitles=True):
                     'reels': [{'path': paths['video'], 'duration_s': round(duration, 3), 'frames': round(duration*fps),
                                'bytes': target.stat().st_size, 'sha256': digest}],
                     'group_order': [g['group_id'] for g in status['order']],
-                    'group_sources': status['sources'], 'missing_groups': status['groups_missing']}
+                    'group_sources': status['sources'], 'missing_groups': status['groups_missing'],
+                    'preview_groups': status['preview_groups'], 'whitebox_sources': whitebox_sources}
         (staging/EPISODE_MANIFEST).write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
         os.replace(target, base/paths['video'])
         os.replace(staging/EPISODE_MANIFEST, base/paths['manifest'])

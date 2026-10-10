@@ -2,7 +2,9 @@
 """Compile whiteboxes and automatically save every changed camera-view video (camera.mp4; no top view since 2026-09-08).
 
 2026-09-09 流程:白模调度 Agent 用 --compile-only 只编译落盘 episode.json 供预览页审看;用户签字「H3W-白模确认」后,
-白模导出 Agent 再不带该参数运行本脚本导出 camera.mp4 并自动接线;导出完成后才生成分镜背景图(code/render_shot_plates.py)。"""
+白模导出 Agent 再不带该参数运行本脚本导出 camera.mp4 并自动接线;导出完成后才生成分镜背景图(code/render_shot_plates.py)。
+2026-10-10:签字前给用户看的白模样片由 code/concat_whitebox.py 出(预览版组视频落 directing/<ep>/whitebox/preview/,不算导出、
+下游不认);本脚本正式导出时,预览版指纹仍是当前值的组直接转正(回执 videos.promoted),不重渲。"""
 import json
 import sys
 from pathlib import Path

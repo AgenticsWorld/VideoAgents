@@ -989,6 +989,166 @@ def test_preview_videos_reports_whitebox_reel(reel_project, monkeypatch):
     assert w['url'].startswith('/projects/demo/assets/whitebox/ep02/ep02-camera.mp4?v=')
 
 
+# ---------------- 预览版组视频 + H3W 签字前的白模样片(2026-10-10) ----------------
+def _fake_browser(monkeypatch, width=256, height=144):
+    """render_videos 的无头浏览器换成固定帧:FFmpeg 编码照常真跑,不需要 Chromium。"""
+    import base64
+    import io
+    import shutil
+    from PIL import Image
+    import playwright.sync_api
+    if not shutil.which('ffmpeg'):
+        pytest.skip('FFmpeg unavailable')
+    buf = io.BytesIO(); Image.new('RGB', (width, height), 'blue').save(buf, format='JPEG')
+    frame = base64.b64encode(buf.getvalue()).decode()
+    class Page:
+        def add_init_script(self, *a): pass
+        def goto(self, *a): pass
+        def wait_for_function(self, *a, **kw): pass
+        def evaluate(self, fn, arg): return frame if '.frame(' in fn else None
+    class Browser:
+        def new_page(self, **kw): return Page()
+        def close(self): pass
+    class Playwright:
+        def __init__(self): self.chromium = self
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def launch(self, **kw): return Browser()
+    monkeypatch.setattr(playwright.sync_api, 'sync_playwright', Playwright)
+    return {'width': width, 'height': height, 'fps': 2}
+
+
+def test_preview_videos_stay_out_of_official_export_until_promoted(project, monkeypatch):
+    """签字前的预览版不写正式 manifest(背景图闸门、参考视频接线都不认);签字后导出时指纹没变直接转正,不重渲。"""
+    from modules import whitebox_export as export
+    from modules.whitebox_refs import whitebox_group
+    kw = _fake_browser(monkeypatch)
+    episode = compile_episode(project, 'ep01')
+    write(project/'directing/ep01/whitebox/episode.json', episode)
+    preview, official = project/'directing/ep01/whitebox/preview/grp1', project/'assets/whitebox/ep01/grp1'
+    assert export.ensure_videos(project, episode, preview=True, **kw) == {'rendered': ['grp1'], 'skipped': [], 'promoted': []}
+    draft = json.loads((preview/'manifest.json').read_text())
+    assert (preview/'camera.mp4').stat().st_size > 0 and draft['preview'] is True
+    assert draft['files'] == ['directing/ep01/whitebox/preview/grp1/camera.mp4']
+    assert not official.exists()                                  # render_shot_plates.py 认的正式 manifest 没有出现
+    assert whitebox_group(project, 'ep01', 'grp1')[1] is None     # sync_whitebox_refs 也不会把预览版接进 prompt
+    assert export.reel_clip(project, 'ep01', 'grp1') == ('preview', preview)
+    assert export.ensure_videos(project, episode, preview=True, **kw)['skipped'] == ['grp1']
+    video = (preview/'camera.mp4').read_bytes()
+    monkeypatch.setattr(export, 'render_videos', lambda *a, **k: pytest.fail('promotion must not re-render'))
+    assert export.ensure_videos(project, episode, **kw) == {'rendered': [], 'skipped': [], 'promoted': ['grp1']}
+    record = json.loads((official/'manifest.json').read_text())
+    assert (official/'camera.mp4').read_bytes() == video and not preview.exists()
+    assert record['files'] == ['assets/whitebox/ep01/grp1/camera.mp4'] and 'preview' not in record
+    assert record['source_sha256'] == draft['source_sha256'] == export.fingerprint(episode, episode['groups'][0])
+    assert whitebox_group(project, 'ep01', 'grp1')[1] == record
+    assert export.reel_clip(project, 'ep01', 'grp1') == ('export', official)
+    assert export.ensure_videos(project, episode, **kw)['skipped'] == ['grp1']
+
+
+def test_preview_videos_follow_whitebox_changes_without_touching_signed_export(project, monkeypatch):
+    from modules import whitebox_export as export
+    kw = _fake_browser(monkeypatch)
+    episode = compile_episode(project, 'ep01')
+    key = episode['groups'][0]['actors'][0]['keyframes'][0]
+    preview, official = project/'directing/ep01/whitebox/preview/grp1', project/'assets/whitebox/ep01/grp1'
+    sha = lambda folder: json.loads((folder/'manifest.json').read_text())['source_sha256']
+    export.ensure_videos(project, episode, preview=True, **kw)
+    first = sha(preview)
+    key['yaw'] = 1                                                # 白模改了:预览版过期 → 重渲预览版
+    assert export.ensure_videos(project, episode, preview=True, **kw)['rendered'] == ['grp1'] and sha(preview) != first
+    key['yaw'] = 2                                                # 正式导出遇到过期预览版:不转正,重渲正式版并清掉预览版
+    assert export.ensure_videos(project, episode, **kw) == {'rendered': ['grp1'], 'skipped': [], 'promoted': []}
+    assert not preview.exists() and sha(official) == export.fingerprint(episode, episode['groups'][0])
+    assert export.ensure_videos(project, episode, preview=True, **kw)['skipped'] == ['grp1'] and not preview.exists()
+    signed = sha(official)
+    # 渲染器代码更新:已签字导出、白模没改的组不冒预览版(样片照用下游在用的正式版);正式导出才按渲染器指纹重出
+    stock = export.renderer_fingerprint
+    monkeypatch.setattr(export, 'renderer_fingerprint', lambda: 'new-renderer')
+    assert export.ensure_videos(project, episode, preview=True, **kw)['skipped'] == ['grp1'] and not preview.exists()
+    monkeypatch.setattr(export, 'renderer_fingerprint', stock)
+    key['yaw'] = 3                                                # 签字后又改白模:只出预览版,已签字的正式版原样保留给下游
+    assert export.ensure_videos(project, episode, preview=True, **kw)['rendered'] == ['grp1']
+    assert sha(official) == signed and sha(preview) != signed
+    assert export.reel_clip(project, 'ep01', 'grp1') == ('preview', preview)
+    key['yaw'] = 2                                                # 改回已签字的那版:正式版又是当前值,残留预览版清掉
+    assert export.ensure_videos(project, episode, preview=True, **kw)['skipped'] == ['grp1'] and not preview.exists()
+
+
+def test_reel_uses_preview_clips_and_flags_whitebox_changes(reel_project, monkeypatch):
+    import shutil
+    from services.runtime import core
+    from modules.whitebox_export import concat_episode, episode_reel_status, fingerprint
+    base = reel_project
+    preview = base/'directing/ep02/whitebox/preview'
+    # grp001:签字前,只有预览版;grp003:已签字导出后又改过白模,正式版 + 更新的预览版都在
+    preview.mkdir(parents=True)
+    shutil.move(str(base/'assets/whitebox/ep02/grp001'), str(preview/'grp001'))
+    _tiny_clip(preview/'grp003/camera.mp4', 5)
+    write(preview/'grp003/manifest.json', {'group_id': 'grp003', 'duration_s': 5, 'fps': 24, 'width': 64, 'height': 36, 'preview': True,
+                                           'source_sha256': 'src-grp003-v2', 'files': ['directing/ep02/whitebox/preview/grp003/camera.mp4']})
+    episode = {'ep': 'ep02', 'scenes': {'SCN-1': {'scene_id': 'SCN-1'}},
+               'groups': [{'group_id': g, 'scene_id': 'SCN-1', 'duration_s': d} for g, d in (('grp002', 3), ('grp001', 2), ('grp003', 5))]}
+    write(base/'directing/ep02/whitebox/episode.json', episode)
+    before = episode_reel_status(base, 'ep02')
+    assert before['groups_missing'] == [] and before['preview_groups'] == ['grp001', 'grp003']
+    assert before['sources'] == {'grp002': 'src-grp002', 'grp001': 'src-grp001', 'grp003': 'src-grp003-v2'}
+    manifest = concat_episode(base, 'ep02')
+    assert manifest['groups'] == 3 and abs(manifest['duration_s']-10) < 0.2 and manifest['preview_groups'] == ['grp001', 'grp003']
+    assert manifest['whitebox_sources'] == {g['group_id']: fingerprint(episode, g) for g in episode['groups']}
+    after = episode_reel_status(base, 'ep02')
+    assert after['exists'] and not after['stale'] and after['whitebox_changed'] == []
+    monkeypatch.setattr(core, 'PROJECTS_DIR', base.parent)
+    w = core._preview_videos('demo', 'ep02')['whitebox']
+    assert w['preview_groups'] == ['grp001', 'grp003'] and w['whitebox_changed'] == [] and w['groups_ready'] == 3
+    # 待决项状态不影响画面,不算白模改动
+    episode['groups'][1]['issues'] = [{'id': 'WBI-ep02-grp001-001', 'status': 'decided'}]
+    write(base/'directing/ep02/whitebox/episode.json', episode)
+    assert not episode_reel_status(base, 'ep02')['stale']
+    # 样片之后白模又改过(重编译 / 导演台覆盖层落盘)→ 过期,点名改过的组
+    episode['groups'][1]['cameras'] = [{'shot_id': 'sh1', 'fov': 35}]
+    write(base/'directing/ep02/whitebox/episode.json', episode)
+    changed = episode_reel_status(base, 'ep02')
+    assert changed['stale'] and changed['stale_reason'] == 'whitebox' and changed['whitebox_changed'] == ['grp001']
+    assert core._preview_videos('demo', 'ep02')['whitebox']['whitebox_changed'] == ['grp001']
+
+
+def reel_cli(monkeypatch, project, *args):
+    import importlib.util
+    import sys
+    root = Path(__file__).resolve().parents[1]
+    monkeypatch.syspath_prepend(str(root/'code'))
+    spec = importlib.util.spec_from_file_location('whitebox_reel_cli_test', root/'code/concat_whitebox.py')
+    cli = importlib.util.module_from_spec(spec); spec.loader.exec_module(cli)
+    monkeypatch.setattr(sys, 'argv', ['concat_whitebox', '--project', 'demo', '--out-root', str(project), '--ep', 'ep01', *args])
+    return cli
+
+
+def test_reel_cli_fills_previews_before_concat(project, monkeypatch, capsys):
+    reel = {'reels': [{'path': 'assets/whitebox/ep01/ep01-camera.mp4'}], 'groups': 1, 'duration_s': 4, 'mode': 'copy',
+            'subtitles': {}, 'missing_groups': [], 'preview_groups': ['grp1']}
+    calls = []
+    cli = reel_cli(monkeypatch, project)
+    monkeypatch.setattr(cli, 'ensure_videos', lambda base, e, g, **kw: calls.append((g, kw['preview'])) or {'rendered': ['grp1'], 'skipped': [], 'promoted': []})
+    monkeypatch.setattr(cli, 'concat_episode', lambda base, ep, **kw: calls.append('concat') or reel)
+    assert cli.main() == 0 and calls == [(None, True), 'concat']
+    out = capsys.readouterr().out
+    assert '"preview_videos": {"rendered": ["grp1"]' in out and '"preview_groups": ["grp1"]' in out
+    assert not (project/'directing/ep01/whitebox/episode.json').exists()      # 样片 CLI 只在内存里编译,不改落盘的编译结果
+    # --no-render:只拼现有组视频
+    cli = reel_cli(monkeypatch, project, '--no-render')
+    monkeypatch.setattr(cli, 'ensure_videos', lambda *a, **k: pytest.fail('--no-render rendered previews'))
+    monkeypatch.setattr(cli, 'concat_episode', lambda base, ep, **kw: reel)
+    assert cli.main() == 0
+    # 预览版补不出 = 失败,不得悄悄拿旧视频拼
+    cli = reel_cli(monkeypatch, project)
+    def fail(*a, **k): raise RuntimeError('缺少 Playwright')
+    monkeypatch.setattr(cli, 'ensure_videos', fail)
+    monkeypatch.setattr(cli, 'concat_episode', lambda *a, **k: pytest.fail('concat ran after a failed preview render'))
+    with pytest.raises(RuntimeError, match='缺少 Playwright.*--no-render'):
+        cli.main()
+
+
 def test_animated_scene_prop_tilts_without_duplicate_and_resets(project):
     import shutil, subprocess
     keys=[{'t':0,'position':[0,.8,0]}, {'t':2,'position':[1,.9,0],'pitch':.4,'roll':1.2},

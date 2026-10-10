@@ -10,7 +10,7 @@
 <script src="/static/ep-picker.js?v=20260912"></script>
 <script src="/static/jump-anchor.js?v=20260912"></script>
 <script src="/static/edit-popup.js?v=20260927a-reviser"></script>
-<script src="/static/whitebox-reel.js?v=20260911"></script>
+<script src="/static/whitebox-reel.js?v=20261010"></script>
 <script src="/static/dialogue-tts.js?v=20261002"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
@@ -1968,7 +1968,7 @@ function wbReelHtml(w,ep){
   const sub=w.subtitles||{},vw=+w.width||0,vh=+w.height||0;
   const meta=w.exists?I18N.f('{d}s · {n} 组 · 字幕 {s} 条',{d:Math.round(w.duration_s||0),n:w.groups??'—',s:sub.cues||0}):t('尚未生成');
   const ready=`${w.groups_ready||0}/${w.groups_total||0}`;
-  let h=`<div class="doc closed wbreel"><h3 onclick="if(!event.target.closest('button'))this.parentNode.classList.toggle('closed')">🧊 ${esc(t('白模样片'))} <span class="meta">${esc(meta)} · ${esc(I18N.f('分镜组白模视频 {ready} 组就绪',{ready}))}${w.subtitle_cues?' · '+esc(I18N.f('可烧字幕 {n} 条',{n:w.subtitle_cues})):''}</span><span class="tail">${WhiteboxReel.statusHtml(w,run)}<button class="wbreelbtn" ${run?'disabled':''} title="${esc(t('把本集各组白模摄影机视角视频按组序拼成整集样片并烧入对白/旁白字幕;派单给白模调度 Agent 用宿主 CLI 生成,缺组会先补出'))}">🔄 ${esc(t('重新生成白模样片'))}</button></span></h3>`;
+  let h=`<div class="doc closed wbreel"><h3 onclick="if(!event.target.closest('button'))this.parentNode.classList.toggle('closed')">🧊 ${esc(t('白模样片'))} <span class="meta">${esc(meta)} · ${esc(I18N.f('分镜组白模视频 {ready} 组就绪',{ready}))}${w.subtitle_cues?' · '+esc(I18N.f('可烧字幕 {n} 条',{n:w.subtitle_cues})):''}</span><span class="tail">${WhiteboxReel.statusHtml(w,run)}<button class="wbreelbtn" ${run?'disabled':''} title="${esc(t('把本集各组白模摄影机视角视频按组序拼成整集样片并烧入对白/旁白字幕;派单给白模调度 Agent 用宿主 CLI 生成。H3W 签字前也可以出:缺失或已过期的组先渲染预览版(本机渲染,不算正式导出)'))}">🔄 ${esc(t('重新生成白模样片'))}</button></span></h3>`;
   h+=`<div class="body">${w.exists?`<video class="reelvid${vw&&vh>vw?' tall':''}" controls preload="metadata" onloadedmetadata="reelFit(this)" src="${esc(w.url)}"${vw&&vh?` style="aspect-ratio:${vw}/${vh}"`:''}></video><div style="color:var(--dim);font-size:12px;margin-top:6px">${esc(w.path||'')} · ${WhiteboxReel.metaList(w).map(esc).join(' · ')}</div>`:`<div style="color:var(--dim);font-size:13px">${esc(I18N.f('该集还没有白模样片(assets/whitebox/{ep}/{ep}-camera.mp4),点「重新生成白模样片」派单给白模调度 Agent 生成',{ep}))}</div>`}</div></div>`;
   if(run)pollWbReel(run,proj,ep);
   return h;

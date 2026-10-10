@@ -3215,7 +3215,7 @@ def build_role_prompt(agent_id: str, project: str,
         "(blocking_map_present;**2026-09-07 起不再渲染 `directing/epNN/blocking_maps/grpNNN.png` 动线标注图**——人物在场景中的空间位置与动线由 3D 白模参考视频承担,"
         "禁止自绘动线图或复制/改写宿主脚本),blocking 每镜站位落在组级动线上(blocking_on_map,站位片段=场景地标关系 + 屏侧方位 + 朝向);Phase 7 prompt refs **不挂**俯视图/九宫格(2026-09-09:俯视图只供分镜预览页与 storyboard/shot_list `scene_refs` 查看,不进视频参考图;场景空间由白模摄影机视频 + 分镜背景图承担)、"
         "逐字注入 route_en、主体定义句用 blocking_map `label`(机检 layout_map_bound,"
-        "`code/layout_map_bound_check.py`);**白模链同开(workflow.yaml whitebox_requested = 本开关)**:Phase 6 每集开头为本集用到且尚未建模的场景 scene-modeling(p6-scene-model)出 `bible/scenes/<sid>/whitebox.json`,Phase 6 whitebox-staging 写 `whitebox_plans/` 并用 `code/render_whitebox.py --compile-only` 只编译落盘供预览页审看(不导出视频),**用户在闸门 g6w「H3W-白模确认」签字后**由 07-directing/whitebox-staging 接导出工单(p6-whitebox-export)用 `code/render_whitebox.py` 导出 `assets/whitebox/<ep>/<grp>/camera.mp4`(仅摄影机视角),导出完成后 p6-shot-plates(08-video-gen/shot-plates)跑 `code/render_shot_plates.py` 生成分镜背景图(按机位指纹入库复用、运镜分档出镜首/镜尾、长边 1920,自动 `code/sync_shot_plates.py --write` 接进组 refs,机检 shot_plate_bound,2026-09-09),"
+        "`code/layout_map_bound_check.py`);**白模链同开(workflow.yaml whitebox_requested = 本开关)**:Phase 6 每集开头为本集用到且尚未建模的场景 scene-modeling(p6-scene-model)出 `bible/scenes/<sid>/whitebox.json`,Phase 6 whitebox-staging 写 `whitebox_plans/` 并用 `code/render_whitebox.py --compile-only` 只编译落盘供预览页审看(不做正式导出;交付前跑 `code/concat_whitebox.py` 出整集白模样片供签字前连续审看,用的是预览版组视频、不接线),**用户在闸门 g6w「H3W-白模确认」签字后**由 07-directing/whitebox-staging 接导出工单(p6-whitebox-export)用 `code/render_whitebox.py` 导出 `assets/whitebox/<ep>/<grp>/camera.mp4`(仅摄影机视角),导出完成后 p6-shot-plates(08-video-gen/shot-plates)跑 `code/render_shot_plates.py` 生成分镜背景图(按机位指纹入库复用、运镜分档出镜首/镜尾、长边 1920,自动 `code/sync_shot_plates.py --write` 接进组 refs,机检 shot_plate_bound,2026-09-09),"
         "导出即自动接成该组视频生成的参考视频(`code/sync_whitebox_refs.py --write`:组 prompt `video_refs`=camera.mp4 + `Shot 1:` 前固定段 `Whitebox reference:`(视频作用)/`Whitebox legend:`(颜色↔人物、眼睛鼻尖=朝向)+ Global constraints 禁白模外观句;"
         "**白模人物参考图规约(2026-09-09)**:组 refs 只准挂在本组白模摄影机视频里实际出现的人物/生物的参考图(宿主 appearing_cast 判定:presence/关键帧 visible/visible_actor_ids/画幅几何),镜头外在场、已离场、缺席/远程人物不挂图不绑定——sync_scene_cast 只为出现者补图,sync_whitebox_refs --write 把多余人物图移出并重排 [Image N],机检 whitebox_cast_ref/whitebox_ref_bound 按违规报,正文仍引用被移除图时须先改正文;"
         "prompt 工位写完必跑两个 sync 的 `--write`(sync_whitebox_refs / sync_shot_plates),机检 whitebox_ref_bound / shot_plate_bound;video-generation 按 video_refs 顺序传 `--ref-video`,方舟/MiniMax 参考视频须公网 URL——「设置 → 文件托管」未配置即报错),video-generation 开跑前复核——以上 SOUL.md/WORKFLOW.md 标注 2026-08-19 / 2026-09-07 的条款全部生效。"
@@ -10827,7 +10827,7 @@ async def api_publish_dispatch(project: str, ep: str, body: dict) -> dict:
 def _ep_whitebox_reel(base: Path, ep: str) -> dict:
     """分镜预览页「白模样片」板块(成片发布页 2026-09-13 起不再展示,接口字段 whitebox 保留供测试/兼容)(2026-09-08 起,原名白模合辑;2026-09-11 起烧入对白/旁白字幕):
     整集摄影机视角白模视频 assets/whitebox/<ep>/<ep>-camera.mp4 的现状——存在则给播放 URL,
-    并按各组 camera.mp4 指纹与字幕指纹判断是否过期(stale_reason=groups|subtitles);
+    并按各组 camera.mp4 指纹、白模编译指纹与字幕指纹判断是否过期(stale_reason=groups|whitebox|subtitles|audio);
     附派单目标 Agent 与当前可烧字幕条数,页面按钮据此发指令。"""
     from modules.whitebox_export import episode_reel_status
     try:
@@ -10839,6 +10839,8 @@ def _ep_whitebox_reel(base: Path, ep: str) -> dict:
     out = {"exists": st["exists"], "stale": st["stale"], "stale_reason": st.get("stale_reason", ""), "path": st["path"],
            "groups_total": st["groups_total"], "groups_ready": len(st["groups_ready"]),
            "groups_missing": st["groups_missing"], "agent": WHITEBOX_REEL_AGENT,
+           # 2026-10-10:H3W 签字前的样片用预览版组视频(未正式导出、未接线)→ 页面标「预览版」;白模在样片之后又改过的组 → 提示重出
+           "preview_groups": st.get("preview_groups") or [], "whitebox_changed": st.get("whitebox_changed") or [],
            "dialogue_audio": {"enabled": da.get("enabled", False), "lines": da.get("lines", 0), "overflow": len(da.get("overflow") or [])},
            "subtitle_cues": len(cues), "subtitle_dialogue": sum(1 for c in cues if c["kind"] == "dialogue"),
            "subtitle_narration": sum(1 for c in cues if c["kind"] == "narration")}
