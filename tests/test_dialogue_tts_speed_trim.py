@@ -159,3 +159,59 @@ def test_sync_status_only_manifest_without_trim_gets_trimmed_in_place(project, m
     assert calls == [] and m["retrimmed"] == 2
     for e in m["lines"]:
         assert e["duration_s"] < 1.0 and (ldir / dt.RAW_DIR / e["file"]).is_file()
+
+
+# ---------------------------------------------------------------- 轻声句(2026-10-10,jidi ep02 sh006)
+
+def test_silence_threshold_follows_peak():
+    assert dt.silence_threshold(None) == dt.TRIM_NOISE_DB            # 峰值读不到:固定阈值
+    assert dt.silence_threshold(-3.0) == dt.TRIM_NOISE_DB            # 正常响度:不变
+    assert dt.silence_threshold(-17.0) == dt.TRIM_NOISE_DB
+    assert dt.silence_threshold(-30.8) == pytest.approx(-48.8)       # 轻声句:比峰值低 18 dB
+    assert dt.trim_params(0.5) == {"noise_db": -35.0, "peak_headroom_db": 18.0, "keep_head": 0.1, "keep_tail": 0.15, "max_pause": 0.5}
+
+
+def _make_quiet_line(out: Path, lead=0.4, head=0.8, soft=1.2, tail=0.6, head_db=-13, soft_db=-27):
+    """轻声句:静音 + 一段轻的音 + 一段更轻的收尾 + 静音(sine 自身峰值约 −18 dB,再压 head_db / soft_db)。"""
+    f = (f"aevalsrc=0:d={lead}[a];sine=frequency=440:duration={head},volume={head_db}dB[b];"
+         f"sine=frequency=330:duration={soft},volume={soft_db}dB[c];aevalsrc=0:d={tail}[d];[a][b][c][d]concat=n=4:v=0:a=1[out]")
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-filter_complex", f,
+                    "-map", "[out]", "-c:a", "libmp3lame", "-b:a", "128k", str(out)], check=True)
+
+
+@pytest.mark.skipif(not (shutil.which("ffmpeg") and shutil.which("ffprobe")), reason="ffmpeg unavailable")
+def test_quiet_line_keeps_its_soft_ending_and_old_library_is_retrimmed(project, monkeypatch):
+    """整句都轻(峰值约 −31 dB、收尾约 −45 dB)的句子:固定 −35 dB 会把收尾当静音裁掉;阈值跟峰值走后整句保留。"""
+    monkeypatch.setattr(dt, "tts_channel", lambda: ("volcengine", "seed-audio-1.0"))
+    calls = []
+
+    def fake_tts(entry, out):
+        calls.append(out.name)
+        _make_quiet_line(out)
+
+    m = dt.sync(project, "ep01", tts=fake_tts)
+    ldir = dt.lib_dir(project, "ep01")
+    raw = ldir / dt.RAW_DIR / m["lines"][0]["file"]
+    assert dt.peak_db(raw) == pytest.approx(-31, abs=1.5)
+    # 旧口径(固定 −35 dB):更轻的收尾整段被判静音,只剩前 0.8s
+    old = dt.trim_plan(dt.detect_silences(raw, noise_db=dt.TRIM_NOISE_DB), dt.probe_duration(raw))
+    assert old["tail_s"] > 1.5
+    for e in m["lines"]:
+        assert e["trim"]["noise_db_used"] == pytest.approx(e["trim"]["peak_db"] - 18, abs=0.11) and e["trim"]["noise_db_used"] < -47
+        assert e["trim"]["lead_s"] == pytest.approx(0.3, abs=0.08) and e["trim"]["tail_s"] == pytest.approx(0.45, abs=0.08)
+        assert e["duration_s"] == pytest.approx(2.25, abs=0.12)      # 0.8 + 1.2 整句 + 0.10 头 + 0.15 尾
+    # 存量库(旧参数戳、库文件是被裁短的那份):下次同步只从 _raw/ 重裁,不重新合成
+    saved = json.loads((ldir / dt.MANIFEST).read_text(encoding="utf-8"))
+    for e in saved["lines"]:
+        e["trim"] = {"lead_s": 0.0, "tail_s": 1.8, "pause_s": 0.0,
+                     "params": {"noise_db": -35.0, "keep_head": 0.1, "keep_tail": 0.15, "max_pause": 0.0}}
+        dt.apply_trim(ldir / dt.RAW_DIR / e["file"], ldir / e["file"], [(0.3, 1.35)])
+        e["duration_s"] = round(dt.probe_duration(ldir / e["file"]), 3)
+    write(ldir / dt.MANIFEST, saved)
+    calls.clear()
+    m2 = dt.sync(project, "ep01", tts=fake_tts)
+    assert calls == [] and m2["synthesized"] == 0 and m2["retrimmed"] == 2
+    for e in m2["lines"]:
+        assert e["duration_s"] == pytest.approx(2.25, abs=0.12) and e["trim"]["params"] == dt.trim_params(0.0)
+    # 再同步:参数戳已是新的,不再重裁
+    assert dt.sync(project, "ep01", tts=fake_tts)["retrimmed"] == 0
