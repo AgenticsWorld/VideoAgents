@@ -6360,6 +6360,12 @@ def _sketchgen_size(aspect: str) -> str:
     return f"{w}x{h}"
 
 
+# 单张出图子进程(genmedia image / storyboard_sketch)的外层超时:须大于 genmedia 内最长的图像等待
+# (IMAGE_TIMEOUT / COMFY_TIMEOUT 1800s)并留上传参考图与下载产物余量,否则外层先杀子进程,
+# 远端任务既不取消也不落盘
+IMAGE_SUBPROCESS_TIMEOUT = 2100
+
+
 def _sketchgen_worker(project: str, ep: str, grp: str, png: Path, text: str):
     """后台线程:genmedia 子进程生图(线稿+组 refs 作参考,项目风格串入 prompt),
     成图加入组 refs;进度经 SKETCHGEN_JOBS + SSE sketchgen 事件对外。"""
@@ -6389,7 +6395,7 @@ def _sketchgen_worker(project: str, ep: str, grp: str, png: Path, text: str):
         neg = str(st.get("negative_prompt_string_en") or "").strip()
         if neg:
             cmd += ["--negative", neg]
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=900, cwd=str(ROOT))
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=IMAGE_SUBPROCESS_TIMEOUT, cwd=str(ROOT))
         if r.returncode != 0 or not out.is_file():
             raise RuntimeError((r.stderr or r.stdout or "").strip()[-500:]
                                or f"genmedia exit {r.returncode}")
@@ -6519,7 +6525,7 @@ def _board_hand_ai_worker(project: str, ep: str, key: str, scene: dict, shot: di
     cmd += ["--note", text] if text else ["--clear-note"]
     status, err = "done", ""
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=900, cwd=str(ROOT))
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=IMAGE_SUBPROCESS_TIMEOUT, cwd=str(ROOT))
         if r.returncode != 0:
             rec = sbb.load_index(base, ep)["shots"].get(key) or {}
             err = str(rec.get("error") or "") or (r.stderr or r.stdout or "").strip()[-500:] or f"exit {r.returncode}"
@@ -9626,7 +9632,7 @@ def _board_sketch_worker(project: str, ep: str, scene: str, jobkey: str, targets
             cmd.append("--force")
         status, err = "done", ""
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=900, cwd=str(ROOT))
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=IMAGE_SUBPROCESS_TIMEOUT, cwd=str(ROOT))
             if r.returncode != 0:
                 status = "failed"
                 err = (r.stderr or r.stdout or "").strip()[-500:] or f"exit {r.returncode}"
@@ -9804,7 +9810,7 @@ def _board_sketch_batch_worker(project: str, ep: str, jobkey: str, targets: list
             cmd += ["--model", model]
         err = ""
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=1200, cwd=str(ROOT))
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=IMAGE_SUBPROCESS_TIMEOUT, cwd=str(ROOT))
             if r.returncode != 0:
                 err = (r.stderr or r.stdout or "").strip()[-500:] or f"exit {r.returncode}"
         except Exception as e:  # noqa: BLE001
@@ -12607,20 +12613,112 @@ def _wf_run_stats(run_id) -> float | None:
     return None
 
 
-def _wf_meta_duration(base: Path, task_id: str) -> float | None:
-    """runs/<task_id>/meta.json 的 started_at → ended_at/finished_at → 秒。
-    结束字段两种写法并存(WORKFLOW.md §6.1 规约 finished_at,存量多为 ended_at)。"""
+def _wf_meta_interval(base: Path, task_id: str) -> tuple[float, float] | None:
+    """runs/<task_id>/meta.json 的 started_at → ended_at/finished_at → (起, 止) 时间戳。
+    结束字段两种写法并存(WORKFLOW.md §6.1 规约 finished_at,存量多为 ended_at)。
+    meta 由 agent 手写(常为整点估值),只在运行记录里归集不到该节点时兜底。"""
     meta = _read_json_safe(base / "runs" / task_id / "meta.json")
     if not isinstance(meta, dict):
         return None
     ended = meta.get("ended_at") or meta.get("finished_at")
     try:
-        t0 = datetime.fromisoformat(str(meta["started_at"]).replace("Z", "+00:00"))
-        t1 = datetime.fromisoformat(str(ended).replace("Z", "+00:00"))
-        s = (t1 - t0).total_seconds()
-        return s if 0 < s < 86400 * 7 else None
+        t0 = datetime.fromisoformat(str(meta["started_at"]).replace("Z", "+00:00")).timestamp()
+        t1 = datetime.fromisoformat(str(ended).replace("Z", "+00:00")).timestamp()
+        return (t0, t1) if 0 < t1 - t0 < 86400 * 7 else None
     except Exception:
         return None
+
+
+def _wf_run_interval(run: dict, now: float) -> tuple[float, float] | None:
+    """运行记录的 (started, ended);排队未开跑的不计,在跑的止于当前时刻。"""
+    try:
+        t0 = float(run.get("started") or 0)
+        t1 = float(run.get("ended") or (now if run.get("status") == "running" else 0))
+    except (TypeError, ValueError):
+        return None
+    return (t0, t1) if t0 > 0 and t1 > t0 else None
+
+
+def _wf_union_seconds(intervals) -> float:
+    """时间段并集总长:并行重叠只算一次(项目实际在干活的时长)。"""
+    total, cur_s, cur_e = 0.0, None, None
+    for s, e in sorted(intervals):
+        if cur_e is None or s > cur_e:
+            if cur_e is not None:
+                total += cur_e - cur_s
+            cur_s, cur_e = s, e
+        else:
+            cur_e = max(cur_e, e)
+    if cur_e is not None:
+        total += cur_e - cur_s
+    return total
+
+
+_WF_GRP_RANGE_RE = re.compile(r"grp(\d{3})\s*[–—~\-至到]\s*(?:grp)?(\d{3})")
+_WF_GRP_ONE_RE = re.compile(r"grp(\d{3})")
+_WF_RUN_ID_FIELDS = ("run_id", "prev_run_id", "restyle_run_id")
+
+
+def _wf_attribute_runs(project: str, raw: list[dict]) -> tuple[dict, list]:
+    """把项目的工位运行记录(core.RUNS,含历史与出错结束的)归到 DAG 节点。
+    归属 = 节点 run_id/prev_run_id/restyle_run_id 显式登记 ∪ 派单正文首行点名的节点 id
+    (点名的是扇出母节点且首行列了 grpNNN / grpNNN–grpMMM 时,落到对应实例)。
+    一次运行归到 k 个节点时时长按 k 平摊,避免批次单在多个组上重复计。
+    返回 ({node_id: [份额秒, 运行次数]}, 项目全部运行的时间段——含总制片与未归属运行)。"""
+    now = time.time()
+    ids = {n["id"] for n in raw if n.get("id")}
+    children: dict[str, set] = {}
+    for n in raw:
+        parent = n.get("expanded_from") or n.get("parent")
+        if isinstance(parent, str) and parent in ids and n.get("id"):
+            children.setdefault(parent, set()).add(n["id"])
+    explicit: dict[str, set] = {}
+    for n in raw:
+        for k in _WF_RUN_ID_FIELDS:
+            v = n.get(k)
+            for rid in (v if isinstance(v, (list, tuple)) else [v]):
+                if isinstance(rid, str) and rid:
+                    explicit.setdefault(rid, set()).add(n["id"])
+    id_re = None
+    if ids:
+        alt = "|".join(re.escape(i) for i in sorted(ids, key=len, reverse=True))
+        # 右界允许 -后缀:av3-ep01-video-3D-B11R / av3-ep01-prompt-grp061-r2 这类变更单号归到前缀节点;
+        # 备选按长度降序,同位置先命中最长的完整节点 id
+        id_re = re.compile(rf"(?<![A-Za-z0-9_\-])({alt})(?![A-Za-z0-9_])")
+
+    per_node: dict[str, list] = {}
+    spans: list = []
+    for rid, run in list(RUNS.items()):
+        if not isinstance(run, dict) or run.get("project") != project:
+            continue
+        iv = _wf_run_interval(run, now)
+        if iv is None:
+            continue
+        spans.append(iv)
+        if str(run.get("agent") or "").startswith("00-orchestration/"):
+            continue        # 总制片会话只计入项目总时长,不摊到工位节点
+        targets = set(explicit.get(rid, ()))
+        head = str(run.get("message") or "").strip().split("\n", 1)[0][:300]
+        m = id_re.search(head) if id_re else None
+        if m:
+            nid = m.group(1)
+            inst = set()
+            if nid in children:
+                for a, b in _WF_GRP_RANGE_RE.findall(head):
+                    for g in range(int(a), int(b) + 1):
+                        inst.add(f"{nid}-grp{g:03d}")
+                for g in _WF_GRP_ONE_RE.findall(head):
+                    inst.add(f"{nid}-grp{g}")
+                inst &= children[nid]
+            targets |= inst or {nid}
+        if not targets:
+            continue
+        share = (iv[1] - iv[0]) / len(targets)
+        for nid in targets:
+            acc = per_node.setdefault(nid, [0.0, 0])
+            acc[0] += share
+            acc[1] += 1
+    return per_node, spans
 
 
 def _preview_workflow(project: str):
@@ -12630,6 +12728,9 @@ def _preview_workflow(project: str):
         return {"project": base.name, "nodes": [], "summary": None}
     raw = _dag_load_nodes(dag_path)
     by_id = {n["id"]: n for n in raw if n.get("id")}
+    # 耗时口径:运行记录归集(含重跑/返工/出错结束)优先;归集不到再退 meta.json → 会话日志
+    run_time, spans = _wf_attribute_runs(base.name, raw)
+    extra_spent = 0.0
 
     nodes = []
     for n in raw:
@@ -12637,9 +12738,17 @@ def _preview_workflow(project: str):
             continue
         state = n.get("state") or "pending"
         nid = n["id"]
-        dur = _wf_meta_duration(base, nid)
-        if dur is None:
-            dur = _wf_run_stats(n.get("run_id"))
+        dur, run_count = None, 0
+        if nid in run_time:
+            dur, run_count = run_time[nid]
+        else:
+            iv = _wf_meta_interval(base, nid)
+            if iv is not None:
+                dur = iv[1] - iv[0]
+                spans.append(iv)
+            else:
+                dur = _wf_run_stats(n.get("run_id"))
+                extra_spent += dur or 0
         note = next((str(n[k]) for k in ("note", "orch_note", "skip_reason",
                                          "fail_reason", "pilot_note") if n.get(k)), "")
         nodes.append({
@@ -12654,6 +12763,7 @@ def _preview_workflow(project: str):
             "outputs": n.get("outputs") or [], "attempt": n.get("attempt"),
             "run_id": n.get("run_id"), "note": note[:400],
             "duration_s": round(dur) if dur is not None else None,
+            "run_count": run_count,
         })
 
     # 估时:同族均值 → 同 agent 均值 → 同阶段均值 → 全局均值
@@ -12712,7 +12822,8 @@ def _preview_workflow(project: str):
     video_tok, image_tok = _project_media_tokens(base)
     summary = {
         "total": len(nodes),
-        "spent_duration_s": round(sum(r["duration_s"] or 0 for r in nodes)),
+        # 墙钟并集:全部运行(含总制片、未归属节点的运行)+ meta 兜底时段,并行重叠只算一次
+        "spent_duration_s": round(_wf_union_seconds(spans) + extra_spent),
         "video_tokens": video_tok,
         "image_tokens": image_tok,
         "llm_tokens": _project_llm_tokens(project),

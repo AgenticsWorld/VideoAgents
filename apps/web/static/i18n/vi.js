@@ -1357,6 +1357,8 @@ window.I18N_DICT = {
 "预估": "ước tính",
 "该项目还没有 runs/dag.json(尚未立项)": "Dự án này chưa có runs/dag.json (chưa khởi tạo)",
 "已花费:": "Đã dùng: ",
+"全部运行时段合并,并行重叠只算一次(含总制片、重跑与出错结束的运行)": "Gộp mọi lượt chạy; phần chồng lấn song song chỉ tính một lần (gồm Tổng sản xuất, chạy lại và lượt chạy kết thúc do lỗi)",
+"{n} 次运行": "{n} lượt chạy",
 "剩余预估:": "Ước tính còn lại: ",
 "关键路径:": "Đường găng: ",
 "个任务": "tác vụ",
