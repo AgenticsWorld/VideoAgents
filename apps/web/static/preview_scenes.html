@@ -180,13 +180,13 @@ ul.arr>li{margin:2px 0}
 #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:99;cursor:zoom-out}
 #lightbox img{max-width:96vw;max-height:96vh;border-radius:6px}
 /* ✂ 裁剪分镜背景图(2026-09-15):比例固定 16:9(2026-10-09 起不随项目画幅)的框选浮层,拖选框移动、拖四角缩放,确认后服务端裁切覆盖原图 */
-.cropbtn,.pcopybtn,.pflipbtn{font-size:11px;line-height:16px;padding:1px 7px;flex:none;background:var(--panel2);border:1px solid var(--border);border-radius:5px;color:var(--dim);cursor:pointer}
-.cropbtn:hover,.pcopybtn:hover,.pflipbtn:hover{color:var(--accent);border-color:var(--accent)}
+.cropbtn,.pcopybtn{font-size:11px;line-height:16px;padding:1px 7px;flex:none;background:var(--panel2);border:1px solid var(--border);border-radius:5px;color:var(--dim);cursor:pointer}
+.cropbtn:hover,.pcopybtn:hover{color:var(--accent);border-color:var(--accent)}
 .pl-ops .editbtn{line-height:16px}
-.cropbtn.ok,.pcopybtn.ok,.pflipbtn.ok{color:var(--green);border-color:var(--green)}
-.pcopybtn.err,.pflipbtn.err{color:var(--red);border-color:var(--red);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pcopybtn:disabled,.pflipbtn:disabled{opacity:.5;cursor:default}
-/* 裁剪 / 复制 / 翻转 单独一行(2026-09-28) */
+.cropbtn.ok,.pcopybtn.ok{color:var(--green);border-color:var(--green)}
+.pcopybtn.err{color:var(--red);border-color:var(--red);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pcopybtn:disabled{opacity:.5;cursor:default}
+/* 裁剪 / 复制 单独一行(2026-09-28;翻转按钮 2026-10-10 移除,改在画板里做) */
 .gallery figcaption.pl-ops{flex-wrap:wrap}
 #cropper{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;z-index:100;padding:12px}
 #cropper .cr-bar{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;color:var(--dim);font-size:13px;max-width:92vw;text-align:center}
@@ -414,11 +414,10 @@ function renderDetail(s){
         const cap=[cam.facing?I18N.f('朝向 {d}',{d:cam.facing}):'',cam.height_m!=null?I18N.f('机高 {h} m',{h:cam.height_m}):'',cam.lens_mm_equiv?`${cam.lens_mm_equiv}mm`:'',p.time_of_day||'',
           src].filter(Boolean).join(' · ');
         // ✂ 裁剪(2026-09-15):手动框选(比例固定 16:9,不随项目画幅)→ 服务端裁切覆盖同一文件;按钮与「修改」分开(不走 .editbtn 的修改师浮窗)
-        // ⧉ 复制 / ⇋ 翻转(2026-09-28):复制 = 库里新增一张副本;翻转 = 水平翻转并覆盖这张图。三个按钮单独一行
+        // ⧉ 复制(2026-09-28):库里新增一张副本。按钮单独一行(⇋ 翻转 2026-10-10 移除:画板里的水平 / 垂直翻转替代)
         return `<figure title="${esc(p.key||'')}" data-key="${esc(p.key||'')}"><img src="${esc(bust(p.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption><span class="fn">${esc(cap||p.key||'')}</span></figcaption>`
           +`<figcaption class="pl-ops"><button type="button" class="cropbtn" data-sid="${esc(s.id)}" data-key="${esc(p.key||'')}" title="${esc(t('手动框选区域(比例固定 16:9)裁剪这张背景图,确认后覆盖原图'))}">✂ ${esc(t('裁剪'))}</button>`
           +`<button type="button" class="pcopybtn" data-sid="${esc(s.id)}" data-key="${esc(p.key||'')}" title="${esc(t('创建这张背景图的副本(库里新增一张,原图不动;副本可在分镜预览「换图」里选用)'))}">⧉ ${esc(t('复制'))}</button>`
-          +`<button type="button" class="pflipbtn" data-sid="${esc(s.id)}" data-key="${esc(p.key||'')}" title="${esc(t('水平翻转这张背景图并覆盖原图(再点一次翻回;首次改动保留 .orig 备份)'))}">⇋ ${esc(t('翻转'))}</button>`
           // ✏️ 修改(2026-10-09):右下角浮窗直发分镜背景图 Agent,走 revise_shot_plate.py 库图模式——以这张图为 [Image 1]
           // (浮窗「+」附的本机图片作 [Image 2…] 参考)新出 <key>_revN 入库,替换引用它的分镜,原图不动;尺寸同九宫格补图
           +`<button type="button" class="editbtn" data-kind="shot_plate" data-id="${esc(p.key||'')}" data-agent="08-video-gen/shot-plates" data-loc="${esc(plateLoc(s,p,used))}" data-hint="${esc(t('可点右上角「+」附参考图(本机图片,不上传)'))}" title="${esc(t('对这张背景图提修改意见,直接发给分镜背景图 Agent:以这张图为参考(可附参考图)按意见新出一张,替换引用它的分镜,原图不动'))}">✏️ ${esc(t('修改'))}</button>${CanvasEntry.btn({url:p.url,kind:'plate',label:s.name+' · '+(p.key||''),oid:s.id})}</figcaption>`
@@ -1090,40 +1089,29 @@ document.addEventListener('click',e=>{
   openCrop(b.dataset.sid,b.dataset.key,bust(pl.url));
 });
 
-// ⧉ 复制 / ⇋ 翻转分镜背景图(2026-09-28):POST scenes/<sid>/plates/copy|flip {key}。
-// 复制 → 库里新增副本 <key>_copyN,重取预览数据原位重绘并高亮新图;翻转 → 服务端水平翻转覆盖原图,原地换图不整页重载。
+// ⧉ 复制分镜背景图(2026-09-28):POST scenes/<sid>/plates/copy {key}。
+// 库里新增副本 <key>_copyN,重取预览数据原位重绘并高亮新图。
 function plateBtnFlash(b,cls,txt,restore,tip){
   const tip0=b.title;
   b.classList.add(cls);b.textContent=txt;if(tip)b.title=tip;
   setTimeout(()=>{b.classList.remove(cls);b.textContent=restore;b.title=tip0;b.disabled=false},cls==='err'?6000:2500);
 }
 document.addEventListener('click',async e=>{
-  const b=e.target.closest('.pcopybtn,.pflipbtn');
+  const b=e.target.closest('.pcopybtn');
   if(!b||!b.dataset.key||b.disabled)return;
-  const flip=b.classList.contains('pflipbtn');
   const sid=b.dataset.sid,key=b.dataset.key,proj=$('#project').value.trim()||'demo';
-  const label=flip?'⇋ '+t('翻转'):'⧉ '+t('复制');
-  b.disabled=true;b.textContent=flip?t('翻转中…'):t('复制中…');
+  const label='⧉ '+t('复制');
+  b.disabled=true;b.textContent=t('复制中…');
   try{
-    const r=await fetch(`/api/v1/projects/${encodeURIComponent(proj)}/scenes/${encodeURIComponent(sid)}/plates/${flip?'flip':'copy'}`,
+    const r=await fetch(`/api/v1/projects/${encodeURIComponent(proj)}/scenes/${encodeURIComponent(sid)}/plates/copy`,
       {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
     const d=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(d.detail||((r.status===404||r.status===405)?t('服务未重启:接口不可用'):r.status));
-    if(flip){
-      // ?v= 是文件 mtime(秒级),再补 &t= 防同秒连续翻转命中缓存
-      const url=d.url+(d.url.includes('?')?'&':'?')+'t='+Date.now();
-      const sc=DATA.find(x=>x.id===sid);
-      const pl=sc&&(sc.plates||[]).find(p=>p.key===key);
-      if(pl)pl.url=url;
-      document.querySelectorAll(`.gallery.plates figure[data-key="${CSS.escape(key)}"]`).forEach(fg=>{const im=fg.querySelector('img');if(im)im.src=url;});
-      plateBtnFlash(b,'ok','✓ '+t('已翻转并替换'),label);
-    }else{
-      await reloadKeep();
-      const fg=CUR===sid&&document.querySelector(`.gallery.plates figure[data-key="${CSS.escape(d.key)}"]`);
-      if(fg){fg.scrollIntoView({block:'center',behavior:'smooth'});fg.classList.add('jump-hit');setTimeout(()=>fg.classList.remove('jump-hit'),2500);}
-    }
+    await reloadKeep();
+    const fg=CUR===sid&&document.querySelector(`.gallery.plates figure[data-key="${CSS.escape(d.key)}"]`);
+    if(fg){fg.scrollIntoView({block:'center',behavior:'smooth'});fg.classList.add('jump-hit');setTimeout(()=>fg.classList.remove('jump-hit'),2500);}
   }catch(err){
-    const msg=(flip?t('翻转失败:'):t('复制失败:'))+err.message;
+    const msg=t('复制失败:')+err.message;
     plateBtnFlash(b,'err','✗ '+msg,label,msg);
   }
 });

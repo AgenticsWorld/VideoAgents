@@ -108,7 +108,7 @@ python code/revise_shot_plate.py --project <slug> --ep <ep> --shot <shNNN> [--ro
 
 ### 场景预览页按库图修改 + 用户参考图(2026-10-09)
 
-场景预览页「分镜背景图」板块每张库图在「✂ 裁剪 / ⧉ 复制 / ⇋ 翻转」后有「✏️ 修改」:右下角浮窗(`edit-popup.js`)**直发** `08-video-gen/shot-plates`(不经修改师),定位文本带场景 / 库 key / 文件 / 引用它的分镜与库图模式命令;浮窗底部提示可用输入框右上角「+」附参考图(`file-attach.js`,不上传,只把本机绝对路径拼在消息末尾「附件」段)。
+场景预览页「分镜背景图」板块每张库图在「✂ 裁剪 / ⧉ 复制」后有「✏️ 修改」:右下角浮窗(`edit-popup.js`)**直发** `08-video-gen/shot-plates`(不经修改师),定位文本带场景 / 库 key / 文件 / 引用它的分镜与库图模式命令;浮窗底部提示可用输入框右上角「+」附参考图(`file-attach.js`,不上传,只把本机绝对路径拼在消息末尾「附件」段)。
 
 ```sh
 python code/revise_shot_plate.py --project <slug> --scene <sid> --key <库 key> --change "<英文修改要求>" [--note "<用户原话>"] \
