@@ -7,6 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="/static/i18n/i18n.js"></script>
 <script src="/static/ep-picker.js?v=20260912"></script>
+<script src="/static/canvas-entry.js?v=20261010"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -226,7 +227,8 @@ function render(d){
   h+=`<h3 class="sec">🖼 封面 thumbnail<span class="n">${esc(I18N.f('{n} 张',{n:thumbs.length}))}</span></h3>`;
   h+=thumbs.length?`<div class="thumbs">${thumbs.map(t=>
     `<div class="t"><img src="${esc(t.url)}" loading="lazy" onclick="zoom(this.src)">
-     <div class="cap" title="${esc(t.name)}">${esc(t.name)}</div></div>`).join('')}</div>`
+     <div class="cap" title="${esc(t.name)}">${esc(t.name)}</div>
+     <div class="cap">${CanvasEntry.btn({url:t.url,kind:'cover',label:d.ep+' · '+t.name})}</div></div>`).join('')}</div>`
     :'<div class="none">'+esc(I18N.f('该集还没有封面(edit/{ep}/thumbnail_*.png)',{ep:d.ep}))+'</div>';
 
   // 发布渠道(2026-10-07):勾选 = output.platforms(与输出设置同一键,下游封面 / 字幕 / 画幅矩阵 / 发布包按它);每渠道「发布」按钮派 publisher

@@ -7,6 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="/static/i18n/i18n.js"></script>
 <script src="/static/edit-popup.js?v=20260927a-reviser"></script>
+<script src="/static/canvas-entry.js?v=20261010"></script>
 <script src="/static/image-models.js?v=20261010b"></script>
 <script src="/static/image-model-picker.js?v=20260912"></script>
 <script src="/static/ep-filter.js?v=20260917"></script>
@@ -194,7 +195,7 @@ function renderDetail(p){
   if(FOLDER&&!folders[FOLDER])FOLDER=null;
   const fig=(im,strip)=>{
     const nm=strip?im.name.slice(strip.length+1):im.name;
-    return `<figure><img src="${esc(bust(im.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption title="${esc(nm)}"><span class="fn">${esc(nm)}</span><button class="editbtn" data-url="${esc(im.url)}" title="对这张图提修改意见,发给修改师处理">✏️ 修改</button></figcaption></figure>`;
+    return `<figure><img src="${esc(bust(im.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption title="${esc(nm)}"><span class="fn">${esc(nm)}</span><button class="editbtn" data-url="${esc(im.url)}" title="对这张图提修改意见,发给修改师处理">✏️ 修改</button>${CanvasEntry.btn({url:im.url,kind:'creature',label:p.name+' · '+nm,oid:p.id})}</figcaption></figure>`;
   };
   if(FOLDER){
     const ims=folders[FOLDER];

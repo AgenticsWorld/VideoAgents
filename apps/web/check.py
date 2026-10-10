@@ -18,6 +18,7 @@ REQUIRED = {
     "vendor/three/three.core.js", "vendor/three/OrbitControls.js", "vendor/three/LICENSE",
     "vendor/three/addons/postprocessing/Pass.js", "vendor/spark/spark.module.js", "vendor/spark/LICENSE",
     "world-viewer.js", "director-world.js", "preview_director.html", "world-view-export.html",
+    "preview_canvas.html", "canvas-entry.js",
 }
 
 

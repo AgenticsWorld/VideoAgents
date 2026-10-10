@@ -2302,6 +2302,7 @@ AM_AGENT_TIERS = {                                      # 分类内的例外
     "02-worldbuilding/world": "high",                   # 世界观总纲 = 创作核心
     "03-characters/character-manager": "low",           # 角色索引管理
     "06-art/aspect-ratio": "low",                       # 画幅规范 = 机械活
+    "06-art/image-retouch": "low",                      # 画板修图:看图把用户圈的位置和说明整理成一条编辑提示词,求快
     "08-video-gen/prompt": "high",                      # 生成 prompt 质量决定画面上限
     "08-video-gen/video-generation": "high",            # 视频生成主力
     # audio-to-video 插件:类别 15-audio-video 不在 AM_CATEGORY_TIERS,默认落 low;
@@ -7915,6 +7916,398 @@ async def api_scene_plate_copy(project: str, sid: str, body: dict):
 
 async def api_scene_plate_flip(project: str, sid: str, body: dict):
     return await asyncio.to_thread(_scene_plate_edit, project, sid, body, "flip")
+
+
+# ---------------- 画板(2026-10-10;modules/image_canvas.py,docs/image_canvas.md)----------------
+# 场景预览(场景图 / 分镜背景图)、人物预览(人物图 / 服装图)、生物 / 道具预览、故事板草图、成片发布页封面各处「🖌 画板」按钮
+# → /preview/canvas?project=&file=<项目内相对路径>。编辑 / 放大的结果只进这张图自己的历史(assets/canvas/…),「设为最终版」才动生产链路。
+# 出图一律起子进程跑宿主 CLI code/canvas_edit.py(渠道 / 模型覆盖只作用于那个进程):直接发送与放大由本进程的后台线程起,
+# 经 Agent 的编辑由画板修图 Agent(06-art/image-retouch)整理提示词后自己跑同一条命令。页面轮询 GET 取进度。
+CANVAS_AGENT = "06-art/image-retouch"
+CANVAS_CLI_TIMEOUT = 1500
+
+
+def _canvas_zh() -> bool:
+    return (ui_lang_code() or "zh").lower().startswith("zh")
+
+
+def _canvas_error(e) -> ServiceError:
+    return ServiceError(getattr(e, "status", 400), e.text(_canvas_zh()) if hasattr(e, "text") else str(e))
+
+
+def _canvas_run_ended(run_id: str) -> str | None:
+    """Agent 整理提示词的那次运行是否已结束:None = 还在跑(或查不到,交给超时判),否则返回结束状态。"""
+    r = RUNS.get(run_id)
+    if not r or r.get("status") in ("queued", "running"):
+        return None
+    return str(r.get("status") or "ended") + (f":{str(r.get('error'))[:200]}" if r.get("error") else "")
+
+
+def _canvas_url(base: Path, rel: str) -> str:
+    try:
+        v = int((base / rel).stat().st_mtime)
+    except OSError:
+        v = 0
+    return f"/projects/{base.name}/{rel}?v={v}"
+
+
+def _canvas_open(project: str, file: str, kind: str = "", create: bool = True):
+    from modules import image_canvas as ic
+    base = _proj_base(project)
+    try:
+        doc, hist = ic.open_doc(base, str(file or ""), str(kind or ""), create=create)
+    except ic.CanvasError as e:
+        raise _canvas_error(e) from None
+    return base, doc, hist
+
+
+def _canvas_state(base: Path, doc: Path, hist: dict | None = None) -> dict:
+    from modules import image_canvas as ic
+    st = ic.state(base, doc, hist or ic.load_history(doc), run_ended=_canvas_run_ended)
+    for v in st["versions"]:
+        v["url"] = _canvas_url(base, v["file_rel"])
+        v["thumb_url"] = _canvas_url(base, v["thumb_rel"])
+        if v.get("raw_rel"):
+            v["raw_url"] = _canvas_url(base, v["raw_rel"])
+    for r in st["refs"]:
+        r["url"] = _canvas_url(base, r["file"])
+    st["info"]["url"] = _canvas_url(base, st["file"])
+    st["project"] = base.name
+    zh = _canvas_zh()
+    for j in (st.get("job"), st.get("last_job")):      # 任务报错:中文界面出中文,其余有英文版的出英文
+        if j:
+            en = j.pop("error_en", "")
+            if en and not zh:
+                j["error"] = en
+    st["ui"] = (hist or ic.load_history(doc)).get("ui") or {}
+    # 渠道清单 / 保真超分可选项 / 修图 Agent 是否在:每个接口的返回都带全,页面拿任何一次返回都能整页重绘
+    from modules import genmedia
+    img = (load_genconfig().get("image") or {})
+    gmodel = comfy_global_mode(img.get("comfyui")) if img.get("provider") == "comfyui" else active_image_model()
+    st["models"] = {"channels": _image_channels(), "global": {"provider": img.get("provider") or "", "model": gmodel},
+                    "pref": image_model_pref(st["pref_kind"]) if st["pref_kind"] else {"provider": "", "model": ""}}
+    st["upscalers"] = genmedia.image_upscalers()
+    st["agent"] = CANVAS_AGENT if agent_dir(CANVAS_AGENT) else ""
+    return st
+
+
+def _canvas_channel(body: dict) -> tuple[str, str]:
+    """页面选的图像渠道 / 模型(空渠道 = 跟随全局);口径同预览页顶栏的图像模型下拉。"""
+    provider = str((body or {}).get("provider") or "").strip()
+    model = str((body or {}).get("model") or "").strip()
+    if not provider:
+        return "", ""
+    if provider not in IMAGE_PROVIDERS:
+        raise ServiceError(400, f"provider must be one of {IMAGE_PROVIDERS}")
+    if provider in ("agentics", "rhapi"):
+        model = ""                       # 文生图 / 图生图两个模型在「生成模型」页定,出图时按有无参考图自动选
+    if provider == "comfyui":
+        model = model or comfy_global_mode((load_genconfig().get("image") or {}).get("comfyui"))
+        if model not in COMFY_MODES:
+            raise ServiceError(400, f"ComfyUI 运行方式须为 {COMFY_MODES} 之一,收到 {model}")
+    return provider, model
+
+
+async def api_canvas_get(project: str, file: str = "", kind: str = "", label: str = "", oid: str = ""):
+    """画板页面数据:图片信息、全部历史版本、最终版、参考图托盘、进行中的任务,以及渠道清单与保真超分可选项。"""
+    from modules import image_canvas as ic
+
+    def _load():
+        base, doc, hist = _canvas_open(project, file, kind)
+        ic.set_ui(doc, label, oid)
+        return _canvas_state(base, doc, hist if not (label or oid) else None)
+    return await asyncio.to_thread(_load)
+
+
+async def api_canvas_limits(project: str, file: str = "", version: str = "", provider: str = "", model: str = ""):
+    """「放大」页:所选图像渠道 / 模型在这张图的画幅下能出多大。{limits, current, max | tiers};上限未知时 limits.mode = unknown。"""
+    from modules import genmedia, image_canvas as ic
+    provider, model = _canvas_channel({"provider": provider, "model": model})
+
+    def _load():
+        base, doc, hist = _canvas_open(project, file, create=False)
+        try:
+            v = ic.version_of(hist, version or hist.get("final") or "")
+            facts = ic.channel_facts(provider, model)
+        except ic.CanvasError as e:
+            raise _canvas_error(e) from None
+        w, h = v["width"], v["height"]
+        lim = facts["limits"]
+        out = {"provider": facts["provider"], "model": facts["model"], "limits": lim, "current": [w, h],
+               "ref_capacity": facts["ref_capacity"], "max": None, "tiers": []}
+        if lim.get("mode") == "pixels":
+            mx = genmedia.image_max_size(lim, w, h)
+            out["max"] = list(mx) if mx else None
+        elif lim.get("mode") == "tiers":
+            out["tiers"] = [{"tier": t, "size": list(genmedia.image_tier_size(lim, t, w, h))} for t in lim.get("tiers") or []]
+        return out
+    return await asyncio.to_thread(_load)
+
+
+def _canvas_spawn(base: Path, doc: Path, jid: str, action: str, *flags: str) -> None:
+    """后台线程起宿主 CLI 跑一个任务;CLI 自己记成功 / 失败,进程异常退出而任务还挂着时在这里补记失败。"""
+    from modules import image_canvas as ic
+
+    def _work():
+        cmd = [sys.executable, str(ROOT / "code" / "canvas_edit.py"), action, "--project", base.name,
+               "--doc", doc.name, "--job", jid, *flags]
+        err = ""
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=CANVAS_CLI_TIMEOUT, cwd=str(ROOT))
+            if r.returncode != 0:
+                err = (r.stderr or r.stdout or "").strip()[-600:] or f"exit {r.returncode}"
+        except Exception as e:  # noqa: BLE001
+            err = str(e)[:600]
+        try:
+            job = ic.load_job(doc, jid)
+            if job.get("status") in ic.ACTIVE:
+                job = ic.set_job(doc, jid, status="failed", error=err or "出图进程结束但没有产出",
+                                 error_en="" if err else "The generation process ended without producing a result")
+        except Exception:  # noqa: BLE001
+            job = {}
+        HUB.publish({"type": "canvas", "project": base.name, "file": job.get("source") or "", "job": jid,
+                     "status": job.get("status") or "failed"})
+    threading.Thread(target=_work, daemon=True, name=f"canvas-{jid}").start()
+
+
+def _canvas_work_order(base: Path, doc: Path, job: dict, hist: dict) -> str:
+    """发给画板修图 Agent 的工单(Agent 指令文本,不随界面语言)。首行 [画板 <任务号>] 供对话记录里检索。"""
+    from modules import image_canvas as ic
+    absp = lambda rel: str(base / rel)   # noqa: E731
+    by_role = {i["role"]: i for i in job["images"] if i["role"] != "ref"}
+    w, h = job.get("parent_size") or [0, 0]
+    ui = hist.get("ui") or {}
+    lines = [f"[画板 {job['id']}] 整理一次图片编辑的提示词并提交出图(项目 {base.name})",
+             f"对象:{ui.get('label') or hist['source']}(类别 {hist.get('kind')};原路径 {hist['source']})",
+             f"[Image 1] 底图:{absp(by_role['source']['file'])}({w}x{h},画板版本 {job['parent']})"]
+    if by_role.get("marked"):
+        lines.append(f"[Image 2] 带圈标注图:{absp(by_role['marked']['file'])}(彩色描边 + 编号是用户圈出的位置,只作定位标记)")
+        lines.append(f"用户圈出的区域(共 {len(job['regions'])} 个):")
+        for r in job["regions"]:
+            lines.append(f"  区域{r['n']}({ic.region_where(r)};裁切图 {absp(r['crop']) if r.get('crop') else '-'}):"
+                         f"{r.get('text') or '(没有单独说明,按整体说明处理)'}")
+    lines.append(f"整体说明:{job.get('text') or '(无)'}")
+    refs = [i for i in job["images"] if i["role"] == "ref"]
+    if refs:
+        lines.append("参考图(用户文字里的 @图N / @refN 指的就是它们):")
+        for i in refs:
+            lines.append(f"  @图{i['ref']} = [Image {i['n']}] {absp(i['file'])}:{i.get('note') or '(用户没写注释)'}")
+    lines.append(f"图像模型:{job.get('provider') or '全局图像渠道'} {job.get('model') or ''}(用户在画板里选的,由宿主命令套用,不要改)")
+    lines.append("圈外锁定:" + ("开(出图后宿主只取圈内贴回底图,圈外像素不变)" if job.get("lock") else "关(整张图以模型返回的为准)"))
+    lines.append("宿主按模板拼的提示词(图序与位置说法以它为准,请按你看到的画面把每处要改的东西写具体):")
+    lines.append("<<<\n" + (job.get("template_prompt") or "") + "\n>>>")
+    prompt_file = doc / "jobs" / job["id"] / "prompt.txt"
+    lines.append(f"把写好的英文提示词存到 {prompt_file},然后只跑这一条命令(前台等它结束):")
+    lines.append(f"python3 code/canvas_edit.py submit --project {base.name} --doc {doc.name} --job {job['id']} --prompt-file {prompt_file}")
+    if job.get("preview"):
+        lines.append("用户勾了「发送前先看提示词」:这条命令只会把提示词存为待确认、不出图,属正常,跑完即结束本单。")
+    return "\n".join(lines)
+
+
+async def api_canvas_edit(project: str, body: dict):
+    """画板「编辑」发送:{file, kind, parent, regions[], text, refs[参考图编号], provider, model, lock, mode: agent|direct, preview}。
+    直接发送 = 宿主按模板提示词出图;经 Agent = 派画板修图 Agent 整理提示词;preview = 先停在待确认,用户看过提示词再出图。"""
+    from modules import image_canvas as ic
+    body = body or {}
+    base, doc, hist = _canvas_open(project, body.get("file"), body.get("kind"))
+    provider, model = _canvas_channel(body)
+    mode = "direct" if body.get("mode") == "direct" else "agent"
+    if mode == "agent" and not agent_dir(CANVAS_AGENT):
+        raise ServiceError(404, f"Unknown agent: {CANVAS_AGENT}")
+    payload = {k: body.get(k) for k in ("parent", "regions", "text", "refs", "lock", "preview")}
+    payload.update({"provider": provider, "model": model, "mode": mode})
+    try:
+        job = await asyncio.to_thread(ic.create_edit_job, base, doc, payload, run_ended=_canvas_run_ended)
+    except ic.CanvasError as e:
+        raise _canvas_error(e) from None
+    if job["status"] == "queued":
+        _canvas_spawn(base, doc, job["id"], "submit", "--template")
+    elif job["status"] == "drafting":
+        try:
+            res = await api_chat({"agent": CANVAS_AGENT, "message": _canvas_work_order(base, doc, job, ic.load_history(doc)),
+                                  "project": base.name, "source": "user"})
+            ic.set_job(doc, job["id"], run_id=res.get("run_id") or "")
+        except Exception as e:  # noqa: BLE001
+            why = getattr(e, "detail", None) or e
+            ic.set_job(doc, job["id"], status="failed", error=f"派单失败:{why}"[:500], error_en=f"Dispatch failed: {why}"[:500])
+            raise
+    return _canvas_state(base, doc)
+
+
+async def api_canvas_confirm(project: str, body: dict):
+    """待确认的提示词:{file, job, prompt}确认后出图(可先改提示词);{file, job, cancel: true} 取消(Agent 还在整理时也可取消)。"""
+    from modules import image_canvas as ic
+    body = body or {}
+    base, doc, _ = _canvas_open(project, body.get("file"), create=False)
+    jid = str(body.get("job") or "")
+    zh = _canvas_zh()
+    try:
+        job = ic.load_job(doc, jid)
+        if body.get("cancel"):
+            if job.get("status") not in ("awaiting_confirm", "drafting"):
+                raise ServiceError(409, "任务已经在出图或已结束,不能取消" if zh else "The job is already generating or finished and cannot be cancelled")
+            ic.set_job(doc, jid, status="cancelled", error="")
+            return _canvas_state(base, doc)
+        if job.get("status") != "awaiting_confirm":
+            raise ServiceError(409, "这个任务不在待确认状态" if zh else "This job is not awaiting confirmation")
+        prompt = str(body.get("prompt") or job.get("prompt") or "").strip()
+        if not prompt:
+            raise ServiceError(400, "提示词为空" if zh else "The prompt is empty")
+        ic.set_job(doc, jid, status="queued", prompt=prompt[:8000])
+    except ic.CanvasError as e:
+        raise _canvas_error(e) from None
+    _canvas_spawn(base, doc, jid, "submit", "--confirmed")
+    return _canvas_state(base, doc)
+
+
+async def api_canvas_upscale(project: str, body: dict):
+    """画板「放大」:{file, parent, mode: redraw|fidelity, provider, model, upscaler, width}(高按画幅推)。宿主直接出图,不经 Agent。"""
+    from modules import image_canvas as ic
+    body = body or {}
+    base, doc, _ = _canvas_open(project, body.get("file"), body.get("kind"))
+    provider, model = _canvas_channel(body) if body.get("mode") != "fidelity" else ("", "")
+    payload = {k: body.get(k) for k in ("parent", "mode", "upscaler", "width")}
+    payload.update({"provider": provider, "model": model})
+    try:
+        job = await asyncio.to_thread(ic.create_upscale_job, base, doc, payload, run_ended=_canvas_run_ended)
+    except ic.CanvasError as e:
+        raise _canvas_error(e) from None
+    _canvas_spawn(base, doc, job["id"], "upscale")
+    return _canvas_state(base, doc)
+
+
+async def api_canvas_transform(project: str, body: dict):
+    """画板非 AI 操作(同样记为一个版本):{file, version, op: crop|flip_h|flip_v|rotate|resize, params}。"""
+    from modules import image_canvas as ic
+    body = body or {}
+    base, doc, _ = _canvas_open(project, body.get("file"), body.get("kind"))
+    try:
+        ver = await asyncio.to_thread(ic.transform, base, doc, str(body.get("version") or ""), str(body.get("op") or ""),
+                                      body.get("params") if isinstance(body.get("params"), dict) else {})
+    except ic.CanvasError as e:
+        raise _canvas_error(e) from None
+    return {**_canvas_state(base, doc), "created": ver["id"]}
+
+
+async def api_canvas_version(project: str, body: dict):
+    """历史版本的两个动作:{file, version, action: delete}(挪进 trash,不真删)/ {action: unlock}(圈外锁定的版本改用模型返回的整图,另存一版)。"""
+    from modules import image_canvas as ic
+    body = body or {}
+    base, doc, _ = _canvas_open(project, body.get("file"), create=False)
+    vid, action = str(body.get("version") or ""), str(body.get("action") or "")
+    if action not in ("delete", "unlock"):
+        raise ServiceError(400, "action must be delete or unlock")
+    try:
+        res = await asyncio.to_thread(ic.delete_version if action == "delete" else ic.unlock_version, base, doc, vid)
+    except ic.CanvasError as e:
+        raise _canvas_error(e) from None
+    return {**_canvas_state(base, doc), "created": res.get("id") if action == "unlock" else ""}
+
+
+async def api_canvas_ref_upload(data: bytes, project: str, file: str, filename: str):
+    """画板参考图上传(整个请求体就是图片字节)→ 进这张图的参考图托盘,返回新条目(编号 n 即文字里的 @图n)。"""
+    from modules import image_canvas as ic
+    base, doc, _ = _canvas_open(project, file, create=False)
+    try:
+        rec = await asyncio.to_thread(lambda: ic.add_ref(base, doc, data=data, filename=filename))
+    except ic.CanvasError as e:
+        raise _canvas_error(e) from None
+    return {"ok": True, "ref": {**rec, "url": _canvas_url(base, rec["file"])}, "refs": _canvas_state(base, doc)["refs"]}
+
+
+async def api_canvas_ref(project: str, body: dict):
+    """参考图托盘:{file, library: <项目内相对路径>} 从项目库选一张;{file, n, note} 改注释;{file, n, remove: true} 移出托盘。"""
+    from modules import image_canvas as ic
+    body = body or {}
+    base, doc, _ = _canvas_open(project, body.get("file"), create=False)
+    try:
+        if body.get("library"):
+            ic.add_ref(base, doc, library_rel=str(body["library"]), note=str(body.get("note") or ""))
+        else:
+            ic.update_ref(doc, int(body.get("n") or 0), note=body.get("note") if "note" in body else None, remove=bool(body.get("remove")))
+    except ic.CanvasError as e:
+        raise _canvas_error(e) from None
+    return {"ok": True, "refs": _canvas_state(base, doc)["refs"]}
+
+
+async def api_canvas_library(project: str, q: str = ""):
+    """「从项目库选」参考图的候选:人物 / 生物 / 道具 / 场景概念图、分镜背景图、refs/ 里的图片。"""
+    from modules import image_canvas as ic
+    base = _proj_base(project)
+    groups = await asyncio.to_thread(ic.library_images, base, q)
+    for g in groups:
+        for it in g["items"]:
+            it["url"] = _canvas_url(base, it["file"])
+    return {"groups": groups}
+
+
+async def api_canvas_impact(project: str, file: str = ""):
+    """「设为最终版」之前的影响清单:{users: 谁在用这张图, notes: 提示代号, setting_kind}。"""
+    from modules import image_canvas as ic
+    base, doc, hist = _canvas_open(project, file, create=False)
+    out = await asyncio.to_thread(ic.impact, base, hist)
+    out["setting_kind"] = ic.SETTING_KINDS.get(hist.get("kind") or "") or ""
+    out["storage"] = hist.get("storage")
+    return out
+
+
+async def api_canvas_adopt(project: str, body: dict):
+    """画板「设为最终版」:{file, version, repoint(分镜背景图:是否替换引用它的分镜,默认是), sync_setting(把这次改动发给修改师更新设定)}。
+    有分镜 / 组在用这张图时写一条变更记录(runs/revisions/,rerun_downstream=否:总制片只标脏不重跑,与修改师同一口径)。"""
+    from modules import image_canvas as ic
+    body = body or {}
+    base, doc, hist = _canvas_open(project, body.get("file"), create=False)
+    vid = str(body.get("version") or "")
+    prev_final = hist.get("final")
+    try:
+        res = await asyncio.to_thread(ic.adopt, base, doc, vid, repoint=body.get("repoint", True) is not False)
+        hist = ic.load_history(doc)
+        changes = ic.describe_changes(hist, vid)
+        users = (await asyncio.to_thread(ic.impact, base, hist))["users"]
+    except ic.CanvasError as e:
+        raise _canvas_error(e) from None
+    kind, meta, ui = hist.get("kind") or "image", hist.get("meta") or {}, hist.get("ui") or {}
+    skind = ic.SETTING_KINDS.get(kind) or ""
+    oid = ui.get("oid") if kind == "costume" and ui.get("oid") else (meta.get("id") or ui.get("oid") or "")
+    label = ui.get("label") or hist["source"]
+    target = {"kind": skind or kind, "id": oid, "ep": meta.get("ep") or "", "files": [res["target_file"]], "label": label,
+              "rerun_downstream": False}
+    changed = vid != prev_final or res.get("created") or bool(res.get("replaced"))
+    if changed and users:
+        rid = f"canvas-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:4]}"
+        rec = {"id": rid, "run_id": "", "project": base.name, "created": time.time(), "ended": time.time(), "status": "done", "error": "",
+               "source": "canvas", "target": target,
+               "message": (f"画板把 {label} 的最终版换成 {vid}({res['target_file']})\n{changes}")[:2000],
+               "files": [res["target_file"]],
+               "record": {"changed_files": [res["target_file"]], "dirty_nodes": [], "signature_expired": "", "checks": [],
+                          "notes": ("用户在画板里直接换了这张图,已出的视频没有变;在用它的:" + "、".join(users[:20]))[:1000]},
+               "rerun_downstream": False, "consumed": None}
+        try:
+            d = revisions_dir(base.name)
+            d.mkdir(parents=True, exist_ok=True)
+            atomic_write_json(d / f"{rid}.json", rec)
+            res["revision"] = rid
+        except Exception as e:  # noqa: BLE001
+            print(f"[canvas] 变更记录写入失败(不影响最终版):{e}", flush=True)
+    if body.get("sync_setting") and skind and changes:
+        zh = _canvas_zh()
+        msg = ((f"画板把 {label} 的最终版换成了一张改过的图(图片已经落盘:{res['target_file']},不要重出图、不要改这张图)。\n"
+                f"这次改了什么:\n{changes}\n"
+                "请只把对应的设定文字(设定卡、外观 / 陈设描述、出图用的描述串)改成与新图一致,免得以后重出时又改回去;"
+                "新图与设定哪里对不上以新图为准。")
+               if zh else
+               (f"The canvas replaced the final image of {label} with an edited one (already saved at {res['target_file']}; "
+                "do not regenerate or modify this image).\n"
+                f"What changed:\n{changes}\n"
+                "Update only the matching setting text (setting card, appearance / set-dressing description, the description "
+                "strings used for generation) so it agrees with the new image and later regenerations do not revert it; "
+                "where the two disagree, the new image wins."))
+        try:
+            run = await api_chat({"agent": REVISER_ID, "message": msg, "project": base.name, "target": dict(target), "source": "user"})
+            res["setting_run"] = run.get("run_id")
+        except Exception as e:  # noqa: BLE001
+            res["setting_error"] = str(getattr(e, "detail", None) or e)[:300]
+    return {**_canvas_state(base, doc), "adopted": res, "users": users}
 
 
 # ---------------- 场景预览页「💾 背景图」(2026-09-26):把全景 360° 视窗 / 世界模型视窗当前画面存为一张新背景图 ----------------

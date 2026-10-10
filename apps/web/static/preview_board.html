@@ -11,6 +11,7 @@
 <script src="/static/preview-stickbar.js?v=20260913" defer></script>
 <script src="/static/preview-nav.js?v=20260913" defer></script>
 <script src="/static/edit-popup.js?v=20260927a-reviser"></script>
+<script src="/static/canvas-entry.js?v=20261010"></script>
 <script src="/static/mini-md.js?v=20260911"></script>
 <script src="/static/image-models.js?v=20261010b"></script>
 <script src="/static/image-model-picker.js?v=20260912"></script>
@@ -567,6 +568,8 @@ function sketchCell(sc,sh,ep){
   let h=`<div class="skbox ${PORTRAIT?'portrait':''} ${busy?'busy':''}" style="aspect-ratio:${aspectCss(LAST.aspect)}" ${r.url?`data-img="${esc(r.url)}" data-cap="${esc(cap)}"`:''} title="${esc(r.status==='failed'?(r.error||''):(r.prompt||''))}">${r.url?`<img src="${esc(r.url)}" alt="" loading="lazy">`:`<div class="ph">${busy?'':'🖊 '+esc(t('未出草图'))}</div>`}${st?`<div class="st ${cls}">${st}</div>`:''}</div>`;
   h+=`<div class="skbtns"><button class="editbtn sk-gen" data-scene="${esc(sc.scene_no)}" data-order="${sh.order}" ${busy?'disabled':''} title="${esc(t('按当前草图模型出/重出这一镜的草图'))}">${r.url?'↻ '+esc(t('重出')):'🖊 '+esc(t('出图'))}</button>`;
   if(r.url)h+=`<button class="editbtn" data-agent="${esc((LAST.agents||{}).sketch||'07-directing/storyboard-sketch')}" data-key="${esc(sh.key)}" data-loc="${esc('[草图 '+ep+'/'+sh.key+'] '+I18N.f('修改分镜草图 {ep} 场次 {no} 第 {o} 镜(项目 {p};图片 {dir}/{key}.png,台账 {dir}/index.json;镜头内容:{txt})',{ep,key:sh.key,no:sc.scene_no,o:sh.order,p:LAST.project||'',dir:LAST.sketch_dir||('assets/storyboard/'+ep),txt:clip(sh.content,40)}))}" ${busy?'disabled':''}>✏️ ${esc(t('改草图'))}</button>`;
+  // 🖌 画板(2026-10-10):圈选修改 / 放大这张草图,保留历史版本;设为最终版时写回本文件并更新草图台账(mode=canvas)
+  if(r.url)h+=CanvasEntry.btn({url:r.url,kind:'sketch',label:ep+' '+sc.scene_no+' #'+sh.order+' · '+clip(sh.content,30),oid:sh.key});
   // ✍️ 手绘(2026-09-16):手机扫码画布(同 分镜预览「添加参考图 → 🎨 手绘参考图」的 /draw/<token> 机制),画的图直接作为该镜草图,不经 AI
   h+=`<button class="editbtn sk-draw" data-key="${esc(sh.key)}" ${busy?'disabled':''} title="${esc(t('手机扫码画一张草图;默认由 AI 按分镜草图风格重绘,画布页取消勾选「AI 加工」则原图直接作为这一镜的草图'))}">✍️ ${esc(t('手绘'))}</button>`;
   h+=`</div>`;

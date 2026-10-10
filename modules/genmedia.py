@@ -4079,6 +4079,182 @@ def image_max_pixels(cfg: dict) -> int | None:
     return None
 
 
+# ---------------- 画板(modules/image_canvas.py,2026-10-10):出图尺寸约束 + 保真超分 ----------------
+# image_size_limits:生效图像渠道 / 模型按请求宽高出图时的尺寸约束。画板「放大」据此显示「该模型最大宽高」,编辑时把请求尺寸收进范围。
+#   {"mode": "pixels", "max_pixels", "min_pixels", "multiple", "max_edge", "max_ratio", "basis"}  按具体宽高出图,给了面积 / 边长上限
+#   {"mode": "tiers", "tiers": [...], "rule": "area" | "long_edge", "basis"}                    只收分辨率档,实际像素由模型定
+#   {"mode": "unknown"}                                                                        上限未知(不猜)
+# basis:measured = 逐个模型实测过(火山 / BytePlus,见 image_max_pixels);doc = 抄自渠道参数表,没实测。
+IMAGE_TIER_LONG_EDGE = {"1K": 1280, "2K": 2560, "4K": 3840}     # 按长边分档的渠道(Fal Nano Banana)各档的请求长边
+ARK_SEEDREAM5_MIN_PIXELS = 3_686_400
+
+
+def image_size_limits(cfg: dict) -> dict:
+    provider = cfg.get("provider")
+    model = str(cfg.get("model") or "").strip()
+    if provider in ("volcengine", "byteplus"):
+        cap = image_max_pixels(cfg)
+        # Seedream 5.x 出图下限 3,686,400 像素(2560x1440 当量;与故事板草图 sketch_size 同口径):小图编辑时请求按这个下限出,结果再对回底图尺寸
+        lo = ARK_SEEDREAM5_MIN_PIXELS if "seedream-5" in model.lower() else 0
+        return {"mode": "pixels", "max_pixels": cap, "min_pixels": lo, "multiple": 2, "basis": "measured"} if cap else {"mode": "unknown"}
+    if provider == "fal":
+        family = _fal_image_family(model)
+        if family == "seedream":
+            lo, hi = FAL_SEEDREAM_2K_AREA if _fal_seedream_2k(model) else (0, IMAGE_MAX_PIXELS_4K)
+            return {"mode": "pixels", "max_pixels": hi, "min_pixels": lo, "multiple": 2, "basis": "doc"}
+        if family == "gpt":
+            return {"mode": "pixels", "max_pixels": FAL_GPT_SIZE["area"][1], "min_pixels": FAL_GPT_SIZE["area"][0],
+                    "multiple": FAL_GPT_SIZE["multiple"], "max_edge": FAL_GPT_SIZE["max_edge"],
+                    "max_ratio": FAL_GPT_SIZE["max_ratio"], "basis": "doc"}
+        if family == "ideogram":      # 画板总带原图作参考,走 /edit 端点的约束
+            return {"mode": "pixels", "max_pixels": FAL_IDEOGRAM_EDIT_SIZE["area"][1], "min_pixels": FAL_IDEOGRAM_EDIT_SIZE["area"][0],
+                    "multiple": FAL_IDEOGRAM_EDIT_SIZE["multiple"], "max_ratio": FAL_IDEOGRAM_EDIT_SIZE["max_ratio"], "basis": "doc"}
+        if family == "banana":
+            return {"mode": "tiers", "tiers": ["1K", "2K", "4K"], "rule": "long_edge", "basis": "doc"}
+        if family == "flux3":
+            return {"mode": "tiers", "tiers": list(FAL_FLUX3_TIERS), "rule": "area", "basis": "doc"}
+        return {"mode": "unknown"}
+    if provider == "openrouter":
+        info = _openrouter_image_model_info(model)
+        tiers = [t for t in ((((info or {}).get("supported_parameters") or {}).get("resolution") or {}).get("values") or [])
+                 if _tier_side(t)]
+        if tiers:
+            return {"mode": "tiers", "tiers": sorted(tiers, key=_tier_side), "rule": "area", "basis": "doc"}
+    return {"mode": "unknown"}
+
+
+def image_max_size(limits: dict, width: int, height: int) -> tuple[int, int] | None:
+    """按具体宽高出图的模型在这个画幅下的最大宽高(向下取到 multiple 的倍数);分档 / 未知的模型返回 None。"""
+    if limits.get("mode") != "pixels" or not limits.get("max_pixels"):
+        return None
+    w, h = float(width), float(height)
+    ratio = limits.get("max_ratio") or 0
+    if ratio and max(w, h) / min(w, h) > ratio:
+        return None                                        # 画幅超出该模型允许的长宽比:不给上限,由调用方提示
+    scale = (limits["max_pixels"] / (w * h)) ** 0.5
+    if limits.get("max_edge"):
+        scale = min(scale, limits["max_edge"] / max(w, h))
+    m = max(1, int(limits.get("multiple") or 1))
+    return max(m, int(w * scale) // m * m), max(m, int(h * scale) // m * m)
+
+
+def image_tier_size(limits: dict, tier: str, width: int, height: int) -> tuple[int, int]:
+    """分档模型:要落进某一档,按当前画幅该请求多大的宽高(area 规则按该档名义面积,long_edge 规则按该档长边)。"""
+    ratio = width / height
+    if limits.get("rule") == "long_edge":
+        long_edge = IMAGE_TIER_LONG_EDGE.get(str(tier).upper()) or int(_tier_side(tier) or 1024)
+        w, h = (long_edge, long_edge / ratio) if ratio >= 1 else (long_edge * ratio, long_edge)
+    else:
+        side = _tier_side(tier) or 1024
+        w, h = (side * side * ratio) ** 0.5, (side * side / ratio) ** 0.5
+    return max(2, int(round(w / 2)) * 2), max(2, int(round(h / 2)) * 2)
+
+
+def fit_image_request(limits: dict, width: int, height: int) -> tuple[int, int]:
+    """把一个想要的宽高收进模型约束(只对 pixels 模式生效,其余原样;各渠道自己的请求体整形照常再走一遍)。"""
+    if limits.get("mode") != "pixels" or not limits.get("max_pixels"):
+        return int(width), int(height)
+    return _fit_size(width, height, multiple=max(1, int(limits.get("multiple") or 1)),
+                     area=(int(limits.get("min_pixels") or 0) or 1, int(limits["max_pixels"])),
+                     max_edge=int(limits.get("max_edge") or 0), max_ratio=float(limits.get("max_ratio") or 0))
+
+
+# 保真超分:不重画内容的专用超分模型,与「图像模型重绘放大」并列。local = 本机 Lanczos 插值(不新增细节,免费)。
+# Fal 各端点的字段抄自 Fal 模型目录参数表(2026-10-10,api.fal.ai/v1/models?endpoint_id=…&expand=openapi-3.0),没有真实出图实测:
+#   fal-ai/seedvr/upscale/image       image_url + upscale_mode=factor + upscale_factor 1..10 + output_format png|jpg|webp
+#   topaz/upscale/image/precision     image_url + upscale_factor 1..4 + output_format jpeg|png(model 等其余参数用默认)
+#   fal-ai/esrgan                     image_url + scale 1..8 + output_format png|jpeg
+#   fal-ai/aura-sr                    image_url(固定 4 倍,不发倍率)
+#   bria/increase-resolution          image_url + desired_increase 2|4 + output_type png|jpeg
+# 模型返回的图比目标大时宿主再用 Lanczos 缩到目标尺寸(固定 4 倍的模型做 2 倍放大就是这么来的);比目标小就按它实际给的尺寸存,不拿插值凑数。
+IMAGE_UPSCALERS = (
+    {"id": "local", "provider": "local", "label": "本机插值(Lanczos)", "max_factor": 8},
+    {"id": "fal-ai/seedvr/upscale/image", "provider": "fal", "label": "SeedVR2", "max_factor": 10,
+     "factor_key": "upscale_factor", "extra": {"upscale_mode": "factor"}, "format_key": "output_format"},
+    {"id": "topaz/upscale/image/precision", "provider": "fal", "label": "Topaz Precision", "max_factor": 4,
+     "factor_key": "upscale_factor", "format_key": "output_format"},
+    {"id": "fal-ai/esrgan", "provider": "fal", "label": "Real-ESRGAN", "max_factor": 8,
+     "factor_key": "scale", "format_key": "output_format"},
+    {"id": "fal-ai/aura-sr", "provider": "fal", "label": "AuraSR", "max_factor": 4, "fixed_factor": 4},
+    {"id": "bria/increase-resolution", "provider": "fal", "label": "Bria Increase Resolution", "max_factor": 4,
+     "factor_key": "desired_increase", "factor_enum": (2, 4), "format_key": "output_type"},
+)
+
+
+def _fal_key_any() -> str:
+    """Fal Key:图像 / 视频段任一段填过的,或环境变量;没有返回空串。"""
+    try:
+        return _fal_reclaim_key()
+    except RuntimeError:
+        return ""
+
+
+def image_upscalers() -> list[dict]:
+    """保真超分可选项(画板「放大」页),带 configured:Fal 的几项要有 Fal Key。"""
+    fal = bool(_fal_key_any())
+    return [{"id": u["id"], "provider": u["provider"], "label": u["label"], "max_factor": u["max_factor"],
+             "fixed_factor": u.get("fixed_factor"), "configured": u["provider"] == "local" or fal} for u in IMAGE_UPSCALERS]
+
+
+def _fal_upscale_body(spec: dict, image_url: str, factor: float) -> dict:
+    body = {"image_url": image_url, **(spec.get("extra") or {})}
+    key = spec.get("factor_key")
+    if key and not spec.get("fixed_factor"):
+        enum = spec.get("factor_enum")
+        if enum:
+            body[key] = min([e for e in enum if e >= factor] or [max(enum)])
+        else:
+            body[key] = round(min(max(float(factor), 1.0), float(spec["max_factor"])), 3)
+    if spec.get("format_key"):
+        body[spec["format_key"]] = "png"
+    return body
+
+
+def upscale_image(src: str, output: str, upscaler: str, width: int, height: int) -> dict:
+    """保真超分一张图到目标宽高,结果写 output(PNG;调用方按自己的编码约定再存)。
+    返回 {provider, model, factor, model_size: [w, h], size: [w, h]}。"""
+    from PIL import Image
+    spec = next((u for u in IMAGE_UPSCALERS if u["id"] == upscaler), None)
+    if not spec:
+        raise RuntimeError(f"未知的超分模型:{upscaler}(可选 {', '.join(u['id'] for u in IMAGE_UPSCALERS)})")
+    with Image.open(src) as im:
+        im.load()
+        sw, sh = im.size
+        source = im.copy()
+    width, height = int(width), int(height)
+    factor = max(width / sw, height / sh)
+    if factor <= 1.0:
+        raise RuntimeError(f"目标尺寸 {width}x{height} 没有比原图 {sw}x{sh} 大")
+    if factor > spec["max_factor"] + 1e-6:
+        raise RuntimeError(f"{spec['label']} 最多放大 {spec['max_factor']} 倍,这次要 {factor:.2f} 倍")
+    Path(output).parent.mkdir(parents=True, exist_ok=True)
+    if spec["provider"] == "local":
+        source.resize((width, height), Image.LANCZOS).save(output, "PNG")
+        return {"provider": "local", "model": "lanczos", "factor": round(factor, 3), "model_size": [width, height], "size": [width, height]}
+    key = _fal_key_any()
+    if not key:
+        raise RuntimeError("保真超分的 Fal 模型需要 Fal API Key:请在「🎨 生成模型」页图像或视频的 Fal 标签页填入")
+    body = _fal_upscale_body(spec, _file_to_data_url(src), factor)
+    print(f"[genmedia] Fal 超分 {spec['id']}:{sw}x{sh} → 目标 {width}x{height}"
+          f"({'固定 ' + str(spec['fixed_factor']) + ' 倍' if spec.get('fixed_factor') else '倍率 ' + str(body.get(spec.get('factor_key') or ''))})",
+          file=sys.stderr, flush=True)
+    res = _fal_queue_run({"api_key": key}, spec["id"], body, IMAGE_TIMEOUT, Path(output).name, kind="图像", output=output)
+    image = res.get("image") if isinstance(res.get("image"), dict) else ((res.get("images") or [None])[0])
+    url = image.get("url") if isinstance(image, dict) else ""
+    if not url:
+        raise RuntimeError(f"Fal 超分任务成功但无图像 URL:{json.dumps(res, ensure_ascii=False)[:400]}")
+    data = _decode_data_url(url)
+    _pending_task_clear(output)
+    import io
+    got = Image.open(io.BytesIO(data))
+    got.load()
+    model_size = list(got.size)
+    if got.size[0] * got.size[1] > width * height * 1.02:
+        got = got.resize((width, height), Image.LANCZOS)
+    got.save(output, "PNG")
+    return {"provider": "fal", "model": spec["id"], "factor": round(factor, 3), "model_size": model_size, "size": list(got.size)}
+
+
 def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
     rh = _comfy_is_rh(cfg)
     base = hdrs = None

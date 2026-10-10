@@ -624,6 +624,80 @@ async def scene_plates_mode(project: str, sid: str, body: dict[str, Any]) -> dic
     """场景级「场景图」模式覆盖(inherit|single|pair;白模关闭项目的正向/反向场景图方案,2026-09-17)。"""
     return await core.api_scene_plates_mode(project, sid, body)
 
+# ---------------- 画板(2026-10-10,docs/image_canvas.md):/preview/canvas 的数据与动作 ----------------
+@api.get("/projects/{project}/canvas", tags=["artifacts"])
+async def canvas_get(project: str, file: str = "", kind: str = "", label: str = "", oid: str = "") -> dict[str, Any]:
+    """画板页面数据:图片信息、全部历史版本、最终版、参考图托盘、进行中的任务、图像渠道清单、保真超分可选项。"""
+    return _artifact_urls(await core.api_canvas_get(project, file, kind, label, oid), project)
+
+
+@api.get("/projects/{project}/canvas/limits", tags=["artifacts"])
+async def canvas_limits(project: str, file: str = "", version: str = "", provider: str = "", model: str = "") -> dict[str, Any]:
+    """「放大」页:所选图像渠道 / 模型在这张图的画幅下能出多大(具体宽高 / 分辨率档 / 上限未知)。"""
+    return await core.api_canvas_limits(project, file, version, provider, model)
+
+
+@api.get("/projects/{project}/canvas/library", tags=["artifacts"])
+async def canvas_library(project: str, q: str = "") -> dict[str, Any]:
+    """「从项目库选」参考图的候选清单。"""
+    return _artifact_urls(await core.api_canvas_library(project, q), project)
+
+
+@api.get("/projects/{project}/canvas/impact", tags=["artifacts"])
+async def canvas_impact(project: str, file: str = "") -> dict[str, Any]:
+    """「设为最终版」之前的影响清单:谁在用这张图 + 提示代号。"""
+    return await core.api_canvas_impact(project, file)
+
+
+@api.post("/projects/{project}/canvas/edit", tags=["artifacts"])
+async def canvas_edit(project: str, body: dict[str, Any]) -> dict[str, Any]:
+    """画板「编辑」发送:圈选区域 + 文字 + 参考图 + 图像渠道 / 模型;经画板修图 Agent 整理提示词,或直接发送。"""
+    return _artifact_urls(await core.api_canvas_edit(project, body), project)
+
+
+@api.post("/projects/{project}/canvas/confirm", tags=["artifacts"])
+async def canvas_confirm(project: str, body: dict[str, Any]) -> dict[str, Any]:
+    """待确认的提示词:确认后出图,或取消任务。"""
+    return _artifact_urls(await core.api_canvas_confirm(project, body), project)
+
+
+@api.post("/projects/{project}/canvas/upscale", tags=["artifacts"])
+async def canvas_upscale(project: str, body: dict[str, Any]) -> dict[str, Any]:
+    """画板「放大」:图像模型重绘放大 / 保真超分,结果进历史。"""
+    return _artifact_urls(await core.api_canvas_upscale(project, body), project)
+
+
+@api.post("/projects/{project}/canvas/transform", tags=["artifacts"])
+async def canvas_transform(project: str, body: dict[str, Any]) -> dict[str, Any]:
+    """画板非 AI 操作:裁剪 / 翻转 / 旋转 / 缩放,同样记为一个版本。"""
+    return _artifact_urls(await core.api_canvas_transform(project, body), project)
+
+
+@api.post("/projects/{project}/canvas/version", tags=["artifacts"])
+async def canvas_version(project: str, body: dict[str, Any]) -> dict[str, Any]:
+    """历史版本:删除(挪进 trash)/ 圈外锁定的版本改用整图。"""
+    return _artifact_urls(await core.api_canvas_version(project, body), project)
+
+
+@api.post("/projects/{project}/canvas/adopt", tags=["artifacts"])
+async def canvas_adopt(project: str, body: dict[str, Any]) -> dict[str, Any]:
+    """画板「设为最终版」:固定路径的图写回原路径;分镜背景图登记为 <key>_revN 并改指引用它的分镜。"""
+    return _artifact_urls(await core.api_canvas_adopt(project, body), project)
+
+
+@api.post("/projects/{project}/canvas/refs", tags=["artifacts"])
+async def canvas_ref(project: str, body: dict[str, Any]) -> dict[str, Any]:
+    """参考图托盘:从项目库选一张 / 改注释 / 移出托盘。"""
+    return _artifact_urls(await core.api_canvas_ref(project, body), project)
+
+
+@api.post("/projects/{project}/canvas/refs/upload", tags=["artifacts"])
+async def canvas_ref_upload(request: Request, project: str, file: str = "", filename: str = "") -> dict[str, Any]:
+    """参考图上传:请求体就是图片字节。"""
+    data = await request.body()
+    return _artifact_urls(await core.api_canvas_ref_upload(data, project, file, filename), project)
+
+
 @api.post("/projects/{project}/scenes/{sid}/plates/plate-mode", tags=["artifacts"])
 async def scene_plate_mode(project: str, sid: str, body: dict[str, Any]) -> dict[str, Any]:
     """场景级「背景图模式」覆盖(inherit|pano|world;白模开启项目的分镜背景图参考来源:全景图重投影 / 世界模型截图,2026-09-22)。"""

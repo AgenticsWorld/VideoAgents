@@ -3446,6 +3446,86 @@ def revise_library_plate(base: Path, sid: str, key: str, change: str, *, note: s
     return result
 
 
+# ---------------------------------------------------------------- 画板「设为最终版」(2026-10-10,modules/image_canvas.py)
+# 画板里编辑 / 放大出的版本先只在画板历史里;用户点「设为最终版」才进库:沿用上面「按修改意见重出」的口径——登记为
+# <原 key 去 _revN>_rev<N>(条目 revised=True、pano_ref.kind='revision'、created_by.source='canvas'),原图与原条目不动,
+# 再把引用原图(以及本画板此前登记过的各版)的分镜条目改指过去并 sync。机位事实 / whitebox_frame / 光照方案照抄原条目
+# (画板不改机位与构图);尺寸按图片实际宽高记(放大后的版本比 1920x1080 大)。
+def adopt_canvas_plate(base: Path, sid: str, src_key: str, image_path: Path | None, *, existing_key: str = '', also_from=(),
+                       repoint: bool = True, change: str = '', note: str = '', channel: dict | None = None,
+                       canvas: dict | None = None, log=print) -> dict:
+    """image_path 给了就把这张图登记成新的 _revN;existing_key 给了则不新建(该版本以前登记过,或 existing_key == src_key
+    表示改回原图)。repoint 时把引用 src_key / also_from 各 key 的分镜条目改指向目标 key。
+    返回 {key, file, created, replaced: ['ep01/sh010', 'ep01/sh012(end)'…], syncs}。找不到库图抛 ValueError。"""
+    sid = component(sid)
+    lib = load_library(base, sid)
+    src_entry = next((e for e in lib['plates'] if e.get('key') == src_key), None)
+    if not src_entry:
+        raise ValueError(f'{sid} 的背景图库里没有 {src_key}')
+    now = dt.datetime.now().isoformat(timespec='seconds')
+    created = False
+    if existing_key:
+        entry = next((e for e in lib['plates'] if e.get('key') == existing_key), None)
+        if not entry or not entry.get('file') or not (base/entry['file']).is_file():
+            raise ValueError(f'{sid} 的背景图库里没有 {existing_key}(或文件已不在)')
+    else:
+        if image_path is None or not Path(image_path).is_file():
+            raise ValueError('缺少要登记的图片')
+        from PIL import Image
+        with Image.open(image_path) as im:
+            size = f'{im.size[0]}x{im.size[1]}'
+        key = revision_key(lib, src_key)
+        out_rel = f"assets/concepts/scenes/{sid}/{PLATES_DIR}/{key}.png"
+        (base/out_rel).write_bytes(Path(image_path).read_bytes())
+        src_rel = str(src_entry.get('file') or '')
+        entry = {'key': key, 'master': False, 'revised': True, 'file': out_rel, 'whitebox_frame': src_entry.get('whitebox_frame'),
+                 'lighting_scheme_id': src_entry.get('lighting_scheme_id'), 'time_of_day': src_entry.get('time_of_day'),
+                 'camera': src_entry.get('camera') or {}, 'size': size, 'refs': [src_rel] if src_rel else [],
+                 'pano_ref': {'kind': 'revision', 'source_key': src_key, 'source_file': src_rel, 'source_kind': _revision_source_kind(src_entry),
+                              'change': (change or '').strip(), 'note': (note or '').strip(), 'user_refs': []},
+                 'plate_mode': 'revision', 'channel': channel or None,
+                 'created_by': {'source': 'canvas', 'scene_id': sid, 'tool': 'image_canvas', **(canvas or {})}, 'written_at': now}
+        (base/out_rel).with_suffix('.json').write_text(json.dumps(entry, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+        upsert_library_entry(base, sid, entry, lib)
+        created = True
+        log(f"saved: {out_rel}")
+    target = entry['key']
+    result = {'ok': True, 'scene_id': sid, 'source_key': src_key, 'key': target, 'file': entry['file'], 'created': created,
+              'replaced': [], 'syncs': []}
+    if not repoint:
+        return result
+    from_keys = [k for k in dict.fromkeys([src_key, *also_from]) if k and k != target]
+    users = [dict(u, key=k) for k in from_keys for u in plate_users(base, sid, k)]
+    for ep in sorted({u['ep'] for u in users}):
+        idx = load_episode_index(base, ep)
+        gids = []
+        for u in (u for u in users if u['ep'] == ep):
+            rec = idx['shots'].get(u['shot_id'])
+            slot = next((p for p in (rec or {}).get('plates') or []
+                         if isinstance(p, dict) and p.get('role') == u['role'] and p.get('key') == u['key']), None)
+            if slot is None:
+                continue
+            prev = {'key': slot.get('key'), 'file': slot.get('file'), 'reuse': slot.get('reuse')}
+            back = slot.get('revised_from') if isinstance(slot.get('revised_from'), dict) else {}
+            if target == src_key and back.get('key') == target:
+                # 改回原图:恢复换图前的 reuse,去掉修订标记
+                slot.update({'key': target, 'file': entry['file'], 'reuse': back.get('reuse') or 'manual'})
+                for k in ('revised_from', 'revised_at', 'revision'):
+                    slot.pop(k, None)
+            else:
+                slot.update({'key': target, 'file': entry['file'], 'reuse': 'revised' if target != src_key else 'manual',
+                             'revised_from': prev, 'revised_at': now,
+                             'revision': {'change': (change or '').strip(), 'note': (note or '').strip(), 'scope': 'canvas'}})
+            rec['written_at'] = now
+            result['replaced'].append(u['ep'] + '/' + u['shot_id'] + ('(end)' if u['role'] == 'end' else ''))
+            if rec.get('group_id') and rec['group_id'] not in gids:
+                gids.append(rec['group_id'])
+        save_episode_index(base, ep, idx)
+        result['syncs'] += [s for s in (_revision_sync(base, ep, g) for g in gids) if s]
+    log(f"替换分镜:{', '.join(result['replaced']) if result['replaced'] else '无'}")
+    return result
+
+
 # ---------------------------------------------------------------- 场景预览页「⧉ 复制」「⇋ 翻转」(2026-09-28,分镜背景图板块)
 # 复制:库里新增一张副本 <原 key 去掉已有 _copyN>_copy<N>(图片文件整份拷贝 + <key>.json 台账),条目 copy=True / pano_ref.kind='copy'
 # 记来源;副本**不带** master / grid9 / grid9_fallback 标记——不参与 find_master 派生、九宫格选格、补图复用这些自动决策(同机位

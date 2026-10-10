@@ -7,6 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="/static/i18n/i18n.js"></script>
 <script src="/static/edit-popup.js?v=20260927a-reviser"></script>
+<script src="/static/canvas-entry.js?v=20261010"></script>
 <script src="/static/image-models.js?v=20261010b"></script>
 <script src="/static/image-model-picker.js?v=20260912"></script>
 <script src="/static/ep-filter.js?v=20260917"></script>
@@ -251,7 +252,7 @@ function renderDetail(c){
   if(FOLDER&&!folders[FOLDER])FOLDER=null;
   const fig=(im,strip)=>{
     const nm=strip?im.name.slice(strip.length+1):im.name;
-    return `<figure><img src="${esc(bust(im.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption title="${esc(nm)}"><span class="fn">${esc(nm)}</span><button class="editbtn" data-url="${esc(im.url)}" title="对这张图提修改意见,发给修改师处理">✏️ 修改</button>${avCtl(im)}</figcaption></figure>`;
+    return `<figure><img src="${esc(bust(im.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption title="${esc(nm)}"><span class="fn">${esc(nm)}</span><button class="editbtn" data-url="${esc(im.url)}" title="对这张图提修改意见,发给修改师处理">✏️ 修改</button>${CanvasEntry.btn({url:im.url,kind:'character',label:c.name+' · '+nm,oid:c.id})}${avCtl(im)}</figcaption></figure>`;
   };
   if(FOLDER){
     const ims=folders[FOLDER];
@@ -286,7 +287,7 @@ function renderDetail(c){
         <div class="pic">${pic}</div>
         <div class="info">
           <div class="lb">${esc(x.label)}<span class="id">${esc(x.id)}</span>${x.default?`<span class="badge def">${t('默认装')}</span>`:''}${x.default&&x.url?`<span class="id">(${t('sheet.png 复用')})</span>`:''}
-            <button class="editbtn" data-kind="costume" data-id="${esc(x.id)}" data-loc="${esc(loc)}" title="${esc(t('对这套服装的设定或 sheet 提修改意见,发给修改师处理'))}">✏️ 修改</button></div>
+            <button class="editbtn" data-kind="costume" data-id="${esc(x.id)}" data-loc="${esc(loc)}" title="${esc(t('对这套服装的设定或 sheet 提修改意见,发给修改师处理'))}">✏️ 修改</button>${x.url?CanvasEntry.btn({url:x.url,kind:'costume',label:c.name+' · '+x.label,oid:x.id}):''}</div>
           ${x.occasion||x.period?`<div class="ml">${x.occasion?esc(t('场合:')+x.occasion):''}${x.occasion&&x.period?'  ·  ':''}${x.period?esc(t('时期:')+x.period):''}</div>`:''}
           ${when?`<div class="ml">${esc(t('出场:')+when)}</div>`:''}
           ${x.variants&&x.variants.length?`<div class="ml">${esc(t('子状态:')+x.variants.join('、'))}</div>`:''}

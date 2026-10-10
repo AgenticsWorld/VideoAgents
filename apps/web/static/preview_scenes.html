@@ -10,6 +10,7 @@
 <script src="/static/i18n/i18n.js"></script>
 <script src="/static/jump-anchor.js?v=20260915"></script>
 <script src="/static/edit-popup.js?v=20261009-hint"></script>
+<script src="/static/canvas-entry.js?v=20261010"></script>
 <script src="/static/image-models.js?v=20261010b"></script>
 <script src="/static/image-model-picker.js?v=20260912"></script>
 <script src="/static/ep-filter.js?v=20260917"></script>
@@ -328,7 +329,7 @@ function renderDetail(s){
   if(FOLDER&&!folders[FOLDER])FOLDER=null;
   const fig=(im,strip)=>{
     const nm=strip?im.name.slice(strip.length+1):im.name;
-    return `<figure><img src="${esc(bust(im.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption title="${esc(nm)}"><span class="fn">${esc(nm)}</span><button class="editbtn" data-url="${esc(im.url)}" title="对这张图提修改意见,发给修改师处理">✏️ 修改</button></figcaption></figure>`;
+    return `<figure><img src="${esc(bust(im.url))}" loading="lazy" onclick="zoom(this.src)"><figcaption title="${esc(nm)}"><span class="fn">${esc(nm)}</span><button class="editbtn" data-url="${esc(im.url)}" title="对这张图提修改意见,发给修改师处理">✏️ 修改</button>${CanvasEntry.btn({url:im.url,kind:'scene',label:s.name+' · '+nm,oid:s.id})}</figcaption></figure>`;
   };
   // 🖼 场景图板块(原「图库」,2026-09-25 改名):场景目录下全部图(grid_9views.png / layout_top.png / 概念图…)+ archive、candidates 等子文件夹
   let g='';
@@ -420,7 +421,7 @@ function renderDetail(s){
           +`<button type="button" class="pflipbtn" data-sid="${esc(s.id)}" data-key="${esc(p.key||'')}" title="${esc(t('水平翻转这张背景图并覆盖原图(再点一次翻回;首次改动保留 .orig 备份)'))}">⇋ ${esc(t('翻转'))}</button>`
           // ✏️ 修改(2026-10-09):右下角浮窗直发分镜背景图 Agent,走 revise_shot_plate.py 库图模式——以这张图为 [Image 1]
           // (浮窗「+」附的本机图片作 [Image 2…] 参考)新出 <key>_revN 入库,替换引用它的分镜,原图不动;尺寸同九宫格补图
-          +`<button type="button" class="editbtn" data-kind="shot_plate" data-id="${esc(p.key||'')}" data-agent="08-video-gen/shot-plates" data-loc="${esc(plateLoc(s,p,used))}" data-hint="${esc(t('可点右上角「+」附参考图(本机图片,不上传)'))}" title="${esc(t('对这张背景图提修改意见,直接发给分镜背景图 Agent:以这张图为参考(可附参考图)按意见新出一张,替换引用它的分镜,原图不动'))}">✏️ ${esc(t('修改'))}</button></figcaption>`
+          +`<button type="button" class="editbtn" data-kind="shot_plate" data-id="${esc(p.key||'')}" data-agent="08-video-gen/shot-plates" data-loc="${esc(plateLoc(s,p,used))}" data-hint="${esc(t('可点右上角「+」附参考图(本机图片,不上传)'))}" title="${esc(t('对这张背景图提修改意见,直接发给分镜背景图 Agent:以这张图为参考(可附参考图)按意见新出一张,替换引用它的分镜,原图不动'))}">✏️ ${esc(t('修改'))}</button>${CanvasEntry.btn({url:p.url,kind:'plate',label:s.name+' · '+(p.key||''),oid:s.id})}</figcaption>`
           +`<figcaption><span class="fn">${esc(used?I18N.f('用于分镜:{s}',{s:used}):t('尚未被分镜引用'))}</span></figcaption></figure>`;
       }).join('')+'</div>':`<div class="meta-line">${esc(t('(暂无分镜背景图;白模签字 H3W 并导出后由分镜背景图链生成)'))}</div>`;
     h+=blk('shot_plates',`🎦 ${esc(t('分镜背景图'))} <span class="cnt">${esc(I18N.f('{n} 张',{n:plates.length}))}</span>`
