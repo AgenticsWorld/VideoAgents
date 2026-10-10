@@ -356,6 +356,8 @@ REFS_README = """# refs/ — 用户参考目录
 - `fonts/`      字体文件(ttf/otf/ttc):花字、封面、片头片尾、字幕等一切需要字体的工位统一优先使用;
                 花字引擎自动并入字体清单,font_id 为 `proj:<family>`
 - `text/`       文本资料:设定/文案等(txt/md 等),相关 Agent 参考使用
+- `other/`      其他:上面各类都放不进去的参考文件,任意格式(PDF/表格/压缩包/工程文件等);
+                请在【参考文件】页给文件写注释说明用途,相关 Agent 按注释参考使用
 - `NOTES.md`    逐文件注释:哪个文件管什么、想用在哪(有则 Agent 必读)。
                 注释在【参考文件】页逐文件填写,自动写入本文件的标记块(机器可读版在 annotations.json)
 
@@ -395,7 +397,7 @@ def ensure_project(project: str):
     """建项目目录 + 用户参考目录骨架。"""
     refs = PROJECTS_DIR / project / "refs"
     for sub in ("style", "thumbnail", "characters", "scenes", "creatures", "props", "music",
-                "video", "fonts", "text"):
+                "video", "fonts", "text", "other"):
         (refs / sub).mkdir(parents=True, exist_ok=True)
     readme = refs / "README.md"
     if not readme.exists():
@@ -3737,13 +3739,14 @@ def build_role_prompt(agent_id: str, project: str,
 - 详细纪律见 agents/WORKFLOW.md §9;生成失败如实上报,严禁伪造或占位产物
 
 ## 用户参考素材(视觉/配乐工作前必查)
-用户通过 Web 客户端「参考文件」页把风格/封面/角色/场景/生物/道具参考图、希望使用的音频、参考视频、字体与文本资料按分类上传到 {proj_rel}/refs/(style/ thumbnail/ characters/ scenes/ creatures/ props/ music/ video/ fonts/ text/),并逐文件填写注释:
+用户通过 Web 客户端「参考文件」页把风格/封面/角色/场景/生物/道具参考图、希望使用的音频、参考视频、字体、文本资料与其他类型的参考文件按分类上传到 {proj_rel}/refs/(style/ thumbnail/ characters/ scenes/ creatures/ props/ music/ video/ fonts/ text/ other/),并逐文件填写注释:
 - **注释必读**:{proj_rel}/refs/NOTES.md(自动汇总用户逐图/逐曲注释,机器可读版 refs/annotations.json)说明每个文件管什么、想用在哪——有则必读并按注释执行
 - 优先级:用户参考素材 > 你的自行发挥;与文字设定冲突时上报用户裁决,不擅自取舍
 - 命中的参考图经 genmedia --ref 注入生成,并把所用路径记入产物 meta/prompts.json 的 user_refs 字段
 - 配乐(09-audio/music)须先盘点 refs/music/,自行判断每首曲子适合用在视频的哪些位置并优先选用,选用/弃用情况写入 cue sheet(规则见 WORKFLOW.md §2 第 6 条)
 - 视频生成类工位须先盘点 refs/video/(动作/运镜/节奏/转场参考),按注释对位到相应镜头;所选视频模型支持参考视频时经 `genmedia.py video --ref-video` 注入,不支持时作为提示词描述依据,所用路径记入 user_refs(规则见 WORKFLOW.md §2 第 8 条)
 - 一切需要字体的工位(花字/封面/片头片尾/字幕等)须先盘点 refs/fonts/(ttf/otf/ttc),有则全片统一优先使用用户字体(NOTES.md 指定了用途的按指定分配),所用路径记入 user_refs;花字引擎自动把它们并入字体清单,font_id 为 `proj:<family>`(`render_captions.py fonts-list --project <slug>` 可查;规则见 WORKFLOW.md §2 第 9 条)
+- refs/other/(任意格式的其他参考文件)不要求逐单盘点:仅当 refs/NOTES.md 里该文件的注释说明的用途落在你本单要做的对象上,或工单点名了该路径时才读取使用,所用路径记入 user_refs;没有注释也没被工单点名的文件不读(规则见 WORKFLOW.md §2 第 10 条)
 - 目录为空则照常工作,不阻塞;详细约定见 agents/WORKFLOW.md §2"""
     if is_dispatcher_agent(agent_id):
         confirm_timeout = confirm_timeout_setting()
@@ -13118,7 +13121,7 @@ async def api_brief_set(body: dict):
 
 # ---------------- 参考文件页(refs/ 分类预览、上传、逐文件注释) ----------------
 REF_CATEGORIES = ("style", "thumbnail", "characters", "scenes", "creatures", "props", "music",
-                  "video", "fonts", "text")
+                  "video", "fonts", "text", "other")
 REF_FONT_EXTS = (".ttf", ".otf", ".ttc")      # 与花字引擎 modules/captions.py 扫描口径一致
 REF_SKIP_FILES = {"README.md", "NOTES.md", "annotations.json"}
 AUDIO_EXTS = (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg")

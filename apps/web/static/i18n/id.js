@@ -457,6 +457,7 @@ window.I18N_DICT = {
 "花字 字体 示例": "Contoh teks font",
 "无法预览该字体": "Font ini tidak dapat dipratinjau",
 "设定/文案等文本资料,相关 Agent 参考使用": "Materi teks seperti setelan/naskah, sebagai referensi Agent terkait",
+"其他类型的参考文件,任意格式(PDF/表格/压缩包等);请添加注释说明用途,相关 Agent 按注释参考使用": "Berkas referensi lain dalam format apa pun (PDF/lembar kerja/arsip, dll.); tambahkan catatan tentang kegunaannya, Agent terkait akan merujuknya sesuai catatan",
 "复制在项目中的相对路径": "Salin path relatif dalam proyek",
 "散放在 refs/ 根目录的文件,一律视为整体风格参考": "Berkas lepas di akar refs/ semuanya dianggap referensi gaya keseluruhan",
 "上传": "Unggah",

@@ -457,6 +457,7 @@ window.I18N_DICT = {
 "花字 字体 示例": "Exemple de texte de police",
 "无法预览该字体": "Impossible de prévisualiser cette police",
 "设定/文案等文本资料,相关 Agent 参考使用": "Documents texte (univers, textes…) servant de référence aux Agents concernés",
+"其他类型的参考文件,任意格式(PDF/表格/压缩包等);请添加注释说明用途,相关 Agent 按注释参考使用": "Autres fichiers de référence, tous formats (PDF, tableurs, archives…) ; ajoutez une note précisant leur usage, les Agents concernés s'y référeront selon la note",
 "复制在项目中的相对路径": "Copier le chemin relatif dans le projet",
 "散放在 refs/ 根目录的文件,一律视为整体风格参考": "Les fichiers en vrac à la racine de refs/ sont tous traités comme références de style global",
 "上传": "Envoyer",

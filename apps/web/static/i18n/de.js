@@ -457,6 +457,7 @@ window.I18N_DICT = {
 "花字 字体 示例": "Schrift Beispieltext",
 "无法预览该字体": "Diese Schrift kann nicht als Vorschau angezeigt werden",
 "设定/文案等文本资料,相关 Agent 参考使用": "Textmaterialien wie Settings oder Texte, als Referenz für die betreffenden Agents",
+"其他类型的参考文件,任意格式(PDF/表格/压缩包等);请添加注释说明用途,相关 Agent 按注释参考使用": "Sonstige Referenzdateien in beliebigem Format (PDF, Tabellen, Archive usw.); bitte per Notiz den Zweck angeben, die betreffenden Agents nutzen sie entsprechend",
 "复制在项目中的相对路径": "Relativen Pfad im Projekt kopieren",
 "散放在 refs/ 根目录的文件,一律视为整体风格参考": "Lose Dateien im refs/-Stamm gelten sämtlich als Gesamtstil-Referenzen",
 "上传": "Hochladen",

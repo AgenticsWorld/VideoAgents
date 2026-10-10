@@ -457,6 +457,7 @@ window.I18N_DICT = {
 "花字 字体 示例": "Văn bản mẫu phông chữ",
 "无法预览该字体": "Không thể xem trước phông chữ này",
 "设定/文案等文本资料,相关 Agent 参考使用": "Tư liệu văn bản như thiết lập/nội dung chữ, để các Agent liên quan tham khảo",
+"其他类型的参考文件,任意格式(PDF/表格/压缩包等);请添加注释说明用途,相关 Agent 按注释参考使用": "Tệp tham khảo khác, định dạng bất kỳ (PDF/bảng tính/tệp nén…); hãy thêm ghi chú nêu mục đích, các Agent liên quan sẽ tham khảo theo ghi chú",
 "复制在项目中的相对路径": "Sao chép đường dẫn tương đối trong dự án",
 "散放在 refs/ 根目录的文件,一律视为整体风格参考": "Tệp rời ở gốc refs/ đều được coi là tham chiếu phong cách tổng thể",
 "上传": "Tải lên",

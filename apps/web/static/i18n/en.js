@@ -484,6 +484,7 @@ window.I18N_DICT = {
 "花字 字体 示例": "Font sample text",
 "无法预览该字体": "Cannot preview this font",
 "设定/文案等文本资料,相关 Agent 参考使用": "Text materials such as lore notes or copy, for the relevant agents to reference",
+"其他类型的参考文件,任意格式(PDF/表格/压缩包等);请添加注释说明用途,相关 Agent 按注释参考使用": "Other reference files in any format (PDF, spreadsheets, archives, etc.); add a note saying what each is for, and the relevant agents will use them accordingly",
 "复制在项目中的相对路径": "Copy the file's path relative to the project",
 "散放在 refs/ 根目录的文件,一律视为整体风格参考": "Files loose in the refs/ root are all treated as overall style references",
 "上传": "Upload",
