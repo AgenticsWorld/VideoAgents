@@ -26,3 +26,13 @@ World Labs Technologies, Inc.) to render Gaussian-splat worlds (`.spz`) in the b
 License is retained in `apps/web/static/vendor/spark/LICENSE`. Upstream:
 https://github.com/sparkjsdev/spark. World generation itself calls the hosted World
 Labs Marble API (https://docs.worldlabs.ai/api) with the user's own API key.
+
+On Windows x64 the desktop client can download FFmpeg from the VideoAgents package
+mirrors when none is installed. The package is the unmodified
+`ffmpeg-9.0.2-essentials_build.zip` static build from gyan.dev (FFmpeg 9.0.2, GPL v3),
+pinned with its SHA-256 in `apps/desktop/ffmpeg-artifact.json`. Its `LICENSE` and
+`README.txt` (build configuration and the source revision,
+https://github.com/FFmpeg/FFmpeg/commit/946fcce07b) are installed next to the
+binaries; `ffplay.exe` is removed after extraction. FFmpeg runs as a separate program
+and is not linked into VideoAgents. Upstream: https://www.gyan.dev/ffmpeg/builds/ and
+https://github.com/GyanD/codexffmpeg/releases/tag/9.0.2.

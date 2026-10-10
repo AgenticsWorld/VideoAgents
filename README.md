@@ -58,7 +58,9 @@ desktop shell. Electron starts the same gateway by default or proxies the remote
 specified by `VIDEOAGENTS_API_URL`. Release packages do not contain Python. On the first launch
 without an installed runtime, the client reads `https://s3.agentics.world/packages/video-agents/metadata.json`
 and downloads the matching package. Claude, Codex, Kimi, Pi, OpenCode, Grok, FFmpeg, models, and GPU environments remain
-optional external installations.
+optional external installations. On Windows x64 the desktop client offers to download FFmpeg from the same
+package source when none is found (no package manager or administrator rights needed); the build is pinned in
+`apps/desktop/ffmpeg-artifact.json`.
 
 Before desktop development, make sure `node --version` meets `.nvmrc`; with nvm, run `nvm use` first. Run `npm ci` again after switching Node major versions so an incomplete Electron installation from the old runtime is not reused.
 

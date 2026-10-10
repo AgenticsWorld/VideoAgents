@@ -57,8 +57,13 @@ function commonExecutableDirectories(environment: NodeJS.ProcessEnv): string[] {
   ]
 }
 
-export function desktopExecutablePath(environment: NodeJS.ProcessEnv = process.env): string {
+export function desktopExecutablePath(
+  environment: NodeJS.ProcessEnv = process.env,
+  preferredDirectories: string[] = [],
+): string {
   const values = [
+    // 应用自己装的工具（Windows 自动下载的 FFmpeg）排最前：系统里残缺的同名命令不应盖过它。
+    ...preferredDirectories,
     loginShellPath(environment),
     ...commonExecutableDirectories(environment),
     environment.PATH || '',
