@@ -155,6 +155,8 @@ CI 跑 `tests/` 全量:模块与流水线 CLI 回归、仓库完整性(JSON/YAML
 
 Copyright 2026 AgenticsWorld.
 
-项目采用 [Apache License 2.0](LICENSE)。允许使用、修改、分发和商业使用；再分发时需要保留许可证与版权声明、保留 [`NOTICE`](NOTICE) 中的来源署名，并按许可证要求标明修改。
+项目采用 [GNU 通用公共许可证第 3 版](LICENSE)（`GPL-3.0-only`）。允许使用、修改、分发和商业使用；分发本项目或其修改版时，必须以同一许可证发布并提供对应的源代码，保留许可证与版权声明（含 [`NOTICE`](NOTICE)），并标明所做修改及修改日期。本软件不附带任何担保。
+
+v1.0.38 及更早的发布版本以 Apache License 2.0 发布，这些版本仍可按该许可证使用。
 
 标准引用信息见 [`CITATION.cff`](CITATION.cff)。

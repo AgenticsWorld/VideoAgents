@@ -6,6 +6,6 @@ authors:
   - name: "AgenticsWorld"
 repository-code: "https://github.com/AgenticsWorld/VideoAgents"
 url: "https://github.com/AgenticsWorld/VideoAgents"
-license: Apache-2.0
+license: GPL-3.0-only
 version: 1.0.38
 date-released: 2026-10-08

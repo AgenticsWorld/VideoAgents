@@ -184,10 +184,15 @@ layer (route table, offline GET smoke test, Web console pages). Cases that need
 
 Copyright 2026 AgenticsWorld.
 
-Licensed under the [Apache License 2.0](LICENSE). You may use, modify, and
-redistribute the project, including commercially. Redistributions must retain
-the license and copyright notices, preserve the attribution in [`NOTICE`](NOTICE),
-and identify modified files as required by the license.
+Licensed under the [GNU General Public License v3.0](LICENSE) (`GPL-3.0-only`).
+You may use, modify, and redistribute the project, including commercially. If
+you distribute the project or a modified version of it, you must license it
+under the same terms, make the corresponding source code available, keep the
+license and copyright notices (including [`NOTICE`](NOTICE)) intact, and mark
+your changes with the date you made them. The software comes with no warranty.
+
+Releases up to and including v1.0.38 were published under the Apache License 2.0
+and remain available under those terms.
 
 Citation metadata is available in [`CITATION.cff`](CITATION.cff).
 
