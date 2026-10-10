@@ -31,18 +31,20 @@ Weights (<https://huggingface.co/Noctaluna/Noct-Q-Uncensored-Qwen-Image-2.1>,
 ```text
 ComfyUI/models/
 ├── diffusion_models/NoctQ_V4_int8_convrot.safetensors
-├── text_encoders/qwen3vl_8b_bf16.safetensors
+├── text_encoders/qwen3vl_8b_int8_convrot.safetensors
 └── vae/qwen_image_2.1_vae_bf16.safetensors
 ```
 
-The author's workflow loads `qwen3vl_8b_int8_convrot.safetensors` (about half the size, for 8–12 GB cards).
-This template names the bf16 text encoder instead — the file used by the official Qwen Image 2.1 template
-and the one in Comfy Cloud's catalog. To use the int8 file, fork the JSON and change `clip_name` on node `2`.
+These are the three files the author's workflow loads; the int8 text encoder is about half the size of the
+bf16 one and is the pairing recommended for 8–12 GB cards. If you already have `qwen3vl_8b_bf16.safetensors`
+(the file used by the official Qwen Image 2.1 template), fork the JSON and change `clip_name` on node `2`
+instead of downloading the int8 file.
 
-**Comfy Cloud** (checked 2026-10-10, Cloud v0.39.2): the node and `qwen3vl_8b_bf16.safetensors` are
-available, but `NoctQ_V4_int8_convrot.safetensors` and `qwen_image_2.1_vae_bf16.safetensors` are **not** in
-the shared model catalog. Import both into your Cloud account first (Cloud's model import accepts Hugging
-Face / Civitai URLs); until then the submission fails validation on nodes `1` and `3`.
+**Comfy Cloud** (checked 2026-10-10, Cloud v0.39.2): the node is available, but **none of the three files**
+is in the shared model catalog. Import them into your Cloud account first (Cloud's model import accepts
+Hugging Face / Civitai URLs); until then the submission fails validation on nodes `1`, `2` and `3`. The
+catalog does have `qwen3vl_8b_bf16.safetensors`, so forking node `2` to it leaves only the diffusion model
+and the VAE to import.
 
 ### Console Configuration
 
@@ -114,17 +116,17 @@ Noct Q 是 [Qwen/Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1) 的
 ```text
 ComfyUI/models/
 ├── diffusion_models/NoctQ_V4_int8_convrot.safetensors
-├── text_encoders/qwen3vl_8b_bf16.safetensors
+├── text_encoders/qwen3vl_8b_int8_convrot.safetensors
 └── vae/qwen_image_2.1_vae_bf16.safetensors
 ```
 
-作者的工作流加载的是 `qwen3vl_8b_int8_convrot.safetensors`(体积约一半,给 8–12 GB 显卡用)。本模板改写为
-bf16 版文本编码器——Qwen Image 2.1 官方模板用的就是它,Comfy Cloud 的模型目录里也只有它。要用 int8 版,fork
-本 JSON,把节点 `2` 的 `clip_name` 改掉即可。
+这三个文件就是作者工作流加载的那三个;int8 版文本编码器体积约为 bf16 版的一半,是作者给 8–12 GB 显卡推荐的
+搭配。手头已有 `qwen3vl_8b_bf16.safetensors`(Qwen Image 2.1 官方模板用的那个)时,可以不下载 int8 版,fork
+本 JSON 把节点 `2` 的 `clip_name` 改掉即可。
 
-**Comfy Cloud**(2026-10-10 核对,云端 v0.39.2):节点和 `qwen3vl_8b_bf16.safetensors` 都有,但公共模型目录里
-**没有** `NoctQ_V4_int8_convrot.safetensors` 与 `qwen_image_2.1_vae_bf16.safetensors`。须先把这两个文件导入自己的
-云端账号(Cloud 的模型导入接受 Hugging Face / Civitai 链接);导入前提交会在节点 `1`、`3` 上校验失败。
+**Comfy Cloud**(2026-10-10 核对,云端 v0.39.2):节点有,但这**三个文件公共模型目录里都没有**。须先把它们导入
+自己的云端账号(Cloud 的模型导入接受 Hugging Face / Civitai 链接);导入前提交会在节点 `1`、`2`、`3` 上校验失败。
+目录里有 `qwen3vl_8b_bf16.safetensors`,把节点 `2` fork 成它,就只剩底模和 VAE 需要导入。
 
 ### 控制台配置
 
