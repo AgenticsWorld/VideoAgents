@@ -16240,10 +16240,18 @@ def _transition_design_question(proj: str, gate_id: str | None, question: str) -
 
 
 def _transition_design_sign_accept(proj: str, gate_id: str | None) -> None:
-    """H3A 签字后:把各集仍 proposed 的过场设计接受并 apply(记 by=sign:g6)。"""
+    """H3A 签字后:把各集仍 proposed 的过场设计接受并 apply(记 by=sign:g6)。
+    先兜底登记剧本场间衔接(2026-10-10 二期,docs/scene_links.md):导演采纳的衔接还没写进 shot_list transition_in.link 的,
+    此刻由宿主登记并写回——极简模式不派过场设计节点,没有别处会跑 propose;无衔接的集不动、不新建设计表。"""
     from modules import transition_design as _td
     base = PROJECTS_DIR / proj
     for ep in _transition_gate_episodes(proj, gate_id):
+        try:
+            landed = _td.land_script_links(base, ep)
+            if landed:
+                print(f"[transition_design] {proj}/{ep} H3A 签字登记剧本场间衔接 {len(landed)} 处:{', '.join(landed[:5])}", flush=True)
+        except Exception as e:  # noqa: BLE001
+            print(f"[transition_design] {proj}/{ep} 登记剧本场间衔接失败:{e}", flush=True)
         try:
             done = _td.accept_all_proposed(base, ep, by="sign:g6")
             if done:

@@ -13,7 +13,8 @@
 | 动作 | `动作:…` / `△…` | `ACTION: …` / `△ …` | 无前缀的普通段落也算动作 |
 | 台词 | `CHAR-0001:「…」` / `- **名(CHAR-0001)**(括注):… {emotion, est_duration_s}` | `CHAR-0001: "…"` / `- **Name (CHAR-0001)**(paren): "…" {emotion: …, est_duration_s: …}` | 说话人必须带 `CHAR-` ID;只有名字时台词须加引号(`「」“”""`) |
 | 旁白候选 | `〔旁白候选(旁白)〕:…` | `[NARRATION (narrator)]: …` / `[V.O.]: …`(无 CHAR 说话人) | 旁白者文本归旁白候选;**带 CHAR 说话人的 `(O.S.)` / `(V.O.)` 括注(2026-10-03 声画分离,docs/sound_split.md)仍是对白行,拆解表 / 对白适配保留并带 `placement` os / vo** |
-| 转场 | `转场:CUT TO` | `TRANSITION: CUT TO` / 独立一行 `CUT TO:` `FADE OUT.` `DISSOLVE TO:` | |
+| 转场 | `转场:CUT TO` | `TRANSITION: CUT TO` / 独立一行 `CUT TO:` `FADE OUT.` `DISSOLVE TO:` | 统一由 `modules/scene_links.transition_line` 识别(行首可带 `- ` 或粗体) |
+| 场间衔接(2026-10-10,`docs/scene_links.md`) | `转场:MATCH CUT TO S04 {衔接: 形状, 出: …, 入: …}` | `TRANSITION: MATCH CUT TO S04 {link: shape, out: …, in: …}` | 花括号只写在本场最后一行转场行;键 `衔接/出/入` 与 `link/out/in` 等价,键间逗号或分号,值里可有逗号;`衔接` 只认七种:形状 shape / 动作 action / 同机位 position / 运动 motion / 声音 sound / 台词 line / 反差 contrast;转场词后点名的场次号必须是相邻下一场。机检 `scene_link_valid` |
 | 时段/声音 | `时段:…` `声音:…` `音效:…` `音乐:…` | `TIME: …` `SOUND: …` `SFX: …` `MUSIC: …` | |
 | 本场无对白 | `〔本场无对白〕` | `[NO DIALOGUE]` | |
 | 场内子标题 | `### 旁白` / `### 对白` / `### 声音` | `### Narration` / `### Dialogue` / `### Sound` | 决定其后段落归类 |
@@ -40,6 +41,7 @@
 
 ## 实现位置
 
+- `modules/scene_links.py`:转场行与场间衔接花括号的唯一解析口(`transition_line` / `parse_transition`),剧本拆解、事件取舍机检、过场设计诊断共用。
 - `modules/script_breakdown.py`:`_SCENE_TOKEN`/`_INT_EXT`/`_TOD_WORDS`/`_NOT_SPEAKER`(+`_not_speaker`)/`_parse_heading`(末段按位置认时段)/`parse_screenplay` 各锚点正则/`derive` 的无旁白声明。
 - `modules/scene_int_ext.py`:`_ALIASES` 英文别名;存量推断词英文整词命中。
 - `code/check_dialogue_fit.py`、`services/runtime/core.py` 对白解析:`**final**`、英文列名与排除列、`Narration` 段。

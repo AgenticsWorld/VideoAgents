@@ -108,6 +108,11 @@ tr.sh td.l .cast{display:block;margin-top:4px;font-weight:400}
 .snd{color:var(--dim);font-style:italic;white-space:pre-wrap}
 .trn{color:var(--dim);font-size:12px}
 .trn::before{content:'⤵ '}
+.lk{font-size:12px;line-height:1.5}
+.lk .chip.lkk{color:var(--accent);border-color:var(--accent)}
+.lk .lkt{font-size:10.5px;color:var(--yellow);border:1px dashed var(--yellow);border-radius:8px;padding:0 5px;margin-left:2px;cursor:help}
+.lk .io{display:flex;gap:6px;align-items:baseline}
+.lk .io .k{flex:none;color:var(--dim)}
 .nar{color:var(--purple);white-space:pre-wrap}
 .nar .nid{font-weight:600;margin-right:6px}
 .nar .cand{color:var(--dim);font-size:11.5px;margin-left:6px}
@@ -423,7 +428,10 @@ function sceneRows(sc,bd,ep,A){
     (LAST.board_scenes||[]).includes(sc.no)?JumpAnchor.link('board',proj0,ep,'scene',sc.no):'',
     (LAST.shot_scenes||[]).includes(sc.no)?JumpAnchor.link('storyboard',proj0,ep,'scene',sc.no):'']);
   let h=`<tr class="sh" data-stick-scene="${esc(sc.no)}" data-stick-label="${esc(sc.scene_name||'')}" id="sc-${esc(sc.no)}"><td class="l" data-no-i18n>${l}</td><td class="r"><div class="info">${r.map(([k,v])=>`<div class="ln"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')}</div></td><td class="e">${jumps}${editBtn(A.scenes,I18N.f('剧本 {ep} 场次 {no}{name}(文件 {f})',{ep,no:sc.no,name:sc.scene_name?' '+sc.scene_name:'',f:epFile(ep,'screenplay.md')}),'','',sc.no)}${noteHtml(sc.no)}</td></tr>`;
-  const blocks=sc.blocks&&sc.blocks.length?sc.blocks:fallbackBlocks(sc);
+  let blocks=sc.blocks&&sc.blocks.length?sc.blocks:fallbackBlocks(sc);
+  // 场间衔接(sc.link_out,宿主按剧本场尾转场行算)只挂在本场最后一条转场行上;正式拆解表漏了转场块时在场尾补一行
+  if(sc.link_out&&!blocks.some(b=>b.type==='transition'))blocks=blocks.concat([{type:'transition',text:sc.link_out.cut||sc.transition||'CUT TO'}]);
+  const lastTr=blocks.map(b=>b.type).lastIndexOf('transition');
   let dn=0;
   blocks.forEach((b,bi)=>{
     const bk=sc.no+'/b'+(bi+1);   // 场内块键(按拆解表 blocks 顺序,1 起)
@@ -441,12 +449,20 @@ function sceneRows(sc,bd,ep,A){
         :`<b style="color:var(--purple)">${esc(b.id)}</b>${b.est_s!=null?` · ${secs(b.est_s)}`:''}${b.tone?` · ${esc(b.tone)}`:''}${b.anchor?`<div>📍 ${esc(clip(b.anchor,60))}</div>`:''}`;
       h+=`<tr class="blk"><td class="l" data-no-i18n><div class="nar">🎙 ${b.speaker?`<span class="nid">${esc(b.speaker)}</span>`:''}${esc(b.text)}</div></td><td class="r">${right}</td><td class="e">${editBtn(A.narration,b.id?I18N.f('旁白 {ep}/{id}(anchor: {a};文件 {f} 条目 {id})',{ep,id:b.id,a:b.anchor||'',f:epFile(ep,'narration.md')}):I18N.f('旁白候选 {ep} 场次 {no}「{txt}」(剧本文件 {f})',{ep,no:sc.no,txt:clip(b.text,20),f:epFile(ep,'screenplay.md')}),'','',b.id?'nar:'+b.id:bk)}${noteHtml(b.id?'nar:'+b.id:bk)}</td></tr>`;
     }else if(b.type==='transition'){
-      h+=`<tr class="blk"><td class="l" data-no-i18n><span class="trn">${esc(b.text)}</span></td><td class="r"></td><td class="e">${editBtn(A.scenes,I18N.f('剧本 {ep} 场次 {no} 转场「{txt}」(文件 {f})',{ep,no:sc.no,txt:b.text,f:epFile(ep,'screenplay.md')}),'sm','',bk)}${noteHtml(bk)}</td></tr>`;
+      const lk=sc.link_out&&bi===lastTr?sc.link_out:null;
+      h+=`<tr class="blk"><td class="l" data-no-i18n><span class="trn">${esc(lk&&lk.cut?lk.cut:b.text)}</span></td><td class="r">${lk?linkHtml(lk):''}</td><td class="e">${editBtn(A.scenes,I18N.f('剧本 {ep} 场次 {no} 转场「{txt}」(文件 {f})',{ep,no:sc.no,txt:b.text,f:epFile(ep,'screenplay.md')}),'sm','',bk)}${noteHtml(bk)}</td></tr>`;
     }else{
       h+=`<tr class="blk"><td class="l" data-no-i18n><div class="${b.type==='sound'?'snd':'act'}">${esc(b.text)}</div></td><td class="r">${b.type==='sound'?'🔊':''}</td><td class="e">${editBtn(A.scenes,I18N.f('剧本 {ep} 场次 {no} 动作段「{txt}」(文件 {f})',{ep,no:sc.no,txt:clip(b.text,20),f:epFile(ep,'screenplay.md')}),'','',bk)}${noteHtml(bk)}</td></tr>`;
     }
   });
   return h;
+}
+// 场间衔接初稿(2026-10-10,docs/scene_links.md):类型 + 本场结尾 / 下一场开头成对的两头;形状 / 动作匹配标「试验」
+function linkHtml(lk){
+  return `<div class="lk"><span class="chip lkk" title="${esc(t('剧本写的场间衔接初稿:本场结尾与下一场开头成对设计;采不采纳由导演在转场清单里逐条处置'))}">🔗 ${esc(t(lk.label_zh||lk.kind||''))}</span>`
+    +(lk.tier==='trial'?`<span class="lkt" title="${esc(t('形状 / 动作匹配要两个画面逐帧重合,目前下游只当标注,不保证对得上'))}">${esc(t('试验'))}</span>`:'')
+    +`<div class="io"><span class="k">${esc(t('本场结尾'))}</span><span data-no-i18n>${esc(lk.out||'')}</span></div>`
+    +`<div class="io"><span class="k">${esc(t('下一场开头'))}</span><span data-no-i18n>${esc(lk.in||'')}</span></div></div>`;
 }
 // 正式拆解表没给 blocks 时按 动作 → 对白 → 旁白 → 转场 顺序兜底
 function fallbackBlocks(sc){

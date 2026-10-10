@@ -47,6 +47,10 @@
                                        只配无 inserts / 无 hold_s 的 hard_cut/dissolve,首组不得,须写 reason;carry=line 须切点旁有画外句
                                        (声画分离 ≠ 关);存量 audio_lead_s 自动归一为 {kind:j, carry:bed}。由 audio-mixing 按 mix_basis sources
                                        boundaries[].sound_bridge 摆位(J bed 预滚 / L bed 延续,本组原生轨不提前),画面与 timemap 不动
+  11h. transition_link_valid          场间衔接登记卡(2026-10-10 二期,docs/scene_links.md):transition_in.link {kind, out, in, out_shot, in_shot, …}——
+                                       kind 在七种白名单、out / in 非空、type ∈ hard_cut/match_cut/smash_cut/dissolve(隔黑隔白衔接就断)、
+                                       不得与 inserts / hold_s 并用、首组不得、须写 reason;out_shot 须是前组最后一镜、in_shot 须是本组第一镜
+                                       (拆并组后过期 → 重跑 transition_design.py propose)。只由宿主过场设计写,两侧组提示词的衔接句见 sync_scene_links.py
   11e. transition_close_valid         集尾收束(2026-09-25,§9C):shot_list 顶层可选 episode_close {type: hard_cut|fade_black|fade_white|cut_black|cut_white,
                                        duration_s ∈ [0.3,3](淡出类), hold_s ∈ [0,3](淡出后黑/白场停留;切黑类须 >0), hold_audio ∈ fade|mute};缺省 = 项目设置
                                        settings.json#transitions.episode_close(默认淡出到黑 1.0s + 黑场 0.5s);hard_cut = 显式不处理(停在末帧)
@@ -799,6 +803,42 @@ def _check_motion_pair(gid: str, t: dict, is_first: bool) -> list[str]:
     return errs
 
 
+LINK_TYPES = ("hard_cut", "match_cut", "smash_cut", "dissolve")   # 场间衔接成立的转场类型(与 modules/scene_links.LINK_LAND_TYPES 同)
+
+
+def _check_link(gid: str, t: dict, prev_g: dict | None, g: dict) -> list[str]:
+    """transition_link_valid(2026-10-10 二期,docs/scene_links.md):场间衔接登记卡 transition_in.link 的契约。"""
+    raw = t.get("link")
+    if raw is None:
+        return []
+    from modules.scene_links import KINDS     # 惰性:白名单只有一份
+    tag = f"{gid} transition_link_valid:"
+    if not isinstance(raw, dict):
+        return [f"{tag} link 须为对象,得到 {type(raw).__name__}"]
+    errs = []
+    if raw.get("kind") not in KINDS:
+        errs.append(f"{tag} link.kind={raw.get('kind')!r} 不在白名单 {list(KINDS)}")
+    for k in ("out", "in"):
+        if not str(raw.get(k) or "").strip():
+            errs.append(f"{tag} link.{k} 为空(出 = 前一场最后一个画面或声音,入 = 本场第一个画面或声音)")
+    if t.get("type") not in LINK_TYPES:
+        errs.append(f"{tag} 带 link 的边界 type 只能 {list(LINK_TYPES)}(黑场 / 白场 / 淡出会把两头隔开),得到 {t.get('type')}")
+    if inserts_of(t) or t.get("hold_s"):
+        errs.append(f"{tag} link 不得与 inserts / hold_s 并用(字卡 / 定场 / 黑场停留插在中间,衔接就断了)")
+    if prev_g is None:
+        errs.append(f"{tag} 首组无前组,不得 link")
+    else:
+        last = (prev_g.get("shots") or [None])[-1]
+        first = (g.get("shots") or [None])[0]
+        if raw.get("out_shot") and last and raw["out_shot"] != last:
+            errs.append(f"{tag} link.out_shot={raw['out_shot']} 不是前组 {prev_g.get('group_id')} 的最后一镜 {last}(拆并组后过期,重跑 transition_design.py propose)")
+        if raw.get("in_shot") and first and raw["in_shot"] != first:
+            errs.append(f"{tag} link.in_shot={raw['in_shot']} 不是本组第一镜 {first}(拆并组后过期,重跑 transition_design.py propose)")
+    if not str(t.get("reason") or "").strip():
+        errs.append(f"{tag} 带 link 须写 reason")
+    return errs
+
+
 def _check_inserts(gid: str, t: dict, is_first: bool) -> tuple[list[str], float]:
     ins = inserts_of(t)
     if not ins:
@@ -980,6 +1020,7 @@ def check_transitions(shot_list: dict, insert_budget_pct: float | None = None, s
                     side = "下组首镜" if sb["kind"] == "j" else "前组末镜"
                     errors.append(f"{gid} transition_sound_bridge_valid: carry=line 但{side}没有 heard_in 含该镜的画外句(os/vo),改 carry=bed 或先把那句转画外")
         errors += _check_motion_pair(gid, t, i == 0)
+        errors += _check_link(gid, t, groups[i - 1] if i > 0 else None, g)
     if budget and insert_total > float(budget) * insert_budget_pct / 100.0 + 1e-9:
         errors.append(f"transition_insert_budget: Σ插入段 {insert_total:g}s > 集预算 {budget}s × {insert_budget_pct:g}%"
                       f" = {float(budget) * insert_budget_pct / 100.0:.2f}s(项目「过场模式」预算;极简档为 0)")

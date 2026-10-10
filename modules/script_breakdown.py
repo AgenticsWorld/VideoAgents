@@ -16,6 +16,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from modules import scene_links
 from modules.entity_ids import CHAR_ID_PAT
 
 SCHEMA_VERSION = "script_breakdown/1.0"
@@ -433,11 +434,10 @@ def parse_screenplay(text: str, known_names: set[str] | None = None) -> dict:
             if m and cur["alloc_s"] is None:
                 cur["alloc_s"] = float(m.group(1))
             continue
-        m = (re.match(r"^(?:[-*]\s*)?\**(?:转场|TRANSITION)\**\s*[:：]\s*\**(.+?)\**\s*$", s, re.I)
-             or re.match(r"^\**((?:SMASH |MATCH |JUMP )?CUT TO(?: BLACK)?|FADE (?:IN|OUT|TO BLACK)|DISSOLVE TO|WIPE TO|CROSSFADE|INTERCUT)\s*[:.]?\**\s*$", s, re.I))
-        if m:
-            cur["transition"] = _strip_md(m.group(1))
-            _push(cur, "transition", cur["transition"])
+        tr = scene_links.transition_line(s)   # 转场行(含场间衔接花括号,docs/scene_links.md)统一由 scene_links 识别
+        if tr:
+            cur["transition"] = tr
+            _push(cur, "transition", tr)
             continue
         m = re.match(r"^\(?\s*adaptation_note\s*[:：]\s*(.+?)\)?\s*$", s, re.I)
         if m:
@@ -1009,6 +1009,8 @@ def load(base: Path, ep: str) -> dict:
     inputs = input_mtimes(base, ep)
     p = breakdown_path(base, ep)
     has_inputs = any(k.endswith("screenplay.md") for k in inputs)
+    # 场间衔接(2026-10-10,docs/scene_links.md):scenes[].link_out 一律由宿主按剧本场尾转场行现算,不靠拆解工位写
+    sp_text = read_text(base / "story" / "episodes" / ep / "screenplay.md")
     if p.is_file():
         agent = read_json(p)
         if isinstance(agent, dict) and isinstance(agent.get("scenes"), list):
@@ -1023,11 +1025,11 @@ def load(base: Path, ep: str) -> dict:
             merged.setdefault("issues", [])
             if errors:
                 merged["issues"] = [{"level": "error", "text": e} for e in errors] + list(merged["issues"])
-            return {"breakdown": merged, "source": "agent", "stale": stale, "file": str(p.relative_to(base)),
-                    "mtime": mt, "inputs": inputs, "errors": errors}
-        return {"breakdown": derived, "source": "derived", "stale": [], "file": None, "mtime": None,
+            return {"breakdown": scene_links.annotate(merged, sp_text), "source": "agent", "stale": stale,
+                    "file": str(p.relative_to(base)), "mtime": mt, "inputs": inputs, "errors": errors}
+        return {"breakdown": scene_links.annotate(derived, sp_text), "source": "derived", "stale": [], "file": None, "mtime": None,
                 "inputs": inputs, "errors": ["script_breakdown.json 不是合法拆解表(缺 scenes[] 或 JSON 无法解析)"]}
-    return {"breakdown": derived if has_inputs else None, "source": "derived" if has_inputs else "none",
+    return {"breakdown": scene_links.annotate(derived, sp_text) if has_inputs else None, "source": "derived" if has_inputs else "none",
             "stale": [], "file": None, "mtime": None, "inputs": inputs, "errors": []}
 
 

@@ -32,6 +32,8 @@
     "emotion": {"type": "倦怠→被勾起的好奇", "intensity": 0.35},   // intensity ∈ [0,1]
     "tempo": "medium", "tempo_label": "中", "color": "ep01-seg1(暖砂灰黄昏)",
     "transition": "CUT TO", "hooks": ["oh-1"], "narration_ids": ["N-01"],
+    // link_out(2026-10-10,docs/scene_links.md):本场场尾转场行写了场间衔接 {衔接, 出, 入} 时由宿主加载时按 screenplay.md 现算挂上
+    // {from, to, kind, tier: active|trial, out, in, cut, label_zh, label_en, land};拆解工位不用写,写了也会被覆盖;没写衔接的场不带此键
     "npc": {"on": true, "density": "medium", "reason": "原文「下班高峰,马路上人来车往」→ 公共空间开·适中"},   // NPC 参与构图判定(2026-10-09,docs/npc_staging.md)
     "blocks": [                            // 场内小块,按剧本原文顺序(页面左列逐块显示,每块一个反馈按钮)
       {"type": "action", "text": "夕阳压在楼群的边线上。…"},
@@ -78,7 +80,7 @@
 | 动作段 | 画面/动作原文(连续段落并成一块) | — | `01-story/screenplay` |
 | 对白块 | 连续台词(说话人色点 + 括注 + 台词) | 逐句对齐:情绪 · 估时 · ✓风格命中;多句时 Σ 合计 | `01-story/dialogue-rewrite` |
 | 旁白 | 🎙 旁白正文(定稿文本;剧本候选未进定稿时标注) | N-id · 估时 · 语气 · 📍挂点 | `01-story/narration` |
-| 转场 | ⤵ CUT TO 等 | — | `01-story/screenplay` |
+| 转场 | ⤵ CUT TO 等(带场间衔接时花括号收起,只显示转场词) | 场内最后一条转场行带场间衔接时:🔗 类型(形状 / 动作匹配另标「试验」)· 本场结尾 … · 下一场开头 …(`scenes[].link_out`,docs/scene_links.md) | `01-story/screenplay` |
 
 页头:集号按钮(✅ 已有正式拆解表 / ⚠ 仅剧本 / – 无剧本)、标题 + ⏱ 预计/预算量表、来源状态行(正式 / 已过期 / 推导 + 「🔁 重新分析」)。反馈按钮把该块的定位与文本摘录预填进共用编辑浮窗(edit-popup.js),直接发给对应工位。
 

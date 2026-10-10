@@ -22,6 +22,7 @@
     dramatized_events_covered  本集每个 dramatize 事件至少出现在一场的 [事件] 行
     cut_events_absent          任何场次的 [事件] 不得引用 cut 事件
     scene_has_dramatized_event 每场 [事件] 至少含一个 dramatize 事件(纯 mention/merge 事件不得独立成场)
+    scene_link_valid           场尾转场行的场间衔接 `{衔接, 出, 入}` 合法(modules/scene_links.verify,2026-10-10;与事件取舍无关,各模式照常核)
   旧格式(episode_plan 无 treatments)剧本侧回退为「全部视为 dramatize」并 WARN,不阻断存量项目。
 
 衍生(原创)模式(2026-10-09,#128/#123):项目只借原著世界观、不改编原著情节时,episode_plan 顶层写
@@ -476,8 +477,19 @@ def _spacetime_ok(parsed_scenes: list[dict], screenplay_text: str, errors: list[
     return not split or legacy_split
 
 
+def _links_ok(screenplay_text: str, errors: list[str], warns: list[str]) -> tuple[bool, list[dict]]:
+    """scene_link_valid(2026-10-10,docs/scene_links.md):场尾转场行的 `{衔接, 出, 入}`。存量剧本(generated_at 早于
+    scene_links.LINK_RULE_SINCE 或缺失)只 WARN。→ (是否 PASS, 本集合法衔接清单)"""
+    from modules import scene_links
+
+    res = scene_links.verify(screenplay_text)
+    errors.extend(f"场间衔接 {e}" for e in res["errors"])
+    warns.extend(f"场间衔接 {w}" for w in res["warns"])
+    return res["ok"], res["links"]
+
+
 def verify_screenplay(screenplay_text: str, plan: dict | None, ep: str) -> dict:
-    """剧本 vs 本集 treatment。→ {checks, errors, warns, scenes: [{scene, events}], treatments}"""
+    """剧本 vs 本集 treatment。→ {checks, errors, warns, scenes: [{scene, events}], treatments, links}"""
     from modules import script_breakdown as sb   # 复用剧本解析(场次/[事件] 行)
 
     errors: list[str] = []
@@ -489,18 +501,20 @@ def verify_screenplay(screenplay_text: str, plan: dict | None, ep: str) -> dict:
               for s in parsed.get("scenes") or []]
     if ep_plan is None:
         warns.append(f"episode_plan 里没有 {ep},无法核 treatment(仅解析场次)")
+        links_ok, links = _links_ok(screenplay_text, errors, warns)
         return {"checks": {"dramatized_events_covered": True, "cut_events_absent": True, "scene_has_dramatized_event": True,
-                           "scene_spacetime_continuous": True},
-                "errors": errors, "warns": warns, "scenes": scenes, "treatments": {}, "legacy": True}
+                           "scene_spacetime_continuous": True, "scene_link_valid": links_ok},
+                "errors": errors, "warns": warns, "scenes": scenes, "treatments": {}, "legacy": True, "links": links}
     if is_derivative(plan):
         # 衍生模式:场次 [事件] 行写 none(`[EVENTS] none` / `[事件] 无`)是合法占位,事件三项不评
         cited = [f"{s['scene'] or '?'}({', '.join(s['events'])})" for s in scenes if s["events"]]
         if cited:
             warns.append("衍生模式下场次 [事件] 行应写 none,不挂原著事件: " + "; ".join(cited))
         checks["scene_spacetime_continuous"] = _spacetime_ok(parsed.get("scenes") or [], screenplay_text, errors, warns)
+        checks["scene_link_valid"], links = _links_ok(screenplay_text, errors, warns)
         return {"checks": checks, "skipped": list(SCREENPLAY_EVENT_CHECKS), "skip_reason": DERIVATIVE_SKIP_REASON,
                 "derivative": True, "errors": errors, "warns": warns, "scenes": scenes, "treatments": {}, "legacy": False,
-                "n_scenes": len(scenes), "n_dramatize": 0}
+                "n_scenes": len(scenes), "n_dramatize": 0, "links": links}
     evs = episode_events(ep_plan)
     tr, ferrs = episode_treatments(ep_plan)
     legacy = not has_treatments(ep_plan)
@@ -547,10 +561,11 @@ def verify_screenplay(screenplay_text: str, plan: dict | None, ep: str) -> dict:
     if no_event_scenes:
         warns.append(f"场次无 [事件] 行,无法核对: {no_event_scenes}")
     checks["scene_spacetime_continuous"] = _spacetime_ok(parsed.get("scenes") or [], screenplay_text, errors, warns)
+    checks["scene_link_valid"], links = _links_ok(screenplay_text, errors, warns)
     if dram and len(scenes) > len(dram) * 2:
         warns.append(f"场次 {len(scenes)} 场 > dramatize 事件 {len(dram)} 个的 2 倍,疑似平铺(每个演的事件平均 ≤2 场为宜)")
     return {"checks": checks, "errors": errors, "warns": warns, "scenes": scenes, "treatments": treat, "legacy": legacy,
-            "n_scenes": len(scenes), "n_dramatize": len(dram)}
+            "n_scenes": len(scenes), "n_dramatize": len(dram), "links": links}
 
 
 def format_report(res: dict, title: str) -> str:

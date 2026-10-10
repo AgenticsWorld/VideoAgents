@@ -1594,6 +1594,9 @@ const TR_MODES={minimal:'极简',classic:'经典',cinematic:'电影感',custom:'
 const TR_CLOSE={fade_black:'淡出到黑',fade_white:'淡出到白',cut_black:'切黑(突然黑屏)',cut_white:'切白',hard_cut:'不处理(停在末帧)'};
 const TR_JOIN_STYLE={wipe:'划像',blur_through:'模糊穿越',zoom_through:'推进穿越',iris:'圈入圈出',pixelize:'像素化',fadegrays:'去色叠化'};
 const TR_SRC={screenplay:'剧本',continuity:'连戏表',scenes_index:'场景库',derived:'推定',user:'用户'};
+// 剧本场间衔接(2026-10-10 二期,docs/scene_links.md):登记卡 transition_in.link 的类型名 / 导演处置
+const TR_LINK={shape:'形状匹配',action:'动作匹配',position:'同机位',motion:'运动接力',sound:'声音接力',line:'台词接力',contrast:'反差硬切'};
+const TR_LINK_DISP={adopt:'导演采纳',modify:'导演修改',drop:'导演弃用'};
 let TR_BY_TO={},TR_BY_ID={};   // TR_BY_ID / TRANSITIONS_SETTINGS:声桥行用(2026-10-03)
 function trJoinLabel(tr){
   if(!tr)return t('硬切');
@@ -1603,6 +1606,7 @@ function trJoinLabel(tr){
   if(tr.duration_s)s+=' '+tr.duration_s+'s';
   const pads=[];if(tr.freeze_s)pads.push(t('定格')+' '+tr.freeze_s+'s');if(tr.hold_s)pads.push(t('黑场')+' '+tr.hold_s+'s');
   // 三期成对运镜 / 四期音先入(2026-09-26)
+  if(tr.link&&tr.link.kind)pads.unshift('🔗 '+t(TR_LINK[tr.link.kind]||tr.link.kind));   // 场间衔接登记卡
   if(tr.motion_pair&&tr.motion_pair.out)pads.push(t('成对运镜')+' '+tr.motion_pair.out+'→'+(tr.motion_pair.in||''));
   // 声桥 J/L(2026-10-03):sound_bridge {kind j|l, s, carry bed|line};旧 audio_lead_s 视为 J·底床
   const sb=trBridgeOf(tr);
@@ -1672,7 +1676,10 @@ function trDiagHtml(tr){
   if(d.light_jump)bits.push(`<span class="tag">${t('光线跳变')}</span>`);
   if(d.first_shot_wide)bits.push(`<span class="tag">${t('首镜已是远景')}</span>`);
   const lines=[];
-  if(d.screenplay_hint)lines.push(`📜 ${esc(d.screenplay_hint)}`);
+  if(d.screenplay_link){   // 剧本写的衔接:类型 + 导演处置 + 两头内容(有它时不再重复显示转场句原文)
+    const k=d.screenplay_link,dp=(d.script_link_disposition||{}).disposition;
+    lines.push(`🔗 ${t('剧本衔接')} · ${esc(t(TR_LINK[k.kind]||k.kind))}${k.tier==='trial'?` <span class="tag warn" title="${t('形状 / 动作匹配要两个画面逐帧重合,目前下游只当标注,不保证对得上')}">${t('试验')}</span>`:''} <span class="tag ${dp==='adopt'||dp==='modify'?'ok':dp==='drop'?'':'warn'}">${t(TR_LINK_DISP[dp]||'导演未处置')}</span> <span data-no-i18n>${esc(k.out)} → ${esc(k.in)}</span>`);
+  }else if(d.screenplay_hint)lines.push(`📜 ${esc(d.screenplay_hint)}`);
   if((d.director_notes||[]).length)lines.push(`🎬 ${t('导演阐述')}:${esc(d.director_notes[0])}${d.director_notes.length>1?' …':''} <span class="tag" title="${t('已拍板:过场模式的选择优先于导演/编剧散文里的「无字幕板」声明,此处只作提示')}">${t('仅提示')}</span>`);
   if(d.continuity&&d.continuity.id)lines.push(`⛓ ${esc(d.continuity.id)} anchor=${esc(d.continuity.anchor||'')}${d.continuity.framing_change_ok===false?' · <span class="tag warn">framing</span>':''}`);
   return `<div class="trdiag">${bits.join(' ')}${lines.length?'<br>'+lines.join('<br>'):''}</div>`;
@@ -1704,7 +1711,8 @@ function transCard(tr){
   const alts=tr.alternatives||[];
   const stChip=`<span class="tag ${tr.status==='proposed'?'warn':decided?'ok':''}">${t(TR_STATUS[tr.status]||tr.status)}</span>`;
   const rsChip=(tr.render_state?`<span class="tag ${tr.render_state==='rendered'?'ok':tr.render_state==='awaiting_clip'?'warn':''}">${t(TR_RENDER[tr.render_state])}</span>`:'')
-    +(tr.designed_by?`<span class="tag" title="${esc(tr.designed_by+(tr.agent_note?' · '+tr.agent_note:''))}">🤖 ${t('工位建议')}</span>`:'');   // 二期工位 07-directing/transition-design 定的主设计
+    +(tr.designed_by?`<span class="tag" title="${esc(tr.designed_by+(tr.agent_note?' · '+tr.agent_note:''))}">🤖 ${t('工位建议')}</span>`:'')   // 二期工位 07-directing/transition-design 定的主设计
+    +(tr.source==='script_link'?`<span class="tag" title="${t('导演采纳的剧本场间衔接:已登记进分镜表,两侧组提示词各写一句衔接句;要换别的方案在下拉里选')}">📜 ${t('剧本衔接')}</span>`:'');
   const stale=tr.stale?`<span class="tag warn" title="${t('前后组视频或素材已变化,已构建的插入段过期,出成片时自动重建')}">${t('素材已变')}</span>`:'';
   const proj=$('#project').value.trim()||'demo';
   const loc=I18N.f('过场 {ep} {a}→{b}(设计表 directing/{ep}/transition_design.json 边界 {bid};定稿字段 directing/{ep}/shot_list.json generation_groups group_id={b} 的 transition_in)',{ep:EP,a:tr.from_group,b:tr.to_group,bid:tr.id});

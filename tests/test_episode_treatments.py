@@ -203,7 +203,7 @@ def test_plan_derivative_requires_note_and_empty_events():
 
 def test_screenplay_derivative_none_placeholder():
     res = et.verify_screenplay(SP_DERIVATIVE, _derivative_plan(), "ep01")
-    assert res["checks"] == {"scene_spacetime_continuous": True} and not res["errors"] and not res["warns"]
+    assert res["checks"] == {"scene_spacetime_continuous": True, "scene_link_valid": True} and not res["errors"] and not res["warns"]
     assert set(res["skipped"]) == set(et.SCREENPLAY_EVENT_CHECKS)
     cited = SP_DERIVATIVE.replace("[EVENTS] none | [CAST] CHAR-guide | [DURATION] 46s", "[EVENTS] ev0001 | [CAST] CHAR-guide | [DURATION] 46s")
     assert any("应写 none" in w for w in et.verify_screenplay(cited, _derivative_plan(), "ep01")["warns"])

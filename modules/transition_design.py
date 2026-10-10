@@ -304,32 +304,49 @@ def scene_display_name(base: Path, sid: str, scenes: dict | None = None) -> str:
 
 
 def _screenplay(base: Path, ep: str) -> dict:
-    """场次头与场尾「转场:」行:{scene_no: {header, int_ext, scene_id, name, tod, transition_out(本场末的转场句), transition_in(上一场末的转场句)}}"""
+    """场次头与场尾转场行:{scene_no: {header, int_ext, scene_id, name, tod, transition_out(本场末的转场句), transition_in(上一场末的转场句),
+    link_out(本场尾写的场间衔接初稿,docs/scene_links.md;没写为 None)}}。
+    转场行与场次由 modules/scene_links 统一识别(2026-10-10):此前只认行首是「转场」的写法,`- 转场:` / `**转场**:` / 英文
+    `TRANSITION:` / 独立一行 `CUT TO:` 都读不到,场头也只认 `## Sxx | INT | SCN-… | …` 一种排版。场头写法对得上
+    SCREENPLAY_HEAD_RE 的,字段仍取场头原文(存量口径不变);对不上的取剧本解析结果。"""
+    from modules import scene_links
+
     p = Path(base) / "story" / "episodes" / ep / "screenplay.md"
     try:
         text = p.read_text(encoding="utf-8") if p.is_file() else ""
     except OSError:
         text = ""
-    heads = list(SCREENPLAY_HEAD_RE.finditer(text))
+    rows = scene_links.scene_rows(text)
+    by_link = {x["from"]: x for x in scene_links.links(text, rows)}
     out, prev_out = {}, None
-    for i, m in enumerate(heads):
-        seg = text[m.end(): heads[i + 1].start() if i + 1 < len(heads) else len(text)]
-        tr = None
-        for line in seg.splitlines():
-            if line.strip().startswith("转场"):
-                tr = line.strip()
-        out[m.group(1)] = {"header": m.group(0).strip(), "int_ext": m.group(2), "scene_id": m.group(3),
-                           "name": m.group(4).strip(), "tod": m.group(5).strip(), "transition_out": tr,
-                           "transition_in": prev_out}
+    for r in rows:
+        no = str(r.get("no") or "")
+        if not no or no in out:
+            continue
+        hdr = r.get("header") or ""
+        m = SCREENPLAY_HEAD_RE.match(hdr)
+        tr = f"转场:{r['transition']}" if r.get("transition") else None
+        out[no] = {"header": m.group(0).strip() if m else hdr,
+                   "int_ext": m.group(2) if m else r.get("int_ext"),
+                   "scene_id": m.group(3) if m else r.get("scene_id"),
+                   "name": (m.group(4).strip() if m else r.get("scene_name")) or "",
+                   "tod": (m.group(5).strip() if m else r.get("time_of_day")) or "",
+                   "transition_out": tr, "transition_in": prev_out, "link_out": by_link.get(r.get("no"))}
         prev_out = tr
     return out
 
 
-def _director_notes(base: Path, ep: str) -> list[str]:
+def _plan_text(base: Path, ep: str) -> str:
     p = Path(base) / "directing" / ep / "directing_plan.md"
     try:
-        text = p.read_text(encoding="utf-8") if p.is_file() else ""
+        return p.read_text(encoding="utf-8") if p.is_file() else ""
     except OSError:
+        return ""
+
+
+def _director_notes(base: Path, ep: str) -> list[str]:
+    text = _plan_text(base, ep)
+    if not text:
         return []
     notes = []
     for line in text.splitlines():
@@ -494,6 +511,8 @@ def diagnose(base: Path, ep: str) -> list[dict]:
     cont = _continuity(base, ep)
     plates = _shot_plates(base, ep)
     from check_generation_groups import transition_of  # noqa: E402  (code/ 已入 sys.path)
+    from modules import scene_links as _scene_links
+    sdisps = _scene_links.parse_dispositions(_plan_text(base, ep)) if any(v.get("link_out") for v in sp.values()) else {}
     out = []
     for i in range(1, len(groups)):
         a, b = groups[i - 1], groups[i]
@@ -515,6 +534,14 @@ def diagnose(base: Path, ep: str) -> list[dict]:
         spb = sp.get(str(b.get("scene_no") or fb.get("scene_no") or "")) or {}
         spa = sp.get(str(a.get("scene_no") or fa.get("scene_no") or "")) or {}
         hint = spa.get("transition_out") if (sc or (spa.get("transition_out") and a.get("scene_no") != b.get("scene_no"))) else None
+        # 剧本场间衔接初稿(2026-10-10,docs/scene_links.md):只挂在「本场最后一组 → 它点名的下一场第一组」这条边界上;
+        # 一期只带进诊断供复核,出主设计仍按模式表(导演采纳的已在 shot_list,记 accepted)
+        a_no, b_no = str(a.get("scene_no") or fa.get("scene_no") or ""), str(b.get("scene_no") or fb.get("scene_no") or "")
+        slink = spa.get("link_out")
+        if not (slink and a_no != b_no and _scene_links.norm_no(slink["to"]) == _scene_links.norm_no(b_no)):
+            slink = None
+        # 二期:导演在转场清单里对这条衔接的处置(采纳 / 修改才登记进 transition_in.link;弃用 / 未处置按普通边界)
+        sdisp = sdisps.get((_scene_links.norm_no(slink["from"]), _scene_links.norm_no(slink["to"]))) if slink else None
         ct = cont.get((a["group_id"], b["group_id"])) or {}
         # 相对时间词:剧本场次头 > continuity 说明 > 无(派生只给时段词)
         time_word, time_src = None, None
@@ -553,7 +580,9 @@ def diagnose(base: Path, ep: str) -> list[dict]:
                 "time_word": time_word, "time_word_source": time_src,
                 "cast_change": cast, "light_jump": light,
                 "narrative_block_edge": edge, "narrative_block": (bb or ba) or None,
-                "screenplay_hint": hint, "screenplay_header": spb.get("header"),
+                "screenplay_hint": hint, "screenplay_header": spb.get("header"), "screenplay_link": slink,
+                "script_link_disposition": ({"disposition": sdisp.get("disposition"), "land": sdisp.get("land"),
+                                             "note": _scene_links.disposition_note(sdisp.get("reason"))} if sdisp else None),
                 "director_notes": dnotes,
                 "continuity": {k: ct.get(k) for k in ("id", "anchor", "boundary_type", "cast_change", "framing_change_ok")} if ct else None,
                 "first_shot_wide": _is_wide(fb), "first_shot_size": fb.get("size"),
@@ -935,29 +964,204 @@ def _designs_for(b: dict, eff: dict) -> tuple[dict | None, list[dict]]:
     return design, alts
 
 
+# ---------------------------------------------------------------- 剧本场间衔接 → 设计(二期 2026-10-10,docs/scene_links.md)
+# 导演在转场清单里采纳 / 修改的剧本衔接,由宿主登记进 transition_in.link(登记卡:类型、两头内容、落在哪两镜、导演的对位要求),
+# 边界记 accepted / source=script_link 并 apply 进 shot_list——它是导演定的,优先于模式预设;模式建议(字卡 / 定场)只进候选。
+# 分镜工位已落的 type / intent / reason / source 原样保留,只在上面加登记卡;没落的按导演写的类型补建。
+# 随衔接带的过场手段(运动接力 → 成对运镜,声音 / 台词接力 → 声先入)守模式口径:电影感自动带上,经典 / 自定义放候选,极简不出;
+# 白模开启时摄影机由白模视频定,成对运镜不自动带(只放候选)。
+LINK_TYPES = ("hard_cut", "match_cut", "smash_cut", "dissolve")
+LINK_DEVICE = {"motion": "motion_pair", "sound": "sound_bridge", "line": "sound_bridge"}
+LINK_SOURCES = ("transition_design", "script_link")      # 这两种来源的现有设计不算「导演 / 分镜工位落的」
+_MOTION_DIR = {"左": "pan_left", "右": "pan_right", "上": "tilt_up", "下": "tilt_down",
+               "left": "pan_left", "right": "pan_right", "up": "tilt_up", "down": "tilt_down"}
+
+
+def _motion_out(text: str) -> str:
+    """运动接力的出画方向 → 成对运镜 out(只看「出」那一头:向右出画 = pan_right);读不出用默认方向,工位 / 用户可在过场卡改。"""
+    m = re.search(r"向\s*(左|右|上|下)", text or "") or re.search(r"\b(left|right|up|down)(?:wards?)?\b", text or "", re.I)
+    return _MOTION_DIR.get(m.group(1).lower(), MOTION_DEFAULT[0]) if m else MOTION_DEFAULT[0]
+
+
+def _bridge_carry(eff: dict, d: dict, kind: str) -> str:
+    """声桥承载(同 _designs_for 内口径):项目默认 line、声画分离开着且切点旁有画外句才 line,否则 bed。"""
+    if str(eff.get("sound_bridge_carry") or "bed") == "line" and str(eff.get("sound_split") or "off") != "off":
+        if (kind == "j" and d.get("first_shot_offscreen_line")) or (kind == "l" and d.get("last_shot_offscreen_line")):
+            return "line"
+    return "bed"
+
+
+def _camera_locked(base: Path) -> bool:
+    """白模开启(output.spatial_blocking):摄影机由白模摄影机视频定,宿主不自动加成对运镜。"""
+    st = _read(Path(base) / "settings.json", {}) or {}
+    return isinstance(st.get("output"), dict) and st["output"].get("spatial_blocking") is True
+
+
+def _unlinked(cur_raw: dict | None) -> dict:
+    """现有 transition_in 去掉登记卡与随它带上的手段(link.device 记的那个键)= 分镜工位落的原样。"""
+    cur_raw = cur_raw if isinstance(cur_raw, dict) else {}
+    lk = cur_raw.get("link") if isinstance(cur_raw.get("link"), dict) else {}
+    return {k: v for k, v in cur_raw.items() if k != "link" and k != lk.get("device")}
+
+
+def _link_design(b: dict, eff: dict, cur_raw: dict | None, *, camera_locked: bool = False) -> tuple[dict, list[dict]] | None:
+    """边界上有导演采纳 / 修改的剧本衔接 → (主设计, 候选[]);否则 None。幂等:同样的输入重出同样的设计。"""
+    from check_generation_groups import MOTION_PAIRS  # noqa: E402
+    from modules import scene_links
+    d = b["diagnosis"]
+    lk, disp = d.get("screenplay_link"), d.get("script_link_disposition") or {}
+    if not lk or disp.get("disposition") not in ("adopt", "modify") or lk.get("kind") not in scene_links.KINDS:
+        return None
+    meta = scene_links.KINDS[lk["kind"]]
+    cur_raw = cur_raw if isinstance(cur_raw, dict) else {}
+    where = f"剧本衔接 {lk['from']}→{lk['to']}({meta['zh']})"
+    if cur_raw and cur_raw.get("source") not in LINK_SOURCES:
+        base_t = _unlinked(cur_raw)
+    else:
+        ty = disp.get("land") or meta["land"]
+        base_t = {"type": ty, "intent": _intent(d),
+                  "reason": f"{where}:导演{scene_links.DISPOSITIONS[disp['disposition']]}" + (f"——{disp['note']}" if disp.get("note") else ""),
+                  "source": "script_link"}
+        if ty == "dissolve":
+            base_t["duration_s"] = 0.5
+    if base_t.get("type") not in LINK_TYPES or base_t.get("inserts") or base_t.get("hold_s"):
+        return None        # 隔黑 / 插了字卡:衔接不成立,不登记(对账 script_links_landed 会报类型不符)
+    if not str(base_t.get("reason") or "").strip():
+        base_t["reason"] = where
+    if not base_t.get("intent"):
+        base_t["intent"] = _intent(d)
+    shots = b.get("boundary_shots") or [None, None]
+
+    def with_link(t: dict, device: str | None = None) -> dict:
+        return {**t, "link": scene_links.link_record(lk, out_shot=shots[0], in_shot=shots[1], note=disp.get("note") or "", device=device)}
+
+    plain = with_link(base_t)
+    dev = LINK_DEVICE.get(lk["kind"])
+    with_dev = None
+    if dev and eff.get("mode") != "minimal" and base_t["type"] in ("hard_cut", "dissolve") and dev not in base_t:
+        t = dict(base_t)
+        if dev == "motion_pair":
+            out = _motion_out(lk["out"])
+            t["motion_pair"] = {"out": out, "in": MOTION_PAIRS[out], "speed": MOTION_DEFAULT[2]}
+        else:
+            t["sound_bridge"] = {"kind": "j", "s": float(eff.get("sound_bridge_s") or SOUND_BRIDGE_S), "carry": _bridge_carry(eff, d, "j")}
+        with_dev = with_link(t, dev)
+    if with_dev is None:
+        return plain, []
+    name = "成对运镜" if dev == "motion_pair" else "声先入"
+    if eff.get("mode") == "cinematic" and not (dev == "motion_pair" and camera_locked):
+        return with_dev, [{"label": f"衔接(不带{name})", "transition_in": plain}]
+    return plain, [{"label": f"衔接 + {name}", "transition_in": with_dev}]
+
+
+def _rewrite_transitions(base: Path, ep: str, by_group: dict[str, dict]) -> None:
+    """把若干组的 transition_in 直接改成给定值(空 = 删键);只用于撤掉过期的衔接登记卡。json 读写保真。"""
+    slp = Path(base) / "directing" / ep / "shot_list.json"
+    sl = _read(slp, None)
+    if not isinstance(sl, dict):
+        return
+    changed = False
+    for g in sl.get("generation_groups") or []:
+        if isinstance(g, dict) and g.get("group_id") in by_group:
+            new = by_group[g["group_id"]]
+            if new:
+                if g.get("transition_in") != new:
+                    g["transition_in"], changed = new, True
+            elif "transition_in" in g:
+                del g["transition_in"]
+                changed = True
+    if changed:
+        sl.setdefault("_meta", {})["transition_design_applied_at"] = dt.datetime.now().isoformat(timespec="seconds")
+        _write(slp, sl)
+
+
+def _user_decided(prev: dict, force: bool = False) -> bool:
+    return prev.get("status") in ("accepted", "rejected") and prev.get("source") == "user" and not force
+
+
+def land_script_links(base: Path, ep: str) -> list[str]:
+    """本集有「导演采纳的剧本衔接还没登记进 shot_list」或「登记卡已过期」的边界时跑一次 propose(其内登记 / 撤销并写回);
+    返回这些边界 id。没有就什么都不做(不为此新建设计表)。H3A 签字时宿主调用(极简模式没有过场设计节点,靠这里兜底)。"""
+    base = Path(base)
+    eff = effective(base, ep)
+    locked = _camera_locked(base)
+    prev_by = {b.get("id"): b for b in ((load_design(base, ep) or {}).get("boundaries") or []) if isinstance(b, dict)}
+    pending = []
+    for b in diagnose(base, ep):
+        if _user_decided(prev_by.get(b["id"]) or {}):
+            continue
+        cur_raw = b.get("current_raw") or {}
+        link = _link_design(b, eff, cur_raw, camera_locked=locked)
+        if (link is not None and _clean_design(link[0]) != cur_raw) or (link is None and isinstance(cur_raw.get("link"), dict)):
+            pending.append(b["id"])
+    if pending:
+        propose(base, ep)
+    return pending
+
+
 def propose(base: Path, ep: str, *, force: bool = False) -> dict:
     """按生效模式重出全集建议,写 transition_design.json。已 accepted / rejected 的边界保留裁决(force=True 时也重出但保留 feedback);
-    shot_list 里非本模块来源的非硬切设计(导演清单)记为 status=accepted, source=shot_list。"""
+    shot_list 里非本模块来源的非硬切设计(导演清单)记为 status=accepted, source=shot_list。
+    二期(2026-10-10):导演采纳 / 修改的剧本场间衔接登记为 transition_in.link(status=accepted, source=script_link)并当场写回 shot_list;
+    剧本或导演处置撤了的衔接,登记卡一并撤掉。用户在过场卡上裁决过的边界(source=user)不动。"""
     base = Path(base)
     eff = effective(base, ep)
     old = load_design(base, ep) or {}
     old_by = {b.get("id"): b for b in (old.get("boundaries") or []) if isinstance(b, dict)}
     rows = []
+    locked = _camera_locked(base)
+    strip: dict[str, dict] = {}      # 过期登记卡:组 → 撤掉后的 transition_in(空 = 整条删)
+    need_apply = False
+    from check_generation_groups import transition_of  # noqa: E402
     for b in diagnose(base, ep):
         prev = old_by.get(b["id"]) or {}
+        cur_raw = b.get("current_raw") or {}
+        user_decided = _user_decided(prev, force)
+        link = None if user_decided else _link_design(b, eff, cur_raw, camera_locked=locked)
+        if link is None and not user_decided and isinstance(cur_raw.get("link"), dict):
+            # 剧本 / 导演处置里已没有这条采纳的衔接:撤掉登记卡与随它带的手段;宿主补建的整条撤掉,分镜工位落的底子留下
+            cleaned = {} if cur_raw.get("source") == "script_link" else _unlinked(cur_raw)
+            strip[b["to_group"]] = cleaned
+            cur_raw = cleaned
+            b = {**b, "current_raw": cleaned or None, "current": transition_of({"transition_in": cleaned}) if cleaned else {"type": "hard_cut"}}
         design, alts = _designs_for(b, eff)
         cur = b.get("current") or {"type": "hard_cut"}
-        cur_raw = b.get("current_raw") or {}
+        prev_base = _unlinked(cur_raw) if cur_raw.get("source") not in LINK_SOURCES else prev.get("prev_transition_in")
         entry = {**b, "alternatives": alts, "feedback": prev.get("feedback") or [],
-                 "prev_transition_in": prev.get("prev_transition_in", cur_raw if cur_raw.get("source") != "transition_design" else prev.get("prev_transition_in"))}
-        if cur_raw and cur_raw.get("source") not in ("transition_design",) and (cur.get("type") != "hard_cut" or cur_raw.get("reason")):
+                 "prev_transition_in": prev.get("prev_transition_in", prev_base)}
+        if link is not None:
+            # 导演采纳的剧本衔接:已定稿(source=script_link),模式建议与带 / 不带手段的变体进候选
+            ldesign, lalts = link
+            entry["design"] = ldesign
+            entry["status"] = "accepted"
+            entry["source"] = "script_link"
+            entry["alternatives"] = lalts + ([{"label": f"过场模式建议({eff['mode']})", "transition_in": design}] if design is not None else []) + alts
+            if _clean_design(ldesign) != cur_raw:
+                need_apply = True
+        elif user_decided and b["diagnosis"].get("screenplay_link"):
+            # 有剧本衔接的边界上用户已在过场卡裁决(选了候选 / 保持硬切):原样保留。必须先于下面的「shot_list 现有设计」分支——
+            # 用户选的带衔接候选来源不是 transition_design,落到那个分支会被当成导演清单,下次重出就按模式重算、把用户的选择冲掉
+            entry["design"] = prev.get("design")
+            entry["status"] = prev["status"]
+            entry["source"] = "user"
+            for k in ("decided_at", "decided_by"):
+                if prev.get(k):
+                    entry[k] = prev[k]
+            if design is not None and not any(a.get("transition_in") == design for a in entry["alternatives"]):
+                entry["alternatives"] = [{"label": f"过场模式建议({eff['mode']})", "transition_in": design}] + entry["alternatives"]
+            back = _link_design(b, eff, cur_raw, camera_locked=locked)     # 留一条回头路:导演采纳的衔接方案放进候选
+            if back is not None:
+                backs = [{"label": "剧本衔接(导演采纳)", "transition_in": back[0]}] + back[1]
+                entry["alternatives"] = [a for a in backs if a["transition_in"] != entry["design"]] + entry["alternatives"]
+        elif cur_raw and cur_raw.get("source") not in ("transition_design",) and (cur.get("type") != "hard_cut" or cur_raw.get("reason")):
             # 导演清单 / 后期页写入的现有设计:视为已定稿,建议只进候选
             entry["design"] = dict(cur_raw)
             entry["status"] = "accepted"
             entry["source"] = "post_plan" if cur_raw.get("source") == "post_plan" else "shot_list"
             if design is not None:
                 entry["alternatives"] = [{"label": f"过场模式建议({eff['mode']})", "transition_in": design}] + alts
-        elif prev.get("status") in ("accepted", "rejected") and not force:
+        elif prev.get("status") in ("accepted", "rejected") and prev.get("source") != "script_link" and not force:
+            # (source=script_link 的旧条目是宿主按剧本衔接推出来的,不是谁的裁决:衔接撤了就不保留)
             entry["design"] = prev.get("design")
             entry["status"] = prev["status"]
             entry["source"] = prev.get("source") or "user"
@@ -987,6 +1191,10 @@ def propose(base: Path, ep: str, *, force: bool = False) -> dict:
                                                  "sound_bridge_s", "sound_bridge_carry")},
             "written_at": dt.datetime.now().isoformat(timespec="seconds"), "boundaries": rows}
     _write(design_path(base, ep), data)
+    if strip:
+        _rewrite_transitions(base, ep, strip)
+    if need_apply:
+        apply(base, ep)       # 衔接是导演定的:登记卡随 propose 直接写回 shot_list(其余 accepted 边界本就同步,幂等)
     return data
 
 

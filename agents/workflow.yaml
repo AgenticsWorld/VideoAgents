@@ -207,8 +207,8 @@ phases:
       - { id: p5-episode-plan, agent: 01-story/episode-planner, outputs: [story/episode_plan.json],   # 2026-09-12 §5A:事件「分配」改「归类+取舍」,每集 treatments[] 逐事件定 dramatize/mention/merge/cut;机检 code/verify_episode_plan.py --project
           validation: { auto: [events_classified_once, treatments_complete, dramatize_within_cap, hook_points_dramatized, cut_not_on_causal_chain, merge_target_valid, duration_in_budget], rubric: writing_v1 } }
       - { id: p5-screenplay, agent: 01-story/screenplay, for_each: episode, depends_on: [p5-episode-plan],
-          outputs: ["story/episodes/{ep}/screenplay.md"],   # 只把 dramatize 事件写成场,每场首行 [事件] 行;机检 code/check_screenplay_events.py --project --ep(§5A,2026-09-12)
-          validation: { auto: [id_refs_valid, dramatized_events_covered, cut_events_absent, scene_has_dramatized_event], rubric: writing_v1, qa: [11-qa/logic-qa] } }
+          outputs: ["story/episodes/{ep}/screenplay.md"],   # 只把 dramatize 事件写成场,每场首行 [事件] 行;机检 code/check_screenplay_events.py --project --ep(§5A,2026-09-12);scene_link_valid 同 CLI(2026-10-10,docs/scene_links.md:场尾转场行的场间衔接 {衔接, 出, 入};没写衔接的剧本直接 PASS)
+          validation: { auto: [id_refs_valid, dramatized_events_covered, cut_events_absent, scene_has_dramatized_event, scene_link_valid], rubric: writing_v1, qa: [11-qa/logic-qa] } }
       - { id: p5-dialogue, agent: 01-story/dialogue-rewrite, for_each: episode, depends_on: [p5-screenplay],
           validation: { auto: [style_hit_rate_gte_80, line_duration_fits] } }   # 2026-10-03 起每句对白行元信息随 emotion 写 pace: fast|medium|slow(语速档),估时按时间尺(modules/time_cost.py)   # line_duration_fits:code/check_dialogue_fit.py 无 shot_list 时的「仅剧本层」模式(line_le_cap + line_est_consistent,2026-08-30)
       - { id: p5-narration, agent: 01-story/narration, for_each: episode, depends_on: [p5-dialogue],
@@ -261,7 +261,7 @@ phases:
           outputs: ["assets/concepts/creatures/{id}/"],
           validation: { auto: [creature_identifiers_match, creature_image_no_person, creature_stage_variants_ok], qa: [11-qa/visual-qa] } }
       - { id: p6-plan, agent: 07-directing/director, outputs: ["directing/{ep}/directing_plan.md"],
-          validation: { rubric: creative_v1, qa: [06-art/art-director] } }
+          validation: { auto: [script_links_disposed], rubric: creative_v1, qa: [06-art/art-director] } }   # script_links_disposed(2026-10-10,docs/scene_links.md):code/check_scene_links.py --project --ep——剧本场尾转场行每条场间衔接,转场清单里都有一行「剧本衔接 Sxx→Syy:采纳 | 修改 | 弃用」;剧本没写衔接 = 不适用,直接 PASS,不必为此跑额外步骤
       - { id: p6-storyboard, agent: 07-directing/storyboard, depends_on: [p6-plan, p6-env-concept],   # 白模开启时 blocking_map 引用本集场景 layout.json 地标,须等本集场景布局包出齐
           outputs: ["directing/{ep}/storyboard.json"],   # 含 groups_draft(生成组草案)、每组 scene_refs/blocking_map(人物起点/动线/终点标注,引用场景 layout.json 地标)、每组 costumes(角色→COS-id,2026-08-26)、每镜 view_tile
           validation: { auto: [scene_coverage_100, every_shot_in_group, blocking_map_present, creature_refs_valid,
@@ -278,6 +278,7 @@ phases:
                                group_audio_plan_defined, ambient_only_groups_justified,
                                dialogue_est_fits_group_x0.7,   # 2026-08-30 起由 code/check_dialogue_fit.py 执行(dialogue_fit_group),超限不再自查放行——定稿后固定进 p6-dialogue-fit 精简环节
                                shot_time_budget_ok, group_density_ok,   # 时间尺(2026-10-03):每镜镜长 ≥ 节拍单价 + 台词估时 + 余量;平均镜长 <1.5s 的密集组 ≤15s(code/check_time_budget.py --scope shots;group_density_ok 也内置于 check_generation_groups.py)
+                               script_links_landed,   # 2026-10-10 二期(docs/scene_links.md):code/check_scene_links.py --project --ep——导演采纳 / 修改的剧本场间衔接,后一场第一组有显式 transition_in 且类型一致;登记卡 transition_in.link 由宿主写(未写只 WARN);剧本无衔接 = 不适用 PASS
                                creature_refs_valid,   # 每镜 creatures[] / 组 creatures_union 引用须存在于 bible/creatures/index.json(2026-08-26)
                                costume_refs_valid,    # 每镜 costumes{CHAR:COS} / 组 costumes_by_char 合法且组内同角色同一套;换装点只能落在组边界(costume_change_on_group_boundary,2026-08-26)
                                transition_ok,         # 组入口转场 transition_in:类型枚举/时长范围/非硬切必填 intent+reason/Σ可渲染 ≤ 集预算 1%/narrative_block 成对连续(code/check_generation_groups.py 内置,WORKFLOW.md §9C,2026-08-28)
@@ -379,6 +380,7 @@ phases:
                                sd25_prompt_structure,   # 2026-09-09:套用 sd25-pe 的组正文必须按 2.5 官方结构(【人物】/【动作与声音】分组、每镜「使用/不采用」清单、【未采用素材】、【保持一致】;【场景】槽位由 sync_shot_plates 写),同脚本自动执行
                                h3_prompt_structure,   # 2026-09-09:期望 h3-pe 的组正文必须按 H3 Ref2VA 六段结构(subject_definitions 逐图 <Subject N>…<Picture i> / retention_analysis 逐份 / <d> 台词 / <Audio N> 绑 (Sx);背景图 <Picture N> 构图锚与 Plate anchor 由 sync_shot_plates 写),同脚本自动执行;自述 checklist 不算数。原注释:套用 sd25-pe 的组正文必须按 2.5 官方结构(【人物】/【动作与声音】分组、每镜「使用/不采用」清单、【未采用素材】、【保持一致】;【场景】槽位由 sync_shot_plates 写),同脚本自动执行;自述 checklist 不算数。原注释:组 json 回执 skill_applied 与项目「提示词技能」快照一致(id/sha256/checklist;不套用时 id=null+reason),code/prompt_skill_check.py;运行时另核 prompt_skill_read——漏读 SKILL.md 的运行直接 error 退回(2026-08-28)
                                motion_pair_bound,   # 2026-09-26 三期:组边界 transition_in.motion_pair(成对运镜)两侧组 prompt 含宿主写入的「【运镜对接】」句(前组末 Shot 段尾镜带出 / 本组首 Shot 段接入),残留过期句 = 违规;code/sync_motion_pairs.py --write 机器写入,无 motion_pair 的集 PASS
+                               scene_link_bound,   # 2026-10-10 二期(docs/scene_links.md):组边界 transition_in.link(场间衔接登记卡)两侧组 prompt 含宿主写入的「【场间衔接】」句(前组末 Shot 段落点 / 本组首 Shot 段起点),残留过期句 = 违规;code/sync_scene_links.py --write 机器写入并对账 script_links_landed;无登记卡的集 PASS
                                shot_timing_bound] } }   # 2026-09-23:镜次时长——shot_list 每镜 duration_s 按生效模型官方写法进正文(2.5/Wan 3.0 连续整数秒时间段标在段首镜段头后、H3 Shot k≥2 切点 At MM:SS.mmm,、2.0 不写),标签齐全/连续/末段止于 round(total_duration_s)/Σ duration_s = total_duration_s;code/sync_shot_timing.py --write 机器写入(§7F ⑩)
       # 视频提示词签字(2026-10-05):本集**全部**生成组的 p7-prompt 关单(含各 sync_* 机器写入段与 validation.auto 全过)后,用户在「🎦 分镜预览」页
       # (/preview/storyboard)逐组审看视频提示词(正文 + 参考图 / 参考视频 / 参考音频清单)并签字;集行右侧有「✅ 签字确认 / ⏸ 暂缓」(与控制台签字卡同一条)。

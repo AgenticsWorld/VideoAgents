@@ -8,7 +8,8 @@ shot_list.generation_groups[].transition_in 仍是唯一定稿字段,只由本 C
   diagnose  逐边界诊断(不写文件):换场景 / 跳时段 / 阵容 / 光线 / 叙事块进出、剧本「转场:」句、导演包装声明、continuity 判定、
             字卡文字候选(时间词来源 screenplay / continuity / derived=推定)、定场素材可用性(全景锚点 / 母图)
   propose   按本集生效「过场模式」(settings.json#transitions,集级 episode.json#transitions_mode 覆盖)重出全集建议 → 设计表;
-            已 accepted / rejected 的边界保留裁决;shot_list 里导演清单 / 后期页写的现有设计记 accepted(source=shot_list/post_plan)
+            已 accepted / rejected 的边界保留裁决;shot_list 里导演清单 / 后期页写的现有设计记 accepted(source=shot_list/post_plan);
+            导演采纳的剧本场间衔接登记成 transition_in.link 并当场写回 shot_list(source=script_link,docs/scene_links.md 二期),撤了的一并撤
   accept    --boundary B-grpA-grpB [--alt N | --design '<json>']:接受主设计 / 第 N 个候选 / 用户给的 transition_in,并 apply
   reject    --boundary …:裁定保持硬切(原有导演设计则恢复),并 apply
   card      --boundary … --lines "次日清晨" "天庭 · 南天门":改字卡 / 叠字幕文字(source=user),已接受则同步 apply
@@ -69,6 +70,13 @@ def _fmt_design(t):
         bits.append(f"+{x.get('kind')} {float(x.get('duration_s') or 0):g}s{extra}")
     if t.get("overlay_card"):
         bits.append("叠字 " + " / ".join(t["overlay_card"].get("lines") or []))
+    if isinstance(t.get("link"), dict):      # 剧本场间衔接登记卡(docs/scene_links.md)
+        lk = t["link"]
+        bits.append(f"衔接 {lk.get('kind')}:{lk.get('out')} → {lk.get('in')}")
+    if isinstance(t.get("motion_pair"), dict):
+        bits.append(f"成对运镜 {t['motion_pair'].get('out')}→{t['motion_pair'].get('in')}")
+    if isinstance(t.get("sound_bridge"), dict):
+        bits.append(f"声桥 {str(t['sound_bridge'].get('kind')).upper()} {t['sound_bridge'].get('s')}s")
     return " · ".join(bits)
 
 
