@@ -1737,7 +1737,7 @@ function transCard(tr){
       ${editable?`<button class="editbtn trbtn" data-act="edit" data-bid="${esc(tr.id)}" title="${t('改字卡 / 叠字幕文字')}">✎ ${t('改字')}</button>`:''}
       <button class="editbtn trbtn" data-act="preview" data-bid="${esc(tr.id)}" title="${t('渲染边界预览小片:前组尾 2s + 过场 + 本组首 2s,与成片同一滤镜链(约 10–40 秒)')}">▶ ${t('出预览')}</button>
       <button class="editbtn" data-kind="transition" data-id="${esc(tr.id)}" data-loc="${esc(loc)}" title="${t('对这处过场提修改意见,发给修改师处理')}">✏️ ${t('修改')}</button>
-      <span class="tredit" style="display:none" data-bid="${esc(tr.id)}">${[0,1,2].map(i=>`<input placeholder="${t('第')} ${i+1} ${t('行')}" value="${esc(cardLines[i]||'')}">`).join('')}<button class="editbtn trbtn" data-act="save-lines" data-bid="${esc(tr.id)}">💾</button><button class="editbtn trbtn" data-act="cancel-edit" data-bid="${esc(tr.id)}">✕</button></span>
+      <span class="tredit" style="display:none" data-bid="${esc(tr.id)}">${[0,1,2].map(i=>`<input placeholder="${esc(I18N.f('第 {n} 行',{n:i+1}))}" value="${esc(cardLines[i]||'')}">`).join('')}<button class="editbtn trbtn" data-act="save-lines" data-bid="${esc(tr.id)}">💾</button><button class="editbtn trbtn" data-act="cancel-edit" data-bid="${esc(tr.id)}">✕</button></span>
       <span class="trmsg" style="color:var(--dim);font-size:11.5px"></span>
     </div>${fb}
   </div>`;

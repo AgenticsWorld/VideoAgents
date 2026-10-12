@@ -331,6 +331,8 @@ const maxV=gid=>versionsOf(gid).reduce((m,v)=>Math.max(m,v.v),0);
 const runningBatches=()=>(((DD||{}).ledger||{}).batches||[]).filter(b=>b.status==='running');
 const shotOf=sid=>SB&&(SB.shots||[]).find(s=>s.shot_id===sid);
 const TL=k=>((DD||{}).labels||{}).target?.[k]||k;
+// 版本说明是宿主落盘的固定写法(提交前基线 / 批次 B-NNNN),显示时按界面语言转写;其余写法原样
+const VL=l=>{const m=/^批次 (\S+)$/.exec(l||'');return m?I18N.f('批次 {id}',{id:m[1]}):t(l||'')};
 
 /* ---------- 加载 ---------- */
 async function load(keep){
@@ -702,7 +704,7 @@ async function sourceData(sel,gid){
   const g=grpById(gid);
   if(sel==='live')return {scene:WB.scenes[g.scene_id],group:g,label:t('当前(实时)')};
   const v=await J(api('/versions/'+encodeURIComponent(gid)+'/'+encodeURIComponent(sel)));
-  return {scene:v.scene,group:v.group,label:'v'+v.v+(v.label?' · '+v.label:'')};
+  return {scene:v.scene,group:v.group,label:'v'+v.v+(v.label?' · '+VL(v.label):'')};
 }
 async function setGroup(){
   // 渲染器只建一次、换组只重载场景:同一 canvas 上 dispose(forceContextLoss)后再 new WebGLRenderer 拿到的是已丢失的上下文,
@@ -1449,7 +1451,7 @@ function selectVersion(version){
 }
 function renderVersionSelects(){
   const vs=versionsOf(SEL).slice().sort((a,b)=>b.v-a.v);
-  const opts=`<option value="live">${esc(t('当前(实时)'))}</option>`+vs.map(v=>`<option value="${v.v}">v${v.v}${v.label?' · '+esc(v.label):''}</option>`).join('');
+  const opts=`<option value="live">${esc(t('当前(实时)'))}</option>`+vs.map(v=>`<option value="${v.v}">v${v.v}${v.label?' · '+esc(VL(v.label)):''}</option>`).join('');
   const select=$('#version');if(!select)return;
   select.innerHTML=opts;select.value=(VERSION==='live'||vs.some(v=>String(v.v)===String(VERSION)))?String(VERSION):'live';
   VERSION=select.value;
@@ -1476,7 +1478,7 @@ function renderRight(){
   const draftBody=`${ovRow}${notes.length?notes.slice().reverse().map(noteHtml).join(''):ovRow?'':`<div class="bat">${esc(t('还没有注释:点 3D 里的对象或下方对象卡,写下修改要求'))}</div>`}
     <div class="nform" id="nform"${draftOnly?' style="display:none"':''}>
       <div class="row"><label>${esc(t('对象'))}</label><select id="nf-target"></select></div>
-      <div class="row"><label>${esc(t('发给'))}</label><select id="nf-agent">${Object.entries(DD.routes||{}).map(([a,l])=>`<option value="${esc(a)}">${esc(l)}${a===DD.agent?' · '+esc(t('默认')):''}</option>`).join('')}</select></div>
+      <div class="row"><label>${esc(t('发给'))}</label><select id="nf-agent">${Object.entries(DD.routes||{}).map(([a,l])=>`<option value="${esc(a)}">${esc(t(l))}${a===DD.agent?' · '+esc(t('默认')):''}</option>`).join('')}</select></div>
       <div class="row"><label>${esc(t('镜/时刻'))}</label><div style="display:flex;gap:6px;align-items:center"><select id="nf-shot" style="width:auto"></select><label style="display:inline-flex;gap:4px;align-items:center;color:var(--dim)"><input type="checkbox" id="nf-uset" checked> t=</label><input type="number" id="nf-t" step="0.1" min="0" style="width:70px"> s</div></div>
       <div class="row"><label>${esc(t('要求'))}</label><textarea id="nf-text" placeholder="${esc(t('例:何香在 3 秒时往北挪 1 米,面向王三合;机位降到 1.2 m 平视'))}"></textarea></div>
       <div class="btns"><span class="msg" id="nf-msg"></span><button class="sm" id="nf-clear">${esc(t('清空'))}</button><button class="sm pri" id="nf-save">${esc(t('加入队列'))}</button></div>
@@ -1488,7 +1490,7 @@ function renderRight(){
   const vs=versionsOf(gid).slice().sort((a,b)=>b.v-a.v);
   const batches=(DD.ledger.batches||[]).filter(b=>NOTE_SCOPE==='all'||b.group_ids.includes(gid)).slice().reverse();
   const vbody=`<div class="subrow"><span class="msg">${esc(t('版本 = 该组编译结果快照;选择一个版本预览播放'))}</span><button class="sm" id="snap"${draftOnly?' disabled':''}>${esc(t('把当前存为版本'))}</button></div>
-    ${vs.map(v=>`<div class="ver"><span class="v">v${v.v}</span><span class="lb" data-no-i18n>${esc(v.label||'')}${v.batch_id?' · '+esc(v.batch_id):''}</span><span class="lb">${esc((v.created_at||'').slice(5,16))}</span><span class="sp"></span>${String(VERSION)===String(v.v)?`<span class="cur">${esc(t('当前选择'))}</span>`:''}<button class="xs" data-version="${v.v}">${esc(t('预览'))}</button></div>`).join('')||`<div class="bat">${esc(t('还没有版本;首次提交会自动存一份基线'))}</div>`}
+    ${vs.map(v=>`<div class="ver"><span class="v">v${v.v}</span><span class="lb" data-no-i18n>${esc(VL(v.label))}${v.batch_id?' · '+esc(v.batch_id):''}</span><span class="lb">${esc((v.created_at||'').slice(5,16))}</span><span class="sp"></span>${String(VERSION)===String(v.v)?`<span class="cur">${esc(t('当前选择'))}</span>`:''}<button class="xs" data-version="${v.v}">${esc(t('预览'))}</button></div>`).join('')||`<div class="bat">${esc(t('还没有版本;首次提交会自动存一份基线'))}</div>`}
     ${batches.length?`<div class="sec-h" style="position:static">${esc(t('批次'))} <span class="lite">${batches.length}</span></div>`:''}
     ${batches.map(b=>`<div class="bat"><b>${esc(b.id)}</b> <span class="st ${esc(b.status)}">${esc((DD.labels.batch_status||{})[b.status]||b.status)}</span> · ${esc(b.group_ids.join(', '))} · ${esc(I18N.f('{n} 条注释',{n:(b.note_ids||[]).length}))}${(b.issue_ids||[]).length?' · '+esc(I18N.f('{n} 项裁决',{n:b.issue_ids.length})):''}${b.run_id?` · <a href="/?run=${encodeURIComponent(b.run_id)}" target="_blank" data-no-i18n>${esc(String(b.run_id).slice(0,8))}</a>`:''}${Object.keys(b.versions||{}).length?' → '+esc(Object.entries(b.versions).map(([g,v])=>g+' v'+v).join(', ')):''}${b.error?` · <span style="color:var(--red)">${esc(b.error)}</span>`:''}<br><span data-no-i18n>${esc(b.created_at||'')}</span></div>`).join('')}`;
   h+=acc('vers',`▣ ${esc(t('已提交版本'))}`,`${vs.length}`,vbody);
@@ -1535,7 +1537,7 @@ function issueHtml(i){
 function noteHtml(n){
   const tg=n.target||{},color=colorOf(tg.id);
   const other=n.group_id!==SEL;
-  return `<div class="note ${other?'other':''}" data-nid="${esc(n.id)}"><div class="r1"><span class="tg"><i style="background:${esc(color)}"></i>${esc(TL(tg.kind))} ${esc(tg.label||tg.id||'')}</span>${other?`<button class="xs" data-gsel="${esc(n.group_id)}">${esc(n.group_id)}</button>`:''}${n.shot_id?`<span class="tag" data-no-i18n>${esc(n.shot_id)}</span>`:''}${n.t!=null?`<button class="xs" data-jump="${n.t}" title="${esc(t('跳到该时刻'))}">t=${esc(n.t)}s</button>`:''}${n.target_agent&&n.target_agent!==DD.agent?`<span class="tag" title="${esc(n.target_agent)}">→ ${esc((DD.routes||{})[n.target_agent]||n.target_agent)}</span>`:''}<span class="sp"></span><span class="st ${esc(n.status)}" title="${n.verified===false?esc(t('其它工位无编译指纹可核验,以运行回执为准')):''}">${esc((DD.labels.note_status||{})[n.status]||n.status)}${n.verified===false?'*':''}</span></div>
+  return `<div class="note ${other?'other':''}" data-nid="${esc(n.id)}"><div class="r1"><span class="tg"><i style="background:${esc(color)}"></i>${esc(t(TL(tg.kind)))} ${esc(tg.label||tg.id||'')}</span>${other?`<button class="xs" data-gsel="${esc(n.group_id)}">${esc(n.group_id)}</button>`:''}${n.shot_id?`<span class="tag" data-no-i18n>${esc(n.shot_id)}</span>`:''}${n.t!=null?`<button class="xs" data-jump="${n.t}" title="${esc(t('跳到该时刻'))}">t=${esc(n.t)}s</button>`:''}${n.target_agent&&n.target_agent!==DD.agent?`<span class="tag" title="${esc(n.target_agent)}">→ ${esc((DD.routes||{})[n.target_agent]||n.target_agent)}</span>`:''}<span class="sp"></span><span class="st ${esc(n.status)}" title="${n.verified===false?esc(t('其它工位无编译指纹可核验,以运行回执为准')):''}">${esc((DD.labels.note_status||{})[n.status]||n.status)}${n.verified===false?'*':''}</span></div>
     <div class="txt" data-no-i18n>${esc(n.text)}</div>
     <div class="r2"><span>${esc(n.id)}</span><span>${esc((n.updated_at||n.created_at||'').slice(5,16))}</span>${n.batch_id?`<span>${esc(n.batch_id)}</span>`:''}${n.version_after?`<span>→ v${esc(n.version_after)}</span>`:''}${n.error?`<span class="err">${esc(n.error)}</span>`:''}</div>
     ${n.status==='draft'?`<div class="r3"><button class="xs" data-edit="${esc(n.id)}">${esc(t('编辑'))}</button><button class="xs warn" data-del="${esc(n.id)}">${esc(t('删除'))}</button></div>`:''}</div>`;
@@ -1566,7 +1568,7 @@ function restoreNoteForm(){
 function fillNoteForm(p,keepText){
   const sel=$('#nf-target'),shot=$('#nf-shot'),tin=$('#nf-t');if(!sel)return;
   const rows=objectRows();
-  sel.innerHTML=rows.map(r=>`<option value="${esc(r.kind)}|${esc(r.id)}" data-label="${esc(r.stored||r.label)}">${esc(TL(r.kind))} · ${esc(r.label)}</option>`).join('');
+  sel.innerHTML=rows.map(r=>`<option value="${esc(r.kind)}|${esc(r.id)}" data-label="${esc(r.stored||r.label)}">${esc(t(TL(r.kind)))} · ${esc(r.label)}</option>`).join('');
   if(p){sel.value=p.kind+'|'+p.id;if(sel.selectedIndex<0)sel.selectedIndex=0;const ta=$('#nf-text');if(p.object&&ta&&!ta.value)ta.value='['+p.object+'] '}
   else if(sel.selectedIndex<0)sel.selectedIndex=0;
   const g=grpById(SEL);

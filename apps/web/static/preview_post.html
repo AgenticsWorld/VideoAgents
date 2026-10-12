@@ -694,8 +694,8 @@ function setMonitor(keepTime){
   loadShotCuts(SEL,VA);
   if(vb.dataset.src!==fb.url){vb.src=fb.url;vb.dataset.src=fb.url}
   va.muted=vidMuted(SEL);vb.muted=true;
-  $('#tagA').textContent='A · '+(VA===0?'v0 母本':'v'+VA)+(VA===cur?' ★':'');
-  $('#tagB').textContent='B · '+(VB===0?'v0 母本':'v'+VB)+(VB===cur?' ★':'');
+  $('#tagA').textContent='A · '+(VA===0?t('母本 v0'):'v'+VA)+(VA===cur?' ★':'');
+  $('#tagB').textContent='B · '+(VB===0?t('母本 v0'):'v'+VB)+(VB===cur?' ★':'');
   $('#xgid').textContent=SEL;
   va.addEventListener('loadedmetadata',()=>{if(keepTime)seekTo(t0);renderWaves();drawRange();drawCuts();drawShotCuts()},{once:true});
   applyAB();refreshMonitorMeta();drawMask();drawRange();renderWaves();renderCut();drawCuts();drawShotCuts();stemSync();

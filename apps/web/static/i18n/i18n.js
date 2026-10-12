@@ -103,7 +103,8 @@
   function trAttr(el, name) {
     if (!el.getAttribute) return;
     var v = el.getAttribute(name);
-    if (!v || !/[一-鿿]/.test(v) || inSkipped(el)) return;
+    // placeholder 是界面提示语:元素自身的 data-no-i18n 只保护用户填的值,不挡提示语(祖先带标记时仍整块不译)
+    if (!v || !/[一-鿿]/.test(v) || inSkipped(name === 'placeholder' ? el.parentElement : el)) return;
     var nv = tr(v);
     if (nv !== v) el.setAttribute(name, nv);
   }
