@@ -1,34 +1,243 @@
-# VideoAgents
+<p align="center">
+  <img src="docs/assets/readme/logo.png" alt="VideoAgents" width="96" />
+</p>
 
-**人人都能创作视频 —— 全自动智能体团队，成片成本仅约每分钟 3 美元。**
+<h1 align="center">VideoAgents</h1>
 
-[English](README.md) · [💬 加入 Discord 社群](https://discord.gg/faaZCrWxCq)
+<p align="center">
+  <strong>人人都能创作视频 —— 全自动智能体团队，成片成本仅约每分钟 3 美元。</strong>
+</p>
 
-VideoAgents 是一套开源、文件驱动的多 Agent 视频生产系统，用于把长篇小说改编为分集视频。项目包含 83 个专业 Agent，覆盖剧情改编、世界观、角色、美术、导演、音视频生成、剪辑、质量审核和发布。
+<p align="center">
+  <a href="#quickstart"><strong>快速开始</strong></a> &middot;
+  <a href="#works-with"><strong>支持的渠道</strong></a> &middot;
+  <a href="https://github.com/AgenticsWorld/VideoAgents-Samples"><strong>示例项目</strong></a> &middot;
+  <a href="https://discord.gg/faaZCrWxCq"><strong>Discord</strong></a> &middot;
+  <a href="https://x.com/AgenticsWorld"><strong>X</strong></a> &middot;
+  <a href="https://shumati.cn/videoagents/"><strong>官网</strong></a> &middot;
+  <a href="README.md"><strong>English</strong></a>
+</p>
 
-仓库提供原生 HTML/CSS WebUI、Electron 桌面外壳、开放 FastAPI、机器可读的工作流 DAG、Agent 职责说明、媒体服务适配器和通用校验工具。小说原文、项目配置和生成媒体默认保存在本地 `data/projects/`，不会提交到 Git。
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="GPL-3.0 License" /></a>
+  <a href="https://github.com/AgenticsWorld/VideoAgents/releases"><img src="https://img.shields.io/github/v/release/AgenticsWorld/VideoAgents" alt="Latest release" /></a>
+  <a href="https://github.com/AgenticsWorld/VideoAgents/stargazers"><img src="https://img.shields.io/github/stars/AgenticsWorld/VideoAgents?style=flat" alt="Stars" /></a>
+  <a href="https://discord.gg/faaZCrWxCq"><img src="https://img.shields.io/badge/discord-join-7289da" alt="Discord" /></a>
+</p>
 
-## 主要能力
+<br/>
 
-- 87 个 Agent，分属 13 个制作部门
-- 声明式 Agent 插件机制：扩展新工位与业务流程；内置衍生小说、双书融合两个官方插件，上传插件保存在可写的运行时数据目录
-- 剧情、美术、分镜、成片和发布环节的人工确认闸门
-- 文件化产物、项目内版本管理和可审计 QA 记录
-- 支持 Claude CLI、Codex CLI 和 OpenAI 兼容的 DeepAgents 引擎
-- 可配置图像、视频、音乐、TTS 与对象存储服务
-- 多语言本地 Web 控制台、资产预览和手机手绘分镜
-- 浏览器与 Electron 共用原 WebUI 的同一套静态页面
-- 版本化 `/api/v1`、OpenAPI、持久运行状态与实时 SSE 通知
+<p align="center">
+  <a href="docs/assets/readme/storyboard-preview.jpg"><img src="docs/assets/readme/storyboard-preview.jpg" alt="VideoAgents 分镜预览页：左侧是参考图、背景图和道具图，右侧是生成的组视频" width="900" /></a>
+</p>
 
-## 环境要求
+<p align="center">
+  <sub>示例项目 <a href="https://github.com/AgenticsWorld/VideoAgents-Samples">alices</a>（《爱丽丝梦游仙境》）的「分镜预览」页（英文界面）：一个生成组挂的人物定妆图、背景图和道具图，以及它生成出来的视频。</sub>
+</p>
 
-- Python 3.10 或更高版本
-- Node.js 22.12 或更高版本（仅开发或打包 Electron 客户端）
-- 至少一种 Agent 执行引擎：Claude CLI、Codex CLI 或 OpenAI 兼容模型
-- FFmpeg，用于媒体检查、音频处理和剪辑流程
-- 仅需配置实际使用的生成服务凭据
+<br/>
+
+## 30 秒了解 VideoAgents
+
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/97e159f0-8c10-46c2-98d7-915e62d1d749" width="900" controls></video>
+</div>
+
+<br/>
+
+# 把小说拍成分集长剧，AI 剧组干活，你来当导演
+
+VideoAgents 是一套开源、文件驱动的多 Agent 视频生产系统，用来把长篇小说改编成分集视频。
+
+**如果说视频模型是一台摄影机，VideoAgents 就是整个制片厂。**
+
+94 个专业 Agent 分属 13 个制作部门——剧情、世界观、角色、生物、场景、美术、导演、视频生成、音频、剪辑、质量审核和发布——按声明式工作流推进，并在人工确认闸门处停下来等你签字，创作方向始终由你决定。系统在你自己的电脑上运行：小说原文、项目文件和生成的媒体都保存在本地工作区。
+
+|        | 步骤           | 做什么                                                                                       |
+| ------ | -------------- | -------------------------------------------------------------------------------------------- |
+| **01** | 带来一部小说   | 新建项目、导入文本、选定画面风格，设好单集时长和发布平台。                                   |
+| **02** | 剧组开工       | 世界圣经 → 角色与资产 → 剧本 → 故事板 → 3D 白模预演 → 视频 → 声音 → 剪辑 → 后期。            |
+| **03** | 你来签字       | 从世界圣经到发布最多 12 个确认闸门。上一步没签字，下一步花钱的活就不会开始。                 |
+
+<br/>
+
+<a id="works-with"></a>
+
+## 支持的引擎与渠道
+
+执行引擎和生成渠道都由你自己选。每类生成服务单独配置，不绑定某一个模型或厂商。
+
+|                     | 支持                                                                                                              |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 🤖 **执行引擎**     | Claude Code · Codex CLI · Kimi Code · Pi · OpenCode · Grok Build · DeepAgents（任意 OpenAI 兼容模型：本地、云端或 OpenRouter） |
+| 🖼 **图像**         | Agentics · OpenRouter · 火山引擎 · BytePlus · Fal · RunningHub · ComfyUI                                           |
+| 🎬 **视频**         | Agentics · OpenRouter · 火山引擎 · BytePlus · Fal · RunningHub · ComfyUI                                           |
+| 🎙 **语音 / TTS**   | Agentics · OpenRouter · 火山引擎 · ElevenLabs · MiniMax · ComfyUI                                                  |
+| 🎵 **音乐**         | Agentics · OpenRouter · ElevenLabs · ComfyUI                                                                       |
+| 🔊 **音效**         | ElevenLabs · Fal                                                                                                   |
+| 🧑 **数字人**       | Agentics · HeyGen · Kling AI · ComfyUI                                                                             |
+| 🔍 **超分**         | FFmpeg · Agentics · 火山引擎 · MiniMax · ComfyUI                                                                   |
+| 🌍 **世界模型**     | World Labs                                                                                                         |
+| ☁️ **对象存储**     | 火山引擎 TOS · 阿里云 OSS · 腾讯云 COS · 任意 S3 兼容服务                                                          |
+| 📣 **发布平台**     | YouTube · Bilibili · TikTok · 抖音 · 小红书                                                                        |
+| 📱 **手机消息**     | 微信 · 飞书 · WhatsApp                                                                                             |
+
+<sub>ComfyUI 工作流可在本地、Comfy Cloud 或 RunningHub 上运行。控制台界面支持 12 种语言。</sub>
+
+<br/>
+
+## 如果你符合下面的情况，VideoAgents 适合你
+
+- ✅ 想把**小说或网文拍成多集视频**，但没有一整个剧组
+- ✅ 做过一分钟的 AI 短片，到**十分钟级的中长剧**就卡住了：道具服装跳变、人多了镜头失控、反复重抽把预算烧光
+- ✅ 希望 Agent **自己把流水线跑下去**，但创作上的决定仍由你确认
+- ✅ 想**为每类任务自己选模型**，有更好的模型时随时切换
+- ✅ 希望小说原文和生成素材**留在自己的电脑上**
+- ✅ 希望每一步都留下**可以打开、修改和追溯的文件**
+
+<br/>
+
+## 功能
+
+<table>
+<tr>
+<td align="center" width="33%">
+<h3>📖 剧情与世界观改编</h3>
+把长篇小说拆成事件、时间线和世界圣经，作为后续所有环节的事实依据。
+</td>
+<td align="center" width="33%">
+<h3>🧑‍🎨 角色与资产</h3>
+角色、服装、生物、场景、道具各自建卡，配参考图和声音样本，全片每件资产只认一个形象锚点。
+</td>
+<td align="center" width="33%">
+<h3>📜 剧本预览</h3>
+剧本与时长、情绪、节奏、钩子分析并排成表，任意一块都能把修改意见直接派给负责的 Agent。
+</td>
+</tr>
+<tr>
+<td align="center">
+<h3>✏️ 故事板与动态样片</h3>
+逐镜分镜表配铅笔草图，可用便宜的图像模型批量出，也可以在手机上手绘，再串成不花生成费的动态样片。
+</td>
+<td align="center">
+<h3>🧊 3D 白模预演</h3>
+按米制尺度搭场景，人物、道具和摄影机带关键帧调度。导出的机位白模视频就是视频生成的参考视频。
+</td>
+<td align="center">
+<h3>🎥 导演台</h3>
+点选任意人物、道具或机位写修改意见，也可以自己拖动。每次修改自动存版本，可 A|B 对比。
+</td>
+</tr>
+<tr>
+<td align="center">
+<h3>🎬 图像与视频生成</h3>
+提示词按镜头表逐镜写出，每个生成组都带着它必须对齐的定妆图、背景图和道具图。
+</td>
+<td align="center">
+<h3>🎙 配音、音乐与声音</h3>
+视频模型原生对白、音色设计与克隆、项目音乐库、音效，以及最终混音。
+</td>
+<td align="center">
+<h3>🎚 后期处理</h3>
+调色、修补、特效、包装和声音都按「处方」管理，作用范围从整集到组内时间段，母本永不覆盖。
+</td>
+</tr>
+<tr>
+<td align="center">
+<h3>🛡 人工确认闸门</h3>
+世界圣经、角色与资产、美术风格、剧本、故事板、白模、分镜、视频提示词、视觉生成、后期、首集成片、发布。
+</td>
+<td align="center">
+<h3>✅ 八路质量审核</h3>
+逻辑、角色一致性、时间线、世界观一致性、画面、音频、内容安全、版权，八个维度并行审核。
+</td>
+<td align="center">
+<h3>💰 成本控制</h3>
+先用不花钱的预演把戏排好，付费步骤排在签字之后，优先复用，草稿分辨率加超分交付，简单任务用便宜模型。
+</td>
+</tr>
+<tr>
+<td align="center">
+<h3>🔌 插件与技能</h3>
+声明式插件扩展新的工位和业务流程，技能教会某个 Agent 一门手艺，两者都可以用 zip 安装。
+</td>
+<td align="center">
+<h3>🗂 全程文件化</h3>
+每张设定卡、每条提示词、每份镜头表和审核报告都是项目里的文件，每次生成都记下所用的模型、渠道和参考图。
+</td>
+<td align="center">
+<h3>🏠 本地优先</h3>
+在你的电脑上运行，默认只监听 <code>127.0.0.1</code>，并提供版本化 API、OpenAPI 文档和实时事件，便于集成。
+</td>
+</tr>
+</table>
+
+<br/>
+
+## 界面一览
+
+以下截图均为英文界面。
+
+<table>
+<tr>
+<td align="center" width="33%"><a href="docs/assets/readme/console.jpg"><img src="docs/assets/readme/console.jpg" alt="控制台" /></a><br/><sub><strong>控制台</strong>：Agent 列表、与每个 Agent 的对话、运行面板</sub></td>
+<td align="center" width="33%"><a href="docs/assets/readme/workflow.jpg"><img src="docs/assets/readme/workflow.jpg" alt="工作流预览" /></a><br/><sub><strong>工作流预览</strong>：流水线 DAG、任务状态、耗时与 token 用量</sub></td>
+<td align="center" width="33%"><a href="docs/assets/readme/script.jpg"><img src="docs/assets/readme/script.jpg" alt="剧本预览" /></a><br/><sub><strong>剧本预览</strong>：剧本分块及对应的时长、事件与钩子</sub></td>
+</tr>
+<tr>
+<td align="center"><a href="docs/assets/readme/characters.jpg"><img src="docs/assets/readme/characters.jpg" alt="人物预览" /></a><br/><sub><strong>人物预览</strong>：定妆图、音色与服装</sub></td>
+<td align="center"><a href="docs/assets/readme/scenes.jpg"><img src="docs/assets/readme/scenes.jpg" alt="场景预览" /></a><br/><sub><strong>场景预览</strong>：俯视布局图、场景图与 3D 白模</sub></td>
+<td align="center"><a href="docs/assets/readme/props.jpg"><img src="docs/assets/readme/props.jpg" alt="道具预览" /></a><br/><sub><strong>道具预览</strong>：道具卡，含材质与尺寸定义</sub></td>
+</tr>
+<tr>
+<td align="center"><a href="docs/assets/readme/storyboard.jpg"><img src="docs/assets/readme/storyboard.jpg" alt="故事板" /></a><br/><sub><strong>故事板</strong>：分镜表、铅笔草图与动态样片</sub></td>
+<td align="center"><a href="docs/assets/readme/director.jpg"><img src="docs/assets/readme/director.jpg" alt="导演台" /></a><br/><sub><strong>导演台</strong>：在 3D 白模现场里做调度</sub></td>
+<td align="center"><a href="docs/assets/readme/post.jpg"><img src="docs/assets/readme/post.jpg" alt="后期处理" /></a><br/><sub><strong>后期处理</strong>：A|B 监视器、处方与整集时间轴</sub></td>
+</tr>
+</table>
+
+<br/>
+
+## VideoAgents 解决什么问题
+
+| 没有 VideoAgents | 有了 VideoAgents |
+| --- | --- |
+| ❌ 上一镜桌上的杯子是青花瓷，下一镜变成了白瓷；主角上一场穿的孝服，下一场又换回了干净的常服。 | ✅ 全片资产库：道具卡、按「场合 × 时期」排的服装矩阵，以及每个生成组都要对齐的参考图。 |
+| ❌ 一两个人在画面里还好控制。人一多、镜头一长，谁站在哪、看向哪、走到哪，靠文字说不清。 | ✅ 按米制尺度做 3D 白模预演：人物、道具和摄影机带关键帧调度，审看后导出机位白模视频，作为参考视频挂进生成指令。 |
+| ❌ 把「这场戏的张力」翻译成模型能执行的指令，靠人工逐镜手搓，慢而且不稳定。 | ✅ Prompt Agent 逐镜按「运镜、动作与表情、空间位置、音频」写提示词：一镜只用一种运镜，动作写明幅度和速度，情绪写成看得见的身体细节。 |
+| ❌ 角色长相跑偏，不在场的人也被画进画面。 | ✅ 新生成的关键帧与定妆图做人脸相似度比对；提示词带身份锁，画面里的每个人都必须对得上一张参考图。 |
+| ❌ 片子都生成完了，才发现剧本或分镜不对。 | ✅ 把审看前移到不花钱的环节：剧本预览、故事板草图和动态样片。上游在签字之后又被改动时，页面会标记签字已过期。 |
+| ❌ 预算大多花在最后用不上的废片上：反复重抽、高分辨率直出、每一镜都重新出参考图。 | ✅ 先做不花钱的预演，付费步骤排在签字之后，优先复用，草稿分辨率加超分交付，自动重跑默认关闭：成片成本约每分钟 3 美元。 |
+| ❌ 成片里有一处瑕疵，只能整组重抽。 | ✅ 后期处理工作台：调色、修补、特效和声音都是带版本的处方，可 A\|B 对比、随时回滚。 |
+| ❌ 换脸有肖像权风险，还容易做出每部剧都一样的「平均脸」。 | ✅ 角色是按文字设定和美术风格生成的原创形象，不拿真人照片做换脸。 |
+| ❌ 平台审查看得很细，一项素材拿不出授权就可能下架。 | ✅ 内容安全 Agent 和版权 Agent 在发布前逐集审查：镜头、封面、字幕、配乐和字体。 |
+| ❌ 说不清某一版角色或镜头是怎么来的。 | ✅ 每一步都落成项目里的文件，每个生成物都记下所用的模型、渠道和参考图。 |
+
+<br/>
+
+<a id="quickstart"></a>
 
 ## 快速开始
+
+开源，本地运行，执行引擎和生成渠道用你自己的账号。
+
+### 直接安装桌面客户端
+
+| 平台                    | 下载                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------- |
+| macOS（Apple 芯片）     | [VideoAgents.zip](https://cdn.shumati.cn/packages/video-agents/mac/VideoAgents.zip)   |
+| Windows（x64）          | [VideoAgents.zip](https://cdn.shumati.cn/packages/video-agents/win/VideoAgents.zip)   |
+
+1. **下载、解压、打开。** 安装包不含 Python，首次启动时客户端会自动下载运行环境。
+2. **在顶栏选一个执行引擎。** 对应的命令行没装或没登录时会弹出引导窗口：用官方脚本一键安装，再弹出终端运行它自己的登录命令。
+3. **配置生成渠道。** 在 ⚙️ 设置 → 生成模型 里填入要用的图像、视频、音频服务的凭据。
+4. **新建项目并导入小说。** 剧组从世界圣经开始干活，每到一个确认闸门就停下来等你签字。
+
+媒体检查、音频处理和剪辑需要 FFmpeg。Windows 客户端在本机没有 FFmpeg 时会提示自动下载；macOS 用 `brew install ffmpeg` 安装。
+
+### 或者从源码运行
+
+环境要求：Python 3.10 或更高版本、FFmpeg、至少一种执行引擎。Node.js 22.12 或更高版本只在开发或打包桌面客户端时需要。
 
 ```bash
 git clone https://github.com/AgenticsWorld/VideoAgents.git
@@ -41,93 +250,40 @@ python apps/web/check.py
 python apps/web/server.py
 ```
 
-完成可编辑安装后，也可以直接运行 `videoagents-web`。如只需要开放 API 服务，则运行 `videoagents-api`。
+浏览器打开 <http://127.0.0.1:8630>，API 文档位于 <http://127.0.0.1:8630/api/v1/docs>。完成可编辑安装后也可以直接运行 `videoagents-web`；只需要 API 服务时运行 `videoagents-api`。
 
-浏览器打开 <http://127.0.0.1:8630>，在顶部选择或创建项目，再配置执行引擎与所需生成服务。API 文档位于 <http://127.0.0.1:8630/api/v1/docs>。
+需要无人值守的全自动流水线时，用 `make run-auto` 启动，`claude` 引擎的 Agent 执行命令时不再弹审批。该模式下 Agent 可以执行任意命令，请只在可信的机器上使用。
 
-WebUI 使用 `npm run dev:web`（实际启动 Python Web 网关）；桌面客户端开发使用 `npm ci && npm run dev:desktop`。桌面客户端默认启动同一个 Web 网关，也可通过 `VIDEOAGENTS_API_URL=https://host` 反向代理远程 API。发布安装包不包含 Python；首次启动且本机没有可用环境时，客户端从 `https://s3.agentics.world/packages/video-agents/metadata.json` 读取当前平台版本并下载安装。Claude、Codex、Kimi、Pi、OpenCode、FFmpeg、模型和 GPU 环境仍按需独立安装。Windows x64 桌面客户端在本机没有可用 FFmpeg 时，可从同一发布源自动下载安装（不需要包管理器和管理员权限），版本钉在 `apps/desktop/ffmpeg-artifact.json`。
+桌面端开发、打包、发版和 DeepAgents 调参见 [`docs/DEVELOPMENT.zh-CN.md`](docs/DEVELOPMENT.zh-CN.md)。
 
-桌面开发前请确认 `node --version` 不低于 `.nvmrc` 指定的版本；使用 nvm 时先执行 `nvm use`。切换 Node 大版本后必须重新执行 `npm ci`，避免保留由旧 Node 生成的不完整 Electron 安装。
+<br/>
 
-也可以完全通过 Makefile 操作桌面端：首次安装依赖使用 `make desktop-install`，开发启动使用 `make desktop-dev`（或 `make desktop-run`），只编译使用 `make desktop-build`；`make desktop-runtime` 使用当前 Git 短 hash 构建独立 Python ZIP，产物写入 `apps/desktop/.runtime-packages/`。`make desktop` 只生成不含 Python 的客户端安装包，产物写入 `apps/desktop/release/`。
+## 更多
 
-Python 运行时与 Electron 应用完全分开版本化。运行时写入用户数据目录的 `python-runtimes/versions/<version>/`，通过 `active.json` 激活。已有可用环境时启动过程不会访问版本索引；仅首次缺少环境，或用户从桌面菜单选择“检查并更新 Python 环境”时才检查最新版本。下载过程校验大小、SHA-256、平台、架构、版本和可执行路径。开发/诊断时仍可用 `VIDEOAGENTS_PYTHON` 显式覆盖。
+- **插件** — [VideoAgents-Plugins](https://github.com/AgenticsWorld/VideoAgents-Plugins)：扩展剧组的 Agent 团队与流程，如衍生小说、双书融合、音频配画、混剪配画、有声剧、数字人对话。在 ⚙️ 设置 → 插件 里上传 zip 安装，上传的插件保存在可写的运行时数据目录。
+- **技能** — [VideoAgents-Skills](https://github.com/AgenticsWorld/VideoAgents-Skills)：教某个 Agent 一门手艺的 `SKILL.md` 技能包。在控制台的「技能」按钮里上传 zip 安装。
+- **示例项目** — [VideoAgents-Samples](https://github.com/AgenticsWorld/VideoAgents-Samples)：可以直接打开看的完整项目，包括本页截图用的 _alices_。在项目下拉里用「导入项目…」导入 zip。
 
-仅当 `v*` tag 指向 `main` 中的提交时，工作流才构建桌面端与 Python 环境；两类包统一使用 tag 版本号并发布到 `packages/video-agents/`。Python 环境位于 `python/`，macOS 与 Windows 的带版本桌面 ZIP 分别位于 `mac/` 和 `win/`，共享更新索引为 `metadata.json`；两个桌面目录还会用 `VideoAgents.zip` 覆盖发布最新版本。Release 客户端启动时先读取该 metadata：高于当前版本但仍受支持时提示可选更新；低于其中的 `desktop.minimumVersion` 时，在创建主窗口和启动本地后端之前进入不可跳过的强制更新流程。发布任务从 GitHub Actions 的 `MINIMUM_DESKTOP_VERSION` environment/repository variable 读取该值，未配置时默认为 `1.0.0`；格式错误或最低版本高于本次 release 版本时，发布任务会失败。
+<br/>
 
-macOS 桌面端从 Finder 启动时会读取用户登录 Shell 的 `PATH`，并补充 Homebrew、`~/.local/bin`、Kimi、OpenCode、Grok、Volta、pnpm 等常见 CLI 目录。因此终端中已安装的 `claude`、`codex`、`kimi`、`pi`、`opencode`、`grok` 会被本地 Python 服务及其 Agent 子进程继承，无需把第三方 CLI 打入客户端安装包。切换到 `pi` 引擎后，语言模型下拉会通过 `pi --list-models` 动态读取当前 Pi 登录凭证实际可用的渠道与模型。`opencode` 引擎同样通过 `opencode models` 动态读取；`grok` 引擎（Grok Build CLI，安装见 https://grok.com/build，`grok login` 登录）通过 `grok models` 动态读取。各引擎（deepagents 除外）的语言模型下拉均默认「智能分配」：按 Agent 任务复杂度自动选模型（如 opencode 引擎把创作核心 Agent 派给 DeepSeek V4 Pro、其余派给 DeepSeek V4 Flash），切换引擎或语言模型会自动同步全部 Agent 的模型设置。
-
-顶栏切到某个 CLI 引擎（或开屏）时若检测到命令未安装或未登录，会弹出引导窗口：「一键安装」在后台运行该 CLI 的官方安装命令（`curl -fsSL <官方脚本> | bash`，Windows 为 `irm <官方脚本> | iex`；OpenCode 在 Windows 上走 `npm install -g opencode-ai`），日志实时显示，失败可「在终端中安装」以便回答脚本的交互提问；装好后「登录」会弹出终端窗口运行该 CLI 自己的登录命令（如 `claude auth login`、`codex login`、`kimi login`），用户在浏览器中用自己的账号授权，程序轮询到已登录即关窗，全程不经手令牌。安装子进程不带本程序与各渠道的密钥环境变量；一键安装与登录只对本机访问开放。
-
-本地 `make desktop` 默认设置 `CSC_IDENTITY_AUTO_DISCOVERY=false`，不会读取 macOS Keychain 中的 Apple 开发者证书，也不会签名或公证。正式发布签名只由 GitHub Actions 在显式提供 `CSC_LINK`、Apple ID 等 secrets 时启用。
-
-如需无人值守的全自动流水线，用全自动模式启动，`claude` 引擎的 Agent 执行
-命令时不再弹审批（`codex`、`pi` 与 `deepagents` 引擎本就免审批）：
-
-```bash
-make run-auto
-```
-
-该模式下 Agent 可执行任意命令，请仅在可信机器上使用。调度层越界防护
-（`orchestrator_guard` hook 与 `modules/genmedia.py` 运行时守卫）与权限模式
-无关，依然生效。
-
-可选集成：
-
-```bash
-python -m pip install -e ".[storage]"
-python -m pip install -e ".[dev]"
-```
-
-deepagents 引擎需要 Python ≥3.11。若主环境是 3.10，请改用
-`make install-deepagents` 创建专用的 `.venv-deepagents`（运行时自动发现）；
-也可设置 `DEEPAGENTS_PY` 指向任意已安装 deepagents 的解释器。
-
-如需为该独立环境指定 Python 解释器：
-
-```bash
-make install-deepagents DEEPAGENTS_PYTHON=python3.11
-```
-
-如果通过 asdf 管理 Python，可显式选择已安装的 3.11 版本：
-
-```bash
-ASDF_PYTHON_VERSION=3.11.12 make install-deepagents DEEPAGENTS_PYTHON=python
-```
-
-DeepAgents 默认按 128000 token 上下文运行，单次输出上限 8192 token，图递归上限为 250
-（调度类 Agent 为 500）。runner 还会为系统提示词和工具 schema 预留 16384 token，首轮输入
-超限直接拒绝；约 48000 个估算 token 时压缩历史，只保留约 8000 个估算 token；每次 shell 工具输出最多返回 24000
-字节。为避免无界扫描和递归放大上下文，`glob` 工具与自动泛用子 Agent 默认关闭。
-只有当本地推理服务实际配置了相同或更大的上下文窗口时，才覆盖下面的值：
-
-```bash
-DEEPAGENTS_CONTEXT_WINDOW=131072 DEEPAGENTS_MAX_OUTPUT_TOKENS=8192 ./run.sh
-```
-
-还可调整 `DEEPAGENTS_RECURSION_LIMIT` 与 `DEEPAGENTS_MAX_TOOL_OUTPUT_BYTES`；提高任一值都会
-增加运行时间或上下文压力。撞到 recursion_limit 时 runner 会从最后检查点自动续跑，
-最多 `DEEPAGENTS_MAX_CONTINUATIONS`（默认 3）轮，仍未收敛才报错。
-
-FFmpeg 需要通过操作系统包管理器单独安装。
-
-## 目录结构
+## 仓库结构
 
 ```text
-agents/          Agent 职责、工作流文档和 DAG
-code/            仓库级校验与工具脚本
-modules/         媒体、音频、版本管理和 DeepAgents 适配器
-services/api/    可独立运行的 Python API 服务、Schema 和运行状态
+agents/           Agent 职责、工作流文档和 DAG
+code/             仓库级校验与工具脚本
+modules/          媒体、音频和 DeepAgents 适配器
+services/api/     可独立运行的 Python API 服务、Schema 和运行状态
 services/runtime/ Agent 调度、项目业务、Provider 与内部运行工具
-apps/web/        原 WebUI 静态页面、Python 静态服务与同源 API 反向代理
-apps/desktop/    Electron 外壳、Python Web 服务生命周期、打包与更新
-tests/           回归测试(pytest):模块、流水线 CLI 与仓库完整性
-data/projects/   视频剪辑项目资源、输入与生成产物，默认不入 Git
+apps/web/         原 WebUI 静态页面、Python 静态服务与同源 API 反向代理
+apps/desktop/     Electron 外壳、Python Web 服务生命周期、打包与更新
+plugins/          声明式 Agent 插件（仓库内置衍生小说团队）
+tests/            回归测试（pytest）：模块、流水线 CLI 与仓库完整性
+data/projects/    视频项目资源、输入与生成产物，默认不入 Git
 ```
 
-`agents/WORKFLOW.md` 是供人阅读的流程权威，`agents/workflow.yaml` 是 orchestrator 的机器执行输入。
+`agents/WORKFLOW.md` 是供人阅读的流程权威，`agents/workflow.yaml` 是 orchestrator 的机器执行输入。浏览器与 Electron 共用同一套静态 WebUI，旁边是版本化的 `/api/v1`、OpenAPI、持久运行状态与实时 SSE 通知。完整的组件关系和目录决策见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)。
 
-完整的组件关系、目录决策、`packages/` 的适用时机、内嵌调度与独立 Worker 的区别见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)。
+<br/>
 
 ## 配置与安全
 
@@ -141,6 +297,8 @@ data/projects/   视频剪辑项目资源、输入与生成产物，默认不入
 
 需要局域网手绘分镜或更高自动化权限时，参考 [`.env.example`](.env.example) 显式开启。启用前请阅读 [`SECURITY.md`](SECURITY.md)，不要把控制台直接暴露到公网。
 
+<br/>
+
 ## 开发
 
 ```bash
@@ -149,9 +307,21 @@ pytest
 npm run test:web   # 浏览器端白模 / 导演台代码的 Node 检查
 ```
 
-CI 跑 `tests/` 全量:模块与流水线 CLI 回归、仓库完整性(JSON/YAML、工作流 Agent 引用、安全默认值)、HTTP 层(路由表、离线 GET 冒烟、Web 控制台页面)。需要 `ffmpeg` 的用例在未安装时自动跳过。
+CI 跑 `tests/` 全量：模块与流水线 CLI 回归、仓库完整性（JSON/YAML、工作流 Agent 引用、安全默认值）、HTTP 层（路由表、离线 GET 冒烟、Web 控制台页面）。需要 `ffmpeg` 的用例在未安装时自动跳过。
 
-## 许可证与引用
+完整的开发指南见 [`docs/DEVELOPMENT.zh-CN.md`](docs/DEVELOPMENT.zh-CN.md)，参与贡献见 [`CONTRIBUTING.md`](CONTRIBUTING.md)。
+
+<br/>
+
+## 社区
+
+- [Discord](https://discord.gg/faaZCrWxCq) — 加入社群
+- [X](https://x.com/AgenticsWorld) — 关注更新与公告
+- [GitHub Issues](https://github.com/AgenticsWorld/VideoAgents/issues) — 报告问题、提功能建议
+
+<br/>
+
+## 许可证
 
 Copyright 2026 AgenticsWorld.
 
@@ -160,3 +330,15 @@ Copyright 2026 AgenticsWorld.
 v1.0.38 及更早的发布版本以 Apache License 2.0 发布，这些版本仍可按该许可证使用。
 
 标准引用信息见 [`CITATION.cff`](CITATION.cff)。
+
+## 商标与服务
+
+文中出现的第三方产品和渠道名称只用于说明可对接的集成，商标和服务权利归各自所有者。VideoAgents 不提供也不再分发任何第三方模型或服务。
+
+<br/>
+
+---
+
+<p align="center">
+  <sub>以 GPL-3.0 开源。给想当导演、不想整天盯着模型抽卡的人。</sub>
+</p>

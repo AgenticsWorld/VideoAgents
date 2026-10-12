@@ -1,40 +1,241 @@
-# VideoAgents
+<p align="center">
+  <img src="docs/assets/readme/logo.png" alt="VideoAgents" width="96" />
+</p>
 
-**Video creation for everyone — a fully automated Agent Team that delivers finished video for about $3 per minute.**
+<h1 align="center">VideoAgents</h1>
 
-[中文说明](README.zh-CN.md) · [💬 Join our Discord](https://discord.gg/faaZCrWxCq)
+<p align="center">
+  <strong>Video creation for everyone — a fully automated Agent Team that delivers finished video for about $3 per minute.</strong>
+</p>
 
-VideoAgents is an open-source, file-based multi-agent production system for
-turning long-form fiction into episodic video. It defines 83 specialized agents
-across story adaptation, worldbuilding, characters, art direction, directing,
-media generation, audio, editing, quality assurance, and publishing.
+<p align="center">
+  <a href="#quickstart"><strong>Quickstart</strong></a> &middot;
+  <a href="#works-with"><strong>Works with</strong></a> &middot;
+  <a href="https://github.com/AgenticsWorld/VideoAgents-Samples"><strong>Samples</strong></a> &middot;
+  <a href="https://discord.gg/faaZCrWxCq"><strong>Discord</strong></a> &middot;
+  <a href="https://x.com/AgenticsWorld"><strong>X</strong></a> &middot;
+  <a href="https://agentics.world"><strong>Website</strong></a> &middot;
+  <a href="README.zh-CN.md"><strong>中文</strong></a>
+</p>
 
-The repository includes the original HTML/CSS WebUI, an Electron shell, an open FastAPI service, a machine-readable workflow DAG,
-agent role specifications, media-provider adapters, and reusable validation
-tools. Project inputs and generated media stay in a local `data/projects/`
-workspace and are not committed by default.
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="GPL-3.0 License" /></a>
+  <a href="https://github.com/AgenticsWorld/VideoAgents/releases"><img src="https://img.shields.io/github/v/release/AgenticsWorld/VideoAgents" alt="Latest release" /></a>
+  <a href="https://github.com/AgenticsWorld/VideoAgents/stargazers"><img src="https://img.shields.io/github/stars/AgenticsWorld/VideoAgents?style=flat" alt="Stars" /></a>
+  <a href="https://discord.gg/faaZCrWxCq"><img src="https://img.shields.io/badge/discord-join-7289da" alt="Discord" /></a>
+</p>
 
-## Highlights
+<br/>
 
-- 83 focused agents organized into 13 production departments
-- Declarative agent plugins add new roles and workflows; official derivative-fiction and fusion-fiction teams are bundled, while uploaded plugins live in the writable runtime data directory
-- Human approval gates for story, art direction, storyboards, cuts, and release
-- File-based artifacts with auditable QA records
-- Claude CLI, Codex CLI, and OpenAI-compatible DeepAgents execution engines
-- Configurable image, video, music, TTS, and object-storage providers
-- A multilingual local Web console with preview and storyboard tools
-- The same original static WebUI shared by browsers and Electron
-- Versioned `/api/v1`, OpenAPI, durable run state, and real-time SSE events
+<p align="center">
+  <a href="docs/assets/readme/storyboard-preview.jpg"><img src="docs/assets/readme/storyboard-preview.jpg" alt="VideoAgents Storyboard Preview: reference sheets, plates and props on the left, the generated group video on the right" width="900" /></a>
+</p>
 
-## Requirements
+<p align="center">
+  <sub>Storyboard Preview in the <a href="https://github.com/AgenticsWorld/VideoAgents-Samples">alices</a> sample project (<em>Alice's Adventures in Wonderland</em>): the character sheets, plates and props a generation group is anchored to, and the video it produced.</sub>
+</p>
 
-- Python 3.10 or newer
-- Node.js 22.12 or newer only for Electron development and packaging
-- At least one agent engine: Claude CLI, Codex CLI, or an OpenAI-compatible model
-- FFmpeg for media inspection, audio processing, and editing workflows
-- Provider credentials only for the generation services you choose to use
+<br/>
 
-## Quick Start
+## 30-second tour
+
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/97e159f0-8c10-46c2-98d7-915e62d1d749" width="900" controls></video>
+</div>
+
+<br/>
+
+# Turn a novel into episodic video, with an AI crew you direct
+
+VideoAgents is an open-source, file-based multi-agent production system for turning long-form fiction into episodic video.
+
+**If a video model is a _camera_, VideoAgents is the _studio_.**
+
+94 specialist agents in 13 departments — story, worldbuilding, characters, creatures, scenes, art, directing, video generation, audio, editing, QA and publishing — work through a declarative workflow, and stop at human sign-off gates so the creative direction stays yours. It runs on your machine: the novel, the project files and the generated media stay in a local workspace.
+
+|        | Step                  | What happens                                                                                                              |
+| ------ | --------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **01** | Bring a novel         | Create a project, import the text, pick a visual style, set the episode length and target platforms.                     |
+| **02** | The crew gets to work | World bible → characters and assets → screenplay → storyboard → 3D whitebox previs → video → sound → edit → post.         |
+| **03** | You sign off          | Up to 12 gates, from the world bible to the release. Nothing expensive runs before you approve the step that feeds it.    |
+
+<br/>
+
+<a id="works-with"></a>
+
+## Works with
+
+Bring your own engines and providers. Each modality is configured on its own, so you are never locked into one model or vendor.
+
+|                         | Supported                                                                                                                      |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| 🤖 **Agent engines**    | Claude Code · Codex CLI · Kimi Code · Pi · OpenCode · Grok Build · DeepAgents (any OpenAI-compatible model: local, cloud or OpenRouter) |
+| 🖼 **Image**            | Agentics · OpenRouter · Volcano Engine · BytePlus · Fal · RunningHub · ComfyUI                                                  |
+| 🎬 **Video**            | Agentics · OpenRouter · Volcano Engine · BytePlus · Fal · RunningHub · ComfyUI                                                  |
+| 🎙 **Voice / TTS**      | Agentics · OpenRouter · Volcano Engine · ElevenLabs · MiniMax · ComfyUI                                                         |
+| 🎵 **Music**            | Agentics · OpenRouter · ElevenLabs · ComfyUI                                                                                    |
+| 🔊 **Sound effects**    | ElevenLabs · Fal                                                                                                                |
+| 🧑 **Digital human**    | Agentics · HeyGen · Kling AI · ComfyUI                                                                                          |
+| 🔍 **Upscale**          | FFmpeg · Agentics · Volcano Engine · MiniMax · ComfyUI                                                                          |
+| 🌍 **World model**      | World Labs                                                                                                                      |
+| ☁️ **Object storage**   | Volcano Engine TOS · Alibaba Cloud OSS · Tencent Cloud COS · any S3-compatible service                                          |
+| 📣 **Publishing**       | YouTube · Bilibili · TikTok · Douyin · Xiaohongshu                                                                              |
+| 📱 **Mobile messaging** | WeChat · Feishu · WhatsApp                                                                                                      |
+
+<sub>ComfyUI workflows run locally, on Comfy Cloud or on RunningHub. The console is available in 12 languages.</sub>
+
+<br/>
+
+## VideoAgents is right for you if
+
+- ✅ You want to turn a **novel or web serial into multi-episode video** without assembling a studio
+- ✅ You have made one-minute AI shorts and hit the wall at **ten-minute episodes**: props drift, crowded shots fall apart, rerolls eat the budget
+- ✅ You want agents to **run the pipeline on their own**, but you still want to approve the creative decisions
+- ✅ You want to **choose the model for each job** and switch when a better one ships
+- ✅ You want your manuscript and footage to **stay on your own machine**
+- ✅ You want every step to leave a **file you can open, edit and audit**
+
+<br/>
+
+## Features
+
+<table>
+<tr>
+<td align="center" width="33%">
+<h3>📖 Story & World Adaptation</h3>
+Break a long novel into events, a timeline and a world bible that every later step treats as fact.
+</td>
+<td align="center" width="33%">
+<h3>🧑‍🎨 Characters & Assets</h3>
+Cards, reference sheets and voice samples for characters, costumes, creatures, scenes and props: one anchor per asset for the whole series.
+</td>
+<td align="center" width="33%">
+<h3>📜 Script Preview</h3>
+The screenplay beside its timing, emotion, pacing and hook analysis. Send a revision note for any block to the agent that owns it.
+</td>
+</tr>
+<tr>
+<td align="center">
+<h3>✏️ Storyboard & Animatic</h3>
+A shot table with pencil sketches, drawn in bulk with a cheap image model or by hand on your phone, then cut into an animatic with no generation cost.
+</td>
+<td align="center">
+<h3>🧊 3D Whitebox Previs</h3>
+Metric-scale sets with keyframed actors, props and cameras. The exported camera pass becomes the reference video for generation.
+</td>
+<td align="center">
+<h3>🎥 Director's Console</h3>
+Click any actor, prop or camera to leave a note, or drag them yourself. Every change is versioned and comparable A|B.
+</td>
+</tr>
+<tr>
+<td align="center">
+<h3>🎬 Image & Video Generation</h3>
+Prompts are written shot by shot from the shot list, and each generation group carries the sheets, plates and props it must match.
+</td>
+<td align="center">
+<h3>🎙 Voice, Music & Sound</h3>
+Native dialogue from the video model, designed or cloned voices, a per-project music library, sound effects and the final mix.
+</td>
+<td align="center">
+<h3>🎚 Post-production</h3>
+Grading, repair, VFX, packaging and sound as adjustments scoped from a whole episode down to a time range. Masters are never overwritten.
+</td>
+</tr>
+<tr>
+<td align="center">
+<h3>🛡 Human Sign-off Gates</h3>
+World bible, characters and assets, art style, screenplay, storyboard, whitebox, shot list, video prompts, visuals, post, final cut, release.
+</td>
+<td align="center">
+<h3>✅ Eight QA Reviews</h3>
+Logic, character consistency, timeline, world consistency, picture, audio, content safety and copyright are reviewed in parallel.
+</td>
+<td align="center">
+<h3>💰 Cost Control</h3>
+Free previews first, paid steps after sign-off, reuse before regeneration, draft resolution plus upscale, and cheap models for simple jobs.
+</td>
+</tr>
+<tr>
+<td align="center">
+<h3>🔌 Plugins & Skills</h3>
+Declarative plugins add new roles and workflows. Skills teach one agent one craft. Install either from a zip.
+</td>
+<td align="center">
+<h3>🗂 Files, Not a Black Box</h3>
+Every card, prompt, shot list and QA report is a file in your project, and each generation records its model, provider and references.
+</td>
+<td align="center">
+<h3>🏠 Local First</h3>
+Runs on your computer and listens on <code>127.0.0.1</code> by default, with a versioned API, OpenAPI docs and live events for integrations.
+</td>
+</tr>
+</table>
+
+<br/>
+
+## A look inside
+
+<table>
+<tr>
+<td align="center" width="33%"><a href="docs/assets/readme/console.jpg"><img src="docs/assets/readme/console.jpg" alt="Console" /></a><br/><sub><strong>Console</strong>: the agent roster, a chat with each agent, and the run panel</sub></td>
+<td align="center" width="33%"><a href="docs/assets/readme/workflow.jpg"><img src="docs/assets/readme/workflow.jpg" alt="Workflow Preview" /></a><br/><sub><strong>Workflow</strong>: the pipeline DAG with task states, time and token usage</sub></td>
+<td align="center" width="33%"><a href="docs/assets/readme/script.jpg"><img src="docs/assets/readme/script.jpg" alt="Script Preview" /></a><br/><sub><strong>Script Preview</strong>: screenplay blocks with timing, events and hooks</sub></td>
+</tr>
+<tr>
+<td align="center"><a href="docs/assets/readme/characters.jpg"><img src="docs/assets/readme/characters.jpg" alt="Character Preview" /></a><br/><sub><strong>Characters</strong>: reference sheets, voices and costumes</sub></td>
+<td align="center"><a href="docs/assets/readme/scenes.jpg"><img src="docs/assets/readme/scenes.jpg" alt="Scene Preview" /></a><br/><sub><strong>Scenes</strong>: top-down layouts, plates and the 3D blockout</sub></td>
+<td align="center"><a href="docs/assets/readme/props.jpg"><img src="docs/assets/readme/props.jpg" alt="Prop Preview" /></a><br/><sub><strong>Props</strong>: prop cards with material and size definitions</sub></td>
+</tr>
+<tr>
+<td align="center"><a href="docs/assets/readme/storyboard.jpg"><img src="docs/assets/readme/storyboard.jpg" alt="Storyboard" /></a><br/><sub><strong>Storyboard</strong>: the shot table with pencil sketches and the animatic</sub></td>
+<td align="center"><a href="docs/assets/readme/director.jpg"><img src="docs/assets/readme/director.jpg" alt="Director's Console" /></a><br/><sub><strong>Director's Console</strong>: blocking on the 3D whitebox set</sub></td>
+<td align="center"><a href="docs/assets/readme/post.jpg"><img src="docs/assets/readme/post.jpg" alt="Post-production" /></a><br/><sub><strong>Post-production</strong>: the A|B monitor, adjustments and the episode timeline</sub></td>
+</tr>
+</table>
+
+<br/>
+
+## Problems VideoAgents solves
+
+| Without VideoAgents | With VideoAgents |
+| --- | --- |
+| ❌ The cup is blue porcelain in one shot and white in the next. The lead walks out of a funeral scene in clean everyday clothes. | ✅ A project-wide asset library: prop cards, a costume matrix by occasion and period, and reference sheets that every generation group is anchored to. |
+| ❌ Two people in frame are manageable. Add more people and a longer take, and you can no longer tell the model who stands where, looks where and walks where. | ✅ 3D whitebox previs at metric scale: actors, props and cameras are keyframed, reviewed, and exported as a camera pass that is attached to the prompt as a reference video. |
+| ❌ Turning "the tension in this scene" into something a model can execute is slow, manual and different every time. | ✅ A prompt agent writes each shot as camera move, action and expression, position, and audio: one camera move per shot, motion described with amount and speed, emotion turned into visible physical detail. |
+| ❌ Characters drift from their design, and people who are not in the scene show up in frame. | ✅ New keyframes are compared with the character sheet for face similarity, and prompts carry an identity lock: everyone on screen must match a reference image. |
+| ❌ You find out the script or the shot list was wrong after the video has been generated. | ✅ Review moves upstream to the steps that cost nothing: script preview, storyboard sketches and an animatic. A sign-off is marked stale when its upstream changes later. |
+| ❌ Most of the budget is burned on footage you never use: rerolls, full-resolution first passes, new reference images for every shot. | ✅ Free previs first, paid steps only after sign-off, reuse before regeneration, draft resolution plus upscale, automatic reruns off by default: about $3 per finished minute. |
+| ❌ One flaw in a finished clip means rerolling the whole group. | ✅ A post-production workbench: grading, repair, VFX and sound as versioned adjustments, with A\|B comparison and rollback. |
+| ❌ Face swaps bring likeness risk and the same averaged face in every show. | ✅ Characters are original designs generated from the written character settings and the art style, not from photos of real people. |
+| ❌ Platform review is strict about details, and a missing license can take a video down. | ✅ A content-safety agent and a copyright agent review each episode before release: shots, thumbnail, subtitles, music and fonts. |
+| ❌ Nobody can say how a given version of a character or a shot came about. | ✅ Every step is a file in the project, and each generated asset records the model, provider and references that produced it. |
+
+<br/>
+
+<a id="quickstart"></a>
+
+## Quickstart
+
+Open source. Runs locally. Bring your own engine and provider accounts.
+
+### Install the desktop app
+
+| Platform              | Download                                                                                  |
+| --------------------- | ----------------------------------------------------------------------------------------- |
+| macOS (Apple silicon) | [VideoAgents.zip](https://s3.agentics.world/packages/video-agents/mac/VideoAgents.zip)    |
+| Windows (x64)         | [VideoAgents.zip](https://s3.agentics.world/packages/video-agents/win/VideoAgents.zip)    |
+
+1. **Download, unzip and open the app.** The package does not include Python; on first launch the app downloads its own runtime.
+2. **Pick an agent engine in the top bar.** If that CLI is missing or not signed in, a setup dialog installs it with its official script and opens its own login in a terminal.
+3. **Add your providers.** In ⚙️ Settings → Generation Models, enter credentials for the image, video and audio services you plan to use.
+4. **Create a project and import your novel.** The crew starts with the world bible and stops at each sign-off gate for your approval.
+
+FFmpeg is required for media inspection, audio and editing. On Windows the app offers to download it when none is found; on macOS install it with `brew install ffmpeg`.
+
+### Or run from source
+
+Requirements: Python 3.10 or newer, FFmpeg, and at least one agent engine. Node.js 22.12 or newer is needed only for desktop development and packaging.
 
 ```bash
 git clone https://github.com/AgenticsWorld/VideoAgents.git
@@ -47,117 +248,44 @@ python apps/web/check.py
 python apps/web/server.py
 ```
 
-After installation, the equivalent `videoagents-web` command is also available. Use `videoagents-api` when only the open API service is needed.
+Open <http://127.0.0.1:8630>. API documentation is at <http://127.0.0.1:8630/api/v1/docs>. After installation the equivalent `videoagents-web` command is also available; use `videoagents-api` when only the API service is needed.
 
-Open <http://127.0.0.1:8630>. API documentation is at
-<http://127.0.0.1:8630/api/v1/docs>. Select or create a project in the top bar, then
-configure an execution engine and any generation providers you need.
+For unattended pipelines, `make run-auto` starts the console in full-auto mode, so agents on the `claude` engine run shell commands without approval prompts. Agents can then execute any command, so use it only on a trusted machine.
 
-Use `npm run dev:web` to start the Python Web gateway and `npm ci && npm run dev:desktop` for the
-desktop shell. Electron starts the same gateway by default or proxies the remote API
-specified by `VIDEOAGENTS_API_URL`. Release packages do not contain Python. On the first launch
-without an installed runtime, the client reads `https://s3.agentics.world/packages/video-agents/metadata.json`
-and downloads the matching package. Claude, Codex, Kimi, Pi, OpenCode, Grok, FFmpeg, models, and GPU environments remain
-optional external installations. On Windows x64 the desktop client offers to download FFmpeg from the same
-package source when none is found (no package manager or administrator rights needed); the build is pinned in
-`apps/desktop/ffmpeg-artifact.json`.
+Desktop development, packaging, releases and DeepAgents tuning are covered in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
 
-Before desktop development, make sure `node --version` meets `.nvmrc`; with nvm, run `nvm use` first. Run `npm ci` again after switching Node major versions so an incomplete Electron installation from the old runtime is not reused.
+<br/>
 
-The equivalent Makefile targets are `make desktop-install`, `make desktop-dev` (or `make desktop-run`) for development, and `make desktop-build` for compilation. `make desktop-runtime` creates a separately distributable Python ZIP using the current short Git hash under `apps/desktop/.runtime-packages/`. `make desktop` creates the client-only artifacts under `apps/desktop/release/`.
+## More
 
-The Python runtime and Electron application are versioned independently. Runtimes are installed under the user data directory at `python-runtimes/versions/<version>/` and selected through `active.json`. Startup never checks for updates when a valid runtime exists; the index is read only on first installation or when the user chooses the manual Python update menu item. Package size, SHA-256, platform, architecture, version, and executable containment are validated before activation. `VIDEOAGENTS_PYTHON` remains an explicit development and diagnostics override.
+- **Plugins** — [VideoAgents-Plugins](https://github.com/AgenticsWorld/VideoAgents-Plugins): add-on agent teams and workflows such as derivative fiction, fusion fiction, audio-to-video, mashup, audio drama and digital-human dialogue. Install a zip from ⚙️ Settings → Plugins. Uploaded plugins live in the writable runtime data directory.
+- **Skills** — [VideoAgents-Skills](https://github.com/AgenticsWorld/VideoAgents-Skills): `SKILL.md` packs that teach one agent one craft. Install a zip from the **Skill** button in the console.
+- **Sample projects** — [VideoAgents-Samples](https://github.com/AgenticsWorld/VideoAgents-Samples): complete projects to open and explore, including the _alices_ project shown on this page. Import a project zip with **Import Project…** in the project dropdown.
 
-Desktop and Python packages are produced only when a `v*` tag points to a commit on `main`. The tag version is embedded in both package types and published under `packages/video-agents/`: Python runtimes in `python/`, versioned desktop ZIPs in `mac/` and `win/`, and `metadata.json` as the shared update index. Each desktop directory also exposes `VideoAgents.zip` as the latest package. Release clients read this metadata before creating the main window: a newer supported version remains optional, while clients older than `desktop.minimumVersion` enter a non-skippable update flow before the local backend starts. The publish job reads that value from the GitHub Actions environment/repository variable `MINIMUM_DESKTOP_VERSION` and defaults to `1.0.0` when it is unset; publishing fails when the value is invalid or newer than the release version.
+<br/>
 
-When launched from Finder, the macOS desktop client imports the login shell `PATH` and supplements common Homebrew, `~/.local/bin`, Kimi, OpenCode, Grok, Volta, and pnpm locations. Existing `claude`, `codex`, `kimi`, `pi`, `opencode`, and `grok` installations are therefore inherited by the local Python service and its Agent child processes instead of being bundled into the client. When the `pi` engine is selected, its language-model menus are populated from `pi --list-models`, so they reflect the providers and models available to the current Pi login. The `opencode` engine likewise populates its menus from `opencode models`, and the `grok` engine (Grok Build CLI, install from https://grok.com/build, sign in with `grok login`) from `grok models`. For every engine except deepagents the language-model menu defaults to Smart Assignment, which picks a model per agent by task complexity (e.g. on the opencode engine creative-core agents go to DeepSeek V4 Pro and the rest to DeepSeek V4 Flash); switching the engine or language model automatically re-syncs every agent's model settings.
-
-When the top-bar engine (or the one restored at startup) is a CLI that is missing or not signed in, a setup dialog opens. **One-click install** runs that CLI's official install command in the background (`curl -fsSL <official script> | bash`, or `irm <official script> | iex` on Windows; OpenCode on Windows uses `npm install -g opencode-ai`) and streams the log; if it fails, **Install in a terminal** reruns it in a terminal window so the script's questions can be answered. Once installed, **Sign in** opens a terminal window running the CLI's own login command (such as `claude auth login`, `codex login`, `kimi login`); the user authorizes with their own account in the browser and the dialog closes when the login is detected. The app never handles the tokens. The install process gets no app or provider secrets in its environment, and install and sign-in are only offered to requests from the local machine.
-
-Local `make desktop` packaging defaults to `CSC_IDENTITY_AUTO_DISCOVERY=false`, so it never reads an Apple developer certificate from the macOS Keychain and performs no signing or notarization. Release signing is enabled only in GitHub Actions when `CSC_LINK` and the Apple secrets are explicitly supplied.
-
-For unattended pipelines, start the console in full-auto mode so agents on the
-`claude` engine can run shell commands without approval prompts (the `codex`,
-`pi`, and `deepagents` engines already run unattended):
-
-```bash
-make run-auto
-```
-
-This lets agents execute any command, so use it only on a trusted machine. The
-orchestration-layer guardrails (the `orchestrator_guard` hook and the runtime
-check in `modules/genmedia.py`) are independent of the permission mode and stay
-active.
-
-Optional integrations can be installed as extras:
-
-```bash
-python -m pip install -e ".[storage]"
-python -m pip install -e ".[dev]"
-```
-
-The deepagents engine requires Python 3.11 or newer. If your main environment
-runs Python 3.10, use `make install-deepagents` instead to create a dedicated
-`.venv-deepagents` that the runtime discovers automatically; alternatively set
-`DEEPAGENTS_PY` to any interpreter that has deepagents installed.
-
-To choose a specific interpreter for that dedicated environment:
-
-```bash
-make install-deepagents DEEPAGENTS_PYTHON=python3.11
-```
-
-When using asdf, select an installed Python 3.11 version explicitly:
-
-```bash
-ASDF_PYTHON_VERSION=3.11.12 make install-deepagents DEEPAGENTS_PYTHON=python
-```
-
-DeepAgents defaults to a 128,000-token context window, an 8,192-token output cap,
-and a graph recursion limit of 250 (500 for dispatcher agents). The runner
-reserves 16,384 tokens for prompt and tool-schema overhead, rejects an oversized
-first request, summarizes at 48,000 estimated tokens, keeps 8,000 tokens, and caps each shell
-tool result at 24,000 bytes. The `glob` tool and automatic general-purpose
-subagent are disabled to prevent unbounded scans and recursive context growth.
-Override the model window only when the model server is configured with the
-same or larger value:
-
-```bash
-DEEPAGENTS_CONTEXT_WINDOW=131072 DEEPAGENTS_MAX_OUTPUT_TOKENS=8192 ./run.sh
-```
-
-`DEEPAGENTS_RECURSION_LIMIT` and `DEEPAGENTS_MAX_TOOL_OUTPUT_BYTES` can also be
-adjusted; raising either increases runtime or context pressure. When the recursion
-limit is hit, the runner resumes from the last checkpoint up to
-`DEEPAGENTS_MAX_CONTINUATIONS` (default 3) times before failing.
-
-FFmpeg must be installed separately with your operating system's package
-manager.
-
-## Repository Layout
+## Under the hood
 
 ```text
-agents/          Agent role specifications, workflow documentation, and DAG
-code/            Repository-level validation and utility scripts
-modules/         Media, audio, and DeepAgents adapters
-services/api/    Independently runnable Python API service, schemas, and runtime state
+agents/           Agent role specifications, workflow documentation, and DAG
+code/             Repository-level validation and utility scripts
+modules/          Media, audio, and DeepAgents adapters
+services/api/     Independently runnable Python API service, schemas, and runtime state
 services/runtime/ Agent scheduling, project services, providers, and runtime tools
-apps/web/        Original static WebUI plus Python static server/API reverse proxy
-apps/desktop/    Electron shell, Python Web lifecycle, packaging, and updates
-tests/           Regression suite (pytest): modules, pipeline CLIs, and repository integrity
-data/projects/   Video project resources, inputs, and generated artifacts
+apps/web/         Original static WebUI plus Python static server/API reverse proxy
+apps/desktop/     Electron shell, Python Web lifecycle, packaging, and updates
+plugins/          Declarative agent plugins (the derivative-fiction team ships here)
+tests/            Regression suite (pytest): modules, pipeline CLIs, and repository integrity
+data/projects/    Video project resources, inputs, and generated artifacts
 ```
 
-`agents/WORKFLOW.md` is the human-readable process authority.
-`agents/workflow.yaml` is the orchestrator's machine-readable input.
+`agents/WORKFLOW.md` is the human-readable process authority; `agents/workflow.yaml` is the orchestrator's machine-readable input. Browsers and the Electron shell share the same static WebUI, served next to a versioned `/api/v1` with OpenAPI, durable run state and real-time SSE events. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for component relationships and directory decisions.
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for component relationships,
-directory decisions, the future role of `packages/`, and inline scheduler versus worker trade-offs.
+<br/>
 
-## Configuration
+## Configuration and security
 
-Runtime configuration and SQLite control state live in `data/.videoagents/`;
-project media remains in `data/projects/`. Both can contain private data and are excluded from Git.
+Runtime configuration and SQLite control state live in `data/.videoagents/`; project media remains in `data/projects/`. Both can contain private data and are excluded from Git.
 
 Public-release security defaults are deliberately conservative:
 
@@ -165,9 +293,9 @@ Public-release security defaults are deliberately conservative:
 - `VIDEOAGENTS_PERMISSION_MODE=acceptEdits`
 - Claude OAuth usage probing is disabled
 
-See [`.env.example`](.env.example) for opt-in overrides and read
-[`SECURITY.md`](SECURITY.md) before enabling LAN access or unrestricted agent
-permissions.
+See [`.env.example`](.env.example) for opt-in overrides and read [`SECURITY.md`](SECURITY.md) before enabling LAN access or unrestricted agent permissions.
+
+<br/>
 
 ## Development
 
@@ -177,30 +305,38 @@ pytest
 npm run test:web   # Node checks for the browser-side whitebox / director code
 ```
 
-CI runs the whole `tests/` suite: module and pipeline-CLI regressions, repository
-integrity (JSON/YAML, workflow agent references, security defaults), and the HTTP
-layer (route table, offline GET smoke test, Web console pages). Cases that need
-`ffmpeg` skip when it is not installed.
+CI runs the whole `tests/` suite: module and pipeline-CLI regressions, repository integrity (JSON/YAML, workflow agent references, security defaults), and the HTTP layer (route table, offline GET smoke test, Web console pages). Cases that need `ffmpeg` skip when it is not installed.
 
-## License and Attribution
+See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) for the full development guide and [`CONTRIBUTING.md`](CONTRIBUTING.md) for how to contribute.
+
+<br/>
+
+## Community
+
+- [Discord](https://discord.gg/faaZCrWxCq) — join the community
+- [X](https://x.com/AgenticsWorld) — follow updates and announcements
+- [GitHub Issues](https://github.com/AgenticsWorld/VideoAgents/issues) — bugs and feature requests
+
+<br/>
+
+## License
 
 Copyright 2026 AgenticsWorld.
 
-Licensed under the [GNU General Public License v3.0](LICENSE) (`GPL-3.0-only`).
-You may use, modify, and redistribute the project, including commercially. If
-you distribute the project or a modified version of it, you must license it
-under the same terms, make the corresponding source code available, keep the
-license and copyright notices (including [`NOTICE`](NOTICE)) intact, and mark
-your changes with the date you made them. The software comes with no warranty.
+Licensed under the [GNU General Public License v3.0](LICENSE) (`GPL-3.0-only`). You may use, modify, and redistribute the project, including commercially. If you distribute the project or a modified version of it, you must license it under the same terms, make the corresponding source code available, keep the license and copyright notices (including [`NOTICE`](NOTICE)) intact, and mark your changes with the date you made them. The software comes with no warranty.
 
-Releases up to and including v1.0.38 were published under the Apache License 2.0
-and remain available under those terms.
+Releases up to and including v1.0.38 were published under the Apache License 2.0 and remain available under those terms.
 
 Citation metadata is available in [`CITATION.cff`](CITATION.cff).
 
-## Trademarks and Services
+## Trademarks and services
 
-Third-party product and provider names are used only to describe compatible
-integrations. Their respective owners retain all trademark and service rights.
-VideoAgents does not grant access to or redistribute any third-party model or
-service.
+Third-party product and provider names are used only to describe compatible integrations. Their respective owners retain all trademark and service rights. VideoAgents does not grant access to or redistribute any third-party model or service.
+
+<br/>
+
+---
+
+<p align="center">
+  <sub>Open source under GPL-3.0. Built for people who would rather direct the film than babysit the models.</sub>
+</p>
