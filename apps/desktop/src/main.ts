@@ -417,12 +417,16 @@ function closeRuntimeProgress(): void {
   resetRuntimeProgressMeter()
 }
 
-function executableSearchPath(): string {
+function executableSearchPath(python?: string): string {
   // The managed FFmpeg directory is listed even before anything is installed
   // there, so the running web server finds FFmpeg right after setup completes.
   return desktopExecutablePath(
     process.env,
-    process.platform === 'win32' ? [managedFfmpegBinDirectory(app.getPath('userData'))] : [],
+    [
+      ...(process.platform === 'win32' ? [managedFfmpegBinDirectory(app.getPath('userData'))] : []),
+      // Keep the selected Python ahead of login-shell/system paths, without resolving venv symlinks.
+      ...(python ? [path.dirname(python)] : []),
+    ],
   )
 }
 
@@ -584,7 +588,7 @@ async function ensureWebServer(): Promise<void> {
   const clientBuild = readBuildInfo(process.resourcesPath, app.isPackaged)
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    PATH: executableSearchPath(),
+    PATH: executableSearchPath(activeRuntime.python),
     PYTHONUTF8: '1',
     PYTHONIOENCODING: 'utf-8',
     PYTHONNOUSERSITE: '1',
