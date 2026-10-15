@@ -683,7 +683,7 @@ def test_agentics_tts_config_splits_voice_design_and_voice_clone(monkeypatch, tm
 
     profiles = {
         "qwen3tts-voicedesign": {"profile_code": "qwen3tts-voicedesign", "token_schema": {
-            "parameters": {"text": {}, "instruct": {}}, "files": {}}},
+            "parameters": {"text": {}, "instruction": {}}, "files": {}}},
         "qwen3tts-clone": {"profile_code": "qwen3tts-clone", "token_schema": {
             "parameters": {"text": {}}, "files": {}}},
     }
@@ -698,8 +698,13 @@ def test_agentics_tts_config_splits_voice_design_and_voice_clone(monkeypatch, tm
 
     genmedia.generate_tts("样本句", "refs/CHAR-0001_voiceprint.mp3", character="CHAR-0001")
     genmedia.generate_tts("台词句", "lines/ep01_line.mp3", voice="narrator-id")
-    assert calls[0][0] == "qwen3tts-voicedesign" and calls[0][1]["instruct"] == "女性,音高中低"
-    assert calls[1][0] == "qwen3tts-clone" and "instruct" not in calls[1][1]
+    assert calls[0][0] == "qwen3tts-voicedesign" and calls[0][1]["instruction"] == "女性,音高中低"
+    assert calls[1][0] == "qwen3tts-clone" and "instruction" not in calls[1][1]
+
+    # 旧名 instruct 仍兼容(后端 2026-10-14 前导入的 profile)
+    profiles["qwen3tts-voicedesign"]["token_schema"]["parameters"] = {"text": {}, "instruct": {}}
+    genmedia.generate_tts("样本句", "refs/CHAR-0001_voiceprint.mp3", character="CHAR-0001")
+    assert calls.pop()[1]["instruct"] == "女性,音高中低"
 
     # design profile 未声明嗓音描述参数 → 回落 Voice Clone profile
     profiles["qwen3tts-voicedesign"]["token_schema"]["parameters"] = {"text": {}}

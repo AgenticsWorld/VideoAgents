@@ -1085,8 +1085,9 @@ _AGENTICS_FIXED_PARAMETERS = {
     },
     "tts": {
         "text": ("string", 1, None), "voice_id": ("string", None, None),
-        # 嗓音文字描述(Voice Design profile 声明其一即可):instruct 为首选名——与 RunningHub 工作流里
-        # Qwen3-TTS VoiceDesign 节点的输入位同名(_RH_TTS_DESIGN_DESC_KEYS 首项);其余为兼容名
+        # 嗓音文字描述(Voice Design profile 声明其一即可):instruction 为 Agentics 后端 TTS 固定契约的
+        # 正式名(2026-10-14 起);instruct 与 RunningHub Qwen3-TTS VoiceDesign 节点输入位同名;其余为兼容名
+        "instruction": ("string", None, None),
         "instruct": ("string", None, None), "voice_instruction": ("string", None, None),
         "voice_description": ("string", None, None), "instructions": ("string", None, None),
         "language": ("string", None, None), "speed": ("number", 0.1, None),
@@ -6768,8 +6769,9 @@ def _resolve_tts_reference(cfg, text, output, voice="", character="", variant=""
     )
 
 
-# Agentics Voice Design profile 的嗓音描述参数名:首选与 RunningHub 节点输入位一致的 instruct
-_AGENTICS_TTS_DESC_KEYS = ("instruct", "voice_instruction", "voice_description", "instructions")
+# Agentics Voice Design profile 的嗓音描述参数名:首选后端 TTS 固定契约的 instruction,
+# 其次与 RunningHub 节点输入位一致的 instruct
+_AGENTICS_TTS_DESC_KEYS = ("instruction", "instruct", "voice_instruction", "voice_description", "instructions")
 
 
 def _is_voiceprint_sample(output: str) -> bool:
