@@ -200,7 +200,9 @@ function buildUnits(){
       :st.every(x=>x==='done'||x==='skipped')?(st.some(x=>x==='done')?'done':'skipped')
       :has('done')?'partial':'pending';
     // 时间:实际 Σ + 剩余估 Σ
-    u.actDur=u.exec.reduce((a,m)=>a+(m.duration_s||0),0);
+    // 实际耗时含已扇出母节点本身(批次单点名母节点、未列组号时归在母节点上)
+    u.actDur=u.members.reduce((a,m)=>a+(m.duration_s||0),0);
+    u.runCnt=u.members.reduce((a,m)=>a+(m.run_count||0),0);
     u.estDur=u.exec.reduce((a,m)=>a+(m.est_duration_s||0),0);
     u.doneCnt=st.filter(x=>x==='done'||x==='skipped').length;
   }
@@ -313,7 +315,7 @@ function renderSummary(){
     +(failed?`<span class="st" style="color:var(--red)">✖ <b>${failed}</b> ${t('失败')}</span>`:'')
     +(blocked?`<span class="st" style="color:var(--orange)">⛔ <b>${blocked}</b> ${t('受阻')}</span>`:'')
     +signs.map(m=>`<span class="sig" data-key="${esc(m.family)}" title="${esc(m.id)}">✍️ ${esc(m.checkpoint||m.id)}</span>`).join('')
-    +`<span class="st">${t('已花费:')}<b>${fmtDur(s.spent_duration_s)||'—'}</b></span>`
+    +`<span class="st" title="${esc(t('全部运行时段合并,并行重叠只算一次(含总制片、重跑与出错结束的运行)'))}">${t('已花费:')}<b>${fmtDur(s.spent_duration_s)||'—'}</b></span>`
     +`<span class="st" title="${esc(t('按历史均值预估'))}">${t('剩余预估:')}<b>${fmtDur(s.remaining_est_duration_s)||'—'}</b> (${s.remaining_count} ${t('个任务')})</span>`
     +`<span class="st" title="${esc(t('剩余任务沿依赖链的最长估时(并行推进下的理论最短完成时间)'))}">${t('关键路径:')}<b>${fmtDur(s.critical_path_s)||'—'}</b></span>`
     +`<span class="st" title="${esc(t('全部 Agent 会话输入+输出累计(含缓存读写)'))}">${t('消耗语言tokens')} <b>${fmtM(s.llm_tokens)}</b></span>`
@@ -364,7 +366,7 @@ function renderDetail(){
       ${kv('Agent',esc(u.agent))}
       ${kv(t('阶段'),esc(u.phase+' '+t(PHASE_NAMES[u.phase]||'')))}
       ${kv(t('签字点'),esc(u.checkpoint))}
-      ${kv(t('实际'),u.actDur?esc(fmtDur(u.actDur)):'')}
+      ${kv(t('实际'),u.actDur?esc(fmtDur(u.actDur))+(u.runCnt?` <span style="color:var(--dim)">(${esc(I18N.f(t('{n} 次运行'),{n:u.runCnt}))})</span>`:''):'')}
       ${kv(t('预估'),u.estDur?esc(fmtDur(u.estDur))+` <span style="color:var(--dim)">(${t('按历史均值')})</span>`:'')}
       ${kv(t('依赖'),u.deps.length?`<span class="deps">${u.deps.map(d=>`<a data-key="${esc(d)}">${esc(d)}</a>`).join('、')}</span>`:'')}
       ${kv(t('产出'),esc((u.base||u.members[0]).outputs.join('、')))}

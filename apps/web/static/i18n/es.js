@@ -1357,6 +1357,8 @@ window.I18N_DICT = {
 "预估": "estimado",
 "该项目还没有 runs/dag.json(尚未立项)": "Este proyecto aún no tiene runs/dag.json (sin inicializar)",
 "已花费:": "Gastado: ",
+"全部运行时段合并,并行重叠只算一次(含总制片、重跑与出错结束的运行)": "Todas las ejecuciones combinadas; el solapamiento en paralelo se cuenta una sola vez (incluye al Productor, repeticiones y ejecuciones terminadas con error)",
+"{n} 次运行": "{n} ejecuciones",
 "剩余预估:": "Estimación restante: ",
 "关键路径:": "Ruta crítica: ",
 "个任务": "tareas",
