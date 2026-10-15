@@ -1,6 +1,6 @@
 /* 预览页「✏️ 编辑/修改」浮窗(所有预览页共用)
  * 用法:<script src="/static/edit-popup.js"></script>(放 i18n.js 之后),
- *      EditPopup.open({project, compose, agent, dispatcher, target, onSent})
+ *      EditPopup.open({project, compose, agent, dispatcher, target, onSent, hint})
  *   project = 项目 slug;compose = 预填进输入框的定位文本(如「修改 <对象>\n修改意见:」);
  *   agent   = 目标 Agent id;缺省或不存在时落**修改师**(00-orchestration/reviser,一人把相关改动全做完,
  *             无状态可并发、不排队在总制片后面);修改师不存在(旧服务端)时再落总制片;
@@ -10,12 +10,13 @@
  *             非修改师目标时该字段被服务端忽略;
  *   onSent  = 可选回调 (runJson) => void,派单成功后拿到 /api/v1/runs 的返回(含 run_id),
  *             供页面就地标记「处理中」并轮询(故事板页草图重绘用)。
+ *   hint    = 可选,替换底部提示文字(缺省「发出后到控制台可看 Agent 回复」;如场景预览背景图「修改」提示可用「+」附参考图),每次 open 重置。
  * 行为:在当前页右下角弹出非模态浮窗(无遮罩,不抢页面其它区域的点击/选择/复制),
  *      标头显示目标 Agent,输入框预填定位文本、光标落尾,用户接着写修改意见,
  *      目标为修改师时多一行「顺带重跑受影响的下游任务」勾选(默认不勾:只改用户指的这一处,
  *      下游是否重跑由总制片按变更记录决定;勾上则修改师完成后宿主立即把变更记录投递总制片),
  *      并查一次 /api/v1/runs:与本对象相关的任务正在跑时显示冲突提示(不拦发送);
- *      Shift+Enter 或「发送」按钮 POST /api/v1/runs(引擎/模型不传,由服务端回退顶栏全局设置);
+ *      Enter(Shift+Enter 换行)或「发送」按钮 POST /api/v1/runs(引擎/模型不传,由服务端回退顶栏全局设置);
  *      输入框右上角「+」按钮(file-attach.js,语音按钮开启时居右下角)可附本机文件:不上传,只把绝对路径拼在正文末尾;
  *      发出后浮窗折叠成一条「✅ 已发送给 …」小提示,数秒后自动消失;失败则保留原文并显示错误。
  * 控制台 index.html 仍保留 ?project=&compose=&agent= 预填通道(飞书等外部入口沿用),本文件不替代它。
@@ -93,7 +94,7 @@
       '<div class="ep-head"><span class="ep-title">✏️ '+esc(T('修改意见'))+'</span>'
       +'<span class="ep-agent">'+esc(T('发给:'))+'<b data-no-i18n></b></span>'
       +'<button type="button" class="ep-close" title="'+esc(T('关闭'))+'" aria-label="'+esc(T('关闭'))+'">×</button></div>'
-      +'<textarea data-no-i18n placeholder="'+esc(T('接着写修改意见… (Shift+Enter 发送,Enter 换行)'))+'"></textarea>'
+      +'<textarea data-no-i18n placeholder="'+esc(T('接着写修改意见… (Enter 发送,Shift+Enter 换行)'))+'"></textarea>'
       +'<label class="ep-opt" hidden><input type="checkbox" class="ep-rerun"><span>'+esc(T('顺带重跑受影响的下游任务(交总制片标脏重派)'))+'</span></label>'
       +'<div class="ep-warn" role="status"></div>'
       +'<div class="ep-err" role="alert"></div>'
@@ -109,7 +110,7 @@
     attachVoice(ta);
     attachFiles(ta);
     ta.addEventListener('keydown',function(e){
-      if(e.key==='Enter'&&e.shiftKey){e.preventDefault();send();}   // 与控制台输入框同一快捷键
+      if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();send();}   // 与控制台输入框同一快捷键;输入法选词中的 Enter 不发送
       else if(e.key==='Escape'){e.preventDefault();close();}         // 仅焦点在浮窗内时 Esc 关闭,不截获页面其它 Esc
     });
     return root;
@@ -174,6 +175,7 @@
     el.querySelector('.ep-send').disabled=false;
     var optRow=el.querySelector('.ep-opt');optRow.hidden=true;el.querySelector('.ep-rerun').checked=false;
     var b=el.querySelector('.ep-agent b');b.textContent='…';
+    var hint=el.querySelector('.ep-hint');hint.textContent=opt.hint||T('发出后到控制台可看 Agent 回复');hint.title=opt.hint||'';
     cur={project:opt.project||'demo',agent:{id:opt.agent||'',name:opt.agent||''},text:opt.compose||'',
          target:cleanTarget(opt.target),dispatcher:!!opt.dispatcher,
          onSent:typeof opt.onSent==='function'?opt.onSent:null};

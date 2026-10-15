@@ -9,6 +9,8 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+from mirror_ffmpeg import load_pin
+
 
 VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 
@@ -27,7 +29,10 @@ def main() -> None:
     parser.add_argument("--minimum-desktop-version", default="1.0.0")
     parser.add_argument("--version", required=True)
     parser.add_argument("--public-base", help="Package URL prefix for this distribution")
+    parser.add_argument("--ffmpeg-artifact", type=Path, help="Pinned FFmpeg packages (ffmpeg-artifact.json)")
     args = parser.parse_args()
+    if args.ffmpeg_artifact and not args.public_base:
+        raise SystemExit("--ffmpeg-artifact requires --public-base")
     document = {"schema": 1, "python": {}}
     python = document["python"]
     metadata_files = sorted(args.artifacts.rglob("*.metadata.json"))
@@ -69,6 +74,17 @@ def main() -> None:
             if args.public_base and filename:
                 metadata["url"] = f"{args.public_base.rstrip('/')}/{platform}/{filename}"
             desktop[platform] = metadata
+    if args.ffmpeg_artifact:
+        # The package itself is the same upstream build on every mirror; only the
+        # URL follows the distribution, like the Python runtime above.
+        ffmpeg = document.setdefault("ffmpeg", {})
+        for entry in load_pin(args.ffmpeg_artifact):
+            ffmpeg.setdefault(entry["platform"], {})[entry["arch"]] = {
+                "version": entry["version"],
+                "url": f"{args.public_base.rstrip('/')}/ffmpeg/{entry['filename']}",
+                "sha256": entry["sha256"],
+                "size": entry["size"],
+            }
     document["updatedAt"] = datetime.now(timezone.utc).isoformat()
     args.index.parent.mkdir(parents=True, exist_ok=True)
     args.index.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")

@@ -16,6 +16,9 @@ import re
 from pathlib import Path
 from typing import Any
 
+from modules import scene_links
+from modules.entity_ids import CHAR_ID_PAT
+
 SCHEMA_VERSION = "script_breakdown/1.0"
 OWNER_AGENT = "01-story/timeline-story"    # 拆解表产出/「重新分析」承接工位(2026-09-11 用户指定)
 BREAKDOWN_REL = "story/episodes/{ep}/script_breakdown.json"
@@ -43,7 +46,7 @@ INPUT_FILES = ("story/episodes/{ep}/screenplay.md", "story/episodes/{ep}/dialogu
 # 剧本机器锚点契约(docs/screenplay_anchors.md,2026-09-23):方括号标签/行首关键词/场头字段位置固定不随输出语言变,
 # 中文旧写法与英文规范写法等价(EVENTS/CAST/DURATION、ACTION/TRANSITION/TIME/SOUND/SFX/MUSIC/NARRATION、NO DIALOGUE…)
 _SCENE_TOKEN = re.compile(r"^(S\d{1,3}[A-Za-z]?(?:[-–]\d+)?(?:[（(](?:续|cont'?d|continued)[)）])?|\d{1,2}-\d{1,2}|OH|EC|FRAME[-_]\w+)(?=$|[\s|｜·:：—\-])", re.I)
-_CHAR_RE = re.compile(r"CHAR-\d+")
+_CHAR_RE = re.compile(CHAR_ID_PAT)        # 数字编号与拼音 slug(CHAR-jie-rui-er)都认,口径见 modules/entity_ids(#117)
 _SCN_RE = re.compile(r"SCN-\d+")
 _EV_RE = re.compile(r"\bev[a-z]*[-_]?(?:ch\d+[-_])?\d+\b", re.I)
 _DUR_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:s\b|秒)")
@@ -284,7 +287,7 @@ _DLG_PATTERNS = [
     # [LN-ep01-01] 章墨(CHAR-0001)〔OV〕(擦汗)：台词(括注/〔〕次序不限,在 _speaker 里拆)
     re.compile(r"^(?:[-*]\s*)?\[(?P<id>[A-Za-z][\w-]*-[\w-]+)\]\s*(?P<spk>[^:：]+?)\s*[:：]\s*(?P<text>.+)$"),
     # CHAR-0002:「佳宁？」 {…}   /  CHAR-0011:「早安，九位。」
-    re.compile(r"^(?:[-*]\s*)?(?P<spk>CHAR-\d+)\s*(?P<paren>[（(][^()（）]*[)）])?\s*[:：]\s*(?P<text>.+)$"),
+    re.compile(r"^(?:[-*]\s*)?(?P<spk>" + CHAR_ID_PAT + r")\s*(?P<paren>[（(][^()（）]*[)）])?\s*[:：]\s*(?P<text>.+)$"),
     # 老者：「……」(仅接受引号包裹的台词,避免把「动作:」「声音:」当说话人)
     re.compile(r"^(?:[-*]\s*)?(?P<spk>[^\s:：「「\[\]*|#>][^:：「「\[\]*|#>]{0,19}?)\s*(?P<paren>[（(][^()（）]*[)）])?\s*[:：]\s*(?P<text>[「“\"].+)$"),   # 英文名可含空格(Old Man)
 ]
@@ -431,11 +434,10 @@ def parse_screenplay(text: str, known_names: set[str] | None = None) -> dict:
             if m and cur["alloc_s"] is None:
                 cur["alloc_s"] = float(m.group(1))
             continue
-        m = (re.match(r"^(?:[-*]\s*)?\**(?:转场|TRANSITION)\**\s*[:：]\s*\**(.+?)\**\s*$", s, re.I)
-             or re.match(r"^\**((?:SMASH |MATCH |JUMP )?CUT TO(?: BLACK)?|FADE (?:IN|OUT|TO BLACK)|DISSOLVE TO|WIPE TO|CROSSFADE|INTERCUT)\s*[:.]?\**\s*$", s, re.I))
-        if m:
-            cur["transition"] = _strip_md(m.group(1))
-            _push(cur, "transition", cur["transition"])
+        tr = scene_links.transition_line(s)   # 转场行(含场间衔接花括号,docs/scene_links.md)统一由 scene_links 识别
+        if tr:
+            cur["transition"] = tr
+            _push(cur, "transition", tr)
             continue
         m = re.match(r"^\(?\s*adaptation_note\s*[:：]\s*(.+?)\)?\s*$", s, re.I)
         if m:
@@ -1007,6 +1009,8 @@ def load(base: Path, ep: str) -> dict:
     inputs = input_mtimes(base, ep)
     p = breakdown_path(base, ep)
     has_inputs = any(k.endswith("screenplay.md") for k in inputs)
+    # 场间衔接(2026-10-10,docs/scene_links.md):scenes[].link_out 一律由宿主按剧本场尾转场行现算,不靠拆解工位写
+    sp_text = read_text(base / "story" / "episodes" / ep / "screenplay.md")
     if p.is_file():
         agent = read_json(p)
         if isinstance(agent, dict) and isinstance(agent.get("scenes"), list):
@@ -1021,11 +1025,11 @@ def load(base: Path, ep: str) -> dict:
             merged.setdefault("issues", [])
             if errors:
                 merged["issues"] = [{"level": "error", "text": e} for e in errors] + list(merged["issues"])
-            return {"breakdown": merged, "source": "agent", "stale": stale, "file": str(p.relative_to(base)),
-                    "mtime": mt, "inputs": inputs, "errors": errors}
-        return {"breakdown": derived, "source": "derived", "stale": [], "file": None, "mtime": None,
+            return {"breakdown": scene_links.annotate(merged, sp_text), "source": "agent", "stale": stale,
+                    "file": str(p.relative_to(base)), "mtime": mt, "inputs": inputs, "errors": errors}
+        return {"breakdown": scene_links.annotate(derived, sp_text), "source": "derived", "stale": [], "file": None, "mtime": None,
                 "inputs": inputs, "errors": ["script_breakdown.json 不是合法拆解表(缺 scenes[] 或 JSON 无法解析)"]}
-    return {"breakdown": derived if has_inputs else None, "source": "derived" if has_inputs else "none",
+    return {"breakdown": scene_links.annotate(derived, sp_text) if has_inputs else None, "source": "derived" if has_inputs else "none",
             "stale": [], "file": None, "mtime": None, "inputs": inputs, "errors": []}
 
 
@@ -1073,6 +1077,9 @@ def validate(bd: dict, base: Path | None = None, ep: str | None = None) -> tuple
                 errors.append(f"{no}.{k} 须为非负数")
         if sc.get("tempo") not in (None, "slow", "medium", "fast"):
             errors.append(f"{no}.tempo 须为 slow|medium|fast")
+        # NPC 参与构图判定(2026-10-09,docs/npc_staging.md):字段存在时查格式;缺判定由 check_script_breakdown 的 npc_judged 管
+        from modules.npc_staging import judgment_errors
+        errors.extend(judgment_errors(no, sc.get("npc")))
         for k, b in enumerate(sc.get("blocks") or []):
             if not isinstance(b, dict) or b.get("type") not in ("action", "sound", "dialogue", "narration", "transition"):
                 errors.append(f"{no}.blocks[{k}].type 须为 action|sound|dialogue|narration|transition")

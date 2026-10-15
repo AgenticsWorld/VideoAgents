@@ -6,13 +6,13 @@
     GET https://api.fal.ai/v1/models?endpoint_id=<端点>&expand=openapi-3.0      单个端点 + 参数表
 
 - 设置页里一条 = 一个「模型前缀」:同一模型的 text-to-video / image-to-video / reference-to-video
-  (图像:text-to-image / edit / image-to-image / multi)几个端点并成一条,模型 ID 存前缀——与内置清单同一约定,
+  (图像:text-to-image / edit / edit-image / image-to-image / multi)几个端点并成一条,模型 ID 存前缀——与内置清单同一约定,
   genmedia 生成时按本次输入挑端点。有的模型文生端点就是前缀本身(如 fal-ai/veo3.1),resolve_* 按目录核对。
 - 各端点参数名、取值写法都不一样(时长有整数、"5"、"8s" 三种写法,尾帧有 end_image_url / tail_image_url …),
   shape_video / shape_image 读该端点的参数表:只发它收的字段,时长 / 分辨率 / 画幅取它枚举里最接近的值;
   端点收不下本次输入(如不支持尾帧、不收参考图)就报错,不悄悄丢掉。
 - genmedia 内置了映射的家族(Seedance / MiniMax H3 / Kling / Wan 3.0 / Seedream / Nano Banana / GPT Image /
-  FLUX.2 / Kontext / Qwen / Hunyuan)不走这里。目录查不到的端点(自己部署的私有应用等)genmedia 回落旧的通用映射。
+  FLUX.3 / FLUX.2 / Kontext / Qwen / Hunyuan / Ideogram V4.5)不走这里。目录查不到的端点(自己部署的私有应用等)genmedia 回落旧的通用映射。
 
 缓存:搜索结果进程内 10 分钟;单个端点(含「不存在」)落盘 data/.videoagents/fal_models/ 24 小时。
 """
@@ -41,7 +41,7 @@ RETRY_WAITS = (2.0, 5.0, 10.0, 15.0)
 KINDS = ("image", "video")
 CATEGORIES = {"image": ("text-to-image", "image-to-image"),
               "video": ("text-to-video", "image-to-video")}      # reference-to-video 端点在目录里归 image-to-video
-IMAGE_TASK_SUFFIXES = ("text-to-image", "image-to-image", "edit", "multi")
+IMAGE_TASK_SUFFIXES = ("text-to-image", "image-to-image", "edit", "edit-image", "multi")
 
 FIRST_FRAME_KEYS = ("image_url", "start_image_url", "first_frame_url", "first_image_url", "start_frame_url")
 LAST_FRAME_KEYS = ("end_image_url", "tail_image_url", "last_frame_url", "last_image_url", "end_frame_url")
@@ -280,7 +280,7 @@ def resolve_image(model: str, has_refs: bool, api_key: str = "") -> dict | None:
     mid = str(model or "").strip().strip("/")
     if split_endpoint(mid, "image")[1]:
         return lookup(mid, api_key=api_key)
-    for suffix in (("edit", "image-to-image", "multi") if has_refs else ("text-to-image",)):
+    for suffix in (("edit", "edit-image", "image-to-image", "multi") if has_refs else ("text-to-image",)):
         rec = lookup(f"{mid}/{suffix}", api_key=api_key)
         if rec:
             return rec
@@ -486,7 +486,13 @@ def shape_image(entry: dict, *, prompt: str, negative: str = "", width: int, hei
     fmt_enum = (props.get("output_format") or {}).get("enum") or []
     if fmt and fmt in fmt_enum:
         body["output_format"] = fmt
-    _put_refs(body, props, list(refs or []), REF_IMAGE_LIST_KEYS, FIRST_FRAME_KEYS[:1], "参考图", endpoint, to_url)
+    refs = list(refs or [])
+    primary = FIRST_FRAME_KEYS[0]
+    if (refs and primary in entry["input"]["required"] and "array" not in (props[primary].get("types") or [])
+            and _first_key(props, REF_IMAGE_LIST_KEYS, want_array=True)):
+        # 既有必填的单张底图位、又另有参考图列表位的编辑端点(如 Ideogram):第一张作底图,其余进列表
+        body[primary] = to_url(refs.pop(0))
+    _put_refs(body, props, refs, REF_IMAGE_LIST_KEYS, FIRST_FRAME_KEYS[:1], "参考图", endpoint, to_url)
     _check_required(body, entry)
     return body, notes
 

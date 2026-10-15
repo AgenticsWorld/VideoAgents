@@ -3,6 +3,8 @@
  *      const P=mountImageModelPicker({kind:'scenes', host:'#imp', label:'🎨 图像模型', title:'…'});
  *      P.value() → {provider, model} 或 {}(跟随全局);P.reload() 重新拉取。
  *      compact:true(场景页两块并排用):渠道项只写「跟随全局」、模型名截到 20 字、下拉最宽 150px,完整名放 title。
+ *      画板(preview_canvas.html,2026-10-10)用的两个选项:persist:false = 只在本页选、不写回该类别的设置(onChange 仍回调);
+ *      data:{channels, global, provider, model} = 渠道清单与初始选择由调用方给,不再去拉;label:'' = 不显示标签。
  * 数据:GET/POST /api/v1/config/image-model/<kind>(kind: sketch|scenes|characters|creatures|props),
  *      存服务端 state.json image_model_prefs[kind],与全局「生成模型」设置分开;空渠道 = 跟随全局。
  * 出图侧:genmedia 按输出目录 assets/concepts/<kind>/ 自动套用该类别的选择(草图由 storyboard_sketch.py 显式传)。
@@ -38,6 +40,7 @@
     const clipN=opt.compact?20:46;
     if(opt.title)host.title=opt.title;
     const lab=document.createElement('span');lab.textContent=tt(opt.label||'🎨 图像模型');
+    if(opt.label==='')lab.hidden=true;
     const sp=document.createElement('select'),sm=document.createElement('select'),ci=document.createElement('input');
     ci.placeholder=tt('自定义模型 id');ci.hidden=true;sm.hidden=true;
     host.append(lab,sp,sm,ci);
@@ -91,6 +94,7 @@
       fillModels(D.model||'');
     }
     async function reload(){
+      if(opt.data){D={channels:opt.data.channels||[],global:opt.data.global||{},provider:opt.data.provider||'',model:opt.data.model||''};render();return}
       try{
         const r=await fetch('/api/v1/config/image-model/'+encodeURIComponent(kind));
         if(!r.ok)throw new Error(r.status);
@@ -102,6 +106,7 @@
     async function save(){
       const v=value();
       D.provider=v.provider||'';D.model=v.model||'';
+      if(opt.persist===false){if(opt.onChange)opt.onChange(v);return}
       try{await fetch('/api/v1/config/image-model/'+encodeURIComponent(kind),{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({provider:v.provider||'',model:v.model||''})});}catch(_){}
       if(opt.onChange)opt.onChange(v);

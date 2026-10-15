@@ -44,6 +44,8 @@ transition Agent 按 directing_plan 自由文本自写 ffmpeg xfade,一项目一
                                           fade 尾帧近黑/近白;黑场垫片中点近黑、定格帧 = 前组末帧;
                                           风格接缝中点与两侧都不同且非纯黑;
                                           硬切边界两侧帧与源一致(无时间漂移,有垫片时按 timemap 对位)
+                                          (抽帧一律按帧号取:秒 → round 半帧进位 → -ss (n−½)/fps,集尾按视频流帧数
+                                          定位,不受 1/12288 时间基亚毫秒 pts / 容器时长毫秒取整影响,issue #115/#116)
              insert_budget_ok             Σ插入段 ≤ 集预算 × 项目「过场模式」预算%(极简 0 / 经典 8 / 电影感 10 / 自定义)
              inserts_built                插入段/叠字构建台账在、指纹与 timeline 条目一致、段文件在(生成式 clip 缺失 = FAIL:
                                           桥接 <B-id>.bridge.mp4 / i2v 定场 <B-id>.establishing.mp4,均由 Phase 7 p7-transition-clips 出)
@@ -67,6 +69,7 @@ transition Agent 按 directing_plan 自由文本自写 ffmpeg xfade,一项目一
 退出码:全 PASS=0,任一 FAIL=1。
 """
 import json
+import math
 import shutil
 import subprocess
 import sys
@@ -1408,6 +1411,24 @@ def _gray_frame(path, t, w, h):
     return b""
 
 
+def _frame_no(t, fps):
+    """秒 → 帧号(0 起):四舍五入、恰半帧进位。整数帧平移不改变取整结果,源 / 成片两侧按同一口径
+    取号即逐帧对位(Python round 是银行家舍入,半帧处奇偶不同会错 1 帧,故不用)。"""
+    return max(0, int(math.floor(float(t) * fps + 0.5 + 1e-6)))
+
+
+def _gray_frame_n(path, n, fps, w, h):
+    """第 n 帧(0 起)灰度字节(缩放到 w×h)。按 -ss (n−½)/fps 取「时间戳 ≥ 该点的首帧」即第 n 帧——
+    帧时间戳偏离名义值不足半帧都不会错位。以前按秒 -ss 正落在帧边界上:时间基 1/12288 的拼接片
+    第 852 帧 pts=35.499674 早于 35.5,-ss 35.5 跳过它取到第 853 帧,另一侧取到第 852 帧,
+    硬切位置误报漂移(issue #115);集尾按容器时长(毫秒取整 89.542 > 实际 89.541667)倒推末内容帧,
+    越过一帧落进黑场(issue #116)。不用 select=eq(n,N):要从头解码,长集太慢。
+    抽空(请求帧在末帧之后)时退回 _gray_frame 的逐级回退(issue #88)。"""
+    b = _run(["ffmpeg", "-v", "error", "-ss", f"{max(0.0, (n - 0.5) / fps):.6f}", "-i", str(path), "-frames:v", "1",
+              "-vf", f"scale={w}:{h}", "-f", "rawvideo", "-pix_fmt", "gray", "-"], timeout=120, binary=True)
+    return b or _gray_frame(path, n / fps, w, h)
+
+
 def _mean(b):
     return sum(b) / len(b) if b else 0.0
 
@@ -1576,6 +1597,10 @@ def do_check(proj, ep, src_path, out_path, write=True):
     w, h = 160, 90
     problems, verified, whitelist = [], 0, []
     step = 1.0 / fps
+
+    def gray(path, t):
+        """t 秒处一帧:按帧号取(_frame_no / _gray_frame_n),源 / 成片 / 段文件同一口径。"""
+        return _gray_frame_n(path, _frame_no(t, fps), fps, w, h)
     ins_verified, ins_issues = 0, []
     for e in planned:
         ty, t, d = e.get("type"), float(e.get("cut_time_s") or 0), float(e.get("duration_s") or 0)
@@ -1588,22 +1613,28 @@ def do_check(proj, ep, src_path, out_path, write=True):
             if _is_close(e):
                 # 集尾收束:淡出类核淡出末帧(全黑时刻前 1 帧)近黑/近白,切黑类核末内容帧**不**近黑(确认是硬切而非提前变黑);停留中点同色;整段窗口进黑帧白名单
                 dark = ty in ("fade_black", "cut_black")
-                black_at = od - close_h                     # 画面全黑时刻 = 成片末 − 停留
-                mu_last = _mean(_gray_frame(out_path, max(0.0, black_at - step), w, h))
+                black_at = od - close_h                     # 画面全黑时刻 = 成片末 − 停留(白名单窗口用)
+                # 取帧按视频流帧数定位,不用容器时长:容器时长毫秒取整(89.542 > 实际 89.541667)或被更长的声轨撑大,
+                # 倒推「末 − 停留 − 1 帧」会越过末内容帧落进停留首帧(issue #116)
+                hold_n = _close_frames(e, fps)[1]
+                out_n = _file_frames(out_path)
+                last_n = max(0, out_n - hold_n - 1)          # 成片末内容帧(淡出类 = 淡出末帧)
+                mu_last = _mean(_gray_frame_n(out_path, last_n, fps, w, h))
                 if ty in FADE_COLOR and ((mu_last > DARK_MAX) if dark else (mu_last < BRIGHT_MIN)):
                     problems.append(f"{e['at_shot']} {ty} 淡出末帧灰度均值 {mu_last:.0f}")
                 if close_h:
-                    mu = _mean(_gray_frame(out_path, od - close_h / 2, w, h))
+                    mu = _mean(_gray_frame_n(out_path, out_n - hold_n + hold_n // 2, fps, w, h))
                     if (mu > DARK_MAX) if dark else (mu < BRIGHT_MIN):
                         problems.append(f"{e['at_shot']} {ty} 停留中点灰度均值 {mu:.0f}")
                     if ty in CUT_COLOR:
-                        # 源末内容帧按视频流帧数定位(容器时长常被更长的声轨撑大,-ss 到声轨末会抽不到帧)
-                        ref = _gray_frame(src_path, _file_frames(src_path) / fps - step, w, h)
-                        x = _gray_frame(out_path, black_at - step, w, h)
+                        # 源末内容帧 = 源视频流末帧;成片末内容帧 = 成片帧数 − 停留帧 − 1
+                        src_last = max(0, _file_frames(src_path) - 1)
+                        ref = _gray_frame_n(src_path, src_last, fps, w, h)
+                        x = _gray_frame_n(out_path, last_n, fps, w, h)
                         if not ref or not x:
-                            problems.append(f"{e['at_shot']} {ty} 末内容帧取帧失败({'源片' if not ref else '成片'} t={_file_frames(src_path) / fps - step if not ref else black_at - step:.3f}s 抽不到帧)")
+                            problems.append(f"{e['at_shot']} {ty} 末内容帧取帧失败({'源片第 %d' % src_last if not ref else '成片第 %d' % last_n} 帧抽不到)")
                         elif _mad(x, ref) > SAME_TOL + 4:
-                            problems.append(f"{e['at_shot']} {ty} 末内容帧与源末帧差 {_mad(x, ref):.1f}(切黑前画面被改动)")
+                            problems.append(f"{e['at_shot']} {ty} 末内容帧(成片第 {last_n} 帧)与源末帧(第 {src_last} 帧)差 {_mad(x, ref):.1f}(切黑前画面被改动)")
                 whitelist.append({"at_shot": e["at_shot"], "type": ty, "start_s": round(max(0.0, black_at - d), 3), "end_s": round(od, 3)})
                 verified += 1
                 continue
@@ -1618,8 +1649,8 @@ def do_check(proj, ep, src_path, out_path, write=True):
                     r = (meta.get("inserts") or [])[k] if k < len(meta.get("inserts") or []) else None
                     x = e["inserts"][k]
                     if r and Path(r.get("file", "")).is_file():
-                        ref = _gray_frame(Path(r["file"]), nf / fps / 2, w, h)
-                        got = _gray_frame(out_path, mid, w, h)
+                        ref = gray(Path(r["file"]), nf / fps / 2)
+                        got = gray(out_path, mid)
                         mad = _mad(got, ref)
                         if mad > SAME_TOL + 6:
                             ins_issues.append(f"{e['at_shot']} ins{k}({x.get('kind')}) 中点帧与段文件差 {mad:.1f}")
@@ -1632,9 +1663,9 @@ def do_check(proj, ep, src_path, out_path, write=True):
                             if bg in ("black", "blur_prev"):
                                 whitelist.append({"at_shot": e["at_shot"], "type": "title_card", "start_s": round(st, 3), "end_s": round(st + nf / fps, 3)})
                         if x.get("kind") == "bridge":
-                            a0 = _gray_frame(Path(r["file"]), 0.0, w, h)
-                            b1 = _gray_frame(Path(r["file"]), max(0.0, nf / fps - step), w, h)
-                            sa, sb = _gray_frame(src_path, t - step, w, h), _gray_frame(src_path, t, w, h)
+                            a0 = gray(Path(r["file"]), 0.0)
+                            b1 = gray(Path(r["file"]), max(0.0, nf / fps - step))
+                            sa, sb = gray(src_path, t - step), gray(src_path, t)
                             m0, m1 = _mad(a0, sa), _mad(b1, sb)
                             if not (a0 and b1 and sa and sb):
                                 ins_issues.append(f"{e['at_shot']} 桥接首/末帧或前组尾/本组首取帧失败")
@@ -1647,12 +1678,12 @@ def do_check(proj, ep, src_path, out_path, write=True):
             # 叠字幕:本组首 F 帧内画面应与源帧有差(文字在),F 帧之后恢复与源一致
             if e.get("overlay_card") and e.get("from_group") is not None:
                 od_s = float(e["overlay_card"].get("duration_s") or 2.5)
-                x1 = _gray_frame(out_path, to + od_s / 2, w, h)
-                s1 = _gray_frame(src_path, t + od_s / 2, w, h)
+                x1 = gray(out_path, to + od_s / 2)
+                s1 = gray(src_path, t + od_s / 2)
                 if _mad(x1, s1) < 0.4:
                     ins_issues.append(f"{e['at_shot']} 叠字幕窗口中点与源帧无差(文字未叠上?)")
-                x2 = _gray_frame(out_path, to + od_s + 0.5, w, h)
-                s2 = _gray_frame(src_path, t + od_s + 0.5, w, h)
+                x2 = gray(out_path, to + od_s + 0.5)
+                s2 = gray(src_path, t + od_s + 0.5)
                 if _mad(x2, s2) > SAME_TOL + 2:
                     ins_issues.append(f"{e['at_shot']} 叠字幕结束后 0.5s 画面与源差 {_mad(x2, s2):.1f}")
                 ins_verified += 1
@@ -1660,13 +1691,13 @@ def do_check(proj, ep, src_path, out_path, write=True):
                 # 垫片:黑场中点近黑;定格帧 ≈ 前组末帧(源 t−1 帧);dip/fade 类前组尾淡出末帧近黑
                 if hd:
                     hb = to - ins_total_s          # 黑场块末 = 插入段块首
-                    mu = _mean(_gray_frame(out_path, hb - hd / 2, w, h))
+                    mu = _mean(gray(out_path, hb - hd / 2))
                     if mu > DARK_MAX:
                         problems.append(f"{e['at_shot']} 黑场垫片中点灰度均值 {mu:.0f}")
                     whitelist.append({"at_shot": e["at_shot"], "type": f"{ty}+hold", "start_s": round(hb - hd, 3), "end_s": round(hb, 3)})
                 if fz:
-                    ref = _gray_frame(src_path, t - step, w, h)
-                    x = _gray_frame(out_path, to - ins_total_s - hd - fz / 2, w, h)
+                    ref = gray(src_path, t - step)
+                    x = gray(out_path, to - ins_total_s - hd - fz / 2)
                     mad = _mad(x, ref)
                     if ty in ("dip_black", "dip_white") or ty in FADE_COLOR:
                         pass                      # 定格段叠着淡出,不与源帧比对
@@ -1674,7 +1705,7 @@ def do_check(proj, ep, src_path, out_path, write=True):
                         problems.append(f"{e['at_shot']} 定格帧与前组末帧差 {mad:.1f}")
                 if ty in ("dip_black", "fade_black"):
                     hb = to - ins_total_s
-                    mu = _mean(_gray_frame(out_path, hb - hd - step, w, h))
+                    mu = _mean(gray(out_path, hb - hd - step))
                     if mu > DARK_MAX:
                         problems.append(f"{e['at_shot']} {ty}+垫片 前组尾淡出末帧灰度均值 {mu:.0f}")
                     dd = d / 2 if ty == "dip_black" else d
@@ -1686,7 +1717,7 @@ def do_check(proj, ep, src_path, out_path, write=True):
                 # 只有插入段(接缝为硬切 / 叠化 / 淡出)的边界:接缝落在段链内,各段中点已核;前组尾淡出到黑/白时核末帧
                 if ty in ("fade_black", "fade_white"):
                     hb = to - ins_total_s
-                    mu = _mean(_gray_frame(out_path, hb - step, w, h))
+                    mu = _mean(gray(out_path, hb - step))
                     ok = mu <= DARK_MAX if ty == "fade_black" else mu >= BRIGHT_MIN
                     if not ok:
                         problems.append(f"{e['at_shot']} {ty}→插入段 前组尾端帧灰度均值 {mu:.0f}")
@@ -1695,9 +1726,9 @@ def do_check(proj, ep, src_path, out_path, write=True):
             elif ty == "dissolve" and xfade_name(e) != "fade":
                 # 风格接缝(wipe / hblur / zoomin / iris / pixelize / fadegrays):中点既不是前帧也不是后帧、且非纯黑
                 margin = round(_frames(d, fps) / 2) / fps + 2 * step
-                a = _gray_frame(src_path, t - margin, w, h)
-                b = _gray_frame(src_path, t + margin, w, h)
-                x = _gray_frame(out_path, to, w, h)
+                a = gray(src_path, t - margin)
+                b = gray(src_path, t + margin)
+                x = gray(out_path, to)
                 if _mad(x, a) < 2.0 and _mad(x, b) < 2.0:
                     problems.append(f"{e['at_shot']} 风格接缝 {xfade_name(e)} 中点与两侧都无差(未生效?)")
                 if _mean(x) <= DARK_MAX and _mean(a) > DARK_MAX and _mean(b) > DARK_MAX:
@@ -1709,9 +1740,9 @@ def do_check(proj, ep, src_path, out_path, write=True):
                 # 容忍名义边界与实拼内容 1–2 帧的历史偏差(timeline 浮点截断遗留)
                 # (2026-09-03 首次实跑校准)
                 margin = round(_frames(d, fps) / 2) / fps + 2 * step
-                a = _gray_frame(src_path, t - margin, w, h)
-                b = _gray_frame(src_path, t + margin, w, h)
-                x = _gray_frame(out_path, to, w, h)
+                a = gray(src_path, t - margin)
+                b = gray(src_path, t + margin)
+                x = gray(out_path, to)
                 mm = _blend_mad(x, a, b)
                 # 阈值随前后组画面差自适应:参考帧在窗口外 ±2 帧,运动内容下与窗口内
                 # 冻结克隆帧的差 ∝ 前后组差;静止组 _mad(a,b)≈0 仍按 BLEND_TOL 严卡
@@ -1721,7 +1752,7 @@ def do_check(proj, ep, src_path, out_path, write=True):
                 verified += 1
             elif ty in ("dip_black", "dip_white"):
                 # ffmpeg fadeblack/fadewhite 的纯黑/纯白峰值不在窗口正中(实测约 1/3 处),窗口内取三点极值
-                mus = [_mean(_gray_frame(out_path, to + k * d / 4, w, h)) for k in (-1, 0, 1)]
+                mus = [_mean(gray(out_path, to + k * d / 4)) for k in (-1, 0, 1)]
                 mu = min(mus) if ty == "dip_black" else max(mus)
                 ok = mu <= DARK_MAX if ty == "dip_black" else mu >= BRIGHT_MIN
                 if not ok:
@@ -1730,10 +1761,10 @@ def do_check(proj, ep, src_path, out_path, write=True):
                 verified += 1
             elif ty in FADE_COLOR:
                 if e.get("from_group") is None:
-                    x = _gray_frame(out_path, 0.0, w, h)
+                    x = gray(out_path, 0.0)
                     whitelist.append({"at_shot": e["at_shot"], "type": ty, "start_s": 0.0, "end_s": round(d, 3)})
                 else:
-                    x = _gray_frame(out_path, to - step, w, h)
+                    x = gray(out_path, to - step)
                     whitelist.append({"at_shot": e["at_shot"], "type": ty, "start_s": round(to - d, 3), "end_s": round(to, 3)})
                 mu = _mean(x)
                 ok = mu <= DARK_MAX if ty == "fade_black" else mu >= BRIGHT_MIN
@@ -1750,7 +1781,7 @@ def do_check(proj, ep, src_path, out_path, write=True):
     drift = []
     for label, t in samples:
         try:
-            mm = _mad(_gray_frame(out_path, m(t), w, h), _gray_frame(src_path, t, w, h))
+            mm = _mad(gray(out_path, m(t)), gray(src_path, t))
             if mm > SAME_TOL:
                 drift.append(f"{label} 差 {mm:.1f}")
         except RuntimeError as ex:

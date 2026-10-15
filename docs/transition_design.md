@@ -11,7 +11,7 @@
 | 文件 | 谁写 | 内容 |
 |---|---|---|
 | `directing/epNN/transition_design.json` | 宿主 CLI `code/transition_design.py`(propose / design / card / accept / reject / apply) | 每集一张设计表 `schema transition_design.v1`:逐边界 `id B-grpA-grpB` / 诊断(换场景 / 跳时段 / 阵容 / 光线 / 叙事块进出、剧本转场句、导演声明、continuity 判定、字卡文字候选、定场素材可用性)/ `design` / `alternatives[]` / `status`(proposed / accepted / rejected / none)/ `source`(mode / agent / user / shot_list / post_plan)/ `feedback[]` |
-| `directing/epNN/shot_list.json#generation_groups[].transition_in` | 只由 `apply` 投影写回 | **唯一定稿字段**。一期扩展:`join.style`(dissolve 的 xfade 风格族)、`inserts[]`(`title_card` / `establishing` / `timelapse` / `bridge`,单段 0.5–4 s、单边界 Σ ≤ 6 s、首组不得)、`overlay_card`(叠字幕,不变长)、`sound_bridge {kind, s, carry}`(四期声桥,2026-10-03 改版;存量 `audio_lead_s` 读入时自动归一为 `{j, s, bed}`) |
+| `directing/epNN/shot_list.json#generation_groups[].transition_in` | 只由 `apply` 投影写回 | **唯一定稿字段**。一期扩展:`join.style`(dissolve 的 xfade 风格族)、`inserts[]`(`title_card` / `establishing` / `timelapse` / `bridge`,单段 0.5–4 s、单边界 Σ ≤ 6 s、首组不得)、`overlay_card`(叠字幕,不变长)、`sound_bridge {kind, s, carry}`(四期声桥,2026-10-03 改版;存量 `audio_lead_s` 读入时自动归一为 `{j, s, bed}`)、`link {kind, out, in, out_shot, in_shot, note, …}`(剧本场间衔接登记卡,2026-10-10,docs/scene_links.md;导演采纳的衔接由 `propose` 登记并当场写回) |
 | `assets/transitions/epNN/<B-id>.establishing.mp4` + `.still.jpg` | video-generation(clip)/ 宿主 `clips --prepare`(首帧静帧) | 二期:生成式定场空镜 clip 与其首帧 |
 | `assets/transitions/epNN/<B-id>.bridge.mp4` | video-generation | 生成式桥接 clip(首尾帧贴前组尾 / 本组首) |
 | `edit/epNN/transitions/<B-id>/` | `render_transitions.py build` | 渲好的插入段 `ins{k}.mp4`、字卡 / 叠字 PNG、预览小片、`meta.json`(指纹) |
@@ -38,6 +38,7 @@ Phase 9  p9-transition:render_transitions.py plan → build(消费 clip;缺 = mi
 ### 一期(2026-09-24)
 
 - 诊断 `diagnose`:相邻组比对 scene_id / time_of_day / characters_union / lighting_scheme_id / narrative_block,读剧本场次头与场尾「转场:」句、导演阐述「无字幕板」声明(仅提示)、continuity 衔接表;字卡文字候选 = 关系时间词(剧本 > continuity > 推定时段词)+ 场景库地名;定场素材 = 服务本组首镜的全景锚点(pano_sweep)> 首镜起点母图(plate_kenburns)。
+- **剧本读取(2026-10-10 修,docs/scene_links.md)**:场次头与转场句改由 `modules/scene_links` 读——此前只认行首是「转场」的行,`- 转场:` / `**转场**:` / 英文 `TRANSITION:` / 独立一行 `CUT TO:` 都读不到,场头也只认 `## Sxx | INT | SCN-… | …` 一种排版(全部项目副本合计:能读到转场句的场次 241 → 2536;原先读得到的场次字段与转场句不变)。场尾转场行带 `{衔接, 出, 入}` 时诊断另出 `screenplay_link {from, to, kind, tier, out, in, …}`,只挂在「本场最后一组 → 下一场第一组」这条边界上,并带导演处置 `script_link_disposition {disposition, land, note}`。导演采纳 / 修改的衔接由 `propose` 登记成 `transition_in.link`(`status=accepted, source=script_link`,当场 apply;模式建议只进候选;电影感下运动接力带成对运镜、声音 / 台词接力带声先入,经典 / 自定义放候选,极简不出),详见 docs/scene_links.md「二期」。
 - 建议 `propose`:按模式表出主设计 + 候选;导演清单 / 后期页已写的设计记 accepted 不动;用户裁决保留。
 - 页面:分镜预览页每两组之间一张过场卡,顶部汇总条(集级模式下拉 / 插入预算条 / 出建议 / ⏹ 集尾);`▶ 出预览` 走 `render_transitions.py preview`。
 - 成片:`build` 把插入段渲成段文件,`render` 按段链插到组边界(前组尾 → 定格 → 黑场 → 插入段 → 本组首),成片按 Σ 变长、timemap 同表 `kind: boundary_insert`;字卡 / 叠字字体按 §2 规则 9 自动取项目字体。
@@ -96,6 +97,7 @@ python3 code/render_transitions.py plan|build|preview|render|check --project <sl
 | `motion_pair_valid` / `transition_sound_bridge_valid`(入 transition_ok) | check_generation_groups.py | 配对不合法 / 与 inserts 并用 / 首组 / 缺 reason;声桥 s ∉ (0,1.5] / 配了插入段或黑场 / type 非 hard_cut·dissolve / `carry: line` 但切点旁无画外句或声画分离关 |
 | `sound_bridge_built`(p8-mix 验收) | code/sound_bridge.py check / mix_basis check | 有声桥的边界缺底床片段或构建指纹落后于取源版本 / 设计 |
 | `motion_pair_bound` | sync_motion_pairs.py | 两侧组 prompt 缺运镜对接句、句子不在正确 Shot 段、残留过期句 |
+| `transition_link_valid`(入 transition_ok)/ `script_links_landed` / `scene_link_bound` | check_generation_groups.py / check_scene_links.py / sync_scene_links.py | 剧本场间衔接登记卡契约不合法 / 导演采纳的衔接没落进 shot_list 或登记卡过期 / 两侧组 prompt 缺衔接句(docs/scene_links.md) |
 | `transition_render_ok`(… inserts_built / insert_frames_verified / insert_budget_ok) | render_transitions.py check | 生成式 clip 缺失、段文件缺、指纹过期、预算超 |
 
 ### 三期(2026-09-26):生成式桥接 + 成对运镜

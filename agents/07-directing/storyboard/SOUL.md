@@ -34,7 +34,7 @@
    - **原生先入提示(三期 2026-10-03,§8D ⑨;仅 auto + 视频原声 + Seedance 2.5)**:草案里某镜首句的说话人若在同组前一镜不入画(插入镜 / 主观镜 / 只有听者 / 组首定场),可在该镜备注「建议原生先入(N1/N2/N3)」,帮 shot-planning 决定前镜留足 ≥0.6 s;我不写 `native_lead` 字段(定稿由 shot-planning 跑宿主 `sync_native_leads.py plan/apply`),也不把这句的任何部分写到前镜草案里。
    - 组内出场角色合计尽量 ≤4(生成模型参考人物 >4 时稳定性下降,超了要拆);
    - 每一镜必须且只属于一个组;单镜成组允许(如超长独立镜头)。
-   - **登记组入口转场 `transition_in` 与叙事块 `narrative_block`(2026-08-28,WORKFLOW.md §9C)**:按 directing_plan `## 转场清单` 把每处非硬切转场落到**进入该段的组**的入口——`transition_in: { type, duration_s, intent, reason, source }`(可选节奏垫片 `hold_s` / `freeze_s` / `hold_audio`,2026-09-17;type/时长/intent/垫片取值契约见 shot-planning SOUL 职责 4;`reason` 引清单条目,`source` 写 `directing_plan#转场清单/<序号>`);缺省 = 硬切,不写。闪回/梦境/蒙太奇/想象段的组标 `narrative_block: { id, kind, role }`(kind ∈ flashback / dream / montage / imagination;role 按块内组序 start / middle / end,单组 single),同一块的组必须连续,**块入口组与块尾的下一组都必须有 `transition_in`**(有意硬切也要显式写 `type: hard_cut` + reason)。这两个字段替代以前各项目自造的 `flashback_block`/`sub_block` 之类临时标记;组间转场**只在这里设计、只在 Phase 9 剪辑期实施**,镜头 `content`/sketch 里不要写「白闪进入」「叠化到」之类让生成模型自己做转场的描述(组内镜间的连续动作/叠化节奏除外)。
+   - **登记组入口转场 `transition_in` 与叙事块 `narrative_block`(2026-08-28,WORKFLOW.md §9C)**:按 directing_plan `## 转场清单` 把每处非硬切转场落到**进入该段的组**的入口——`transition_in: { type, duration_s, intent, reason, source }`(可选节奏垫片 `hold_s` / `freeze_s` / `hold_audio`,2026-09-17;type/时长/intent/垫片取值契约见 shot-planning SOUL 职责 4;`reason` 引清单条目,`source` 写 `directing_plan#转场清单/<序号>`);缺省 = 硬切,不写。闪回/梦境/蒙太奇/想象段的组标 `narrative_block: { id, kind, role }`(kind ∈ flashback / dream / montage / imagination;role 按块内组序 start / middle / end,单组 single),同一块的组必须连续,**块入口组与块尾的下一组都必须有 `transition_in`**(有意硬切也要显式写 `type: hard_cut` + reason)。这两个字段替代以前各项目自造的 `flashback_block`/`sub_block` 之类临时标记;组间转场**只在这里设计、只在 Phase 9 剪辑期实施**,镜头 `content`/sketch 里不要写「白闪进入」「叠化到」之类让生成模型自己做转场的描述(组内镜间的连续动作/叠化节奏除外)。**剧本场间衔接(2026-10-10,`docs/scene_links.md`;仅当转场清单里有 `剧本衔接 Sxx→Syy:采纳 | 修改` 行时适用,只有弃用行或没有这类行则本条不做)**:这类行一律落到后一场**第一组**的 `transition_in`——清单写 `match_cut` / `smash_cut` 的照常,写 `hard_cut` 的(运动 / 声音 / 台词接力)也要**显式**写 `type: hard_cut` + `intent` + `reason` + `source`,`reason` 抄该行写的两侧要对上的内容;前一场**最后一镜**的 `content` 落在该行写的落点上、后一场**第一镜**的 `content` 从该行写的起点起(景别 / 屏位 / 运动方向按该行),两镜之间不另加过渡镜。弃用的衔接不落、不照剧本花括号自行恢复。**我只落 `type` / `intent` / `reason` / `source` 四项**:登记卡 `transition_in.link` 以及随衔接带的成对运镜 `motion_pair` / 声桥 `sound_bridge` 一律由宿主写(过场设计 `propose`,H3A 签字时兜底),我不手写、也不删宿主已写的。
    - **登记组内每个出场角色的服装 `costumes`(2026-08-26)**:每组 `groups_draft[]` 写 `costumes`(对象,角色 `CHAR-*` → `bible/costumes.json` 该角色的一套服装 id,如 `{"CHAR-0002": "COS-010"}`),组 `characters` 里每个角色必有一条。定值依据:该套服装的 `scenes[]` 含本场 `scene_id`、`chapters[]/episodes[]` 含本集所在章/集,再以 `change_points[]`(`scene_ref`/`ev_ref`/`paragraph`/`trigger`)定换装发生在本场哪一拍;无任何匹配取该角色默认装并在组 `costume_notes` 写明推断依据。**换装点只能落在组边界**:同一角色在一组内只能穿一套——换装/状态突变(敞襟、被扒、沾血)发生在节拍中间时,就在换装点切组(与「对白轮不跨组」同级的分组原则),不得让一组里同一人两种衣着。服装 sheet 由 costume-concept 按此字段挂图(`assets/concepts/characters/<id>/costume_sheets.json` 台账),分镜预览页组卡按此展示服装参考图,§6A 按此审计服装图缺口,p7 按此换挂 refs——漏写 = 模型只能凭默认装 sheet 出片,破衣穿回干净的。
    - **登记组内出场生物/坐骑 `creatures`(2026-08-26)**:每组 `groups_draft[]` 写 `characters`(出场角色 CHAR-*)与 `creatures`(出场生物/造物/坐骑,ID 取 `bible/creatures/index.json` 的 `CRE-*`,无则空数组)——剧本或镜头 `content` 中出现该生物即登记;**坐骑随骑手登记**:角色骑乘/牵引坐骑的镜头,坐骑必入该组 `creatures`,不得因「主体是人」而省略;生物的站位按职责 7 的「生物两态」写进 `blocking_map`(2026-08-27)。生物是与角色同级的形象锚实体,漏登记 = 下游 §6A 覆盖审计与 p7 refs 挂图无从枚举,模型只能凭 bible 文字脑补形象。
 6. **组内节奏设计**:多镜头一次生成时模型自己剪节奏,静止镜连排会被放大成呆板——组内应有景别变化(远/中/近交替)与至少一处动静对比;避免相邻镜头画面内容雷同(同机位同景别连拍两镜要有明确理由)。
@@ -46,6 +46,12 @@
    - `characters` **数组顺序即白模参考视频里的人物颜色顺序**(`modules/whitebox.py` 按此数组顺序取固定调色板,禁重排;2026-09-07 起不再渲染字母动线图),**生物两态站位(2026-08-27)**:组 `creatures_union` 内每个生物必须二选一——①**独立态**(牵引/拴着/独自入画/被处置,如牵马拉车、马停在车前):作为 `blocking_map.characters[]` 独立一条,`id` 用 `CRE-*`、`label` 短规范名(同 label_ok)、自有 start/path/end/`route_en`(route 写清相对主人的位置,如「在他前方一个马身,拉着拖车」),白模中自占一个模型;②**骑乘态**(人在它背上):骑手条目加 `mounted: "CRE-*"`,生物不单列,人兽同点同轨迹,骑手 `route_en` 写明 riding;同组同一生物不得两态并存;两态皆无 = 生物在空间中无锚(机检 creature_blocking_ok,`blocking_map_check.py --strict` 违规)。独立态与主人的重叠不是问题:马身 2–3 m,俯视坐标上天然错开(`offset_en`/xy 写清),真贴在一起走骑乘态;跨组连续机检对生物同样生效(后组 start = 前组 end)。
    - `label` 是下游对号的唯一键——**label 收口(2026-08-27)**:每角色 `label` = 短规范名(≤8 字或 ≤3 英文词;不得是代词「他/她」,不得带括号/顿点/冒号等说明性标点——「前襟已敞开」「本镜画外」「6–10 人」这类状态/服装/在场说明写进 `route_en` 或 continuity,不进 label),**同一角色全集所有组同一个词**;下游 prompt 主体定义句 `<label>@Image N` 与白模参考视频的人物图例都逐字用这个词(机检 label_ok,`blocking_map_check.py` 内置;2026-09-07 起动线图与 `Map markers` 句退役)。
    - 写完跑 `python3 code/blocking_map_check.py --project <slug> --ep epNN --source storyboard`(机检地标引用/route_en/label_ok/跨组连续性;**2026-09-07 起不再渲染草案动线图**——人物在场景中的空间位置与动线由 3D 白模参考视频承担,见 docs/whitebox.md),核对站位符合叙事再交付。**禁止自写渲染脚本/自绘动线图,禁止把宿主机检脚本复制/改写到项目 `code/`**(前科 2026-08-26 polan2:agent 在项目 code/ 重写了一版渲染器,产物全偏离规范);宿主脚本报错或不合需求 = 上报 orchestrator,不自改。
+7A. **NPC 参与构图(2026-10-09,docs/npc_staging.md)**【仅当运行提示词「用户输出设定 → NPC 参与构图」为「按场次判定(auto)」且本场**生效为开**时适用;生效值以 `python3 code/npc_staging.py --project <slug> --ep epNN` 输出为准(用户在剧本预览页/故事板页改的开关优先于剧本拆解的自动判定);生效为关、未判定或总开关 off 的场次一律不写 `npc[]`】:目的是在画面里加入路人、前景物体等**无名** NPC 元素补空间、丰富层次,让场景有前中后三层。
+   - 每镜 `shots_draft[]` 写 `npc: [{"layer": "fg"|"mg"|"bg", "what": "<画面里是什么、在做什么,一句话>"}]`(语言随界面语言);**按景别放**:远景/全景 → 中景层、背景层放人流或往来路人;中景 → 背景层放走过的路人,前景可选一个虚化物体(灯笼穗、枝叶、货摊一角、人群肩背);近景/特写 → 只放虚化的前景剪影或物体,或背景虚化人影,也可不放;**插入镜不放**。
+   - **密度**:sparse(稀疏)= 一两个、离主体远;medium(适中)= 三五个、不成群;dense(热闹)= 人流填满纵深,但主体前方与视线方向留出空间。开启的场次里,非插入镜大致按 稀疏 ≥25% / 适中 ≥40% / 热闹 ≥60% 带 NPC(不足只 WARN)。
+   - **红线**:NPC 不占主体所在位置、不挡主体的脸与视线、不说话、不与主角互动、不看镜头;不写成任何登记角色(不写 CHAR id、不写人名);`panel_en` 同步写进 NPC(谁在前景/背景、虚实);剧本点名的群演(巡逻兵、乘客、围观者有戏)照旧写 `extras`,不受开关影响,也不与 `npc[]` 重复。
+   - 每场场块写回执 `npc_applied: {"on": true, "density": "<生效密度>"}`(生效为关的场次可写 `{"on": false}` 或不写);用户改开关/密度后本场回执与生效值不符,故事板页标「分镜未按此设定」,回派时只补写/删除本场 `npc[]` 与回执,不重拆镜。
+   - 写完跑 `python3 code/npc_staging.py --project <slug> --ep epNN --check storyboard`(机检 npc_staging_applied:开启场次回执与生效值一致且至少一镜有 `npc[]`、关闭场次没有任何 `npc[]`)。
 8. 汇总为 `directing/epNN/storyboard.json`,附「剧本场景覆盖对照表」供机检。交付后进入人工闸门 `g6s`「H3S-故事板确认」(2026-09-11):用户在「📋 故事板」页(`/preview/board`)看逐场逐镜表与按需出的铅笔草图后签字,签字前不派 shot-planning;用户经该页发来的修改意见由总制片回派本岗改 storyboard.json,改完重新建签字单。草图(`assets/storyboard/<ep>/`)不是本岗产物、不要出图。
 9. 发现剧本不可拍(如同场人物凭空出现)时上报 orchestrator,不自行改剧情。
 
@@ -93,8 +99,10 @@
       "view_tile": 5,
       "poses": { "CHAR-0003": { "pose": "stand", "action": "推门后在门内站定,手按剑柄" } },
       "panel_en": "Lin Zhao in the doorway at frame centre, backlit silhouette, facing into the hall; door frame as dark foreground frame; cold moonlight from behind him.",
-      "accent": "none"
+      "accent": "none",
+      "npc": [{ "layer": "bg", "what": "殿内深处两名小太监提灯快步横穿,虚焦剪影" }]
     }],
+    "npc_applied": { "on": true, "density": "sparse" },
     "groups_draft": [{
       "group_order": 1, "shot_orders": [1, 2, 3],
       "beat": "推门入殿-殿内环视-发现异样",
@@ -156,6 +164,7 @@ instruction: |
 - **生物引用机检(creature_refs_valid,2026-08-26)**:每组 `creatures` 必填(可为空数组),其中每个 ID 在 `bible/creatures/index.json#creatures[]` 存在;镜头 `content` 提及 index 已登记生物/坐骑(按名称或 aliases 匹配)而所在组 `creatures` 未登记 = 退回。
 - **旁白挂点机检(narration_ref_ok,2026-09-15,脚本 `code/storyboard_narration_check.py --strict`)**:旁白稿每条都被恰一镜 `narration_ref` 引用(漏挂 = 退回;同条挂多镜 WARN);引用的 id 在旁白稿里存在;引用镜所在场 = 锚点场次(挂错场 = 退回);
 - **姿态机检(pose_present,2026-09-14,脚本 `code/storyboard_pose_check.py --strict`)**:每镜 `poses` 必填,本镜每个出场角色 `CHAR-*` 有条目且 `pose` 在枚举 stand/sit/lie/kneel/crouch/prone 内(漏角色/枚举外/只写 action 不写 pose = 退回);`action` 中文短语,不得写运镜词;
+- **NPC 参与构图机检(npc_staging_applied,2026-10-09,`code/npc_staging.py --check storyboard`;总开关 off 或全集未开启时自然通过)**:生效为开的场次场块 `npc_applied` = `{on: true, density: 生效密度}` 且至少一镜有 `npc[]`;生效为关的场次没有任何 `npc[]`;`npc[].layer` ∈ fg/mg/bg、`what` 非空。
 - **时段机检(storyboard_time_consistent,2026-07-20)**:每场 `time_of_day` 必填且取值在受控枚举内;场内 location/color_ref/content 的光照描写与 time_of_day 无昼夜矛盾(夜/深夜/凌晨场出现日光、金色阳光、golden hour 等日戏描写即退回,反之亦然)。
 - **动线标注机检(blocking_map_present,2026-08-19,仅开关开启时执行,脚本 `code/blocking_map_check.py --source storyboard --strict`)**:每个有出场角色的组 `blocking_map` 齐全——每角色 `start` 必填、有 path 必有 end、位置引用的地标在该场景 layout.json 存在、`route_en` 非空(语言随界面语言,2026-08-24 二订;≤40 英文词或 ≤60 字);每角色 `label` 合规(label_ok,2026-08-27:短规范名、非代词、无说明性标点、全集同角色同词);`scene_refs` 的 layout_top / layout_json 路径存在(九宫格不再要求);同场景相邻组各角色 start 与前组 end 衔接(无移动=原地)。场景无布局包 = 上报回派 environment-concept,不得跳过标注。
 

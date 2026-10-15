@@ -1,5 +1,19 @@
 VideoAgents
-Copyright 2026 AgenticsWorld
+Copyright (C) 2026 AgenticsWorld
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, version 3.
+
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+this program (see the LICENSE file). If not, see <https://www.gnu.org/licenses/>.
 
 This product includes software originally developed by AgenticsWorld.
 Source: https://github.com/AgenticsWorld/VideoAgents
+
+Releases up to and including v1.0.38 were published under the Apache License,
+Version 2.0, and remain available under those terms.

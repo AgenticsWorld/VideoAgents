@@ -9,7 +9,6 @@
 import asyncio
 import gzip
 import hashlib
-import hmac
 import importlib.util
 import io
 import json
@@ -41,8 +40,12 @@ from modules import skill_records
 from modules.prompt_layout import paragraphize
 from modules import caption_catalog as _ccat
 from modules import id_scheme
+from modules.entity_ids import extract_actor_id
+from modules.volc_openapi import signed_call as _volc_signed_call
 from modules import voice_library as _voice_library
 from services.runtime import rhythm as narrative_rhythm
+from services.runtime import engine_setup
+from services.runtime import dagcheck
 
 # ---------------- 配置 ----------------
 ROOT = Path(__file__).resolve().parents[2]             # 工作区根目录
@@ -128,7 +131,14 @@ def resolve_cli_executable(engine: str) -> str | None:
     to the npm-generated ``claude.cmd`` shim, even when a shell can find it.
     """
     configured = CLI_BINS.get(engine)
-    return shutil.which(configured) if configured else None
+    if not configured:
+        return None
+    found = shutil.which(configured)
+    if found or os.environ.get(CLI_ENV_VARS.get(engine, "")):
+        return found
+    # 一键安装后服务进程 PATH 未含官方脚本的安装目录(脚本只改用户 shell rc / 用户 PATH):
+    # 按各家默认安装位置兜底,装完不重启服务即可检测、派单
+    return engine_setup.fallback_executable(engine)
 
 
 def cli_not_found_error(engine: str) -> str:
@@ -346,6 +356,8 @@ REFS_README = """# refs/ — 用户参考目录
 - `fonts/`      字体文件(ttf/otf/ttc):花字、封面、片头片尾、字幕等一切需要字体的工位统一优先使用;
                 花字引擎自动并入字体清单,font_id 为 `proj:<family>`
 - `text/`       文本资料:设定/文案等(txt/md 等),相关 Agent 参考使用
+- `other/`      其他:上面各类都放不进去的参考文件,任意格式(PDF/表格/压缩包/工程文件等);
+                请在【参考文件】页给文件写注释说明用途,相关 Agent 按注释参考使用
 - `NOTES.md`    逐文件注释:哪个文件管什么、想用在哪(有则 Agent 必读)。
                 注释在【参考文件】页逐文件填写,自动写入本文件的标记块(机器可读版在 annotations.json)
 
@@ -385,7 +397,7 @@ def ensure_project(project: str):
     """建项目目录 + 用户参考目录骨架。"""
     refs = PROJECTS_DIR / project / "refs"
     for sub in ("style", "thumbnail", "characters", "scenes", "creatures", "props", "music",
-                "video", "fonts", "text"):
+                "video", "fonts", "text", "other"):
         (refs / sub).mkdir(parents=True, exist_ok=True)
     readme = refs / "README.md"
     if not readme.exists():
@@ -498,6 +510,34 @@ def whitebox_selfcheck_setting() -> bool:
     """白模自检开关(默认开;设置菜单「高级→Agent 高级设置」):开启时白模调度工位编译后
     用宿主 `render_whitebox.py --stills` 出静帧联系表并读图核对取景,关闭时只做数值自检。"""
     return bool(STATE.get("whitebox_selfcheck", True))
+
+
+def episode_parallel_setting() -> bool:
+    """多集并行开关(默认关;设置菜单「高级→Agent 高级设置」):关闭时总制片按集顺序推进——
+    当前集全部节点结束(发布环节 p11-* 不计)才派下一集,集内各组/镜/场景照常并行扇出;
+    看门狗与闸门补建签字单同口径剔除后续集节点(services/runtime/dagcheck.py episode_serial_hold)。"""
+    return bool(STATE.get("episode_parallel", False))
+
+
+def episode_order_prompt_section(project: str) -> str:
+    """调度型 Agent 的「多集推进设定」段(按开关二选一注入)。"""
+    head = "\n\n## 多集推进设定(Web 客户端「设置→高级→Agent 高级设置」全局设置,实时生效)\n"
+    if episode_parallel_setting():
+        return head + ("- 多集并行:**开启** —— 按试点集策略:首集全流程过 H4 后,后续各集节点依赖满足即可同时推进;"
+                       f"可派前沿看 `python3 services/runtime/dagcheck.py --project {project} --frontier`")
+    return head + (
+        "- 多集并行:**关闭**(默认)—— 按集顺序推进,同一时刻只推进一集。**当前集** = 集号最小、仍有节点未到终态"
+        "(done/passed/passed_human_override/skipped/cancelled/waived;发布环节 `p11-*` 不计)的那一集。"
+        "带集号的节点(`pX-*-epNN`、`gX-epNN` 及其组/镜/场景级扇出实例,含 Phase 5 剧本类分集节点)只派当前集的,"
+        "当前集内各组/镜/场景照常按依赖并行扇出;当前集全部节点结束后才派下一集的第一个节点。不带集号的项目级节点不受此限\n"
+        "- 当前集停在人工签字、重跑确认、blocker 或用户暂缓时,**不改推后续集**:守则「继续派发无依赖任务」只指项目级节点"
+        "与当前集内的其他节点;没有可派的就按守则发起签字 / 升级后正常结束运行\n"
+        f"- 可派前沿以宿主命令为准:`python3 services/runtime/dagcheck.py --project {project} --frontier`"
+        "(实时读本设定,输出当前集、可派节点与「按集顺序暂缓」的后续集节点);结束前巡检同样看它,暂缓清单里的节点不算漏派\n"
+        "- 已完成的集被修改记录 / 缺陷单标脏回到未结束时,它集号更小即成为当前集:先补完它再继续后面的集\n"
+        "- 用户给出集范围(如「推进 ep03-ep10」)= 按集序逐集做,不等于要求并行;只有用户在对话里明确要求多集同时推进时"
+        "才照用户指令执行,并提示可在「Agent 高级设置」打开「多集并行」\n"
+        "- 「试点集策略」(首集过 H4 后批量并行)在本设定下不适用:每一集都等前一集结束再开始")
 
 
 def confirm_timeout_setting() -> int:
@@ -736,7 +776,7 @@ DEFAULT_GENCONFIG = {
         "openrouter": {"api_key": "", "model": "bytedance-seed/seedream-4.5",
                        "custom_model": ""},
         # Fal(queue.fal.run 托管图像端点):model 存家族前缀(fal-ai/bytedance/seedream/v5/lite、
-        # fal-ai/nano-banana-pro、openai/gpt-image-2.5/flare、fal-ai/flux-2-pro、alibaba/qwen-image-3…),
+        # google/nano-banana-2.1、openai/gpt-image-2.5/sunburst、fal-ai/flux-2-pro、alibaba/qwen-image-3…),
         # genmedia 无参考图走文生图端点、有 --ref 自动切 edit/multi;custom_model 可填完整端点 ID;
         # api_key 与视频段 Fal 共用(任一段填过即可,genmedia.get_config 互相兜底)
         "fal": {"api_key": "", "model": "fal-ai/bytedance/seedream/v5/lite", "custom_model": ""},
@@ -1041,6 +1081,11 @@ DEFAULT_GENCONFIG = {
                #   白名单自动转画外(反应镜承接 / 时间尺超限 / 群戏第四人 / 出画后续说 / 定场镜首句),每条须写 placement_reason。
                #   与旁白开关正交:旁白只管旁白者声线;人物 V.O. 归本项。
                "sound_split": "off",
+               # npc_staging=NPC 参与构图总开关(2026-10-09,docs/npc_staging.md):auto(默认)=按场次判定——剧本拆解(p5-breakdown)
+               #   逐场写 scenes[].npc {on, density, reason},用户可在剧本预览页 / 故事板页按场次改「自动 / 开 / 关」与密度
+               #   (story/episodes/<ep>/scene_npc.json,modules/npc_staging.py);生效为开的场次由故事板起在画面里加路人、前景物体做出
+               #   前中后三层(npc[] → 构图 layers → 白模 EXTRA-NPC → 组 prompt 固定段);off=全部场次关闭。没有判定的场次(存量)按关处理
+               "npc_staging": "auto",
                "spatial_blocking": False,
                # scene_plates=场景图(2026-09-17,仅白模关闭时生效;A 方案 docs/scene_plates.md):auto(默认)=每场景必出正向图(站在入口往内看的主视角图,
                #   environment-concept 登记 assets/concepts/scenes/<sid>/scene_plates.json),分镜定稿后各集 shot_list 有镜 plate_view=reverse 才由
@@ -1171,6 +1216,7 @@ UPSCALE_FFMPEG_FILTERS = ("lanczos", "bicubic", "spline", "bilinear")
 UPSCALE_FFMPEG_PRESETS = ("ultrafast", "fast", "medium", "slow", "veryslow")
 # 对白配音方式:native=视频原声(默认)/dubbing=后期配音(TTS 按画面开口时段贴合,workflow p7-dub)
 DIALOGUE_VOICE_MODES = ("native", "dubbing")
+NPC_STAGING_MODES = ("auto", "off")   # 输出设置「NPC 参与构图」总开关(2026-10-09,与 modules.npc_staging.MASTER_MODES 同步)
 SOUND_SPLIT_MODES = ("off", "script_only", "auto")   # 输出设置「声画分离」(2026-10-03,docs/sound_split.md):关(默认)/ 仅剧本标记 / 自动(与 modules.offscreen_lines.SOUND_SPLIT_MODES 同步)
 SCENE_PLATES_MODES = ("auto", "single", "pair")   # 输出设置「场景图」(2026-09-17,仅白模关闭时生效):正向必出;反向按需 / 不出 / 全出
 PLATE_MODE_LABELS = {"pano": "全景图 pano", "world": "世界模型 world", "grid": "九宫格自动补图 grid", "grid_manual": "九宫格手动补图 grid_manual"}
@@ -2140,6 +2186,8 @@ def _validate_output(o: dict):
         raise ServiceError(400, f"output.plate_mode must be one of {PLATE_MODES}")
     if "sound_split" in o and o["sound_split"] not in SOUND_SPLIT_MODES:
         raise ServiceError(400, f"output.sound_split must be one of {SOUND_SPLIT_MODES}")
+    if "npc_staging" in o and o["npc_staging"] not in NPC_STAGING_MODES:
+        raise ServiceError(400, f"output.npc_staging must be one of {NPC_STAGING_MODES}")
     if "dialogue_tts" in o and not isinstance(o["dialogue_tts"], bool):
         raise ServiceError(400, "output.dialogue_tts must be a boolean")
     # 对白配音=后期配音时「生成对白语音」为必选(2026-09-23 用户拍板):UI 勾上锁死,这里兜底归一,
@@ -2254,6 +2302,7 @@ AM_AGENT_TIERS = {                                      # 分类内的例外
     "02-worldbuilding/world": "high",                   # 世界观总纲 = 创作核心
     "03-characters/character-manager": "low",           # 角色索引管理
     "06-art/aspect-ratio": "low",                       # 画幅规范 = 机械活
+    "06-art/image-retouch": "low",                      # 画板修图:看图把用户圈的位置和说明整理成一条编辑提示词,求快
     "08-video-gen/prompt": "high",                      # 生成 prompt 质量决定画面上限
     "08-video-gen/video-generation": "high",            # 视频生成主力
     # audio-to-video 插件:类别 15-audio-video 不在 AM_CATEGORY_TIERS,默认落 low;
@@ -2932,46 +2981,6 @@ def _openrouter_balance() -> dict | None:
         return None
 
 
-def _volc_signed_call(ak: str, sk: str, action: str, version: str,
-                      body: dict | None = None,
-                      service: str = "billing", region: str = "cn-north-1",
-                      host: str = "open.volcengineapi.com") -> dict:
-    """火山引擎 OpenAPI 调用(HMAC-SHA256 签名,同官方 SDK Signer);
-    body 为 None 走 GET,否则 POST JSON。"""
-    method = "GET" if body is None else "POST"
-    payload = b"" if body is None else json.dumps(body).encode()
-    query = urllib.parse.urlencode(sorted({"Action": action, "Version": version}.items()))
-    xdate = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
-    payload_hash = hashlib.sha256(payload).hexdigest()
-    headers = {"host": host, "x-date": xdate, "x-content-sha256": payload_hash}
-    if body is not None:
-        headers["content-type"] = "application/json; charset=utf-8"
-    signed = ";".join(sorted(headers))
-    canon = "\n".join([method, "/", query,
-                       "".join(f"{k}:{headers[k]}\n" for k in sorted(headers)),
-                       signed, payload_hash])
-    scope = f"{xdate[:8]}/{region}/{service}/request"
-    sts = "\n".join(["HMAC-SHA256", xdate, scope,
-                     hashlib.sha256(canon.encode()).hexdigest()])
-
-    def h(key: bytes, msg: str) -> bytes:
-        return hmac.new(key, msg.encode(), hashlib.sha256).digest()
-    k_sign = h(h(h(h(sk.encode(), xdate[:8]), region), service), "request")
-    sig = hmac.new(k_sign, sts.encode(), hashlib.sha256).hexdigest()
-    req_headers = {
-        "Authorization": (f"HMAC-SHA256 Credential={ak}/{scope}, "
-                          f"SignedHeaders={signed}, Signature={sig}"),
-        "X-Date": xdate, "X-Content-Sha256": payload_hash,
-    }
-    if body is None:
-        return _http_get_json(f"https://{host}/?{query}", headers=req_headers)
-    req_headers["Content-Type"] = "application/json; charset=utf-8"
-    req = urllib.request.Request(f"https://{host}/?{query}", data=payload,
-                                 headers=req_headers, method="POST")
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.loads(r.read().decode("utf-8", "replace"))
-
-
 def _volc_balance() -> dict | None:
     """火山引擎账户可用余额(QueryBalanceAcct,CNY);未开启/未配 AK/SK/异常返回 None。"""
     cfg = resource_cfg()
@@ -3166,11 +3175,13 @@ def build_role_prompt(agent_id: str, project: str,
     burn_in = (
         "**开启** —— 成片终稿必须内嵌字幕:subtitle 产出 subtitles.srt(正片 0 秒基准)后,由 edit 在封装终版时"
         "先用宿主 CLI `code/finalize_episode.py shift`(或 assemble 自动跑)按片头实测时长整体平移生成成片基准"
-        " subtitles_final.srt,再把**平移后的字幕**烧录进画面(ffmpeg subtitles 滤镜等),烧录后 `finalize_episode.py check`"
-        " 须全 PASS——final.mp4 含片头时严禁直接烧正片基准 SRT,否则字幕整体偏早;"
-        "烧录样式严格按 subtitle SOUL.md 的烧录样式规范"
-        "(小字号贴底、≤2 行、白字黑描边、禁大面积底板);orchestrator 排期须把该烧录步骤纳入本集必做项,"
-        "platform-adapter 发布物料一律基于烧录版母版"
+        " subtitles_final.srt,`finalize_episode.py check` 全 PASS 后**只准**用宿主 CLI"
+        " `python3 code/burn_subtitles.py burn --project <slug> --ep epNN`(附加语言版本加 `--lang <code>`)把平移后的字幕"
+        "烧进成片副本 final_sub[.<lang>].mp4(干净版 final.mp4 不动、音轨流拷贝;PIL 字幕带 + overlay,不依赖 ffmpeg libass),"
+        "禁止自写 ffmpeg subtitles / ass / drawtext 滤镜或在项目 code/ 下写替代脚本——final.mp4 含片头时严禁直接烧正片基准 SRT;"
+        "烧录样式按 subtitle SOUL.md 的烧录样式规范(小字号贴底、≤2 行、白字黑描边、禁大面积底板),由该 CLI 内置机检"
+        " subtitle_style_ok 把关,FAIL 即不交付;orchestrator 排期须把该烧录步骤纳入本集必做项,"
+        "platform-adapter 发布物料一律基于烧录版母版 final_sub[.<lang>].mp4"
         if out.get("subtitle_burn_in") else
         "关闭(默认)—— 成片不烧录字幕,字幕仅以外挂形式交付:final.mp4 含片头时交付 edit 用 `code/finalize_episode.py shift`"
         " 平移后的成片基准 subtitles_final.srt(严禁把正片 0 秒基准的 subtitles.srt 直接配 final.mp4,"
@@ -3207,7 +3218,7 @@ def build_role_prompt(agent_id: str, project: str,
         "(blocking_map_present;**2026-09-07 起不再渲染 `directing/epNN/blocking_maps/grpNNN.png` 动线标注图**——人物在场景中的空间位置与动线由 3D 白模参考视频承担,"
         "禁止自绘动线图或复制/改写宿主脚本),blocking 每镜站位落在组级动线上(blocking_on_map,站位片段=场景地标关系 + 屏侧方位 + 朝向);Phase 7 prompt refs **不挂**俯视图/九宫格(2026-09-09:俯视图只供分镜预览页与 storyboard/shot_list `scene_refs` 查看,不进视频参考图;场景空间由白模摄影机视频 + 分镜背景图承担)、"
         "逐字注入 route_en、主体定义句用 blocking_map `label`(机检 layout_map_bound,"
-        "`code/layout_map_bound_check.py`);**白模链同开(workflow.yaml whitebox_requested = 本开关)**:Phase 6 每集开头为本集用到且尚未建模的场景 scene-modeling(p6-scene-model)出 `bible/scenes/<sid>/whitebox.json`,Phase 6 whitebox-staging 写 `whitebox_plans/` 并用 `code/render_whitebox.py --compile-only` 只编译落盘供预览页审看(不导出视频),**用户在闸门 g6w「H3W-白模确认」签字后**由 07-directing/whitebox-staging 接导出工单(p6-whitebox-export)用 `code/render_whitebox.py` 导出 `assets/whitebox/<ep>/<grp>/camera.mp4`(仅摄影机视角),导出完成后 p6-shot-plates(08-video-gen/shot-plates)跑 `code/render_shot_plates.py` 生成分镜背景图(按机位指纹入库复用、运镜分档出镜首/镜尾、长边 1920,自动 `code/sync_shot_plates.py --write` 接进组 refs,机检 shot_plate_bound,2026-09-09),"
+        "`code/layout_map_bound_check.py`);**白模链同开(workflow.yaml whitebox_requested = 本开关)**:Phase 6 每集开头为本集用到且尚未建模的场景 scene-modeling(p6-scene-model)出 `bible/scenes/<sid>/whitebox.json`,Phase 6 whitebox-staging 写 `whitebox_plans/` 并用 `code/render_whitebox.py --compile-only` 只编译落盘供预览页审看(不做正式导出;交付前跑 `code/concat_whitebox.py` 出整集白模样片供签字前连续审看,用的是预览版组视频、不接线),**用户在闸门 g6w「H3W-白模确认」签字后**由 07-directing/whitebox-staging 接导出工单(p6-whitebox-export)用 `code/render_whitebox.py` 导出 `assets/whitebox/<ep>/<grp>/camera.mp4`(仅摄影机视角),导出完成后 p6-shot-plates(08-video-gen/shot-plates)跑 `code/render_shot_plates.py` 生成分镜背景图(按机位指纹入库复用、运镜分档出镜首/镜尾、长边 1920,自动 `code/sync_shot_plates.py --write` 接进组 refs,机检 shot_plate_bound,2026-09-09),"
         "导出即自动接成该组视频生成的参考视频(`code/sync_whitebox_refs.py --write`:组 prompt `video_refs`=camera.mp4 + `Shot 1:` 前固定段 `Whitebox reference:`(视频作用)/`Whitebox legend:`(颜色↔人物、眼睛鼻尖=朝向)+ Global constraints 禁白模外观句;"
         "**白模人物参考图规约(2026-09-09)**:组 refs 只准挂在本组白模摄影机视频里实际出现的人物/生物的参考图(宿主 appearing_cast 判定:presence/关键帧 visible/visible_actor_ids/画幅几何),镜头外在场、已离场、缺席/远程人物不挂图不绑定——sync_scene_cast 只为出现者补图,sync_whitebox_refs --write 把多余人物图移出并重排 [Image N],机检 whitebox_cast_ref/whitebox_ref_bound 按违规报,正文仍引用被移除图时须先改正文;"
         "prompt 工位写完必跑两个 sync 的 `--write`(sync_whitebox_refs / sync_shot_plates),机检 whitebox_ref_bound / shot_plate_bound;video-generation 按 video_refs 顺序传 `--ref-video`,方舟/MiniMax 参考视频须公网 URL——「设置 → 文件托管」未配置即报错),video-generation 开跑前复核——以上 SOUL.md/WORKFLOW.md 标注 2026-08-19 / 2026-09-07 的条款全部生效。"
@@ -3302,6 +3313,22 @@ def build_role_prompt(agent_id: str, project: str,
         if sound_split == "script_only" else
         "**关闭(off,默认)** —— 全部台词画内开口(存量口径):剧本不写 `(O.S.)`/`(V.O.)`(声源不在画内的话改写成画内句或交旁白 / 剧本变更),"
         "shot_list 不写 placement(视同 on),不派 offscreen_lines,offscreen 系列机检报 skipped: sound_split off;旁白开关逻辑不受影响")
+    # NPC 参与构图(2026-10-09,docs/npc_staging.md):项目总开关 + 场次级三态/密度;条件式写法——只有生效为开的场次才加 NPC
+    npc_line = (
+        "**全部关闭(off)** —— 剧本拆解不写 `scenes[].npc` 判定,故事板/镜头表不写 `npc[]`、不写 `npc_applied`,构图/白模/prompt 不加路人与前景氛围物;"
+        "剧本点名的群演照常走 `extras`;npc 系列机检报 skipped"
+        if out.get("npc_staging") == "off" else
+        "**按场次判定(auto,默认)** —— 目的:在画面里加路人、前景物体等 NPC 元素补空间,让场景有前中后三层。"
+        "① p5-breakdown(timeline-story)逐场在 `script_breakdown.json` 写 `npc: {on, density: sparse|medium|dense|null, reason}`"
+        "(按剧本原文判:公共/热闹场合开,写明无人/密谈/私密/内心空间/深夜(夜市等除外)关;reason 引原文;"
+        "`python3 code/npc_staging.py --project <slug> --ep epNN --suggest` 的关键词建议只作参考;机检 npc_judged);"
+        "② 用户可在剧本预览页 / 故事板页按场次改「自动/开/关」与密度(`story/episodes/<ep>/scene_npc.json`,宿主自有,Agent 不改);"
+        "**以 `python3 code/npc_staging.py --project <slug> --ep epNN` 输出的生效值为准**(用户值 > 自动判定 > 未判定=关);"
+        "③ **仅生效为开的场次**:storyboard 按景别给镜写 `npc: [{layer: fg|mg|bg, what}]` 并在场块写回执 `npc_applied: {on, density}`"
+        "(机检 npc_staging_applied = `--check storyboard`),shot-planning 把 `npc[]` 照抄到定稿镜,composition 把 NPC 写进 `layers` 对应层"
+        "(npc_layers_bound),白模开启时 whitebox-staging 用 `EXTRA-NPC-xx` 群演摆位,prompt 产出后跑 `python3 code/npc_staging.py --project <slug> --ep epNN --write`"
+        "写宿主固定段 `Background figures (NPC): … End background figures.` 并把身份锁收窄到具名角色(npc_prompt_bound);"
+        "生效为关的场次一律不写 `npc[]`。NPC 是无名氛围层,与剧本点名的群演(`extras`)不同,不进角色集合、不挂参考图、不说话")
     # 过场模式(2026-09-24 设置项;2026-09-26 二期工位):项目级 settings.json#transitions,集级 episode.json#transitions_mode 可覆盖
     try:
         from modules import transition_design as _td_prompt
@@ -3433,14 +3460,14 @@ def build_role_prompt(agent_id: str, project: str,
 
 ## 用户时长设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档中的示例值)
 - 每集目标时长:{ep_line}
-- 单个分镜时长范围:{shot_min}–{shot_max} 秒 —— storyboard 的每镜时长建议与 shot-planning 的每镜终稿时长必须落在该区间。**对白承载(§7D ①/①′,2026-10-03 改按时间尺)**:台词估时 = 0.7s 起止余量 + 有效字符 ÷(角色 voice.json speed_cpm 中点 ÷60 × 语速档倍率 fast 1.19 / medium 1 / slow 0.81)+ 0.4s × 句中停顿数,语速档取对白行 `pace`(dialogue-rewrite 随情绪写);**对白镜镜长 ≥ Σ台词估时 + 开口前 0.4s + 说完后 0.3s**(新集 FAIL;前科 fengshen3 ep07:镜长 = 估时,5 秒台词被模型整句丢掉),每组 Σ台词估时 ≤ 组时长×0.7、单句 ≤ {shot_max}×0.7 秒;storyboard 起草分组、shot-planning 定镜时长都要按此装得下台词,定稿 shot_list 后由固定节点 p6-dialogue-fit(dialogue-rewrite)跑宿主 CLI `python3 code/check_dialogue_fit.py --project <slug> --ep epNN` 校验,超限按报告 trim_targets 只动对白文本层精简并 `--write-est` 复检;该节点 PASS 前不派 blocking、不发起 H3A,严禁靠压语速放行
+- 单个分镜时长范围:{shot_min}–{shot_max} 秒 —— storyboard 的每镜时长建议与 shot-planning 的每镜终稿时长必须落在该区间。**对白承载(§7D ①/①′,2026-10-03 改按时间尺)**:台词估时 = 0.7s 起止余量 + 有效字符 ÷(角色 voice.json speed_cpm 中点 ÷60 × 语速档倍率 fast 1.19 / medium 1 / slow 0.81)+ 0.4s × 句中停顿数(英文等拉丁文字的句子按词数 ÷ speed_wpm 词速,宿主自动判),语速档取对白行 `pace`(dialogue-rewrite 随情绪写);**对白镜镜长 ≥ Σ台词估时 + 开口前 0.4s + 说完后 0.3s**(新集 FAIL;前科 fengshen3 ep07:镜长 = 估时,5 秒台词被模型整句丢掉),每组 Σ台词估时 ≤ 组时长×0.7、单句 ≤ {shot_max}×0.7 秒;storyboard 起草分组、shot-planning 定镜时长都要按此装得下台词,定稿 shot_list 后由固定节点 p6-dialogue-fit(dialogue-rewrite)跑宿主 CLI `python3 code/check_dialogue_fit.py --project <slug> --ep epNN` 校验,超限按报告 trim_targets 只动对白文本层精简并 `--write-est` 复检;该节点 PASS 前不派 blocking、不发起 H3A,严禁靠压语速放行
 - **时间尺与可加长单集(2026-10-03,docs/time_cost.md,`python3 code/check_time_budget.py --project <slug> --ep epNN --scope script|shots|blocking|prompt`)**:动作也按秒算——每个动作节拍按单价表取最短用时(转头 0.5 / 掷出 0.7 / 撞墙滑倒 1.2 / 起身 1.5 / 法宝亮起 1.0…,缺省 0.7,保持 0.3);**pacing 分配每场时长前先算该场需求 = Σ台词估时(含开口前后余量)+ Σ动作节拍**,Σ需求 > 每集预算时按用户拍板顺序处理:① **加长单集**——本集预算最多上调 **{extend_pct}%**(项目设置「视频节奏 → 可加长单集」,写 pacing.json `duration_budget_s` + `duration_policy{{kind: time_budget_extension, base_budget_s, extend_pct, need_s, reason}}`,shot-planning / edit 以调整后预算为基准);② 仍超 → **精简台词**(报告 trim_targets 回派 dialogue-rewrite);③ 仍超 → **合并动作短镜 / 删次要拍**(报告 merge_candidates 交 storyboard)。镜级:每镜镜长 ≥ Σ节拍单价 + 台词估时 + 余量;**密集组(平均镜长 < 1.5s)总时长 ≤ 15s**(按节拍链拆组,机检 group_density_ok);blocking 的 beats[] 单价之和 ≤ 镜长 − 台词估时、同人相邻节拍 ≥ 0.3s(beat_budget_ok / beat_spacing_ok);prompt 只把 blocking 的节拍写细,不加新的顺序动作(prompt_beats_bound:顺序连接词数 ≤ 节拍数 + 1)。存量集(产物日期早于 2026-10-03)这些机检只 WARN
 - 生成组(generation group)总时长上限:{sg_max} 秒(整数)—— storyboard 分组草案与 shot-planning 定稿的每组 Σ镜头时长必须 ≤{sg_max}s(项目「视频模型设置」,已由用户按所选视频模型的单次生成上限配置:Seedance 2.0 系列 15s、Seedance 2.5 30s;文档中出现的 15s 示例值一律以本设定为准,见 WORKFLOW.md §7A)
 - 长镜头(时长设置「长镜头」开关 + 「连接方式」尾帧图片/尾段视频):{long_take_line}
 - 每组参考素材数量上限(项目「视频模型设置」,优先级高于文档示例值):参考图 ≤{sg_img} 张、参考视频 ≤{sg_vid} 个、参考音频 ≤{sg_aud} 段 —— 这是**全局视频模型**的口径;模型侧硬限(Seedance 2.0:9图/3视频/3音频、参考音视频总时长各≤15s;Seedance 2.5:30图/10视频/10音频、总时长各≤30s)由 genmedia 提交前强制校验。**refs 按实际需要挂齐(2026-08-30 改):必挂项(每角色 sheet、每生物 sheet、场景干净俯视图+9 宫格、道具图 main_01.png——每道具一张,不挂比例锚图 scale_ref_01.png,道具尺寸靠 prompt_token 文字)与本组确需的按需项(额外脸部锚/道具细节图/手绘渲染图/前组尾帧)一律写入 refs,不得为凑上限省略必挂图、不得自行拆组;张数超过本组生效上限时照常落盘完整 refs 并标 `status: "blocked_refs_cap"` + `blocked_reason`(逐张路径与所属实体、上限值、超出张数),上报 orchestrator 转告用户——由用户在分镜预览决定:①「🎛 模型」给该组单独换参考图上限更高的视频模型(如 Seedance 2.5 ≤30 张,渠道不变),或 ②手动删减该组参考图;用户拍板后重派本组。视频生成工位对 `blocked_refs_cap` 或 refs 超本组生效上限的组禁开跑(refs_mandatory_le_cap);组级覆盖了模型的组,上限以该组模型硬限为准(见下方「组级覆盖」段,如有)**
 
 ## 用户输出设定(Web 客户端项目设置,当前项目实时生效,优先级高于文档示例与项目内旧规范)
-- 输出画幅:{aspect}({aspect_name})—— 画幅规范(aspect_ratio.json)、分镜构图、关键帧、视频生成、剪辑成片一律按该画幅执行(生成时 genmedia 传 --aspect {aspect});发现项目内既有产物或规范与此冲突,新产出以本设定为准并在汇报中注明
+- 输出画幅:{aspect}({aspect_name})—— 画幅规范(aspect_ratio.json)、分镜构图、关键帧、视频生成、剪辑成片一律按该画幅执行(生成时 genmedia 传 --aspect {aspect});发现项目内既有产物或规范与此冲突,新产出以本设定为准并在汇报中注明。**例外(2026-10-09):场景图(正向 main_01 / 反向 / 光照变体)、俯视布局图、九宫格、分镜背景图(母图 / 补图 / 手工截取)、全景重投影与世界模型截图一律 16:9,不随本画幅**——场景图 `--size 2560x1440`,其余由宿主脚本定尺寸,不得手传 --aspect 改画幅
 - 输出语言:{out_lang} —— 剧本、台词、旁白、字幕、配音、成片文案、发布物料一律使用 {out_lang} 输出(剧本/对白/旁白文件里的机器锚点不随输出语言变:中文写「[事件]/[出场]/[时长]、动作:、转场:」,其它语言一律用英文规范写法「[EVENTS]/[CAST]/[DURATION]、ACTION:、TRANSITION:、[NARRATION (…)]:、[NO DIALOGUE]」,契约 docs/screenplay_anchors.md,2026-09-23);提供给生成模型的 prompt 不受此限(视频/图像 prompt 语言随界面语言,见下两条;音乐 prompt 用英文)
 - 视频生成 prompt 语言:提供给视频生成模型的 video_prompt **正文散文(镜头动作/画面/运镜描述等)用{ui_lang}书写,不必用英文**;**注入视频 prompt 的上游片段内容语言同样用{ui_lang}(2026-08-24)**——各生产方按{ui_lang}产出片段内容:art-director 的 style.json 注入用风格串 `style_fragment_ui`(英文版 style_fragment_en/negative_prompt_en 保留供负面词表与存量回退)、blocking 的 `space_fragment_en`、lighting 的 `prompt_fragment_en`、costume 的 `visual_en`、prop 的 `scale.prompt_token`、sound-effect/ambience 的 cue(字段名保留历史 `_en` 后缀,不改名);**空间布局链路字段同样用{ui_lang}(2026-08-24 二订)**——layout.json `name_en`/`desc_en`、storyboard `route_en`/`offset_en` 及站位/prompt 句内的地标词一并按{ui_lang}产出(这些词只进 prompt、不上图,无字体限制——2026-09-07 起俯视图直接引用、不再叠加人物动线标注;地标词仍逐字取 layout.json `name_en`,全链路统一写法);**逐字纪律优先于语言偏好**:下游对既有片段一律逐字拼入、严禁翻译或改写,存量片段语言与{ui_lang}不一致时以既有片段为准,要换语言须回派上游成套重出(同场景/同集一致),不得零散混语;但以下保持英文原样不翻译——结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:` 及 `[Image N]`/`[Audio N]`/`@Image N`/`@Audio N` 引用,机检与注释注入代码依赖这些英文锚点;素材指代只用这套英文锚点,禁写「图片N/音频N/视频N」等本地化变体)、固定英文约束句(Identity lock、非对白组静默句、Spatial layout 声明句、Global constraints 负面清单)、台词(按剧本冻结版);Seedance 2.5 的结构标签(`【人物】`/`【动作与声音】`/「使用：/不采用：」/`【未采用素材】`/`【保持一致】`)是官方段落标签,非中文界面用机检认可的固定英文标签(`【Characters】`/`【Action & sound】`/「Use:/Not used:」/`【Unused assets】`/`【Consistency】`),两套等价、不得自造
 - 图像生成 prompt 语言:提供给图像生成模型的 image prompt(概念图/锚点图/参考图,genmedia image)**正文同样用{ui_lang}书写(2026-08-24)**——风格段逐字取 style.json `style_fragment_ui`(存量项目缺该字段回退英文 `style_fragment_en`);**负面词表保持英文**(`--negative` 与 prompt 内负面清单取 `negative_prompt_en`,通用负面术语跨引擎稳定、机检按英文子串匹配);存量英文项目补图沿用英文,不得半中半英
@@ -3452,6 +3479,7 @@ def build_role_prompt(agent_id: str, project: str,
 - 对白配音:{dialogue_voice}
 - 生成对白语音:{dialogue_tts_line}
 - 声画分离:{sound_split_line}
+- NPC 参与构图:{npc_line}
 - 过场模式:{transitions_line}
 - 人物精确空间位置:{spatial_line}
 - 视频分辨率:一切视频生成(首次/重 roll/兜底重做)一律 `--resolution {draft_res}`(草稿档);成片分辨率({final_res})与草稿档不同时,终版**默认且仅由 upscale 超分**得到——不询问用户、严禁按成片档重新生成(重生成贵、慢且画面随机);成片档 `--resolution {final_res}` 重出仅限一种情形——QA 判定超分不达标的兜底重出(WORKFLOW.md §7B)—— 分辨率直接决定生成费用,严禁擅自调高(genmedia 有硬闸门,越档自动压回草稿档)
@@ -3712,13 +3740,14 @@ def build_role_prompt(agent_id: str, project: str,
 - 详细纪律见 agents/WORKFLOW.md §9;生成失败如实上报,严禁伪造或占位产物
 
 ## 用户参考素材(视觉/配乐工作前必查)
-用户通过 Web 客户端「参考文件」页把风格/封面/角色/场景/生物/道具参考图、希望使用的音频、参考视频、字体与文本资料按分类上传到 {proj_rel}/refs/(style/ thumbnail/ characters/ scenes/ creatures/ props/ music/ video/ fonts/ text/),并逐文件填写注释:
+用户通过 Web 客户端「参考文件」页把风格/封面/角色/场景/生物/道具参考图、希望使用的音频、参考视频、字体、文本资料与其他类型的参考文件按分类上传到 {proj_rel}/refs/(style/ thumbnail/ characters/ scenes/ creatures/ props/ music/ video/ fonts/ text/ other/),并逐文件填写注释:
 - **注释必读**:{proj_rel}/refs/NOTES.md(自动汇总用户逐图/逐曲注释,机器可读版 refs/annotations.json)说明每个文件管什么、想用在哪——有则必读并按注释执行
 - 优先级:用户参考素材 > 你的自行发挥;与文字设定冲突时上报用户裁决,不擅自取舍
 - 命中的参考图经 genmedia --ref 注入生成,并把所用路径记入产物 meta/prompts.json 的 user_refs 字段
 - 配乐(09-audio/music)须先盘点 refs/music/,自行判断每首曲子适合用在视频的哪些位置并优先选用,选用/弃用情况写入 cue sheet(规则见 WORKFLOW.md §2 第 6 条)
 - 视频生成类工位须先盘点 refs/video/(动作/运镜/节奏/转场参考),按注释对位到相应镜头;所选视频模型支持参考视频时经 `genmedia.py video --ref-video` 注入,不支持时作为提示词描述依据,所用路径记入 user_refs(规则见 WORKFLOW.md §2 第 8 条)
 - 一切需要字体的工位(花字/封面/片头片尾/字幕等)须先盘点 refs/fonts/(ttf/otf/ttc),有则全片统一优先使用用户字体(NOTES.md 指定了用途的按指定分配),所用路径记入 user_refs;花字引擎自动把它们并入字体清单,font_id 为 `proj:<family>`(`render_captions.py fonts-list --project <slug>` 可查;规则见 WORKFLOW.md §2 第 9 条)
+- refs/other/(任意格式的其他参考文件)不要求逐单盘点:仅当 refs/NOTES.md 里该文件的注释说明的用途落在你本单要做的对象上,或工单点名了该路径时才读取使用,所用路径记入 user_refs;没有注释也没被工单点名的文件不读(规则见 WORKFLOW.md §2 第 10 条)
 - 目录为空则照常工作,不阻塞;详细约定见 agents/WORKFLOW.md §2"""
     if is_dispatcher_agent(agent_id):
         confirm_timeout = confirm_timeout_setting()
@@ -3782,11 +3811,13 @@ def build_role_prompt(agent_id: str, project: str,
    不得因 GraphRecursionError/超时/API 5xx 等报错改用 claude/codex/kimi/pi/opencode/grok/deepagents 中的另一个)。
    报错后重试一律沿用原引擎与 Agent/全局模型配置——不要在同一条路上串行耗死,也不要用换引擎当兜底
 9. 【结束前 DAG 前沿巡检】每次准备结束当前运行前,必须先运行
-   `python3 services/runtime/dagcheck.py --project {project} --strict` 并检查依赖已满足的节点:
+   `python3 services/runtime/dagcheck.py --project {project} --strict --frontier` 并检查它列出的依赖已满足节点
+   (按下方「多集推进设定」,按集顺序暂缓的后续集节点不在可派之列):
    有非人工待办就继续派单;有已解锁 `human:true` 的 H 门就必须当场执行
    `python3 services/runtime/dispatch.py --confirm "【<checkpoint>】<审阅要点与放行影响>" --sign --project {project}`。
    只有签字单已经发起、确有 blocker/暂缓，或 DAG 全部完成时才可结束。严禁只回复“后续必须签字”后关单，
    严禁自行把人工节点写成 passed；服务端漏单守卫只负责补建同类永久签字单，不替代本项职责"""
+        p += episode_order_prompt_section(project)
         plugs = active_plugins()
         if plugs:
             lines = []
@@ -7097,8 +7128,8 @@ def _dialogue_index(text: str) -> dict[str, dict]:
         if not did or not line or did in idx:
             return
         spk = (speaker or "").strip()
-        m = re.search(r"(CHAR-\d+)", spk)
-        idx[did] = {"speaker": m.group(1) if m else re.sub(r"[〔【(\[].*$", "", spk).strip() or None,
+        cid = extract_actor_id(spk, char_only=True)          # 数字编号与拼音 slug 都认,口径见 modules/entity_ids(#117)
+        idx[did] = {"speaker": cid or re.sub(r"[〔【(\[].*$", "", spk).strip() or None,
                     "text": line}
 
     text_col = spk_col = None
@@ -7551,15 +7582,16 @@ def _preview_scenes(project: str):
         if d.is_dir():
             ids |= {x.name for x in d.iterdir()
                     if x.is_dir() and not x.name.startswith(".")}
-    # 分镜背景图(2026-09-09):场景库 assets/concepts/scenes/<sid>/plates/index.json,按各集 shot_plates.json 反查被哪些镜引用
-    used_by: dict[str, list] = {}
+    # 分镜背景图(2026-09-09):场景库 assets/concepts/scenes/<sid>/plates/index.json,按各集 shot_plates.json 反查被哪些镜引用;
+    # 按 (场景, key) 计——九宫格等 key 按光照方案命名,不同场景库里会重名(2026-10-09 jidi LS01_grid9_t9 曾把别的场景的镜算进来)
+    used_by: dict[tuple, list] = {}
     manual_needed: dict[str, list] = {}   # 场景 → 九宫格手动补图模式下待用户手工截取的镜(2026-10-04,集索引 view.manual_needed)
     for f in sorted((base / "directing").glob("ep*/shot_plates.json")):
         sp = _read_json_safe(f) or {}
         for sp_sid, rec in (sp.get("shots") or {}).items():
             for p in (rec.get("plates") or []) if isinstance(rec, dict) else []:
                 if isinstance(p, dict) and p.get("key"):
-                    used_by.setdefault(p["key"], []).append(f"{f.parent.name}/{sp_sid}" + ("(end)" if p.get("role") == "end" else ""))
+                    used_by.setdefault((rec.get("scene_id"), p["key"]), []).append(f"{f.parent.name}/{sp_sid}" + ("(end)" if p.get("role") == "end" else ""))
                     if p.get("reuse") == "grid9" and isinstance(p.get("view"), dict) and p["view"].get("manual_needed") and rec.get("scene_id"):
                         cam = p.get("camera") or {}
                         manual_needed.setdefault(rec["scene_id"], []).append({
@@ -7595,7 +7627,7 @@ def _preview_scenes(project: str):
                            # 全景制(2026-09-10):来源锚点/空洞比;无 pano_ref = legacy 旧法出图
                            # 2026-09-22 kind = pano|world(世界模型截图作参考出的母图)
                            "pano_ref": {k: pr.get(k) for k in ("kind", "anchor_id", "scheme", "hole_fraction", "source_key")} if pr else None,
-                           "created_by": p.get("created_by"), "used_by": used_by.get(p.get("key"), [])})
+                           "created_by": p.get("created_by"), "used_by": used_by.get((sid, p.get("key")), [])})
         # 场景全景锚点(2026-09-10):assets/concepts/scenes/<sid>/panos/index.json,预览页「全景图」板块(3D 白模之下)
         panos = None
         try:
@@ -7698,14 +7730,9 @@ def _preview_scenes(project: str):
                        "world_job": _scene_world_job_view(base.name, sid)})
     # 项目「白模」选项(output.spatial_blocking,默认关):关闭时场景预览页不显示「生成世界模型」按钮与世界模型板块
     whitebox_enabled = (load_project_settings(base.name).get("output") or {}).get("spatial_blocking") is True
-    # 项目画幅(2026-09-15):预览页「✂ 裁剪」分镜背景图的固定选框比例(母图按项目画幅出图,裁后仍须同比例才能继续作组视频参考图)
-    fmt = None
-    try:
-        from modules.whitebox import read as _wb_read, render_format as _wb_fmt
-        _f = _wb_fmt(_wb_read(base / "settings.json", {}))
-        fmt = {"width": _f["width"], "height": _f["height"]}
-    except Exception as e:  # noqa: BLE001
-        print(f"[preview-scenes] 项目画幅读取失败(忽略):{e}", flush=True)
+    # 背景图画幅:预览页「✂ 裁剪」分镜背景图的固定选框比例。2026-10-09 起背景图一律 16:9(shot_plates.PLATE_FMT),不随项目画幅
+    from modules.shot_plates import PLATE_FMT as _plate_fmt
+    fmt = {"width": _plate_fmt["width"], "height": _plate_fmt["height"]}
     try:
         from modules.scene_plates import project_mode as _sp_project_mode
         scene_plates_mode = _sp_project_mode(base)
@@ -7776,12 +7803,11 @@ async def api_scene_plate_mode(project: str, sid: str, body: dict):
 
 
 def _scene_plate_crop(project: str, sid: str, body: dict) -> dict:
-    """场景预览页「✂ 裁剪」分镜背景图(2026-09-15):{key, left, top, width, height}(选区,0..1 归一化到当前图)→ 按项目画幅比例
-    吸附/收进画幅后裁切母图并**原地覆盖同一文件**(首次裁剪把原图留作 <key>.orig.<ext> 便于回退),更新库 index.json 与 <key>.json
+    """场景预览页「✂ 裁剪」分镜背景图(2026-09-15):{key, left, top, width, height}(选区,0..1 归一化到当前图)→ 按背景图画幅 16:9
+    (2026-10-09 起不随项目画幅)吸附/收进画幅后裁切母图并**原地覆盖同一文件**(首次裁剪把原图留作 <key>.orig.<ext> 便于回退),更新库 index.json 与 <key>.json
     条目的 size / manual_crops。集索引 directing/<ep>/shot_plates.json 与组 prompt refs 都只记 key/路径,不必改动,下次 sync/出图自动用新图。
     不放大回母图尺寸:裁切不会增加信息,保留原生像素。"""
     from modules import shot_plates
-    from modules.whitebox import read as _wb_read, render_format as _wb_fmt
     try:
         from PIL import Image
     except ImportError:  # pragma: no cover
@@ -7808,18 +7834,12 @@ def _scene_plate_crop(project: str, sid: str, body: dict) -> dict:
         raise ServiceError(400, "left/top/width/height(选区,0..1 归一化)必填且须为数字") from None
     if not all(math.isfinite(v) for v in (left, top, width, height)) or width <= 0 or height <= 0:
         raise ServiceError(400, "选区宽高须为正数")
-    try:
-        _fmt = _wb_fmt(_wb_read(base / "settings.json", {}))
-        aspect = _fmt["width"] / _fmt["height"]
-    except Exception:  # noqa: BLE001
-        aspect = None
+    aspect = shot_plates.PLATE_ASPECT
     with Image.open(f) as im:
         im.load()
         src_fmt = im.format or "PNG"
         W, H = im.size
-        if aspect is None:
-            aspect = W / H
-        # 归一化 → 像素;以宽为准按项目画幅算高,越界则反过来以高为准;再整体收进画幅
+        # 归一化 → 像素;以宽为准按背景图画幅算高,越界则反过来以高为准;再整体收进画幅
         l, t = min(max(left, 0.0), 1.0) * W, min(max(top, 0.0), 1.0) * H
         w = min(width * W, W)
         h = w / aspect
@@ -7904,6 +7924,398 @@ async def api_scene_plate_flip(project: str, sid: str, body: dict):
     return await asyncio.to_thread(_scene_plate_edit, project, sid, body, "flip")
 
 
+# ---------------- 画板(2026-10-10;modules/image_canvas.py,docs/image_canvas.md)----------------
+# 场景预览(场景图 / 分镜背景图)、人物预览(人物图 / 服装图)、生物 / 道具预览、故事板草图、成片发布页封面各处「🖌 画板」按钮
+# → /preview/canvas?project=&file=<项目内相对路径>。编辑 / 放大的结果只进这张图自己的历史(assets/canvas/…),「设为最终版」才动生产链路。
+# 出图一律起子进程跑宿主 CLI code/canvas_edit.py(渠道 / 模型覆盖只作用于那个进程):直接发送与放大由本进程的后台线程起,
+# 经 Agent 的编辑由画板修图 Agent(06-art/image-retouch)整理提示词后自己跑同一条命令。页面轮询 GET 取进度。
+CANVAS_AGENT = "06-art/image-retouch"
+CANVAS_CLI_TIMEOUT = 1500
+
+
+def _canvas_zh() -> bool:
+    return (ui_lang_code() or "zh").lower().startswith("zh")
+
+
+def _canvas_error(e) -> ServiceError:
+    return ServiceError(getattr(e, "status", 400), e.text(_canvas_zh()) if hasattr(e, "text") else str(e))
+
+
+def _canvas_run_ended(run_id: str) -> str | None:
+    """Agent 整理提示词的那次运行是否已结束:None = 还在跑(或查不到,交给超时判),否则返回结束状态。"""
+    r = RUNS.get(run_id)
+    if not r or r.get("status") in ("queued", "running"):
+        return None
+    return str(r.get("status") or "ended") + (f":{str(r.get('error'))[:200]}" if r.get("error") else "")
+
+
+def _canvas_url(base: Path, rel: str) -> str:
+    try:
+        v = int((base / rel).stat().st_mtime)
+    except OSError:
+        v = 0
+    return f"/projects/{base.name}/{rel}?v={v}"
+
+
+def _canvas_open(project: str, file: str, kind: str = "", create: bool = True):
+    from modules import image_canvas as ic
+    base = _proj_base(project)
+    try:
+        doc, hist = ic.open_doc(base, str(file or ""), str(kind or ""), create=create)
+    except ic.CanvasError as e:
+        raise _canvas_error(e) from None
+    return base, doc, hist
+
+
+def _canvas_state(base: Path, doc: Path, hist: dict | None = None) -> dict:
+    from modules import image_canvas as ic
+    st = ic.state(base, doc, hist or ic.load_history(doc), run_ended=_canvas_run_ended)
+    for v in st["versions"]:
+        v["url"] = _canvas_url(base, v["file_rel"])
+        v["thumb_url"] = _canvas_url(base, v["thumb_rel"])
+        if v.get("raw_rel"):
+            v["raw_url"] = _canvas_url(base, v["raw_rel"])
+    for r in st["refs"]:
+        r["url"] = _canvas_url(base, r["file"])
+    st["info"]["url"] = _canvas_url(base, st["file"])
+    st["project"] = base.name
+    zh = _canvas_zh()
+    for j in (st.get("job"), st.get("last_job")):      # 任务报错:中文界面出中文,其余有英文版的出英文
+        if j:
+            en = j.pop("error_en", "")
+            if en and not zh:
+                j["error"] = en
+    st["ui"] = (hist or ic.load_history(doc)).get("ui") or {}
+    # 渠道清单 / 保真超分可选项 / 修图 Agent 是否在:每个接口的返回都带全,页面拿任何一次返回都能整页重绘
+    from modules import genmedia
+    img = (load_genconfig().get("image") or {})
+    gmodel = comfy_global_mode(img.get("comfyui")) if img.get("provider") == "comfyui" else active_image_model()
+    st["models"] = {"channels": _image_channels(), "global": {"provider": img.get("provider") or "", "model": gmodel},
+                    "pref": image_model_pref(st["pref_kind"]) if st["pref_kind"] else {"provider": "", "model": ""}}
+    st["upscalers"] = genmedia.image_upscalers()
+    st["agent"] = CANVAS_AGENT if agent_dir(CANVAS_AGENT) else ""
+    return st
+
+
+def _canvas_channel(body: dict) -> tuple[str, str]:
+    """页面选的图像渠道 / 模型(空渠道 = 跟随全局);口径同预览页顶栏的图像模型下拉。"""
+    provider = str((body or {}).get("provider") or "").strip()
+    model = str((body or {}).get("model") or "").strip()
+    if not provider:
+        return "", ""
+    if provider not in IMAGE_PROVIDERS:
+        raise ServiceError(400, f"provider must be one of {IMAGE_PROVIDERS}")
+    if provider in ("agentics", "rhapi"):
+        model = ""                       # 文生图 / 图生图两个模型在「生成模型」页定,出图时按有无参考图自动选
+    if provider == "comfyui":
+        model = model or comfy_global_mode((load_genconfig().get("image") or {}).get("comfyui"))
+        if model not in COMFY_MODES:
+            raise ServiceError(400, f"ComfyUI 运行方式须为 {COMFY_MODES} 之一,收到 {model}")
+    return provider, model
+
+
+async def api_canvas_get(project: str, file: str = "", kind: str = "", label: str = "", oid: str = ""):
+    """画板页面数据:图片信息、全部历史版本、最终版、参考图托盘、进行中的任务,以及渠道清单与保真超分可选项。"""
+    from modules import image_canvas as ic
+
+    def _load():
+        base, doc, hist = _canvas_open(project, file, kind)
+        ic.set_ui(doc, label, oid)
+        return _canvas_state(base, doc, hist if not (label or oid) else None)
+    return await asyncio.to_thread(_load)
+
+
+async def api_canvas_limits(project: str, file: str = "", version: str = "", provider: str = "", model: str = ""):
+    """「放大」页:所选图像渠道 / 模型在这张图的画幅下能出多大。{limits, current, max | tiers};上限未知时 limits.mode = unknown。"""
+    from modules import genmedia, image_canvas as ic
+    provider, model = _canvas_channel({"provider": provider, "model": model})
+
+    def _load():
+        base, doc, hist = _canvas_open(project, file, create=False)
+        try:
+            v = ic.version_of(hist, version or hist.get("final") or "")
+            facts = ic.channel_facts(provider, model)
+        except ic.CanvasError as e:
+            raise _canvas_error(e) from None
+        w, h = v["width"], v["height"]
+        lim = facts["limits"]
+        out = {"provider": facts["provider"], "model": facts["model"], "limits": lim, "current": [w, h],
+               "ref_capacity": facts["ref_capacity"], "max": None, "tiers": []}
+        if lim.get("mode") == "pixels":
+            mx = genmedia.image_max_size(lim, w, h)
+            out["max"] = list(mx) if mx else None
+        elif lim.get("mode") == "tiers":
+            out["tiers"] = [{"tier": t, "size": list(genmedia.image_tier_size(lim, t, w, h))} for t in lim.get("tiers") or []]
+        return out
+    return await asyncio.to_thread(_load)
+
+
+def _canvas_spawn(base: Path, doc: Path, jid: str, action: str, *flags: str) -> None:
+    """后台线程起宿主 CLI 跑一个任务;CLI 自己记成功 / 失败,进程异常退出而任务还挂着时在这里补记失败。"""
+    from modules import image_canvas as ic
+
+    def _work():
+        cmd = [sys.executable, str(ROOT / "code" / "canvas_edit.py"), action, "--project", base.name,
+               "--doc", doc.name, "--job", jid, *flags]
+        err = ""
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=CANVAS_CLI_TIMEOUT, cwd=str(ROOT))
+            if r.returncode != 0:
+                err = (r.stderr or r.stdout or "").strip()[-600:] or f"exit {r.returncode}"
+        except Exception as e:  # noqa: BLE001
+            err = str(e)[:600]
+        try:
+            job = ic.load_job(doc, jid)
+            if job.get("status") in ic.ACTIVE:
+                job = ic.set_job(doc, jid, status="failed", error=err or "出图进程结束但没有产出",
+                                 error_en="" if err else "The generation process ended without producing a result")
+        except Exception:  # noqa: BLE001
+            job = {}
+        HUB.publish({"type": "canvas", "project": base.name, "file": job.get("source") or "", "job": jid,
+                     "status": job.get("status") or "failed"})
+    threading.Thread(target=_work, daemon=True, name=f"canvas-{jid}").start()
+
+
+def _canvas_work_order(base: Path, doc: Path, job: dict, hist: dict) -> str:
+    """发给画板修图 Agent 的工单(Agent 指令文本,不随界面语言)。首行 [画板 <任务号>] 供对话记录里检索。"""
+    from modules import image_canvas as ic
+    absp = lambda rel: str(base / rel)   # noqa: E731
+    by_role = {i["role"]: i for i in job["images"] if i["role"] != "ref"}
+    w, h = job.get("parent_size") or [0, 0]
+    ui = hist.get("ui") or {}
+    lines = [f"[画板 {job['id']}] 整理一次图片编辑的提示词并提交出图(项目 {base.name})",
+             f"对象:{ui.get('label') or hist['source']}(类别 {hist.get('kind')};原路径 {hist['source']})",
+             f"[Image 1] 底图:{absp(by_role['source']['file'])}({w}x{h},画板版本 {job['parent']})"]
+    if by_role.get("marked"):
+        lines.append(f"[Image 2] 带圈标注图:{absp(by_role['marked']['file'])}(彩色描边 + 编号是用户圈出的位置,只作定位标记)")
+        lines.append(f"用户圈出的区域(共 {len(job['regions'])} 个):")
+        for r in job["regions"]:
+            lines.append(f"  区域{r['n']}({ic.region_where(r)};裁切图 {absp(r['crop']) if r.get('crop') else '-'}):"
+                         f"{r.get('text') or '(没有单独说明,按整体说明处理)'}")
+    lines.append(f"整体说明:{job.get('text') or '(无)'}")
+    refs = [i for i in job["images"] if i["role"] == "ref"]
+    if refs:
+        lines.append("参考图(用户文字里的 @图N / @refN 指的就是它们):")
+        for i in refs:
+            lines.append(f"  @图{i['ref']} = [Image {i['n']}] {absp(i['file'])}:{i.get('note') or '(用户没写注释)'}")
+    lines.append(f"图像模型:{job.get('provider') or '全局图像渠道'} {job.get('model') or ''}(用户在画板里选的,由宿主命令套用,不要改)")
+    lines.append("圈外锁定:" + ("开(出图后宿主只取圈内贴回底图,圈外像素不变)" if job.get("lock") else "关(整张图以模型返回的为准)"))
+    lines.append("宿主按模板拼的提示词(图序与位置说法以它为准,请按你看到的画面把每处要改的东西写具体):")
+    lines.append("<<<\n" + (job.get("template_prompt") or "") + "\n>>>")
+    prompt_file = doc / "jobs" / job["id"] / "prompt.txt"
+    lines.append(f"把写好的英文提示词存到 {prompt_file},然后只跑这一条命令(前台等它结束):")
+    lines.append(f"python3 code/canvas_edit.py submit --project {base.name} --doc {doc.name} --job {job['id']} --prompt-file {prompt_file}")
+    if job.get("preview"):
+        lines.append("用户勾了「发送前先看提示词」:这条命令只会把提示词存为待确认、不出图,属正常,跑完即结束本单。")
+    return "\n".join(lines)
+
+
+async def api_canvas_edit(project: str, body: dict):
+    """画板「编辑」发送:{file, kind, parent, regions[], text, refs[参考图编号], provider, model, lock, mode: agent|direct, preview}。
+    直接发送 = 宿主按模板提示词出图;经 Agent = 派画板修图 Agent 整理提示词;preview = 先停在待确认,用户看过提示词再出图。"""
+    from modules import image_canvas as ic
+    body = body or {}
+    base, doc, hist = _canvas_open(project, body.get("file"), body.get("kind"))
+    provider, model = _canvas_channel(body)
+    mode = "direct" if body.get("mode") == "direct" else "agent"
+    if mode == "agent" and not agent_dir(CANVAS_AGENT):
+        raise ServiceError(404, f"Unknown agent: {CANVAS_AGENT}")
+    payload = {k: body.get(k) for k in ("parent", "regions", "text", "refs", "lock", "preview")}
+    payload.update({"provider": provider, "model": model, "mode": mode})
+    try:
+        job = await asyncio.to_thread(ic.create_edit_job, base, doc, payload, run_ended=_canvas_run_ended)
+    except ic.CanvasError as e:
+        raise _canvas_error(e) from None
+    if job["status"] == "queued":
+        _canvas_spawn(base, doc, job["id"], "submit", "--template")
+    elif job["status"] == "drafting":
+        try:
+            res = await api_chat({"agent": CANVAS_AGENT, "message": _canvas_work_order(base, doc, job, ic.load_history(doc)),
+                                  "project": base.name, "source": "user"})
+            ic.set_job(doc, job["id"], run_id=res.get("run_id") or "")
+        except Exception as e:  # noqa: BLE001
+            why = getattr(e, "detail", None) or e
+            ic.set_job(doc, job["id"], status="failed", error=f"派单失败:{why}"[:500], error_en=f"Dispatch failed: {why}"[:500])
+            raise
+    return _canvas_state(base, doc)
+
+
+async def api_canvas_confirm(project: str, body: dict):
+    """待确认的提示词:{file, job, prompt}确认后出图(可先改提示词);{file, job, cancel: true} 取消(Agent 还在整理时也可取消)。"""
+    from modules import image_canvas as ic
+    body = body or {}
+    base, doc, _ = _canvas_open(project, body.get("file"), create=False)
+    jid = str(body.get("job") or "")
+    zh = _canvas_zh()
+    try:
+        job = ic.load_job(doc, jid)
+        if body.get("cancel"):
+            if job.get("status") not in ("awaiting_confirm", "drafting"):
+                raise ServiceError(409, "任务已经在出图或已结束,不能取消" if zh else "The job is already generating or finished and cannot be cancelled")
+            ic.set_job(doc, jid, status="cancelled", error="")
+            return _canvas_state(base, doc)
+        if job.get("status") != "awaiting_confirm":
+            raise ServiceError(409, "这个任务不在待确认状态" if zh else "This job is not awaiting confirmation")
+        prompt = str(body.get("prompt") or job.get("prompt") or "").strip()
+        if not prompt:
+            raise ServiceError(400, "提示词为空" if zh else "The prompt is empty")
+        ic.set_job(doc, jid, status="queued", prompt=prompt[:8000])
+    except ic.CanvasError as e:
+        raise _canvas_error(e) from None
+    _canvas_spawn(base, doc, jid, "submit", "--confirmed")
+    return _canvas_state(base, doc)
+
+
+async def api_canvas_upscale(project: str, body: dict):
+    """画板「放大」:{file, parent, mode: redraw|fidelity, provider, model, upscaler, width}(高按画幅推)。宿主直接出图,不经 Agent。"""
+    from modules import image_canvas as ic
+    body = body or {}
+    base, doc, _ = _canvas_open(project, body.get("file"), body.get("kind"))
+    provider, model = _canvas_channel(body) if body.get("mode") != "fidelity" else ("", "")
+    payload = {k: body.get(k) for k in ("parent", "mode", "upscaler", "width")}
+    payload.update({"provider": provider, "model": model})
+    try:
+        job = await asyncio.to_thread(ic.create_upscale_job, base, doc, payload, run_ended=_canvas_run_ended)
+    except ic.CanvasError as e:
+        raise _canvas_error(e) from None
+    _canvas_spawn(base, doc, job["id"], "upscale")
+    return _canvas_state(base, doc)
+
+
+async def api_canvas_transform(project: str, body: dict):
+    """画板非 AI 操作(同样记为一个版本):{file, version, op: crop|flip_h|flip_v|rotate|resize, params}。"""
+    from modules import image_canvas as ic
+    body = body or {}
+    base, doc, _ = _canvas_open(project, body.get("file"), body.get("kind"))
+    try:
+        ver = await asyncio.to_thread(ic.transform, base, doc, str(body.get("version") or ""), str(body.get("op") or ""),
+                                      body.get("params") if isinstance(body.get("params"), dict) else {})
+    except ic.CanvasError as e:
+        raise _canvas_error(e) from None
+    return {**_canvas_state(base, doc), "created": ver["id"]}
+
+
+async def api_canvas_version(project: str, body: dict):
+    """历史版本的两个动作:{file, version, action: delete}(挪进 trash,不真删)/ {action: unlock}(圈外锁定的版本改用模型返回的整图,另存一版)。"""
+    from modules import image_canvas as ic
+    body = body or {}
+    base, doc, _ = _canvas_open(project, body.get("file"), create=False)
+    vid, action = str(body.get("version") or ""), str(body.get("action") or "")
+    if action not in ("delete", "unlock"):
+        raise ServiceError(400, "action must be delete or unlock")
+    try:
+        res = await asyncio.to_thread(ic.delete_version if action == "delete" else ic.unlock_version, base, doc, vid)
+    except ic.CanvasError as e:
+        raise _canvas_error(e) from None
+    return {**_canvas_state(base, doc), "created": res.get("id") if action == "unlock" else ""}
+
+
+async def api_canvas_ref_upload(data: bytes, project: str, file: str, filename: str):
+    """画板参考图上传(整个请求体就是图片字节)→ 进这张图的参考图托盘,返回新条目(编号 n 即文字里的 @图n)。"""
+    from modules import image_canvas as ic
+    base, doc, _ = _canvas_open(project, file, create=False)
+    try:
+        rec = await asyncio.to_thread(lambda: ic.add_ref(base, doc, data=data, filename=filename))
+    except ic.CanvasError as e:
+        raise _canvas_error(e) from None
+    return {"ok": True, "ref": {**rec, "url": _canvas_url(base, rec["file"])}, "refs": _canvas_state(base, doc)["refs"]}
+
+
+async def api_canvas_ref(project: str, body: dict):
+    """参考图托盘:{file, library: <项目内相对路径>} 从项目库选一张;{file, n, note} 改注释;{file, n, remove: true} 移出托盘。"""
+    from modules import image_canvas as ic
+    body = body or {}
+    base, doc, _ = _canvas_open(project, body.get("file"), create=False)
+    try:
+        if body.get("library"):
+            ic.add_ref(base, doc, library_rel=str(body["library"]), note=str(body.get("note") or ""))
+        else:
+            ic.update_ref(doc, int(body.get("n") or 0), note=body.get("note") if "note" in body else None, remove=bool(body.get("remove")))
+    except ic.CanvasError as e:
+        raise _canvas_error(e) from None
+    return {"ok": True, "refs": _canvas_state(base, doc)["refs"]}
+
+
+async def api_canvas_library(project: str, q: str = ""):
+    """「从项目库选」参考图的候选:人物 / 生物 / 道具 / 场景概念图、分镜背景图、refs/ 里的图片。"""
+    from modules import image_canvas as ic
+    base = _proj_base(project)
+    groups = await asyncio.to_thread(ic.library_images, base, q)
+    for g in groups:
+        for it in g["items"]:
+            it["url"] = _canvas_url(base, it["file"])
+    return {"groups": groups}
+
+
+async def api_canvas_impact(project: str, file: str = ""):
+    """「设为最终版」之前的影响清单:{users: 谁在用这张图, notes: 提示代号, setting_kind}。"""
+    from modules import image_canvas as ic
+    base, doc, hist = _canvas_open(project, file, create=False)
+    out = await asyncio.to_thread(ic.impact, base, hist)
+    out["setting_kind"] = ic.SETTING_KINDS.get(hist.get("kind") or "") or ""
+    out["storage"] = hist.get("storage")
+    return out
+
+
+async def api_canvas_adopt(project: str, body: dict):
+    """画板「设为最终版」:{file, version, repoint(分镜背景图:是否替换引用它的分镜,默认是), sync_setting(把这次改动发给修改师更新设定)}。
+    有分镜 / 组在用这张图时写一条变更记录(runs/revisions/,rerun_downstream=否:总制片只标脏不重跑,与修改师同一口径)。"""
+    from modules import image_canvas as ic
+    body = body or {}
+    base, doc, hist = _canvas_open(project, body.get("file"), create=False)
+    vid = str(body.get("version") or "")
+    prev_final = hist.get("final")
+    try:
+        res = await asyncio.to_thread(ic.adopt, base, doc, vid, repoint=body.get("repoint", True) is not False)
+        hist = ic.load_history(doc)
+        changes = ic.describe_changes(hist, vid)
+        users = (await asyncio.to_thread(ic.impact, base, hist))["users"]
+    except ic.CanvasError as e:
+        raise _canvas_error(e) from None
+    kind, meta, ui = hist.get("kind") or "image", hist.get("meta") or {}, hist.get("ui") or {}
+    skind = ic.SETTING_KINDS.get(kind) or ""
+    oid = ui.get("oid") if kind == "costume" and ui.get("oid") else (meta.get("id") or ui.get("oid") or "")
+    label = ui.get("label") or hist["source"]
+    target = {"kind": skind or kind, "id": oid, "ep": meta.get("ep") or "", "files": [res["target_file"]], "label": label,
+              "rerun_downstream": False}
+    changed = vid != prev_final or res.get("created") or bool(res.get("replaced"))
+    if changed and users:
+        rid = f"canvas-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:4]}"
+        rec = {"id": rid, "run_id": "", "project": base.name, "created": time.time(), "ended": time.time(), "status": "done", "error": "",
+               "source": "canvas", "target": target,
+               "message": (f"画板把 {label} 的最终版换成 {vid}({res['target_file']})\n{changes}")[:2000],
+               "files": [res["target_file"]],
+               "record": {"changed_files": [res["target_file"]], "dirty_nodes": [], "signature_expired": "", "checks": [],
+                          "notes": ("用户在画板里直接换了这张图,已出的视频没有变;在用它的:" + "、".join(users[:20]))[:1000]},
+               "rerun_downstream": False, "consumed": None}
+        try:
+            d = revisions_dir(base.name)
+            d.mkdir(parents=True, exist_ok=True)
+            atomic_write_json(d / f"{rid}.json", rec)
+            res["revision"] = rid
+        except Exception as e:  # noqa: BLE001
+            print(f"[canvas] 变更记录写入失败(不影响最终版):{e}", flush=True)
+    if body.get("sync_setting") and skind and changes:
+        zh = _canvas_zh()
+        msg = ((f"画板把 {label} 的最终版换成了一张改过的图(图片已经落盘:{res['target_file']},不要重出图、不要改这张图)。\n"
+                f"这次改了什么:\n{changes}\n"
+                "请只把对应的设定文字(设定卡、外观 / 陈设描述、出图用的描述串)改成与新图一致,免得以后重出时又改回去;"
+                "新图与设定哪里对不上以新图为准。")
+               if zh else
+               (f"The canvas replaced the final image of {label} with an edited one (already saved at {res['target_file']}; "
+                "do not regenerate or modify this image).\n"
+                f"What changed:\n{changes}\n"
+                "Update only the matching setting text (setting card, appearance / set-dressing description, the description "
+                "strings used for generation) so it agrees with the new image and later regenerations do not revert it; "
+                "where the two disagree, the new image wins."))
+        try:
+            run = await api_chat({"agent": REVISER_ID, "message": msg, "project": base.name, "target": dict(target), "source": "user"})
+            res["setting_run"] = run.get("run_id")
+        except Exception as e:  # noqa: BLE001
+            res["setting_error"] = str(getattr(e, "detail", None) or e)[:300]
+    return {**_canvas_state(base, doc), "adopted": res, "users": users}
+
+
 # ---------------- 场景预览页「💾 背景图」(2026-09-26):把全景 360° 视窗 / 世界模型视窗当前画面存为一张新背景图 ----------------
 def _scene_plate_manual(project: str, sid: str, body: dict) -> dict:
     """{source: pano|world, image: dataURL(JPEG/PNG,客户端已按分镜图规格渲染), camera: {position, target, fov_v_deg}(白模坐标,米),
@@ -7913,7 +8325,7 @@ def _scene_plate_manual(project: str, sid: str, body: dict) -> dict:
     import base64 as _b64
     import io as _io
     from modules import shot_plates
-    from modules.whitebox import read as _wb_read, render_format as _wb_fmt
+    from modules.whitebox import read as _wb_read
     try:
         from PIL import Image
     except ImportError:  # pragma: no cover
@@ -7947,7 +8359,8 @@ def _scene_plate_manual(project: str, sid: str, body: dict) -> dict:
         raise ServiceError(400, "camera.target 不能与 position 重合")
     scheme = re.sub(r"[^\w\-]", "", str(body.get("scheme") or "")) or "nolight"
     anchor_id = re.sub(r"[^\w\-]", "", str(body.get("anchor_id") or ""))
-    fmt = _wb_fmt(_wb_read(base / "settings.json", {}))
+    # 手工截取不受项目画幅限制,一律 16:9(2026-10-08;与自动出图同一常量 PLATE_FMT)
+    fmt = shot_plates.PLATE_FMT
     pw, ph = shot_plates.plate_size(fmt)
     layout = _wb_read(base / "assets/concepts/scenes" / sid / "layout.json", {}) or {}
     scene = _wb_read(base / "assets/concepts/scenes" / sid / "whitebox.scene.json", {}) or {}
@@ -7964,7 +8377,7 @@ def _scene_plate_manual(project: str, sid: str, body: dict) -> dict:
         if min(W, H) < 64:
             raise ServiceError(400, "图片太小")
         if abs(W / H - pw / ph) > 0.02:
-            raise ServiceError(400, f"图片宽高比 {W}x{H} 与项目画幅 {pw}x{ph} 不符")
+            raise ServiceError(400, f"图片宽高比 {W}x{H} 须为 16:9({pw}x{ph})")
         if (W, H) != (pw, ph):
             im = im.resize((pw, ph), Image.LANCZOS)
         now = datetime.now()
@@ -8023,7 +8436,9 @@ def _shot_plate_candidates(project: str, ep: str, shot_id: str) -> dict:
     for f in sorted((base / "directing").glob("ep*/shot_plates.json")):
         sp = _read_json_safe(f) or {}
         for sp_sid, r in (sp.get("shots") or {}).items():
-            for p in (r.get("plates") or []) if isinstance(r, dict) else []:
+            if not isinstance(r, dict) or r.get("scene_id") != sid:   # 只算本场景的镜:不同场景库里 key 会重名
+                continue
+            for p in r.get("plates") or []:
                 if isinstance(p, dict) and p.get("key"):
                     used_by.setdefault(p["key"], []).append(f"{f.parent.name}/{sp_sid}" + ("(end)" if p.get("role") == "end" else ""))
     current = {p.get("role"): p.get("key") for p in rec["plates"] if isinstance(p, dict)}
@@ -9006,6 +9421,9 @@ def _preview_script(project: str, ep: str):
     data["notes"] = scn.load_notes(base, ep)["notes"]      # 用户注释(2026-09-27):* / S01 / S01/b3 / nar:ID / hook:ID / event:ID / pacing:S01 / trim:S01/n / plan
     out = (load_project_settings(base.name).get("output") or {})
     data["narration_enabled"] = out.get("narration_enabled") is True
+    # NPC 参与构图(2026-10-09):场次头 👥 开关——总开关 + 逐场生效值/来源/自动判定/用户覆盖/关键词建议
+    from modules import npc_staging as npcs
+    data["npc"] = npcs.resolve(base, ep, breakdown=res["breakdown"] or {}, zh=_notes_submit_zh())
     # 本集拆解是否已派单在跑(页面刷新后仍能显示「分析中」并继续轮询)
     data["reanalyze_run"] = next(
         (r["id"] for r in reversed(list(RUNS.values()))
@@ -9361,7 +9779,42 @@ def _preview_board(project: str, ep: str):
     data["animatic"] = _board_animatic(base, ep)
     data["gate"] = _board_gate(base, ep)
     data["notes"] = sbb.load_notes(base, ep)["notes"]      # 用户注释(2026-09-15):整集 * / 场次 S01 / 镜 S01-03
+    data["npc"] = _board_npc(base, ep, board)               # NPC 参与构图(2026-10-09):场次头 👥 开关 + 本场分镜是否按生效值写了 npc[]
     return data
+
+
+def _board_npc(base: Path, ep: str, board: dict) -> dict:
+    from modules import npc_staging as npcs
+    nos = [sc.get("scene_no") for sc in board.get("scenes") or [] if sc.get("scene_no")]
+    res = npcs.resolve(base, ep, zh=_notes_submit_zh(), extra_scene_nos=nos)
+    if board.get("has_storyboard"):
+        _, _, states = npcs.check_storyboard(base, ep, res)
+        for no, st in states.items():
+            if no in res["scenes"]:
+                res["scenes"][no]["applied"] = st
+    return res
+
+
+def _npc_set(project: str, ep: str, body: dict) -> dict:
+    """剧本预览页 / 故事板页场次头 👥 开关:{scene, mode: auto|on|off, density?: sparse|medium|dense|''}
+    → story/episodes/<ep>/scene_npc.json(宿主自有);返回本集最新生效表(故事板页另带 applied 状态)。"""
+    from modules import npc_staging as npcs
+    base = _proj_base(project)
+    ep = re.sub(r"[^\w\-]", "", ep)
+    if not ep or not ((base / "story" / "episodes" / ep).is_dir() or (base / "directing" / ep).is_dir()):
+        raise ServiceError(404, f"episode {ep} not found")
+    try:
+        npcs.set_override(base, ep, str(body.get("scene") or ""), str(body.get("mode") or "auto"),
+                          (str(body.get("density")) if body.get("density") else None))
+    except ValueError as e:
+        raise ServiceError(400, str(e)) from None
+    from modules import storyboard_board as sbb
+    board = sbb.load_board(base, ep)
+    return {"ok": True, "npc": _board_npc(base, ep, board)}
+
+
+async def api_npc_set(project: str, ep: str, body: dict):
+    return await asyncio.to_thread(_npc_set, project, ep, body or {})
 
 
 async def api_preview_board(project: str = "demo", ep: str = ""):
@@ -10776,7 +11229,7 @@ async def api_publish_dispatch(project: str, ep: str, body: dict) -> dict:
 def _ep_whitebox_reel(base: Path, ep: str) -> dict:
     """分镜预览页「白模样片」板块(成片发布页 2026-09-13 起不再展示,接口字段 whitebox 保留供测试/兼容)(2026-09-08 起,原名白模合辑;2026-09-11 起烧入对白/旁白字幕):
     整集摄影机视角白模视频 assets/whitebox/<ep>/<ep>-camera.mp4 的现状——存在则给播放 URL,
-    并按各组 camera.mp4 指纹与字幕指纹判断是否过期(stale_reason=groups|subtitles);
+    并按各组 camera.mp4 指纹、白模编译指纹与字幕指纹判断是否过期(stale_reason=groups|whitebox|subtitles|audio);
     附派单目标 Agent 与当前可烧字幕条数,页面按钮据此发指令。"""
     from modules.whitebox_export import episode_reel_status
     try:
@@ -10788,6 +11241,8 @@ def _ep_whitebox_reel(base: Path, ep: str) -> dict:
     out = {"exists": st["exists"], "stale": st["stale"], "stale_reason": st.get("stale_reason", ""), "path": st["path"],
            "groups_total": st["groups_total"], "groups_ready": len(st["groups_ready"]),
            "groups_missing": st["groups_missing"], "agent": WHITEBOX_REEL_AGENT,
+           # 2026-10-10:H3W 签字前的样片用预览版组视频(未正式导出、未接线)→ 页面标「预览版」;白模在样片之后又改过的组 → 提示重出
+           "preview_groups": st.get("preview_groups") or [], "whitebox_changed": st.get("whitebox_changed") or [],
            "dialogue_audio": {"enabled": da.get("enabled", False), "lines": da.get("lines", 0), "overflow": len(da.get("overflow") or [])},
            "subtitle_cues": len(cues), "subtitle_dialogue": sum(1 for c in cues if c["kind"] == "dialogue"),
            "subtitle_narration": sum(1 for c in cues if c["kind"] == "narration")}
@@ -12993,7 +13448,11 @@ async def api_genconfig_set(body: dict):
                                 f"or one of {sorted(RH_BASES)}")
     if up_comfy.get("rh_instance_type") not in {"standard", "plus", "ultra"}:
         raise ServiceError(400, "upscale.comfyui.rh_instance_type must be standard, plus or ultra")
+    # 选中 Agentics 渠道须已登录桌面端账号;只校验本次新切到 agentics 的类别。图像/视频/音乐/语音/
+    # 数字人/deepagents 默认渠道都是 agentics,若按合并后整份配置校验,浏览器版(无桌面登录)
+    # 保存任何无关设置(界面语言、模型分配策略…)都会 401
     if any((cfg.get(kind) or {}).get("provider") == "agentics"
+           and (old.get(kind) or {}).get("provider") != "agentics"
            for kind in ("image", "video", "music", "tts", "digital_human", "upscale", "deepagents")):
         resolve_agentics_connection()
     dh_comfy = (cfg.get("digital_human") or {}).get("comfyui") or {}
@@ -13166,7 +13625,7 @@ async def api_brief_set(body: dict):
 
 # ---------------- 参考文件页(refs/ 分类预览、上传、逐文件注释) ----------------
 REF_CATEGORIES = ("style", "thumbnail", "characters", "scenes", "creatures", "props", "music",
-                  "video", "fonts", "text")
+                  "video", "fonts", "text", "other")
 REF_FONT_EXTS = (".ttf", ".otf", ".ttc")      # 与花字引擎 modules/captions.py 扫描口径一致
 REF_SKIP_FILES = {"README.md", "NOTES.md", "annotations.json"}
 AUDIO_EXTS = (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg")
@@ -14679,31 +15138,78 @@ async def api_globalmodel_get():
     return {"global_model": global_model_pref()}
 
 
-def video_model_family(cfg: dict | None = None) -> str:
-    """生效视频模型对应的「模型限制」预设口径:sd25 / sd20(含 fast/mini)/ mmh3(任何渠道跑 H3,
-    含 ComfyUI/RunningHub 工作流)/ wan30(Fal 托管阿里 Wan 3.0);无法判定(其他模型或无模型渠道)返 ""。"""
-    cfg = cfg or load_genconfig()
-    if is_minimax_h3_active(cfg):
+def video_family_for(*names: str) -> str:
+    """按模型 id / 名称 / 工作流名关键字归入「模型限制」预设口径(2026-10-09):sd25 / sd20 / mmh3 / wan30,
+    不命中返 ""。先小写、非字母数字一律折成 "-" 再按序匹配,先中先得。各渠道实际写法:
+      mmh3  名字同时含 minimax 与 h3(minimax/h3[-max]、MiniMax-H3、minimax/hailuo-h3/…、
+            rhart-video/minimax-h3-oss/…、工作流节点 MiniMaxH3ReferenceToVideo),或 hailuo-3 / hailuo-h3
+            (OpenRouter minimax/hailuo-3[-max] 不含 h3 字样)
+      sd25  seedance-2.5 各写法(doubao-/dreamina-seedance-2-5-…、bytedance/seedance-2.5[-global]-token/…)
+      sd20  其余 seedance-2.x(含 fast/mini/global),及 RunningHub 给 Seedance 2.0 起的别名 sparkvideo-2.0
+      wan30 wan-3.x(alibaba/wan-3.0[-prime]/…)
+    Seedance 1.x、Hailuo 2.3、Wan 2.x、Kling、Veo、Vidu、PixVerse、LTX 等不命中。"""
+    t = re.sub(r"[^a-z0-9]+", "-", " ".join(n for n in names if n).lower())
+    if ("minimax" in t and "h3" in t) or re.search(r"hailuo-?h?3(?![0-9])", t):
         return "mmh3"
-    m = effective_video_model(cfg)
-    if is_seedance25(m):
+    if re.search(r"(?:seedance|sparkvideo)-?v?2-5(?![0-9])", t):
         return "sd25"
-    if is_seedance20(m):
+    if re.search(r"(?:seedance|sparkvideo)-?v?2(?![0-9])", t):
         return "sd20"
-    if is_wan30(m):
+    if re.search(r"(?<![a-z])wan-?3(?![0-9])", t):
         return "wan30"
     return ""
 
 
+def _comfy_video_family(comfy: dict) -> str:
+    """ComfyUI 渠道无模型 id:先看工作流名(本地/Comfy Cloud = 工作流文件名,RunningHub = 所选工作流的备注),
+    不命中再看工作流 JSON 全文(RunningHub 只读本地缓存,不发网络请求)。"""
+    mode = comfy.get("mode") or "local"
+    if mode in RH_BASES:
+        wf_id = str(comfy.get("rh_workflow_id") or "")
+        name = next((str(w.get("note") or "") for w in comfy.get("rh_workflows") or []
+                     if isinstance(w, dict) and wf_id and str(w.get("id")) == wf_id), "")
+        fam = video_family_for(name)
+        return fam or video_family_for(_rh_cached_workflow(comfy))
+    wf = str(comfy.get("workflow") or "").strip()
+    fam = video_family_for(Path(wf).name)
+    if fam or not wf:
+        return fam
+    try:
+        from modules.genmedia import _resolve_comfy_workflow_path
+        return video_family_for(_resolve_comfy_workflow_path(wf).read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _effective_video_names(cfg: dict) -> tuple[str, str, str]:
+    """生效视频渠道 → (provider, 模型 id, 名称)。Agentics 未选 profile 时与 genmedia 同口径取目录首项,
+    名称取 profile 名(profile 代号未必含模型名);目录须已登录桌面端账号,拉不到时 id/名称为空。"""
+    prov = active_video_provider(cfg)
+    model = effective_video_model(cfg)
+    if prov != "agentics":
+        return prov, model, video_model_label(model, prov) if model else _video_model_label(cfg)
+    rows = agentics_video_profiles()
+    model = model or (rows[0]["id"] if rows else "")
+    return prov, model, next((r["label"] for r in rows if r["id"] == model), model)
+
+
+def video_model_family(cfg: dict | None = None) -> str:
+    """生效视频模型对应的「模型限制」预设口径(规则见 video_family_for);无法判定返 ""。"""
+    cfg = cfg or load_genconfig()
+    if active_video_provider(cfg) == "comfyui":
+        return _comfy_video_family((cfg.get("video") or {}).get("comfyui") or {})
+    return video_family_for(*_effective_video_names(cfg)[1:])
+
+
 async def api_video_model_get():
     """「生成模型」页当前生效的视频模型(video-generation 工位口径)及其预设口径;
-    新建向导「模型限制」步据此在所选预设与生效模型不一致时给提示(不拦下一步)。"""
-    cfg = load_genconfig()
-    model = effective_video_model(cfg)
-    prov = active_video_provider(cfg)
-    return {"provider": prov, "model": model,
-            "label": video_model_label(model, prov) if model else _video_model_label(cfg),
-            "family": video_model_family(cfg)}
+    新建向导「模型限制」步打开时据 family 自动选中对应预设,不命中保留默认并提示核对。"""
+    def work():
+        cfg = load_genconfig()
+        prov, model, label = _effective_video_names(cfg)
+        return {"provider": prov, "model": model, "label": label or prov,
+                "family": video_model_family(cfg)}
+    return await asyncio.to_thread(work)
 
 
 async def api_globalmodel_set(body: dict):
@@ -15008,13 +15514,91 @@ async def api_soul(agent: str):
 
 
 async def api_enginecheck(engine: str):
-    """检测执行引擎 CLI 是否已安装(顶栏切换 claude/codex/kimi/pi/opencode/grok 时前端调用)。
+    """检测执行引擎 CLI 是否已安装、是否已登录(顶栏切换 claude/codex/kimi/pi/opencode/grok
+    时前端调用;一键安装 / 登录后前端轮询)。logged_in:True/False/None(判断不了,不打扰)。
     deepagents 为进程内 runner,无 CLI 依赖,视为始终可用。"""
     if engine not in CLI_BINS:
         return {"engine": engine, "available": True, "bin": ""}
     path = await asyncio.to_thread(resolve_cli_executable, engine)
-    return {"engine": engine, "available": bool(path),
-            "bin": CLI_BINS[engine], "path": path or ""}
+    plan = engine_setup.install_plan(engine)
+    out = {"engine": engine, "available": bool(path),
+           "bin": CLI_BINS[engine], "path": path or "",
+           "label": CLI_LABELS.get(engine, engine),
+           "install_command": plan.get("display", ""),
+           "install_unsupported": plan.get("unsupported", ""),
+           "install": engine_setup.install_snapshot(engine),
+           "logged_in": None, "login_method": ""}
+    if path:
+        st = await asyncio.to_thread(engine_setup.login_status, engine, path)
+        out.update(logged_in=st["logged_in"], login_method=st["method"])
+    return out
+
+
+ENGINE_SETUP_DIR = RUNTIME_DIR / "engine-setup"     # 弹出终端运行的登录 / 安装脚本(不含任何密钥)
+
+
+def _engine_setup_engine(engine: str) -> str:
+    if engine not in CLI_BINS or not engine_setup.supported(engine):
+        raise ServiceError(404, f"Unknown engine: {engine}")
+    return engine
+
+
+def _engine_terminal_path_dirs(exe: str | None) -> list[str]:
+    """终端脚本前置的 PATH:CLI 所在目录 + 服务进程 PATH(桌面端已补常见安装目录;
+    Terminal.app 新开的登录 shell 不继承服务进程环境)。"""
+    dirs = [str(Path(exe).parent)] if exe else []
+    return dirs + [d for d in (os.environ.get("PATH") or "").split(os.pathsep) if d and d not in dirs]
+
+
+async def api_engine_install(engine: str, body: dict | None = None):
+    """一键安装:mode=background(默认)后台跑官方安装脚本,前端轮询 GET 取进度;
+    mode=terminal 弹出终端跑同一条命令(脚本有交互提问时用)。"""
+    engine = _engine_setup_engine(engine)
+    body = body or {}
+    if (body.get("mode") or "background") == "terminal":
+        plan = engine_setup.install_plan(engine)
+        if plan.get("unsupported"):
+            raise ServiceError(400, plan["unsupported"])
+        zh = (ui_lang_code() or "zh") == "zh"
+        script = engine_setup.terminal_script(
+            engine_setup.install_lines(CLI_LABELS[engine], plan["display"], zh),
+            plan["terminal_line"], zh, path_dirs=_engine_terminal_path_dirs(None))
+        await asyncio.to_thread(_engine_open_terminal, f"install-{engine}", script, plan.get("env"))
+        return {"engine": engine, "mode": "terminal", "opened": True}
+    snap = await asyncio.to_thread(engine_setup.start_install, engine,
+                                   lambda: resolve_cli_executable(engine))
+    return {"engine": engine, "mode": "background", "install": snap}
+
+
+async def api_engine_install_status(engine: str):
+    engine = _engine_setup_engine(engine)
+    return {"engine": engine, "install": engine_setup.install_snapshot(engine)}
+
+
+async def api_engine_login(engine: str):
+    """弹出终端运行该 CLI 自己的登录命令;用户在浏览器完成授权,前端轮询 availability。
+    本程序不经手、不保存任何令牌。"""
+    engine = _engine_setup_engine(engine)
+    exe = await asyncio.to_thread(resolve_cli_executable, engine)
+    if not exe:
+        raise ServiceError(409, "not_installed")
+    zh = (ui_lang_code() or "zh") == "zh"
+    script = engine_setup.terminal_script(
+        engine_setup.login_lines(engine, CLI_LABELS[engine], zh),
+        engine_setup.login_command_line(engine, exe), zh,
+        path_dirs=_engine_terminal_path_dirs(exe))
+    await asyncio.to_thread(_engine_open_terminal, f"login-{engine}", script, None)
+    return {"engine": engine, "opened": True}
+
+
+def _engine_open_terminal(name: str, script: str, extra_env: dict | None):
+    try:
+        engine_setup.open_terminal(ENGINE_SETUP_DIR, name, script,
+                                   env=engine_setup.installer_env(extra_env))
+    except engine_setup.TerminalUnavailable as e:
+        raise ServiceError(501, f"terminal_unavailable: {e}") from None
+    except OSError as e:
+        raise ServiceError(500, f"terminal_failed: {e}") from None
 
 
 async def api_projects():
@@ -15938,6 +16522,7 @@ async def api_stop_run(run_id: str):
 _HUMAN_GATE_NOTIFIED: dict[str, float] = {}   # project -> 上次提醒时刻(防刷屏)
 _DAG_RECONCILE_NOTIFIED: dict[str, float] = {}   # project -> 上次唤醒补展开 DAG 的时刻
 _DAG_INVALID_NOTIFIED: dict[str, float] = {}   # project -> 上次唤醒修复 DAG 的时刻
+_EPISODE_HOLD_NOTIFIED: dict[str, float] = {}   # project -> 上次提醒「按集顺序推进卡在当前集」的时刻
 
 _DONE_STATES = {"done", "passed", "passed_human_override"}
 
@@ -15957,34 +16542,19 @@ def _dag_load_nodes(dag_path) -> list[dict]:
     return [{**n, "id": n.get("id") or n.get("task_id", "")} for n in nodes]
 
 
-def _dag_runnable(proj: str) -> tuple[list[str], list[str]]:
-    """读 runs/dag.json,返回 (依赖已满足的非人工待办节点, 依赖已满足的人工签字节点)。"""
+def _dag_frontier(proj: str) -> dict:
+    """读 runs/dag.json 的待办前沿(dagcheck.frontier,与总制片 `dagcheck.py --frontier` 同口径):
+    skipped/cancelled/waived 终态、blocked(用户明确暂缓)、template/expanded 扇出骨架(#72)都不算待办,
+    否则看门狗每轮都会据此空唤醒总制片;多集并行关闭时另把按集顺序暂缓的后续集节点剔出(held)。"""
     dag_path = PROJECTS_DIR / proj / "runs" / "dag.json"
-    if not dag_path.is_file():
-        return [], []
-    nodes = _dag_load_nodes(dag_path)
-    done = {n["id"] for n in nodes if n.get("state") in _DONE_STATES}
-    runnable, human_waiting = [], []
-    for n in nodes:
-        if n.get("state") in _DONE_STATES:
-            continue
-        # skipped/cancelled/waived 是不再执行的终态(如已下线的 p0-version-init)、
-        # blocked 是用户明确暂缓:都不算待办,否则看门狗每轮都会据此空唤醒总制片
-        if n.get("state") in _WF_TERMINAL_SKIP or n.get("state") == "blocked":
-            continue
-        # #72:template/expanded 是 for_each 扇出骨架(已按实例扇出,本身不可派单),人工/非人工一律不算待办
-        if n.get("state") in ("template", "expanded"):
-            continue
-        if not all(d in done for d in (n.get("depends_on") or [])):
-            continue
-        if n.get("human"):
-            # expanded/template 只是待实例化骨架，blocked 是用户明确暂缓；只有
-            # pending 人工节点能够发起新的签字。
-            if n.get("state") == "pending":
-                human_waiting.append(n["id"])
-        else:
-            runnable.append(n["id"])
-    return runnable, human_waiting
+    nodes = _dag_load_nodes(dag_path) if dag_path.is_file() else []
+    return dagcheck.frontier(nodes, episode_parallel_setting())
+
+
+def _dag_runnable(proj: str) -> tuple[list[str], list[str]]:
+    """返回 (依赖已满足的非人工待办节点, 依赖已满足的 pending 人工签字节点),已剔除按集顺序暂缓的节点。"""
+    f = _dag_frontier(proj)
+    return f["runnable"], f["human_waiting"]
 
 
 def _gate_checkpoint(node: dict) -> str:
@@ -16174,10 +16744,18 @@ def _transition_design_question(proj: str, gate_id: str | None, question: str) -
 
 
 def _transition_design_sign_accept(proj: str, gate_id: str | None) -> None:
-    """H3A 签字后:把各集仍 proposed 的过场设计接受并 apply(记 by=sign:g6)。"""
+    """H3A 签字后:把各集仍 proposed 的过场设计接受并 apply(记 by=sign:g6)。
+    先兜底登记剧本场间衔接(2026-10-10 二期,docs/scene_links.md):导演采纳的衔接还没写进 shot_list transition_in.link 的,
+    此刻由宿主登记并写回——极简模式不派过场设计节点,没有别处会跑 propose;无衔接的集不动、不新建设计表。"""
     from modules import transition_design as _td
     base = PROJECTS_DIR / proj
     for ep in _transition_gate_episodes(proj, gate_id):
+        try:
+            landed = _td.land_script_links(base, ep)
+            if landed:
+                print(f"[transition_design] {proj}/{ep} H3A 签字登记剧本场间衔接 {len(landed)} 处:{', '.join(landed[:5])}", flush=True)
+        except Exception as e:  # noqa: BLE001
+            print(f"[transition_design] {proj}/{ep} 登记剧本场间衔接失败:{e}", flush=True)
         try:
             done = _td.accept_all_proposed(base, ep, by="sign:g6")
             if done:
@@ -16256,13 +16834,17 @@ def _approval_project(c: dict) -> str | None:
 
 
 async def ensure_human_gate_approvals(proj: str, parent: str | None = None) -> list[str]:
-    """为已解锁人工闸门补建持久签字单；只建单，不放行 DAG。"""
+    """为已解锁人工闸门补建持久签字单；只建单，不放行 DAG。多集并行关闭时，
+    按集顺序暂缓的后续集闸门不新建（已有签字单的续跑照常）。"""
     created = []
+    held = set(_dag_frontier(proj)["held"])
     for node in _ready_human_gates(proj):
         gate_id = node["id"]
         existing = [c for c in CONFIRMS.values()
                     if c.get("kind") == "sign" and _approval_project(c) == proj
                     and c.get("gate_id") == gate_id]
+        if not existing and gate_id in held:
+            continue
         if existing:
             # 服务若恰在签字落盘后、续跑派单前退出，重启后由核对钩子补唤醒。
             signed = next((c for c in reversed(existing)
@@ -16550,11 +17132,16 @@ async def idle_watchdog():
                         mark_revisions_consumed(proj, "watchdog")
                         print(f"[watchdog] 唤醒 {orch}:{proj} DAG {state}", flush=True)
                     continue
-                runnable, human_waiting = _dag_runnable(proj)
+                fr = _dag_frontier(proj)
+                runnable, human_waiting = fr["runnable"], fr["human_waiting"]
+                cur_ep = fr["current_episode"]
+                hold_note = (f"(多集并行已关闭:按集顺序只推进当前集 ep{cur_ep:02d} 与项目级节点,"
+                             f"后续集 {len(fr['held'])} 个节点待本集结束后再派)"
+                             ) if fr["held"] and cur_ep is not None else ""
                 if runnable:
                     msg = (f"[自动运行·状态检查] 项目 {proj} 当前没有任何任务在运行,"
                            f"但 runs/dag.json 仍有依赖已满足的待办节点(如:{', '.join(runnable[:6])}"
-                           f"{' 等' if len(runnable) > 6 else ''})。"
+                           f"{' 等' if len(runnable) > 6 else ''}){hold_note}。"
                            "请按 DAG 与派单守则继续推进;若确在等待人工或有原因暂停,简要说明后结束。"
                            + orders_note)
                     await api_chat({"agent": orch, "message": msg,
@@ -16596,6 +17183,12 @@ async def idle_watchdog():
                         _HUMAN_GATE_NOTIFIED[proj] = now
                         notify_user(f"项目 {proj} 流水线停在人工签字点:"
                                     f"{', '.join(human_waiting[:3])},等你确认")
+                elif fr["held"] and cur_ep is not None \
+                        and now - _EPISODE_HOLD_NOTIFIED.get(proj, 0) > 3600:
+                    # 多集并行关闭:当前集剩下的节点都暂缓/阻塞(没有可派也没有待签),后续集按集顺序不开始
+                    _EPISODE_HOLD_NOTIFIED[proj] = now
+                    notify_user(f"项目 {proj} 按集顺序推进停在 ep{cur_ep:02d}:该集仍有未结束节点(暂缓或阻塞),"
+                                "后续集暂不开始")
         except Exception as e:  # noqa: BLE001
             print(f"[watchdog] 异常(忽略):{e}\n{traceback.format_exc()}", flush=True)
 
@@ -16650,6 +17243,7 @@ async def api_agent_advanced_get():
               "thinking_effort_default": THINKING_EFFORT_DEFAULT,
               "thinking_effort_levels": list(THINKING_EFFORT_LEVELS),
               "whitebox_selfcheck": whitebox_selfcheck_setting(),
+              "episode_parallel": episode_parallel_setting(),
               "debug_mode": debug_mode(),
               "max_turns": max_turns_setting(),
               "max_turns_default": MAX_TURNS_DEFAULT,
@@ -16670,6 +17264,9 @@ async def api_agent_advanced_set(body: dict):
       派单时按引擎翻译成推理强度参数;持久化,对后续启动的运行生效
     - whitebox_selfcheck:白模自检开关(布尔,默认开):开启时经运行提示词让白模调度工位在编译后
       跑 `render_whitebox.py --stills` 读静帧联系表核对取景;持久化,对后续启动的运行生效
+    - episode_parallel:多集并行开关(布尔,默认关):关闭时总制片按集顺序推进,当前集全部节点结束
+      (发布环节 p11-* 不计)才开始下一集,集内照常并行扇出;经调度型 Agent 运行提示词注入,
+      看门狗与 `dagcheck.py --frontier` 实时读取;持久化
     - max_turns:单次运行引擎轮次上限(MAX_TURNS_MIN..MAX_TURNS_MAX;仅 claude/grok
       引擎有 --max-turns 参数,撞上限即被切断且无续跑,大批量工位需放宽);持久化,
       对后续启动的运行生效
@@ -16692,6 +17289,8 @@ async def api_agent_advanced_set(body: dict):
         updates["thinking_effort"] = lv
     if body.get("whitebox_selfcheck") is not None:
         updates["whitebox_selfcheck"] = bool(body.get("whitebox_selfcheck"))
+    if body.get("episode_parallel") is not None:
+        updates["episode_parallel"] = bool(body.get("episode_parallel"))
     if body.get("debug_mode") is not None:
         updates["debug_mode"] = bool(body.get("debug_mode"))
     if body.get("max_retries") is not None:
@@ -16723,7 +17322,7 @@ async def api_agent_advanced_set(body: dict):
     conc = {k: body.get(k) for k in ("global_concurrency", "agent_concurrency", "run_timeout", "idle_timeout")
             if body.get(k) is not None}
     if not updates and not conc:
-        raise ServiceError(400, "nothing to update: pass global_concurrency / agent_concurrency / run_timeout / idle_timeout / agent_memory_kb / max_retries / confirm_timeout / thinking_effort / max_turns / whitebox_selfcheck / debug_mode")
+        raise ServiceError(400, "nothing to update: pass global_concurrency / agent_concurrency / run_timeout / idle_timeout / agent_memory_kb / max_retries / confirm_timeout / thinking_effort / max_turns / whitebox_selfcheck / episode_parallel / debug_mode")
     if conc:
         await api_agent_concurrency_set(conc)   # 自带校验;校验失败则整单不落盘
     if updates:

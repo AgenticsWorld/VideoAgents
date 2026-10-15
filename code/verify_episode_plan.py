@@ -10,6 +10,9 @@
   cut_not_on_causal_chain  cut 事件不得 importance=major、不得是任何保留事件的 caused_by、不得是卡点
   merge_target_valid       merge_into 指向同集 dramatize 事件
   duration_in_budget / ids_valid  沿用旧检
+衍生(原创)模式(2026-10-09,WORKFLOW §5A):总表顶层 derivative_mode: true 时,上面六项事件对账类报 SKIPPED,改核
+  derivative_mode_consistent  顶层 derivative_note 非空、各集 events / treatments 全空(防半改编半豁免)
+  duration_in_budget / ids_valid 照常;此时缺 events.json 不算文件缺失。
 
 用法:python3 code/verify_episode_plan.py [--project <slug>] [--sec-per-event 90] [--json]
 退出码:0 全 PASS、1 有 FAIL、2 文件缺失。只 print,不改任何文件。
@@ -35,7 +38,7 @@ def main() -> int:
         return 2
     events = et.read_json(base / "events.json")
     graph = et.read_json(base / "story_graph.json")
-    if events is None:
+    if events is None and not et.is_derivative(plan):
         print(f"MISSING {base / 'events.json'}")
         return 2
     res = et.verify_plan(plan, events, graph, sec_per_event=args.sec_per_event)

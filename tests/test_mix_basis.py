@@ -70,6 +70,15 @@ def cli(script, *args, expect=0):
     return p.stdout
 
 
+def cli_all(script, *args, expect=0):
+    """同 cli,返回 stdout + stderr(SystemExit 的 FAIL 文案在 stderr)。"""
+    env = dict(os.environ, VIDEOAGENTS_DATA_DIR=str(DATA))
+    p = subprocess.run([sys.executable, str(ROOT / "code" / script), *args, "--project", "mixtest", "--ep", "ep01"],
+                       capture_output=True, text=True, env=env, cwd=ROOT)
+    assert p.returncode == expect, p.stdout + p.stderr
+    return p.stdout + p.stderr
+
+
 def _cutout(project, gid, base_v, t0, t1):
     from services.runtime import core
     r = asyncio.run(core.api_post_cutout("mixtest", "ep01", {"group_id": gid, "base_v": base_v, "cuts": [{"t0": t0, "t1": t1}]}))
@@ -131,6 +140,23 @@ def test_sources_stamp_check_and_finalize_decision(project):
     ops, info = fe.load_timemap(project, "ep01", cut_post, notes)
     assert ops == [] and any(l["layer"] == "post_versions" and l.get("skipped") for l in info["layers"])
     assert any("不再套" in n for n in notes)
+    # ④b 字幕基准声明(issue #114):声明 original → 字幕照套层 1(−0.5s),声轨表不变;未声明且末条超出正片 → shift FAIL 并提示
+    assert info["subs_basis"] == {"basis": "auto", "source": None, "post_layer": "skipped", "post_delta_s": pytest.approx(-0.5, abs=0.05)}
+    ops_o, info_o = fe.load_timemap(project, "ep01", cut_post, [], subs_basis="original")
+    assert info_o["subs_basis"]["post_layer"] == "applied" and info_o["audio_ops"] == info["audio_ops"] == []
+    assert info_o["ops"] == ops_o and fe.timemap.total_delta(ops_o) == pytest.approx(-0.5, abs=0.05)
+    (ed / "subtitles.srt").write_text("1\n00:00:00,500 --> 00:00:01,500\n甲\n\n2\n00:00:05,000 --> 00:00:06,200\n乙\n", encoding="utf-8")
+    out = cli_all("finalize_episode.py", "shift", "--cut", "cut_post.mp4", expect=1)
+    assert "subtitle_basis" in out and "--subs-basis original" in out and not (ed / "subtitles_final.srt").exists()
+    cli("finalize_episode.py", "shift", "--cut", "cut_post.mp4", "--subs-basis", "original")
+    assert json.loads((ed / "subtitles.basis.json").read_text(encoding="utf-8"))["basis"] == "original"
+    assert fe.parse_srt(ed / "subtitles_final.srt")[1] == (pytest.approx(4.5, abs=0.05), pytest.approx(5.7, abs=0.05))
+    ops_d, info_d = fe.load_timemap(project, "ep01", cut_post, [])          # 不带参数也按声明文件
+    assert ops_d == ops_o and info_d["subs_basis"]["source"] == "edit/ep01/subtitles.basis.json"
+    cli("finalize_episode.py", "shift", "--cut", "cut_post.mp4", "--subs-basis", "auto", expect=1)   # 删声明 → 回到默认口径
+    assert not (ed / "subtitles.basis.json").exists()
+    for n in ("subtitles.srt", "subtitles_final.srt", "final_layout.json"):
+        (ed / n).unlink(missing_ok=True)
     with pytest.raises(SystemExit, match="原粗剪基准"):
         fe.load_timemap(project, "ep01", cut_v1, [])
     # 不用外挂声轨时只 WARN 不拦

@@ -14,7 +14,7 @@
 1. 读取 `bible/aspect_ratio.json` 的画幅与分辨率矩阵(H2 已锁定),为每个目标平台产出对应画幅版本(横 / 竖),裁切时保住构图主体与字幕安全区。
 2. 按平台规格转码:码率、封装格式、fps、分辨率逐项对表。
 3. 时长切条:超出平台单条上限的集,按平台规则切条;切点优先对齐 `story/episodes/epNN/pacing.json` 的场次边界,禁止切在台词中间。
-4. 打包:视频 + 平台版字幕 + 对应画幅封面归入 `publish/<platform>/package/<ep>/`(每集一个子目录;数据布局见 WORKFLOW.md §2);字幕一律取成片基准 `subtitles_final.srt`;**打包前先跑 `python3 code/finalize_episode.py check --project <slug> --ep epNN`(只读机检 intro_offset_ok,WORKFLOW.md §9B)**——它逐条核对字幕平移量并按声轨互相关实测片头偏移,FAIL 即停手上报 edit 补跑 `shift`/重新 `assemble`,不得自行改字幕时间码顶替。
+4. 打包:视频 + 平台版字幕 + 对应画幅封面归入 `publish/<platform>/package/<ep>/`(每集一个子目录;数据布局见 WORKFLOW.md §2);字幕一律取成片基准 `subtitles_final.srt`;**打包前先跑 `python3 code/finalize_episode.py check --project <slug> --ep epNN`(只读机检 intro_offset_ok,WORKFLOW.md §9B)**——它逐条核对字幕平移量并按声轨互相关实测片头偏移,FAIL 即停手上报 edit 补跑 `shift`/重新 `assemble`,不得自行改字幕时间码顶替。**仅当 `output.subtitle_burn_in` 开启**:视频母版取烧录版 `edit/epNN/final_sub.mp4`(附加语言 `final_sub.<lang>.mp4`;由 edit 用 `code/burn_subtitles.py` 产出,台账 `edit/epNN/subtitles_burn.json` 对应条目 check 须 PASS),缺烧录版或 FAIL 即停手上报 edit,不得自行烧录;关闭时母版 = final.mp4。
 5. 自跑平台规格 lint(`platform_spec_lint`),全过才提交回执。
 
 ## 不做什么(边界)

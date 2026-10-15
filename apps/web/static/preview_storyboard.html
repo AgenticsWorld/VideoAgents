@@ -5,12 +5,12 @@
 <title>分镜预览 · Agentics：VideoAgents</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Cmask%20id%3D%27m%27%3E%3Crect%20width%3D%2724%27%20height%3D%2724%27%20fill%3D%27%23fff%27%2F%3E%3Cpath%20d%3D%27M6.5%207.5h7M6.5%2010h4.5%27%20stroke%3D%27%23000%27%20stroke-width%3D%271.6%27%20stroke-linecap%3D%27round%27%20fill%3D%27none%27%2F%3E%3C%2Fmask%3E%3Cg%20fill%3D%27%236c9ef8%27%3E%3Cpath%20d%3D%27M3%205a2%202%200%200%201%202-2h14a2%202%200%200%201%202%202v7a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2z%27%20mask%3D%27url%28%23m%29%27%2F%3E%3Crect%20x%3D%273%27%20y%3D%2716.5%27%20width%3D%278%27%20height%3D%274.5%27%20rx%3D%271.5%27%2F%3E%3Crect%20x%3D%2713%27%20y%3D%2716.5%27%20width%3D%278%27%20height%3D%274.5%27%20rx%3D%271.5%27%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="/static/whitebox.css?v=20260926-flykeys">
+<link rel="stylesheet" href="/static/whitebox.css?v=20261008-maxh">
 <script src="/static/i18n/i18n.js"></script>
 <script src="/static/ep-picker.js?v=20260912"></script>
 <script src="/static/jump-anchor.js?v=20260912"></script>
 <script src="/static/edit-popup.js?v=20260927a-reviser"></script>
-<script src="/static/whitebox-reel.js?v=20260911"></script>
+<script src="/static/whitebox-reel.js?v=20261010"></script>
 <script src="/static/dialogue-tts.js?v=20261002"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
@@ -120,6 +120,10 @@ h2.title .sub{color:var(--dim);font-size:13px;font-weight:400}
 .doc.wbreel .warn{color:var(--yellow)}.doc.wbreel .ok{color:var(--green)}.doc.wbreel .err{color:var(--red)}
 .doc.wbreel .wbreelbtn{font-size:11.5px;padding:2px 8px;background:var(--panel2);border:1px solid var(--border);border-radius:5px;color:var(--text);cursor:pointer}
 .doc.wbreel .wbreelbtn:disabled{opacity:.55;cursor:default}
+/* 样片播放器默认尺寸:横屏按宽 720px;竖屏(9:16 等)按高封顶,不随宽度撑到上千像素;板块正文不再套 60vh 内滚动 */
+.doc.wbreel>.body{max-height:none}
+video.reelvid{display:block;width:min(100%,720px);border-radius:8px;background:#000}
+video.reelvid.tall{width:auto;max-width:100%;height:min(70vh,640px)}
 .scene{margin:26px 0 10px;border-left:3px solid var(--accent);padding-left:12px}
 .scene h3{font-size:16px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 .scene h3 .tag{font-size:11.5px;color:var(--dim);font-weight:400}
@@ -1590,6 +1594,9 @@ const TR_MODES={minimal:'极简',classic:'经典',cinematic:'电影感',custom:'
 const TR_CLOSE={fade_black:'淡出到黑',fade_white:'淡出到白',cut_black:'切黑(突然黑屏)',cut_white:'切白',hard_cut:'不处理(停在末帧)'};
 const TR_JOIN_STYLE={wipe:'划像',blur_through:'模糊穿越',zoom_through:'推进穿越',iris:'圈入圈出',pixelize:'像素化',fadegrays:'去色叠化'};
 const TR_SRC={screenplay:'剧本',continuity:'连戏表',scenes_index:'场景库',derived:'推定',user:'用户'};
+// 剧本场间衔接(2026-10-10 二期,docs/scene_links.md):登记卡 transition_in.link 的类型名 / 导演处置
+const TR_LINK={shape:'形状匹配',action:'动作匹配',position:'同机位',motion:'运动接力',sound:'声音接力',line:'台词接力',contrast:'反差硬切'};
+const TR_LINK_DISP={adopt:'导演采纳',modify:'导演修改',drop:'导演弃用'};
 let TR_BY_TO={},TR_BY_ID={};   // TR_BY_ID / TRANSITIONS_SETTINGS:声桥行用(2026-10-03)
 function trJoinLabel(tr){
   if(!tr)return t('硬切');
@@ -1599,6 +1606,7 @@ function trJoinLabel(tr){
   if(tr.duration_s)s+=' '+tr.duration_s+'s';
   const pads=[];if(tr.freeze_s)pads.push(t('定格')+' '+tr.freeze_s+'s');if(tr.hold_s)pads.push(t('黑场')+' '+tr.hold_s+'s');
   // 三期成对运镜 / 四期音先入(2026-09-26)
+  if(tr.link&&tr.link.kind)pads.unshift('🔗 '+t(TR_LINK[tr.link.kind]||tr.link.kind));   // 场间衔接登记卡
   if(tr.motion_pair&&tr.motion_pair.out)pads.push(t('成对运镜')+' '+tr.motion_pair.out+'→'+(tr.motion_pair.in||''));
   // 声桥 J/L(2026-10-03):sound_bridge {kind j|l, s, carry bed|line};旧 audio_lead_s 视为 J·底床
   const sb=trBridgeOf(tr);
@@ -1668,7 +1676,10 @@ function trDiagHtml(tr){
   if(d.light_jump)bits.push(`<span class="tag">${t('光线跳变')}</span>`);
   if(d.first_shot_wide)bits.push(`<span class="tag">${t('首镜已是远景')}</span>`);
   const lines=[];
-  if(d.screenplay_hint)lines.push(`📜 ${esc(d.screenplay_hint)}`);
+  if(d.screenplay_link){   // 剧本写的衔接:类型 + 导演处置 + 两头内容(有它时不再重复显示转场句原文)
+    const k=d.screenplay_link,dp=(d.script_link_disposition||{}).disposition;
+    lines.push(`🔗 ${t('剧本衔接')} · ${esc(t(TR_LINK[k.kind]||k.kind))}${k.tier==='trial'?` <span class="tag warn" title="${t('形状 / 动作匹配要两个画面逐帧重合,目前下游只当标注,不保证对得上')}">${t('试验')}</span>`:''} <span class="tag ${dp==='adopt'||dp==='modify'?'ok':dp==='drop'?'':'warn'}">${t(TR_LINK_DISP[dp]||'导演未处置')}</span> <span data-no-i18n>${esc(k.out)} → ${esc(k.in)}</span>`);
+  }else if(d.screenplay_hint)lines.push(`📜 ${esc(d.screenplay_hint)}`);
   if((d.director_notes||[]).length)lines.push(`🎬 ${t('导演阐述')}:${esc(d.director_notes[0])}${d.director_notes.length>1?' …':''} <span class="tag" title="${t('已拍板:过场模式的选择优先于导演/编剧散文里的「无字幕板」声明,此处只作提示')}">${t('仅提示')}</span>`);
   if(d.continuity&&d.continuity.id)lines.push(`⛓ ${esc(d.continuity.id)} anchor=${esc(d.continuity.anchor||'')}${d.continuity.framing_change_ok===false?' · <span class="tag warn">framing</span>':''}`);
   return `<div class="trdiag">${bits.join(' ')}${lines.length?'<br>'+lines.join('<br>'):''}</div>`;
@@ -1700,7 +1711,8 @@ function transCard(tr){
   const alts=tr.alternatives||[];
   const stChip=`<span class="tag ${tr.status==='proposed'?'warn':decided?'ok':''}">${t(TR_STATUS[tr.status]||tr.status)}</span>`;
   const rsChip=(tr.render_state?`<span class="tag ${tr.render_state==='rendered'?'ok':tr.render_state==='awaiting_clip'?'warn':''}">${t(TR_RENDER[tr.render_state])}</span>`:'')
-    +(tr.designed_by?`<span class="tag" title="${esc(tr.designed_by+(tr.agent_note?' · '+tr.agent_note:''))}">🤖 ${t('工位建议')}</span>`:'');   // 二期工位 07-directing/transition-design 定的主设计
+    +(tr.designed_by?`<span class="tag" title="${esc(tr.designed_by+(tr.agent_note?' · '+tr.agent_note:''))}">🤖 ${t('工位建议')}</span>`:'')   // 二期工位 07-directing/transition-design 定的主设计
+    +(tr.source==='script_link'?`<span class="tag" title="${t('导演采纳的剧本场间衔接:已登记进分镜表,两侧组提示词各写一句衔接句;要换别的方案在下拉里选')}">📜 ${t('剧本衔接')}</span>`:'');
   const stale=tr.stale?`<span class="tag warn" title="${t('前后组视频或素材已变化,已构建的插入段过期,出成片时自动重建')}">${t('素材已变')}</span>`:'';
   const proj=$('#project').value.trim()||'demo';
   const loc=I18N.f('过场 {ep} {a}→{b}(设计表 directing/{ep}/transition_design.json 边界 {bid};定稿字段 directing/{ep}/shot_list.json generation_groups group_id={b} 的 transition_in)',{ep:EP,a:tr.from_group,b:tr.to_group,bid:tr.id});
@@ -1956,14 +1968,16 @@ let WB_ON=true;
    与视频预览页同一板块(共用 /static/whitebox-reel.js):按钮派单给白模调度 Agent 跑宿主 CLI code/concat_whitebox.py,
    轮询运行结束后只重拉本集数据刷新本块(不整页重绘);运行中状态跨页保留。 */
 const WBREEL_POLLING=new Set();
+// 样片元数据到了按实际宽高校正(清单没记宽高的旧样片靠这一步判竖屏)
+function reelFit(v){if(!v.videoWidth||!v.videoHeight)return;v.style.aspectRatio=v.videoWidth+'/'+v.videoHeight;v.classList.toggle('tall',v.videoHeight>v.videoWidth)}
 function wbReelHtml(w,ep){
   w=w||{};
   const proj=$('#project').value.trim()||'demo',run=WhiteboxReel.runId(proj,ep);
-  const sub=w.subtitles||{};
+  const sub=w.subtitles||{},vw=+w.width||0,vh=+w.height||0;
   const meta=w.exists?I18N.f('{d}s · {n} 组 · 字幕 {s} 条',{d:Math.round(w.duration_s||0),n:w.groups??'—',s:sub.cues||0}):t('尚未生成');
   const ready=`${w.groups_ready||0}/${w.groups_total||0}`;
-  let h=`<div class="doc closed wbreel"><h3 onclick="if(!event.target.closest('button'))this.parentNode.classList.toggle('closed')">🧊 ${esc(t('白模样片'))} <span class="meta">${esc(meta)} · ${esc(I18N.f('分镜组白模视频 {ready} 组就绪',{ready}))}${w.subtitle_cues?' · '+esc(I18N.f('可烧字幕 {n} 条',{n:w.subtitle_cues})):''}</span><span class="tail">${WhiteboxReel.statusHtml(w,run)}<button class="wbreelbtn" ${run?'disabled':''} title="${esc(t('把本集各组白模摄影机视角视频按组序拼成整集样片并烧入对白/旁白字幕;派单给白模调度 Agent 用宿主 CLI 生成,缺组会先补出'))}">🔄 ${esc(t('重新生成白模样片'))}</button></span></h3>`;
-  h+=`<div class="body">${w.exists?`<video controls preload="metadata" src="${esc(w.url)}" style="width:min(100%,720px);border-radius:8px;background:#000;display:block"></video><div style="color:var(--dim);font-size:12px;margin-top:6px">${esc(w.path||'')} · ${WhiteboxReel.metaList(w).map(esc).join(' · ')}</div>`:`<div style="color:var(--dim);font-size:13px">${esc(I18N.f('该集还没有白模样片(assets/whitebox/{ep}/{ep}-camera.mp4),点「重新生成白模样片」派单给白模调度 Agent 生成',{ep}))}</div>`}</div></div>`;
+  let h=`<div class="doc closed wbreel"><h3 onclick="if(!event.target.closest('button'))this.parentNode.classList.toggle('closed')">🧊 ${esc(t('白模样片'))} <span class="meta">${esc(meta)} · ${esc(I18N.f('分镜组白模视频 {ready} 组就绪',{ready}))}${w.subtitle_cues?' · '+esc(I18N.f('可烧字幕 {n} 条',{n:w.subtitle_cues})):''}</span><span class="tail">${WhiteboxReel.statusHtml(w,run)}<button class="wbreelbtn" ${run?'disabled':''} title="${esc(t('把本集各组白模摄影机视角视频按组序拼成整集样片并烧入对白/旁白字幕;派单给白模调度 Agent 用宿主 CLI 生成。H3W 签字前也可以出:缺失或已过期的组先渲染预览版(本机渲染,不算正式导出)'))}">🔄 ${esc(t('重新生成白模样片'))}</button></span></h3>`;
+  h+=`<div class="body">${w.exists?`<video class="reelvid${vw&&vh>vw?' tall':''}" controls preload="metadata" onloadedmetadata="reelFit(this)" src="${esc(w.url)}"${vw&&vh?` style="aspect-ratio:${vw}/${vh}"`:''}></video><div style="color:var(--dim);font-size:12px;margin-top:6px">${esc(w.path||'')} · ${WhiteboxReel.metaList(w).map(esc).join(' · ')}</div>`:`<div style="color:var(--dim);font-size:13px">${esc(I18N.f('该集还没有白模样片(assets/whitebox/{ep}/{ep}-camera.mp4),点「重新生成白模样片」派单给白模调度 Agent 生成',{ep}))}</div>`}</div></div>`;
   if(run)pollWbReel(run,proj,ep);
   return h;
 }
@@ -1997,7 +2011,7 @@ document.addEventListener('click',async e=>{
 // 白模模块只 import 一次并复用同一个 promise:首屏时 render 里 resetWhitebox 与 mountGroups 各自 import() 的回调顺序不保证,
 // 曾出现 mountGroups 先跑、随后 resetWhitebox 把刚建的观察器断掉,面板永远停在「正在加载」(2026-09-22 无头实测复现)
 let WB_MOD=null;
-const wbModule=()=>WB_MOD||(WB_MOD=import('/static/whitebox-ui.js?v=20261005-pose'));
+const wbModule=()=>WB_MOD||(WB_MOD=import('/static/whitebox-ui.js?v=20261009-hand121'));
 function render(d){
   const wbKeep=!WB_INVALIDATE;WB_INVALIDATE=false;
   WB_ON=d.whitebox_enabled===true;

@@ -12,6 +12,7 @@ agents/06-art/color-script/SOUL.md 锁死,本脚本据此机检;宿主读取侧(
        flashback/dream/montage/imagination 内;标了 variant 却没有变体定义;变体定义没有色值;grade 不是数值。
   契约字段(缺省 WARN,--strict 按 FAIL——新项目交付前用):episode_id:"epNN"、段落写在 acts[]、key_palette、
        event_refs、scene_ids、palette 直接写色值、变体定义写在顶层 variants.<kind> 且带 grade 数值。
+  episode_plan 顶层 derivative_mode: true(衍生 / 原创模式,不改编原著事件,2026-10-09)时不核 event_refs,其余照常。
 
 用法:
   python3 code/check_color_script.py --project <slug>            # 存量项目:契约字段只 WARN
@@ -26,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import parse_args  # noqa: E402  副作用:modules/ 入 sys.path
 
 import color_script  # noqa: E402
+import episode_treatments  # noqa: E402
 
 
 def main() -> int:
@@ -43,7 +45,8 @@ def main() -> int:
     except Exception:
         pass
     plan_eps = [color_script.entry_ep(e) for e in (plan.get("episodes") or []) if isinstance(e, dict)]
-    errs, warns = color_script.validate(cs, [e for e in plan_eps if e], strict=args.strict)
+    errs, warns = color_script.validate(cs, [e for e in plan_eps if e], strict=args.strict,
+                                        derivative=episode_treatments.is_derivative(plan))
     for tag, rows in (("WARN", warns), ("FAIL", errs)):
         for r in rows[:args.max]:
             print(f"{tag} {r}")

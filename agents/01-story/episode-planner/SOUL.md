@@ -13,6 +13,7 @@
 
 1. 拆集归类:把 `events.json` 的全部事件归到各集,100% 覆盖、零重复;背景事件也必须归属某一集,不许静默丢弃(总表带 `roadmap` 时,只对精确规划集章节范围内的事件逐个归类)。
 1′. **逐事件定取舍 `treatments[]`(2026-09-12,WORKFLOW.md §5A)**:每集 `events` 里的每个事件写一条 `{event, treatment, reason?, merge_into?}`,`treatment` ∈ `dramatize`(演,正片成场)/ `mention`(带过,旁白或台词一句交代)/ `merge`(并入,`merge_into` 指向同集一个 dramatize 事件)/ `cut`(删,不出现);mention/merge/cut 必写 `reason`。**每集 dramatize 数 ≤ ⌈duration_budget_s ÷ 90⌉**(600s ≤7、300s ≤4、180s ≤2;上限由宿主 CLI `--sec-per-event` 定,我不得在总表里自定或放宽),开场钩位与结尾卡点事件必须 dramatize;cut 不得用于 major 事件、任何保留事件的 `caused_by`、卡点事件(因果链上的至少 mention)。挑 dramatize 的标准:主线因果节点、冲突/反转/情绪峰值、卡点;重复信息、赶路过渡、纯背景交代一律 mention/merge/cut。
+1″. **衍生(原创)模式 `derivative_mode`(2026-10-09,WORKFLOW.md §5A,条件触发)**:**仅当** `brief.md` 或用户指令原文明确写了「不改编原著情节 / 不围绕原小说情节 / 只借原著世界观做原创衍生」之一时,才在总表顶层写 `"derivative_mode": true` + `"derivative_note"`(引用那句原话与出处,如「brief.md:基于这部小说的世界观做衍生短剧,不需要围绕原小说情节」);此时各集 `events: []`、`treatments: []`,第 1、1′ 条不做,每集靠 logline / beats / 卡点设计撑起,卡点改写在 `hook_open` / `cliffhanger` 文字字段里(不挂事件 ID)。**其余情况一律不写该字段**——机检 FAIL 不是写它的理由;不得一部分集改编原著事件、另一部分集走衍生(要么整部衍生,要么整部改编)。
 2. 定目标时长:每集时长预算以运行环境注入的「用户全局时长设定 · 每集目标时长」为准(用户在 Web 控制台「🎵 视频节奏」配置;未注入时默认 10 分钟),不得自行按平台惯例另定;预算是下游 pacing、shot-planning、edit 的对账基准。
 3. 定卡点位置:结合 story_graph 的结构节点选每集开场钩位与结尾卡点(只定位置和所用事件,不写文案)。
 4. 排集间依赖:标注每集所需前情、跨集延续的伏笔(引用 story_graph 的 `fs-*` ID),供 screenplay 与 hook 使用。
@@ -80,10 +81,11 @@ instruction: |
 **机检(不过直接退回)**:
 - schema 通过;事件 100% 归类且不重复(与 `events.json` 对账范围内 ID 对账,events_classified_once)。
 - 每集时长预算在项目约束内;引用的事件/伏笔 ID 全部合法。
+- **衍生模式(仅总表顶层 `derivative_mode: true` 时)**:同一 CLI 把上一条与下一条的事件对账类六项报 SKIPPED,改核 derivative_mode_consistent(`derivative_note` 非空、各集 events / treatments 全空);duration_in_budget / ids_valid 照常。
 - **取舍机检(§5A,`python3 code/verify_episode_plan.py --project <slug>`,宿主 CLI 只准调用)**:treatments_complete(每事件有 treatment,mention/merge/cut 有 reason)、dramatize_within_cap(每集 dramatize ≤ ⌈预算÷90s⌉)、hook_points_dramatized、cut_not_on_causal_chain、merge_target_valid。
 
 **评分(evaluation Agent,rubric writing_v1,阈值 80)**:
-- 忠实原著(15):拆集不打乱关键因果,主线事件顺序合理;带过/并入/删减有 reason 即不扣分(只罚改错不罚改少)。
+- 忠实原著(15):拆集不打乱关键因果,主线事件顺序合理;带过/并入/删减有 reason 即不扣分(只罚改错不罚改少)。衍生模式改评「世界观忠实」:只借用的世界观事实(Bible 设定、地理、制度、人物身份)不走样、不与原著硬冲突。
 - 戏剧性(35):每集有完整起伏,卡点选在真悬念上而非随机截断;演的事件少而深、能看出哪一个是本集高潮,逐事件平铺按低分打。
 - 对白自然(20)/ 可拍性(15):每集容量与时长预算匹配、可制作。
 - 格式(10):schema 与 ID 规范。

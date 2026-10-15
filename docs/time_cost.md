@@ -16,8 +16,15 @@ fengshen3 ep07 grp011(28 s / 21 镜)出片后丢了一句 5 秒台词,sh080 之�
 
 ## 口径(`modules/time_cost.py`,唯一来源)
 
-**台词** `line_est(text, pace, cpm)` = `ONSET_S 0.7` + 有效字数 ÷ 语速 + `PAUSE_S 0.4` × 句中停顿数(≥ 0.6 s)
+**台词** `line_est(text, pace, cpm, wpm)` = `ONSET_S 0.7` + 有效字数 ÷ 语速 + `PAUSE_S 0.4` × 句中停顿数(≥ 0.6 s)
 - 语速 = 角色 `voice.json#speed_cpm` 中点 ÷ 60 × 档位倍率 `fast 1.19 / medium 1 / slow 0.81`;无角色语速按档位 `5.0 / 4.2 / 3.4` 字/秒。
+- **英文等按词计的句子**(2026-10-09,#124):句中没有汉字 / 假名 / 谚文、且有字母(拉丁、西里尔、带重音字母…)时,
+  有效字数换成**词数**(按空白切,`can't` / `well-known` 各一词;字母数 ÷ 6 兜底,单个长词不至于估成一词),
+  语速换成**词速**:角色 `voice.json#speed_wpm` 中点 > `speed_cpm` 换算(× 130/252,保持角色相对快慢;> 400 的 `speed_cpm`
+  是按字母 / 分钟写的,÷ 3.8)> 默认 `DEFAULT_WPM 130`,再乘档位倍率;`Dr.` / `Mr.` 等缩写的点与小数点不算句中停顿。
+  旧口径把字母逐个当字、再除以中文字速,英文高估约 2 倍(alices 真实 seed-audio 样本 1.72 词/秒)。
+  含汉字 / 假名 / 谚文的句子、只有数字标点的句子仍按字计,与 2026-10-03 口径逐字相同(fengshen3 190 句复算 0 变化)。
+  拉丁文字项目的嗓音卡写 `speed_wpm`(词 / 分钟);精简目标对这类句子给 `target_words`(<3 词短句豁免)。
 - 档位 `pace` 由 **dialogue-rewrite** 随 `emotion` 写进对白行元信息 `{emotion: 冷怒, pace: slow, est_duration_s: …}`,
   `shot_list.dialogue_lines[]` 照抄;没写按情绪词猜(急/喝/惊/怒 → fast,哭/恳求/低语/冷/沉吟 → slow),猜不出 medium。
 - 对白镜余量:每句开口前 `PRE_SPEECH_S 0.4` + 说完后 `POST_SPEECH_S 0.3`。

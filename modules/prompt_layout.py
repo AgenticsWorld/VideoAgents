@@ -15,6 +15,7 @@ _HEADS = (
     r"Whitebox facing:",
     r"Shot plates:",
     r"Scene plates:",
+    r"Background figures \(NPC\):",
     r"Director's note \(user instruction",
     r"Global constraints:",
 )
@@ -26,7 +27,7 @@ _LABEL_RE = re.compile(r"(?<=[。.;；!！?？}>）)])[ \t\r\n]*(?=【(?:人物|
 _H3_RE = re.compile(r"(?<=\S)[ \t]*\n\s*(?=(?:subject_definitions|summary|retention_analysis|detailed_description|"
                     r"overall_soundscape|non_diegetic_music):)")
 # 固定段收尾句之后另起一段
-_TAIL_RE = re.compile(r"(End scene presence references\.|End continuation reference\.)[ \t\r\n]*(?=\S)")
+_TAIL_RE = re.compile(r"(End scene presence references\.|End continuation reference\.|End background figures\.)[ \t\r\n]*(?=\S)")
 _BLANK_RE = re.compile(r"[ \t]*\n[ \t]*\n\s*")
 
 

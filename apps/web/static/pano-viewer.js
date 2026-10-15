@@ -1,7 +1,7 @@
 // 场景预览页全景图 360° 查看器(2026-09-21):2:1 等距柱状全景贴到内翻球面,拖动转头、滚轮/双指缩放视角、双击复位、Esc/点 × 关闭;
 // 「🖼 平面原图」切回整张展开图(核对接缝/列位用)。依赖页面 importmap:three(见 preview_scenes.html)。
-// 「💾 背景图」(2026-09-26):openPano360(src, meta) 带锚点信息(project/sid/anchor_id/scheme/position/yaw_deg/format)时显示,
-// 把当前视窗画面按项目画幅(长边 1920)离屏渲染一张,连同换算出的白模机位(position/target/fov)POST 到 scenes/<sid>/plates/manual 存为新背景图;
+// 「💾 背景图」(2026-09-26):openPano360(src, meta) 带锚点信息(project/sid/anchor_id/scheme/position/yaw_deg)时显示,
+// 把当前视窗画面按 16:9(1920×1080,不随项目画幅)离屏渲染一张,连同换算出的白模机位(position/target/fov)POST 到 scenes/<sid>/plates/manual 存为新背景图;
 // 方向换算:全景图中心列 = 锚点 yaw(与 modules/scene_panos.py 投影约定、world-viewer 的 yaw 同一约定 fwd=(-sin yaw,0,-cos yaw)),
 // 视窗 lon 与贴图 u 的关系 u=lon/360(LON0=180 正对中心列)→ 世界 yaw = yaw0 - (lon - 180)。虚线框 = 将保存的画幅范围。
 import * as THREE from 'three';
@@ -52,8 +52,8 @@ function build(){
     camera.lookAt(Math.sin(phi)*Math.cos(th),Math.cos(phi),Math.sin(phi)*Math.sin(th));
     renderer.render(scene,camera);
     updateGuide();};
-  // 保存画幅:项目画幅比 A;屏幕比 S ≥ A 时同垂直视场、左右裁到 A;S < A 时以屏幕水平视场为准、上下裁到 A(虚线框即所见即所存)
-  const capAspect=()=>{const f=meta&&meta.format;return (f&&f.width>0&&f.height>0)?f.width/f.height:16/9;};
+  // 保存画幅:固定 16:9,不随项目画幅(2026-10-08);屏幕比 S ≥ A 时同垂直视场、左右裁到 A;S < A 时以屏幕水平视场为准、上下裁到 A(虚线框即所见即所存)
+  const capAspect=()=>16/9;
   const capFov=()=>{const S=root.clientWidth/root.clientHeight,A=capAspect();if(S>=A)return camera.fov;
     const th=Math.tan(THREE.MathUtils.degToRad(camera.fov)/2)*S;return 2*THREE.MathUtils.radToDeg(Math.atan(th/A));};
   const updateGuide=()=>{if(!meta)return;const W=root.clientWidth,H=root.clientHeight,S=W/H,A=capAspect();
@@ -78,8 +78,7 @@ function build(){
   root.querySelector('.p360-close').onclick=closePano360;
   ui.save.onclick=async()=>{
     if(!meta||!cur||ui.save.disabled)return;
-    const f=meta.format||{},long=1920,fw=f.width>0?f.width:16,fh=f.height>0?f.height:9,sc=long/Math.max(fw,fh);
-    const W=Math.round(fw*sc/2)*2,H=Math.round(fh*sc/2)*2;
+    const W=1920,H=1080;
     // 离屏按画幅渲一帧(同一任务内 toDataURL,无需 preserveDrawingBuffer),再恢复视窗
     const fov0=camera.fov,asp0=camera.aspect,pr=renderer.getPixelRatio();
     camera.fov=capFov();camera.aspect=W/H;camera.updateProjectionMatrix();

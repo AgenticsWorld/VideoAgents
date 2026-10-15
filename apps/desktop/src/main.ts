@@ -18,7 +18,9 @@ import {
   ServiceRegion, serviceRegion, UserAccount,
 } from './desktop-auth'
 import {desktopExecutablePath} from './shell-environment'
-import {FfmpegInstallerMissingError, inspectFfmpegEnvironment, installFfmpeg} from './ffmpeg-environment'
+import {
+  FfmpegInstallerMissingError, inspectFfmpegEnvironment, installFfmpeg, managedFfmpegBinDirectory,
+} from './ffmpeg-environment'
 
 let webServer: ChildProcess | undefined
 let webPort = process.env.VIDEOAGENTS_WEB_PORT || ''
@@ -415,11 +417,20 @@ function closeRuntimeProgress(): void {
   resetRuntimeProgressMeter()
 }
 
+function executableSearchPath(): string {
+  // The managed FFmpeg directory is listed even before anything is installed
+  // there, so the running web server finds FFmpeg right after setup completes.
+  return desktopExecutablePath(
+    process.env,
+    process.platform === 'win32' ? [managedFfmpegBinDirectory(app.getPath('userData'))] : [],
+  )
+}
+
 async function offerFfmpegEnvironmentSetup(): Promise<void> {
   // FFmpeg is an optional desktop helper. Check it only after the main window
   // exists, including when the user chose “暂不登录”; never delay the main flow.
   if (!window || window.isDestroyed()) return
-  let executablePath = desktopExecutablePath()
+  let executablePath = executableSearchPath()
   const environment: NodeJS.ProcessEnv = {...process.env, PATH: executablePath}
   const existing = inspectFfmpegEnvironment(environment)
   if (existing.ok) {
@@ -434,7 +445,7 @@ async function offerFfmpegEnvironmentSetup(): Promise<void> {
     detail: `${existing.problem}。部分视频处理功能可能不可用，但不影响其他功能。\n\n`
       + (process.platform === 'darwin'
         ? '可以通过 Homebrew 自动安装 Apple Silicon 版 FFmpeg。'
-        : '可以通过 WinGet 自动安装 Windows x64 版 FFmpeg。'),
+        : '可以自动下载并安装 Windows x64 版 FFmpeg，不需要管理员权限。'),
     buttons: ['自动安装', '暂时忽略'],
     defaultId: 0,
     cancelId: 1,
@@ -448,7 +459,7 @@ async function offerFfmpegEnvironmentSetup(): Promise<void> {
     '正在安装 FFmpeg',
     process.platform === 'darwin'
       ? 'VideoAgents 将通过 Homebrew 安装 Apple Silicon 版 FFmpeg。'
-      : 'VideoAgents 将通过 WinGet 安装 Windows x64 版 FFmpeg。',
+      : 'VideoAgents 将下载并安装 Windows x64 版 FFmpeg。',
     'VideoAgents FFmpeg 环境',
   )
   try {
@@ -457,11 +468,16 @@ async function offerFfmpegEnvironmentSetup(): Promise<void> {
     const installed = await installFfmpeg({
       executablePath,
       environment,
+      userData: app.getPath('userData'),
       onProgress: progress => {
-        updateRuntimeProgress({phase: 'extracting', message: progress.detail || progress.message})
+        updateRuntimeProgress({
+          phase: progress.received === undefined ? 'extracting' : 'downloading',
+          message: progress.detail || progress.message,
+          received: progress.received, total: progress.total,
+        })
       },
     })
-    executablePath = desktopExecutablePath()
+    executablePath = executableSearchPath()
     const verified = inspectFfmpegEnvironment({...process.env, PATH: executablePath})
     if (!verified.ok) throw new Error(verified.problem)
     console.log(`[ffmpeg] installed: ${installed.version}`)
@@ -476,7 +492,7 @@ async function offerFfmpegEnvironmentSetup(): Promise<void> {
     const message = error instanceof Error ? error.message : String(error)
     console.warn(`[ffmpeg] optional setup failed: ${message}`)
     if (window && !window.isDestroyed() && error instanceof FfmpegInstallerMissingError) {
-      // 缺包管理器（Windows 无 WinGet）：改为引导用户去 FFmpeg 官网手动下载安装。
+      // 自动下载没成、又缺包管理器（Windows 无 WinGet）：引导用户去 FFmpeg 官网手动下载安装。
       const answer = await dialog.showMessageBox(window, {
         type: 'warning',
         title: 'FFmpeg 安装未完成',
@@ -568,7 +584,7 @@ async function ensureWebServer(): Promise<void> {
   const clientBuild = readBuildInfo(process.resourcesPath, app.isPackaged)
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    PATH: desktopExecutablePath(),
+    PATH: executableSearchPath(),
     PYTHONUTF8: '1',
     PYTHONIOENCODING: 'utf-8',
     PYTHONNOUSERSITE: '1',

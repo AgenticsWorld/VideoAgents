@@ -1,6 +1,9 @@
 import {spawn, spawnSync} from 'node:child_process'
-import {existsSync} from 'node:fs'
+import {existsSync, mkdirSync, readdirSync, renameSync, rmSync} from 'node:fs'
 import path from 'node:path'
+import {
+  downloadArtifact, extractRuntimeArchive, fetchFfmpegArtifact, FFMPEG_KIND,
+} from './runtime-download'
 
 const INSTALL_TIMEOUT_MS = 30 * 60 * 1000
 const VERSION_TIMEOUT_MS = 8000
@@ -14,11 +17,15 @@ export interface FfmpegStatus {
 export interface FfmpegInstallProgress {
   message: string
   detail?: string
+  received?: number
+  total?: number
 }
 
 export interface FfmpegInstallOptions {
   environment?: NodeJS.ProcessEnv
   executablePath: string
+  /** Windows：自动下载的 FFmpeg 放在这个目录下；它的 bin 目录须已排在 executablePath 里。 */
+  userData?: string
   onProgress?: (progress: FfmpegInstallProgress) => void
 }
 
@@ -39,6 +46,11 @@ export class FfmpegInstallerMissingError extends Error {
     this.name = 'FfmpegInstallerMissingError'
     this.manager = manager
   }
+}
+
+/** 自动下载的 FFmpeg 固定放在这里；路径不随版本变，可以在安装前就排进 PATH。 */
+export function managedFfmpegBinDirectory(userData: string): string {
+  return path.join(userData, 'ffmpeg', 'current', 'bin')
 }
 
 function executableCandidates(
@@ -167,6 +179,64 @@ function runInstallCommand(
   })
 }
 
+/** 压缩包里带 bin/ffmpeg.exe 与 bin/ffprobe.exe 的那一层目录（上游包外面套了一层版本目录）。 */
+function findFfmpegRoot(directory: string, depth = 2): string | undefined {
+  const bin = path.join(directory, 'bin')
+  if (existsSync(path.join(bin, 'ffmpeg.exe')) && existsSync(path.join(bin, 'ffprobe.exe'))) return directory
+  if (depth === 0) return undefined
+  for (const entry of readdirSync(directory, {withFileTypes: true})) {
+    if (!entry.isDirectory()) continue
+    const found = findFfmpegRoot(path.join(directory, entry.name), depth - 1)
+    if (found) return found
+  }
+  return undefined
+}
+
+/**
+ * 从当前发布源下载 Windows 版 FFmpeg 并解压到 userData，不需要包管理器和管理员权限。
+ * 索引没有收录本平台的安装包时返回 false。
+ */
+export async function installManagedFfmpeg(
+  userData: string,
+  onProgress: (progress: FfmpegInstallProgress) => void = () => undefined,
+  platform: NodeJS.Platform = process.platform,
+  arch: string = process.arch,
+): Promise<boolean> {
+  onProgress({message: '正在检查 FFmpeg 安装包…'})
+  const artifact = await fetchFfmpegArtifact(platform, arch)
+  if (!artifact) return false
+  const target = path.dirname(managedFfmpegBinDirectory(userData))
+  const store = path.dirname(target)
+  const archive = path.join(store, `${artifact.version}.zip.part`)
+  const staging = path.join(store, `.installing-${process.pid}`)
+  mkdirSync(store, {recursive: true})
+  rmSync(archive, {force: true})
+  rmSync(staging, {recursive: true, force: true})
+  try {
+    await downloadArtifact(artifact, archive, progress => onProgress({
+      message: progress.message, received: progress.received, total: progress.total,
+    }), FFMPEG_KIND)
+    onProgress({message: '正在解压 FFmpeg…'})
+    mkdirSync(staging, {recursive: true})
+    await extractRuntimeArchive(archive, staging, FFMPEG_KIND)
+    const root = findFfmpegRoot(staging)
+    if (!root) throw new Error('FFmpeg 安装包里没有 ffmpeg.exe 与 ffprobe.exe')
+    // 只用 ffmpeg / ffprobe；播放器占三分之一体积，不留。
+    rmSync(path.join(root, 'bin', 'ffplay.exe'), {force: true})
+    rmSync(target, {recursive: true, force: true})
+    renameSync(root, target)
+    return true
+  } finally {
+    rmSync(archive, {force: true})
+    rmSync(staging, {recursive: true, force: true})
+  }
+}
+
+function describeError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  return message === 'fetch failed' ? '无法连接下载服务器，请检查网络' : message
+}
+
 export async function installFfmpeg(options: FfmpegInstallOptions): Promise<FfmpegStatus> {
   const environment: NodeJS.ProcessEnv = {
     ...process.env, ...options.environment, PATH: options.executablePath,
@@ -174,11 +244,44 @@ export async function installFfmpeg(options: FfmpegInstallOptions): Promise<Ffmp
   const existing = inspectFfmpegEnvironment(environment)
   if (existing.ok) return existing
 
-  const command = ffmpegInstallCommand(process.platform, process.arch, environment)
+  // Windows 先从自己的发布源下载；没下成（索引未收录、网络不通、校验不过）再退到 WinGet。
+  let downloadProblem: string | undefined
+  if (process.platform === 'win32' && options.userData) {
+    try {
+      if (await installManagedFfmpeg(options.userData, options.onProgress)) {
+        const downloaded = inspectFfmpegEnvironment(environment)
+        if (downloaded.ok) return downloaded
+        downloadProblem = `FFmpeg 已下载，但环境验收失败：${downloaded.problem}`
+      } else {
+        downloadProblem = '当前发布源暂未提供 FFmpeg 安装包'
+      }
+    } catch (error) {
+      downloadProblem = describeError(error)
+    }
+    console.warn(`[ffmpeg] 自动下载未完成，改试 WinGet：${downloadProblem}`)
+  }
+
+  let command: InstallCommand
+  try {
+    command = ffmpegInstallCommand(process.platform, process.arch, environment)
+  } catch (error) {
+    if (downloadProblem && error instanceof FfmpegInstallerMissingError) {
+      throw new FfmpegInstallerMissingError(
+        error.manager,
+        `自动下载 FFmpeg 未完成：${downloadProblem}。本机也没有 WinGet 可用。\nFFmpeg 只有 AI 自动剪辑需要，这不会影响 VideoAgents 的其他功能。\n可以稍后重新启动应用再试，或从 FFmpeg 官方下载后手动安装 ${FFMPEG_DOWNLOAD_URL}`,
+      )
+    }
+    throw error
+  }
   options.onProgress?.({
     message: command.manager === 'homebrew' ? '正在通过 Homebrew 安装 FFmpeg…' : '正在通过 WinGet 安装 FFmpeg…',
   })
-  await runInstallCommand(command, environment, options.onProgress)
+  try {
+    await runInstallCommand(command, environment, options.onProgress)
+  } catch (error) {
+    if (!downloadProblem) throw error
+    throw new Error(`${describeError(error)}\n\n此前自动下载也未完成：${downloadProblem}`)
+  }
 
   // The desktop PATH includes Homebrew and WinGet link directories up front, so
   // newly created command links are visible without restarting Electron.

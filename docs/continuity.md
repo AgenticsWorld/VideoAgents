@@ -45,6 +45,22 @@ genmedia 校验；回退后图片超限必须解决，不可静默删人物图�
 尾段声明明确要求向后延长而非照抄参考；角色图定义身份，白模指导后续站位，不覆盖边界画面。
 声音由本组对白/声音指令生成。Seedance 2.5 延长任务通过既有适配器处理自适应画幅。
 
+## 续接素材入虚拟人像库(2026-10-09)
+
+尾帧图片和尾段视频里的人物是真人感画面,按 URL / base64 原样提交会被方舟隐私过滤(`PrivacyInformation`)
+随机拒收。「设置 → 高级 → 虚拟人像资产库」启用、项目长镜头开启、视频渠道为火山方舟且模型为 Seedance 2.x 时,
+`genmedia video` 在参数校验通过后、建任务前,对按连接方式挂上的续接素材自动入库(`modules/ark_assets.py`):
+
+- 尾帧图片 `assets/clips/epNN/<prev>.last_frame.png` → `AssetType=Image`;
+- 尾段视频 `assets/continuity/epNN/<prev>.continuation.mp4` → `AssetType=Video`。
+
+提交前确认已入库且审核 `Active` 再以 `asset://<id>` 提交(台账已有记录也用 GetAsset 复核,库可能被全自动管理换集清空或手动删除;
+审核中则等待,图片上限 10 分钟、视频 15 分钟)。素材先经「文件托管」对象存储换预签名 URL,
+不合方舟素材规格(视频 mp4/mov、2–30 s、24–60 fps、总像素 407,696–8,295,044 等)、上传/入库失败、
+审核未过或等待超时都只在生成日志告警,回退原提交方式,不阻断生成。内容审核未过的同一份素材台账记 `Failed`,不再重提;
+前组重出后新素材重新入库,并删掉同一前组的旧续接资产,省素材额度。台账与人物图共用 `data/.videoagents/avatar_assets.json`
+(条目 `kind: continuity`、`slot: 项目|集|前组|类型`)。dry-run 只校验不入库。
+
 ## 重生成与验收
 
 依赖判据必须同时检查前组尾帧图片、前组 `.continuation.mp4` 和 `continuity_ref.from_group`。

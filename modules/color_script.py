@@ -225,9 +225,11 @@ def variants(cs: dict) -> dict:
 
 
 # ---------------------------------------------------------------- 机检 color_script_ok
-def validate(cs: dict, plan_eps: list[str] | None = None, strict: bool = False) -> tuple[list[str], list[str]]:
+def validate(cs: dict, plan_eps: list[str] | None = None, strict: bool = False,
+             derivative: bool = False) -> tuple[list[str], list[str]]:
     """返回 (errors, warnings)。新契约字段缺失:strict=FAIL,否则 WARN(存量项目);内容性缺陷(某集无条目、
-    段落无合法色值 / 无 mood / 无 rationale、peaks 指向不存在的集)一律 FAIL。"""
+    段落无合法色值 / 无 mood / 无 rationale、peaks 指向不存在的集)一律 FAIL。
+    derivative=True(episode_plan 衍生模式,不改编原著事件,2026-10-09 #123):没有事件 id 可挂,不核 event_refs。"""
     errs: list[str] = []
     warns: list[str] = []
     soft = errs if strict else warns
@@ -263,7 +265,7 @@ def validate(cs: dict, plan_eps: list[str] | None = None, strict: bool = False) 
                 errs.append(f"{tag}: mood 为空")
             if not s["rationale"]:
                 errs.append(f"{tag}: rationale 为空")
-            if not s["events"]:
+            if not s["events"] and not derivative:
                 soft.append(f"{tag}: 缺 event_refs(本段对应 episode_plan 的哪些事件)")
             if not s["scene_ids"] and not s["scenes"]:
                 soft.append(f"{tag}: 缺 scene_ids(本段发生在哪些 SCN-场景;下游按场景取色板)")

@@ -486,7 +486,10 @@ def legend_rows(group: dict, cast: dict | None = None) -> list:
         if shown is not None and x.get('id') not in shown:
             continue
         noun = 'creature' if x.get('kind') == 'creature' else 'figure'
-        rows.append(f"{color_name(x.get('color'))} {noun} = {x.get('label') or x.get('id')} ({x.get('id')}, background extra)")
+        # NPC 参与构图(2026-10-09,modules/npc_staging):EXTRA-NPC-* 是无名氛围层,图例写明不是登记角色
+        role = ('anonymous NPC passer-by, not a named character' if str(x.get('id') or '').startswith('EXTRA-NPC-')
+                else 'background extra')
+        rows.append(f"{color_name(x.get('color'))} {noun} = {x.get('label') or x.get('id')} ({x.get('id')}, {role})")
     return rows
 
 

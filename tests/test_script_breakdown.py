@@ -207,6 +207,13 @@ def test_check_cli_and_preview_api(project, monkeypatch):
     bd["source"] = "agent"
     write(sb.breakdown_path(project, "ep01"), bd)
     r = subprocess.run(cli + ["--json"], capture_output=True, text=True)
+    out = json.loads(r.stdout)      # 2026-10-09 起新拆解表每场须有 NPC 参与构图判定(npc_judged)
+    assert r.returncode == 1 and any("npc_judged" in e for e in out["errors"]), r.stdout + r.stderr
+    for sc in bd["scenes"]:
+        if not sc.get("pacing_only"):
+            sc["npc"] = {"on": False, "density": None, "reason": "测试"}
+    write(sb.breakdown_path(project, "ep01"), bd)
+    r = subprocess.run(cli + ["--json"], capture_output=True, text=True)
     out = json.loads(r.stdout)
     assert r.returncode == 0 and out["pass"] and out["scenes"] == 3, r.stdout + r.stderr
     from services.runtime import core
@@ -281,6 +288,17 @@ def test_parse_english_anchor_screenplay():
     assert b["action"] == ["Wang lights a candle."] and b["transition"] == "FADE OUT"
     assert [(d["speaker_name"], d["text"]) for d in b["dialogue"]] == [("Old Man", "Sleep.")]
 
+
+
+def test_slug_ids_cast_and_speaker():
+    """#117:拼音 / 英文 slug 编号(CHAR-jie-rui-er)在 [CAST] 行、对白括注、行首编号三种写法里都认;数字编号带 -v1 后缀仍取到数字段。"""
+    sp = sb.parse_screenplay(EN_ANCHORS.replace("CHAR-0001, CHAR-0002 | [DURATION] 40s", "CHAR-jie-rui-er, CHAR-gaal-dornick | [DURATION] 40s")
+                             .replace('CHAR-0001: "Who', 'CHAR-jie-rui-er: "Who')
+                             .replace("Old Man (CHAR-0002)", "Old Man (CHAR-gaal-dornick)"), {"Old Man"})
+    a = sp["scenes"][0]
+    assert a["cast"] == ["CHAR-jie-rui-er", "CHAR-gaal-dornick"]
+    assert [d["speaker_id"] for d in a["dialogue"]] == ["CHAR-jie-rui-er", "CHAR-gaal-dornick"]
+    assert sb._speaker("车夫甲(CHAR-0093-v1)")[:2] == ("CHAR-0093", "车夫甲")
 
 def test_english_int_ext_aliases_and_inference():
     from modules import scene_int_ext as ie

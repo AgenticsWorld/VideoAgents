@@ -33,6 +33,24 @@ interface RuntimeIndex {
     mac?: Record<string, RuntimeArtifact>
     win?: Record<string, RuntimeArtifact>
   }
+  ffmpeg?: {
+    mac?: Record<string, RuntimeArtifact>
+    win?: Record<string, RuntimeArtifact>
+  }
+}
+
+/** 制品在各自发布源下的子目录，以及下载 / 解压提示里用的名称。 */
+export interface ArtifactKind {
+  directory: 'python' | 'ffmpeg'
+  packageName: string
+  downloading: string
+}
+
+const PYTHON_KIND: ArtifactKind = {
+  directory: 'python', packageName: 'Python 环境包', downloading: '正在下载 Python 环境…',
+}
+export const FFMPEG_KIND: ArtifactKind = {
+  directory: 'ffmpeg', packageName: 'FFmpeg 安装包', downloading: '正在下载 FFmpeg…',
 }
 
 export interface RuntimeProgress {
@@ -73,7 +91,9 @@ function indexUrl(build = packagedBuildInfo()): string {
   return process.env.VIDEOAGENTS_RUNTIME_INDEX_URL || build?.updateIndexUrl || DEFAULT_INDEX_URL
 }
 
-function validateArtifact(value: unknown, sourceIndex: string, build?: RuntimeBuildInfo): RuntimeArtifact {
+function validateArtifact(
+  value: unknown, sourceIndex: string, build?: RuntimeBuildInfo, kind: ArtifactKind = PYTHON_KIND,
+): RuntimeArtifact {
   if (!value || typeof value !== 'object') throw new Error('运行时索引缺少当前平台制品')
   const artifact = value as Partial<RuntimeArtifact>
   if (typeof artifact.version !== 'string' || !SAFE_VERSION.test(artifact.version)
@@ -85,13 +105,13 @@ function validateArtifact(value: unknown, sourceIndex: string, build?: RuntimeBu
   const configuredIndex = process.env.VIDEOAGENTS_RUNTIME_INDEX_URL
   if (configuredIndex) {
     if (url.origin !== new URL(sourceIndex).origin) throw new Error('运行时制品与索引来源不一致')
-  } else if (!url.href.startsWith(`${build?.packageBaseUrl || DEFAULT_PACKAGE_PREFIX.replace(/python\/$/, '')}python/`)) {
+  } else if (!url.href.startsWith(`${build?.packageBaseUrl || DEFAULT_PACKAGE_PREFIX.replace(/python\/$/, '')}${kind.directory}/`)) {
     throw new Error('运行时制品 URL 不属于当前发布源的受信任路径')
   }
   return artifact as RuntimeArtifact
 }
 
-export async function fetchLatestRuntimeArtifact(): Promise<RuntimeArtifact> {
+async function fetchRuntimeIndex(): Promise<{index: RuntimeIndex; source: string; build?: RuntimeBuildInfo}> {
   const build = packagedBuildInfo()
   const source = indexUrl(build)
   const response = await fetch(source, {redirect: 'error', cache: 'no-store'})
@@ -100,38 +120,64 @@ export async function fetchLatestRuntimeArtifact(): Promise<RuntimeArtifact> {
   if (text.length > 1024 * 1024) throw new Error('运行时索引文件过大')
   const index = JSON.parse(text) as RuntimeIndex
   if (index.schema !== 1 || !index.python) throw new Error('运行时索引格式无效')
-  const platform = process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'win' : undefined
+  return {index, source, build}
+}
+
+function indexPlatform(platform: NodeJS.Platform): 'mac' | 'win' | undefined {
+  return platform === 'darwin' ? 'mac' : platform === 'win32' ? 'win' : undefined
+}
+
+export async function fetchLatestRuntimeArtifact(): Promise<RuntimeArtifact> {
+  const {index, source, build} = await fetchRuntimeIndex()
+  const platform = indexPlatform(process.platform)
   if (!platform) throw new Error(`暂不支持的平台：${process.platform}`)
   return validateArtifact(index.python[platform]?.[process.arch], source, build)
 }
 
-async function downloadArtifact(
+/**
+ * 当前发布源（AGT 走 S3、SMT 走 OSS，同 Python 运行时）上的 FFmpeg 安装包；
+ * 索引没有收录该平台时返回 undefined，由调用方改用其他安装方式。
+ */
+export async function fetchFfmpegArtifact(
+  platform: NodeJS.Platform = process.platform,
+  arch: string = process.arch,
+): Promise<RuntimeArtifact | undefined> {
+  const {index, source, build} = await fetchRuntimeIndex()
+  const key = indexPlatform(platform)
+  const artifact = key ? index.ffmpeg?.[key]?.[arch] : undefined
+  return artifact === undefined ? undefined : validateArtifact(artifact, source, build, FFMPEG_KIND)
+}
+
+export async function downloadArtifact(
   artifact: RuntimeArtifact,
   destination: string,
   onProgress: (progress: RuntimeProgress) => void,
+  kind: ArtifactKind = PYTHON_KIND,
 ): Promise<void> {
   const response = await fetch(artifact.url, {redirect: 'error', cache: 'no-store'})
-  if (!response.ok || !response.body) throw new Error(`Python 环境包下载失败：HTTP ${response.status}`)
+  if (!response.ok || !response.body) throw new Error(`${kind.packageName}下载失败：HTTP ${response.status}`)
   const headerSize = Number(response.headers.get('content-length') || artifact.size)
   let received = 0
   const hash = createHash('sha256')
   const meter = new Transform({
     transform(chunk: Buffer, _encoding, callback) {
       received += chunk.length
-      if (received > artifact.size + 1024) return callback(new Error('Python 环境包大小与索引不一致'))
+      if (received > artifact.size + 1024) return callback(new Error(`${kind.packageName}大小与索引不一致`))
       hash.update(chunk)
-      onProgress({phase: 'downloading', message: '正在下载 Python 环境…', received, total: headerSize})
+      onProgress({phase: 'downloading', message: kind.downloading, received, total: headerSize})
       callback(null, chunk)
     },
   })
   await pipeline(Readable.fromWeb(response.body as never), meter, createWriteStream(destination, {mode: 0o600}))
-  if (received !== artifact.size) throw new Error(`Python 环境包大小校验失败：${received}/${artifact.size}`)
+  if (received !== artifact.size) throw new Error(`${kind.packageName}大小校验失败：${received}/${artifact.size}`)
   if (hash.digest('hex').toLowerCase() !== artifact.sha256.toLowerCase()) {
-    throw new Error('Python 环境包 SHA-256 校验失败')
+    throw new Error(`${kind.packageName} SHA-256 校验失败`)
   }
 }
 
-async function extractRuntimeArchive(archive: string, staging: string): Promise<void> {
+export async function extractRuntimeArchive(
+  archive: string, staging: string, kind: ArtifactKind = PYTHON_KIND,
+): Promise<void> {
   // extract-zip 在部分 macOS 运行时包（venv 内含符号链接）上会无限停在解压阶段。
   // 使用系统 ditto 保留链接与权限；设置上限以便网络盘/磁盘异常时能给用户明确错误。
   if (process.platform === 'darwin') {
@@ -163,7 +209,7 @@ async function extractRuntimeArchive(archive: string, staging: string): Promise<
     dir: staging,
     onEntry: entry => {
       uncompressedSize += entry.uncompressedSize
-      if (uncompressedSize > 2 * 1024 * 1024 * 1024) throw new Error('Python 环境包解压后体积异常')
+      if (uncompressedSize > 2 * 1024 * 1024 * 1024) throw new Error(`${kind.packageName}解压后体积异常`)
     },
   })
 }

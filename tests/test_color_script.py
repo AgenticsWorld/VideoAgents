@@ -93,3 +93,24 @@ def test_cli_exit_codes(tmp_path):
     (tmp_path / "story" / "episode_plan.json").write_text(json.dumps({"episodes": [{"ep": "ep01"}, {"ep": "ep02"}]}), encoding="utf-8")
     p = run(tmp_path)
     assert p.returncode == 1 and "FAIL ep02" in p.stdout
+
+
+def test_derivative_mode_skips_event_refs(tmp_path):
+    """episode_plan 衍生模式(#123):没有原著事件可挂,--strict 不再要求 event_refs;其余契约照常。"""
+    cs = json.loads(json.dumps(NEW))
+    for a in cs["episodes"][0]["acts"]:
+        a.pop("event_refs")
+    assert any("event_refs" in e for e in c.validate(cs, ["ep01"], strict=True)[0])
+    assert c.validate(cs, ["ep01"], strict=True, derivative=True) == ([], [])
+    cs["episodes"][0]["acts"][1].pop("scene_ids")
+    assert any("scene_ids" in e for e in c.validate(cs, ["ep01"], strict=True, derivative=True)[0])
+    cs["episodes"][0]["acts"][1]["scene_ids"] = ["SCN-0044"]
+    (tmp_path / "bible").mkdir()
+    (tmp_path / "story").mkdir()
+    (tmp_path / "bible" / "color_script.json").write_text(json.dumps(cs, ensure_ascii=False), encoding="utf-8")
+    for plan, code in (({"derivative_mode": True, "derivative_note": "衍生", "episodes": [{"ep": "ep01"}]}, 0),
+                       ({"episodes": [{"ep": "ep01"}]}, 1)):
+        (tmp_path / "story" / "episode_plan.json").write_text(json.dumps(plan, ensure_ascii=False), encoding="utf-8")
+        p = subprocess.run([sys.executable, str(ROOT / "code" / "check_color_script.py"), "--out-root", str(tmp_path), "--strict"],
+                           capture_output=True, text=True, cwd=ROOT)
+        assert p.returncode == code, p.stdout + p.stderr

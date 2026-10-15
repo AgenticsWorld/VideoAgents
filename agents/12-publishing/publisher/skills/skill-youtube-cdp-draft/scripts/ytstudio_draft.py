@@ -7,11 +7,21 @@ studio.youtube.com and fill its metadata, then STOPS — the final
 save/publish click is always left to the user.
 
 Commands:
-    python3 ytstudio_draft.py check-login
+    python3 ytstudio_draft.py check-login [--new-tab | --tab-id ID]
     python3 ytstudio_draft.py upload --video V.mp4 --title-file t.txt \
         --desc-file d.txt [--thumbnail th.png] [--tags "a,b,c"] \
-        [--made-for-kids] [--stop-at visibility|details]
-    python3 ytstudio_draft.py screenshot out.png
+        [--made-for-kids] [--stop-at visibility|details] [--new-tab | --tab-id ID]
+    python3 ytstudio_draft.py screenshot out.png [--tab-id ID]
+
+Tab selection: every run prints "TAB_ID: <id>" for the tab it attached to.
+check-login / upload reuse an existing studio.youtube.com tab only when no
+upload dialog is open in it (a previous episode waiting on the Visibility
+page for the user's save click, or a tab that does not answer within a few
+seconds) — otherwise they fall back to a blank tab / a new tab, so
+back-to-back episodes never navigate away from (or hang on) an earlier
+draft. --new-tab always opens a fresh tab; --tab-id targets one tab
+exactly (use it for screenshot when several drafts are open). Tabs are
+never closed by this script — the user saves/publishes in them.
 
 Selector notes: YouTube Studio (Polymer, mostly light DOM) keeps stable
 element ids across UI languages — #create-icon, #title-textarea #textbox,
@@ -36,6 +46,20 @@ UPLOAD_URL = "https://www.youtube.com/upload"  # redirects into studio upload di
 # itself keeps running in the browser; this only stops the monitoring).
 UPLOAD_STALL_TIMEOUT = 180
 POLL = 3
+# Seconds a studio tab gets to answer the upload-dialog probe; a tab stuck
+# on a modal ("Leave site?") or otherwise unresponsive counts as busy.
+TAB_PROBE_TIMEOUT = 5.0
+# Upload dialog deep link (studio.youtube.com/channel/<id>/videos/upload?d=ud).
+_UPLOAD_URL_RE = re.compile(r"[?&]d=ud(?:&|#|$)|/videos/upload")
+_UPLOAD_DIALOG_JS = """
+    (function() {
+        var d = document.querySelector('ytcp-uploads-dialog');
+        if (!d) return false;
+        var p = d.querySelector('tp-yt-paper-dialog') || d;
+        if (p.hasAttribute('opened')) return true;
+        return p.getClientRects().length > 0;
+    })()
+"""
 
 
 class CDPError(RuntimeError):
@@ -61,32 +85,100 @@ class CDP:
         r.raise_for_status()
         return [t for t in r.json() if t.get("type") == "page"]
 
-    def attach(self, prefer_substr: str, create_url: str | None = None):
+    def _new_tab(self, url: str) -> dict:
+        r = self.http.put(f"{self.base}/json/new?{url}", timeout=5)
+        if r.status_code >= 400:  # older Chrome used GET
+            r = self.http.get(f"{self.base}/json/new?{url}", timeout=5)
+        r.raise_for_status()
+        target = r.json()
+        try:  # bring it to front: background tabs get throttled
+            self.http.get(f"{self.base}/json/activate/{target.get('id', '')}", timeout=5)
+        except requests.RequestException:
+            pass
+        return target
+
+    def _probe_upload_dialog(self, ws_url: str) -> bool | None:
+        """True/False = upload dialog open or not; None = tab did not answer."""
+        try:
+            ws = websocket.create_connection(
+                ws_url, suppress_origin=True, timeout=TAB_PROBE_TIMEOUT,
+            )
+        except (websocket.WebSocketException, OSError):
+            return None
+        try:
+            ws.send(json.dumps({"id": 1, "method": "Runtime.evaluate", "params": {
+                "expression": _UPLOAD_DIALOG_JS, "returnByValue": True,
+            }}))
+            deadline = time.time() + TAB_PROBE_TIMEOUT
+            while time.time() < deadline:
+                ws.settimeout(max(0.1, deadline - time.time()))
+                resp = json.loads(ws.recv())
+                if resp.get("id") == 1:
+                    if "error" in resp:
+                        return None
+                    return bool(resp.get("result", {}).get("result", {}).get("value"))
+            return None
+        except (websocket.WebSocketException, OSError, ValueError):
+            return None
+        finally:
+            ws.close()
+
+    def _tab_busy(self, tab: dict) -> str:
+        """Why this studio tab must not be reused ('' = free to reuse)."""
+        if _UPLOAD_URL_RE.search(tab.get("url", "")):
+            return "upload dialog open"
+        ws_url = tab.get("webSocketDebuggerUrl")
+        if not ws_url:
+            return "no debugger url"
+        state = self._probe_upload_dialog(ws_url)
+        if state is None:
+            return "tab not responding"
+        return "upload dialog open" if state else ""
+
+    def attach(self, prefer_substr: str, create_url: str | None = None, *,
+               new_tab: bool = False, tab_id: str | None = None,
+               skip_busy: bool = False):
         """Attach to the first tab whose URL contains prefer_substr.
 
         Falls back to a blank tab; as a last resort opens a new tab (never
         steals a tab that belongs to another flow, e.g. the XHS draft).
+        new_tab: always open a fresh tab. tab_id: attach to exactly that tab.
+        skip_busy: pass over matching tabs that hold an open upload dialog
+        or do not respond (an earlier episode awaiting the user's save).
         """
         tabs = self._tabs()
-        target = next((t for t in tabs if prefer_substr in t.get("url", "")), None)
-        if target is None:
-            target = next(
-                (t for t in tabs
-                 if t.get("url", "").startswith(("about:blank", "chrome://newtab",
-                                                 "chrome://new-tab-page"))),
-                None,
-            )
-        if target is None:
-            url = create_url or "about:blank"
-            r = self.http.put(f"{self.base}/json/new?{url}", timeout=5)
-            if r.status_code >= 400:  # older Chrome used GET
-                r = self.http.get(f"{self.base}/json/new?{url}", timeout=5)
-            r.raise_for_status()
-            target = r.json()
+        if tab_id:
+            target = next((t for t in tabs if t.get("id") == tab_id), None)
+            if target is None:
+                raise CDPError(f"No page tab with id {tab_id} (closed?)")
+        elif new_tab:
+            target = self._new_tab(create_url or "about:blank")
+        else:
+            matches = [t for t in tabs if prefer_substr in t.get("url", "")]
+            target = None
+            for t in matches:
+                why = self._tab_busy(t) if skip_busy else ""
+                if not why:
+                    target = t
+                    break
+                print(f"[ytstudio] Leaving busy tab alone ({why}): {t.get('url', '')[:90]}")
+            if target is None:
+                target = next(
+                    (t for t in tabs
+                     if t.get("url", "").startswith(("about:blank", "chrome://newtab",
+                                                     "chrome://new-tab-page"))),
+                    None,
+                )
+            if target is None:
+                target = self._new_tab(create_url or "about:blank")
+            elif not skip_busy and len(matches) > 1:
+                print(f"[ytstudio] WARNING: {len(matches)} studio tabs open — "
+                      "pass --tab-id to pick the right one.")
         ws_url = target.get("webSocketDebuggerUrl")
         if not ws_url:
             raise CDPError(f"Tab has no webSocketDebuggerUrl: {target.get('url')}")
         print(f"[ytstudio] Attaching to tab: {target.get('url', '')[:90]}")
+        print(f"TAB_ID: {target.get('id', '')}")
         self.ws = websocket.create_connection(
             ws_url, suppress_origin=True, max_size=None, enable_multithread=True,
         )
@@ -515,15 +607,28 @@ def cmd_upload(cdp: CDP, args) -> int:
     return 0
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    new_tab_help = ("Open a fresh tab instead of reusing a studio tab (one tab per "
+                    "episode when uploading several in a row)")
+    tab_id_help = "Attach to exactly this tab (id printed as TAB_ID by an earlier run)"
     parser = argparse.ArgumentParser(description="YouTube Studio CDP draft uploader")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=9222)
+    parser.add_argument("--new-tab", action="store_true", help=new_tab_help)
+    parser.add_argument("--tab-id", help=tab_id_help)
+    # Same options after the subcommand; SUPPRESS keeps a value given before
+    # the subcommand from being reset by the subparser's default.
+    tab_opts = argparse.ArgumentParser(add_help=False)
+    tab_opts.add_argument("--new-tab", action="store_true", default=argparse.SUPPRESS,
+                          help=new_tab_help)
+    tab_opts.add_argument("--tab-id", default=argparse.SUPPRESS, help=tab_id_help)
+    tab_id_opt = argparse.ArgumentParser(add_help=False)
+    tab_id_opt.add_argument("--tab-id", default=argparse.SUPPRESS, help=tab_id_help)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("check-login")
+    sub.add_parser("check-login", parents=[tab_opts])
 
-    up = sub.add_parser("upload")
+    up = sub.add_parser("upload", parents=[tab_opts])
     up.add_argument("--video", required=True, help="Absolute path to the video file")
     up.add_argument("--title-file", required=True)
     up.add_argument("--desc-file", required=True)
@@ -543,13 +648,22 @@ def main() -> int:
                          "previous choice, so default to private to prevent accidental "
                          "public publishes; 'none' leaves it untouched")
 
-    shot = sub.add_parser("screenshot")
+    shot = sub.add_parser("screenshot", parents=[tab_id_opt])
     shot.add_argument("output", help="PNG output path")
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    if args.cmd == "screenshot" and args.new_tab:
+        parser.error("screenshot captures an existing tab; use --tab-id, not --new-tab")
+    if args.new_tab and args.tab_id:
+        parser.error("--new-tab and --tab-id are mutually exclusive")
     cdp = CDP(args.host, args.port)
     try:
-        cdp.attach("studio.youtube.com", create_url=STUDIO_URL)
+        # check-login / upload navigate the tab: never reuse one that still
+        # holds an earlier episode's upload dialog. screenshot wants exactly
+        # such a tab, so it keeps plain reuse.
+        cdp.attach("studio.youtube.com", create_url=STUDIO_URL,
+                   new_tab=args.new_tab, tab_id=args.tab_id,
+                   skip_busy=args.cmd != "screenshot")
         if args.cmd == "check-login":
             return cmd_check_login(cdp)
         if args.cmd == "upload":

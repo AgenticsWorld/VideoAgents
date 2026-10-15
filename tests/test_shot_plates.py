@@ -691,7 +691,7 @@ def test_revise_shot_plate_keeps_source_and_swaps_only_this_role(tmp_path, monke
     assert dry['dry_run'] and dry['key'] == 'L1_grid9_t8_rev1' and not calls
     assert sp.load_episode_index(base, ep)['shots']['sh001']['plates'][0]['key'] == 'L1_grid9_t8'   # dry-run 不改索引
     res = sp.revise_shot_plate(base, ep, 'sh001', 'start', 'remove the lantern', note='去掉灯笼', seed=7, log=lambda *_: None)
-    assert len(calls) == 1 and calls[0]['refs'] == [str(base/src_rel)] and calls[0]['size'] == '192x108'
+    assert len(calls) == 1 and calls[0]['refs'] == [str(base/src_rel)] and calls[0]['size'] == '1920x1080'   # 同九宫格补图尺寸
     assert 'Requested change: remove the lantern.' in calls[0]['prompt'] and '去掉灯笼' in calls[0]['prompt']
     assert res['key'] == 'L1_grid9_t8_rev1' and (base/res['file']).is_file() and (base/res['file']).with_suffix('.json').is_file()
     assert (base/src_rel).is_file()                                                   # 原图不动
@@ -709,6 +709,119 @@ def test_revise_shot_plate_keeps_source_and_swaps_only_this_role(tmp_path, monke
     assert res2['key'] == 'L1_grid9_t8_rev2' and calls[-1]['refs'] == [str(base/res['file'])]
     assert sp.load_episode_index(base, ep)['shots']['sh001']['plates'][0]['revised_from']['key'] == 'L1_grid9_t8_rev1'
 
+
+
+def _library_revision_fixture(tmp_path, monkeypatch):
+    """库图 L1_t3(九宫格格子)被 ep01 sh001 起点/终点、ep02 sh005 起点引用,另一场景同名 key 不算。"""
+    import json
+    from PIL import Image
+    from modules import genmedia
+    base, sid = tmp_path, 'SCN-1'
+    (base/'settings.json').write_text(json.dumps({'output': {'spatial_blocking': True}}))
+    (base/'assets/concepts/scenes'/sid/'plates').mkdir(parents=True)
+    src_rel = f'assets/concepts/scenes/{sid}/plates/L1_t3.png'
+    Image.new('RGB', (192, 108), 'gray').save(base/src_rel, format='JPEG')
+    f = facts((0, 1.5, 0), (0, 1.5, -10), 27)
+    src_entry = {'key': 'L1_t3', 'file': src_rel, 'grid9': True, 'master': False, 'camera': f, 'lighting_scheme_id': 'L1', 'time_of_day': 'dusk',
+                 'size': '192x108', 'pano_ref': {'kind': 'grid9', 'tile': 2, 'scheme': 'L1'}}
+    sp.save_library(base, sid, {'schema_version': sp.SCHEMA_LIBRARY, 'scene_id': sid, 'plates': [src_entry]})
+    slot = lambda role, key='L1_t3': {'role': role, 'key': key, 'file': src_rel, 'reuse': 'grid9', 'camera': f, 'view': {'fraction': .5}}   # noqa: E731
+    sp.save_episode_index(base, 'ep01', {'schema_version': sp.SCHEMA_EPISODE, 'ep': 'ep01', 'shots': {
+        'sh001': {'group_id': 'grp001', 'scene_id': sid, 'plates': [slot('start'), slot('end')]},
+        'sh002': {'group_id': 'grp001', 'scene_id': sid, 'plates': [slot('start', 'other')]},
+        'sh003': {'group_id': 'grp002', 'scene_id': 'SCN-2', 'plates': [slot('start')]}}})
+    sp.save_episode_index(base, 'ep02', {'schema_version': sp.SCHEMA_EPISODE, 'ep': 'ep02', 'shots': {
+        'sh005': {'group_id': 'grp003', 'scene_id': sid, 'plates': [slot('start')]}}})
+    calls, synced = [], []
+
+    def fake_generate(prompt, output, negative='', refs=None, aspect='', size='', seed=None):
+        calls.append({'prompt': prompt, 'refs': refs, 'size': size, 'aspect': aspect})
+        Image.new('RGB', (192, 108), 'blue').save(output, format='JPEG')
+        return output
+    monkeypatch.setattr(genmedia, 'generate_image', fake_generate)
+    monkeypatch.setattr(genmedia, 'get_config', lambda kind: {'provider': 'test', 'model': 'm'})
+    monkeypatch.setattr(sp, 'sync_group', lambda base, ep, gid, write=False, **k: synced.append((ep, gid)) or {'group_id': gid, 'errors': []})
+    return base, sid, src_rel, src_entry, calls, synced
+
+
+def test_revise_library_plate_replaces_all_users_and_keeps_source(tmp_path, monkeypatch):
+    base, sid, src_rel, src_entry, calls, synced = _library_revision_fixture(tmp_path, monkeypatch)
+    assert [(u['ep'], u['shot_id'], u['role']) for u in sp.plate_users(base, sid, 'L1_t3')] == \
+        [('ep01', 'sh001', 'start'), ('ep01', 'sh001', 'end'), ('ep02', 'sh005', 'start')]          # 别的场景同名 key 不算
+    dry = sp.revise_library_plate(base, sid, 'L1_t3', 'remove the lantern', dry_run=True, log=lambda *_: None)
+    assert dry['key'] == 'L1_t3_rev1' and dry['replaced'] == ['ep01/sh001', 'ep01/sh001(end)', 'ep02/sh005'] and not calls
+    assert sp.load_episode_index(base, 'ep01')['shots']['sh001']['plates'][0]['key'] == 'L1_t3'
+    res = sp.revise_library_plate(base, sid, 'L1_t3', 'remove the lantern', note='去掉灯笼', seed=3, log=lambda *_: None)
+    assert len(calls) == 1 and calls[0]['refs'] == [str(base/src_rel)] and calls[0]['size'] == '1920x1080' and calls[0]['aspect'] == '16:9'
+    p = calls[0]['prompt']
+    assert '[Image 1] is the current background plate taken from this exact camera' in p and 'this exact shot' not in p
+    assert 'Requested change: remove the lantern.' in p and '去掉灯笼' in p and 'Time of day: dusk.' in p and '[Image 2]' not in p
+    assert 'Camera: ' in p and 'start of the shot' not in p
+    lib = sp.load_library(base, sid)['plates']
+    assert lib[0] == src_entry and (base/src_rel).is_file()                                      # 原图/原条目不动
+    new = lib[1]
+    assert new['key'] == 'L1_t3_rev1' and new['revised'] and not new['master'] and new['pano_ref']['source_kind'] == 'grid9'
+    assert new['created_by']['source'] == 'scene_preview' and 'label' not in new['created_by'] and new['size'] == '1920x1080'
+    e1 = sp.load_episode_index(base, 'ep01')['shots']
+    assert [s['key'] for s in e1['sh001']['plates']] == ['L1_t3_rev1', 'L1_t3_rev1'] and e1['sh002']['plates'][0]['key'] == 'other'
+    assert e1['sh003']['plates'][0]['key'] == 'L1_t3'                                            # 别的场景不动
+    s0 = e1['sh001']['plates'][0]
+    assert s0['reuse'] == 'revised' and s0['revised_from']['key'] == 'L1_t3' and s0['view'] == {'fraction': .5}   # 同机位同构图:view 不动
+    assert sp.load_episode_index(base, 'ep02')['shots']['sh005']['plates'][0]['key'] == 'L1_t3_rev1'
+    assert sorted(synced) == [('ep01', 'grp001'), ('ep02', 'grp003')] and res['replaced'] == dry['replaced']
+
+
+def test_revise_library_plate_only_and_library_only(tmp_path, monkeypatch):
+    import pytest
+    base, sid, _, _, calls, synced = _library_revision_fixture(tmp_path, monkeypatch)
+    res = sp.revise_library_plate(base, sid, 'L1_t3', 'add moss', only=['ep01/sh001(end)'], seed=1, log=lambda *_: None)
+    e1 = sp.load_episode_index(base, 'ep01')['shots']['sh001']['plates']
+    assert res['replaced'] == ['ep01/sh001(end)'] and [s['key'] for s in e1] == ['L1_t3', 'L1_t3_rev1']
+    assert sp.load_episode_index(base, 'ep02')['shots']['sh005']['plates'][0]['key'] == 'L1_t3' and synced == [('ep01', 'grp001')]
+    res2 = sp.revise_library_plate(base, sid, 'L1_t3', 'add rain', library_only=True, seed=2, log=lambda *_: None)
+    assert res2['key'] == 'L1_t3_rev2' and res2['replaced'] == [] and len(synced) == 1
+    assert any(e['key'] == 'L1_t3_rev2' for e in sp.load_library(base, sid)['plates'])
+    with pytest.raises(ValueError, match='ep01/sh002 没有引用'):
+        sp.revise_library_plate(base, sid, 'L1_t3', 'x', only=['ep01/sh002'], log=lambda *_: None)
+    with pytest.raises(ValueError, match='写法不对'):
+        sp.revise_library_plate(base, sid, 'L1_t3', 'x', only=['sh001'], log=lambda *_: None)
+    with pytest.raises(ValueError, match='没有 nope'):
+        sp.revise_library_plate(base, sid, 'nope', 'x', log=lambda *_: None)
+    assert len(calls) == 2
+
+
+def test_revise_with_user_reference_images(tmp_path, monkeypatch):
+    import pytest
+    from PIL import Image
+    base, sid, src_rel, _, calls, _ = _library_revision_fixture(tmp_path, monkeypatch)
+    ext = tmp_path/'outside'; ext.mkdir()
+    Image.new('RGB', (64, 64), 'red').save(ext/'door.jpg', format='JPEG')
+    Image.new('RGB', (64, 64), 'green').save(ext/'moss.bmp', format='BMP')
+    (ext/'not_image.png').write_text('x')
+    with pytest.raises(ValueError, match='不是可读取的图片'):
+        sp.revise_library_plate(base, sid, 'L1_t3', 'x', refs=[str(ext/'not_image.png')], log=lambda *_: None)
+    with pytest.raises(ValueError, match='参考图不存在'):
+        sp.revise_library_plate(base, sid, 'L1_t3', 'x', refs=[str(ext/'missing.png')], log=lambda *_: None)
+    many = []
+    for i in range(sp.REVISION_MAX_REFS + 1):
+        Image.new('RGB', (8, 8)).save(ext/f'r{i}.png'); many.append(str(ext/f'r{i}.png'))
+    with pytest.raises(ValueError, match='最多'):
+        sp.revise_library_plate(base, sid, 'L1_t3', 'x', refs=many, log=lambda *_: None)
+    dry = sp.revise_library_plate(base, sid, 'L1_t3', 'use the door in [Image 2]', refs=[str(ext/'door.jpg')], dry_run=True, log=lambda *_: None)
+    assert dry['refs'] == [src_rel, str((ext/'door.jpg').resolve())] and not (base/'assets/concepts/scenes'/sid/'plates/revision_refs').exists()
+    res = sp.revise_library_plate(base, sid, 'L1_t3', 'use the door in [Image 2] and the moss in [Image 3]',
+                                  refs=[str(ext/'door.jpg'), str(ext/'moss.bmp'), str(ext/'door.jpg')], seed=5, log=lambda *_: None)
+    keep = [f'assets/concepts/scenes/{sid}/plates/revision_refs/L1_t3_rev1_ref1.jpg', f'assets/concepts/scenes/{sid}/plates/revision_refs/L1_t3_rev1_ref2.png']
+    assert res['refs'] == [src_rel] + keep and all((base/k).is_file() for k in keep)          # 去重;BMP 转存 PNG
+    assert calls[-1]['refs'] == [str(base/r) for r in res['refs']]
+    p = calls[-1]['prompt']
+    assert '[Image 2] to [Image 3] are reference images supplied by the director' in p and 'do not copy their camera' in p
+    new = next(e for e in sp.load_library(base, sid)['plates'] if e['key'] == 'L1_t3_rev1')
+    assert new['pano_ref']['user_refs'] == keep and new['refs'] == res['refs']
+    # 按镜模式同样收参考图
+    res2 = sp.revise_shot_plate(base, 'ep01', 'sh001', 'start', 'paint it [Image 2] red', refs=[str(ext/'door.jpg')], seed=6, log=lambda *_: None)
+    assert res2['key'] == 'L1_t3_rev2' and len(res2['refs']) == 2 and '[Image 2] is a reference image' in calls[-1]['prompt']
+    assert 'do not copy its camera' in calls[-1]['prompt'] and 'start of the shot' in calls[-1]['prompt']
 
 def test_copy_key_chains_from_root():
     lib = {'plates': [{'key': 'X'}, {'key': 'X_copy1'}, {'key': 'X_copy3'}, {'key': 'Y_copy9'}]}
@@ -1095,3 +1208,114 @@ def test_set_plate_adopt_writes_index_and_syncs(tmp_path, monkeypatch):
     sp.set_plate_adopt(base, ep, 'sh001', 'start', clear=True)
     slot = sp.load_episode_index(base, ep)['shots']['sh001']['plates'][0]
     assert 'adopt' not in slot and 'exclude_note' not in slot
+
+
+# ---------------------------------------------------------------- 背景图画幅固定 16:9(2026-10-09)
+TALL = 9 / 16
+
+
+def test_plate_format_fixed_16x9_helpers():
+    assert sp.PLATE_FMT['aspect_ratio'] == '16:9' and sp.plate_size() == (1920, 1080)
+    w, h = sp.master_size()
+    assert abs(w / h - 16 / 9) < .01 and w * h <= sp.MASTER_MAX_PIXELS
+    assert sp.plate_size({'width': 9, 'height': 16}) == (1080, 1920)           # 显式传画幅(白模帧)仍按其画幅
+    assert sp.plate_fov_v(40, TALL) == 40 and sp.plate_fov_v(40, 16 / 9) == 40   # 不比 16:9 宽:视场不变
+    wide = sp.plate_fov_v(40, 2.39)
+    assert math.isclose(math.tan(math.radians(wide / 2)) * 16 / 9, math.tan(math.radians(20)) * 2.39, rel_tol=1e-9)
+    assert sp.aspect_view(16 / 9) == {} and sp.aspect_view(1.776) == {}
+    assert sp.aspect_view(TALL) == {'fraction': 1.0, 'fraction_w': 0.316, 'aspect_only': True}
+    assert sp.aspect_view(2.39) == {'fraction': 0.744, 'fraction_w': 1.0, 'aspect_only': True}
+    assert sp.entry_aspect({'size': '1080x1920'}) == TALL and sp.entry_aspect({}) == sp.PLATE_ASPECT
+
+
+def test_plan_master_and_fits_with_project_aspect_other_than_16x9():
+    def job(deg, fov=40.0, aspect_fmt=FMT):
+        return {'facts': sp.camera_facts(cam((0, 1.5, 0), turned((0, 1.5, 0), deg), fov), aspect_fmt, *AXES)}
+    # 竖屏 9:16:母图 16:9、视场同常规(55°),本镜与 ±20° 的同伴都装得下
+    j = job(0)
+    m = sp.plan_master(j, [job(20), job(-20)], TALL)
+    assert m['fov'] == sp.MASTER_FOV_V_DEG
+    mcam = {'position': m['position'], 'target': m['target'], 'fov_v_deg': m['fov']}
+    for p in (j, job(20), job(-20)):
+        assert sp.view_fits(mcam, sp.cam_of_facts(p['facts']), TALL, master_aspect=sp.PLATE_ASPECT)
+    # 2.39:1 宽银幕:本镜 50° 按 16:9 母图换算要 >55°,母图视场随之放宽且装得下
+    w = job(0, 50.0)
+    m = sp.plan_master(w, [], 2.39)
+    assert m['fov'] == sp.plate_fov_v(50.0, 2.39) + sp.MASTER_FOV_MARGIN_DEG > sp.MASTER_FOV_V_DEG
+    assert sp.view_fits({'position': m['position'], 'target': m['target'], 'fov_v_deg': m['fov']}, sp.cam_of_facts(w['facts']), 2.39,
+                        master_aspect=sp.PLATE_ASPECT)
+    # 旧按项目画幅出的竖屏母图(size 1080x1920)按其实际画幅判复用:窄母图装不下 ±20° 偏转的镜
+    base = Path('.')
+    legacy = {'key': 'old', 'master': True, 'file': 'x.png', 'lighting_scheme_id': 'L1', 'pano_ref': {'kind': 'pano'}, 'size': '1080x1920',
+              'camera': sp.camera_facts(cam((0, 1.5, 0), (0, 1.5, -10), 55.0), {'width': 9, 'height': 16}, *AXES)}
+    assert sp.find_master({'plates': [legacy]}, 'L1', job(0, 40.0)['facts'], TALL, base, require_file=False) is legacy
+    assert sp.find_master({'plates': [legacy]}, 'L1', job(20, 40.0)['facts'], TALL, base, require_file=False) is None
+    assert sp.find_master({'plates': [{**legacy, 'size': '2858x1608'}]}, 'L1', job(20, 40.0)['facts'], TALL, base, require_file=False) is not None
+
+
+def test_view_info_and_phrases_split_width_height_only_when_aspect_differs():
+    master = {'key': 'M', 'size': '2858x1608', 'camera': facts((0, 1.5, 0), (0, 1.5, -10), 55.0)}
+    shot = facts((0, 1.5, 0), (0, 1.5, -10), 40.0)
+    same = sp.view_info(master, shot, 16 / 9)
+    assert 'fraction_w' not in same and same == sp.view_info(master, shot)
+    p = {'view': same, 'centre': []}
+    assert sp.view_phrase_en(p) == f"the shot frames a tighter view inside this plate (about {int(round(same['fraction'] * 100))}% of its width and height, centred in the middle)"
+    assert sp.view_phrase_zh(p) == f"这是该机位的广角母图，镜头画面是其中更紧的一块（约占母图宽高的{round(same['fraction'] * 10)}成，中心居中）"
+    tall = sp.view_info(master, shot, TALL)
+    assert math.isclose(tall['fraction_w'], round(tall['fraction'] * TALL / (2858 / 1608), 3))
+    p = {'view': tall, 'centre': []}
+    assert f"about {int(round(tall['fraction_w'] * 100))}% of its width and about {int(round(tall['fraction'] * 100))}% of its height" in sp.view_phrase_en(p)
+    assert f"宽约占母图的{round(tall['fraction_w'] * 10)}成、高约占母图的{round(tall['fraction'] * 10)}成" in sp.view_phrase_zh(p)
+    p = {'view': {'grid9': {}, **sp.aspect_view(TALL)}, 'centre': []}
+    assert sp.view_phrase_en(p) == 'the shot frames a tighter view inside this plate (about 32% of its width and its full height, centred in the middle)'
+    assert sp.view_phrase_zh(p) == '这是该机位的背景图，镜头画面是其中的一块（宽约占背景图的3成、高度占满，中心居中）'
+    assert sp.view_phrase_en({'view': {'grid9': {}}}) == 'the shot frames almost exactly this view'      # 16:9 项目:与以前相同
+
+
+def test_run_episode_vertical_project_makes_16x9_grid_fallback(tmp_path, monkeypatch):
+    import json
+    base, ep, sid = _manual_project(tmp_path, monkeypatch, 'grid')
+    (base / 'settings.json').write_text(json.dumps({'output': {'plate_mode': 'grid', 'spatial_blocking': True,
+                                                               'aspect_preset': 'custom', 'aspect_custom': '9:16'}}), encoding='utf-8')
+    for rel in ('layout_top.png', 'plates/L1_grid9.png'):
+        (base / 'assets/concepts/scenes' / sid / rel).write_bytes(b'x')
+    calls = []
+    monkeypatch.setattr('modules.genmedia.generate_image', lambda prompt, out, **k: (calls.append(k), Path(out).write_bytes(b'x')), raising=False)
+    monkeypatch.setattr('modules.genmedia.get_config', lambda *a, **k: {'provider': 'test', 'model': 'm'})
+    stats = sp.run_episode(base, ep, log=lambda *_: None)
+    assert not stats['errors'] and stats.get('grid9_fallback_new') == 1 and len(calls) == 1
+    assert calls[0]['size'] == '1920x1080' and calls[0]['aspect'] == '16:9'                     # 竖屏项目的补图也是 16:9
+    shots = sp.load_episode_index(base, ep)['shots']
+    v1, p2 = shots['sh001']['plates'][0]['view'], shots['sh002']['plates'][0]
+    assert v1['fraction_w'] == 0.316 and v1['aspect_only']                                      # 九宫格格子:写明本镜只占中间一条
+    assert p2['reuse'] == 'grid9_fallback' and p2['view']['fraction_w'] == 0.316
+    assert abs(p2['camera']['fov_h_deg'] - sp.camera_facts(cam((0, 0, 0), (0, 0, -1), 40.0), {'width': 9, 'height': 16}, *AXES)['fov_h_deg']) < .1   # 索引记本镜
+    entry = next(e for e in sp.load_library(base, sid)['plates'] if e['key'] == p2['key'])
+    assert entry['size'] == '1920x1080' and entry['camera']['fov_v_deg'] == 40.0
+    assert abs(entry['camera']['fov_h_deg'] - sp.camera_facts(cam((0, 0, 0), (0, 0, -1), 40.0), sp.PLATE_FMT, *AXES)['fov_h_deg']) < .1     # 库图记 16:9
+
+
+def test_revise_legacy_vertical_plate_comes_out_16x9(tmp_path, monkeypatch):
+    import json
+    from PIL import Image
+    from modules import genmedia
+    base, sid, ep = tmp_path, 'SCN-1', 'ep01'
+    (base/'settings.json').write_text(json.dumps({'output': {'spatial_blocking': True, 'aspect_preset': 'custom', 'aspect_custom': '9:16'}}))
+    (base/'assets/concepts/scenes'/sid/'plates').mkdir(parents=True)
+    src_rel = f'assets/concepts/scenes/{sid}/plates/old.png'
+    Image.new('RGB', (108, 192), 'gray').save(base/src_rel, format='JPEG')         # 旧口径:按竖屏项目画幅出的图
+    f = sp.camera_facts(cam((0, 1.5, 0), (0, 1.5, -10), 40.0), {'width': 9, 'height': 16}, *AXES)
+    sp.save_library(base, sid, {'schema_version': sp.SCHEMA_LIBRARY, 'scene_id': sid, 'plates': [
+        {'key': 'old', 'file': src_rel, 'master': True, 'camera': f, 'lighting_scheme_id': 'L1', 'size': '108x192', 'pano_ref': {'kind': 'pano'}}]})
+    sp.save_episode_index(base, ep, {'schema_version': sp.SCHEMA_EPISODE, 'ep': ep, 'shots': {'sh001': {'group_id': 'grp001', 'scene_id': sid, 'plates': [
+        {'role': 'start', 'key': 'old', 'file': src_rel, 'reuse': 'library', 'camera': f}]}}})
+    calls = []
+    monkeypatch.setattr(genmedia, 'generate_image', lambda prompt, output, **k: (calls.append({'prompt': prompt, **k}),
+                                                                                  Image.new('RGB', (192, 108)).save(output, format='JPEG')))
+    monkeypatch.setattr(genmedia, 'get_config', lambda kind: {'provider': 'test', 'model': 'm'})
+    sp.revise_shot_plate(base, ep, 'sh001', 'start', 'remove the lantern', seed=1, log=lambda *_: None)
+    assert calls[0]['size'] == '1920x1080' and calls[0]['aspect'] == '16:9'
+    hfov = sp.camera_facts(cam((0, 1.5, 0), (0, 1.5, -10), 40.0), sp.PLATE_FMT, *AXES)['fov_h_deg']
+    assert f"({hfov} degrees horizontal field of view)" in calls[0]['prompt']             # 机位句按 16:9 重算
+    slot = sp.load_episode_index(base, ep)['shots']['sh001']['plates'][0]
+    assert slot['camera'] == f and slot['view'] == sp.aspect_view(9 / 16)                # 索引仍记本镜;写明本镜只占中间一条

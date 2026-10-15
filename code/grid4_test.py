@@ -300,7 +300,8 @@ def build_prompt(layout: dict, scene: dict, views: list, geom: dict, pos, hfov: 
 # ---------------------------------------------------------------- generate
 def ensure_grid4(base: Path, sid: str, scheme_id: str, scheme_key: str, time_of_day: str, plan: dict, *, at=None, height=STATION_HEIGHT_M,
                  hfov=DEFAULT_HFOV, force=False, dry_run=False, seed=None, log=print) -> dict:
-    scene, layout, fmt, axes = plan['episode']['scenes'][sid], plan['layouts'][sid], plan['fmt'], plan['axes'][sid]
+    scene, layout, axes = plan['episode']['scenes'][sid], plan['layouts'][sid], plan['axes'][sid]
+    fmt = sp.PLATE_FMT   # 宫格与格子一律 16:9(2026-10-09),不随项目画幅
     out = base / 'assets/concepts/scenes' / sid / DIRNAME
     rel = f'assets/concepts/scenes/{sid}/{DIRNAME}'
     idx_file = out / 'index.json'

@@ -29,6 +29,10 @@
 - 静音修剪(2026-09-15):合成原声落 _raw/,库文件为裁掉首尾静音的版本(首留 0.10s、尾留 0.15s;seed-audio
   首尾常各带 0.4–1.0s 空白,短句尤甚);output.dialogue_tts_max_pause>0 时句中超过该秒数的停顿也压到该值(默认 0=不动)。
   修剪是后处理,不进 key:参数变了从 _raw/ 重裁,不重新调 TTS;台账每句记 trim{lead_s,tail_s,pause_s,params}。
+  静音阈值跟本句响度走(2026-10-10):min(−35 dB, 本句峰值 − 18 dB)。演法写「轻声 / 压着嗓子」时 seed-audio 整句都很轻
+  (jidi ep02 sh006 峰值 −30.8 dB、均值 −50 dB),固定 −35 dB 把后半句当静音裁掉了 2.5s(5.7s → 3.2s;该句阈值须 ≤ −44 dB
+  才保得住整句)。余量取 18 dB 是只动轻声句:存量 296 句里峰值 ≥ −17 dB 的 290 句阈值不变、裁法不变。
+  台账 trim 另记 peak_db / noise_db_used;节奏贴合找停顿用同一阈值。
 - 节奏贴合(2026-09-28):seed-audio 自然语速约 3 字/秒且标点处停顿 0.6–1.7s,而分镜按 est_duration_s(约 4.2 字/秒)
   定镜长,样片里对白普遍拖到下一镜、与下一句重叠。库文件(自然语速)不动——后期配音仍取它按开口时段贴合;
   另出一份**节奏贴合版** _paced/<同名文件> 供动态样片/白模样片用:自然时长超过 est_duration_s 的句子先把句中
@@ -47,13 +51,18 @@ import subprocess
 import time
 from pathlib import Path
 
+try:
+    from modules.entity_ids import extract_actor_id, known_actor_ids
+except ImportError:                                      # 脚本直跑时无包前缀
+    from entity_ids import extract_actor_id, known_actor_ids
+
 SCHEMA = "dialogue_tts/v1"
 MANIFEST = "tts_manifest.json"
 LIB_REL = "assets/audio/voice/{ep}/tts"
-_ID_RE = re.compile(r"^(CHAR|CRE)-\d+$")
 EST_TOLERANCE = 0.30      # 实测/估时偏差超过该比例记 WARN
 RAW_DIR = "_raw"          # 合成原声(未修剪)存放子目录
-TRIM_NOISE_DB = -35.0     # 静音判定阈值
+TRIM_NOISE_DB = -35.0     # 静音判定阈值(上限;轻声句按本句峰值下调,见 TRIM_PEAK_HEADROOM_DB)
+TRIM_PEAK_HEADROOM_DB = 18.0   # 静音阈值至少比本句峰值低这么多 dB(峰值 ≥ −17 dB 的句子阈值仍是 TRIM_NOISE_DB)
 TRIM_MIN_SIL = 0.20       # 短于此的空白不算静音段
 TRIM_KEEP_HEAD = 0.10     # 开头保留的静音
 TRIM_KEEP_TAIL = 0.15     # 结尾保留的静音
@@ -167,7 +176,8 @@ def voice_mode(provider: str, model: str) -> tuple[str, str]:
 
 
 def _name_index(base: Path) -> dict[str, str]:
-    """规范名/别名 → CHAR-/CRE- 编号(speaker 写成人名的兜底解析)。"""
+    """规范名/别名 → CHAR-/CRE- 编号(speaker 写成人名的兜底解析)。
+    编号本身与 original_name(英文 / 原著名,如 jidi「Hari Seldon」)也登记为键,排在规范名与别名之后(#117)。"""
     out: dict[str, str] = {}
     cidx = _read(Path(base) / "bible" / "characters" / "index.json") or {}
     for c in cidx.get("characters") or []:
@@ -184,26 +194,29 @@ def _name_index(base: Path) -> dict[str, str]:
     for c in cr.get("creatures") or []:
         if isinstance(c, dict) and c.get("id") and c.get("name"):
             out.setdefault(str(c["name"]).strip(), c["id"])
+    for c in [*(cidx.get("characters") or []), *(cr.get("creatures") or [])]:
+        if isinstance(c, dict) and isinstance(c.get("id"), str) and c["id"].strip():
+            out.setdefault(c["id"].strip(), c["id"].strip())
+            if isinstance(c.get("original_name"), str) and c["original_name"].strip():
+                out.setdefault(c["original_name"].strip(), c["id"].strip())
     return out
 
 
 name_index = _name_index   # 公共名:check_dialogue_fit 等机检共用同一套别名表(#58)
 
-_SPK_ID_RE = re.compile(r"((?:CHAR|CRE)-\d+)")
-
-
-def resolve_speaker(ln: dict, names: dict[str, str]) -> tuple[str, str]:
+def resolve_speaker(ln: dict, names: dict[str, str], known: frozenset | None = None) -> tuple[str, str]:
     """对白行 → (说话人编号 或 '', 原始说话人文本)。与 code/check_dialogue_fit.py 共用口径(#58):
     ① speaker / char 中的 CHAR-/CRE- 编号 → ② 同级 speaker_char / character_id 编号
-    → ③ 规范名/别名表反查 speaker(全文,再去括注)→ 仍无返回 ''。"""
+    → ③ 规范名/别名表反查 speaker(全文,再去括注)→ 仍无返回 ''。
+    编号口径见 modules/entity_ids(#117):数字编号与拼音 slug(CHAR-jie-rui-er)都认,known 给了时 slug 取最长已知编号。"""
     raw = str(ln.get("speaker") or ln.get("char") or ln.get("character_id") or "").strip()
-    m = _SPK_ID_RE.search(raw)
-    if m:
-        return m.group(1), raw
+    cid = extract_actor_id(raw, known)
+    if cid:
+        return cid, raw
     for k in ("speaker_char", "character_id"):
-        m = _SPK_ID_RE.search(str(ln.get(k) or "").strip())
-        if m:
-            return m.group(1), raw
+        cid = extract_actor_id(str(ln.get(k) or "").strip(), known)
+        if cid:
+            return cid, raw
     hit = names.get(raw) or names.get(re.sub(r"[〔【(\[（].*$", "", raw).strip())
     return (hit or ""), raw
 
@@ -220,6 +233,7 @@ def collect_lines(base: Path, ep: str, shot_list: dict | None = None) -> list[di
                 if isinstance(sid, str):
                     group_of[sid] = g["group_id"]
     names = _name_index(base)
+    known = known_actor_ids(base)
     out: list[dict] = []
     seq = 0
     for s in sl.get("shots") or []:
@@ -232,7 +246,7 @@ def collect_lines(base: Path, ep: str, shot_list: dict | None = None) -> list[di
             text = str(ln.get("text") or ln.get("line") or "").strip()
             if not text:
                 continue
-            speaker, raw = resolve_speaker(ln, names)
+            speaker, raw = resolve_speaker(ln, names, known)
             item = {"seq": seq, "shot_id": s["shot_id"], "idx": idx, "group_id": group_of.get(s["shot_id"], ""),
                     "speaker": speaker, "speaker_raw": raw, "text": text,
                     "emotion": str(ln.get("emotion") or ln.get("tone") or "").strip(),
@@ -462,11 +476,42 @@ _SIL_START = re.compile(r"silence_start:\s*(-?[\d.]+)")
 _SIL_END = re.compile(r"silence_end:\s*(-?[\d.]+)")
 
 
-def detect_silences(path: Path, noise_db: float = TRIM_NOISE_DB, min_sil: float = TRIM_MIN_SIL) -> list[tuple[float, float]]:
-    """ffmpeg silencedetect → [(start, end)],按时间排序;末尾未闭合的静音段以文件时长封口。"""
+_MAX_VOLUME = re.compile(r"max_volume:\s*(-?[\d.]+) dB")
+
+
+def peak_db(path: Path) -> float | None:
+    """ffmpeg volumedetect 的 max_volume(dBFS);读不到(无 ffmpeg / 全零样本)返回 None。"""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        return None
+    r = subprocess.run([ffmpeg, "-hide_banner", "-nostats", "-i", str(path), "-vn", "-af", "volumedetect", "-f", "null", "-"],
+                       capture_output=True, text=True, timeout=120)
+    m = _MAX_VOLUME.search((r.stderr or "") + (r.stdout or ""))
+    return float(m.group(1)) if m else None
+
+
+def silence_threshold(peak: float | None) -> float:
+    """本句的静音判定阈值:min(TRIM_NOISE_DB, 峰值 − TRIM_PEAK_HEADROOM_DB)。
+    轻声句整体电平低,固定阈值会把轻的字当静音裁掉;跟着峰值走后轻声句与正常句的相对余量一致。峰值读不到用固定阈值。"""
+    if peak is None:
+        return TRIM_NOISE_DB
+    return round(min(TRIM_NOISE_DB, peak - TRIM_PEAK_HEADROOM_DB), 1)
+
+
+def trim_params(max_pause: float = 0.0) -> dict:
+    """修剪参数戳(台账 trim.params;与上次不同 = 从 _raw/ 重裁)。"""
+    return {"noise_db": TRIM_NOISE_DB, "peak_headroom_db": TRIM_PEAK_HEADROOM_DB, "keep_head": TRIM_KEEP_HEAD,
+            "keep_tail": TRIM_KEEP_TAIL, "max_pause": round(float(max_pause or 0.0), 3)}
+
+
+def detect_silences(path: Path, noise_db: float | None = None, min_sil: float = TRIM_MIN_SIL) -> list[tuple[float, float]]:
+    """ffmpeg silencedetect → [(start, end)],按时间排序;末尾未闭合的静音段以文件时长封口。
+    noise_db 缺省 = 按本句峰值定的阈值(silence_threshold)。"""
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         return []
+    if noise_db is None:
+        noise_db = silence_threshold(peak_db(path))
     r = subprocess.run([ffmpeg, "-hide_banner", "-nostats", "-i", str(path), "-vn",
                         "-af", f"silencedetect=noise={noise_db}dB:d={min_sil}", "-f", "null", "-"],
                        capture_output=True, text=True, timeout=120)
@@ -540,20 +585,22 @@ def apply_trim(src: Path, dst: Path, keep: list[tuple[float, float]], tempo: flo
 def trim_file(raw: Path, dst: Path, max_pause: float = 0.0, probe=None) -> dict:
     """raw(合成原声)→ dst(修剪版);返回台账 trim 段 {lead_s, tail_s, pause_s, params}。无 ffmpeg 或无可裁时直接复制。"""
     probe = probe or probe_duration
-    params = {"noise_db": TRIM_NOISE_DB, "keep_head": TRIM_KEEP_HEAD, "keep_tail": TRIM_KEEP_TAIL,
-              "max_pause": round(float(max_pause or 0.0), 3)}
+    params = trim_params(max_pause)
     total = probe(raw)
     if not total or not shutil.which("ffmpeg"):
         if raw.resolve() != dst.resolve():
             shutil.copyfile(raw, dst)
         return {"lead_s": 0.0, "tail_s": 0.0, "pause_s": 0.0, "params": params, "skipped": "no ffmpeg/duration"}
-    tp = trim_plan(detect_silences(raw), total, max_pause=max_pause)
+    peak = peak_db(raw)
+    used = silence_threshold(peak)
+    level = {"peak_db": peak, "noise_db_used": used}      # 本句实际用的静音阈值(轻声句低于 params.noise_db)
+    tp = trim_plan(detect_silences(raw, noise_db=used), total, max_pause=max_pause)
     if tp["keep"] == [(0.0, total)] or (tp["lead_s"] + tp["tail_s"] + tp["pause_s"]) < 0.02:
         if raw.resolve() != dst.resolve():
             shutil.copyfile(raw, dst)
-        return {"lead_s": 0.0, "tail_s": 0.0, "pause_s": 0.0, "params": params}
+        return {"lead_s": 0.0, "tail_s": 0.0, "pause_s": 0.0, "params": params, **level}
     apply_trim(raw, dst, tp["keep"])
-    return {"lead_s": tp["lead_s"], "tail_s": tp["tail_s"], "pause_s": tp["pause_s"], "params": params}
+    return {"lead_s": tp["lead_s"], "tail_s": tp["tail_s"], "pause_s": tp["pause_s"], "params": params, **level}
 
 
 # ---------------------------------------------------------------- 节奏贴合(后处理,样片用)
@@ -572,7 +619,8 @@ def pace_plan(silences: list[tuple[float, float]], total: float, target: float, 
 
 def pace_params(target: float, max_tempo: float) -> dict:
     return {"target_s": round(float(target), 3), "max_tempo": round(float(max_tempo), 3), "max_pause": PACE_MAX_PAUSE,
-            "keep_head": PACE_KEEP_HEAD, "keep_tail": PACE_KEEP_TAIL, "noise_db": TRIM_NOISE_DB}
+            "keep_head": PACE_KEEP_HEAD, "keep_tail": PACE_KEEP_TAIL, "noise_db": TRIM_NOISE_DB,
+            "peak_headroom_db": TRIM_PEAK_HEADROOM_DB}
 
 
 def pace_file(src: Path, dst: Path, target: float, max_tempo: float = PACE_MAX_TEMPO, probe=None) -> dict:
@@ -705,8 +753,7 @@ def sync(base: Path, ep: str, *, force: bool = False, tts=None, probe=None, log=
                 prev = old_lines.get(e["file"]) or {}
                 e.update(status="ok", trim=prev.get("trim"))
                 # 修剪参数变了(或旧库从未修剪):从 _raw/ 重裁;没有原声则就地裁库文件(首尾静音再裁无损失)
-                want = {"noise_db": TRIM_NOISE_DB, "keep_head": TRIM_KEEP_HEAD, "keep_tail": TRIM_KEEP_TAIL,
-                        "max_pause": round(max_pause, 3)} if trim else None
+                want = trim_params(max_pause) if trim else None
                 have = (prev.get("trim") or {}).get("params") if prev.get("trim") else None
                 changed = False
                 if trim and have != want:

@@ -44,6 +44,23 @@ def test_release_versions_consistent():
     assert match and match.group(1) == __version__
 
 
+def test_license_metadata_consistent():
+    text = (ROOT / "LICENSE").read_text(encoding="utf-8")
+    assert "GNU GENERAL PUBLIC LICENSE" in text.splitlines()[0]
+    assert "Version 3, 29 June 2007" in text.splitlines()[1]
+
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'license = {text = "GPL-3.0-only"}' in pyproject
+    assert "License :: OSI Approved :: GNU General Public License v3 (GPLv3)" in pyproject
+
+    citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
+    assert re.search(r"^license:\s*GPL-3\.0-only\s*$", citation, re.MULTILINE)
+
+    for name in ("README.md", "README.zh-CN.md", "CONTRIBUTING.md"):
+        assert "GPL-3.0-only" in (ROOT / name).read_text(encoding="utf-8"), name
+    assert "GNU General Public License" in (ROOT / "NOTICE").read_text(encoding="utf-8")
+
+
 def test_web_streaming_deltas_are_coalesced():
     html = (ROOT / "apps/web/static/index.html").read_text(encoding="utf-8")
     assert "function appendLiveText(container,text)" in html

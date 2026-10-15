@@ -75,13 +75,15 @@ Python:
       generate_music, generate_sfx, generate_tts, get_config
 
 渠道:
-  图像: agentics(登录账号 + 后端 profile) / openrouter(chat completions, modalities=image)
+  图像: agentics(登录账号 + 后端 profile) / openrouter(图像 API POST /images:画幅、分辨率档按在线目录里
+        该模型支持的取;目录没收录的模型走 chat completions, modalities=image)
         / volcengine(方舟 images/generations,Seedream 系列)
         / byteplus(海外 ModelArk,与方舟同构 API)
         / minimax(POST /v1/image_generation,Image-01;参考图仅 1 张 subject_reference)
-        / fal(queue.fal.run 异步队列,托管 Seedream 5.0 Lite/4.5、Nano Banana Pro/2、GPT Image 2.5/2、
-        FLUX.2 Pro/Max、FLUX Kontext Max、Qwen Image 3、HunyuanImage 3.0 等端点;模型 ID 填家族前缀
-        (fal-ai/bytedance/seedream/v5/lite、fal-ai/nano-banana-pro、openai/gpt-image-2.5/flare…),
+        / fal(queue.fal.run 异步队列,托管 Seedream 5.0 Lite/Pro/Flash/4.5、Nano Banana 2.1/Pro/2、
+        GPT Image 2.5 Sunburst/Flare、GPT Image 2、FLUX.3、FLUX.2 Pro/Max、FLUX Kontext Max、Qwen Image 3、
+        HunyuanImage 3.0、Ideogram V4.5 等端点;模型 ID 填家族前缀
+        (fal-ai/bytedance/seedream/v5/lite、google/nano-banana-2.1、openai/gpt-image-2.5/sunburst…),
         无参考图走文生图端点、有 --ref 自动切 edit/multi 端点,填完整端点 ID 则原样使用;
         尺寸/画幅/参考图上限/seed/负面提示词按家族映射;Key 与视频段 Fal 共用,环境变量兜底 FAL_KEY;
         清单以外的模型(设置页「搜索 Fal 模型」选来的)按 Fal 模型目录里该端点的参数表组请求体,见 modules/fal_models.py)
@@ -1597,11 +1599,28 @@ def _avatar_asset_uri(path: str) -> str | None:
     return None
 
 
+def _continuity_asset_resolver(cfg):
+    """长镜头续接素材(前组尾帧图片 / 尾段视频)自动入虚拟人像库的解析函数(modules/ark_assets.py):
+    path → asset://<id> | None。仅火山方舟 + Seedance 2.x 适用(asset:// 只有这条链路认),其余返回 None;
+    资产库未启用、项目长镜头关闭、非续接素材或入库未成时解析为 None,照原方式提交。"""
+    if cfg.get("provider") != "volcengine" or _seedance_gen(cfg.get("model") or "") < 2.0:
+        return None
+    from modules import ark_assets
+
+    def log(msg):
+        print(f"[genmedia] {msg}", file=sys.stderr, flush=True)
+    return lambda path: ark_assets.continuity_asset_uri(
+        path, config_path=CONFIG_PATH, ledger_path=AVATAR_LEDGER_PATH,
+        upload=_storage_upload_url, log=log)
+
+
 # ---------------- 图像:OpenRouter ----------------
 
 # 专用图像 API 目录(/images/models,公开免鉴权):纯出图模型(gpt-image / grok-imagine-image /
 # seedream / recraft / flux 等,output_modalities=["image"])只能走 POST /images,
-# chat/completions 会 404;图文双出模型(gemini-*-image / gpt-5-image)照旧走 chat。
+# chat/completions 会 404。图文双出模型(gemini-*-image / nano-banana / gpt-5-image)两边都能调,
+# 2026-10-10 起也先走 POST /images:画幅和分辨率档只有图像 API 能按参数传(chat 只能写进提示词,
+# 出图一律是模型默认档);图像 API 回 404 时退回 chat。
 _OPENROUTER_IMAGE_CATALOG: tuple[float, dict] | None = None
 _OPENROUTER_IMAGE_CATALOG_TTL = 600
 
@@ -1625,8 +1644,19 @@ def _is_openrouter_image_api_error(e: "_HTTPStatusError") -> bool:
 
 def _image_openrouter(cfg, prompt, negative, refs, width, height, seed):
     info = _openrouter_image_model_info(cfg["model"])
-    if info and ((info.get("architecture") or {}).get("output_modalities") or []) == ["image"]:
+    outs = ((info or {}).get("architecture") or {}).get("output_modalities") or []
+    tried_images_api = False
+    if info and outs == ["image"]:
         return _image_openrouter_images_api(cfg, prompt, negative, refs, width, height, seed, info)
+    if info and "image" in outs:
+        try:
+            return _image_openrouter_images_api(cfg, prompt, negative, refs, width, height, seed, info)
+        except _HTTPStatusError as e:
+            if e.status != 404:
+                raise
+            tried_images_api = True
+            print(f"[genmedia] OpenRouter {cfg['model']} 图像 API 返回 404,改走 chat/completions"
+                  "(画幅与分辨率只能写进提示词,按模型默认档出图)", file=sys.stderr, flush=True)
     content = [{"type": "text", "text": prompt
                 + (f"\nNegative (avoid): {negative}" if negative else "")
                 + f"\nImage size: {width}x{height}"}]
@@ -1641,7 +1671,7 @@ def _image_openrouter(cfg, prompt, negative, refs, width, height, seed):
     except _HTTPStatusError as e:
         # 目录没取到/未收录的纯出图模型:chat 报 404「Use the /api/v1/images endpoint」
         # 或「No endpoints found that support the requested output modalities」,改走图像 API
-        if not _is_openrouter_image_api_error(e):
+        if tried_images_api or not _is_openrouter_image_api_error(e):
             raise
         return _image_openrouter_images_api(cfg, prompt, negative, refs, width, height, seed, info)
     msg = (resp.get("choices") or [{}])[0].get("message") or {}
@@ -1657,8 +1687,35 @@ def _ratio_value(r: str) -> float:
     return float(a) / float(b)
 
 
-def _image_openrouter_images_api(cfg, prompt, negative, refs, width, height, seed, info):
-    """POST /images:按目录 supported_parameters 只发模型支持的字段,比例取最接近的受支持值。"""
+# 分辨率档(1K / 2K / 4K …)面积够得上请求面积的这个比例就算够用,见 _resolution_tier
+RESOLUTION_TIER_SLACK = 0.8
+
+
+def _tier_side(value) -> float | None:
+    """分辨率档名 → 该档的名义边长:"1K" → 1024、"1.5K" → 1536、"768" / "768sq" → 768;认不出返回 None。"""
+    m = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*(k|sq)?\s*", str(value).lower())
+    if not m:
+        return None
+    n = float(m.group(1))
+    return n * 1024 if m.group(2) == "k" else n
+
+
+def _resolution_tier(width: int, height: int, choices) -> str | None:
+    """按请求宽高从模型的分辨率档里挑一档(OpenRouter 图像 API 的 resolution、Fal FLUX.3 的 resolution)。
+    各家的 1K / 2K / 4K 按像素面积分(约 1024² / 2048² / 4096²,具体宽高随画幅变,如 2K 的 16:9 约 2752x1536),
+    所以比面积不比长边:取面积够得上请求(≥ 请求面积 × RESOLUTION_TIER_SLACK)的最小一档,都够不上取最大一档。
+    2560x1440 和 2858x1608 的母图都落 2K,不会因为长边略过 2560 就跳到贵数倍的 4K;请求约 5.2MP 以上才上 4K。"""
+    tiers = sorted(((side * side, c) for c in choices for side in [_tier_side(c)] if side), key=lambda t: t[0])
+    if not tiers:
+        return None
+    need = int(width) * int(height) * RESOLUTION_TIER_SLACK
+    return next((c for area, c in tiers if area >= need), tiers[-1][1])
+
+
+def _openrouter_images_body(cfg, prompt, negative, refs, width, height, seed, info, to_url=None) -> dict:
+    """POST /images 的请求体:按目录 supported_parameters 只发模型支持的字段——比例取最接近的受支持值,
+    分辨率档(2026-10-10 起)按请求宽高取(_resolution_tier);目录没给分辨率档的模型不发,按它的默认档出。"""
+    to_url = to_url or _file_to_data_url
     params = (info or {}).get("supported_parameters") or {}
     body = {"model": cfg["model"],
             "prompt": prompt + (f"\nNegative (avoid): {negative}" if negative else "")}
@@ -1668,11 +1725,22 @@ def _image_openrouter_images_api(cfg, prompt, negative, refs, width, height, see
         body["aspect_ratio"] = min(ratios, key=lambda r: abs(_ratio_value(r) - want))
     elif not params:   # 目录缺失:发归一化比例,由 OpenRouter 按供应商钳制
         body["aspect_ratio"] = _closest_aspect(width, height)
+    tier = _resolution_tier(width, height, (params.get("resolution") or {}).get("values") or [])
+    if tier:
+        body["resolution"] = tier
     if seed is not None and "seed" in params:
         body["seed"] = seed
     if refs:
-        body["input_references"] = [{"type": "image_url", "image_url": {"url": _file_to_data_url(r)}}
-                                    for r in refs]
+        body["input_references"] = [{"type": "image_url", "image_url": {"url": to_url(r)}} for r in refs]
+    return body
+
+
+def _image_openrouter_images_api(cfg, prompt, negative, refs, width, height, seed, info):
+    """POST /images(请求体见 _openrouter_images_body)。"""
+    body = _openrouter_images_body(cfg, prompt, negative, refs, width, height, seed, info)
+    if body.get("resolution"):
+        print(f"[genmedia] OpenRouter {cfg['model']}:请求 {width}x{height} → 画幅 {body.get('aspect_ratio') or '默认'}"
+              f" / 分辨率档 {body['resolution']}", file=sys.stderr, flush=True)
     resp = _post_json((cfg.get("_base_url") or OPENROUTER_DIRECT_BASE) + "/images", body,
                       {"Authorization": f"Bearer {cfg['api_key']}"}, timeout=IMAGE_TIMEOUT)
     data = resp.get("data") or []
@@ -1729,26 +1797,56 @@ def _image_ark(cfg, prompt, negative, refs, width, height, seed):
 
 # ---------------- 图像:Fal(queue.fal.run 异步队列;托管 Seedream / Nano Banana / GPT Image / FLUX.2 / Qwen 等端点) ----------------
 
-# 各家族端点与字段(2026-09-10 按 fal.ai OpenAPI 抄录;模型 ID 存家族前缀,按有无参考图补任务段):
+# 各家族端点与字段(2026-09-10 按 fal.ai OpenAPI 抄录,2026-10-10 对照 Fal 模型目录复核;模型 ID 存家族前缀,
+# 按有无参考图补任务段):
 #   seedream  fal-ai/bytedance/seedream/v5/lite | v4.5  → /text-to-image | /edit;image_size {width,height}
 #             (v5 lite 总像素须在 2560x1440..4096x4096,越界由 Fal 等比缩放);image_urls ≤10;seed;无 output_format
-#   banana    fal-ai/nano-banana-pro | nano-banana-2      → 空 | /edit;aspect_ratio 枚举 + resolution 1K/2K/4K;
-#             image_urls(Pro 官方上限 14);seed;output_format
+#             bytedance/seedream/v5/pro | flash(2026-10-10;目录里 v5 各档的规范 ID 不带 fal-ai/ 前缀,v5 lite 的旧 ID
+#             仍可调用)→ 同上两个任务段;image_size 总像素须在 1024x1024..2048x2048(文档没写越界会缩,
+#             发之前先等比收进范围,见 _fit_area);image_urls ≤10。v5 三档的参数表都没有 seed(发了被忽略,
+#             2026-10-10 用不带 prompt 的请求探过:多余字段不报错),只有 v4.5 的 seed 生效
+#   banana    google/nano-banana-2.1 | fal-ai/nano-banana-pro | fal-ai/nano-banana-2 → 空 | /edit;
+#             aspect_ratio 枚举 + resolution 1K/2K/4K;image_urls(官方上限 14);seed;output_format
 #   gpt       openai/gpt-image-2.5/flare | sunburst      → /text-to-image | /edit;openai/gpt-image-2 → 空 | /edit;
-#             image_size 枚举(square_hd/landscape_16_9…,OpenAI 不接任意宽高);image_urls ≤16;无 seed;output_format
+#             image_size {width,height}(2026-10-10 用户确认,此前只发 square_hd / landscape_16_9 等枚举档):
+#             两边 16 的倍数、长边 ≤3840、长宽比 ≤3:1、总像素 655,360..8,294,400,不合规的请求尺寸先收进约束
+#             (_fit_size);计费随出图尺寸变;image_urls ≤16;无 seed;output_format
+#   flux3     blackforestlabs/flux-3(2026-10-10)        → /text-to-image | /edit-image;aspect_ratio 枚举(含 2:1)
+#             + resolution 512sq/768sq/1k/2k/4k(按像素面积取档,_resolution_tier;4k 出图要几分钟);
+#             image_urls ≤10;无 seed;无负面提示词;output_format jpeg|png
 #   flux2     fal-ai/flux-2-pro | flux-2-max               → 空 | /edit;image_size {width,height};image_urls;seed;output_format jpeg|png
 #   kontext   fal-ai/flux-pro/kontext/max                 → /text-to-image | /multi;aspect_ratio 枚举;image_urls;seed;output_format
 #   qwen      alibaba/qwen-image-3                        → /text-to-image | /edit;image_size {width,height};image_urls 1-3;
 #             seed;negative_prompt(≤500 字);output_format
 #   hunyuan   fal-ai/hunyuan-image/v3                     → /text-to-image(无编辑端点);image_size;seed;negative_prompt;output_format
+#   ideogram  ideogram/v4.5(2026-10-10;只认这一版,其它 Ideogram 端点字段不同,走 generic)→ 空 | /edit;
+#             文生图 image_size {width,height} 只收白名单尺寸(FAL_IDEOGRAM45_SIZES,取画幅最近、其次面积最近的一个);
+#             /edit 必填 image_url(被编辑的底图 = 第一张参考图)+ reference_image_urls ≤4(其余参考图),
+#             image_size 两边 32 的倍数、≥256、总像素 ≤2048x2048、长宽比 ≤6:1;seed;无 output_format
 #   generic   其它端点:先按 Fal 模型目录里该端点的参数表组请求体(_fal_catalog_image_body,2026-10-06);目录里没有
 #             (私有应用等)才用 prompt + image_size {width,height} + seed(+ image_urls),字段不对由 Fal 侧 422 报错
-FAL_IMAGE_TASK_SUFFIXES = ("text-to-image", "edit", "multi", "image-to-image")
+FAL_IMAGE_TASK_SUFFIXES = ("text-to-image", "edit", "multi", "image-to-image", "edit-image")
 FAL_IMAGE_ENUM_SIZES = {"1:1": "square_hd", "4:3": "landscape_4_3", "16:9": "landscape_16_9",
                         "3:4": "portrait_4_3", "9:16": "portrait_16_9"}
 FAL_BANANA_RATIOS = ("21:9", "16:9", "3:2", "4:3", "5:4", "1:1", "4:5", "3:4", "2:3", "9:16")
 FAL_KONTEXT_RATIOS = ("21:9", "16:9", "4:3", "3:2", "1:1", "2:3", "3:4", "9:16", "9:21")
-FAL_IMAGE_MAX_REFS = {"seedream": 10, "banana": 14, "gpt": 16, "qwen": 3}
+FAL_FLUX3_RATIOS = ("21:9", "2:1", "16:9", "3:2", "7:5", "4:3", "5:4", "1:1", "4:5", "3:4", "5:7", "2:3", "9:16", "1:2")
+FAL_FLUX3_TIERS = ("512sq", "768sq", "1k", "2k", "4k")
+FAL_IMAGE_MAX_REFS = {"seedream": 10, "banana": 14, "gpt": 16, "qwen": 3, "flux3": 10, "ideogram": 5}
+# GPT Image 2 / 2.5 的具体宽高约束(Fal 文生图端点参数表,2026-10-10 抄录)
+FAL_GPT_SIZE = {"multiple": 16, "area": (655_360, 8_294_400), "max_edge": 3840, "max_ratio": 3.0}
+# Ideogram V4.5 /edit 的自定义尺寸约束:两边 ≥256(长宽比 ≤6:1 时面积 ≥256x1536 即可保证)、32 的倍数、总像素 ≤2048x2048
+FAL_IDEOGRAM_EDIT_SIZE = {"multiple": 32, "area": (256 * 1536, 2048 * 2048), "max_ratio": 6.0}
+# Ideogram V4.5 文生图只收这些具体尺寸(参数表 image_size 说明里的白名单,2026-10-10 抄录)
+FAL_IDEOGRAM45_SIZES = (
+    (1024, 1024), (2048, 2048), (1120, 896), (2240, 1792), (1152, 864), (2304, 1728), (1248, 832), (2496, 1664),
+    (1280, 800), (2560, 1600), (1280, 720), (2560, 1440), (1440, 720), (2880, 1440), (3072, 1280), (3168, 1296),
+    (2944, 1152), (3328, 1248), (3072, 1024),
+    (896, 1120), (1792, 2240), (864, 1152), (1728, 2304), (832, 1248), (1664, 2496), (800, 1280), (1600, 2560),
+    (720, 1280), (1440, 2560), (720, 1440), (1440, 2880), (1280, 3072), (1296, 3168), (1152, 2944), (1248, 3328),
+    (1024, 3072))
+# Seedream 5.0 Pro / Flash 的 image_size 总像素范围(Fal 参数表 x-fal min_area / max_area)
+FAL_SEEDREAM_2K_AREA = (1024 * 1024, 2048 * 2048)
 
 
 def _fal_image_family(model: str) -> str:
@@ -1763,11 +1861,78 @@ def _fal_image_family(model: str) -> str:
         return "kontext"
     if "flux-2" in m:
         return "flux2"
+    if "flux-3" in m:
+        return "flux3"
+    if "ideogram/v4.5" in m:
+        return "ideogram"
     if "qwen-image" in m:
         return "qwen"
     if "hunyuan-image" in m:
         return "hunyuan"
     return "generic"
+
+
+def _fal_seedream_2k(model: str) -> bool:
+    """Fal 上出图总像素封顶 2048x2048 的 Seedream 档(5.0 Pro / Flash);5.0 Lite 与 4.5 到 4096x4096。"""
+    m = (model or "").lower()
+    return "seedream/v5/pro" in m or "seedream/v5/flash" in m
+
+
+def _fit_area(width: int, height: int, lo: int, hi: int) -> tuple[int, int]:
+    """把宽高等比缩放到总像素落在 [lo, hi] 内(偶数边);本来就在范围内的原样返回。"""
+    width, height = int(width), int(height)
+    area = width * height
+    if lo <= area <= hi:
+        return width, height
+    grow = area < lo
+    scale = ((lo if grow else hi) / area) ** 0.5
+
+    def even(v: float) -> int:      # 缩小向下取偶(不超上限),放大向上取偶(不低于下限)
+        n = int(v) // 2 * 2
+        return n + 2 if grow and n < v else max(2, n)
+    return even(width * scale), even(height * scale)
+
+
+def _fit_size(width: int, height: int, *, multiple: int, area: tuple[int, int], max_edge: int = 0,
+              max_ratio: float = 0.0) -> tuple[int, int]:
+    """把宽高收进一个端点对具体尺寸的约束:长宽比 ≤ max_ratio、总像素在 area 内、长边 ≤ max_edge、
+    两边是 multiple 的倍数。尽量保持原画幅;本来就满足的原样返回。"""
+    w, h = float(width), float(height)
+    lo, hi = area
+    if max_ratio and max(w, h) / min(w, h) > max_ratio:        # 过扁 / 过长:保面积收到上限比例
+        long_side, short_side = (w * h * max_ratio) ** 0.5, (w * h / max_ratio) ** 0.5
+        w, h = (long_side, short_side) if w >= h else (short_side, long_side)
+    scale = (hi / (w * h)) ** 0.5 if w * h > hi else (lo / (w * h)) ** 0.5 if w * h < lo else 1.0
+    if max_edge and max(w, h) * scale > max_edge:
+        scale = max_edge / max(w, h)
+    m = int(multiple)
+    wi, hi_ = max(m, round(w * scale / m) * m), max(m, round(h * scale / m) * m)
+    for _ in range(64):                                         # 取整后可能刚好越界:一次挪一格到合规为止
+        wide = wi >= hi_
+        if wi * hi_ > hi or (max_edge and max(wi, hi_) > max_edge):
+            wi, hi_ = (wi - m, hi_) if wide else (wi, hi_ - m)
+        elif wi * hi_ < lo:
+            grow_long = not (max_edge and max(wi, hi_) + m > max_edge)
+            wi, hi_ = (wi + m, hi_) if wide == grow_long else (wi, hi_ + m)
+        elif max_ratio and max(wi, hi_) / min(wi, hi_) > max_ratio:
+            wi, hi_ = (wi, hi_ + m) if wide else (wi + m, hi_)
+        else:
+            break
+    return int(wi), int(hi_)
+
+
+def _fal_ideogram45_size(width: int, height: int) -> tuple[int, int]:
+    """Ideogram V4.5 文生图的白名单尺寸里,画幅最接近、其次面积最接近请求的一个。"""
+    ratio, area = width / height, width * height
+
+    def off(a: float, b: float) -> float:
+        return max(a / b, b / a)
+    return min(FAL_IDEOGRAM45_SIZES, key=lambda s: (round(off(s[0] / s[1], ratio), 2), off(s[0] * s[1], area)))
+
+
+def _fal_size_note(model: str, width: int, height: int, w: int, h: int, why: str) -> None:
+    if (w, h) != (int(width), int(height)):
+        print(f"[genmedia] Fal {model}:{width}x{height} {why},已调整为 {w}x{h}", file=sys.stderr, flush=True)
 
 
 def _fal_image_endpoint(model: str, family: str, has_refs: bool) -> str:
@@ -1783,9 +1948,11 @@ def _fal_image_endpoint(model: str, family: str, has_refs: bool) -> str:
         return f"{mid}/text-to-image"
     if family == "kontext":
         return f"{mid}/multi" if has_refs else f"{mid}/text-to-image"
+    if family == "flux3":
+        return f"{mid}/edit-image" if has_refs else f"{mid}/text-to-image"
     if family in ("seedream", "qwen") or (family == "gpt" and "2.5" in mid):
         return f"{mid}/edit" if has_refs else f"{mid}/text-to-image"
-    if family in ("banana", "gpt", "flux2"):
+    if family in ("banana", "gpt", "flux2", "ideogram"):
         return f"{mid}/edit" if has_refs else mid
     return f"{mid}/edit" if has_refs else mid
 
@@ -1848,17 +2015,40 @@ def _fal_image_body(cfg, prompt, negative, refs, width, height, seed, output="",
         body["aspect_ratio"] = _closest_ratio(width, height, FAL_BANANA_RATIOS)
         long_side = max(width, height)
         body["resolution"] = "1K" if long_side <= 1280 else "2K" if long_side <= 2560 else "4K"
+    elif family == "flux3":
+        body["aspect_ratio"] = _closest_ratio(width, height, FAL_FLUX3_RATIOS)
+        body["resolution"] = _resolution_tier(width, height, FAL_FLUX3_TIERS)
     elif family == "kontext":
         body["aspect_ratio"] = _closest_ratio(width, height, FAL_KONTEXT_RATIOS)
     elif family == "gpt":
-        body["image_size"] = FAL_IMAGE_ENUM_SIZES[_closest_ratio(width, height, FAL_IMAGE_ENUM_SIZES)]
+        w, h = _fit_size(width, height, **FAL_GPT_SIZE)
+        _fal_size_note(model, width, height, w, h, "不合 GPT Image 的尺寸约束(两边 16 的倍数、长边 ≤3840、"
+                       "长宽比 ≤3:1、总像素 655,360 至 8,294,400)")
+        body["image_size"] = {"width": w, "height": h}
+    elif family == "ideogram":
+        if refs:
+            w, h = _fit_size(width, height, **FAL_IDEOGRAM_EDIT_SIZE)
+            _fal_size_note(model, width, height, w, h, "不合 Ideogram V4.5 编辑端点的尺寸约束(两边 32 的倍数、"
+                           "不小于 256、总像素不超过 2048x2048)")
+        else:
+            w, h = _fal_ideogram45_size(width, height)
+            _fal_size_note(model, width, height, w, h, "不在 Ideogram V4.5 文生图支持的尺寸里,取最接近的一个")
+        body["image_size"] = {"width": w, "height": h}
     else:
-        body["image_size"] = {"width": int(width), "height": int(height)}
-    if seed is not None and family != "gpt":
+        w, h = int(width), int(height)
+        if family == "seedream" and _fal_seedream_2k(model):
+            w, h = _fit_area(w, h, *FAL_SEEDREAM_2K_AREA)
+            _fal_size_note(model, width, height, w, h, "不在该模型出图范围(总像素 1024x1024 至 2048x2048)内")
+        body["image_size"] = {"width": w, "height": h}
+    if seed is not None and family not in ("gpt", "flux3"):
         body["seed"] = seed
-    if fmt in ("png", "jpeg", "webp") and family != "seedream":
-        body["output_format"] = "png" if (fmt == "webp" and family in ("flux2", "kontext")) else fmt
-    if refs:
+    if fmt in ("png", "jpeg", "webp") and family not in ("seedream", "ideogram"):
+        body["output_format"] = "png" if (fmt == "webp" and family in ("flux2", "kontext", "flux3")) else fmt
+    if refs and family == "ideogram":
+        body["image_url"] = to_url(refs[0])                     # 编辑端点的必填底图
+        if refs[1:]:
+            body["reference_image_urls"] = [to_url(r) for r in refs[1:]]
+    elif refs:
         body["image_urls"] = [to_url(r) for r in refs]
     return endpoint, body
 
@@ -3870,8 +4060,10 @@ _ARK_SEEDREAM_4K_RE = re.compile(r"seedream-(?:4-0|4-5|5-0(?:-lite)?)-\d{6}$")
 
 def image_max_pixels(cfg: dict) -> int | None:
     """生效图像渠道/模型单张出图的像素面积上限(「按所选模型的最高分辨率出图」用,如分镜背景图的九宫格整图);
-    None = 上限未知或该渠道不按请求宽高出图(OpenRouter / MiniMax 只收比例、GPT Image 只收枚举档、ComfyUI 原生
-    latent 另有上限等),调用方用自己的保守默认。没列进来的方舟模型(含自定义模型 ID)也按未知处理,不猜。"""
+    None = 上限未知或该渠道不按请求宽高出图(OpenRouter 只收比例 + 分辨率档、MiniMax 只收比例、ComfyUI 原生
+    latent 另有上限等),调用方用自己的保守默认。没列进来的方舟模型(含自定义模型 ID)也按未知处理,不猜。
+    Fal 的 GPT Image(上限 3840x2160)、FLUX.3(最高 4k 档)、Ideogram V4.5 也返回 None:九宫格是否按它们的
+    最高分辨率出(费用、耗时都高)用户没定过,先用默认面积。"""
     provider = cfg.get("provider")
     model = str(cfg.get("model") or "").strip().lower()
     if provider in ("volcengine", "byteplus"):
@@ -3881,10 +4073,189 @@ def image_max_pixels(cfg: dict) -> int | None:
             return IMAGE_MAX_PIXELS_4K
         return None
     if provider == "fal":
-        # seedream:Fal 文档口径总像素 2560x1440..4096x4096;banana:resolution 枚举最高 4K(_fal_image_body 按长边 > 2560 取 4K 档)
+        # seedream:Fal 文档口径 5.0 Lite / 4.5 总像素到 4096x4096,5.0 Pro / Flash 到 2048x2048;
+        # banana:resolution 枚举最高 4K(_fal_image_body 按长边 > 2560 取 4K 档)
+        if _fal_seedream_2k(model):
+            return FAL_SEEDREAM_2K_AREA[1]
         if _fal_image_family(model) in ("seedream", "banana"):
             return IMAGE_MAX_PIXELS_4K
     return None
+
+
+# ---------------- 画板(modules/image_canvas.py,2026-10-10):出图尺寸约束 + 保真超分 ----------------
+# image_size_limits:生效图像渠道 / 模型按请求宽高出图时的尺寸约束。画板「放大」据此显示「该模型最大宽高」,编辑时把请求尺寸收进范围。
+#   {"mode": "pixels", "max_pixels", "min_pixels", "multiple", "max_edge", "max_ratio", "basis"}  按具体宽高出图,给了面积 / 边长上限
+#   {"mode": "tiers", "tiers": [...], "rule": "area" | "long_edge", "basis"}                    只收分辨率档,实际像素由模型定
+#   {"mode": "unknown"}                                                                        上限未知(不猜)
+# basis:measured = 逐个模型实测过(火山 / BytePlus,见 image_max_pixels);doc = 抄自渠道参数表,没实测。
+IMAGE_TIER_LONG_EDGE = {"1K": 1280, "2K": 2560, "4K": 3840}     # 按长边分档的渠道(Fal Nano Banana)各档的请求长边
+ARK_SEEDREAM5_MIN_PIXELS = 3_686_400
+
+
+def image_size_limits(cfg: dict) -> dict:
+    provider = cfg.get("provider")
+    model = str(cfg.get("model") or "").strip()
+    if provider in ("volcengine", "byteplus"):
+        cap = image_max_pixels(cfg)
+        # Seedream 5.x 出图下限 3,686,400 像素(2560x1440 当量;与故事板草图 sketch_size 同口径):小图编辑时请求按这个下限出,结果再对回底图尺寸
+        lo = ARK_SEEDREAM5_MIN_PIXELS if "seedream-5" in model.lower() else 0
+        return {"mode": "pixels", "max_pixels": cap, "min_pixels": lo, "multiple": 2, "basis": "measured"} if cap else {"mode": "unknown"}
+    if provider == "fal":
+        family = _fal_image_family(model)
+        if family == "seedream":
+            lo, hi = FAL_SEEDREAM_2K_AREA if _fal_seedream_2k(model) else (0, IMAGE_MAX_PIXELS_4K)
+            return {"mode": "pixels", "max_pixels": hi, "min_pixels": lo, "multiple": 2, "basis": "doc"}
+        if family == "gpt":
+            return {"mode": "pixels", "max_pixels": FAL_GPT_SIZE["area"][1], "min_pixels": FAL_GPT_SIZE["area"][0],
+                    "multiple": FAL_GPT_SIZE["multiple"], "max_edge": FAL_GPT_SIZE["max_edge"],
+                    "max_ratio": FAL_GPT_SIZE["max_ratio"], "basis": "doc"}
+        if family == "ideogram":      # 画板总带原图作参考,走 /edit 端点的约束
+            return {"mode": "pixels", "max_pixels": FAL_IDEOGRAM_EDIT_SIZE["area"][1], "min_pixels": FAL_IDEOGRAM_EDIT_SIZE["area"][0],
+                    "multiple": FAL_IDEOGRAM_EDIT_SIZE["multiple"], "max_ratio": FAL_IDEOGRAM_EDIT_SIZE["max_ratio"], "basis": "doc"}
+        if family == "banana":
+            return {"mode": "tiers", "tiers": ["1K", "2K", "4K"], "rule": "long_edge", "basis": "doc"}
+        if family == "flux3":
+            return {"mode": "tiers", "tiers": list(FAL_FLUX3_TIERS), "rule": "area", "basis": "doc"}
+        return {"mode": "unknown"}
+    if provider == "openrouter":
+        info = _openrouter_image_model_info(model)
+        tiers = [t for t in ((((info or {}).get("supported_parameters") or {}).get("resolution") or {}).get("values") or [])
+                 if _tier_side(t)]
+        if tiers:
+            return {"mode": "tiers", "tiers": sorted(tiers, key=_tier_side), "rule": "area", "basis": "doc"}
+    return {"mode": "unknown"}
+
+
+def image_max_size(limits: dict, width: int, height: int) -> tuple[int, int] | None:
+    """按具体宽高出图的模型在这个画幅下的最大宽高(向下取到 multiple 的倍数);分档 / 未知的模型返回 None。"""
+    if limits.get("mode") != "pixels" or not limits.get("max_pixels"):
+        return None
+    w, h = float(width), float(height)
+    ratio = limits.get("max_ratio") or 0
+    if ratio and max(w, h) / min(w, h) > ratio:
+        return None                                        # 画幅超出该模型允许的长宽比:不给上限,由调用方提示
+    scale = (limits["max_pixels"] / (w * h)) ** 0.5
+    if limits.get("max_edge"):
+        scale = min(scale, limits["max_edge"] / max(w, h))
+    m = max(1, int(limits.get("multiple") or 1))
+    return max(m, int(w * scale) // m * m), max(m, int(h * scale) // m * m)
+
+
+def image_tier_size(limits: dict, tier: str, width: int, height: int) -> tuple[int, int]:
+    """分档模型:要落进某一档,按当前画幅该请求多大的宽高(area 规则按该档名义面积,long_edge 规则按该档长边)。"""
+    ratio = width / height
+    if limits.get("rule") == "long_edge":
+        long_edge = IMAGE_TIER_LONG_EDGE.get(str(tier).upper()) or int(_tier_side(tier) or 1024)
+        w, h = (long_edge, long_edge / ratio) if ratio >= 1 else (long_edge * ratio, long_edge)
+    else:
+        side = _tier_side(tier) or 1024
+        w, h = (side * side * ratio) ** 0.5, (side * side / ratio) ** 0.5
+    return max(2, int(round(w / 2)) * 2), max(2, int(round(h / 2)) * 2)
+
+
+def fit_image_request(limits: dict, width: int, height: int) -> tuple[int, int]:
+    """把一个想要的宽高收进模型约束(只对 pixels 模式生效,其余原样;各渠道自己的请求体整形照常再走一遍)。"""
+    if limits.get("mode") != "pixels" or not limits.get("max_pixels"):
+        return int(width), int(height)
+    return _fit_size(width, height, multiple=max(1, int(limits.get("multiple") or 1)),
+                     area=(int(limits.get("min_pixels") or 0) or 1, int(limits["max_pixels"])),
+                     max_edge=int(limits.get("max_edge") or 0), max_ratio=float(limits.get("max_ratio") or 0))
+
+
+# 保真超分:不重画内容的专用超分模型,与「图像模型重绘放大」并列。local = 本机 Lanczos 插值(不新增细节,免费)。
+# Fal 各端点的字段抄自 Fal 模型目录参数表(2026-10-10,api.fal.ai/v1/models?endpoint_id=…&expand=openapi-3.0),没有真实出图实测:
+#   fal-ai/seedvr/upscale/image       image_url + upscale_mode=factor + upscale_factor 1..10 + output_format png|jpg|webp
+#   topaz/upscale/image/precision     image_url + upscale_factor 1..4 + output_format jpeg|png(model 等其余参数用默认)
+#   fal-ai/esrgan                     image_url + scale 1..8 + output_format png|jpeg
+#   fal-ai/aura-sr                    image_url(固定 4 倍,不发倍率)
+#   bria/increase-resolution          image_url + desired_increase 2|4 + output_type png|jpeg
+# 模型返回的图比目标大时宿主再用 Lanczos 缩到目标尺寸(固定 4 倍的模型做 2 倍放大就是这么来的);比目标小就按它实际给的尺寸存,不拿插值凑数。
+IMAGE_UPSCALERS = (
+    {"id": "local", "provider": "local", "label": "本机插值(Lanczos)", "max_factor": 8},
+    {"id": "fal-ai/seedvr/upscale/image", "provider": "fal", "label": "SeedVR2", "max_factor": 10,
+     "factor_key": "upscale_factor", "extra": {"upscale_mode": "factor"}, "format_key": "output_format"},
+    {"id": "topaz/upscale/image/precision", "provider": "fal", "label": "Topaz Precision", "max_factor": 4,
+     "factor_key": "upscale_factor", "format_key": "output_format"},
+    {"id": "fal-ai/esrgan", "provider": "fal", "label": "Real-ESRGAN", "max_factor": 8,
+     "factor_key": "scale", "format_key": "output_format"},
+    {"id": "fal-ai/aura-sr", "provider": "fal", "label": "AuraSR", "max_factor": 4, "fixed_factor": 4},
+    {"id": "bria/increase-resolution", "provider": "fal", "label": "Bria Increase Resolution", "max_factor": 4,
+     "factor_key": "desired_increase", "factor_enum": (2, 4), "format_key": "output_type"},
+)
+
+
+def _fal_key_any() -> str:
+    """Fal Key:图像 / 视频段任一段填过的,或环境变量;没有返回空串。"""
+    try:
+        return _fal_reclaim_key()
+    except RuntimeError:
+        return ""
+
+
+def image_upscalers() -> list[dict]:
+    """保真超分可选项(画板「放大」页),带 configured:Fal 的几项要有 Fal Key。"""
+    fal = bool(_fal_key_any())
+    return [{"id": u["id"], "provider": u["provider"], "label": u["label"], "max_factor": u["max_factor"],
+             "fixed_factor": u.get("fixed_factor"), "configured": u["provider"] == "local" or fal} for u in IMAGE_UPSCALERS]
+
+
+def _fal_upscale_body(spec: dict, image_url: str, factor: float) -> dict:
+    body = {"image_url": image_url, **(spec.get("extra") or {})}
+    key = spec.get("factor_key")
+    if key and not spec.get("fixed_factor"):
+        enum = spec.get("factor_enum")
+        if enum:
+            body[key] = min([e for e in enum if e >= factor] or [max(enum)])
+        else:
+            body[key] = round(min(max(float(factor), 1.0), float(spec["max_factor"])), 3)
+    if spec.get("format_key"):
+        body[spec["format_key"]] = "png"
+    return body
+
+
+def upscale_image(src: str, output: str, upscaler: str, width: int, height: int) -> dict:
+    """保真超分一张图到目标宽高,结果写 output(PNG;调用方按自己的编码约定再存)。
+    返回 {provider, model, factor, model_size: [w, h], size: [w, h]}。"""
+    from PIL import Image
+    spec = next((u for u in IMAGE_UPSCALERS if u["id"] == upscaler), None)
+    if not spec:
+        raise RuntimeError(f"未知的超分模型:{upscaler}(可选 {', '.join(u['id'] for u in IMAGE_UPSCALERS)})")
+    with Image.open(src) as im:
+        im.load()
+        sw, sh = im.size
+        source = im.copy()
+    width, height = int(width), int(height)
+    factor = max(width / sw, height / sh)
+    if factor <= 1.0:
+        raise RuntimeError(f"目标尺寸 {width}x{height} 没有比原图 {sw}x{sh} 大")
+    if factor > spec["max_factor"] + 1e-6:
+        raise RuntimeError(f"{spec['label']} 最多放大 {spec['max_factor']} 倍,这次要 {factor:.2f} 倍")
+    Path(output).parent.mkdir(parents=True, exist_ok=True)
+    if spec["provider"] == "local":
+        source.resize((width, height), Image.LANCZOS).save(output, "PNG")
+        return {"provider": "local", "model": "lanczos", "factor": round(factor, 3), "model_size": [width, height], "size": [width, height]}
+    key = _fal_key_any()
+    if not key:
+        raise RuntimeError("保真超分的 Fal 模型需要 Fal API Key:请在「🎨 生成模型」页图像或视频的 Fal 标签页填入")
+    body = _fal_upscale_body(spec, _file_to_data_url(src), factor)
+    print(f"[genmedia] Fal 超分 {spec['id']}:{sw}x{sh} → 目标 {width}x{height}"
+          f"({'固定 ' + str(spec['fixed_factor']) + ' 倍' if spec.get('fixed_factor') else '倍率 ' + str(body.get(spec.get('factor_key') or ''))})",
+          file=sys.stderr, flush=True)
+    res = _fal_queue_run({"api_key": key}, spec["id"], body, IMAGE_TIMEOUT, Path(output).name, kind="图像", output=output)
+    image = res.get("image") if isinstance(res.get("image"), dict) else ((res.get("images") or [None])[0])
+    url = image.get("url") if isinstance(image, dict) else ""
+    if not url:
+        raise RuntimeError(f"Fal 超分任务成功但无图像 URL:{json.dumps(res, ensure_ascii=False)[:400]}")
+    data = _decode_data_url(url)
+    _pending_task_clear(output)
+    import io
+    got = Image.open(io.BytesIO(data))
+    got.load()
+    model_size = list(got.size)
+    if got.size[0] * got.size[1] > width * height * 1.02:
+        got = got.resize((width, height), Image.LANCZOS)
+    got.save(output, "PNG")
+    return {"provider": "fal", "model": spec["id"], "factor": round(factor, 3), "model_size": model_size, "size": list(got.size)}
 
 
 def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
@@ -4289,11 +4660,14 @@ def _draft_mode_active(cfg, resolution: str) -> bool:
 
 def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed,
                     refs, audio_refs, gen_audio, want_last_frame,
-                    video_refs=None, to_url=None, video_to_url=None, draft=False):
+                    video_refs=None, to_url=None, video_to_url=None, draft=False,
+                    asset_uri_for=None):
     """构造方舟视频任务请求体(独立函数便于 dry-run 校验;to_url 可替换文件内联逻辑,
     video_to_url 单独指定参考视频的 URL 化方式——方舟要求 reference_video 为公网 URL)。
     draft=True 为 Seedance 2.5 样片模式:请求体顶层 draft=true + resolution=480p(官方样例写法),
-    文本参数串里不再重复 --resolution,避免两处分辨率冲突。"""
+    文本参数串里不再重复 --resolution,避免两处分辨率冲突。
+    asset_uri_for(path) → asset://<id> | None:参数校验通过后逐份解析参考图/参考视频的资产 URI
+    (长镜头续接素材自动入虚拟人像库,见 _continuity_asset_resolver;dry-run 不传,不入库)。"""
     to_url = to_url or _file_to_data_url
     video_to_url = video_to_url or to_url
     gen = _seedance_gen(cfg["model"])
@@ -4338,15 +4712,17 @@ def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
             raise RuntimeError(_avatar_required_msg(
                 path, f"当前模型 {cfg['model']} 不支持 asset:// 资产 URI(仅 Seedance 2.x 支持),"
                       "可换用 Seedance 2.x 视频模型"))
-        asset_uri = _avatar_asset_uri(path) if is_v2 else None
+        asset_uri = ((asset_uri_for(path) if asset_uri_for else None)
+                     or (_avatar_asset_uri(path) if is_v2 else None))
         if asset_uri:
             print(f"[genmedia] 参考图已入虚拟人像库,以资产 URI 提交:"
                   f"{Path(path).name} → {asset_uri}", file=sys.stderr, flush=True)
         content.append({"type": "image_url", "role": "reference_image",
                         "image_url": {"url": asset_uri or to_url(path)}})
     for path in video_refs or []:
+        asset_uri = asset_uri_for(path) if asset_uri_for else None
         content.append({"type": "video_url", "role": "reference_video",
-                        "video_url": {"url": video_to_url(path)}})
+                        "video_url": {"url": asset_uri or video_to_url(path)}})
     for path in audio_refs or []:
         content.append({"type": "audio_url", "role": "reference_audio",
                         "audio_url": {"url": to_url(path)}})
@@ -4510,7 +4886,8 @@ def _video_ark(cfg, prompt, first, last, duration, resolution, aspect, seed, out
     draft = _draft_mode_active(cfg, resolution)
     body = _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed,
                            refs, audio_refs, gen_audio, bool(return_last_frame),
-                           video_refs=video_refs, video_to_url=_storage_upload_url, draft=draft)
+                           video_refs=video_refs, video_to_url=_storage_upload_url, draft=draft,
+                           asset_uri_for=_continuity_asset_resolver(cfg))
     if draft:
         print("[genmedia] Seedance 2.5 样片模式(draft=true,480p):成片阶段按本任务 ID 生成 1080p 原片",
               file=sys.stderr, flush=True)

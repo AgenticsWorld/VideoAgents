@@ -13,6 +13,7 @@
 
 1. 读本镜的 storyboard 草描与 `shot_list.json` 条目(景别、机位、出场角色),细化为精确构图:主体在九宫格的位置、水平线/垂直线关系。
 2. 分层:前景/中景/背景各放什么(引用 blocking 的人物与 prop/scene 元素),写明遮挡与框架关系。
+2A. **NPC 氛围层(2026-10-09,docs/npc_staging.md)**【仅当本镜在镜头表 / 故事板草案带 `npc[]`(所在场次 NPC 参与构图生效为开)时适用】:把 `npc[]` 每条写进 `layers` 对应层(fg/mg/bg 字符串里写明「虚焦路人剪影」「两三个挑担路人从画右走过」这类无名描述,不写人名、不写 CHAR id),与该层原有的道具/建筑描述并列;约束:NPC 不占主体所在的九宫格位置、不挡主体视线方向的留白(lead room)、景深比主体虚、近景里不露正脸、不与主体互动。白模开启项目里 `layers` 会被宿主原样写进视频提示词「构图层次」句,写法要能直接被视频模型执行。机检 npc_layers_bound(`python3 code/npc_staging.py --project <slug> --ep epNN --check composition`):带 `npc[]` 的镜,对应层不得为空。
 3. 定视线方向与留白:人物看向哪、视线空间(lead room)与头顶空间(headroom)留多少;对话镜标注正反打的视线匹配。
 4. 遵守 `bible/aspect_ratio.json` 的画幅与安全区:关键信息不进平台 UI 遮挡区。
 5. 产出 `directing/epNN/shots/<shot_id>/composition.json`,可执行性交 visual-qa 预审。

@@ -11,7 +11,7 @@
 
 ## 职责
 
-1. 依据 `personality.json`(气质/性格)与 `appearance.json`(**性别**、年龄段/体型)推导声音画像:音色(受控枚举,如清朗/沙哑/低沉)、基准音高、基准语速区间(字/分钟)、口音或方言倾向。
+1. 依据 `personality.json`(气质/性格)与 `appearance.json`(**性别**、年龄段/体型)推导声音画像:音色(受控枚举,如清朗/沙哑/低沉)、基准音高、基准语速区间(字/分钟;台词是英文等拉丁文字的项目另写 `speed_wpm` 词/分钟,时间尺按它估英文台词,见 docs/time_cost.md)、口音或方言倾向。
 2. **性别硬约束(2026-07-20)**:声纹卡必须回填 `gender`(照抄 appearance.json,不得自定),timbre/pitch/reference_style 与 gender 一致——男角配女声或反之(无易装设定依据)= 机检退回,不靠文字描述碰运气。角色有 `presented_gender` 时:常态声线按对外呈现口径设定(如女扮男装压低音区),须在 `reference_style` 写明伪装处理方式,并在 `emotion_range` 或备注中给出「身份揭露/独处」场景的真声偏移口径。
 3. 给出可检索的参考声线描述(声线标签,供 TTS 选型),不绑定具体真人音源——音源版权由 `11-qa/copyright` 审。**声学字段即生成指令(2026-08-31)**:TTS 走火山 seed-audio-1.0 描述定制嗓音时,`gender/pitch/timbre/accent`(含 age_variants 分版同名字段)会被逐字拼进「按描述生成嗓音」的 prompt——这四个字段只写**纯声学描述**,剧情叙述/出处考据只落 `reference_style` 与 note(不进 prompt);字段写得含糊=生成的嗓子含糊。
 4. 标注情绪态偏移范围:常态/激动/低语时语速与音高的允许偏移区间,供逐句配音按剧本情绪标签调用。
@@ -73,7 +73,7 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
-- 字段齐:**gender** / timbre / pitch / speed_cpm / accent / reference_style 必填;`gender` 与 appearance.json 一致(gender_match,2026-07-20),音色性别与之匹配(有 presented_gender 的按呈现口径核对);
+- 字段齐:**gender** / timbre / pitch / speed_cpm / accent / reference_style 必填(仅当项目台词是英文等拉丁文字时另加 `speed_wpm` 必填,中文项目不写);`gender` 与 appearance.json 一致(gender_match,2026-07-20),音色性别与之匹配(有 presented_gender 的按呈现口径核对);
 - `character_id` 在 index.json 中合法(G3);
 - 原文有嗓音描写的,卡内取值不得与之冲突(有 source_chapter 佐证);
 - 有 age_versions 的角色,age_variants 区间与其一致;每个分版有 `variant` 与 `chapter_range`,各分版章节区间互不重叠。

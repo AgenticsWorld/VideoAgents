@@ -17,10 +17,12 @@ pytest
   out of commits.
 - Add focused tests for shared behavior and user-facing workflows.
 - Preserve backward compatibility for existing project artifacts when practical.
-- Identify modified files and retain `LICENSE` and `NOTICE` when redistributing.
+- When redistributing, keep `LICENSE` and `NOTICE` intact, mark modified files
+  with the date of the change, and provide the corresponding source under
+  GPL-3.0-only.
 
 ## Pull Requests
 
 Describe the behavior change, its motivation, verification performed, and any
 migration impact. Keep unrelated refactors out of the same pull request. By
-submitting a contribution, you agree that it is licensed under Apache-2.0.
+submitting a contribution, you agree that it is licensed under GPL-3.0-only.

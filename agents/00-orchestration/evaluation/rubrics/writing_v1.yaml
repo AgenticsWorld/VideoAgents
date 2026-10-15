@@ -7,7 +7,7 @@ threshold: 80
 dimensions:
   - name: 忠实原著
     weight: 15
-    check: 关键因果与人物动机不走样;为节奏做的带过/并入/删减(episode_plan treatments、adaptation_note)有标注即不扣分——只罚改错,不罚改少
+    check: 关键因果与人物动机不走样;为节奏做的带过/并入/删减(episode_plan treatments、adaptation_note)有标注即不扣分——只罚改错,不罚改少。衍生模式(episode_plan 顶层 derivative_mode true,2026-10-09)没有原著事件可对,改评「世界观忠实」:借用的世界观事实(Bible 设定、地理、制度、人物身份与关系)不走样、不与原著硬冲突,不因「没演原著情节」扣分
     anchors: { 95: 演出的情节原著党挑不出硬伤且取舍有据, 80: 改编点均有标注且不伤主线因果, 60: 关键情节走样或删掉了因果链上的事件 }
   - name: 戏剧性
     weight: 35

@@ -5,6 +5,8 @@
 emotion.intensity ∈ [0,1]、时长字段非负、tempo 受控枚举、每句台词有 speaker/text、旁白锚点
 在场次表内、场景/人物 ID 对照 bible 索引(WARN)、总估时与预算偏差 >10%(WARN)。
 另与推导视图(modules/script_breakdown.derive)对拍:拆解表场次数明显少于剧本解析出的场次数时 WARN。
+npc_judged(2026-10-09,docs/npc_staging.md):项目「NPC 参与构图」总开关不是 off 时,每场须有 npc {on, density, reason}
+判定(格式错 = FAIL;缺判定 = FAIL,2026-10-09 之前产出的存量拆解表只 WARN)。
 
 用法:python3 code/check_script_breakdown.py --project <slug> --ep ep01 [--strict] [--json]
 退出码:0 PASS(--strict 时 WARN 也算失败)、1 FAIL、2 文件缺失。
@@ -15,6 +17,7 @@ import sys
 
 from _common import parse_args
 
+from modules import npc_staging as npc
 from modules import script_breakdown as sb
 
 
@@ -31,6 +34,9 @@ def main() -> int:
         print(f"FAIL {path.relative_to(root)}: JSON 无法解析")
         return 1
     errors, warns = sb.validate(data, base=root, ep=args.ep)
+    n_err, n_warn = npc.check_judgments(root, args.ep, data, path.stat().st_mtime)
+    errors += [e for e in n_err if e not in errors]
+    warns += n_warn
     derived = sb.derive(root, args.ep)
     n_agent, n_derived = len(data.get("scenes") or []), len(derived.get("scenes") or [])
     if n_derived and n_agent < n_derived * 0.6:

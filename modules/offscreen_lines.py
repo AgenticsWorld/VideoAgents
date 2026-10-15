@@ -31,6 +31,11 @@ import subprocess
 import time
 from pathlib import Path
 
+try:
+    from modules.entity_ids import extract_actor_id
+except ImportError:                                      # 脚本直跑时无包前缀
+    from entity_ids import extract_actor_id
+
 SCHEMA = "offscreen_lines/v1"
 MANIFEST = "offscreen_manifest.json"
 LIB_REL = "assets/audio/voice/{ep}/offscreen"
@@ -41,7 +46,6 @@ GAP_S = 0.3                 # 同一窗口多句画外之间的间隔
 PLAN_FACTOR = 1.15          # 估时级:est × 1.15 ≤ 可用窗口(同旁白 narration_window_gte_est_x1.15)
 FIT_FACTOR = 0.9            # 实测级:实测 ≤ 可用窗口 × 0.9(同 narration_fit 留呼吸空隙)
 MIN_WINDOW_S = 0.5
-_ID_RE = re.compile(r"((?:CHAR|CRE)-\d+)")
 
 # 声处理预设:ffmpeg -af 滤镜链(干声 → .fx.wav)。plain 只做重采样;电话=窄带 + 压缩;隔门=低通 + 衰减 + 短回声;
 # 远处=低通 + 衰减 + 较长回声;内心=贴耳(轻压缩)+ 淡混响;回忆=低通 + 长混响(与 inner 区分:更远、更虚)
@@ -228,9 +232,9 @@ def audio_plan_ok(actual: str, expected: str) -> bool:
 
 def _speaker_id(ln: dict) -> str:
     for k in ("speaker", "char", "character_id", "speaker_char"):
-        m = _ID_RE.search(str(ln.get(k) or ""))
-        if m:
-            return m.group(1)
+        cid = extract_actor_id(ln.get(k))          # 编号口径见 modules/entity_ids(#117)
+        if cid:
+            return cid
     return ""
 
 
@@ -268,7 +272,7 @@ def group_timeline(sl: dict) -> tuple[dict, dict]:
     return shots_by_id, info
 
 
-def _line_est(base: Path, ln: dict, speaker: str, cpms: dict) -> float:
+def _line_est(base: Path, ln: dict, speaker: str, cpms: dict, wpms: dict | None = None) -> float:
     e = _f(ln.get("est_duration_s"))
     if e and e > 0:
         return round(e, 2)
@@ -277,7 +281,8 @@ def _line_est(base: Path, ln: dict, speaker: str, cpms: dict) -> float:
             from modules import time_cost as tc
         except ImportError:
             import time_cost as tc
-        return tc.line_est(line_text(ln), str(ln.get("pace") or "") or tc.guess_pace(str(ln.get("emotion") or "")), cpms.get(speaker))
+        return tc.line_est(line_text(ln), str(ln.get("pace") or "") or tc.guess_pace(str(ln.get("emotion") or "")), cpms.get(speaker),
+                           (wpms or {}).get(speaker))           # 英文等按词计的台词用 speed_wpm(#124)
     except Exception:
         return round(max(0.7, len(line_text(ln)) / 4.2 + 0.7), 2)
 
@@ -296,15 +301,15 @@ def collect(base: Path, ep: str, shot_list: dict | None = None, durations: dict 
             from modules import time_cost as tc
         except ImportError:
             import time_cost as tc
-        cpms = tc.character_cpm(base)
+        cpms, wpms = tc.character_cpm(base), tc.character_wpm(base)
     except Exception:
-        cpms = {}
+        cpms, wpms = {}, {}
     anchors = [a for a in sl.get("narration_anchors") or [] if isinstance(a, dict)]
     allow = bridge_allowances(sl)
     # 画内句占时按镜累计(扣窗口用)
     on_by_shot: dict[str, float] = {}
     for sid, s in shots_by_id.items():
-        on_by_shot[sid] = round(sum(_line_est(base, ln, resolve_speaker(ln, names), cpms) for ln in onscreen_lines(s)), 2)
+        on_by_shot[sid] = round(sum(_line_est(base, ln, resolve_speaker(ln, names), cpms, wpms) for ln in onscreen_lines(s)), 2)
     out: list[dict] = []
     for s in sl.get("shots") or []:
         if not isinstance(s, dict) or not s.get("shot_id"):
@@ -341,7 +346,7 @@ def collect(base: Path, ep: str, shot_list: dict | None = None, durations: dict 
                 if (ash and set(ash) & set(good)) or (not ash and a.get("anchor_group") == gid and gid):
                     narr += _f(a.get("est_duration_s"), 0.0) or 0.0
             off = offset_s(ln, floor=-lead, default=(-lead if lead > 0 else None))
-            est = _line_est(base, ln, spk, cpms)
+            est = _line_est(base, ln, spk, cpms, wpms)
             reason = ln.get("placement_reason") if isinstance(ln.get("placement_reason"), dict) else None
             out.append({
                 "shot_id": sid, "idx": idx, "group_id": gid, "speaker": spk,

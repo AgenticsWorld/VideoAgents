@@ -1,8 +1,8 @@
 // 场景预览页「🌍 世界模型」全屏视窗(2026-09-12 World Labs Marble;2026-10-04 由板块内嵌视窗改为全屏,一个场景可有多个世界模型):
 // 点世界模型卡片 → openWorld() 盖满窗口,用 Spark 渲染该世界模型的高斯泼溅,按 world.json#alignment 对齐到白模坐标(米,Y 向上);
 // 拖动转头、WASD 漫游、Esc / ✕ 关闭。
-// 「💾 背景图」:把虚线框里的画面按项目画幅(长边 1920)离屏渲一帧,连同相机白模坐标(position/target/fov)POST 到
-// scenes/<sid>/plates/manual 存为本场景一张新背景图(opts.format 给画幅,opts.onSaved 保存后回调)。
+// 「💾 背景图」:把虚线框里的画面按 16:9(1920×1080,不随项目画幅)离屏渲一帧,连同相机白模坐标(position/target/fov)POST 到
+// scenes/<sid>/plates/manual 存为本场景一张新背景图(opts.onSaved 保存后回调)。
 // 「⚙ 设置」:精度、白模线框(核对对齐用,默认关)、yaw / 尺度微调及其保存、设为默认世界模型(POST scenes/<sid>/worlds/<key>,
 // opts.onChanged 回调);默认世界模型 = 背景图模式 world 的截图与导演台世界背景所用的那个。
 // 依赖页面 importmap:three / three/addons/ / @sparkjsdev/spark(见 preview_scenes.html)。
@@ -73,7 +73,7 @@ async function compiledScene(project,sid){
 }
 
 // world:预览 API 的 scenes[].worlds[i](key/default/files/alignment/base_url/dir/input);
-// opts:{format:{width,height}, sourceLabel:来源全景的显示名, onSaved(d):存了背景图, onChanged(world):设了默认 / 存了对齐}。
+// opts:{sourceLabel:来源全景的显示名, onSaved(d):存了背景图, onChanged(world):设了默认 / 存了对齐}。
 export function openWorld(project,sid,world,opts={}){
   closeWorld();css();
   const base=world.base_url||`/api/v1/projects/${encodeURIComponent(project)}/artifacts/assets/concepts/scenes/${encodeURIComponent(sid)}/world/`;
@@ -147,8 +147,8 @@ export function openWorld(project,sid,world,opts={}){
   const size=()=>{const w=root.clientWidth||1,h=root.clientHeight||1;
     const pr=Math.min(window.devicePixelRatio||1,Math.max(1,Math.sqrt(3e6/(w*h))));
     renderer.setPixelRatio(pr);renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();updateGuide();};
-  // 保存画幅:项目画幅比 A;屏幕比 S ≥ A 时同垂直视场、左右裁到 A;S < A 时以屏幕水平视场为准、上下裁到 A(虚线框即所见即所存)
-  const capAspect=()=>{const fm=opts.format;return (fm&&fm.width>0&&fm.height>0)?fm.width/fm.height:16/9;};
+  // 保存画幅:固定 16:9,不随项目画幅(2026-10-08);屏幕比 S ≥ A 时同垂直视场、左右裁到 A;S < A 时以屏幕水平视场为准、上下裁到 A(虚线框即所见即所存)
+  const capAspect=()=>16/9;
   const capFov=()=>{const S=root.clientWidth/root.clientHeight,A=capAspect();if(S>=A)return camera.fov;
     return 2*deg(Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov)/2)*S/A));};
   const updateGuide=()=>{const W=root.clientWidth,H=root.clientHeight,S=W/H,A=capAspect();
@@ -212,12 +212,11 @@ export function openWorld(project,sid,world,opts={}){
     paintDefault();
   };
 
-  // 💾 背景图:按项目画幅离屏渲一帧(同一任务内 toDataURL)→ POST plates/manual;相机方向直接取 three 相机(已在白模坐标系)
+  // 💾 背景图:按 16:9 离屏渲一帧(同一任务内 toDataURL)→ POST plates/manual;相机方向直接取 three 相机(已在白模坐标系)
   const saveBtn=$('.w3-save');
   saveBtn.onclick=async()=>{
     if(!splat||saveBtn.disabled)return;
-    const fm=opts.format||{},fw=fm.width>0?fm.width:16,fh=fm.height>0?fm.height:9,sc=1920/Math.max(fw,fh);
-    const PW=Math.round(fw*sc/2)*2,PH=Math.round(fh*sc/2)*2;
+    const PW=1920,PH=1080;
     const fov0=camera.fov,fovCap=capFov();
     camera.fov=fovCap;camera.aspect=PW/PH;camera.updateProjectionMatrix();
     renderer.setPixelRatio(1);renderer.setSize(PW,PH,false);

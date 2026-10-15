@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>画板 · Agentics：VideoAgents</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2054%2054%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20clip-rule%3D%22evenodd%22%20d%3D%22M27.0003%2011.417C29.1569%2011.417%2031.6501%2011.6093%2034.0189%2011.8652C34.1395%2011.8783%2034.2587%2011.8917%2034.3763%2011.9043C37.2021%2012.2081%2039.1789%2012.4205%2040.931%2013.4863C42.4071%2014.3844%2043.7298%2015.8578%2044.4642%2017.4219C45.3361%2019.2791%2045.335%2021.3999%2045.3333%2024.4561V29.5439C45.335%2032.6001%2045.3361%2034.7209%2044.4642%2036.5781C43.7298%2038.1422%2042.4071%2039.6156%2040.931%2040.5137C39.1789%2041.5795%2037.2021%2041.7919%2034.3763%2042.0957C34.2587%2042.1083%2034.1395%2042.1217%2034.0189%2042.1348C31.6501%2042.3907%2029.1569%2042.583%2027.0003%2042.583C24.8437%2042.583%2022.3506%2042.3907%2019.9818%2042.1348C19.8611%2042.1217%2019.742%2042.1084%2019.6243%2042.0957C16.7982%2041.7919%2014.8209%2041.5797%2013.0687%2040.5137C11.5925%2039.6155%2010.2698%2038.1422%209.53547%2036.5781C8.66357%2034.721%208.66469%2032.6001%208.66633%2029.5439C8.6664%2029.4098%208.6673%2029.2736%208.6673%2029.1357V24.8643C8.6673%2024.7264%208.6664%2024.5902%208.66633%2024.4561C8.66469%2021.3999%208.66357%2019.279%209.53547%2017.4219C10.2698%2015.8578%2011.5925%2014.3845%2013.0687%2013.4863C14.8209%2012.4203%2016.7982%2012.2081%2019.6243%2011.9043C19.742%2011.8916%2019.8611%2011.8783%2019.9818%2011.8652C22.3506%2011.6093%2024.8437%2011.417%2027.0003%2011.417ZM27.0003%2015.083C25.0334%2015.083%2022.6877%2015.2609%2020.3753%2015.5107C17.0484%2015.8702%2015.9447%2016.0291%2014.9749%2016.6191C14.1142%2017.1428%2013.283%2018.0685%2012.8548%2018.9805C12.3747%2020.0032%2012.3333%2021.2326%2012.3333%2024.8643V29.1357C12.3333%2032.7674%2012.3747%2033.9968%2012.8548%2035.0195C13.283%2035.9315%2014.1142%2036.8572%2014.9749%2037.3809C15.9447%2037.9709%2017.0484%2038.1298%2020.3753%2038.4893C22.6877%2038.7391%2025.0334%2038.917%2027.0003%2038.917C28.9671%2038.917%2031.3121%2038.7391%2033.6243%2038.4893C36.9515%2038.1298%2038.0558%2037.9709%2039.0257%2037.3809C39.8863%2036.8572%2040.7177%2035.9314%2041.1458%2035.0195C41.6259%2033.9969%2041.6673%2032.7673%2041.6673%2029.1357V24.8643C41.6673%2021.2327%2041.6258%2020.0031%2041.1458%2018.9805C40.7177%2018.0686%2039.8863%2017.1428%2039.0257%2016.6191C38.0558%2016.0291%2036.9515%2015.8702%2033.6243%2015.5107C31.3121%2015.2609%2028.9671%2015.083%2027.0003%2015.083ZM23.3333%2021.1338C24.5989%2021.1338%2025.6252%2022.1592%2025.6253%2023.4248V28.0918C25.6252%2029.3574%2024.5989%2030.3838%2023.3333%2030.3838C22.0678%2030.3837%2021.0414%2029.3573%2021.0413%2028.0918V23.4248C21.0414%2022.1593%2022.0678%2021.1339%2023.3333%2021.1338ZM36.1663%2021.1338C37.4319%2021.1338%2038.4582%2022.1592%2038.4583%2023.4248V28.0918C38.4582%2029.3574%2037.4319%2030.3838%2036.1663%2030.3838C34.9009%2030.3835%2033.8754%2029.3572%2033.8753%2028.0918V23.4248C33.8754%2022.1594%2034.9009%2021.134%2036.1663%2021.1338Z%22%20fill%3D%22%236c9ef8%22%2F%3E%3C%2Fsvg%3E">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/static/i18n/i18n.js"></script>
+<script src="/static/image-models.js?v=20261010b"></script>
+<script src="/static/image-model-picker.js?v=20261010c"></script>
+<script>
+/* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
+if(!window.I18N){
+  window.I18N={lang:'zh',langs:{zh:'中文'},t:function(s){return s},
+    f:function(s,p){p=p||{};return String(s).replace(/\{(\w+)\}/g,function(m,k){return k in p?p[k]:m})},
+    setLang:function(){return Promise.resolve()}};
+  window.t=function(s){return s};window.I18N_DICT={};
+}
+</script>
+<style>
+:root{
+  --bg:#0f1117; --panel:#161a23; --panel2:#1c2130; --border:#2a3040;
+  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --link:#fb923c; --green:#4ade80;
+  --red:#f87171; --yellow:#fbbf24; --purple:#c084fc;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+a{color:var(--link)}
+body{background:var(--bg);color:var(--text);font:13px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{display:flex;align-items:center;gap:12px;padding:9px 16px;border-bottom:1px solid var(--border);background:var(--panel)}
+header h1{font-size:15px;font-weight:600;white-space:nowrap}
+header .obj{color:var(--dim);font-size:12.5px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header a.back{color:var(--dim);text-decoration:none;font-size:13px;border:1px solid var(--border);border-radius:6px;padding:3px 10px;line-height:1.4;white-space:nowrap}
+header a.back:hover{color:var(--accent);border-color:var(--accent)}
+.spacer{flex:1}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12.5px;font-family:inherit;white-space:nowrap}
+button:hover:not(:disabled){border-color:var(--accent)}
+button:disabled{opacity:.45;cursor:default}
+button.on{border-color:var(--accent);color:var(--accent)}
+button.pri{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
+button.warn{border-color:var(--yellow);color:var(--yellow)}
+button.sm{font-size:11.5px;padding:1px 7px}
+input[type=text],input[type=number],textarea,select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font:inherit}
+textarea{width:100%;resize:vertical;line-height:1.5}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent)}
+main{flex:1;display:flex;min-height:0}
+#stage{flex:1;min-width:0;display:flex;flex-direction:column}
+#tools{display:flex;align-items:center;gap:6px;padding:6px 10px;border-bottom:1px solid var(--border);background:var(--panel);flex-wrap:wrap}
+#tools .sep{width:1px;height:18px;background:var(--border);margin:0 4px}
+#tools .lb{color:var(--dim);font-size:11.5px}
+#tools input[type=range]{width:80px}
+#vp{flex:1;min-height:0;position:relative;overflow:hidden;background:repeating-conic-gradient(#191d27 0 25%,#141821 0 50%) 0 0/20px 20px}
+#cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+#vp.t-pan #cv{cursor:grab}#vp.t-pan.drag #cv{cursor:grabbing}#vp.t-draw #cv{cursor:crosshair}
+#foot{display:flex;align-items:center;gap:10px;padding:5px 12px;border-top:1px solid var(--border);background:var(--panel);font-size:12px;color:var(--dim)}
+#foot b{color:var(--text);font-weight:600}
+#side{width:392px;flex:none;border-left:1px solid var(--border);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+#tabs{display:flex;border-bottom:1px solid var(--border)}
+#tabs button{flex:1;border:0;border-radius:0;background:none;padding:8px 0;color:var(--dim);border-bottom:2px solid transparent}
+#tabs button.on{color:var(--text);border-bottom-color:var(--accent)}
+.pane{flex:1;overflow-y:auto;padding:12px 14px 24px;display:none}
+.pane.on{display:block}
+.sec{margin-bottom:14px}
+.sec>h3{font-size:12.5px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.sec>h3 .n{color:var(--dim);font-weight:400}
+.hint{color:var(--dim);font-size:11.5px;line-height:1.5}
+.hint.warn{color:var(--yellow)}
+.err{color:var(--red);font-size:12px;white-space:pre-wrap;word-break:break-word}
+.row{display:flex;align-items:center;gap:6px;margin:4px 0}
+.row>input[type=text]{flex:1;min-width:0}
+.chip{flex:none;min-width:20px;height:20px;border-radius:10px;color:#fff;font-size:11.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;padding:0 6px}
+.opt{display:flex;align-items:flex-start;gap:6px;margin:5px 0;cursor:pointer;user-select:none;font-size:12.5px}
+.opt input{margin-top:4px}
+.opt.off{opacity:.5;cursor:default}
+.ref{display:grid;grid-template-columns:auto 54px 1fr auto;gap:6px;align-items:center;margin:6px 0}
+.ref img{width:54px;height:40px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:zoom-in}
+.ref .tag{color:var(--accent);font-size:11.5px;cursor:pointer;white-space:nowrap}
+.ref .meta{min-width:0;display:flex;flex-direction:column;gap:2px}
+.ref .meta input{width:100%;padding:2px 6px;font-size:12px}
+#drop{border:1px dashed var(--border);border-radius:8px;padding:8px;text-align:center;color:var(--dim);font-size:11.5px}
+#drop.over{border-color:var(--accent);color:var(--accent)}
+#mention{position:absolute;z-index:20;background:var(--panel2);border:1px solid var(--accent);border-radius:6px;box-shadow:0 6px 20px rgba(0,0,0,.4);max-width:320px;display:none}
+#mention div{padding:4px 10px;cursor:pointer;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#mention div:hover{background:var(--panel)}
+.jobbox{border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-top:10px;display:none}
+.jobbox.on{display:block}
+.jobbox .st{font-weight:600;display:flex;align-items:center;gap:6px}
+a.btn{display:inline-block;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:1px 7px;font-size:11.5px;text-decoration:none;line-height:1.6}
+a.btn:hover{border-color:var(--accent)}
+.spin{display:inline-block;animation:spin 1.2s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+.ver{display:grid;grid-template-columns:96px 1fr;gap:10px;padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:var(--panel2)}
+.ver.cur{border-color:var(--accent)}
+.ver.cmp{border-color:var(--purple)}
+.ver img{width:96px;height:64px;object-fit:contain;background:#0b0d12;border-radius:4px;cursor:pointer}
+.ver .t1{display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-weight:600}
+.ver .t2{color:var(--dim);font-size:11.5px;line-height:1.45;word-break:break-word}
+.ver .ops{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px}
+.badge{font-size:10px;line-height:14px;border:1px solid var(--dim);color:var(--dim);border-radius:4px;padding:0 5px;font-weight:400;white-space:nowrap}
+.badge.fin{border-color:var(--green);color:var(--green)}
+.badge.warn{border-color:var(--yellow);color:var(--yellow)}
+.badge.key{border-color:var(--purple);color:var(--purple)}
+dl.kv{display:grid;grid-template-columns:max-content 1fr;gap:3px 12px}
+dl.kv dt{color:var(--dim)}
+dl.kv dd{min-width:0;word-break:break-all}
+.sizes{display:flex;gap:5px;flex-wrap:wrap;margin:6px 0}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:60}
+#modal.on{display:flex}
+#modal .box{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px 18px;width:min(560px,calc(100vw - 32px));max-height:calc(100vh - 60px);display:flex;flex-direction:column;gap:10px}
+#modal .box.wide{width:min(900px,calc(100vw - 32px))}
+#modal h3{font-size:14px}
+#modal .body{overflow-y:auto;min-height:0}
+#modal .btns{display:flex;justify-content:flex-end;gap:8px}
+#modal ul{padding-left:18px}
+.lib h4{font-size:12px;color:var(--dim);margin:10px 0 4px}
+.lib .grid{display:flex;flex-wrap:wrap;gap:8px}
+.lib figure{width:120px;cursor:pointer;border:1px solid var(--border);border-radius:6px;padding:3px;background:var(--panel2)}
+.lib figure:hover{border-color:var(--accent)}
+.lib img{width:100%;height:76px;object-fit:contain;display:block;background:#0b0d12;border-radius:3px}
+.lib figcaption{font-size:10.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--accent);border-radius:8px;padding:7px 14px;font-size:13px;z-index:80;display:none;max-width:80vw}
+#toast.bad{border-color:var(--red)}
+#lightbox{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:90;cursor:zoom-out}
+#lightbox img{max-width:96vw;max-height:96vh;border-radius:6px}
+.empty{color:var(--dim);text-align:center;margin-top:40px}
+#side .imp{display:flex;width:100%;gap:6px}
+#side .imp select,#side .imp input{flex:1;min-width:0;max-width:none}
+</style>
+</head>
+<body>
+<header>
+  <a class="back" id="back" href="/" title="返回">&lt;</a>
+  <a class="back" href="/">控制台</a>
+  <h1>🖌 画板</h1>
+  <span class="obj" id="obj" data-no-i18n></span>
+  <div class="spacer"></div>
+  <button id="reload">刷新</button>
+</header>
+<main>
+  <section id="stage">
+    <div id="tools">
+      <span class="lb">圈选</span>
+      <button data-tool="pan" class="on" title="拖动画面;滚轮缩放">✋ 移动</button>
+      <button data-tool="rect" title="拖出一个矩形区域">▭ 矩形</button>
+      <button data-tool="ellipse" title="拖出一个椭圆区域">◯ 椭圆</button>
+      <button data-tool="lasso" title="沿着要改的东西画一圈">➰ 套索</button>
+      <button data-tool="brush" title="涂抹要改的地方">🖌 画笔</button>
+      <input type="range" id="bw" min="1" max="15" value="4" title="画笔粗细">
+      <button id="undo" title="撤销最后一个圈选区域">↶ 撤销</button>
+      <button id="clear" title="清空全部圈选区域">清空</button>
+      <span class="sep"></span>
+      <span class="lb">视图</span>
+      <button id="fit" title="整张图适应窗口">适应</button>
+      <button id="z100" title="按图片实际像素显示">100%</button>
+      <span class="sep"></span>
+      <span class="lb">调整</span>
+      <button id="t-crop" title="把最后一个矩形区域裁出来,存为一个新版本">✂ 裁剪到选区</button>
+      <button id="t-fliph" title="水平翻转,存为一个新版本">⇋ 水平翻转</button>
+      <button id="t-flipv" title="垂直翻转,存为一个新版本">⇅ 垂直翻转</button>
+      <button id="t-rot" title="顺时针旋转 90°,存为一个新版本">⟳ 旋转</button>
+      <button id="t-size" title="改成指定的宽高,存为一个新版本">⤢ 缩放…</button>
+      <span class="sep"></span>
+      <span class="lb">版本对比</span>
+      <select id="cmpmode" title="与历史里选作对比的版本比较:滑杆 / 闪烁 / 差异">
+        <option value="off">不对比</option><option value="slider">滑杆</option><option value="blink">闪烁</option><option value="diff">差异</option>
+      </select>
+      <input type="range" id="split" min="0" max="100" value="50" title="滑杆位置" hidden>
+      <button id="blink" title="按住看对比版本,松开回到当前版本" hidden>按住看 B</button>
+    </div>
+    <div id="vp" class="t-pan"><canvas id="cv"></canvas></div>
+    <div id="foot"><span id="f-ver"></span><div class="spacer"></div><span id="f-zoom" data-no-i18n></span></div>
+  </section>
+  <aside id="side">
+    <div id="tabs">
+      <button data-tab="edit" class="on">编辑</button>
+      <button data-tab="up">放大</button>
+      <button data-tab="hist">历史</button>
+      <button data-tab="info">信息</button>
+    </div>
+    <div class="pane on" id="p-edit">
+      <div class="sec"><h3>图像模型</h3><span id="imp-edit"></span></div>
+      <div class="sec"><h3>圈选区域<span class="n" id="rg-n"></span></h3>
+        <div id="rgs"></div>
+        <div class="hint" id="rg-hint">用上方的矩形 / 椭圆 / 套索 / 画笔在图上圈出要改的位置,每个区域可以单独写修改内容;不圈就是对整张图提要求</div>
+      </div>
+      <div class="sec"><h3>整体说明</h3>
+        <textarea id="txt" rows="4" placeholder="要改什么;输入 @ 可以点名一张参考图"></textarea>
+      </div>
+      <div class="sec"><h3>参考图<span class="n" id="rf-n"></span></h3>
+        <div id="refs"></div>
+        <div id="drop">把图片拖到这里、粘贴,或
+          <button class="sm" id="rf-up">上传</button>
+          <button class="sm" id="rf-lib">从项目库选</button>
+        </div>
+        <input type="file" id="rf-file" accept="image/png,image/jpeg,image/webp" multiple hidden>
+      </div>
+      <div class="sec">
+        <label class="opt" id="o-lock-l"><input type="checkbox" id="o-lock" checked><span>圈外锁定:出图后只取圈内贴回原图,圈外保持不变</span></label>
+        <label class="opt"><input type="checkbox" id="o-direct"><span>直接发送:文字按固定模板直接发给图像模型,不经 Agent 整理(快,适合小改)</span></label>
+        <label class="opt"><input type="checkbox" id="o-preview"><span>发送前先看提示词:确认或修改后再出图</span></label>
+        <div class="row" style="margin-top:8px"><button class="pri" id="send">发送</button><span class="hint" id="send-hint"></span></div>
+        <div class="err" id="edit-err"></div>
+      </div>
+      <div id="job" class="jobbox"></div>
+    </div>
+    <div class="pane" id="p-up">
+      <div class="sec"><h3>当前尺寸</h3><div id="up-cur" data-no-i18n></div></div>
+      <div class="sec"><h3>放大方式</h3>
+        <label class="opt"><input type="radio" name="upmode" value="redraw" checked><span>重绘放大:用图像模型以原图为参考重出一张更大的(细节更多,但人脸、文字、纹理可能走样)</span></label>
+        <label class="opt"><input type="radio" name="upmode" value="fidelity"><span>保真超分:专用超分模型,不重画内容</span></label>
+      </div>
+      <div class="sec" id="up-redraw"><h3>图像模型</h3><span id="imp-up"></span>
+        <div class="hint" id="up-lim" style="margin-top:6px"></div>
+      </div>
+      <div class="sec" id="up-fid" hidden><h3>超分模型</h3>
+        <select id="up-model" style="width:100%"></select>
+        <div class="hint" id="up-fid-hint" style="margin-top:6px"></div>
+      </div>
+      <div class="sec"><h3>目标尺寸</h3>
+        <div class="sizes" id="up-sizes"></div>
+        <div class="row"><span class="hint">宽</span><input type="number" id="up-w" min="16" step="2" style="width:96px"><span class="hint" id="up-h" data-no-i18n></span></div>
+        <div class="row" style="margin-top:8px"><button class="pri" id="up-go">开始放大</button></div>
+        <div class="hint" style="margin-top:6px">放大结果先进历史;对比满意后在「历史」里设为最终版</div>
+        <div class="err" id="up-err"></div>
+      </div>
+      <div id="job2" class="jobbox"></div>
+    </div>
+    <div class="pane" id="p-hist"><div id="vers"></div></div>
+    <div class="pane" id="p-info"><div id="info"></div></div>
+  </aside>
+</main>
+<div id="mention"></div>
+<div id="modal"><div class="box"><h3 id="m-title"></h3><div class="body" id="m-body"></div><div class="btns" id="m-btns"></div></div></div>
+<div id="toast"></div>
+<div id="lightbox"><img alt=""></div>
+<script>
+'use strict';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const F=(s,p)=>I18N.f(s,p||{});
+const Q=new URLSearchParams(location.search);
+const PROJECT=Q.get('project')||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';
+const FILE=Q.get('file')||'';
+const API='/api/v1/projects/'+encodeURIComponent(PROJECT)+'/canvas';
+const COLORS=['#ff3b30','#34c759','#0a84ff','#ffd60a','#bf5af2','#ff9f0a','#64d2ff','#ff375f'];   // 与 modules/image_canvas.REGION_COLORS 同一组
+const ACTIVE=['queued','drafting','awaiting_confirm','running'];
+const KIND_NAMES={scene:'场景图',plate:'分镜背景图',character:'人物图',costume:'服装图',creature:'生物图',prop:'道具图',sketch:'故事板草图',cover:'封面',image:'图片'};
+const OP_NAMES={original:'原图',external:'外部更新',edit:'编辑',upscale:'放大',transform:'调整'};
+const TF_NAMES={crop:'裁剪',flip_h:'水平翻转',flip_v:'垂直翻转',rotate:'旋转',resize:'缩放'};
+const NOTE_TEXT={
+  videos_unchanged:'已经生成的视频不会变;要让它们用上新图,需要重出对应的组',
+  plate_new_key:'原背景图不动:新图登记为一张新的库图(原名加 _revN),引用原图的分镜改指向它',
+  avatar:'人物图换了以后,虚拟人像库里还是旧图:需要到人物预览页重新「入库」',
+  animatic:'动态样片是用旧草图拼的,需要重出',
+  publish_copy:'发布包里的封面是副本,不会跟着变:需要重新出发布包',
+};
+let S=null, VIEW=null, CMP=null, REGIONS=[], TOOL='pan', LASTJOB='', pollTimer=null, LIM=null;
+let PICK_EDIT=null, PICK_UP=null, lastField=null;
+
+function toast(msg,bad){const el=$('#toast');el.textContent=msg;el.className=bad?'bad':'';el.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>el.style.display='none',bad?6000:3200)}
+async function api(path,body,raw){
+  const opt=body===undefined?{}:raw?{method:'POST',body}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)};
+  const r=await fetch(API+path,opt);
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(j.detail||String(r.status));
+  return j;
+}
+const withFile=o=>Object.assign({file:FILE,kind:Q.get('kind')||''},o||{});
+const fmtSize=b=>b>=1048576?(b/1048576).toFixed(2)+' MB':Math.max(1,Math.round(b/1024))+' KB';
+const fmtTime=s=>s?new Date(typeof s==='number'?s*1000:s).toLocaleString():'—';
+const ver=id=>(S&&S.versions||[]).find(v=>v.id===id);
+const mention=n=>'@'+(I18N.lang==='zh'?'\u56fe':'ref')+n;   // 中文界面 @图N,其余 @refN(服务端两种都认)
+
+/* ---------------- 画布:图片 + 圈选区域 + 对比 ---------------- */
+const cv=$('#cv'), ctx=cv.getContext('2d'), vp=$('#vp');
+const IMG={};                       // url → HTMLImageElement
+let T={s:1,x:0,y:0}, fitted=true;   // 图片像素 → 画布 CSS 像素:x*s+T.x
+let draft=null, drag=null, showB=false, diffCanvas=null, diffKey='';
+function img(url){
+  if(!url)return null;
+  let im=IMG[url];
+  if(!im){im=IMG[url]=new Image();im.onload=()=>{if(fitted)fit();else draw()};im.src=url}
+  return im.complete&&im.naturalWidth?im:null;
+}
+function curImg(){const v=ver(VIEW);return v?img(v.url):null}
+function resize(){
+  const r=vp.getBoundingClientRect(), d=window.devicePixelRatio||1;
+  cv.width=Math.max(1,Math.round(r.width*d));cv.height=Math.max(1,Math.round(r.height*d));
+  if(fitted)fit();else draw();
+}
+function fit(){
+  const v=ver(VIEW);if(!v)return;
+  const r=vp.getBoundingClientRect();
+  T.s=Math.min((r.width-24)/v.width,(r.height-24)/v.height);
+  T.x=(r.width-v.width*T.s)/2;T.y=(r.height-v.height*T.s)/2;fitted=true;draw();
+}
+function zoomAt(cx,cy,k){
+  const s=Math.min(16,Math.max(.02,T.s*k));
+  T.x=cx-(cx-T.x)*(s/T.s);T.y=cy-(cy-T.y)*(s/T.s);T.s=s;fitted=false;draw();
+}
+function pathRegion(r,W,H){
+  ctx.beginPath();
+  if(r.shape==='rect')ctx.rect(r.x*W,r.y*H,r.w*W,r.h*H);
+  else if(r.shape==='ellipse')ctx.ellipse((r.x+r.w/2)*W,(r.y+r.h/2)*H,Math.max(.5,r.w*W/2),Math.max(.5,r.h*H/2),0,0,Math.PI*2);
+  else{r.points.forEach((p,i)=>i?ctx.lineTo(p[0]*W,p[1]*H):ctx.moveTo(p[0]*W,p[1]*H));if(r.shape==='lasso')ctx.closePath()}
+}
+function bbox(r){
+  if(r.shape==='rect'||r.shape==='ellipse')return [r.x,r.y];
+  return [Math.min(...r.points.map(p=>p[0])),Math.min(...r.points.map(p=>p[1]))];
+}
+function drawRegion(r,i,W,H){
+  const c=COLORS[i%COLORS.length], lw=2/T.s;
+  ctx.save();
+  pathRegion(r,W,H);
+  if(r.shape==='brush'){ctx.lineCap=ctx.lineJoin='round';ctx.lineWidth=r.width*Math.min(W,H);ctx.strokeStyle=c+'55';ctx.stroke()}
+  else{ctx.fillStyle=c+'22';ctx.fill();ctx.lineWidth=lw;ctx.strokeStyle=c;ctx.stroke()}
+  if(i>=0&&r!==draft){
+    const [bx,by]=bbox(r), rad=11/T.s;
+    ctx.beginPath();ctx.arc(bx*W,by*H,rad,0,Math.PI*2);ctx.fillStyle=c;ctx.fill();
+    ctx.fillStyle='#fff';ctx.font=`700 ${13/T.s}px sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(i+1),bx*W,by*H);
+  }
+  ctx.restore();
+}
+function buildDiff(a,b){
+  const key=a.src+'|'+b.src;
+  if(diffKey===key)return diffCanvas;
+  const w=Math.min(1280,a.naturalWidth), h=Math.round(w*a.naturalHeight/a.naturalWidth);
+  const c1=document.createElement('canvas');c1.width=w;c1.height=h;
+  const x1=c1.getContext('2d',{willReadFrequently:true});
+  x1.drawImage(a,0,0,w,h);const da=x1.getImageData(0,0,w,h);
+  x1.drawImage(b,0,0,w,h);const db=x1.getImageData(0,0,w,h);
+  for(let i=0;i<da.data.length;i+=4){
+    const d=(Math.abs(da.data[i]-db.data[i])+Math.abs(da.data[i+1]-db.data[i+1])+Math.abs(da.data[i+2]-db.data[i+2]))/3;
+    const v=Math.min(255,d*5);          // 差异放大 5 倍:微小改动也看得见
+    da.data[i]=v;da.data[i+1]=v>40?v*.55:v*.2;da.data[i+2]=40-v*.15;da.data[i+3]=255;
+  }
+  x1.putImageData(da,0,0);diffCanvas=c1;diffKey=key;return c1;
+}
+function draw(){
+  const d=window.devicePixelRatio||1;
+  ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,cv.width,cv.height);
+  const v=ver(VIEW), a=curImg();
+  $('#f-zoom').textContent=Math.round(T.s*100)+'%';
+  if(!v||!a)return;
+  const W=v.width,H=v.height;
+  ctx.setTransform(T.s*d,0,0,T.s*d,T.x*d,T.y*d);
+  ctx.imageSmoothingEnabled=T.s<3;
+  const mode=$('#cmpmode').value, bv=mode!=='off'?ver(CMP):null, b=bv?img(bv.url):null;
+  if(b&&mode==='diff')ctx.drawImage(buildDiff(a,b),0,0,W,H);
+  else if(b&&mode==='blink')ctx.drawImage(showB?b:a,0,0,W,H);
+  else if(b&&mode==='slider'){
+    const sx=W*(+$('#split').value)/100;
+    ctx.drawImage(a,0,0,W,H);
+    ctx.save();ctx.beginPath();ctx.rect(sx,0,W-sx,H);ctx.clip();ctx.drawImage(b,0,0,W,H);ctx.restore();
+    ctx.fillStyle='#fff';ctx.fillRect(sx-1/T.s,0,2/T.s,H);
+    ctx.font=`600 ${12/T.s}px sans-serif`;ctx.textBaseline='top';ctx.fillStyle='#fff';ctx.shadowColor='#000';ctx.shadowBlur=4;
+    ctx.textAlign='right';ctx.fillText(v.id,sx-6/T.s,6/T.s);ctx.textAlign='left';ctx.fillText(bv.id,sx+6/T.s,6/T.s);ctx.shadowBlur=0;
+  }else ctx.drawImage(a,0,0,W,H);
+  if(mode==='off'||!b){REGIONS.forEach((r,i)=>drawRegion(r,i,W,H));if(draft)drawRegion(draft,REGIONS.length,W,H)}
+}
+function pt(e){
+  const r=cv.getBoundingClientRect(), v=ver(VIEW);
+  return [Math.min(1,Math.max(0,((e.clientX-r.left)-T.x)/T.s/v.width)),Math.min(1,Math.max(0,((e.clientY-r.top)-T.y)/T.s/v.height))];
+}
+cv.addEventListener('pointerdown',e=>{
+  if(!ver(VIEW))return;
+  cv.setPointerCapture(e.pointerId);
+  if(TOOL==='pan'||e.button===1||e.altKey||$('#cmpmode').value!=='off'){drag={x:e.clientX,y:e.clientY,tx:T.x,ty:T.y};vp.classList.add('drag');return}
+  const p=pt(e);
+  if(TOOL==='rect'||TOOL==='ellipse')draft={shape:TOOL,x:p[0],y:p[1],w:0,h:0,ax:p[0],ay:p[1],text:''};
+  else draft={shape:TOOL,points:[p],width:(+$('#bw').value)/100,text:''};
+  draw();
+});
+cv.addEventListener('pointermove',e=>{
+  if(drag){T.x=drag.tx+e.clientX-drag.x;T.y=drag.ty+e.clientY-drag.y;fitted=false;draw();return}
+  if(!draft)return;
+  const p=pt(e);
+  if(draft.shape==='rect'||draft.shape==='ellipse'){draft.x=Math.min(draft.ax,p[0]);draft.y=Math.min(draft.ay,p[1]);draft.w=Math.abs(p[0]-draft.ax);draft.h=Math.abs(p[1]-draft.ay)}
+  else{const q=draft.points[draft.points.length-1];if(Math.hypot((p[0]-q[0]),(p[1]-q[1]))>.002)draft.points.push(p)}
+  draw();
+});
+function endStroke(){
+  if(drag){drag=null;vp.classList.remove('drag');return}
+  if(!draft)return;
+  const d=draft;draft=null;
+  const ok=(d.shape==='rect'||d.shape==='ellipse')?(d.w>.004&&d.h>.004):d.shape==='lasso'?d.points.length>=3:d.points.length>=1;
+  if(ok){delete d.ax;delete d.ay;if(REGIONS.length>=12)toast(t('最多圈 12 个区域'),true);else REGIONS.push(d)}
+  renderRegions();draw();
+}
+cv.addEventListener('pointerup',endStroke);cv.addEventListener('pointercancel',endStroke);
+cv.addEventListener('wheel',e=>{e.preventDefault();const r=cv.getBoundingClientRect();zoomAt(e.clientX-r.left,e.clientY-r.top,Math.exp(-e.deltaY*.0015))},{passive:false});
+new ResizeObserver(resize).observe(vp);
+document.querySelectorAll('#tools [data-tool]').forEach(b=>b.onclick=()=>{
+  TOOL=b.dataset.tool;document.querySelectorAll('#tools [data-tool]').forEach(x=>x.classList.toggle('on',x===b));
+  vp.className=TOOL==='pan'?'t-pan':'t-draw';
+  if(TOOL!=='pan'&&$('#cmpmode').value!=='off'){$('#cmpmode').value='off';syncCmp()}
+});
+$('#fit').onclick=fit;
+$('#z100').onclick=()=>{const r=vp.getBoundingClientRect();zoomAt(r.width/2,r.height/2,1/T.s)};
+$('#undo').onclick=()=>{REGIONS.pop();renderRegions();draw()};
+$('#clear').onclick=()=>{REGIONS=[];renderRegions();draw()};
+function syncCmp(){
+  const m=$('#cmpmode').value;
+  if(m!=='off'&&(!CMP||CMP===VIEW||!ver(CMP))){$('#cmpmode').value='off';toast(t('先在「历史」里把另一个版本选作对比'));tab('hist');$('#split').hidden=$('#blink').hidden=true;draw();return}
+  $('#split').hidden=m!=='slider';$('#blink').hidden=m!=='blink';showB=false;draw();
+}
+$('#cmpmode').onchange=syncCmp;$('#split').oninput=draw;
+$('#blink').onpointerdown=()=>{showB=true;draw()};
+['pointerup','pointerleave','pointercancel'].forEach(ev=>$('#blink').addEventListener(ev,()=>{showB=false;draw()}));
+
+/* ---------------- 标签页 ---------------- */
+function tab(name){
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===name));
+  document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==='p-'+name));
+  if(name==='up')loadLimits();
+}
+document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>tab(b.dataset.tab));
+
+/* ---------------- 编辑页 ---------------- */
+function renderRegions(){
+  $('#rg-n').textContent=REGIONS.length?F('{n} 个',{n:REGIONS.length}):'';
+  $('#rg-hint').hidden=!!REGIONS.length;
+  $('#rgs').innerHTML=REGIONS.map((r,i)=>`<div class="row"><span class="chip" style="background:${COLORS[i%COLORS.length]}">${i+1}</span>`
+    +`<input type="text" data-no-i18n data-rg="${i}" value="${esc(r.text||'')}" placeholder="${esc(t('这里改成什么(可留空,按整体说明处理)'))}">`
+    +`<button class="sm" data-del="${i}" title="${esc(t('删除这个区域'))}">✕</button></div>`).join('');
+  const lock=$('#o-lock');lock.disabled=!REGIONS.length;$('#o-lock-l').classList.toggle('off',!REGIONS.length);
+}
+$('#rgs').addEventListener('input',e=>{const i=e.target.dataset.rg;if(i!==undefined)REGIONS[+i].text=e.target.value});
+$('#rgs').addEventListener('click',e=>{const d=e.target.dataset.del;if(d!==undefined){REGIONS.splice(+d,1);renderRegions();draw()}});
+document.addEventListener('focusin',e=>{if(e.target.matches('#txt,#rgs input'))lastField=e.target});
+function insertAt(el,text){
+  el=el&&document.body.contains(el)?el:$('#txt');
+  const a=el.selectionStart??el.value.length,b=el.selectionEnd??a;
+  el.value=el.value.slice(0,a)+text+el.value.slice(b);el.focus();el.setSelectionRange(a+text.length,a+text.length);
+  el.dispatchEvent(new Event('input',{bubbles:true}));
+}
+const usedRefs=()=>[...document.querySelectorAll('#refs input[data-use]:checked')].map(c=>+c.dataset.use);
+function renderRefs(){
+  const keep=new Set(usedRefs()), had=new Set([...document.querySelectorAll('#refs input[data-use]')].map(c=>+c.dataset.use));
+  const refs=S.refs||[];
+  $('#rf-n').textContent=refs.length?F('{n} 张',{n:refs.length}):'';
+  $('#refs').innerHTML=refs.map(r=>`<div class="ref"><input type="checkbox" data-use="${r.n}" ${!had.has(r.n)||keep.has(r.n)?'checked':''} title="${esc(t('这次编辑带上这张参考图'))}">`
+    +`<img src="${esc(r.url)}" loading="lazy" data-zoom="${esc(r.url)}" alt="">`
+    +`<div class="meta"><span class="tag" data-mention="${r.n}" title="${esc(t('点击把它插进正在写的文字里'))}" data-no-i18n>${esc(mention(r.n))}</span>`
+    +`<input type="text" data-no-i18n data-note="${r.n}" value="${esc(r.note||'')}" placeholder="${esc(t('注释:这张图是什么、取它的什么'))}"></div>`
+    +`<button class="sm" data-rm="${r.n}" title="${esc(t('移出参考图'))}">✕</button></div>`).join('');
+}
+$('#refs').addEventListener('click',async e=>{
+  const el=e.target;
+  if(el.dataset.zoom){$('#lightbox img').src=el.dataset.zoom;$('#lightbox').style.display='flex'}
+  else if(el.dataset.mention)insertAt(lastField,mention(el.dataset.mention)+' ');
+  else if(el.dataset.rm){try{S.refs=(await api('/refs',withFile({n:+el.dataset.rm,remove:true}))).refs;renderRefs()}catch(err){toast(err.message,true)}}
+});
+$('#refs').addEventListener('change',async e=>{
+  const n=e.target.dataset.note;if(n===undefined)return;
+  try{S.refs=(await api('/refs',withFile({n:+n,note:e.target.value}))).refs}catch(err){toast(err.message,true)}
+});
+$('#lightbox').onclick=()=>$('#lightbox').style.display='none';
+async function uploadRefs(files){
+  for(const f of files){
+    if(!/^image\/(png|jpeg|webp)$/.test(f.type)){toast(F('{name} 不是 PNG / JPEG / WebP 图片',{name:f.name}),true);continue}
+    try{S.refs=(await api('/refs/upload?file='+encodeURIComponent(FILE)+'&filename='+encodeURIComponent(f.name||'pasted.png'),f,true)).refs;renderRefs()}
+    catch(err){toast(err.message,true)}
+  }
+}
+$('#rf-up').onclick=()=>$('#rf-file').click();
+$('#rf-file').onchange=e=>{uploadRefs([...e.target.files]);e.target.value=''};
+const drop=$('#drop');
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over')}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over')}));
+drop.addEventListener('drop',e=>uploadRefs([...e.dataTransfer.files]));
+document.addEventListener('paste',e=>{
+  const fs=[...(e.clipboardData&&e.clipboardData.files||[])].filter(f=>f.type.startsWith('image/'));
+  if(fs.length&&$('#p-edit').classList.contains('on')){e.preventDefault();uploadRefs(fs)}
+});
+$('#rf-lib').onclick=async()=>{
+  const GROUPS={characters:'人物',creatures:'生物',props:'道具',scenes:'场景',refs:'参考文件'};
+  modal(t('从项目库选参考图'),`<input type="text" id="lib-q" style="width:100%" placeholder="${esc(t('按路径搜索…'))}"><div class="lib" id="lib-list"><div class="empty">${esc(t('加载中…'))}</div></div>`,
+    [{label:t('关闭')}],true);
+  let timer=null;
+  const load=async()=>{
+    try{
+      const d=await api('/library?q='+encodeURIComponent($('#lib-q').value.trim()));
+      $('#lib-list').innerHTML=d.groups.length?d.groups.map(g=>`<h4>${esc(t(GROUPS[g.group]||g.group))} · ${g.total}</h4><div class="grid">`
+        +g.items.map(i=>`<figure data-pick="${esc(i.file)}" title="${esc(i.file)}"><img src="${esc(i.url)}" loading="lazy" alt=""><figcaption data-no-i18n>${esc(i.name)}</figcaption></figure>`).join('')+'</div>').join('')
+        :`<div class="empty">${esc(t('没有匹配的图片'))}</div>`;
+    }catch(err){$('#lib-list').innerHTML=`<div class="err">${esc(err.message)}</div>`}
+  };
+  $('#lib-q').oninput=()=>{clearTimeout(timer);timer=setTimeout(load,250)};
+  $('#lib-list').onclick=async e=>{
+    const f=e.target.closest('figure');if(!f)return;
+    try{S.refs=(await api('/refs',withFile({library:f.dataset.pick}))).refs;renderRefs();closeModal()}catch(err){toast(err.message,true)}
+  };
+  load();
+};
+/* @ 点名参考图:在文字里敲 @ 弹出托盘清单 */
+const mbox=$('#mention');
+document.addEventListener('input',e=>{
+  const el=e.target;if(!el.matches('#txt,#rgs input'))return;
+  const pos=el.selectionStart, refs=(S&&S.refs)||[];
+  if(!refs.length||el.value[pos-1]!=='@'){mbox.style.display='none';return}
+  const r=el.getBoundingClientRect();
+  mbox.innerHTML=refs.map(x=>`<div data-n="${x.n}" data-no-i18n>${esc(mention(x.n))}${x.note?' — '+esc(x.note):''}</div>`).join('');
+  mbox.style.display='block';mbox.style.left=Math.max(8,Math.min(r.left,innerWidth-330))+'px';mbox.style.top=(r.bottom+4)+'px';
+  mbox.onmousedown=ev=>{const d=ev.target.closest('div[data-n]');if(!d)return;ev.preventDefault();
+    const p=el.selectionStart;el.setSelectionRange(p-1,p);insertAt(el,mention(d.dataset.n)+' ');mbox.style.display='none'};
+});
+document.addEventListener('click',e=>{if(!e.target.closest('#mention'))mbox.style.display='none'});
+function syncSendHint(){
+  const direct=$('#o-direct').checked;
+  $('#send-hint').textContent=!direct&&S&&!S.agent?t('没有找到画板修图 Agent,只能直接发送'):direct?t('直接发给图像模型'):t('先由画板修图 Agent 整理成提示词');
+}
+$('#o-direct').onchange=syncSendHint;
+$('#send').onclick=async()=>{
+  $('#edit-err').textContent='';
+  const ch=PICK_EDIT?PICK_EDIT.value():{};
+  const body=withFile({parent:VIEW,regions:REGIONS,text:$('#txt').value.trim(),refs:usedRefs(),provider:ch.provider||'',model:ch.model||'',
+    lock:$('#o-lock').checked&&!!REGIONS.length,mode:$('#o-direct').checked||!S.agent?'direct':'agent',preview:$('#o-preview').checked});
+  $('#send').disabled=true;
+  try{apply(await api('/edit',body));toast(t('已发送'))}
+  catch(err){$('#edit-err').textContent=err.message}
+  finally{syncBusy()}
+};
+
+/* ---------------- 任务状态 ---------------- */
+const JOB_TEXT={queued:'排队中',drafting:'画板修图 Agent 正在整理提示词',awaiting_confirm:'提示词待确认',running:'出图中',done:'完成',failed:'失败',cancelled:'已取消'};
+function jobHtml(j,failed){
+  if(j){
+    let h=`<div class="st">${j.status==='awaiting_confirm'?'📝':'<span class="spin">⏳</span>'} ${esc(t(JOB_TEXT[j.status]||j.status))}<span class="badge" data-no-i18n>${esc(j.id)}</span></div>`;
+    if(j.status==='awaiting_confirm')h+=`<div class="hint" style="margin:6px 0 4px">${esc(t('将要发给图像模型的提示词,可以直接改:'))}</div><textarea id="j-prompt" rows="9" data-no-i18n>${esc(j.prompt||'')}</textarea>`
+      +`<div class="row" style="margin-top:6px"><button class="pri" id="j-ok">${esc(t('确认出图'))}</button><button id="j-cancel">${esc(t('取消'))}</button></div>`;
+    else if(j.status==='drafting')h+=`<div class="hint">${esc(t('可以到控制台看 Agent 的进展'))}</div><div class="row"><button id="j-cancel">${esc(t('取消'))}</button></div>`;
+    else h+=`<div class="hint">${esc(j.op==='upscale'?F('目标 {w}×{h}',{w:j.target[0],h:j.target[1]}):t('通常一分钟左右'))}</div>`;
+    return h;
+  }
+  if(failed)return `<div class="st" style="color:var(--red)">✗ ${esc(t(failed.op==='upscale'?'上一次放大失败':'上一次编辑失败'))}</div><div class="err">${esc(failed.error||'')}</div>`;
+  return '';
+}
+function renderJob(){
+  const j=S.job, last=S.last_job&&S.last_job.status==='failed'?S.last_job:null;
+  [['#job','edit'],['#job2','upscale']].forEach(([sel,op])=>{
+    const el=$(sel), mine=j&&j.op===op?j:null, bad=!j&&last&&last.op===op?last:null;
+    const keep=mine&&mine.status==='awaiting_confirm'&&el.dataset.jid===mine.id+mine.status&&el.querySelector('#j-prompt');   // 用户正在改提示词:不重绘
+    if(!keep){el.innerHTML=jobHtml(mine,bad);el.dataset.jid=mine?mine.id+mine.status:''}
+    el.className='jobbox'+(mine||bad?' on':'');
+  });
+  const ok=$('#j-ok'), cancel=$('#j-cancel');
+  if(ok)ok.onclick=async()=>{try{apply(await api('/confirm',withFile({job:j.id,prompt:$('#j-prompt').value})))}catch(err){toast(err.message,true)}};
+  if(cancel)cancel.onclick=async()=>{try{apply(await api('/confirm',withFile({job:j.id,cancel:true})))}catch(err){toast(err.message,true)}};
+}
+function syncBusy(){
+  const busy=!!(S&&S.job);
+  $('#send').disabled=busy;$('#up-go').disabled=busy;
+  ['#t-crop','#t-fliph','#t-flipv','#t-rot','#t-size'].forEach(s=>$(s).disabled=!S);
+}
+function poll(){
+  clearTimeout(pollTimer);
+  if(S&&S.job)pollTimer=setTimeout(async()=>{try{apply(await api('?file='+encodeURIComponent(FILE)),true)}catch(_){poll()}},2500);
+}
+
+/* ---------------- 放大页 ---------------- */
+const upMode=()=>document.querySelector('input[name=upmode]:checked').value;
+function setTarget(w){
+  const v=ver(VIEW);if(!v)return;
+  w=Math.max(2,Math.round(w/2)*2);$('#up-w').value=w;
+  $('#up-h').textContent='× '+Math.max(2,Math.round(w*v.height/v.width/2)*2)+'  ('+(w/v.width).toFixed(2)+'×)';
+}
+$('#up-w').oninput=()=>setTarget(+$('#up-w').value||0);
+function sizeBtns(list){
+  $('#up-sizes').innerHTML=list.map(x=>`<button class="sm" data-w="${x.w}" data-no-i18n title="${x.w}×${x.h}">${esc(x.label)}</button>`).join('');
+}
+$('#up-sizes').onclick=e=>{const w=e.target.dataset.w;if(w)setTarget(+w)};
+function renderUp(){
+  const v=ver(VIEW);if(!v)return;
+  $('#up-cur').textContent=`${v.width} × ${v.height}  ·  ${v.id}`;
+  const fid=upMode()==='fidelity';
+  $('#up-redraw').hidden=fid;$('#up-fid').hidden=!fid;
+  if(fid){
+    const sel=$('#up-model'), cur=sel.value;
+    sel.innerHTML=(S.upscalers||[]).map(u=>`<option value="${esc(u.id)}" ${u.configured?'':'disabled'}>${esc(t(u.label))}${u.provider==='fal'?' (Fal)':''}${u.configured?'':' — '+esc(t('未配置'))}</option>`).join('');
+    if(cur&&[...sel.options].some(o=>o.value===cur&&!o.disabled))sel.value=cur;
+    const u=(S.upscalers||[]).find(x=>x.id===sel.value)||{max_factor:4};
+    $('#up-fid-hint').textContent=u.provider==='local'?t('本机插值不新增细节,只是把像素放大;免费、立即完成')
+      :u.fixed_factor?F('这个模型固定放大 {n} 倍,宿主再缩到目标尺寸',{n:u.fixed_factor}):F('最多放大 {n} 倍;按 Fal 的价格计费',{n:u.max_factor});
+    const fs=[1.5,2,3,4,6,8].filter(f=>f<=u.max_factor&&Math.max(v.width,v.height)*f<=8192);
+    sizeBtns(fs.map(f=>({label:f+'×',w:Math.round(v.width*f),h:Math.round(v.height*f)})));
+    if(!+$('#up-w').value||+$('#up-w').value>v.width*u.max_factor)setTarget(v.width*Math.min(2,u.max_factor));
+  }else renderLimits();
+}
+function renderLimits(){
+  const v=ver(VIEW), el=$('#up-lim');if(!v)return;
+  if(!LIM){el.textContent=t('正在查询该模型的尺寸上限…');el.className='hint';sizeBtns([1.5,2].map(f=>({label:f+'×',w:Math.round(v.width*f),h:Math.round(v.height*f)})));return}
+  const m=LIM.limits.mode;
+  let btns=[];
+  if(m==='pixels'&&LIM.max){
+    const [mw,mh]=LIM.max, k=mw/v.width;
+    el.className='hint'+(k<1.05?' warn':'');
+    el.textContent=k<1.05?F('该模型在这个画幅下最大 {w} × {h},已经放不大这张图了',{w:mw,h:mh})
+      :F('该模型在这个画幅下最大 {w} × {h}(约 {k} 倍){b}',{w:mw,h:mh,k:k.toFixed(2),b:LIM.limits.basis==='measured'?'':t(';上限抄自渠道参数表,没有实测')});
+    btns=[1.5,2,3].filter(f=>f<k-.01).map(f=>({label:f+'×',w:Math.round(v.width*f),h:Math.round(v.height*f)}));
+    if(k>=1.05)btns.push({label:t('到上限')+' '+mw+'×'+mh,w:mw,h:mh});
+    if(k>=1.05&&(!+$('#up-w').value||+$('#up-w').value>mw))setTarget(Math.min(mw,v.width*2));
+  }else if(m==='tiers'){
+    el.className='hint';
+    el.textContent=F('该模型按分辨率档出图({tiers}),实际像素由模型决定;下面每一档是为落进该档而请求的尺寸',{tiers:LIM.limits.tiers.join(' / ')});
+    btns=LIM.tiers.filter(x=>x.size[0]*x.size[1]>v.width*v.height*1.05).map(x=>({label:x.tier+' '+x.size[0]+'×'+x.size[1],w:x.size[0],h:x.size[1]}));
+    if(!btns.length){el.className='hint warn';el.textContent+=' '+t('这张图已经不小于它的最高档')}
+    else if(!+$('#up-w').value)setTarget(btns[0].w);
+  }else{
+    el.className='hint warn';
+    el.textContent=m==='pixels'?t('这张图的画幅超出该模型允许的长宽比'):t('该模型的尺寸上限未知:可以试着放大,模型没按请求尺寸出图时会报失败');
+    btns=[1.5,2].map(f=>({label:f+'×',w:Math.round(v.width*f),h:Math.round(v.height*f)}));
+    if(!+$('#up-w').value)setTarget(v.width*2);
+  }
+  sizeBtns(btns);
+}
+let limSeq=0;
+async function loadLimits(){
+  if(!S||upMode()!=='redraw'){renderUp();return}
+  const ch=PICK_UP?PICK_UP.value():{}, seq=++limSeq;
+  LIM=null;renderUp();
+  try{
+    const d=await (await fetch(API+'/limits?file='+encodeURIComponent(FILE)+'&version='+encodeURIComponent(VIEW||'')+'&provider='+encodeURIComponent(ch.provider||'')+'&model='+encodeURIComponent(ch.model||''))).json();
+    if(seq!==limSeq)return;
+    LIM=d.limits?d:{limits:{mode:'unknown'},tiers:[]};
+  }catch(_){if(seq!==limSeq)return;LIM={limits:{mode:'unknown'},tiers:[]}}
+  renderUp();
+}
+document.querySelectorAll('input[name=upmode]').forEach(r=>r.onchange=()=>{$('#up-w').value='';loadLimits()});
+$('#up-model').onchange=()=>{$('#up-w').value='';renderUp()};
+$('#up-go').onclick=async()=>{
+  $('#up-err').textContent='';
+  const ch=PICK_UP?PICK_UP.value():{};
+  $('#up-go').disabled=true;
+  try{apply(await api('/upscale',withFile({parent:VIEW,mode:upMode(),upscaler:$('#up-model').value,width:+$('#up-w').value||0,provider:ch.provider||'',model:ch.model||''})));toast(t('已开始放大'))}
+  catch(err){$('#up-err').textContent=err.message}
+  finally{syncBusy()}
+};
+
+/* ---------------- 调整(非 AI) ---------------- */
+async function transform(op,params){
+  if(!S)return;
+  try{const st=await api('/transform',withFile({version:VIEW,op,params:params||{}}));REGIONS=[];apply(st);view(st.created);toast(F('已存为 {id}',{id:st.created}))}
+  catch(err){toast(err.message,true)}
+}
+$('#t-fliph').onclick=()=>transform('flip_h');
+$('#t-flipv').onclick=()=>transform('flip_v');
+$('#t-rot').onclick=()=>transform('rotate',{deg:90});
+$('#t-crop').onclick=()=>{
+  const r=[...REGIONS].reverse().find(x=>x.shape==='rect');
+  if(!r){toast(t('先用「矩形」圈出要保留的范围'),true);return}
+  transform('crop',{x:r.x,y:r.y,w:r.w,h:r.h});
+};
+$('#t-size').onclick=()=>{
+  const v=ver(VIEW);if(!v)return;
+  modal(t('缩放到指定尺寸'),`<div class="row"><span class="hint">${esc(t('宽'))}</span><input type="number" id="rs-w" value="${v.width}" min="16" style="width:100px"><span class="hint">${esc(t('高'))}</span><input type="number" id="rs-h" value="${v.height}" min="16" style="width:100px">`
+    +`<label class="opt" style="margin:0 0 0 8px"><input type="checkbox" id="rs-lock" checked><span>${esc(t('保持比例'))}</span></label></div>`
+    +`<div class="hint" style="margin-top:8px">${esc(t('这是普通的插值缩放,不新增细节;要更清晰请用「放大」'))}</div>`,
+    [{label:t('取消')},{label:t('缩放'),pri:true,fn:()=>{transform('resize',{width:+$('#rs-w').value,height:+$('#rs-h').value});closeModal()}}]);
+  $('#rs-w').oninput=()=>{if($('#rs-lock').checked)$('#rs-h').value=Math.round(+$('#rs-w').value*v.height/v.width)};
+  $('#rs-h').oninput=()=>{if($('#rs-lock').checked)$('#rs-w').value=Math.round(+$('#rs-h').value*v.width/v.height)};
+};
+
+/* ---------------- 历史 / 信息 ---------------- */
+function verDesc(v){
+  if(v.op==='edit'){
+    const parts=(v.regions||[]).filter(r=>r.text).map(r=>'①②③④⑤⑥⑦⑧⑨⑩⑪⑫'[r.n-1]+' '+r.text);
+    if(v.text)parts.push(v.text);
+    return parts.join(' · ');
+  }
+  if(v.op==='upscale'){const u=v.upscale||{};return t(u.mode==='fidelity'?'保真超分':'重绘放大')+(u.factor?' '+(+u.factor).toFixed(2)+'×':'')}
+  if(v.op==='transform'){const x=v.transform||{};return t(TF_NAMES[x.op]||x.op||'')+(x.deg?' '+x.deg+'°':'')}
+  return '';
+}
+function renderVers(){
+  const vs=[...S.versions].reverse(), plate=S.storage==='plate';
+  $('#vers').innerHTML=vs.map(v=>{
+    const lock=v.lock||{}, fin=v.id===S.final;
+    const b=[`<span class="badge">${esc(t(OP_NAMES[v.op]||v.op))}</span>`];
+    if(fin)b.push(`<span class="badge fin">★ ${esc(t('最终版'))}</span>`);
+    if(v.plate_key)b.push(`<span class="badge key" data-no-i18n title="${esc(t('已登记进背景图库'))}">${esc(v.plate_key)}</span>`);
+    if(lock.applied)b.push(`<span class="badge${lock.warn?' warn':''}" title="${esc(lock.warn?t('模型把圈外也改了不少(可能整张图挪了位置):圈内贴回原图后接缝可能对不上,可以改用整图看看'):t('圈外保持原图不变'))}">${esc(t(lock.warn?'圈外漂移':'圈外锁定'))}</span>`);
+    if(v.aspect_changed)b.push(`<span class="badge warn">${esc(t('画幅变了'))}</span>`);
+    const use=v.usage&&v.usage.total_tokens?F('用量 {n} tokens',{n:v.usage.total_tokens}):'';
+    const meta=[`${v.width}×${v.height}`,fmtSize(v.bytes),[v.provider,v.model].filter(Boolean).join(' '),use,fmtTime(v.created_at),v.parent?'← '+v.parent:''].filter(Boolean).join(' · ');
+    const desc=verDesc(v);
+    return `<div class="ver${v.id===VIEW?' cur':''}${v.id===CMP?' cmp':''}"><img src="${esc(v.thumb_url)}" loading="lazy" data-view="${v.id}" alt="" title="${esc(t('查看这个版本,之后的编辑以它为底图'))}">`
+      +`<div><div class="t1"><span data-no-i18n>${v.id}</span>${b.join('')}</div><div class="t2" data-no-i18n>${esc(meta)}</div>${desc?`<div class="t2" data-no-i18n title="${esc(v.prompt||'')}">${esc(desc)}</div>`:''}`
+      +`<div class="ops"><button class="sm${v.id===VIEW?' on':''}" data-view="${v.id}">${esc(t(v.id===VIEW?'查看中':'查看'))}</button>`
+      +`<button class="sm${v.id===CMP?' on':''}" data-cmp="${v.id}" ${v.id===VIEW?'disabled':''} title="${esc(t('与正在查看的版本对比'))}">${esc(t('选作对比'))}</button>`
+      +(lock.applied&&v.raw_url?`<button class="sm" data-unlock="${v.id}" title="${esc(t('不做圈外锁定:取模型返回的整张图另存一个版本'))}">${esc(t('改用整图'))}</button>`:'')
+      +`<a class="btn" href="${esc(v.url)}" download="${esc((S.file.split('/').pop()||'image').replace(/(\.[^.]+)$/,'_'+v.id+'$1'))}">${esc(t('下载'))}</a>`
+      +(fin?'':`<button class="sm pri" data-adopt="${v.id}">${esc(t('设为最终版'))}</button>`)
+      +(v.op==='original'||fin||v.id===S.disk||v.plate_key?'':`<button class="sm" data-rmv="${v.id}">${esc(t('删除'))}</button>`)
+      +`</div></div></div>`;
+  }).join('')+(plate?`<div class="hint">${esc(t('分镜背景图:设为最终版时原图不动,新图登记为一张新的库图'))}</div>`:'');
+}
+$('#vers').addEventListener('click',async e=>{
+  const d=e.target.dataset;
+  if(d.view)view(d.view);
+  else if(d.cmp){CMP=CMP===d.cmp?null:d.cmp;if(CMP&&$('#cmpmode').value==='off')$('#cmpmode').value='slider';if(!CMP)$('#cmpmode').value='off';syncCmp();renderVers()}
+  else if(d.unlock){try{const st=await api('/version',withFile({version:d.unlock,action:'unlock'}));apply(st);view(st.created)}catch(err){toast(err.message,true)}}
+  else if(d.rmv)modal(t('删除这个版本?'),`<div>${esc(F('{id} 会从历史里移除(文件挪进回收目录,不会真的删掉)',{id:d.rmv}))}</div>`,
+    [{label:t('取消')},{label:t('删除'),warn:true,fn:async()=>{closeModal();try{apply(await api('/version',withFile({version:d.rmv,action:'delete'})))}catch(err){toast(err.message,true)}}}]);
+  else if(d.adopt)adoptDialog(d.adopt);
+});
+async function adoptDialog(vid){
+  const v=ver(vid);
+  modal(F('把 {id} 设为最终版?',{id:vid}),`<div class="empty">${esc(t('加载中…'))}</div>`,[{label:t('取消')}]);
+  let imp;
+  try{imp=await (await fetch(API+'/impact?file='+encodeURIComponent(FILE))).json();if(!imp.notes)throw new Error(imp.detail||'')}
+  catch(err){$('#m-body').innerHTML=`<div class="err">${esc(err.message)}</div>`;return}
+  const plate=imp.storage==='plate', users=imp.users||[];
+  let h=`<div>${esc(plate?t('这张背景图的新版本会登记进场景背景图库。'):F('会用这个版本覆盖 {path};被换下的图仍留在历史里,随时可以换回。',{path:S.file}))}</div>`;
+  h+=`<div style="margin-top:8px"><b>${esc(t('在用这张图的:'))}</b> <span data-no-i18n>${users.length?esc(users.slice(0,30).join('、'))+(users.length>30?' …':''):esc(t('暂时没有分镜 / 组引用它'))}</span></div>`;
+  if(imp.notes.length)h+='<ul style="margin-top:8px">'+imp.notes.map(n=>`<li>${esc(t(NOTE_TEXT[n]||n))}</li>`).join('')+'</ul>';
+  if(plate&&users.length)h+=`<label class="opt" style="margin-top:10px"><input type="checkbox" id="ad-repoint" checked><span>${esc(F('同时把引用它的分镜改指向新图({n} 处)',{n:users.length}))}</span></label>`;
+  if(imp.setting_kind&&v.op!=='original'&&v.op!=='external')h+=`<label class="opt"><input type="checkbox" id="ad-setting"><span>${esc(t('把这次改动发给修改师,同步更新设定文字(否则以后重出这张图会改回去)'))}</span></label>`;
+  h+=`<div class="hint" style="margin-top:8px">${esc(t('不会自动重跑下游;有分镜在用时会记一条变更记录,交总制片标记受影响的环节'))}</div>`;
+  modal(F('把 {id} 设为最终版?',{id:vid}),h,[{label:t('取消')},{label:t('设为最终版'),pri:true,fn:async()=>{
+    const body=withFile({version:vid,repoint:$('#ad-repoint')?$('#ad-repoint').checked:true,sync_setting:!!($('#ad-setting')&&$('#ad-setting').checked)});
+    closeModal();
+    try{
+      const st=await api('/adopt',body);apply(st);
+      const a=st.adopted||{};
+      toast((a.plate_key?F('已设为最终版:{key}(替换 {n} 处)',{key:a.plate_key,n:(a.replaced||[]).length}):t('已设为最终版'))
+        +(a.setting_run?' · '+t('已发给修改师'):'')+(a.setting_error?' · '+t('发给修改师失败:')+a.setting_error:''),!!a.setting_error);
+    }catch(err){toast(err.message,true)}
+  }}]);
+}
+function renderInfo(){
+  const i=S.info, p=S.provenance||{}, v=ver(VIEW)||{};
+  const rows=[[t('文件'),S.file],[t('类别'),t(KIND_NAMES[S.kind]||S.kind)],[t('分辨率'),`${i.width} × ${i.height}`],[t('文件大小'),fmtSize(i.bytes)],
+    [t('实际编码'),i.encoding+(i.alpha?' + alpha':'')],[t('创建时间'),fmtTime(i.created)],[t('修改时间'),fmtTime(i.modified)],
+    [t('最终版'),S.final||'—'],[t('历史版本'),String(S.versions.length)]];
+  if(p.provider||p.model)rows.push([t('出图模型'),[p.provider,p.model].filter(Boolean).join(' ')]);
+  if(p.seed)rows.push(['seed',String(p.seed)]);
+  if(p.note)rows.push([t('修改意见'),p.note]);
+  let h='<div class="sec"><h3>'+esc(t('原路径上的图'))+'</h3><dl class="kv">'+rows.map(([k,x])=>`<dt>${esc(k)}</dt><dd data-no-i18n>${esc(x)}</dd>`).join('')+'</dl>'
+    +(i.encoding==='JPEG'&&/\.png$/i.test(S.file)?`<div class="hint" style="margin-top:6px">${esc(t('扩展名是 .png,内容是 JPEG:本库的图片按内容识别,这是正常的'))}</div>`:'')+'</div>';
+  const vr=[[t('版本'),v.id],[t('分辨率'),`${v.width} × ${v.height}`],[t('文件大小'),fmtSize(v.bytes||0)],[t('创建时间'),fmtTime(v.created_at)]];
+  if(v.provider||v.model)vr.push([t('出图模型'),[v.provider,v.model].filter(Boolean).join(' ')]);
+  if(v.model_size)vr.push([t('模型返回的尺寸'),v.model_size.join(' × ')]);
+  if(v.lock&&v.lock.drift!=null)vr.push([t('圈外差异'),(v.lock.drift*100).toFixed(1)+'%']);
+  h+='<div class="sec"><h3>'+esc(t('正在查看的版本'))+'</h3><dl class="kv">'+vr.map(([k,x])=>`<dt>${esc(k)}</dt><dd data-no-i18n>${esc(x)}</dd>`).join('')+'</dl></div>';
+  const pr=v.prompt||p.prompt;
+  if(pr)h+='<div class="sec"><h3>'+esc(t(v.prompt?'这个版本的提示词':'原图的提示词'))+`</h3><textarea rows="8" readonly data-no-i18n>${esc(pr)}</textarea></div>`;
+  $('#info').innerHTML=h;
+}
+
+/* ---------------- 弹窗 ---------------- */
+function modal(title,html,btns,wide){
+  $('#m-title').textContent=title;$('#m-body').innerHTML=html;
+  $('#modal .box').classList.toggle('wide',!!wide);
+  const box=$('#m-btns');box.innerHTML='';
+  (btns||[]).forEach(b=>{const el=document.createElement('button');el.textContent=b.label;if(b.pri)el.className='pri';if(b.warn)el.className='warn';el.onclick=b.fn||closeModal;box.appendChild(el)});
+  $('#modal').classList.add('on');
+}
+function closeModal(){$('#modal').classList.remove('on')}
+$('#modal').addEventListener('mousedown',e=>{if(e.target.id==='modal')closeModal()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();mbox.style.display='none';$('#lightbox').style.display='none'}});
+
+/* ---------------- 数据 ---------------- */
+function view(id){
+  if(!ver(id))return;
+  const prev=ver(VIEW), next=ver(id);
+  if(prev&&(prev.width!==next.width||prev.height!==next.height)&&REGIONS.length){REGIONS=[];renderRegions();toast(t('画面尺寸变了,圈选已清空'))}
+  VIEW=id;if(CMP===VIEW){CMP=null;$('#cmpmode').value='off';syncCmp()}
+  $('#up-w').value='';
+  $('#f-ver').innerHTML=`<b data-no-i18n>${esc(id)}</b> · <span data-no-i18n>${next.width}×${next.height}</span> · ${esc(t('之后的编辑、放大、调整都以它为底图'))}`;
+  fit();renderVers();renderInfo();
+  if($('#p-up').classList.contains('on'))loadLimits();else renderUp();
+}
+function apply(st,fromPoll){
+  const prevJob=S&&S.job;
+  S=st;
+  if(!VIEW||!ver(VIEW))VIEW=(ver(st.final)||st.versions[st.versions.length-1]).id;
+  const done=st.last_job;
+  if(prevJob&&!st.job&&done&&done.id===prevJob.id){       // 刚结束的任务:成功就切到新版本
+    if(done.status==='done'&&done.version&&ver(done.version)){REGIONS=[];renderRegions();view(done.version);toast(F('已存为 {id}',{id:done.version}));tab('hist')}
+    else if(done.status==='failed')toast(t(done.op==='upscale'?'放大失败':'编辑失败'),true);
+  }
+  $('#obj').textContent=((st.ui||{}).label||st.file)+'  ·  '+t(KIND_NAMES[st.kind]||st.kind);
+  renderRefs();renderJob();renderVers();renderInfo();renderUp();syncBusy();syncSendHint();draw();poll();
+}
+function mountPickers(){
+  const m=S.models||{channels:[],global:{},pref:{}};
+  const mk=(host,key,onChange)=>{
+    let saved=null;try{saved=JSON.parse(localStorage.getItem(key)||'null')}catch(_){}
+    const init=saved&&m.channels.some(c=>c.id===saved.provider&&c.configured)?saved:(m.pref||{});
+    return mountImageModelPicker({kind:S.pref_kind||'scenes',host,label:'',persist:false,
+      data:{channels:m.channels,global:m.global,provider:init.provider||'',model:init.model||''},
+      onChange:v=>{try{localStorage.setItem(key,JSON.stringify(v))}catch(_){};if(onChange)onChange()}});
+  };
+  PICK_EDIT=mk('#imp-edit','canvas_model_edit_'+(S.pref_kind||'any'));
+  PICK_UP=mk('#imp-up','canvas_model_up_'+(S.pref_kind||'any'),()=>{$('#up-w').value='';loadLimits()});
+}
+async function load(){
+  if(!FILE){$('#vp').innerHTML=`<div class="empty">${esc(t('没有指定图片:请从预览页的「🖌 画板」按钮进入'))}</div>`;return}
+  try{
+    const q='?file='+encodeURIComponent(FILE)+['kind','label','oid'].map(k=>Q.get(k)?'&'+k+'='+encodeURIComponent(Q.get(k)):'').join('');
+    const st=await api(q);
+    const first=!S;
+    S=st;if(first)mountPickers();
+    apply(st);
+    if(first)view(VIEW);
+  }catch(err){$('#vp').innerHTML=`<div class="empty">${esc(t('加载失败:'))}${esc(err.message)}</div>`}
+}
+$('#reload').onclick=load;
+$('#back').onclick=e=>{if(history.length>1){e.preventDefault();history.back()}};
+renderRegions();
+load();
+</script>
+</body>
+</html>

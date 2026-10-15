@@ -14,7 +14,7 @@
 1. 逐句风格化:按 `bible/characters/<id>/dialogue_style.json`(口头禅、句式、用词禁区)重写对白,逐角色统计命中率,整体 ≥80%。
 2. 口语化:书面语转口语、长句拆短句,信息量不丢、人设不崩。
 3. 控时长:按语速估算每句配音时长写入 `est_duration_s`,单句 ≤ 配音上限(口径与 `voice-generation` 的镜头预算一致);超限必拆句或精简。
-   **语速档 `pace` 随情绪一并写(2026-10-03 时间尺,docs/time_cost.md)**:每句对白行元信息除 `emotion` 外必写 `pace: fast | medium | slow`——这句按情绪该怎么念:急/喝/斥/惊/下令 → fast,平叙 → medium,哭求/低语/冷压/沉吟/弥留 → slow。它是**分镜镜长的依据**:估时 = 0.7s 起止余量 + 有效字数 ÷(角色语速 × 档位倍率 fast 1.19 / medium 1 / slow 0.81)+ 0.4s × 句中停顿数,由宿主按本档位算(`code/check_dialogue_fit.py --write-est` 回写),分镜规划再按估时 + 开口前后余量定镜长;后面的台词演法工位只写怎么演,目标时长直接取这个估时。没写 pace 宿主按情绪词猜(猜不出 medium),猜错的账算在我头上。
+   **语速档 `pace` 随情绪一并写(2026-10-03 时间尺,docs/time_cost.md)**:每句对白行元信息除 `emotion` 外必写 `pace: fast | medium | slow`——这句按情绪该怎么念:急/喝/斥/惊/下令 → fast,平叙 → medium,哭求/低语/冷压/沉吟/弥留 → slow。它是**分镜镜长的依据**:估时 = 0.7s 起止余量 + 有效字数 ÷(角色语速 × 档位倍率 fast 1.19 / medium 1 / slow 0.81)+ 0.4s × 句中停顿数(英文等拉丁文字的句子按词数 ÷ 词速 `speed_wpm`,超限精简按 `target_words`),由宿主按本档位算(`code/check_dialogue_fit.py --write-est` 回写),分镜规划再按估时 + 开口前后余量定镜长;后面的台词演法工位只写怎么演,目标时长直接取这个估时。没写 pace 宿主按情绪词猜(猜不出 medium),猜错的账算在我头上。
    **组级回派(§7D 对白适配)**:分镜后若组内台词总时长装不进生成组时长(估时级机检 Σ台词估时 >组时长×0.7;§8A 2026-07-20 起无干声实测环节),回派到我**改短台词**——这是超长的首选解法(优先于调镜/拆组,严禁靠压语速消化:视频模型会为念完台词赶词提速)。只动对白文本层,语义与人设不丢,改完出新版本供重估/重合成复检。
 3′. **对白时长校验修正环节(p6-dialogue-fit,每集,shot-planning 定稿后固定执行,2026-08-30)**:对白是我在 Phase 5 写的,镜头时长到 Phase 6 才定——长度必然漂移,所以定稿镜头表后由我固定跑一遍校验并就地修正:
    - **①校验**:`python3 code/check_dialogue_fit.py --project <slug> --ep epNN`(宿主 CLI,禁人算),报告落 `directing/epNN/dialogue_fit.json`。退出码 0 = PASS → 直接关单(回执写明「无超限」,不改任何稿);
@@ -22,7 +22,7 @@
    - **③复检**:`python3 code/check_dialogue_fit.py --project <slug> --ep epNN --write-est` 重算并回写估时后再跑一遍纯检查,PASS 才关单;改动文件走 version 登记;
    - **④升级**:3 轮仍装不下(台词已无冗余可删)= 文本层解不了,回执写明超限组与已尝试的删减,上报 orchestrator 回派 shot-planning 调镜时长/拆组(分镜变更),我不擅自动镜。
 4. 标情绪:每句附情绪标签(voice-generation 配音的情绪依据来自剧本对白层)。
-5. 只做原位更新:仅改 screenplay.md 的对白层,场景/动作/转场零改动;修改在 result.json 变更记录中留痕。
+5. 只做原位更新:仅改 screenplay.md 的对白层,场景/动作/转场零改动;修改在 result.json 变更记录中留痕。**场尾转场行带 `{衔接: …, 出: …, 入: …}` 时(2026-10-10,`docs/scene_links.md`;没有花括号的转场行本条不适用)**:花括号一字不动;它的「出」或「入」引的是某句台词(台词接力、声音接力常见)时,那句改写后须保留被引的接点词(人名、被问的东西、关键名词),改不了就保留原句并在回执写明——改丢了,机检 scene_link_valid 会报「出 / 入 在正文里找不到对应」。
 6. **画外标记随句保留(2026-10-03,声画分离,WORKFLOW.md §8D;仅当「用户输出设定 → 声画分离」≠ 关时适用)**:screenplay 在说话人括注写的 `(O.S.)`/`(V.O.)` 是客观声源标记,我改写、拆句、合句、精简时**原样保留在同一句的说话人括注上**(拆成两句则两句都带),不自行增删——声源在不在画内不是我判的;精简回派(3′②)的 trim_targets 里带 `placement` 的句子照常只动文本。**例外两处**:① §7D ① 无声组核查三级回派的第 ② 级落到我这里——orchestrator 工单明示「补人物 V.O. 句」时,按原著心理描写 / 信件 / 回忆依据加 `(V.O.)` 句(说话人必须是本集出场人物 CHAR 编号、人物口吻,不写叙述体;这是剧本变更的对白层改动,工单须附依据);② dialogue_fit 超限回派时,报告或工单建议「转画外(D2)」的句子我**不写** `(O.S.)`——那是分镜层决策,由 shot-planning 在 shot_list 写 `placement` 与 reason,我只在回执里记录「本句可转画外、文本未动」。
 
 ## 不做什么(边界)
@@ -39,7 +39,7 @@
 | dialogue-style(Phase 3) | 本集出场角色的风格卡 | `bible/characters/<id>/dialogue_style.json` |
 | 工单(orchestrator 内联) | 配音上限、语速参数 | 工单 `instruction`/`inputs` |
 | shot-planning(p6-dialogue-fit 时) | 定稿镜头表:组时长、镜时长、每镜 dialogue_lines | `directing/epNN/shot_list.json` |
-| voiceprint / settings(p6-dialogue-fit 时) | 各角色语速 `speed_cpm`、单镜上限 `duration.shot_max_s` | `bible/characters/<id>/voice.json`、`settings.json` |
+| voiceprint / settings(p6-dialogue-fit 时) | 各角色语速 `speed_cpm`(英文等拉丁文字台词用 `speed_wpm`)、单镜上限 `duration.shot_max_s` | `bible/characters/<id>/voice.json`、`settings.json` |
 
 ## 输出
 

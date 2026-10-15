@@ -1,7 +1,7 @@
 import { projectRenderFormat } from './whitebox-format.js?v=20260908-bedfoot-pour';
 import { wbText as t, wbMessage } from './whitebox-i18n.js?v=20260908-bedfoot-pour';
 let rendererModule;
-const loadRenderer=()=>rendererModule ||= import('./whitebox-renderer.js?v=20260926-flykeys');
+const loadRenderer=()=>rendererModule ||= import('./whitebox-renderer.js?v=20261009-hand121');
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const api=project=>'/api/v1/projects/'+encodeURIComponent(project)+'/whitebox';
 const artifactBase=project=>'/api/v1/projects/'+encodeURIComponent(project)+'/artifacts/';
@@ -40,10 +40,15 @@ async function previewData(url,fallback,minStagingVersion=0){
 
 // 「状态」弹出层:点面板外任意处收起
 document.addEventListener('click',e=>{if(!e.target.closest('.wb-statuswrap'))document.querySelectorAll('.wb-statuspop.open').forEach(x=>{x.classList.remove('open');x.previousElementSibling?.setAttribute('aria-expanded','false');});});
+// 场景预览的 3D 白模只是看空间,与视频画幅无关:固定 16:9(2026-10-09,同背景图/场景图画幅);组面板仍按项目画幅(摄像机视角 = 成片构图)
+const SCENE_FORMAT={aspect_ratio:'16:9',width:960,height:540};
 async function mount(host,project,scene,group=null,ep='') {
-  const settings=await json(`/api/v1/projects/${encodeURIComponent(project)}/config`);
-  if(!host.isConnected)return;
-  const format=projectRenderFormat(settings);
+  let format=SCENE_FORMAT;
+  if(group){
+    const settings=await json(`/api/v1/projects/${encodeURIComponent(project)}/config`);
+    if(!host.isConnected)return;
+    format=projectRenderFormat(settings);
+  }
   const fileState=value=>value===true?t('已有'):value===false?t('未生成'):t('未知');
   const statusItems=[t('场景模型：{state}',{state:fileState(scene.artifact_status?.model)})];
   if(group)statusItems.push(
@@ -328,7 +333,7 @@ export function mountGroups(root,project,ep){
   // 减少懒建时上方内容撑高把页面推走的位移(导航跳转靠 preview_storyboard.html jumpTo 再校正)
   projectSettings(project).then(settings=>{
     const f=projectRenderFormat(settings);
-    for(const h of hosts)if(h.isConnected&&!h.classList.contains('wb-panel')){const w=Math.max(0,h.clientWidth-24);h.style.minHeight=`${Math.round(2*w*f.height/f.width+160)}px`;}
+    for(const h of hosts)if(h.isConnected&&!h.classList.contains('wb-panel')){const w=Math.max(0,h.clientWidth-24),ch=Math.min(w*f.height/f.width,innerHeight*0.6,520);h.style.minHeight=`${Math.round(2*ch+160)}px`;}
   }).catch(()=>{});
   pending=new Map();
   groupObserver=new IntersectionObserver(entries=>{

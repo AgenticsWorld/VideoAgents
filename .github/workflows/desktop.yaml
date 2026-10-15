@@ -204,7 +204,8 @@ jobs:
             --desktop-artifacts desktop-artifacts/desktop-s3-win \
             --minimum-desktop-version "$MINIMUM_DESKTOP_VERSION" \
             --version "$RELEASE_VERSION" \
-            --public-base "$S3_PUBLIC_BASE"
+            --public-base "$S3_PUBLIC_BASE" \
+            --ffmpeg-artifact apps/desktop/ffmpeg-artifact.json
           python apps/desktop/scripts/update_runtime_index.py \
             --index publish/oss/metadata.json \
             --artifacts runtime-artifacts \
@@ -212,7 +213,17 @@ jobs:
             --desktop-artifacts desktop-artifacts/desktop-oss-win \
             --minimum-desktop-version "$MINIMUM_DESKTOP_VERSION" \
             --version "$RELEASE_VERSION" \
-            --public-base "$OSS_PUBLIC_BASE"
+            --public-base "$OSS_PUBLIC_BASE" \
+            --ffmpeg-artifact apps/desktop/ffmpeg-artifact.json
+      - name: Fetch the pinned FFmpeg package for mirrors that lack it
+        id: ffmpeg
+        shell: bash
+        run: |
+          python apps/desktop/scripts/mirror_ffmpeg.py \
+            --pin apps/desktop/ffmpeg-artifact.json \
+            --mirror s3="$S3_PUBLIC_BASE" \
+            --mirror oss="$OSS_PUBLIC_BASE" \
+            --output ffmpeg-mirror >> "$GITHUB_OUTPUT"
       - name: Prepare six GitHub release assets
         shell: bash
         env:
@@ -267,6 +278,7 @@ jobs:
         shell: bash
         env:
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          UPLOAD_FFMPEG: ${{ steps.ffmpeg.outputs.upload_s3 }}
         run: |
           for package in runtime-artifacts/python-runtime-*/*.zip; do
             aws s3 cp "$package" \
@@ -274,6 +286,14 @@ jobs:
               --content-type application/zip \
               --cache-control "public,max-age=31536000,immutable"
           done
+          if [ "$UPLOAD_FFMPEG" = "true" ]; then
+            for package in ffmpeg-mirror/*.zip; do
+              aws s3 cp "$package" \
+                "s3://agentics-prod/packages/video-agents/ffmpeg/$(basename "$package")" \
+                --content-type application/zip \
+                --cache-control "public,max-age=31536000,immutable"
+            done
+          fi
 
           mac_package="desktop-artifacts/desktop-s3-mac/VideoAgents-${RELEASE_VERSION}.zip"
           win_package="desktop-artifacts/desktop-s3-win/VideoAgents-${RELEASE_VERSION}.zip"
@@ -307,12 +327,20 @@ jobs:
         shell: bash
         env:
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          UPLOAD_FFMPEG: ${{ steps.ffmpeg.outputs.upload_oss }}
         run: |
           for package in runtime-artifacts/python-runtime-*/*.zip; do
             ossutil cp -f "$package" \
               "oss://${OSS_PACKAGES_BUCKET}/packages/video-agents/python/$(basename "$package")" \
               --meta="Content-Type:application/zip#Cache-Control:public,max-age=31536000,immutable"
           done
+          if [ "$UPLOAD_FFMPEG" = "true" ]; then
+            for package in ffmpeg-mirror/*.zip; do
+              ossutil cp -f "$package" \
+                "oss://${OSS_PACKAGES_BUCKET}/packages/video-agents/ffmpeg/$(basename "$package")" \
+                --meta="Content-Type:application/zip#Cache-Control:public,max-age=31536000,immutable"
+            done
+          fi
 
           mac_package="desktop-artifacts/desktop-oss-mac/VideoAgents-${RELEASE_VERSION}.zip"
           win_package="desktop-artifacts/desktop-oss-win/VideoAgents-${RELEASE_VERSION}.zip"

@@ -15,7 +15,7 @@
 #   whitebox_requested: = 项目输出设置 output.spatial_blocking(「白模/人物精确空间位置」,默认关;2026-09-16 起未配置过的存量项目也视为关)——2026-09-07 起该开关的含义即
 #     「用白模摄影机视角视频给视频生成定位人物」:开启时实例化 p6-scene-model / p6-whitebox / g6w / p6-whitebox-export / p6-shot-plates,
 #     白模视频自动接成组视频生成的参考视频,分镜背景图自动接成组参考图;
-#     2026-09-09 顺序:p6-whitebox 只编译(--compile-only)供预览页审看 → 用户签字 g6w「H3W-白模确认」→ p6-whitebox-export 导出 camera.mp4(2026-09-10 起同派 whitebox-staging,原 whitebox-export 工位已并入)
+#     2026-09-09 顺序:p6-whitebox 只编译(--compile-only)供预览页审看(2026-10-10:交付前另跑 code/concat_whitebox.py 出整集白模样片——预览版组视频,不算正式导出)→ 用户签字 g6w「H3W-白模确认」→ p6-whitebox-export 导出 camera.mp4(2026-09-10 起同派 whitebox-staging,原 whitebox-export 工位已并入)
 #     → p6-shot-plates 生成分镜背景图(code/render_shot_plates.py)→ g6「H3A-分镜确认」;
 #     关闭时不实例化以上白模节点，并从 g6 移除对应依赖（同其他 condition 节点）。用户工单单独要求白模预演时同此。
 #   g7p「H3V-视频提示词确认」(2026-10-05,每集):本集全部组 p7-prompt 关单 → 用户在「🎦 分镜预览」页审看各组视频提示词并签字 → 才派 p7-image / p7-video;
@@ -72,7 +72,9 @@ phases:
         depends_on: [p0-scan]
         outputs: ["story/structured_story/"]   # 本批各章分片 chNNN.json,每章一文件
         validation:
-          auto: [schema, batch_chapter_coverage_100, speaker_missing_lt_2pct]
+          # 批级不判 UNKNOWN 占比(批分母常 <50 条,1 条即越 2% 线,与「判不准就标 UNKNOWN」互斥,#130);
+          # 只核每条 UNKNOWN 附候选 + 理由;占比留给 p0-merge 全书判。本批 UNKNOWN ≥5 条且 ≥10% 时只在回执 WARN
+          auto: [schema, batch_chapter_coverage_100, unknown_speaker_annotated]
           rubric: extraction_v1
           threshold: 85
       - id: p0-merge
@@ -205,8 +207,8 @@ phases:
       - { id: p5-episode-plan, agent: 01-story/episode-planner, outputs: [story/episode_plan.json],   # 2026-09-12 §5A:事件「分配」改「归类+取舍」,每集 treatments[] 逐事件定 dramatize/mention/merge/cut;机检 code/verify_episode_plan.py --project
           validation: { auto: [events_classified_once, treatments_complete, dramatize_within_cap, hook_points_dramatized, cut_not_on_causal_chain, merge_target_valid, duration_in_budget], rubric: writing_v1 } }
       - { id: p5-screenplay, agent: 01-story/screenplay, for_each: episode, depends_on: [p5-episode-plan],
-          outputs: ["story/episodes/{ep}/screenplay.md"],   # 只把 dramatize 事件写成场,每场首行 [事件] 行;机检 code/check_screenplay_events.py --project --ep(§5A,2026-09-12)
-          validation: { auto: [id_refs_valid, dramatized_events_covered, cut_events_absent, scene_has_dramatized_event], rubric: writing_v1, qa: [11-qa/logic-qa] } }
+          outputs: ["story/episodes/{ep}/screenplay.md"],   # 只把 dramatize 事件写成场,每场首行 [事件] 行;机检 code/check_screenplay_events.py --project --ep(§5A,2026-09-12);scene_link_valid 同 CLI(2026-10-10,docs/scene_links.md:场尾转场行的场间衔接 {衔接, 出, 入};没写衔接的剧本直接 PASS)
+          validation: { auto: [id_refs_valid, dramatized_events_covered, cut_events_absent, scene_has_dramatized_event, scene_link_valid], rubric: writing_v1, qa: [11-qa/logic-qa] } }
       - { id: p5-dialogue, agent: 01-story/dialogue-rewrite, for_each: episode, depends_on: [p5-screenplay],
           validation: { auto: [style_hit_rate_gte_80, line_duration_fits] } }   # 2026-10-03 起每句对白行元信息随 emotion 写 pace: fast|medium|slow(语速档),估时按时间尺(modules/time_cost.py)   # line_duration_fits:code/check_dialogue_fit.py 无 shot_list 时的「仅剧本层」模式(line_le_cap + line_est_consistent,2026-08-30)
       - { id: p5-narration, agent: 01-story/narration, for_each: episode, depends_on: [p5-dialogue],
@@ -225,7 +227,7 @@ phases:
                         qa: [07-directing/director] } }
       - { id: p5-breakdown, agent: 01-story/timeline-story, for_each: episode, depends_on: [p5-pacing],
           outputs: ["story/episodes/{ep}/script_breakdown.json"],   # 剧本拆解表(2026-09-11):剧情层产物的结构化视图,供「剧本预览」页与 H3 审看;只读拆解,不改剧本
-          validation: { auto: [script_breakdown_ok] } }   # code/check_script_breakdown.py --project --ep
+          validation: { auto: [script_breakdown_ok, npc_judged] } }   # code/check_script_breakdown.py --project --ep(npc_judged 内置:NPC 参与构图逐场判定 scenes[].npc,总开关 off 时跳过,2026-10-09)
       - { id: g5, gate: true, human: true, checkpoint: H3-第1集剧本确认, depends_on: [p5-breakdown] }
 
   - id: p6
@@ -259,12 +261,13 @@ phases:
           outputs: ["assets/concepts/creatures/{id}/"],
           validation: { auto: [creature_identifiers_match, creature_image_no_person, creature_stage_variants_ok], qa: [11-qa/visual-qa] } }
       - { id: p6-plan, agent: 07-directing/director, outputs: ["directing/{ep}/directing_plan.md"],
-          validation: { rubric: creative_v1, qa: [06-art/art-director] } }
+          validation: { auto: [script_links_disposed], rubric: creative_v1, qa: [06-art/art-director] } }   # script_links_disposed(2026-10-10,docs/scene_links.md):code/check_scene_links.py --project --ep——剧本场尾转场行每条场间衔接,转场清单里都有一行「剧本衔接 Sxx→Syy:采纳 | 修改 | 弃用」;剧本没写衔接 = 不适用,直接 PASS,不必为此跑额外步骤
       - { id: p6-storyboard, agent: 07-directing/storyboard, depends_on: [p6-plan, p6-env-concept],   # 白模开启时 blocking_map 引用本集场景 layout.json 地标,须等本集场景布局包出齐
           outputs: ["directing/{ep}/storyboard.json"],   # 含 groups_draft(生成组草案)、每组 scene_refs/blocking_map(人物起点/动线/终点标注,引用场景 layout.json 地标)、每组 costumes(角色→COS-id,2026-08-26)、每镜 view_tile
           validation: { auto: [scene_coverage_100, every_shot_in_group, blocking_map_present, creature_refs_valid,
                                costume_refs_valid, transition_ok,
-                               shot_time_budget_ok, group_density_ok], rubric: visual_plan_v1 } }   # 时间尺(2026-10-03):code/check_time_budget.py --scope shots --source storyboard   # transition_ok:每组按导演转场清单登记 transition_in(受控枚举)/narrative_block(闪回等块成对),WORKFLOW.md §9C(2026-08-28)   # costume_refs_valid:每组每个出场角色有 costumes[CHAR]=合法 COS-id(属该角色);换装点不得落在组内(2026-08-26)   # blocking_map_present:code/blocking_map_check.py --source storyboard --strict(2026-09-07 起只机检、不再渲染动线草图)
+                               shot_time_budget_ok, group_density_ok,
+                               npc_staging_applied], rubric: visual_plan_v1 } }   # NPC 参与构图(2026-10-09):code/npc_staging.py --check storyboard——生效为开的场次 npc_applied 与生效值一致且有镜写 npc[],关的场次无 npc[]   # 时间尺(2026-10-03):code/check_time_budget.py --scope shots --source storyboard   # transition_ok:每组按导演转场清单登记 transition_in(受控枚举)/narrative_block(闪回等块成对),WORKFLOW.md §9C(2026-08-28)   # costume_refs_valid:每组每个出场角色有 costumes[CHAR]=合法 COS-id(属该角色);换装点不得落在组内(2026-08-26)   # blocking_map_present:code/blocking_map_check.py --source storyboard --strict(2026-09-07 起只机检、不再渲染动线草图)
       - { id: g6s, gate: true, human: true, checkpoint: H3S-故事板确认, depends_on: [p6-storyboard] }   # 2026-09-11:用户在「📋 故事板」页(/preview/board)看分镜草案逐场逐镜表(可按需出铅笔草图,草图不是签字前置)后签字;未签字不派 shot-planning;签字后 storyboard.json 又改动则页面标「签字已过期」,orchestrator 重新建单
       - { id: p6-shots, agent: 07-directing/shot-planning, depends_on: [g6s],
           outputs: ["directing/{ep}/shot_list.json"],    # 含 generation_groups(定稿生成组)、narration_anchors(旁白挂点定稿:每条旁白→镜/组区间+可用画面窗口,窗口扣画内句 + 同窗画外句)、逐组 audio_plan(dialogue/voice_over/ambient_only;narration_over 为 voice_over 旧名)、每句 dialogue_lines[].placement(on/os/vo,声画分离 §8D,2026-10-03)
@@ -275,12 +278,14 @@ phases:
                                group_audio_plan_defined, ambient_only_groups_justified,
                                dialogue_est_fits_group_x0.7,   # 2026-08-30 起由 code/check_dialogue_fit.py 执行(dialogue_fit_group),超限不再自查放行——定稿后固定进 p6-dialogue-fit 精简环节
                                shot_time_budget_ok, group_density_ok,   # 时间尺(2026-10-03):每镜镜长 ≥ 节拍单价 + 台词估时 + 余量;平均镜长 <1.5s 的密集组 ≤15s(code/check_time_budget.py --scope shots;group_density_ok 也内置于 check_generation_groups.py)
+                               script_links_landed,   # 2026-10-10 二期(docs/scene_links.md):code/check_scene_links.py --project --ep——导演采纳 / 修改的剧本场间衔接,后一场第一组有显式 transition_in 且类型一致;登记卡 transition_in.link 由宿主写(未写只 WARN);剧本无衔接 = 不适用 PASS
                                creature_refs_valid,   # 每镜 creatures[] / 组 creatures_union 引用须存在于 bible/creatures/index.json(2026-08-26)
                                costume_refs_valid,    # 每镜 costumes{CHAR:COS} / 组 costumes_by_char 合法且组内同角色同一套;换装点只能落在组边界(costume_change_on_group_boundary,2026-08-26)
                                transition_ok,         # 组入口转场 transition_in:类型枚举/时长范围/非硬切必填 intent+reason/Σ可渲染 ≤ 集预算 1%/narrative_block 成对连续(code/check_generation_groups.py 内置,WORKFLOW.md §9C,2026-08-28)
                                speakers_le_3,         # §8A:dialogue 组画内说话人 ≤3(2026-10-03 起落成代码 code/check_generation_groups.py;placement=os|vo 的画外句不计,第四人插话可按 §8D D3 转画外)
                                placement_valid, placement_speaker_is_cast, placement_reason_valid, offscreen_fit, post_voice_no_overlap,   # 声画分离(2026-10-03,WORKFLOW.md §8D,code/offscreen_lines.py check):os/vo 句 heard_in 同组、speaker 为本集 cast 人物编号、分镜转画外须带白名单 trigger、画外句装进 heard_in 窗口(扣画内句 + 同窗旁白)且与旁白不同窗抢位;output.sound_split=off 时 skipped
                                native_lead_valid,   # 原生先入(三期 2026-10-03,§8D ⑨,code/sync_native_leads.py check / 内置于 check_generation_groups):画内句 dialogue_lines[].native_lead 须满足 P1–P8(sound_split=auto、视频原声、Seedance 2.5、同组前一镜无说话人无台词、本镜首句、s ≤ min(前镜,1.0,估时×40%)、先入文本不含表演触发词);只开放 J
+                               npc_shots_consistent,   # NPC 参与构图(2026-10-09,code/npc_staging.py --check shots):定稿镜照抄草案 npc[],生效为关的场次不得带 npc[]
                                blocking_map_present] } }   # 继承 storyboard blocking_map/view_tile 并按定稿组重切(code/blocking_map_check.py --strict,2026-08-19;2026-09-07 起不再渲染 blocking_maps/*.png,人物空间位置由 p6-whitebox 白模参考视频承担)   # 旁白/对白估时级适配 + 无声组核查(WORKFLOW.md §7D ①,H3A 签字前;ambient_only 组必附 silent_rationale,讲不清叙事的回派 narration 补写并写回 narration.md;dialogue 组 Σ台词估时 ≤ 组时长×0.7,超限优先回派 dialogue-rewrite 改短台词——台词超长会迫使视频模型赶词提速)
       # 对白时长校验修正环节(2026-08-30,WORKFLOW.md §7D ①′):对白在 Phase 5 写完、镜头时长到 Phase 6 才定,长度必然漂移。
       # 定稿镜头表后固定跑 code/check_dialogue_fit.py:PASS 即关单(报告落盘);超限组按报告 trim_targets 由 dialogue-rewrite
@@ -305,7 +310,7 @@ phases:
           outputs: ["directing/{ep}/shots/{shot}/camera.json"], validation: { auto: [movement_supported] } }
       - { id: p6-composition, agent: 07-directing/composition, for_each: shot, depends_on: [p6-shots],
           outputs: ["directing/{ep}/shots/{shot}/composition.json"],
-          validation: { qa: [11-qa/visual-qa] } }
+          validation: { auto: [npc_layers_bound], qa: [11-qa/visual-qa] } }   # npc_layers_bound(2026-10-09,code/npc_staging.py --check composition):带 npc[] 的镜 layers 对应层写明 NPC
       - { id: p6-cinematography, agent: 07-directing/cinematography, depends_on: [p6-plan],
           outputs: ["directing/{ep}/cinematography.json"], validation: { qa: [06-art/art-director] } }
       - { id: p6-blocking, agent: 07-directing/blocking, for_each: shot, depends_on: [p6-shots, p6-dialogue-fit],   # performance.trigger 取自定稿台词,须待对白精简完成(2026-08-30)
@@ -321,11 +326,11 @@ phases:
       - { id: p6-whitebox, agent: 07-directing/whitebox-staging, condition: whitebox_requested,
           depends_on: [p6-scene-model, p6-shots, p6-camera, p6-blocking, p6-continuity],
           outputs: ["directing/{ep}/whitebox_plans/", "directing/{ep}/whitebox/episode.json"],
-          validation: { qa: [11-qa/visual-qa] } } # 2026-09-09:只写调度计划并 render_whitebox.py --compile-only 编译落盘 episode.json 供分镜预览页 3D 审看,不导出视频;禁止只交付 --check-only。
-      - { id: g6w, gate: true, human: true, checkpoint: H3W-白模确认, condition: whitebox_requested, depends_on: [p6-whitebox] }   # 用户在「分镜设定」预览页逐组审看 3D 白模(机位/走位/朝向/穿模)后签字;签字后才导出 camera.mp4、再生成分镜背景图(有出图费用);签字卡自动带白模待决项摘要,阻断级未清宿主拒签、建议级签字即接受默认取舍(docs/whitebox.md「待决项与用户裁决」)
+          validation: { qa: [11-qa/visual-qa] } } # 2026-09-09:只写调度计划并 render_whitebox.py --compile-only 编译落盘 episode.json 供分镜预览页 3D 审看,不做正式导出;禁止只交付 --check-only。2026-10-10:交付前跑 code/concat_whitebox.py 出整集白模样片供用户签字前连续审看(预览版组视频落 directing/{ep}/whitebox/preview/,不写 assets/whitebox manifest、不接线;缺 Chromium 失败不阻断交付)。
+      - { id: g6w, gate: true, human: true, checkpoint: H3W-白模确认, condition: whitebox_requested, depends_on: [p6-whitebox] }   # 用户在「分镜设定」预览页逐组审看 3D 白模(机位/走位/朝向/穿模)、连看顶部「🧊 白模样片」(签字前为预览版)后签字;签字后才正式导出 camera.mp4、再生成分镜背景图(有出图费用);签字卡自动带白模待决项摘要,阻断级未清宿主拒签、建议级签字即接受默认取舍(docs/whitebox.md「待决项与用户裁决」)
       - { id: p6-whitebox-export, agent: 07-directing/whitebox-staging, condition: whitebox_requested, depends_on: [g6w],   # 2026-09-10:导出工单派给白模调度本岗(SOUL「视频导出」节),原 07-directing/whitebox-export 已删除
           outputs: ["assets/whitebox/{ep}/"],
-          validation: { auto: [whitebox_videos_exported] } }   # code/render_whitebox.py(不带 --compile-only)导出每组 camera.mp4/manifest.json 并自动 sync_whitebox_refs --write;机检 render_whitebox.py --verify-export;视频失败则任务未完成
+          validation: { auto: [whitebox_videos_exported] } }   # code/render_whitebox.py(不带 --compile-only)导出每组 camera.mp4/manifest.json(签字前出过预览版且白模没再改的组直接转正)并自动 sync_whitebox_refs --write;机检 render_whitebox.py --verify-export;视频失败则任务未完成
       - { id: p6-shot-plates, agent: 08-video-gen/shot-plates, condition: whitebox_requested, depends_on: [p6-whitebox-export],
           outputs: ["directing/{ep}/shot_plates.json"],   # 背景图本体入场景库 assets/concepts/scenes/<sid>/plates/(按机位指纹复用,跨组跨集)
           validation: { auto: [shot_plates_complete, shot_plate_bound], qa: [11-qa/visual-qa] } }   # shot_plates_complete=render_shot_plates.py --status 逐镜齐全(验收以此为准,不采信自述;前科 Agent 丢后台结单一张没出);code/render_shot_plates.py:运镜分档出镜首/镜尾、查库复用/裁切、缺的出新图(长边 1920,控制台默认图像模型)并自动 sync_shot_plates --write;机检 code/sync_shot_plates.py
@@ -362,6 +367,7 @@ phases:
                                prop_ref_listed,   # 组内出场剧情道具的道具图 main_01.png 必须列入 refs 清单(每道具默认仅此一张;比例锚图 scale_ref_01.png 已停出不再挂,2026-10-05)——只有文字 token 没有图,道具样式全靠模型脑补
                                creature_ref_listed,   # 组 creatures_union 每个生物的 sheet(或本组章节对应阶段变体)必列入 refs,排序紧跟角色图之后(2026-08-26)
                                costume_ref_listed,    # 组 costumes_by_char 指到非默认服装的角色,其服装 sheet_<COS-id>.png(经 costume_sheets.json 台账)必列入 refs 作该角色形象图;缺图不得凭 visual_en 文字硬顶,退回走 §6A 回派 costume-concept(2026-08-26)
+                               npc_prompt_bound,     # NPC 参与构图(2026-10-09,code/npc_staging.py --write 后 --check prompt):有 NPC 的组固定段 Background figures (NPC) 齐全、身份锁收窄到具名角色;无 NPC 的组无残留
                                whitebox_ref_bound,   # 白模视频已导出的组:video_refs=camera.mp4(按生效模型参考视频预算取舍;2026-09-08 起无 top.mp4)+ 正文 Whitebox reference/legend 固定段 + Global constraints 禁白模外观句(code/sync_whitebox_refs.py,2026-09-07;开关关闭 skipped)
                                layout_map_bound,  # 2026-09-09 改版:refs 不得含场景俯视图 layout_top*.png / 九宫格 grid_9views*.png / 已退役的 blocking_maps/(俯视图只供分镜预览),逐角色 route_en 逐字命中、主体定义句用 blocking_map label(code/layout_map_bound_check.py)
                                scene_plate_bound,  # 场景图(正向/反向,2026-09-17,白模关闭项目):refs 在角色/生物 sheet 之后挂该场景正向图(+有镜标 reverse 时的反向图)、不再挂该场景旧概念图/俯视图,正文 Shot 1: 前固定段 Scene plates: + 每个 Shot 段头 Scene plate: this shot uses [Image N] … and not [Image M].(code/sync_scene_plates.py;白模开启 skipped)
@@ -374,6 +380,7 @@ phases:
                                sd25_prompt_structure,   # 2026-09-09:套用 sd25-pe 的组正文必须按 2.5 官方结构(【人物】/【动作与声音】分组、每镜「使用/不采用」清单、【未采用素材】、【保持一致】;【场景】槽位由 sync_shot_plates 写),同脚本自动执行
                                h3_prompt_structure,   # 2026-09-09:期望 h3-pe 的组正文必须按 H3 Ref2VA 六段结构(subject_definitions 逐图 <Subject N>…<Picture i> / retention_analysis 逐份 / <d> 台词 / <Audio N> 绑 (Sx);背景图 <Picture N> 构图锚与 Plate anchor 由 sync_shot_plates 写),同脚本自动执行;自述 checklist 不算数。原注释:套用 sd25-pe 的组正文必须按 2.5 官方结构(【人物】/【动作与声音】分组、每镜「使用/不采用」清单、【未采用素材】、【保持一致】;【场景】槽位由 sync_shot_plates 写),同脚本自动执行;自述 checklist 不算数。原注释:组 json 回执 skill_applied 与项目「提示词技能」快照一致(id/sha256/checklist;不套用时 id=null+reason),code/prompt_skill_check.py;运行时另核 prompt_skill_read——漏读 SKILL.md 的运行直接 error 退回(2026-08-28)
                                motion_pair_bound,   # 2026-09-26 三期:组边界 transition_in.motion_pair(成对运镜)两侧组 prompt 含宿主写入的「【运镜对接】」句(前组末 Shot 段尾镜带出 / 本组首 Shot 段接入),残留过期句 = 违规;code/sync_motion_pairs.py --write 机器写入,无 motion_pair 的集 PASS
+                               scene_link_bound,   # 2026-10-10 二期(docs/scene_links.md):组边界 transition_in.link(场间衔接登记卡)两侧组 prompt 含宿主写入的「【场间衔接】」句(前组末 Shot 段落点 / 本组首 Shot 段起点),残留过期句 = 违规;code/sync_scene_links.py --write 机器写入并对账 script_links_landed;无登记卡的集 PASS
                                shot_timing_bound] } }   # 2026-09-23:镜次时长——shot_list 每镜 duration_s 按生效模型官方写法进正文(2.5/Wan 3.0 连续整数秒时间段标在段首镜段头后、H3 Shot k≥2 切点 At MM:SS.mmm,、2.0 不写),标签齐全/连续/末段止于 round(total_duration_s)/Σ duration_s = total_duration_s;code/sync_shot_timing.py --write 机器写入(§7F ⑩)
       # 视频提示词签字(2026-10-05):本集**全部**生成组的 p7-prompt 关单(含各 sync_* 机器写入段与 validation.auto 全过)后,用户在「🎦 分镜预览」页
       # (/preview/storyboard)逐组审看视频提示词(正文 + 参考图 / 参考视频 / 参考音频清单)并签字;集行右侧有「✅ 签字确认 / ⏸ 暂缓」(与控制台签字卡同一条)。

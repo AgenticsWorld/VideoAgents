@@ -58,7 +58,9 @@ desktop shell. Electron starts the same gateway by default or proxies the remote
 specified by `VIDEOAGENTS_API_URL`. Release packages do not contain Python. On the first launch
 without an installed runtime, the client reads `https://s3.agentics.world/packages/video-agents/metadata.json`
 and downloads the matching package. Claude, Codex, Kimi, Pi, OpenCode, Grok, FFmpeg, models, and GPU environments remain
-optional external installations.
+optional external installations. On Windows x64 the desktop client offers to download FFmpeg from the same
+package source when none is found (no package manager or administrator rights needed); the build is pinned in
+`apps/desktop/ffmpeg-artifact.json`.
 
 Before desktop development, make sure `node --version` meets `.nvmrc`; with nvm, run `nvm use` first. Run `npm ci` again after switching Node major versions so an incomplete Electron installation from the old runtime is not reused.
 
@@ -69,6 +71,8 @@ The Python runtime and Electron application are versioned independently. Runtime
 Desktop and Python packages are produced only when a `v*` tag points to a commit on `main`. The tag version is embedded in both package types and published under `packages/video-agents/`: Python runtimes in `python/`, versioned desktop ZIPs in `mac/` and `win/`, and `metadata.json` as the shared update index. Each desktop directory also exposes `VideoAgents.zip` as the latest package. Release clients read this metadata before creating the main window: a newer supported version remains optional, while clients older than `desktop.minimumVersion` enter a non-skippable update flow before the local backend starts. The publish job reads that value from the GitHub Actions environment/repository variable `MINIMUM_DESKTOP_VERSION` and defaults to `1.0.0` when it is unset; publishing fails when the value is invalid or newer than the release version.
 
 When launched from Finder, the macOS desktop client imports the login shell `PATH` and supplements common Homebrew, `~/.local/bin`, Kimi, OpenCode, Grok, Volta, and pnpm locations. Existing `claude`, `codex`, `kimi`, `pi`, `opencode`, and `grok` installations are therefore inherited by the local Python service and its Agent child processes instead of being bundled into the client. When the `pi` engine is selected, its language-model menus are populated from `pi --list-models`, so they reflect the providers and models available to the current Pi login. The `opencode` engine likewise populates its menus from `opencode models`, and the `grok` engine (Grok Build CLI, install from https://grok.com/build, sign in with `grok login`) from `grok models`. For every engine except deepagents the language-model menu defaults to Smart Assignment, which picks a model per agent by task complexity (e.g. on the opencode engine creative-core agents go to DeepSeek V4 Pro and the rest to DeepSeek V4 Flash); switching the engine or language model automatically re-syncs every agent's model settings.
+
+When the top-bar engine (or the one restored at startup) is a CLI that is missing or not signed in, a setup dialog opens. **One-click install** runs that CLI's official install command in the background (`curl -fsSL <official script> | bash`, or `irm <official script> | iex` on Windows; OpenCode on Windows uses `npm install -g opencode-ai`) and streams the log; if it fails, **Install in a terminal** reruns it in a terminal window so the script's questions can be answered. Once installed, **Sign in** opens a terminal window running the CLI's own login command (such as `claude auth login`, `codex login`, `kimi login`); the user authorizes with their own account in the browser and the dialog closes when the login is detected. The app never handles the tokens. The install process gets no app or provider secrets in its environment, and install and sign-in are only offered to requests from the local machine.
 
 Local `make desktop` packaging defaults to `CSC_IDENTITY_AUTO_DISCOVERY=false`, so it never reads an Apple developer certificate from the macOS Keychain and performs no signing or notarization. Release signing is enabled only in GitHub Actions when `CSC_LINK` and the Apple secrets are explicitly supplied.
 
@@ -182,10 +186,15 @@ layer (route table, offline GET smoke test, Web console pages). Cases that need
 
 Copyright 2026 AgenticsWorld.
 
-Licensed under the [Apache License 2.0](LICENSE). You may use, modify, and
-redistribute the project, including commercially. Redistributions must retain
-the license and copyright notices, preserve the attribution in [`NOTICE`](NOTICE),
-and identify modified files as required by the license.
+Licensed under the [GNU General Public License v3.0](LICENSE) (`GPL-3.0-only`).
+You may use, modify, and redistribute the project, including commercially. If
+you distribute the project or a modified version of it, you must license it
+under the same terms, make the corresponding source code available, keep the
+license and copyright notices (including [`NOTICE`](NOTICE)) intact, and mark
+your changes with the date you made them. The software comes with no warranty.
+
+Releases up to and including v1.0.38 were published under the Apache License 2.0
+and remain available under those terms.
 
 Citation metadata is available in [`CITATION.cff`](CITATION.cff).
 

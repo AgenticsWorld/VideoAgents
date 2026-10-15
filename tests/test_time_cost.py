@@ -17,7 +17,7 @@ def test_line_est_adds_onset_pause_and_pace():
     assert tc.line_est(LINE, "slow", 253.5) > base > tc.line_est(LINE, "fast", 253.5)
     assert tc.line_est(LINE, "medium", 252.0) == tc.line_est(LINE)   # 252 cpm = 4.2 字/秒
     assert tc.line_est_legacy(LINE, 253.5) == 5.0                 # 旧口径:字数 ÷ 语速,一位小数
-    assert tc.line_est("嗯。") >= tc.MIN_LINE_S and tc.line_est("a") == round(0.7 + 1 / 4.2, 2)
+    assert tc.line_est("嗯。") >= tc.MIN_LINE_S and tc.line_est("a") == round(0.7 + 60 / tc.DEFAULT_WPM, 2)   # 英文按词(#124)
     assert tc.line_est("") == 0.0
 
 
@@ -48,9 +48,42 @@ def test_beat_costs_prose_and_phrase():
         assert not tc.is_meta_action_line(line), line
 
 
+
+def test_latin_lines_count_words_not_letters():
+    """#124:英文等按词计;中文、只有数字标点的句子仍按字计(与 2026-10-03 口径逐字相同)。"""
+    s = "Dr. Seldon can't know you were here."
+    assert tc.is_word_text(s) and tc.word_count(s) == 7 and tc.inner_pauses(s) == 0     # Dr. 的点不算停顿
+    assert tc.line_est(s) == round(0.7 + 7 / (130 / 60), 2)                             # 默认 130 wpm(原口径 7.53s)
+    assert tc.line_est(s, "medium", wpm=150) == round(0.7 + 7 / 2.5, 2)                 # 角色 speed_wpm 优先
+    assert tc.line_est(s, "medium", 252.0) == tc.line_est(s)                            # 中文口径 cpm 按 130/252 换算
+    assert tc.line_est(s, "medium", 570.0) == tc.line_est(s, "medium", wpm=150)         # > 400 的 cpm 是字母 / 分(÷ 3.8)
+    assert tc.line_est(s, "slow") > tc.line_est(s) > tc.line_est(s, "fast")
+    assert tc.inner_pauses("It costs 3.5 credits, Mr. Hardin.") == 1                     # 小数点 / Mr. 不算
+    assert tc.word_count("Najajeputeladisa.") == 16 / 6 and tc.line_est("Как дела?") > 0   # 长词兜底;西里尔不再估 0
+    assert not tc.is_word_text("哪吒,再把你师父的宝贝") and not tc.is_word_text("36。") and not tc.is_word_text("")
+    assert tc.line_units(LINE) == (21.0, "chars") and tc.line_units(s) == (7.0, "words")
+    assert tc.line_est(LINE, "medium", 240.0, wpm=999) == tc.line_est(LINE, "medium", 240.0)   # wpm 不影响中文句
+    need = tc.dialogue_need([{"text": s, "wpm": 150}])
+    assert need == round(tc.line_est(s, "", wpm=150) + tc.PRE_SPEECH_S + tc.POST_SPEECH_S, 2)
+
+
+def test_character_wpm(tmp_path):
+    import json
+    for cid, v in (("CHAR-alice", {"speed_cpm": [570, 665], "speed_wpm": [150, 175]}), ("CHAR-0001", {"speed_cpm": 240}),
+                   ("CHAR-x", {"speech_rate": {"wpm": {"min": 100, "max": 120}}})):
+        d = tmp_path / "bible" / "characters" / cid
+        d.mkdir(parents=True)
+        (d / "voice.json").write_text(json.dumps(v))
+    assert tc.character_wpm(tmp_path) == {"CHAR-alice": 162.5, "CHAR-x": 110.0}
+    assert tc.character_cpm(tmp_path) == {"CHAR-alice": 617.5, "CHAR-0001": 240.0}
+
 def test_sequence_connectors_and_blocking_beats():
     assert tc.count_sequence_connectors("他先收肘,随后甩臂,再抖腕;接着转身。then he runs. 再次 先生") == 5   # 再次/先生 不算
-    bj = {"characters": [{"id": "A", "beats": [{"t": 0.2, "action": "撞在石壁上"}, {"t": 0.5, "action": "滑倒"},
+    # #119:否定 / 程度用法的「再」不是下一拍动作
+    for s in ("她转身离开,不再回头看我", "再也没动", "别再说了", "没再出声", "一再后退", "再不许来", "再度亮起", "再三叮嘱"):
+        assert tc.count_sequence_connectors(s) == 0, s
+    assert tc.count_sequence_connectors("他收剑,再转身") == 1 and tc.count_sequence_connectors("停住,再") == 1
+    bj ={"characters": [{"id": "A", "beats": [{"t": 0.2, "action": "撞在石壁上"}, {"t": 0.5, "action": "滑倒"},
                                                {"t": 0.6, "action": "幡杆歪了"}, {"t": 1.0, "action": "点名", "sync": "台词『哪吒,』起"}]}]}
     beats = tc.blocking_beats(bj)
     assert [b["cost_s"] for b in beats] == [1.2, 1.2, 0.7, 0.0] and beats[-1]["kind"] == "synced"

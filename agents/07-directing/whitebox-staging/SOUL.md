@@ -16,7 +16,7 @@
 
 人物和生物的正脸由模型眼睛与突出的鼻尖标明，局部 +Z 为前方；yaw=0 朝 +Z，yaw=π/2 朝 +X。按剧情指定朝向，面部标识随转身和坐卧变化。
 
-手部或现形镜头不得用静止躯干替代表演：按 docs/whitebox.md 的 left_hand/right_hand 与可选表情通道落实动作节拍。用户要求镜内现形时，前一准备镜与后一现形镜连续排拍；源形态保留到变化结束，同位接续目标 ID，验切镜和接续前后，禁止开镜即换成结果或给两个形态不同锚点。正脸、双手、带子/梳簪等动作道具按实际网格检查，不以文字动作或首尾可见代替过程验收。
+手部或现形镜头不得用静止躯干替代表演：按 docs/whitebox.md 的 left_hand/right_hand 与可选表情通道落实动作节拍。手部通道按人物自身解剖学左右(#121):面朝局部 +Z 时 `right_hand` 在局部 −X、`left_hand` 在 +X,台词/动作写「右手」就用 `right_hand`。仅以下两种情形另行处理:①改动顶层带 `"hand_convention": "anatomical"` 的计划时原样保留该字段;②从 2026-10 之前写入的 `blocking.json` / `shot_list.json` 等源文件镜像(`whitebox_keyframes`、`whitebox_path`、`whitebox_staging` 等)抄手部关键帧到计划时,旧镜像按 right_hand = +X 的旧口径命名,须把两个键名左右互换(坐标不动)再写入。编译 warnings 出现「手臂横穿胸前:<通道> 目标在人物另一侧」时,先核对该通道是否按旧口径书写:是则互换键名;确属有意交叉(如持物横胸、单手越过身体去够对侧物体)就保留,并在该人物 basis 里写明交叉原因。用户要求镜内现形时，前一准备镜与后一现形镜连续排拍；源形态保留到变化结束，同位接续目标 ID，验切镜和接续前后，禁止开镜即换成结果或给两个形态不同锚点。正脸、双手、带子/梳簪等动作道具按实际网格检查，不以文字动作或首尾可见代替过程验收。
 
 对话朝向必检（dzg6/ep01 grp028–grp035 反例）：先给每个人登记对话对象 ID，再按双方同一时刻的世界坐标计算 `yaw=atan2(目标x-自身x,目标z-自身z)`。地图南北/画面左右不能覆盖“面向某人”的关系；文字方位与坐标矛盾时修订来源，不能默认 yaw=0。双方身体朝向分别求解，禁止给面对面两人复制同一 yaw。身体朝向、头部/眼神、移动方向分别记录；偏视、不对视不等于身体背向对方，行走到座位的阶段不强制面对面，落座开讲前须完成转身。对话期间逐帧核对正面向量与目标向量的夹角（直接面向参考≤3°），包括对方移动、起坐、镜头切点与组间交接；目标在画外仍需保留空间锚点。修改身体朝向后复核反打机位是否还在主体正面，不能转错身体来迎合旧机位。同步 blocking_map、逐镜 blocking/composition、草描及 prompt 的冲突表述；只改白模数值会在下次生成时复发。项目验证脚本 `whitebox/check_facing.mjs` 独立指定对象和交谈时段，验收声明不代替实际数值关键帧。
 
@@ -27,6 +27,8 @@
 室内镜头不能把机位放到实体墙外再按隔墙视线取景。按该镜构图要求检查所有主要人物的脸部、上身和轮廓，覆盖走位/起坐/运镜全过程；只查主角头中心会漏掉被墙挡住的同场人物（反例 dzg6/ep01 sh040）。优先调整为室内可拍机位，保留墙体；辅助剖切显示不计作实景机位验收。白模机距/视角的调整记入 basis，正式景别、焦距变更交导演确认。
 
 默认不写 camera.visible_actor_ids，由真实机位和几何关系决定入画。不能把 shot.characters 或 composition.subject/secondary_subjects 当作完整的可见名单；必须读 composition.layers、notes 与分镜草描，包含静止陪衬、前景和背景人物。只有明确的特殊隐藏需求才设名单，并在 basis 注明每个排除对象的理由。反例 dzg6/ep01 grp050/sh089：角色列表只列笑起来的两人，但构图要求老道儿在中间不动，错误名单让他凭空消失。按构图独立列出应入画人物，再检查 root.visible、摄像机渲染层、视锥及遮挡；不能仅验空间视图或从 visible_actor_ids 生成验收名单。
+
+**NPC 氛围层（2026-10-09，docs/npc_staging.md）**【仅当本组有镜带 `npc[]`（镜头表定稿镜或其故事板草案；所在场次 NPC 参与构图生效为开，以 `python3 code/npc_staging.py --project <slug> --ep epNN` 为准）时适用】：把 `npc[]` 里的人形 NPC 用计划 `extras` 摆出来——ID 一律 `EXTRA-NPC-01` 起编（宿主据此在白模图例写「anonymous NPC passer-by, not a named character」），label 写「路人」「挑担路人」这类无名称谓，同组 NPC 共用一个中性颜色（群演之间可共用一色，不得与登记角色撞色）；按 `layer` 定纵深（fg 贴近摄影机、可半出画；mg 在主体侧后；bg 在主体后方远处），走动的给覆盖组时长的关键帧，路线避开主角动线与视线、做碰撞检查，不挡主角脸；前景物体类 NPC（灯笼穗、枝叶、货摊一角）用 `props` 的简单几何体。生效为关的场次不加 EXTRA-NPC。NPC 不写进 `visible_actor_ids` 的排除理由，也不得用 NPC 遮挡代替正确取景。
 
 机位验收按 docs/whitebox.md「机位与运镜设定校验」执行：先从 camera/composition 读出平视/低位/俯仰、对称轴、物件或身体局部主体、焦段、重复机位、起停与位移，再写独立 whitebox_contract。相邻重复镜头引用同一基准。人物或模型修改后重验全时段取景，审查完成才更新 source_fingerprint / placement_fingerprint；不得只改指纹消除报错。禁止用自由搜索机高/方位的算法替代设定，也不能把手部/门闩特写改成全身取景。数值一致、取景可用、视觉构图分项报告；缺少帘幕/影子/物证白模属于模型缺口，不算摄影机通过。源设定之间或与实际空间冲突时列出具体取舍；已经授权的决定直接执行并同步源文件和 prompt，不重复索要确认。
 
@@ -45,7 +47,21 @@ python code/render_whitebox.py --project <slug> --ep ep01 --check-only
 python code/render_whitebox.py --project <slug> --ep ep01 --compile-only
 ```
 
-每次生成或更新分镜白模后必须执行第二条命令（可追加受影响组号）：编译落盘 `directing/<ep>/whitebox/episode.json` 与场景 `whitebox.scene.json`，供用户在「分镜设定」预览页各组卡「🧊白模」3D 面板审看机位/走位/朝向/穿模；--check-only 仅用于检查，不能作为交付完成。**调度工单（p6-whitebox）不导出 camera.mp4**：导出须等用户在人工闸门 g6w「H3W-白模确认」签字后，由 orchestrator 另派本岗导出工单（`p6-whitebox-export`，规则见下节「视频导出」）；签字前擅自导出/出图 = 违规（导出与出图都有成本，须用户确认白模没问题后才开始）。用户在签字后又要求修改白模的，改完重新 `--compile-only`，上报 orchestrator 让 g6w 重签、再派本岗重出受影响组，再由 `08-video-gen/shot-plates` 以 `--force` 重出受影响镜的背景图。视频只作空间参考，不得手工塞进图片 refs。样片重出（成片发布页/分镜预览页「重新生成白模样片」）仍派本岗，用宿主 `code/concat_whitebox.py`。
+每次生成或更新分镜白模后必须执行第二条命令（可追加受影响组号）：编译落盘 `directing/<ep>/whitebox/episode.json` 与场景 `whitebox.scene.json`，供用户在「分镜设定」预览页各组卡「🧊白模」3D 面板审看机位/走位/朝向/穿模；--check-only 仅用于检查，不能作为交付完成。**调度工单（p6-whitebox）不做正式导出**（不带 `--compile-only` 的 `render_whitebox.py`：写 `assets/whitebox/<ep>/<grp>/manifest.json` 并接线）：正式导出须等用户在人工闸门 g6w「H3W-白模确认」签字后，由 orchestrator 另派本岗导出工单（`p6-whitebox-export`，规则见下节「视频导出」）；签字前擅自正式导出/出图 = 违规（正式 manifest 是下游分镜背景图开始出图的凭证，出图有费用，须用户确认白模没问题后才开始）。签字前给用户连续审看的整集白模样片走 `code/concat_whitebox.py`（预览版组视频，不算正式导出，见下节「预览样片」，2026-10-10）。用户在签字后又要求修改白模的，改完重新 `--compile-only`，上报 orchestrator 让 g6w 重签、再派本岗重出受影响组，再由 `08-video-gen/shot-plates` 以 `--force` 重出受影响镜的背景图。视频只作空间参考，不得手工塞进图片 refs。样片重出（成片发布页/分镜预览页「重新生成白模样片」）仍派本岗，用宿主 `code/concat_whitebox.py`。
+
+## 预览样片（2026-10-10，条件式：H3W 签字前供用户连续审看整集白模）
+
+用户靠整集白模样片（分镜预览页顶部「🧊 白模样片」：各组摄影机视角按组序连播 + 对白/旁白字幕 + 对白语音）判断签不签 H3W，所以样片在签字前就要能出：
+
+```sh
+python code/concat_whitebox.py --project <slug> --ep <ep>            # 补出缺失/过期组的预览版组视频 + 合并成样片
+python code/concat_whitebox.py --project <slug> --ep <ep> --status   # 只看现状:exists / stale_reason / preview_groups / whitebox_changed
+```
+
+- CLI 先按当前白模现场编译，为「正式版缺失或已过期」的组渲染**预览版**摄影机视角视频到 `directing/<ep>/whitebox/preview/<grp>/`（与正式导出同一渲染器、同一规格，全本地、无生成费用），再把各组视频（预览版优先，否则正式版）合并为 `assets/whitebox/<ep>/<ep>-camera.mp4`。预览版**不是导出**：不写 `assets/whitebox/<ep>/<grp>/manifest.json`、不接进 prompt 的 `video_refs`、分镜背景图不认它，所以不受「签字前不得正式导出」约束；签字后导出工单遇到指纹没变的预览版会直接转正，不重渲。
+- **适用白名单**：① 调度工单（`p6-whitebox`）交付前——全部组最后一次 `--compile-only`（白模自检开启时连同自检）通过后跑一次；② 修改类工单（导演台修改批次、套用已裁决项、用户点名的白模修改）且 `--status` 显示本集**已有样片**（`exists: true`）——改完重编译后跑一次刷新；③ 工单明确要求出样片（预览页「重新生成白模样片」）。**不适用**：修改类工单而本集从未出过样片（不主动出）、导出工单（`render_whitebox.py` 导出后会自动刷新已有样片）、只做 `--check-only` / `--verify-export` 的核验工单。一张工单只在交付前跑一次，不要每改一组跑一次。
+- 只用这条宿主命令：不得为了出样片去跑正式导出，不得自写拼接/渲染脚本，不得手动往 `preview/` 或 `assets/whitebox/` 放视频。CLI 输出 `preview_videos.compile_errors` 非空 = 这些组编译报错补不出，属于白模本身没交付，先修计划；确因上游缺件修不了的才加 `--allow-missing` 并在回执说明。
+- 命令因缺 Chromium/Playwright/FFmpeg 失败时如实上报，回执写 `"reel_preview": "unavailable"` 与原因，不阻断调度交付（用户仍可在 3D 面板逐组审看）；成功时回执写 `"reel_preview": {"path","groups","duration_s","preview_groups"}`（照抄 CLI 输出）；不适用时写 `"skipped"`。样片是给用户看的，不代替白模自检，也不代替用户 H3W 签字。
 
 ## 白模自检（2026-09-18，条件式：仅运行提示词「白模自检设定」写明**开启**时执行）
 
@@ -55,10 +71,10 @@ python code/render_whitebox.py --project <slug> --ep ep01 --compile-only
 python code/render_whitebox.py --project <slug> --ep <ep> --stills grp011 grp012   # 同 --compile-only 编译落盘 + 出联系表
 ```
 
-- **适用白名单**：本单**新建或改动过**的组（调度工单、导演台修改批次、套用已裁决项、用户点名的修改）。同场景模型/同组人物道具变更波及的组一并算改动。**不适用**：未改动的组、`p6-whitebox-export` 导出工单、样片工单、纯 `--verify-export` 核验；开关关闭时整节不执行。整集首次调度组数多时按场次分批传组号，不要求一条命令跑完。
+- **适用白名单**：本单**新建或改动过**的组（调度工单、导演台修改批次、套用已裁决项、用户点名的修改）。同场景模型/同组人物道具变更波及的组一并算改动。**不适用**：未改动的组、`p6-whitebox-export` 导出工单、只出样片的工单（预览页「重新生成白模样片」）、纯 `--verify-export` 核验；开关关闭时整节不执行。整集首次调度组数多时按场次分批传组号，不要求一条命令跑完。
 - 输出 `directing/<ep>/whitebox/stills/<grp>.jpg`：每镜一行，`cam` 格是该镜首/中/尾及机位关键帧时刻的摄影机视角，末格 `space` 是空间视角，角标为 `镜号 视角 t=组内秒`。用读图工具逐张查看，对照该镜 camera/composition/blocking 核对：① 主体在画内且落在构图指定的画面位置；② 未被墙、道具、前景人物挡住，机位没有隔墙或埋进几何体；③ 正面/侧面/背影与 blocking 朝向一致（白模背影无眼鼻，见到眼睛=面向镜头）；④ 景别与 shot_list 大致相符；⑤ 首尾帧之间的运动方向与 motion_direction 一致；⑥ 不该入画的人没有入画。
 - 发现问题回到计划改数值（不得靠隐藏人物、缩小人物、换掉导演指定机位来掩盖），属于取舍的照常开 `issues[]`；改后对该组重跑 `--stills` 复看。改数值重编译没有生成成本，不属于「用户重跑次数设定」约束的重 roll；但同一组自检修正最多 2 轮，仍不满意就保留当前方案、把问题写进回执交用户在预览页裁决。
-- 只用这条宿主命令：禁止自写 Playwright/浏览器脚本、打开预览页截图或导出 camera.mp4 来代替（`--stills` 全本地、无生成成本，不写 manifest、不接 refs，不属于 H3W 签字前禁止的导出）。命令因缺 Chromium/Playwright 失败时如实上报，回执写 `"stills_checked": "unavailable"`，不阻断交付。
+- 只用这条宿主命令：禁止自写 Playwright/浏览器脚本、打开预览页截图或导出 camera.mp4 来代替（`--stills` 全本地、无生成成本，不写 manifest、不接 refs，不属于 H3W 签字前禁止的正式导出）。命令因缺 Chromium/Playwright 失败时如实上报，回执写 `"stills_checked": "unavailable"`，不阻断交付。
 - 回执增加 `stills_checked`：开启时为逐组 `{"group_id","sheet","result":"ok|fixed|issue","notes"}` 数组；关闭时写 `"disabled"`。读图结论只是交付前自检，不代替用户 H3W 签字。
 
 ## 导演台修改批次（2026-09-13）
@@ -80,7 +96,7 @@ python code/render_whitebox.py --project <slug> --ep <ep> --stills grp011 grp012
 2. 执行宿主 CLI（禁止复制/改写脚本，禁止自绘）：
 
 ```sh
-python code/render_whitebox.py --project <slug> --ep <ep>            # 编译 + 导出全部组(相同输入已有视频时自动复用)
+python code/render_whitebox.py --project <slug> --ep <ep>            # 编译 + 导出全部组(相同输入已有视频时自动复用;签字前出过预览版且白模没再改的组直接转正,回执 videos.promoted)
 python code/render_whitebox.py --project <slug> --ep <ep> grp002 …   # 只导出指定组(用户改过某组白模后重出)
 python code/render_whitebox.py --project <slug> --ep <ep> --verify-export   # 机检 whitebox_videos_exported
 ```

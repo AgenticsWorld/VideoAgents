@@ -16,7 +16,13 @@ def write(path, value):
 
 
 @pytest.fixture
-def project(tmp_path):
+def project(tmp_path, monkeypatch):
+    # 隔离本机真实生成模型配置(data/.videoagents/genconfig.json):全局渠道不是 fal 时组级覆盖失效,
+    # 预算会按本机全局模型算(如 Seedance 2.5 的 10 段/30s),断言随本机配置漂移;子进程同样经环境变量隔离
+    from modules import genmedia
+    missing = tmp_path/'no-genconfig.json'
+    monkeypatch.setenv('VIDEOAGENTS_CONFIG_PATH', str(missing))
+    monkeypatch.setattr(genmedia, 'CONFIG_PATH', missing)
     base = tmp_path/'demo'
     write(base/'settings.json', {'duration': {'long_take': True, 'long_take_mode': 'tail_video'},
                                  'output': {'spatial_blocking': False}})
