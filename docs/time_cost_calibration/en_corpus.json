@@ -1,0 +1,578 @@
+{
+ "schema": "time_cost_calibration/v1#corpus",
+ "generated_at": "2026-10-20T18:58:28",
+ "sources": [
+  "alices:ep01",
+  "jidi:ep01"
+ ],
+ "extra": "docs/time_cost_calibration/en_extra_lines.json",
+ "lines": [
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "What is the use of a book without pictures or conversations?",
+   "emotion": "",
+   "source": "ep01/sh003/l00",
+   "id": "en001"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice-sister",
+   "variant": "default",
+   "text": "Hush, Alice dear.",
+   "emotion": "",
+   "source": "ep01/sh005/l00",
+   "id": "en002"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "I wonder how many miles I've fallen by this time?",
+   "emotion": "",
+   "source": "ep01/sh021/l00",
+   "id": "en003"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Dinah'll miss me very much to-night, I should think!",
+   "emotion": "",
+   "source": "ep01/sh022/l00",
+   "id": "en004"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Do cats eat bats? Do cats eat bats?… Do bats eat cats?",
+   "emotion": "",
+   "source": "ep01/sh024/l00",
+   "id": "en005"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-white-rabbit",
+   "variant": "default",
+   "text": "Oh dear! Oh dear! I shall be late!",
+   "emotion": "",
+   "source": "ep01/sh028/l00",
+   "id": "en006"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-white-rabbit",
+   "variant": "default",
+   "text": "Oh my ears and whiskers, how late it's getting!",
+   "emotion": "",
+   "source": "ep01/sh031/l00",
+   "id": "en007"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "That certainly was not here before.",
+   "emotion": "",
+   "source": "ep01/sh044/l00",
+   "id": "en008"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "No, I'll look first, and see whether it's marked 'poison' or not.",
+   "emotion": "",
+   "source": "ep01/sh046/l00",
+   "id": "en009"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "What a curious feeling! I must be shutting up like a telescope.",
+   "emotion": "",
+   "source": "ep01/sh048/l00",
+   "id": "en010"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "For it might end, you know, in my going out altogether, like a candle.",
+   "emotion": "",
+   "source": "ep01/sh050/l00",
+   "id": "en011"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Come, there's no use in crying like that! I advise you to leave off this minute!",
+   "emotion": "",
+   "source": "ep01/sh055/l00",
+   "id": "en012"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Well, I'll eat it. And if it makes me grow larger, I can reach the key;",
+   "emotion": "",
+   "source": "ep01/sh058/l00",
+   "id": "en013"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "and if it makes me grow smaller, I can creep under the door.",
+   "emotion": "",
+   "source": "ep01/sh058/l01",
+   "id": "en014"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "So either way I'll get into the garden, and I don't care which happens!",
+   "emotion": "",
+   "source": "ep01/sh059/l00",
+   "id": "en015"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Which way? Which way?",
+   "emotion": "",
+   "source": "ep01/sh060/l00",
+   "id": "en016"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Curiouser and curiouser!",
+   "emotion": "",
+   "source": "ep01/sh063/l00",
+   "id": "en017"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Now I'm opening out like the largest telescope that ever was! Good-bye, feet!",
+   "emotion": "",
+   "source": "ep01/sh064/l00",
+   "id": "en018"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "You ought to be ashamed of yourself, a great girl like you, to go on crying in this way!",
+   "emotion": "",
+   "source": "ep01/sh069/l00",
+   "id": "en019"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Stop this moment, I tell you!",
+   "emotion": "",
+   "source": "ep01/sh070/l00",
+   "id": "en020"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-white-rabbit",
+   "variant": "default",
+   "text": "Oh! the Duchess, the Duchess! Oh! won't she be savage if I've kept her waiting!",
+   "emotion": "",
+   "source": "ep01/sh074/l00",
+   "id": "en021"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "If you please, sir—",
+   "emotion": "",
+   "source": "ep01/sh075/l00",
+   "id": "en022"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Dear, dear! How queer everything is to-day! And yesterday things went on just as usual.",
+   "emotion": "",
+   "source": "ep01/sh078/l00",
+   "id": "en023"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "I wonder if I've been changed in the night? But if I'm not the same, who in the world am I?",
+   "emotion": "",
+   "source": "ep01/sh079/l00",
+   "id": "en024"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Ah, that's the great puzzle!",
+   "emotion": "",
+   "source": "ep01/sh080/l00",
+   "id": "en025"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Let me see: four times five is twelve, and four times six is thirteen… London is the capital of Paris—",
+   "emotion": "",
+   "source": "ep01/sh081/l00",
+   "id": "en026"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "No, that's all wrong, I'm certain! I must have been changed for Mabel!",
+   "emotion": "",
+   "source": "ep01/sh082/l00",
+   "id": "en027"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Oh dear, I do wish they would put their heads down! I am so very tired of being all alone here!",
+   "emotion": "",
+   "source": "ep01/sh083/l00",
+   "id": "en028"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "That was a narrow escape!",
+   "emotion": "",
+   "source": "ep01/sh088/l00",
+   "id": "en029"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "And now for the garden!",
+   "emotion": "",
+   "source": "ep01/sh089/l00",
+   "id": "en030"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "I must have fallen into the sea! And in that case I can go back by railway.",
+   "emotion": "",
+   "source": "ep01/sh095/l00",
+   "id": "en031"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "I wish I hadn't cried so much!",
+   "emotion": "",
+   "source": "ep01/sh098/l00",
+   "id": "en032"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "I shall be punished for it now, I suppose, by being drowned in my own tears!",
+   "emotion": "",
+   "source": "ep01/sh098/l01",
+   "id": "en033"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "That will be a queer thing, to be sure! However, everything is queer to-day.",
+   "emotion": "",
+   "source": "ep01/sh099/l00",
+   "id": "en034"
+  },
+  {
+   "project": "jidi",
+   "speaker": "CHAR-jie-rui-er",
+   "variant": "default",
+   "text": "First time on Trantor? I'm Jerril. Just Jerril.",
+   "emotion": "warm, friendly",
+   "source": "ep01/sh001/l00",
+   "id": "en035"
+  },
+  {
+   "project": "jidi",
+   "speaker": "CHAR-jie-rui-er",
+   "variant": "default",
+   "text": "See the chrome bars? Locals don't even look at them. You will.",
+   "emotion": "amused, knowing",
+   "source": "ep01/sh002/l00",
+   "id": "en036"
+  },
+  {
+   "project": "jidi",
+   "speaker": "CHAR-jie-rui-er",
+   "variant": "default",
+   "text": "Feet under the bar — there. Every outsider does that.",
+   "emotion": "laughing, teasing",
+   "source": "ep01/sh005/l00",
+   "id": "en037"
+  },
+  {
+   "project": "jidi",
+   "speaker": "CHAR-jie-rui-er",
+   "variant": "default",
+   "text": "Most people never come up here. Not once. Open sky scares them half to death.",
+   "emotion": "hushed, confiding",
+   "source": "ep01/sh006/l00",
+   "id": "en038"
+  },
+  {
+   "project": "jidi",
+   "speaker": "CHAR-jie-rui-er",
+   "variant": "default",
+   "text": "No ground. Not anywhere. It's all city.",
+   "emotion": "quiet awe, proud",
+   "source": "ep01/sh010/l00",
+   "id": "en039"
+  },
+  {
+   "project": "jidi",
+   "speaker": "CHAR-jie-rui-er",
+   "variant": "default",
+   "text": "Look down. That's just the roof. Nine-tenths is under there.",
+   "emotion": "intense, almost tender",
+   "source": "ep01/sh011/l00",
+   "id": "en040"
+  },
+  {
+   "project": "jidi",
+   "speaker": "CHAR-jie-rui-er",
+   "variant": "default",
+   "text": "I know why you came to Trantor. And who you came to see.",
+   "emotion": "cold, quiet, controlled",
+   "source": "ep01/sh012/l00",
+   "id": "en041"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-cheshire-cat",
+   "variant": "default",
+   "text": "We're all mad here. I'm mad. You're mad.",
+   "emotion": "",
+   "source": "extra",
+   "id": "en042"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-cheshire-cat",
+   "variant": "default",
+   "text": "Extraordinary, isn't it? Absolutely, unmistakably, irrevocably extraordinary.",
+   "emotion": "",
+   "source": "extra",
+   "id": "en043"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-king-of-hearts",
+   "variant": "default",
+   "text": "Consider your verdict, gentlemen of the jury — carefully, deliberately, and without hurry.",
+   "emotion": "",
+   "source": "extra",
+   "id": "en044"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-king-of-hearts",
+   "variant": "default",
+   "text": "The trial begins at 9:30 on March 14th, 1865, in Courtroom No. 3.",
+   "emotion": "",
+   "source": "extra",
+   "id": "en045"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-king-of-hearts",
+   "variant": "default",
+   "text": "Silence!",
+   "emotion": "",
+   "source": "extra",
+   "id": "en046"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-caterpillar",
+   "variant": "default",
+   "text": "Who. Are. You?",
+   "emotion": "",
+   "source": "extra",
+   "id": "en047"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-caterpillar",
+   "variant": "default",
+   "text": "Keep your temper, child... and remember: one side makes you grow taller, the other side makes you grow shorter.",
+   "emotion": "",
+   "source": "extra",
+   "id": "en048"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-hatter",
+   "variant": "default",
+   "text": "Why is a raven like a writing-desk? I haven't the slightest idea!",
+   "emotion": "",
+   "source": "extra",
+   "id": "en049"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-hatter",
+   "variant": "default",
+   "text": "It's always six o'clock now — always tea-time, and we've no time to wash the things between whiles.",
+   "emotion": "",
+   "source": "extra",
+   "id": "en050"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-queen-of-hearts",
+   "variant": "default",
+   "text": "Off with her head! Off with his head! OFF WITH THEIR HEADS!",
+   "emotion": "",
+   "source": "extra",
+   "id": "en051"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-queen-of-hearts",
+   "variant": "default",
+   "text": "Can you play croquet? Then fetch the flamingos, the hedgehogs, and the soldiers, immediately.",
+   "emotion": "",
+   "source": "extra",
+   "id": "en052"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-gryphon",
+   "variant": "default",
+   "text": "The FBI, the CIA, and NASA all sent letters, but nobody read them.",
+   "emotion": "",
+   "source": "extra",
+   "id": "en053"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-gryphon",
+   "variant": "default",
+   "text": "What fun! It's all her fancy, that is. They never execute anybody, you know.",
+   "emotion": "",
+   "source": "extra",
+   "id": "en054"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-white-rabbit",
+   "variant": "default",
+   "text": "I'm late, I'm late, for a very important date! No time to say hello, goodbye!",
+   "emotion": "",
+   "source": "extra",
+   "id": "en055"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-white-rabbit",
+   "variant": "default",
+   "text": "Mary Ann! Fetch me a pair of gloves and a fan — quick, now!",
+   "emotion": "",
+   "source": "extra",
+   "id": "en056"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-mock-turtle",
+   "variant": "default",
+   "text": "Once, I was a real turtle. We went to school in the sea, every single day, for 25 years.",
+   "emotion": "",
+   "source": "extra",
+   "id": "en057"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-mock-turtle",
+   "variant": "default",
+   "text": "Reeling and writhing, of course, to begin with; and then the different branches of arithmetic.",
+   "emotion": "",
+   "source": "extra",
+   "id": "en058"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Curiouser and curiouser! Now I'm opening out like the largest telescope that ever was!",
+   "emotion": "",
+   "source": "extra",
+   "id": "en059"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "I can't explain myself, I'm afraid, sir, because I'm not myself, you see.",
+   "emotion": "",
+   "source": "extra",
+   "id": "en060"
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Yes, please.",
+   "emotion": "",
+   "source": "extra",
+   "id": "en061"
+  },
+  {
+   "project": "jidi",
+   "speaker": "CHAR-jie-rui-er",
+   "variant": "default",
+   "text": "Gate 47 closes at 11:15. After that, it's a 3.5-hour wait for the next shuttle.",
+   "emotion": "",
+   "source": "extra",
+   "id": "en062"
+  },
+  {
+   "project": "jidi",
+   "speaker": "CHAR-jie-rui-er",
+   "variant": "default",
+   "text": "Dr. Seldon's office is on Level 12, past the Imperial Library. You can't miss it.",
+   "emotion": "",
+   "source": "extra",
+   "id": "en063"
+  }
+ ]
+}

@@ -104,7 +104,7 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
-- 语速在设定区间(speech_rate_in_range),逐段测量、无一越界。
+- 语速在设定区间(speech_rate_in_range),逐段测量、无一越界。区间由工单 / 项目设定给;英文旁白按「词 / 分钟」量(词数 ÷ 实测时长),不套中文的「字 / 秒」区间(2026-10-20)。
 - 旁白稿段落覆盖率 100%;manifest 落点引用的场/镜 ID 合法。
 - **narration_fit(§7D ②)**:逐段实测 `duration_s` ≤ 挂点窗口 `window_s`×0.9,且不与窗口内对白重叠;任一段超窗即整单不过(上报回派 narration 改稿,不得自行删句/压语速硬塞)。
 - **narration_anchor_sync(§8B)**:`python3 code/check_narration_sync.py --project <slug> --ep epNN` 全 PASS——段落编号与挂点定稿双向一致、逐段挂点组=定稿 `anchor_group`、manifest 已盖当前挂点指纹;无指纹/指纹失配即整单不过。

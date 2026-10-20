@@ -1,0 +1,2154 @@
+{
+ "schema": "time_cost_calibration/v1",
+ "samples": [
+  {
+   "id": "en001",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "What is the use of a book without pictures or conversations?",
+   "emotion": "",
+   "source": "ep01/sh003/l00",
+   "key": "d6d0153d97553bec",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en001_d6d0153d97553bec.mp3",
+   "raw_s": 4.08,
+   "duration_s": 3.875,
+   "trim": {
+    "lead_s": 0.205,
+    "tail_s": 0.0,
+    "peak_db": -7.9,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     2.551,
+     2.761
+    ]
+   ],
+   "synthesized_at": "2026-10-20T18:58:56"
+  },
+  {
+   "id": "en002",
+   "project": "alices",
+   "speaker": "CHAR-alice-sister",
+   "variant": "default",
+   "text": "Hush, Alice dear.",
+   "emotion": "",
+   "source": "ep01/sh005/l00",
+   "key": "0dc8e632e6a9139a",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en002_0dc8e632e6a9139a.mp3",
+   "raw_s": 2.832,
+   "duration_s": 2.431,
+   "trim": {
+    "lead_s": 0.401,
+    "tail_s": 0.0,
+    "peak_db": -1.9,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     1.203,
+     2.329
+    ]
+   ],
+   "synthesized_at": "2026-10-20T18:59:22"
+  },
+  {
+   "id": "en003",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "I wonder how many miles I've fallen by this time?",
+   "emotion": "",
+   "source": "ep01/sh021/l00",
+   "key": "454e1b57e4f2e61b",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en003_454e1b57e4f2e61b.mp3",
+   "raw_s": 3.768,
+   "duration_s": 3.563,
+   "trim": {
+    "lead_s": 0.205,
+    "tail_s": 0.0,
+    "peak_db": -7.7,
+    "noise_db_used": -35.0
+   },
+   "silences": [],
+   "synthesized_at": "2026-10-20T18:59:41"
+  },
+  {
+   "id": "en004",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Dinah'll miss me very much to-night, I should think!",
+   "emotion": "",
+   "source": "ep01/sh022/l00",
+   "key": "1f26d33adc461c23",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en004_1f26d33adc461c23.mp3",
+   "raw_s": 4.128,
+   "duration_s": 3.578,
+   "trim": {
+    "lead_s": 0.418,
+    "tail_s": 0.134,
+    "peak_db": -7.0,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     2.328,
+     2.716
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:00:10"
+  },
+  {
+   "id": "en005",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Do cats eat bats? Do cats eat bats?… Do bats eat cats?",
+   "emotion": "",
+   "source": "ep01/sh024/l00",
+   "key": "04acb8ef0e66b5b9",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en005_04acb8ef0e66b5b9.mp3",
+   "raw_s": 7.368,
+   "duration_s": 6.959,
+   "trim": {
+    "lead_s": 0.409,
+    "tail_s": 0.0,
+    "peak_db": -6.7,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     1.617,
+     2.719
+    ],
+    [
+     4.043,
+     5.206
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:00:44"
+  },
+  {
+   "id": "en006",
+   "project": "alices",
+   "speaker": "CHAR-white-rabbit",
+   "variant": "default",
+   "text": "Oh dear! Oh dear! I shall be late!",
+   "emotion": "",
+   "source": "ep01/sh028/l00",
+   "key": "a6fd8d6b3ad58fed",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en006_a6fd8d6b3ad58fed.mp3",
+   "raw_s": 4.848,
+   "duration_s": 4.466,
+   "trim": {
+    "lead_s": 0.382,
+    "tail_s": 0.0,
+    "peak_db": -5.7,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     0.359,
+     0.565
+    ],
+    [
+     1.206,
+     1.509
+    ],
+    [
+     2.393,
+     2.757
+    ],
+    [
+     3.603,
+     4.375
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:01:09"
+  },
+  {
+   "id": "en007",
+   "project": "alices",
+   "speaker": "CHAR-white-rabbit",
+   "variant": "default",
+   "text": "Oh my ears and whiskers, how late it's getting!",
+   "emotion": "",
+   "source": "ep01/sh031/l00",
+   "key": "9dc4a9150b186b4a",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en007_9dc4a9150b186b4a.mp3",
+   "raw_s": 5.424,
+   "duration_s": 3.861,
+   "trim": {
+    "lead_s": 0.215,
+    "tail_s": 1.348,
+    "peak_db": -13.5,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     1.637,
+     1.845
+    ],
+    [
+     2.035,
+     2.292
+    ],
+    [
+     2.884,
+     3.118
+    ],
+    [
+     3.118,
+     3.525
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:01:33"
+  },
+  {
+   "id": "en008",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "That certainly was not here before.",
+   "emotion": "",
+   "source": "ep01/sh044/l00",
+   "key": "5efc5b6cbfcb0e67",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en008_5efc5b6cbfcb0e67.mp3",
+   "raw_s": 4.056,
+   "duration_s": 2.19,
+   "trim": {
+    "lead_s": 0.444,
+    "tail_s": 1.422,
+    "peak_db": -7.9,
+    "noise_db_used": -35.0
+   },
+   "silences": [],
+   "synthesized_at": "2026-10-20T19:01:58"
+  },
+  {
+   "id": "en009",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "No, I'll look first, and see whether it's marked 'poison' or not.",
+   "emotion": "",
+   "source": "ep01/sh046/l00",
+   "key": "e3c732418516234f",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en009_e3c732418516234f.mp3",
+   "raw_s": 5.016,
+   "duration_s": 4.529,
+   "trim": {
+    "lead_s": 0.347,
+    "tail_s": 0.14,
+    "peak_db": -7.0,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     0.436,
+     0.8
+    ],
+    [
+     1.736,
+     2.173
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:02:21"
+  },
+  {
+   "id": "en010",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "What a curious feeling! I must be shutting up like a telescope.",
+   "emotion": "",
+   "source": "ep01/sh048/l00",
+   "key": "090cc7cefbfed79c",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en010_090cc7cefbfed79c.mp3",
+   "raw_s": 5.616,
+   "duration_s": 4.354,
+   "trim": {
+    "lead_s": 1.262,
+    "tail_s": 0.0,
+    "peak_db": -6.6,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     1.602,
+     2.177
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:02:42"
+  },
+  {
+   "id": "en011",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "For it might end, you know, in my going out altogether, like a candle.",
+   "emotion": "",
+   "source": "ep01/sh050/l00",
+   "key": "98ee987ce24567f9",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en011_98ee987ce24567f9.mp3",
+   "raw_s": 6.744,
+   "duration_s": 6.21,
+   "trim": {
+    "lead_s": 0.375,
+    "tail_s": 0.16,
+    "peak_db": -7.7,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     1.313,
+     1.623
+    ],
+    [
+     2.091,
+     2.531
+    ],
+    [
+     4.629,
+     5.071
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:03:02"
+  },
+  {
+   "id": "en012",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Come, there's no use in crying like that! I advise you to leave off this minute!",
+   "emotion": "",
+   "source": "ep01/sh055/l00",
+   "key": "a92f73632b2c67d0",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en012_a92f73632b2c67d0.mp3",
+   "raw_s": 8.232,
+   "duration_s": 7.695,
+   "trim": {
+    "lead_s": 0.347,
+    "tail_s": 0.19,
+    "peak_db": -6.3,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     0.544,
+     1.068
+    ],
+    [
+     3.723,
+     4.178
+    ],
+    [
+     4.885,
+     5.557
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:03:27"
+  },
+  {
+   "id": "en013",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Well, I'll eat it. And if it makes me grow larger, I can reach the key;",
+   "emotion": "",
+   "source": "ep01/sh058/l00",
+   "key": "2ed59d49ae22fe07",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en013_2ed59d49ae22fe07.mp3",
+   "raw_s": 5.664,
+   "duration_s": 5.114,
+   "trim": {
+    "lead_s": 0.434,
+    "tail_s": 0.117,
+    "peak_db": -6.5,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     0.336,
+     0.746
+    ],
+    [
+     1.372,
+     1.878
+    ],
+    [
+     3.48,
+     3.882
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:03:51"
+  },
+  {
+   "id": "en014",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "and if it makes me grow smaller, I can creep under the door.",
+   "emotion": "",
+   "source": "ep01/sh058/l01",
+   "key": "3b6b3266e5f2a144",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en014_3b6b3266e5f2a144.mp3",
+   "raw_s": 4.56,
+   "duration_s": 4.059,
+   "trim": {
+    "lead_s": 0.344,
+    "tail_s": 0.157,
+    "peak_db": -6.8,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     1.869,
+     2.396
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:04:15"
+  },
+  {
+   "id": "en015",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "So either way I'll get into the garden, and I don't care which happens!",
+   "emotion": "",
+   "source": "ep01/sh059/l00",
+   "key": "df1c6f4ddbe00760",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en015_df1c6f4ddbe00760.mp3",
+   "raw_s": 5.304,
+   "duration_s": 4.994,
+   "trim": {
+    "lead_s": 0.212,
+    "tail_s": 0.099,
+    "peak_db": -7.2,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     2.412,
+     2.879
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:04:48"
+  },
+  {
+   "id": "en016",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Which way? Which way?",
+   "emotion": "",
+   "source": "ep01/sh060/l00",
+   "key": "fd969f6a8a4161b7",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en016_fd969f6a8a4161b7.mp3",
+   "raw_s": 3.264,
+   "duration_s": 2.564,
+   "trim": {
+    "lead_s": 0.43,
+    "tail_s": 0.27,
+    "peak_db": -6.9,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     0.745,
+     1.703
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:05:55"
+  },
+  {
+   "id": "en017",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Curiouser and curiouser!",
+   "emotion": "",
+   "source": "ep01/sh063/l00",
+   "key": "612ac62d792b2718",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en017_612ac62d792b2718.mp3",
+   "raw_s": 2.328,
+   "duration_s": 2.014,
+   "trim": {
+    "lead_s": 0.313,
+    "tail_s": 0.0,
+    "peak_db": -6.7,
+    "noise_db_used": -35.0
+   },
+   "silences": [],
+   "synthesized_at": "2026-10-20T19:06:19"
+  },
+  {
+   "id": "en018",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Now I'm opening out like the largest telescope that ever was! Good-bye, feet!",
+   "emotion": "",
+   "source": "ep01/sh064/l00",
+   "key": "5426fb9534b5113e",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en018_5426fb9534b5113e.mp3",
+   "raw_s": 5.952,
+   "duration_s": 5.434,
+   "trim": {
+    "lead_s": 0.374,
+    "tail_s": 0.144,
+    "peak_db": -7.5,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     3.783,
+     4.423
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:06:49"
+  },
+  {
+   "id": "en019",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "You ought to be ashamed of yourself, a great girl like you, to go on crying in this way!",
+   "emotion": "",
+   "source": "ep01/sh069/l00",
+   "key": "7d2cff90fe5bdf2a",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en019_7d2cff90fe5bdf2a.mp3",
+   "raw_s": 6.696,
+   "duration_s": 6.44,
+   "trim": {
+    "lead_s": 0.106,
+    "tail_s": 0.151,
+    "peak_db": -8.7,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     1.915,
+     2.423
+    ],
+    [
+     3.746,
+     4.298
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:07:15"
+  },
+  {
+   "id": "en020",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Stop this moment, I tell you!",
+   "emotion": "",
+   "source": "ep01/sh070/l00",
+   "key": "5c68a063189dd1bd",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en020_5c68a063189dd1bd.mp3",
+   "raw_s": 4.464,
+   "duration_s": 2.503,
+   "trim": {
+    "lead_s": 1.694,
+    "tail_s": 0.267,
+    "peak_db": -7.6,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     1.309,
+     1.655
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:08:03"
+  },
+  {
+   "id": "en021",
+   "project": "alices",
+   "speaker": "CHAR-white-rabbit",
+   "variant": "default",
+   "text": "Oh! the Duchess, the Duchess! Oh! won't she be savage if I've kept her waiting!",
+   "emotion": "",
+   "source": "ep01/sh074/l00",
+   "key": "15236b50bdf775dd",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en021_15236b50bdf775dd.mp3",
+   "raw_s": 7.56,
+   "duration_s": 7.409,
+   "trim": {
+    "lead_s": 0.151,
+    "tail_s": 0.0,
+    "peak_db": -6.3,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     0.195,
+     0.887
+    ],
+    [
+     1.487,
+     1.809
+    ],
+    [
+     1.868,
+     2.087
+    ],
+    [
+     2.609,
+     3.093
+    ],
+    [
+     3.347,
+     3.843
+    ],
+    [
+     4.026,
+     4.234
+    ],
+    [
+     4.744,
+     4.984
+    ],
+    [
+     6.093,
+     6.323
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:08:25"
+  },
+  {
+   "id": "en022",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "If you please, sir—",
+   "emotion": "",
+   "source": "ep01/sh075/l00",
+   "key": "858074d5361ca941",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en022_858074d5361ca941.mp3",
+   "raw_s": 3.264,
+   "duration_s": 2.818,
+   "trim": {
+    "lead_s": 0.446,
+    "tail_s": 0.0,
+    "peak_db": -7.8,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     1.154,
+     2.005
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:08:46"
+  },
+  {
+   "id": "en023",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Dear, dear! How queer everything is to-day! And yesterday things went on just as usual.",
+   "emotion": "",
+   "source": "ep01/sh078/l00",
+   "key": "89a9a0081e7c13b4",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en023_89a9a0081e7c13b4.mp3",
+   "raw_s": 8.088,
+   "duration_s": 7.748,
+   "trim": {
+    "lead_s": 0.198,
+    "tail_s": 0.141,
+    "peak_db": -8.2,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     1.146,
+     1.759
+    ],
+    [
+     3.682,
+     4.324
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:09:23"
+  },
+  {
+   "id": "en024",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "I wonder if I've been changed in the night? But if I'm not the same, who in the world am I?",
+   "emotion": "",
+   "source": "ep01/sh079/l00",
+   "key": "b82d61ab35a58721",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en024_b82d61ab35a58721.mp3",
+   "raw_s": 6.552,
+   "duration_s": 6.219,
+   "trim": {
+    "lead_s": 0.204,
+    "tail_s": 0.129,
+    "peak_db": -7.7,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     2.363,
+     2.926
+    ],
+    [
+     4.167,
+     4.702
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:09:54"
+  },
+  {
+   "id": "en025",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Ah, that's the great puzzle!",
+   "emotion": "",
+   "source": "ep01/sh080/l00",
+   "key": "9e1a4b6b99567b9e",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en025_9e1a4b6b99567b9e.mp3",
+   "raw_s": 2.592,
+   "duration_s": 2.15,
+   "trim": {
+    "lead_s": 0.308,
+    "tail_s": 0.135,
+    "peak_db": -6.2,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     0.425,
+     0.861
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:10:12"
+  },
+  {
+   "id": "en026",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Let me see: four times five is twelve, and four times six is thirteen… London is the capital of Paris—",
+   "emotion": "",
+   "source": "ep01/sh081/l00",
+   "key": "4c3b5753473fb6bc",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en026_4c3b5753473fb6bc.mp3",
+   "raw_s": 12.864,
+   "duration_s": 11.48,
+   "trim": {
+    "lead_s": 0.407,
+    "tail_s": 0.978,
+    "peak_db": -6.6,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     0.803,
+     1.799
+    ],
+    [
+     3.85,
+     4.363
+    ],
+    [
+     6.577,
+     7.819
+    ],
+    [
+     9.41,
+     10.521
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:10:52"
+  },
+  {
+   "id": "en027",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "No, that's all wrong, I'm certain! I must have been changed for Mabel!",
+   "emotion": "",
+   "source": "ep01/sh082/l00",
+   "key": "471d6955edaaf211",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en027_471d6955edaaf211.mp3",
+   "raw_s": 7.848,
+   "duration_s": 7.404,
+   "trim": {
+    "lead_s": 0.444,
+    "tail_s": 0.0,
+    "peak_db": -3.5,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     0.437,
+     0.822
+    ],
+    [
+     1.591,
+     1.83
+    ],
+    [
+     2.495,
+     3.685
+    ],
+    [
+     3.709,
+     4.486
+    ],
+    [
+     4.493,
+     5.272
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:11:16"
+  },
+  {
+   "id": "en028",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Oh dear, I do wish they would put their heads down! I am so very tired of being all alone here!",
+   "emotion": "",
+   "source": "ep01/sh083/l00",
+   "key": "408c75911fff776d",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en028_408c75911fff776d.mp3",
+   "raw_s": 10.368,
+   "duration_s": 9.652,
+   "trim": {
+    "lead_s": 0.425,
+    "tail_s": 0.291,
+    "peak_db": -7.3,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     1.147,
+     1.389
+    ],
+    [
+     4.261,
+     5.046
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:11:43"
+  },
+  {
+   "id": "en029",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "That was a narrow escape!",
+   "emotion": "",
+   "source": "ep01/sh088/l00",
+   "key": "0e82aba39d9f0ed5",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en029_0e82aba39d9f0ed5.mp3",
+   "raw_s": 3.648,
+   "duration_s": 1.926,
+   "trim": {
+    "lead_s": 0.414,
+    "tail_s": 1.308,
+    "peak_db": -6.9,
+    "noise_db_used": -35.0
+   },
+   "silences": [],
+   "synthesized_at": "2026-10-20T19:12:02"
+  },
+  {
+   "id": "en030",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "And now for the garden!",
+   "emotion": "",
+   "source": "ep01/sh089/l00",
+   "key": "bb278fd59681b585",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en030_bb278fd59681b585.mp3",
+   "raw_s": 3.648,
+   "duration_s": 1.829,
+   "trim": {
+    "lead_s": 1.553,
+    "tail_s": 0.266,
+    "peak_db": -6.3,
+    "noise_db_used": -35.0
+   },
+   "silences": [],
+   "synthesized_at": "2026-10-20T19:12:22"
+  },
+  {
+   "id": "en031",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "I must have fallen into the sea! And in that case I can go back by railway.",
+   "emotion": "",
+   "source": "ep01/sh095/l00",
+   "key": "28125fa7cb6f705c",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en031_28125fa7cb6f705c.mp3",
+   "raw_s": 6.048,
+   "duration_s": 5.712,
+   "trim": {
+    "lead_s": 0.202,
+    "tail_s": 0.133,
+    "peak_db": -7.2,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     2.15,
+     2.869
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:12:46"
+  },
+  {
+   "id": "en032",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "I wish I hadn't cried so much!",
+   "emotion": "",
+   "source": "ep01/sh098/l00",
+   "key": "33c45bba5a42a2cd",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en032_33c45bba5a42a2cd.mp3",
+   "raw_s": 5.352,
+   "duration_s": 3.218,
+   "trim": {
+    "lead_s": 0.443,
+    "tail_s": 1.69,
+    "peak_db": -7.3,
+    "noise_db_used": -35.0
+   },
+   "silences": [],
+   "synthesized_at": "2026-10-20T19:13:20"
+  },
+  {
+   "id": "en033",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "I shall be punished for it now, I suppose, by being drowned in my own tears!",
+   "emotion": "",
+   "source": "ep01/sh098/l01",
+   "key": "757406cf4e1c954c",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en033_757406cf4e1c954c.mp3",
+   "raw_s": 6.0,
+   "duration_s": 5.447,
+   "trim": {
+    "lead_s": 0.43,
+    "tail_s": 0.123,
+    "peak_db": -6.9,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     2.384,
+     2.829
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:13:44"
+  },
+  {
+   "id": "en034",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "That will be a queer thing, to be sure! However, everything is queer to-day.",
+   "emotion": "",
+   "source": "ep01/sh099/l00",
+   "key": "a7dd3a9c2314f26e",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en034_a7dd3a9c2314f26e.mp3",
+   "raw_s": 7.128,
+   "duration_s": 6.565,
+   "trim": {
+    "lead_s": 0.407,
+    "tail_s": 0.156,
+    "peak_db": -6.9,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     1.943,
+     2.19
+    ],
+    [
+     2.874,
+     3.512
+    ],
+    [
+     4.083,
+     4.644
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:14:13"
+  },
+  {
+   "id": "en035",
+   "project": "jidi",
+   "speaker": "CHAR-jie-rui-er",
+   "variant": "default",
+   "text": "First time on Trantor? I'm Jerril. Just Jerril.",
+   "emotion": "warm, friendly",
+   "source": "ep01/sh001/l00",
+   "key": "e08fd81e1cb610bb",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en035_e08fd81e1cb610bb.mp3",
+   "raw_s": 4.848,
+   "duration_s": 4.42,
+   "trim": {
+    "lead_s": 0.428,
+    "tail_s": 0.0,
+    "peak_db": -13.7,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     1.453,
+     2.335
+    ],
+    [
+     2.887,
+     3.732
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:14:36"
+  },
+  {
+   "id": "en036",
+   "project": "jidi",
+   "speaker": "CHAR-jie-rui-er",
+   "variant": "default",
+   "text": "See the chrome bars? Locals don't even look at them. You will.",
+   "emotion": "amused, knowing",
+   "source": "ep01/sh002/l00",
+   "key": "cb05996a18d7812d",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en036_cb05996a18d7812d.mp3",
+   "raw_s": 6.552,
+   "duration_s": 5.893,
+   "trim": {
+    "lead_s": 0.355,
+    "tail_s": 0.303,
+    "peak_db": -9.6,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     1.363,
+     2.453
+    ],
+    [
+     4.146,
+     5.134
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:15:00"
+  },
+  {
+   "id": "en037",
+   "project": "jidi",
+   "speaker": "CHAR-jie-rui-er",
+   "variant": "default",
+   "text": "Feet under the bar — there. Every outsider does that.",
+   "emotion": "laughing, teasing",
+   "source": "ep01/sh005/l00",
+   "key": "1ab56800158066d2",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en037_1ab56800158066d2.mp3",
+   "raw_s": 7.848,
+   "duration_s": 4.807,
+   "trim": {
+    "lead_s": 0.372,
+    "tail_s": 2.67,
+    "peak_db": -3.5,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     1.316,
+     1.925
+    ],
+    [
+     2.319,
+     3.213
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:15:25"
+  },
+  {
+   "id": "en038",
+   "project": "jidi",
+   "speaker": "CHAR-jie-rui-er",
+   "variant": "default",
+   "text": "Most people never come up here. Not once. Open sky scares them half to death.",
+   "emotion": "hushed, confiding",
+   "source": "ep01/sh006/l00",
+   "key": "5fa4d3218a45f538",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en038_5fa4d3218a45f538.mp3",
+   "raw_s": 9.36,
+   "duration_s": 8.954,
+   "trim": {
+    "lead_s": 0.406,
+    "tail_s": 0.0,
+    "peak_db": -10.9,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     2.058,
+     3.013
+    ],
+    [
+     3.851,
+     5.515
+    ],
+    [
+     7.266,
+     8.293
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:15:47"
+  },
+  {
+   "id": "en039",
+   "project": "jidi",
+   "speaker": "CHAR-jie-rui-er",
+   "variant": "default",
+   "text": "No ground. Not anywhere. It's all city.",
+   "emotion": "quiet awe, proud",
+   "source": "ep01/sh010/l00",
+   "key": "5ad19678ac79bd26",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en039_5ad19678ac79bd26.mp3",
+   "raw_s": 4.464,
+   "duration_s": 4.464,
+   "trim": {
+    "lead_s": 0.0,
+    "tail_s": 0.0,
+    "peak_db": -11.1,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     0.884,
+     1.605
+    ],
+    [
+     2.421,
+     3.512
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:16:09"
+  },
+  {
+   "id": "en040",
+   "project": "jidi",
+   "speaker": "CHAR-jie-rui-er",
+   "variant": "default",
+   "text": "Look down. That's just the roof. Nine-tenths is under there.",
+   "emotion": "intense, almost tender",
+   "source": "ep01/sh011/l00",
+   "key": "cfd3922440760865",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en040_cfd3922440760865.mp3",
+   "raw_s": 5.736,
+   "duration_s": 5.321,
+   "trim": {
+    "lead_s": 0.416,
+    "tail_s": 0.0,
+    "peak_db": -11.2,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     0.724,
+     1.813
+    ],
+    [
+     2.913,
+     3.663
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:16:34"
+  },
+  {
+   "id": "en041",
+   "project": "jidi",
+   "speaker": "CHAR-jie-rui-er",
+   "variant": "default",
+   "text": "I know why you came to Trantor. And who you came to see.",
+   "emotion": "cold, quiet, controlled",
+   "source": "ep01/sh012/l00",
+   "key": "eae192a22d29c4b8",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en041_eae192a22d29c4b8.mp3",
+   "raw_s": 6.96,
+   "duration_s": 6.209,
+   "trim": {
+    "lead_s": 0.443,
+    "tail_s": 0.308,
+    "peak_db": -11.4,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     2.473,
+     4.054
+    ],
+    [
+     5.293,
+     5.527
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:17:07"
+  },
+  {
+   "id": "en042",
+   "project": "alices",
+   "speaker": "CHAR-cheshire-cat",
+   "variant": "default",
+   "text": "We're all mad here. I'm mad. You're mad.",
+   "emotion": "",
+   "source": "extra",
+   "key": "af3ac2ba21a7db3f",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en042_af3ac2ba21a7db3f.mp3",
+   "raw_s": 6.144,
+   "duration_s": 5.122,
+   "trim": {
+    "lead_s": 0.368,
+    "tail_s": 0.655,
+    "peak_db": -15.6,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     1.708,
+     2.795
+    ],
+    [
+     3.468,
+     3.775
+    ],
+    [
+     3.776,
+     4.377
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:17:35"
+  },
+  {
+   "id": "en043",
+   "project": "alices",
+   "speaker": "CHAR-cheshire-cat",
+   "variant": "default",
+   "text": "Extraordinary, isn't it? Absolutely, unmistakably, irrevocably extraordinary.",
+   "emotion": "",
+   "source": "extra",
+   "key": "c677d3f420237f98",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en043_c677d3f420237f98.mp3",
+   "raw_s": 5.136,
+   "duration_s": 4.951,
+   "trim": {
+    "lead_s": 0.185,
+    "tail_s": 0.0,
+    "peak_db": -19.0,
+    "noise_db_used": -37.0
+   },
+   "silences": [],
+   "synthesized_at": "2026-10-20T19:18:18"
+  },
+  {
+   "id": "en044",
+   "project": "alices",
+   "speaker": "CHAR-king-of-hearts",
+   "variant": "default",
+   "text": "Consider your verdict, gentlemen of the jury — carefully, deliberately, and without hurry.",
+   "emotion": "",
+   "source": "extra",
+   "key": "abeb121ddc3f7b55",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en044_abeb121ddc3f7b55.mp3",
+   "raw_s": 9.864,
+   "duration_s": 9.246,
+   "trim": {
+    "lead_s": 0.404,
+    "tail_s": 0.214,
+    "peak_db": -11.9,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     1.638,
+     1.861
+    ],
+    [
+     1.919,
+     2.685
+    ],
+    [
+     3.45,
+     3.74
+    ],
+    [
+     4.682,
+     5.104
+    ],
+    [
+     5.86,
+     6.279
+    ],
+    [
+     7.255,
+     7.772
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:18:46"
+  },
+  {
+   "id": "en045",
+   "project": "alices",
+   "speaker": "CHAR-king-of-hearts",
+   "variant": "default",
+   "text": "The trial begins at 9:30 on March 14th, 1865, in Courtroom No. 3.",
+   "emotion": "",
+   "source": "extra",
+   "key": "c9e7ffd3e63ecdd2",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en045_c9e7ffd3e63ecdd2.mp3",
+   "raw_s": 6.96,
+   "duration_s": 6.513,
+   "trim": {
+    "lead_s": 0.447,
+    "tail_s": 0.0,
+    "peak_db": -13.6,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     3.094,
+     3.465
+    ],
+    [
+     4.705,
+     5.067
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:19:18"
+  },
+  {
+   "id": "en046",
+   "project": "alices",
+   "speaker": "CHAR-king-of-hearts",
+   "variant": "default",
+   "text": "Silence!",
+   "emotion": "",
+   "source": "extra",
+   "key": "d56080c96137d66e",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en046_d56080c96137d66e.mp3",
+   "raw_s": 1.944,
+   "duration_s": 1.283,
+   "trim": {
+    "lead_s": 0.345,
+    "tail_s": 0.316,
+    "peak_db": -13.2,
+    "noise_db_used": -35.0
+   },
+   "silences": [],
+   "synthesized_at": "2026-10-20T19:19:36"
+  },
+  {
+   "id": "en047",
+   "project": "alices",
+   "speaker": "CHAR-caterpillar",
+   "variant": "default",
+   "text": "Who. Are. You?",
+   "emotion": "",
+   "source": "extra",
+   "key": "621447c75e69de50",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en047_621447c75e69de50.mp3",
+   "raw_s": 3.648,
+   "duration_s": 3.251,
+   "trim": {
+    "lead_s": 0.397,
+    "tail_s": 0.0,
+    "peak_db": -9.2,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     0.757,
+     1.344
+    ],
+    [
+     1.885,
+     2.702
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:19:57"
+  },
+  {
+   "id": "en048",
+   "project": "alices",
+   "speaker": "CHAR-caterpillar",
+   "variant": "default",
+   "text": "Keep your temper, child... and remember: one side makes you grow taller, the other side makes you grow shorter.",
+   "emotion": "",
+   "source": "extra",
+   "key": "61d2a88f6cf6df83",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en048_61d2a88f6cf6df83.mp3",
+   "raw_s": 13.248,
+   "duration_s": 12.877,
+   "trim": {
+    "lead_s": 0.372,
+    "tail_s": 0.0,
+    "peak_db": -7.2,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     1.961,
+     2.185
+    ],
+    [
+     2.255,
+     3.311
+    ],
+    [
+     4.245,
+     5.209
+    ],
+    [
+     8.115,
+     8.347
+    ],
+    [
+     8.445,
+     9.334
+    ],
+    [
+     11.572,
+     12.003
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:27:28"
+  },
+  {
+   "id": "en049",
+   "project": "alices",
+   "speaker": "CHAR-hatter",
+   "variant": "default",
+   "text": "Why is a raven like a writing-desk? I haven't the slightest idea!",
+   "emotion": "",
+   "source": "extra",
+   "key": "3d32345c95816873",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en049_3d32345c95816873.mp3",
+   "raw_s": 7.848,
+   "duration_s": 6.079,
+   "trim": {
+    "lead_s": 0.427,
+    "tail_s": 1.342,
+    "peak_db": -11.3,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     2.909,
+     3.703
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:20:48"
+  },
+  {
+   "id": "en050",
+   "project": "alices",
+   "speaker": "CHAR-hatter",
+   "variant": "default",
+   "text": "It's always six o'clock now — always tea-time, and we've no time to wash the things between whiles.",
+   "emotion": "",
+   "source": "extra",
+   "key": "fd082c3df4883f16",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en050_fd082c3df4883f16.mp3",
+   "raw_s": 11.568,
+   "duration_s": 11.395,
+   "trim": {
+    "lead_s": 0.173,
+    "tail_s": 0.0,
+    "peak_db": -0.7,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     1.956,
+     2.289
+    ],
+    [
+     2.856,
+     3.501
+    ],
+    [
+     5.532,
+     6.308
+    ],
+    [
+     8.892,
+     9.105
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:21:08"
+  },
+  {
+   "id": "en051",
+   "project": "alices",
+   "speaker": "CHAR-queen-of-hearts",
+   "variant": "default",
+   "text": "Off with her head! Off with his head! OFF WITH THEIR HEADS!",
+   "emotion": "",
+   "source": "extra",
+   "key": "3ac66d421e15c865",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en051_3ac66d421e15c865.mp3",
+   "raw_s": 7.368,
+   "duration_s": 7.368,
+   "trim": {
+    "lead_s": 0.0,
+    "tail_s": 0.0,
+    "peak_db": -11.4,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     0.354,
+     0.934
+    ],
+    [
+     1.092,
+     1.32
+    ],
+    [
+     1.32,
+     2.444
+    ],
+    [
+     2.593,
+     4.448
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:21:42"
+  },
+  {
+   "id": "en052",
+   "project": "alices",
+   "speaker": "CHAR-queen-of-hearts",
+   "variant": "default",
+   "text": "Can you play croquet? Then fetch the flamingos, the hedgehogs, and the soldiers, immediately.",
+   "emotion": "",
+   "source": "extra",
+   "key": "4de75e72de124b5a",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en052_4de75e72de124b5a.mp3",
+   "raw_s": 9.432,
+   "duration_s": 9.141,
+   "trim": {
+    "lead_s": 0.107,
+    "tail_s": 0.184,
+    "peak_db": -16.7,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     0.16,
+     0.47
+    ],
+    [
+     0.568,
+     0.8
+    ],
+    [
+     0.823,
+     1.076
+    ],
+    [
+     1.076,
+     2.402
+    ],
+    [
+     2.824,
+     3.099
+    ],
+    [
+     3.848,
+     4.067
+    ],
+    [
+     4.159,
+     4.621
+    ],
+    [
+     5.29,
+     5.508
+    ],
+    [
+     5.627,
+     6.192
+    ],
+    [
+     7.092,
+     7.31
+    ],
+    [
+     7.368,
+     7.594
+    ],
+    [
+     7.705,
+     8.75
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:22:08"
+  },
+  {
+   "id": "en053",
+   "project": "alices",
+   "speaker": "CHAR-gryphon",
+   "variant": "default",
+   "text": "The FBI, the CIA, and NASA all sent letters, but nobody read them.",
+   "emotion": "",
+   "source": "extra",
+   "key": "3a57c654631c2eef",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en053_3a57c654631c2eef.mp3",
+   "raw_s": 9.048,
+   "duration_s": 8.527,
+   "trim": {
+    "lead_s": 0.4,
+    "tail_s": 0.122,
+    "peak_db": -11.6,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     1.027,
+     1.626
+    ],
+    [
+     2.512,
+     3.059
+    ],
+    [
+     3.799,
+     4.594
+    ],
+    [
+     6.083,
+     6.891
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:22:35"
+  },
+  {
+   "id": "en054",
+   "project": "alices",
+   "speaker": "CHAR-gryphon",
+   "variant": "default",
+   "text": "What fun! It's all her fancy, that is. They never execute anybody, you know.",
+   "emotion": "",
+   "source": "extra",
+   "key": "2e2b2477e10d22e2",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en054_2e2b2477e10d22e2.mp3",
+   "raw_s": 6.336,
+   "duration_s": 5.799,
+   "trim": {
+    "lead_s": 0.387,
+    "tail_s": 0.15,
+    "peak_db": -12.5,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     0.788,
+     1.4
+    ],
+    [
+     2.993,
+     3.437
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:22:57"
+  },
+  {
+   "id": "en055",
+   "project": "alices",
+   "speaker": "CHAR-white-rabbit",
+   "variant": "default",
+   "text": "I'm late, I'm late, for a very important date! No time to say hello, goodbye!",
+   "emotion": "",
+   "source": "extra",
+   "key": "2afb769ddf873005",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en055_2afb769ddf873005.mp3",
+   "raw_s": 9.864,
+   "duration_s": 9.734,
+   "trim": {
+    "lead_s": 0.13,
+    "tail_s": 0.0,
+    "peak_db": -6.9,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     0.796,
+     1.219
+    ],
+    [
+     2.006,
+     2.483
+    ],
+    [
+     3.412,
+     3.623
+    ],
+    [
+     3.965,
+     4.3
+    ],
+    [
+     4.631,
+     5.114
+    ],
+    [
+     5.342,
+     5.602
+    ],
+    [
+     6.749,
+     7.142
+    ],
+    [
+     8.053,
+     8.355
+    ],
+    [
+     8.482,
+     8.788
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:23:25"
+  },
+  {
+   "id": "en056",
+   "project": "alices",
+   "speaker": "CHAR-white-rabbit",
+   "variant": "default",
+   "text": "Mary Ann! Fetch me a pair of gloves and a fan — quick, now!",
+   "emotion": "",
+   "source": "extra",
+   "key": "72cbf979ff9fe36b",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en056_72cbf979ff9fe36b.mp3",
+   "raw_s": 6.96,
+   "duration_s": 6.13,
+   "trim": {
+    "lead_s": 0.455,
+    "tail_s": 0.375,
+    "peak_db": -13.2,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     0.945,
+     1.72
+    ],
+    [
+     3.161,
+     3.399
+    ],
+    [
+     4.25,
+     5.101
+    ],
+    [
+     5.237,
+     5.637
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:23:48"
+  },
+  {
+   "id": "en057",
+   "project": "alices",
+   "speaker": "CHAR-mock-turtle",
+   "variant": "default",
+   "text": "Once, I was a real turtle. We went to school in the sea, every single day, for 25 years.",
+   "emotion": "",
+   "source": "extra",
+   "key": "19f5f5e3cbd48994",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en057_19f5f5e3cbd48994.mp3",
+   "raw_s": 11.928,
+   "duration_s": 11.508,
+   "trim": {
+    "lead_s": 0.42,
+    "tail_s": 0.0,
+    "peak_db": -3.6,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     0.325,
+     0.55
+    ],
+    [
+     0.55,
+     1.69
+    ],
+    [
+     2.444,
+     2.755
+    ],
+    [
+     3.073,
+     4.946
+    ],
+    [
+     6.594,
+     7.652
+    ],
+    [
+     8.99,
+     10.193
+    ],
+    [
+     10.393,
+     10.774
+    ],
+    [
+     11.056,
+     11.379
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:24:13"
+  },
+  {
+   "id": "en058",
+   "project": "alices",
+   "speaker": "CHAR-mock-turtle",
+   "variant": "default",
+   "text": "Reeling and writhing, of course, to begin with; and then the different branches of arithmetic.",
+   "emotion": "",
+   "source": "extra",
+   "key": "08a020a166f79830",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en058_08a020a166f79830.mp3",
+   "raw_s": 14.568,
+   "duration_s": 14.182,
+   "trim": {
+    "lead_s": 0.385,
+    "tail_s": 0.0,
+    "peak_db": -14.8,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     1.422,
+     2.691
+    ],
+    [
+     3.255,
+     4.67
+    ],
+    [
+     4.854,
+     8.584
+    ],
+    [
+     9.147,
+     11.288
+    ],
+    [
+     11.836,
+     12.147
+    ],
+    [
+     12.636,
+     13.338
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:24:41"
+  },
+  {
+   "id": "en059",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Curiouser and curiouser! Now I'm opening out like the largest telescope that ever was!",
+   "emotion": "",
+   "source": "extra",
+   "key": "5be7ae128b1ddbd5",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en059_5be7ae128b1ddbd5.mp3",
+   "raw_s": 7.368,
+   "duration_s": 6.846,
+   "trim": {
+    "lead_s": 0.302,
+    "tail_s": 0.22,
+    "peak_db": -6.6,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     1.82,
+     2.393
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:25:05"
+  },
+  {
+   "id": "en060",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "I can't explain myself, I'm afraid, sir, because I'm not myself, you see.",
+   "emotion": "",
+   "source": "extra",
+   "key": "20106c63b0c5e126",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en060_20106c63b0c5e126.mp3",
+   "raw_s": 8.664,
+   "duration_s": 7.894,
+   "trim": {
+    "lead_s": 0.41,
+    "tail_s": 0.361,
+    "peak_db": -7.7,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     2.198,
+     2.676
+    ],
+    [
+     3.481,
+     3.799
+    ],
+    [
+     4.313,
+     4.793
+    ],
+    [
+     6.883,
+     7.198
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:25:29"
+  },
+  {
+   "id": "en061",
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "variant": "default",
+   "text": "Yes, please.",
+   "emotion": "",
+   "source": "extra",
+   "key": "a380c58515d37965",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en061_a380c58515d37965.mp3",
+   "raw_s": 2.328,
+   "duration_s": 1.838,
+   "trim": {
+    "lead_s": 0.4,
+    "tail_s": 0.091,
+    "peak_db": -7.7,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     0.552,
+     1.042
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:25:55"
+  },
+  {
+   "id": "en062",
+   "project": "jidi",
+   "speaker": "CHAR-jie-rui-er",
+   "variant": "default",
+   "text": "Gate 47 closes at 11:15. After that, it's a 3.5-hour wait for the next shuttle.",
+   "emotion": "",
+   "source": "extra",
+   "key": "342e9ccf493eeca0",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en062_342e9ccf493eeca0.mp3",
+   "raw_s": 7.848,
+   "duration_s": 7.349,
+   "trim": {
+    "lead_s": 0.42,
+    "tail_s": 0.078,
+    "peak_db": -11.1,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     2.875,
+     3.506
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:26:22"
+  },
+  {
+   "id": "en063",
+   "project": "jidi",
+   "speaker": "CHAR-jie-rui-er",
+   "variant": "default",
+   "text": "Dr. Seldon's office is on Level 12, past the Imperial Library. You can't miss it.",
+   "emotion": "",
+   "source": "extra",
+   "key": "57fa6c1b339df421",
+   "provider": "volcengine",
+   "model": "seed-audio-1.0",
+   "file": "data/calibration/time_cost/volcengine-seed-audio-1.0/en063_57fa6c1b339df421.mp3",
+   "raw_s": 7.848,
+   "duration_s": 7.349,
+   "trim": {
+    "lead_s": 0.397,
+    "tail_s": 0.102,
+    "peak_db": -8.8,
+    "noise_db_used": -35.0
+   },
+   "silences": [
+    [
+     2.613,
+     3.563
+    ],
+    [
+     5.275,
+     6.316
+    ]
+   ],
+   "synthesized_at": "2026-10-20T19:26:43"
+  }
+ ],
+ "provider": "volcengine",
+ "model": "seed-audio-1.0",
+ "trim_params": {
+  "noise_db": -35.0,
+  "peak_headroom_db": 18.0,
+  "keep_head": 0.1,
+  "keep_tail": 0.15,
+  "max_pause": 0.0
+ }
+}

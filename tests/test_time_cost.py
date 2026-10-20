@@ -53,9 +53,9 @@ def test_latin_lines_count_words_not_letters():
     """#124:英文等按词计;中文、只有数字标点的句子仍按字计(与 2026-10-03 口径逐字相同)。"""
     s = "Dr. Seldon can't know you were here."
     assert tc.is_word_text(s) and tc.word_count(s) == 7 and tc.inner_pauses(s) == 0     # Dr. 的点不算停顿
-    assert tc.line_est(s) == round(0.7 + 7 / (130 / 60), 2)                             # 默认 130 wpm(原口径 7.53s)
+    assert tc.line_est(s) == round(0.7 + 7 / (160 / 60), 2)                             # 默认 160 wpm(2026-10-20 实测校准;原口径 7.53s)
     assert tc.line_est(s, "medium", wpm=150) == round(0.7 + 7 / 2.5, 2)                 # 角色 speed_wpm 优先
-    assert tc.line_est(s, "medium", 252.0) == tc.line_est(s)                            # 中文口径 cpm 按 130/252 换算
+    assert tc.line_est(s, "medium", 252.0) == tc.line_est(s)                            # 中文口径 cpm 按 160/252 换算
     assert tc.line_est(s, "medium", 570.0) == tc.line_est(s, "medium", wpm=150)         # > 400 的 cpm 是字母 / 分(÷ 3.8)
     assert tc.line_est(s, "slow") > tc.line_est(s) > tc.line_est(s, "fast")
     assert tc.inner_pauses("It costs 3.5 credits, Mr. Hardin.") == 1                     # 小数点 / Mr. 不算

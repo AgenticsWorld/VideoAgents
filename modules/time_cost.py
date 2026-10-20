@@ -13,8 +13,11 @@
 台词估时 = ONSET_S + 有效字数 ÷ 语速 + PAUSE_S × 句中停顿数
   语速 = 角色 voice.json speed_cpm 中点 ÷ 60 × 语速档倍率(fast/medium/slow),无角色语速时直接取档位字/秒。
   拉丁 / 西里尔等按空格分词的文字(句中没有汉字 / 假名 / 谚文)按词计(#124):有效字数 → 词数(can't 算一词,
-  单个长词按 字母数 ÷ 6 兜底),语速 = speed_wpm 中点 > speed_cpm 换算(× 130/252,保持角色相对快慢;> 400 的
-  speed_cpm 是按字母 / 分钟写的,÷ 3.8)> 默认 130 wpm,再乘语速档倍率;Dr. / Mr. 等缩写与小数点不算句中停顿。
+  单个长词按 字母数 ÷ 6 兜底),语速 = speed_wpm 中点 > speed_cpm 换算(× 160/252,保持角色相对快慢;> 400 的
+  speed_cpm 是按字母 / 分钟写的,÷ 3.8)> 默认 160 wpm,再乘语速档倍率;Dr. / Mr. 等缩写与小数点不算句中停顿。
+  默认词速 2026-10-20 按 63 句 seed-audio 英文实测校准(code/calibrate_time_cost.py,docs/time_cost_calibration/):
+  原 130 wpm 估长约 16%(比值中位 0.86,平均误差 1.42s),160 wpm 比值中位 0.99、误差 1.09s。同一批数据上按音节计、
+  句间 / 句内停顿分开都没有比按词更准(长的多音节词念得快),故仍按词计。
   含汉字 / 假名 / 谚文的句子与只有数字标点的句子仍按字计,与 2026-10-03 口径逐字相同。
   参数来源:ep07 对白语音库 44 句自然时长拟合 dur = 0.68 + 字数/4.8 + 0.41×停顿(MAE 0.41s;旧公式 0.9s)。
   旧公式(字数 ÷ 语速,无余量)只给 legacy 文件做一致性比对,新写的集一律用新公式。
@@ -42,8 +45,8 @@ _EFF_RE = re.compile(r"[0-9A-Za-z\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\
 _CJK_RE = re.compile(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af]")
 
 # 按词计的文字(#124):英文等拉丁文字原按字母逐个计数再除以中文字速,一句英文高估约 2 倍(alices 真实 TTS 样本 1.72 词/秒)
-DEFAULT_WPM = 130.0                    # 无 speed_wpm / speed_cpm 时的英文等词速(用户 2026-10-09 拍板,偏保守)
-WPM_PER_CPM = DEFAULT_WPM / DEFAULT_CPM  # 只有中文口径 speed_cpm 时按此换算,保持角色相对快慢(252 字/分 ↔ 130 词/分)
+DEFAULT_WPM = 160.0                    # 无 speed_wpm / speed_cpm 时的英文等词速(2026-10-20 实测校准;原 130 是 10-09 无数据时的保守值)
+WPM_PER_CPM = DEFAULT_WPM / DEFAULT_CPM  # 只有中文口径 speed_cpm 时按此换算,保持角色相对快慢(252 字/分 ↔ 160 词/分)
 LETTER_CPM_MIN = 400.0                 # speed_cpm 超过此值 = 按字母 / 分钟写的(alices / jidi 新卡 = speed_wpm × 3.8)
 LETTERS_PER_WORD = 3.8
 LONG_WORD_LETTERS = 6.0                # 词数兜底:字母数 ÷ 6(单个长词 / 不用空格分词的文字不至于估成一词)
@@ -124,14 +127,14 @@ def speech_rate(pace: str = "", cpm: float | None = None) -> float:
 
 
 def cpm_to_wpm(cpm: float | None) -> float | None:
-    """只有 speed_cpm 时换算词速:> 400 视为按字母 / 分钟写的(÷ 3.8),否则按中文字速 × 130/252。"""
+    """只有 speed_cpm 时换算词速:> 400 视为按字母 / 分钟写的(÷ 3.8),否则按中文字速 × DEFAULT_WPM/252。"""
     if not cpm or cpm <= 0:
         return None
     return cpm / LETTERS_PER_WORD if cpm > LETTER_CPM_MIN else cpm * WPM_PER_CPM
 
 
 def word_rate(pace: str = "", cpm: float | None = None, wpm: float | None = None) -> float:
-    """词/秒:speed_wpm > speed_cpm 换算 > 默认 130 wpm,乘语速档倍率。"""
+    """词/秒:speed_wpm > speed_cpm 换算 > 默认 DEFAULT_WPM,乘语速档倍率。"""
     p = norm_pace(pace) or "medium"
     w = wpm if wpm and wpm > 0 else (cpm_to_wpm(cpm) or DEFAULT_WPM)
     return w / 60.0 * PACE_FACTOR[p]

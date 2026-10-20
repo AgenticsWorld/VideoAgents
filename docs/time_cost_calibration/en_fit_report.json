@@ -1,0 +1,1086 @@
+{
+ "schema": "time_cost_calibration/v1#fit",
+ "generated_at": "2026-10-20T19:32:54",
+ "samples": 63,
+ "provider": "volcengine",
+ "model": "seed-audio-1.0",
+ "formula": "duration = 0.7 + words × 60 / wpm + 0.4 × inner_pauses(modules/time_cost.line_est)",
+ "default_wpm": {
+  "current": 160.0,
+  "least_squares": 157.0,
+  "median_unbiased": 163.3
+ },
+ "errors": {
+  "legacy_130wpm_default": {
+   "n": 63,
+   "bias_s": -0.974,
+   "mae_s": 1.423,
+   "ratio_median": 0.861,
+   "over_20pct": 26
+  },
+  "current_default": {
+   "n": 63,
+   "bias_s": 0.03,
+   "mae_s": 1.086,
+   "ratio_median": 0.986,
+   "over_20pct": 29
+  },
+  "median_unbiased_default": {
+   "n": 63,
+   "bias_s": 0.12,
+   "mae_s": 1.083,
+   "ratio_median": 1.0,
+   "over_20pct": 28
+  },
+  "current_with_character_cards": {
+   "n": 63,
+   "bias_s": -0.11,
+   "mae_s": 1.014,
+   "ratio_median": 0.98,
+   "over_20pct": 25
+  }
+ },
+ "diagnostics": {
+  "words_free": {
+   "coef": [
+    0.2386,
+    0.3379,
+    0.7931,
+    0.9527
+   ],
+   "fit": {
+    "n": 63,
+    "bias_s": 0.0,
+    "mae_s": 0.999,
+    "ratio_median": 0.999,
+    "over_20pct": 19
+   },
+   "leave_one_out": {
+    "n": 63,
+    "bias_s": 0.0,
+    "mae_s": 1.069,
+    "ratio_median": 0.999,
+    "over_20pct": 21
+   }
+  },
+  "syllables_free": {
+   "coef": [
+    0.6198,
+    0.2235,
+    0.949,
+    0.8646
+   ],
+   "fit": {
+    "n": 63,
+    "bias_s": 0.0,
+    "mae_s": 1.057,
+    "ratio_median": 0.946,
+    "over_20pct": 19
+   },
+   "leave_one_out": {
+    "n": 63,
+    "bias_s": -0.003,
+    "mae_s": 1.126,
+    "ratio_median": 0.942,
+    "over_20pct": 21
+   }
+  },
+  "words_and_syllables_free": {
+   "coef": [
+    0.164,
+    0.256,
+    0.0721,
+    0.7861,
+    0.8607
+   ],
+   "fit": {
+    "n": 63,
+    "bias_s": 0.0,
+    "mae_s": 0.995,
+    "ratio_median": 0.996,
+    "over_20pct": 18
+   },
+   "leave_one_out": {
+    "n": 63,
+    "bias_s": -0.014,
+    "mae_s": 1.089,
+    "ratio_median": 0.995,
+    "over_20pct": 22
+   }
+  }
+ },
+ "speakers": [
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice",
+   "n": 33,
+   "actual_over_est_median": 0.81,
+   "card_wpm": 162.5,
+   "card_cpm": 617.5
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-alice-sister",
+   "n": 1,
+   "actual_over_est_median": 1.04,
+   "card_wpm": 145.0,
+   "card_cpm": 551.0
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-caterpillar",
+   "n": 2,
+   "actual_over_est_median": 0.95,
+   "card_wpm": 97.5,
+   "card_cpm": 370.5
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-cheshire-cat",
+   "n": 2,
+   "actual_over_est_median": 0.79,
+   "card_wpm": 120.0,
+   "card_cpm": 456.0
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-gryphon",
+   "n": 2,
+   "actual_over_est_median": 1.05,
+   "card_wpm": 167.5,
+   "card_cpm": 636.5
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-hatter",
+   "n": 2,
+   "actual_over_est_median": 1.39,
+   "card_wpm": 180.0,
+   "card_cpm": 684.0
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-king-of-hearts",
+   "n": 3,
+   "actual_over_est_median": 1.06,
+   "card_wpm": 137.5,
+   "card_cpm": 522.5
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-mock-turtle",
+   "n": 2,
+   "actual_over_est_median": 1.18,
+   "card_wpm": 112.5,
+   "card_cpm": 427.5
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-queen-of-hearts",
+   "n": 2,
+   "actual_over_est_median": 1.25,
+   "card_wpm": 165.0,
+   "card_cpm": 627.0
+  },
+  {
+   "project": "alices",
+   "speaker": "CHAR-white-rabbit",
+   "n": 5,
+   "actual_over_est_median": 1.05,
+   "card_wpm": 190.0,
+   "card_cpm": 722.0
+  },
+  {
+   "project": "jidi",
+   "speaker": "CHAR-jie-rui-er",
+   "n": 9,
+   "actual_over_est_median": 0.98,
+   "card_wpm": 152.5,
+   "card_cpm": 580.0
+  }
+ ],
+ "lines": [
+  {
+   "id": "en001",
+   "speaker": "CHAR-alice",
+   "text": "What is the use of a book without pictures or conversations?",
+   "actual_s": 3.875,
+   "words": 11.0,
+   "syllables": 16,
+   "pauses": [
+    0,
+    0
+   ],
+   "current_default_s": 4.83,
+   "current_card_s": 4.76
+  },
+  {
+   "id": "en002",
+   "speaker": "CHAR-alice-sister",
+   "text": "Hush, Alice dear.",
+   "actual_s": 2.431,
+   "words": 3.0,
+   "syllables": 4,
+   "pauses": [
+    0,
+    1
+   ],
+   "current_default_s": 2.23,
+   "current_card_s": 2.34
+  },
+  {
+   "id": "en003",
+   "speaker": "CHAR-alice",
+   "text": "I wonder how many miles I've fallen by this time?",
+   "actual_s": 3.563,
+   "words": 10.0,
+   "syllables": 13,
+   "pauses": [
+    0,
+    0
+   ],
+   "current_default_s": 4.45,
+   "current_card_s": 4.39
+  },
+  {
+   "id": "en004",
+   "speaker": "CHAR-alice",
+   "text": "Dinah'll miss me very much to-night, I should think!",
+   "actual_s": 3.578,
+   "words": 9.0,
+   "syllables": 13,
+   "pauses": [
+    0,
+    1
+   ],
+   "current_default_s": 4.48,
+   "current_card_s": 4.42
+  },
+  {
+   "id": "en005",
+   "speaker": "CHAR-alice",
+   "text": "Do cats eat bats? Do cats eat bats?… Do bats eat cats?",
+   "actual_s": 6.959,
+   "words": 12.0,
+   "syllables": 12,
+   "pauses": [
+    2,
+    0
+   ],
+   "current_default_s": 6.0,
+   "current_card_s": 5.93
+  },
+  {
+   "id": "en006",
+   "speaker": "CHAR-white-rabbit",
+   "text": "Oh dear! Oh dear! I shall be late!",
+   "actual_s": 4.466,
+   "words": 8.0,
+   "syllables": 8,
+   "pauses": [
+    2,
+    0
+   ],
+   "current_default_s": 4.5,
+   "current_card_s": 4.03
+  },
+  {
+   "id": "en007",
+   "speaker": "CHAR-white-rabbit",
+   "text": "Oh my ears and whiskers, how late it's getting!",
+   "actual_s": 3.861,
+   "words": 9.0,
+   "syllables": 11,
+   "pauses": [
+    0,
+    1
+   ],
+   "current_default_s": 4.48,
+   "current_card_s": 3.94
+  },
+  {
+   "id": "en008",
+   "speaker": "CHAR-alice",
+   "text": "That certainly was not here before.",
+   "actual_s": 2.19,
+   "words": 6.0,
+   "syllables": 9,
+   "pauses": [
+    0,
+    0
+   ],
+   "current_default_s": 2.95,
+   "current_card_s": 2.92
+  },
+  {
+   "id": "en009",
+   "speaker": "CHAR-alice",
+   "text": "No, I'll look first, and see whether it's marked 'poison' or not.",
+   "actual_s": 4.529,
+   "words": 12.0,
+   "syllables": 14,
+   "pauses": [
+    0,
+    2
+   ],
+   "current_default_s": 6.0,
+   "current_card_s": 5.93
+  },
+  {
+   "id": "en010",
+   "speaker": "CHAR-alice",
+   "text": "What a curious feeling! I must be shutting up like a telescope.",
+   "actual_s": 4.354,
+   "words": 12.0,
+   "syllables": 18,
+   "pauses": [
+    1,
+    0
+   ],
+   "current_default_s": 5.6,
+   "current_card_s": 5.53
+  },
+  {
+   "id": "en011",
+   "speaker": "CHAR-alice",
+   "text": "For it might end, you know, in my going out altogether, like a candle.",
+   "actual_s": 6.21,
+   "words": 14.0,
+   "syllables": 19,
+   "pauses": [
+    0,
+    3
+   ],
+   "current_default_s": 7.15,
+   "current_card_s": 7.07
+  },
+  {
+   "id": "en012",
+   "speaker": "CHAR-alice",
+   "text": "Come, there's no use in crying like that! I advise you to leave off this minute!",
+   "actual_s": 7.695,
+   "words": 16.0,
+   "syllables": 19,
+   "pauses": [
+    1,
+    1
+   ],
+   "current_default_s": 7.5,
+   "current_card_s": 7.41
+  },
+  {
+   "id": "en013",
+   "speaker": "CHAR-alice",
+   "text": "Well, I'll eat it. And if it makes me grow larger, I can reach the key;",
+   "actual_s": 5.114,
+   "words": 16.0,
+   "syllables": 17,
+   "pauses": [
+    1,
+    2
+   ],
+   "current_default_s": 8.3,
+   "current_card_s": 8.21
+  },
+  {
+   "id": "en014",
+   "speaker": "CHAR-alice",
+   "text": "and if it makes me grow smaller, I can creep under the door.",
+   "actual_s": 4.059,
+   "words": 13.0,
+   "syllables": 15,
+   "pauses": [
+    0,
+    1
+   ],
+   "current_default_s": 5.98,
+   "current_card_s": 5.9
+  },
+  {
+   "id": "en015",
+   "speaker": "CHAR-alice",
+   "text": "So either way I'll get into the garden, and I don't care which happens!",
+   "actual_s": 4.994,
+   "words": 14.0,
+   "syllables": 18,
+   "pauses": [
+    0,
+    1
+   ],
+   "current_default_s": 6.35,
+   "current_card_s": 6.27
+  },
+  {
+   "id": "en016",
+   "speaker": "CHAR-alice",
+   "text": "Which way? Which way?",
+   "actual_s": 2.564,
+   "words": 4.0,
+   "syllables": 4,
+   "pauses": [
+    1,
+    0
+   ],
+   "current_default_s": 2.6,
+   "current_card_s": 2.58
+  },
+  {
+   "id": "en017",
+   "speaker": "CHAR-alice",
+   "text": "Curiouser and curiouser!",
+   "actual_s": 2.014,
+   "words": 3.5,
+   "syllables": 9,
+   "pauses": [
+    0,
+    0
+   ],
+   "current_default_s": 2.01,
+   "current_card_s": 1.99
+  },
+  {
+   "id": "en018",
+   "speaker": "CHAR-alice",
+   "text": "Now I'm opening out like the largest telescope that ever was! Good-bye, feet!",
+   "actual_s": 5.434,
+   "words": 13.0,
+   "syllables": 20,
+   "pauses": [
+    1,
+    1
+   ],
+   "current_default_s": 6.38,
+   "current_card_s": 6.3
+  },
+  {
+   "id": "en019",
+   "speaker": "CHAR-alice",
+   "text": "You ought to be ashamed of yourself, a great girl like you, to go on crying in this way!",
+   "actual_s": 6.44,
+   "words": 19.0,
+   "syllables": 22,
+   "pauses": [
+    0,
+    2
+   ],
+   "current_default_s": 8.62,
+   "current_card_s": 8.52
+  },
+  {
+   "id": "en020",
+   "speaker": "CHAR-alice",
+   "text": "Stop this moment, I tell you!",
+   "actual_s": 2.503,
+   "words": 6.0,
+   "syllables": 7,
+   "pauses": [
+    0,
+    1
+   ],
+   "current_default_s": 3.35,
+   "current_card_s": 3.32
+  },
+  {
+   "id": "en021",
+   "speaker": "CHAR-white-rabbit",
+   "text": "Oh! the Duchess, the Duchess! Oh! won't she be savage if I've kept her waiting!",
+   "actual_s": 7.409,
+   "words": 15.0,
+   "syllables": 19,
+   "pauses": [
+    3,
+    1
+   ],
+   "current_default_s": 7.93,
+   "current_card_s": 7.04
+  },
+  {
+   "id": "en022",
+   "speaker": "CHAR-alice",
+   "text": "If you please, sir—",
+   "actual_s": 2.818,
+   "words": 4.0,
+   "syllables": 4,
+   "pauses": [
+    0,
+    1
+   ],
+   "current_default_s": 2.6,
+   "current_card_s": 2.58
+  },
+  {
+   "id": "en023",
+   "speaker": "CHAR-alice",
+   "text": "Dear, dear! How queer everything is to-day! And yesterday things went on just as usual.",
+   "actual_s": 7.748,
+   "words": 15.0,
+   "syllables": 22,
+   "pauses": [
+    2,
+    1
+   ],
+   "current_default_s": 7.53,
+   "current_card_s": 7.44
+  },
+  {
+   "id": "en024",
+   "speaker": "CHAR-alice",
+   "text": "I wonder if I've been changed in the night? But if I'm not the same, who in the world am I?",
+   "actual_s": 6.219,
+   "words": 21.0,
+   "syllables": 22,
+   "pauses": [
+    1,
+    1
+   ],
+   "current_default_s": 9.38,
+   "current_card_s": 9.25
+  },
+  {
+   "id": "en025",
+   "speaker": "CHAR-alice",
+   "text": "Ah, that's the great puzzle!",
+   "actual_s": 2.15,
+   "words": 5.0,
+   "syllables": 6,
+   "pauses": [
+    0,
+    1
+   ],
+   "current_default_s": 2.98,
+   "current_card_s": 2.95
+  },
+  {
+   "id": "en026",
+   "speaker": "CHAR-alice",
+   "text": "Let me see: four times five is twelve, and four times six is thirteen… London is the capital of Paris—",
+   "actual_s": 11.48,
+   "words": 20.0,
+   "syllables": 25,
+   "pauses": [
+    1,
+    2
+   ],
+   "current_default_s": 9.4,
+   "current_card_s": 9.28
+  },
+  {
+   "id": "en027",
+   "speaker": "CHAR-alice",
+   "text": "No, that's all wrong, I'm certain! I must have been changed for Mabel!",
+   "actual_s": 7.404,
+   "words": 13.0,
+   "syllables": 15,
+   "pauses": [
+    1,
+    2
+   ],
+   "current_default_s": 6.78,
+   "current_card_s": 6.7
+  },
+  {
+   "id": "en028",
+   "speaker": "CHAR-alice",
+   "text": "Oh dear, I do wish they would put their heads down! I am so very tired of being all alone here!",
+   "actual_s": 9.652,
+   "words": 21.0,
+   "syllables": 25,
+   "pauses": [
+    1,
+    1
+   ],
+   "current_default_s": 9.38,
+   "current_card_s": 9.25
+  },
+  {
+   "id": "en029",
+   "speaker": "CHAR-alice",
+   "text": "That was a narrow escape!",
+   "actual_s": 1.926,
+   "words": 5.0,
+   "syllables": 7,
+   "pauses": [
+    0,
+    0
+   ],
+   "current_default_s": 2.58,
+   "current_card_s": 2.55
+  },
+  {
+   "id": "en030",
+   "speaker": "CHAR-alice",
+   "text": "And now for the garden!",
+   "actual_s": 1.829,
+   "words": 5.0,
+   "syllables": 6,
+   "pauses": [
+    0,
+    0
+   ],
+   "current_default_s": 2.58,
+   "current_card_s": 2.55
+  },
+  {
+   "id": "en031",
+   "speaker": "CHAR-alice",
+   "text": "I must have fallen into the sea! And in that case I can go back by railway.",
+   "actual_s": 5.712,
+   "words": 17.0,
+   "syllables": 20,
+   "pauses": [
+    1,
+    0
+   ],
+   "current_default_s": 7.48,
+   "current_card_s": 7.38
+  },
+  {
+   "id": "en032",
+   "speaker": "CHAR-alice",
+   "text": "I wish I hadn't cried so much!",
+   "actual_s": 3.218,
+   "words": 7.0,
+   "syllables": 8,
+   "pauses": [
+    0,
+    0
+   ],
+   "current_default_s": 3.33,
+   "current_card_s": 3.28
+  },
+  {
+   "id": "en033",
+   "speaker": "CHAR-alice",
+   "text": "I shall be punished for it now, I suppose, by being drowned in my own tears!",
+   "actual_s": 5.447,
+   "words": 16.0,
+   "syllables": 19,
+   "pauses": [
+    0,
+    2
+   ],
+   "current_default_s": 7.5,
+   "current_card_s": 7.41
+  },
+  {
+   "id": "en034",
+   "speaker": "CHAR-alice",
+   "text": "That will be a queer thing, to be sure! However, everything is queer to-day.",
+   "actual_s": 6.565,
+   "words": 14.0,
+   "syllables": 19,
+   "pauses": [
+    1,
+    2
+   ],
+   "current_default_s": 7.15,
+   "current_card_s": 7.07
+  },
+  {
+   "id": "en035",
+   "speaker": "CHAR-jie-rui-er",
+   "text": "First time on Trantor? I'm Jerril. Just Jerril.",
+   "actual_s": 4.42,
+   "words": 8.0,
+   "syllables": 11,
+   "pauses": [
+    2,
+    0
+   ],
+   "current_default_s": 4.5,
+   "current_card_s": 4.65
+  },
+  {
+   "id": "en036",
+   "speaker": "CHAR-jie-rui-er",
+   "text": "See the chrome bars? Locals don't even look at them. You will.",
+   "actual_s": 5.893,
+   "words": 12.0,
+   "syllables": 14,
+   "pauses": [
+    2,
+    0
+   ],
+   "current_default_s": 6.0,
+   "current_card_s": 6.22
+  },
+  {
+   "id": "en037",
+   "speaker": "CHAR-jie-rui-er",
+   "text": "Feet under the bar — there. Every outsider does that.",
+   "actual_s": 4.807,
+   "words": 9.0,
+   "syllables": 13,
+   "pauses": [
+    1,
+    1
+   ],
+   "current_default_s": 4.88,
+   "current_card_s": 5.04
+  },
+  {
+   "id": "en038",
+   "speaker": "CHAR-jie-rui-er",
+   "text": "Most people never come up here. Not once. Open sky scares them half to death.",
+   "actual_s": 8.954,
+   "words": 15.0,
+   "syllables": 18,
+   "pauses": [
+    2,
+    0
+   ],
+   "current_default_s": 7.12,
+   "current_card_s": 7.4
+  },
+  {
+   "id": "en039",
+   "speaker": "CHAR-jie-rui-er",
+   "text": "No ground. Not anywhere. It's all city.",
+   "actual_s": 4.464,
+   "words": 7.0,
+   "syllables": 10,
+   "pauses": [
+    2,
+    0
+   ],
+   "current_default_s": 4.12,
+   "current_card_s": 4.25
+  },
+  {
+   "id": "en040",
+   "speaker": "CHAR-jie-rui-er",
+   "text": "Look down. That's just the roof. Nine-tenths is under there.",
+   "actual_s": 5.321,
+   "words": 10.0,
+   "syllables": 12,
+   "pauses": [
+    2,
+    0
+   ],
+   "current_default_s": 5.25,
+   "current_card_s": 5.43
+  },
+  {
+   "id": "en041",
+   "speaker": "CHAR-jie-rui-er",
+   "text": "I know why you came to Trantor. And who you came to see.",
+   "actual_s": 6.209,
+   "words": 13.0,
+   "syllables": 14,
+   "pauses": [
+    1,
+    0
+   ],
+   "current_default_s": 5.98,
+   "current_card_s": 6.21
+  },
+  {
+   "id": "en042",
+   "speaker": "CHAR-cheshire-cat",
+   "text": "We're all mad here. I'm mad. You're mad.",
+   "actual_s": 5.122,
+   "words": 8.0,
+   "syllables": 8,
+   "pauses": [
+    2,
+    0
+   ],
+   "current_default_s": 4.5,
+   "current_card_s": 5.5
+  },
+  {
+   "id": "en043",
+   "speaker": "CHAR-cheshire-cat",
+   "text": "Extraordinary, isn't it? Absolutely, unmistakably, irrevocably extraordinary.",
+   "actual_s": 4.951,
+   "words": 10.833333333333334,
+   "syllables": 27,
+   "pauses": [
+    1,
+    3
+   ],
+   "current_default_s": 6.36,
+   "current_card_s": 7.72
+  },
+  {
+   "id": "en044",
+   "speaker": "CHAR-king-of-hearts",
+   "text": "Consider your verdict, gentlemen of the jury — carefully, deliberately, and without hurry.",
+   "actual_s": 9.246,
+   "words": 12.166666666666666,
+   "syllables": 26,
+   "pauses": [
+    0,
+    4
+   ],
+   "current_default_s": 6.86,
+   "current_card_s": 7.61
+  },
+  {
+   "id": "en045",
+   "speaker": "CHAR-king-of-hearts",
+   "text": "The trial begins at 9:30 on March 14th, 1865, in Courtroom No. 3.",
+   "actual_s": 6.513,
+   "words": 13.0,
+   "syllables": 24,
+   "pauses": [
+    0,
+    2
+   ],
+   "current_default_s": 6.78,
+   "current_card_s": 7.57
+  },
+  {
+   "id": "en046",
+   "speaker": "CHAR-king-of-hearts",
+   "text": "Silence!",
+   "actual_s": 1.283,
+   "words": 1.1666666666666667,
+   "syllables": 2,
+   "pauses": [
+    0,
+    0
+   ],
+   "current_default_s": 1.14,
+   "current_card_s": 1.21
+  },
+  {
+   "id": "en047",
+   "speaker": "CHAR-caterpillar",
+   "text": "Who. Are. You?",
+   "actual_s": 3.251,
+   "words": 3.0,
+   "syllables": 3,
+   "pauses": [
+    2,
+    0
+   ],
+   "current_default_s": 2.62,
+   "current_card_s": 3.35
+  },
+  {
+   "id": "en048",
+   "speaker": "CHAR-caterpillar",
+   "text": "Keep your temper, child... and remember: one side makes you grow taller, the other side makes you grow shorter.",
+   "actual_s": 12.877,
+   "words": 19.0,
+   "syllables": 25,
+   "pauses": [
+    1,
+    3
+   ],
+   "current_default_s": 9.43,
+   "current_card_s": 13.99
+  },
+  {
+   "id": "en049",
+   "speaker": "CHAR-hatter",
+   "text": "Why is a raven like a writing-desk? I haven't the slightest idea!",
+   "actual_s": 6.079,
+   "words": 12.0,
+   "syllables": 19,
+   "pauses": [
+    1,
+    0
+   ],
+   "current_default_s": 5.6,
+   "current_card_s": 5.1
+  },
+  {
+   "id": "en050",
+   "speaker": "CHAR-hatter",
+   "text": "It's always six o'clock now — always tea-time, and we've no time to wash the things between whiles.",
+   "actual_s": 11.395,
+   "words": 17.0,
+   "syllables": 22,
+   "pauses": [
+    0,
+    2
+   ],
+   "current_default_s": 7.88,
+   "current_card_s": 7.17
+  },
+  {
+   "id": "en051",
+   "speaker": "CHAR-queen-of-hearts",
+   "text": "Off with her head! Off with his head! OFF WITH THEIR HEADS!",
+   "actual_s": 7.368,
+   "words": 12.0,
+   "syllables": 14,
+   "pauses": [
+    2,
+    0
+   ],
+   "current_default_s": 6.0,
+   "current_card_s": 5.86
+  },
+  {
+   "id": "en052",
+   "speaker": "CHAR-queen-of-hearts",
+   "text": "Can you play croquet? Then fetch the flamingos, the hedgehogs, and the soldiers, immediately.",
+   "actual_s": 9.141,
+   "words": 14.0,
+   "syllables": 24,
+   "pauses": [
+    1,
+    3
+   ],
+   "current_default_s": 7.55,
+   "current_card_s": 7.39
+  },
+  {
+   "id": "en053",
+   "speaker": "CHAR-gryphon",
+   "text": "The FBI, the CIA, and NASA all sent letters, but nobody read them.",
+   "actual_s": 8.527,
+   "words": 13.0,
+   "syllables": 21,
+   "pauses": [
+    0,
+    3
+   ],
+   "current_default_s": 6.78,
+   "current_card_s": 6.56
+  },
+  {
+   "id": "en054",
+   "speaker": "CHAR-gryphon",
+   "text": "What fun! It's all her fancy, that is. They never execute anybody, you know.",
+   "actual_s": 5.799,
+   "words": 14.0,
+   "syllables": 21,
+   "pauses": [
+    2,
+    2
+   ],
+   "current_default_s": 7.55,
+   "current_card_s": 7.31
+  },
+  {
+   "id": "en055",
+   "speaker": "CHAR-white-rabbit",
+   "text": "I'm late, I'm late, for a very important date! No time to say hello, goodbye!",
+   "actual_s": 9.734,
+   "words": 15.0,
+   "syllables": 20,
+   "pauses": [
+    1,
+    3
+   ],
+   "current_default_s": 7.93,
+   "current_card_s": 7.04
+  },
+  {
+   "id": "en056",
+   "speaker": "CHAR-white-rabbit",
+   "text": "Mary Ann! Fetch me a pair of gloves and a fan — quick, now!",
+   "actual_s": 6.13,
+   "words": 13.0,
+   "syllables": 14,
+   "pauses": [
+    1,
+    2
+   ],
+   "current_default_s": 6.78,
+   "current_card_s": 6.01
+  },
+  {
+   "id": "en057",
+   "speaker": "CHAR-mock-turtle",
+   "text": "Once, I was a real turtle. We went to school in the sea, every single day, for 25 years.",
+   "actual_s": 11.508,
+   "words": 19.0,
+   "syllables": 24,
+   "pauses": [
+    1,
+    3
+   ],
+   "current_default_s": 9.43,
+   "current_card_s": 12.43
+  },
+  {
+   "id": "en058",
+   "speaker": "CHAR-mock-turtle",
+   "text": "Reeling and writhing, of course, to begin with; and then the different branches of arithmetic.",
+   "actual_s": 14.182,
+   "words": 15.0,
+   "syllables": 24,
+   "pauses": [
+    0,
+    3
+   ],
+   "current_default_s": 7.53,
+   "current_card_s": 9.9
+  },
+  {
+   "id": "en059",
+   "speaker": "CHAR-alice",
+   "text": "Curiouser and curiouser! Now I'm opening out like the largest telescope that ever was!",
+   "actual_s": 6.846,
+   "words": 14.0,
+   "syllables": 26,
+   "pauses": [
+    1,
+    0
+   ],
+   "current_default_s": 6.35,
+   "current_card_s": 6.27
+  },
+  {
+   "id": "en060",
+   "speaker": "CHAR-alice",
+   "text": "I can't explain myself, I'm afraid, sir, because I'm not myself, you see.",
+   "actual_s": 7.894,
+   "words": 13.0,
+   "syllables": 18,
+   "pauses": [
+    0,
+    4
+   ],
+   "current_default_s": 7.18,
+   "current_card_s": 7.1
+  },
+  {
+   "id": "en061",
+   "speaker": "CHAR-alice",
+   "text": "Yes, please.",
+   "actual_s": 1.838,
+   "words": 2.0,
+   "syllables": 2,
+   "pauses": [
+    0,
+    1
+   ],
+   "current_default_s": 1.85,
+   "current_card_s": 1.84
+  },
+  {
+   "id": "en062",
+   "speaker": "CHAR-jie-rui-er",
+   "text": "Gate 47 closes at 11:15. After that, it's a 3.5-hour wait for the next shuttle.",
+   "actual_s": 7.349,
+   "words": 15.0,
+   "syllables": 29,
+   "pauses": [
+    1,
+    1
+   ],
+   "current_default_s": 7.53,
+   "current_card_s": 7.8
+  },
+  {
+   "id": "en063",
+   "speaker": "CHAR-jie-rui-er",
+   "text": "Dr. Seldon's office is on Level 12, past the Imperial Library. You can't miss it.",
+   "actual_s": 7.349,
+   "words": 15.0,
+   "syllables": 24,
+   "pauses": [
+    1,
+    1
+   ],
+   "current_default_s": 7.12,
+   "current_card_s": 7.4
+  }
+ ]
+}

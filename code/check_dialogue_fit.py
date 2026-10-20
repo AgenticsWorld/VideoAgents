@@ -12,7 +12,7 @@
   由 dialogue-rewrite 随情绪写;没写按情绪标签猜,猜不出 medium);
   有效字符 = 汉字/假名/谚文 + 拉丁字母数字(每字符 1),标点、空白、括注不计;
   英文等按空格分词的句子(句中没有汉字/假名/谚文)按词计(#124):词数 ÷ 词速,词速 = voice.json#speed_wpm 中点
-  > speed_cpm 换算 > 默认 130 wpm,再乘语速档倍率;精简目标给 target_words;
+  > speed_cpm 换算 > 默认 160 wpm(2026-10-20 实测校准),再乘语速档倍率;精简目标给 target_words;
   无 voice.json / 无 speed_cpm 的说话人(群演等):有记录 est_duration_s(> 0,初稿占位 0 不算)则信记录值,否则按本项目
   各角色语速中点的中位数估(项目无 voice.json 时 240);一律报 WARN speaker_speed_unknown,不参与 line_est_consistent。
   存量(剧本 generated_at / shot_list 日期早于 2026-10-03)沿用旧公式「字数 ÷ 语速」比对,镜级只 WARN。

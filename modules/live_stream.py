@@ -1150,8 +1150,18 @@ def _shrink_refs(d: Path, rels: list[str]) -> list[str]:
 _SENT_RE = re.compile(r"[^。！？!?；;…\n]+[。！？!?；;…]*[”」』\"')）]*|\n+")
 
 
+def _time_cost():
+    mods = str(ROOT / "modules")
+    if mods not in sys.path:
+        sys.path.insert(0, mods)
+    import time_cost  # noqa: WPS433
+    return time_cost
+
+
 def _speech_est_s(text: str) -> float:
     """粗估念完要几秒:CJK 约 4 字/秒,其余(拉丁字母等)约 14 字符/秒;只用于打包,实际以合成结果为准。"""
+    if _time_cost().is_word_text(text):                # 英文等按词计的句子走时间尺(2026-10-20:63 句英文实测,原「14 字符/秒」
+        return _time_cost().line_est(text)              # 估短约 38%、平均误差 2.35s;时间尺按词 1.09s)
     cjk = sum(1 for c in text if "\u2e80" <= c <= "\u9fff" or "\uac00" <= c <= "\ud7af")
     other = sum(1 for c in text if not c.isspace()) - cjk
     return cjk * 0.25 + other * 0.07
@@ -1182,8 +1192,9 @@ def _split_script(text: str, target_s: int) -> list[str]:
             if len(halves) > 1:
                 stack = halves + stack
                 continue
-            if pieces and _speech_est_s(pieces[-1]) + _speech_est_s(cur) <= target:
-                pieces[-1] = f"{pieces[-1]} {cur}" if pieces[-1][-1:].isascii() else pieces[-1] + cur
+            joined = (f"{pieces[-1]} {cur}" if pieces[-1][-1:].isascii() else pieces[-1] + cur) if pieces else cur
+            if pieces and _speech_est_s(joined) <= target:     # 按合并后的整段估(英文的起止只算一次;CJK 与逐段相加相同)
+                pieces[-1] = joined
             else:
                 pieces.append(cur)
     return pieces

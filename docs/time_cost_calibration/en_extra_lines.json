@@ -1,0 +1,27 @@
+{
+  "note": "时间尺英文校准自写句(2026-10-20):补项目台词里少见的写法——数字 / 年份 / 时刻 / 小数、首字母词、Dr. 等缩写、多音节长词、一字一顿的碎句、逗号串、破折号、省略号、全大写喊叫、短句。说话人借 alices / jidi 已冻结声线的人物,覆盖人物卡语速 97.5–190 wpm。",
+  "lines": [
+    {"project": "alices", "speaker": "CHAR-cheshire-cat", "text": "We're all mad here. I'm mad. You're mad."},
+    {"project": "alices", "speaker": "CHAR-cheshire-cat", "text": "Extraordinary, isn't it? Absolutely, unmistakably, irrevocably extraordinary."},
+    {"project": "alices", "speaker": "CHAR-king-of-hearts", "text": "Consider your verdict, gentlemen of the jury — carefully, deliberately, and without hurry."},
+    {"project": "alices", "speaker": "CHAR-king-of-hearts", "text": "The trial begins at 9:30 on March 14th, 1865, in Courtroom No. 3."},
+    {"project": "alices", "speaker": "CHAR-king-of-hearts", "text": "Silence!"},
+    {"project": "alices", "speaker": "CHAR-caterpillar", "text": "Who. Are. You?"},
+    {"project": "alices", "speaker": "CHAR-caterpillar", "text": "Keep your temper, child... and remember: one side makes you grow taller, the other side makes you grow shorter."},
+    {"project": "alices", "speaker": "CHAR-hatter", "text": "Why is a raven like a writing-desk? I haven't the slightest idea!"},
+    {"project": "alices", "speaker": "CHAR-hatter", "text": "It's always six o'clock now — always tea-time, and we've no time to wash the things between whiles."},
+    {"project": "alices", "speaker": "CHAR-queen-of-hearts", "text": "Off with her head! Off with his head! OFF WITH THEIR HEADS!"},
+    {"project": "alices", "speaker": "CHAR-queen-of-hearts", "text": "Can you play croquet? Then fetch the flamingos, the hedgehogs, and the soldiers, immediately."},
+    {"project": "alices", "speaker": "CHAR-gryphon", "text": "The FBI, the CIA, and NASA all sent letters, but nobody read them."},
+    {"project": "alices", "speaker": "CHAR-gryphon", "text": "What fun! It's all her fancy, that is. They never execute anybody, you know."},
+    {"project": "alices", "speaker": "CHAR-white-rabbit", "text": "I'm late, I'm late, for a very important date! No time to say hello, goodbye!"},
+    {"project": "alices", "speaker": "CHAR-white-rabbit", "text": "Mary Ann! Fetch me a pair of gloves and a fan — quick, now!"},
+    {"project": "alices", "speaker": "CHAR-mock-turtle", "text": "Once, I was a real turtle. We went to school in the sea, every single day, for 25 years."},
+    {"project": "alices", "speaker": "CHAR-mock-turtle", "text": "Reeling and writhing, of course, to begin with; and then the different branches of arithmetic."},
+    {"project": "alices", "speaker": "CHAR-alice", "text": "Curiouser and curiouser! Now I'm opening out like the largest telescope that ever was!"},
+    {"project": "alices", "speaker": "CHAR-alice", "text": "I can't explain myself, I'm afraid, sir, because I'm not myself, you see."},
+    {"project": "alices", "speaker": "CHAR-alice", "text": "Yes, please."},
+    {"project": "jidi", "speaker": "CHAR-jie-rui-er", "text": "Gate 47 closes at 11:15. After that, it's a 3.5-hour wait for the next shuttle."},
+    {"project": "jidi", "speaker": "CHAR-jie-rui-er", "text": "Dr. Seldon's office is on Level 12, past the Imperial Library. You can't miss it."}
+  ]
+}

@@ -213,8 +213,8 @@ phases:
           validation: { auto: [style_hit_rate_gte_80, line_duration_fits] } }   # 2026-10-03 起每句对白行元信息随 emotion 写 pace: fast|medium|slow(语速档),估时按时间尺(modules/time_cost.py)   # line_duration_fits:code/check_dialogue_fit.py 无 shot_list 时的「仅剧本层」模式(line_le_cap + line_est_consistent,2026-08-30)
       - { id: p5-narration, agent: 01-story/narration, for_each: episode, depends_on: [p5-dialogue],
           condition: narration_enabled,   # 「📤 输出设置」旁白开关(默认关;2026-09-16 起未配置过的存量项目也视为关);关=用户约定全片无任何旁白,不派发、g5 不因缺我而 HOLD(§7D)
-          outputs: ["story/episodes/{ep}/narration.md"],   # 每条带场景锚点 + est_duration_s(按 narrator 声线实测语速估算)
-          validation: { auto: [pov_consistent_100, every_entry_anchored_with_est_duration], qa: [11-qa/logic-qa] } }
+          outputs: ["story/episodes/{ep}/narration.md"],   # 每条带场景锚点 + est_duration_s(2026-10-20 起由宿主 code/narration_est.py --write 回写:时间尺 × 按本项目旁白实测学到的系数,工位不手算)
+          validation: { auto: [pov_consistent_100, every_entry_anchored_with_est_duration, narration_est_consistent], qa: [11-qa/logic-qa] } }   # narration_est_consistent:code/narration_est.py 只检模式
       - { id: p5-hooks, agent: 01-story/hook, for_each: episode, depends_on: [p5-narration],
           outputs: ["story/episodes/{ep}/hooks.json"], validation: { rubric: creative_v1, qa: [human_pick] } }
       # 时间预算(2026-10-03,docs/time_cost.md):分时长前宿主按时间尺算每场内容需求(台词估时含开口前后余量 + 动作节拍单价),

@@ -3,10 +3,13 @@
 
 不转写、不下载模型(规约禁止自发 ASR):只从组 clip 音轨按自相关找「像人声的有声段」(80–400 Hz 周期性 + 能量,modules/voice_activity.py),
 对每个对白镜,在它的计划时段(shot_list 累计时长;有 meta boundary_map 用 boundary_map)前后各放宽 --pad 秒,
-取窗内最长连续有声段 / 该镜台词估时:
+取窗内最长连续有声段 / 该镜台词估时(间隔 ≤ --merge-gap 秒的有声段先并成一段):
   < --fail-ratio(默认 0.3)  FAIL  台词疑似整句缺失(前科 fengshen3 ep07 grp011 sh084:5s 台词窗内只有 0.9s 人声)
   < --warn-ratio(默认 0.5)  WARN  疑似被截短 / 赶词
 这是安全网不是裁判:同窗相邻镜的台词会互相顶替通过,只能抓「整句没了」这种大漏。
+合并间隔默认 0.8s(2026-10-20):英文台词多是几个短句(「Look down. That's just the roof.」),句间停顿 0.5–0.8s,
+按有声段检测的 0.5s 合并会把一句台词切成几段,jidi ep01 7 个对白镜误报 4 FAIL;0.8s 下 0 FAIL,fengshen3 ep07 sh084
+真丢的那句仍是 0.25。
 
 用法:python3 code/check_dialogue_audible.py --project <slug> --ep ep07 grp011 [grp012 …]   # 缺省全集已出片的对白组
 退出码:0 通过(可含 WARN);1 有 FAIL。报告打印到 stdout,同时写 runs/_checks/dialogue_audible_<ep>.json(--no-report 不写)。
@@ -21,8 +24,10 @@ from _common import parse_args  # noqa: E402
 
 # 有声段检测(自相关基频 + 能量)在 modules/voice_activity.py,与 dub_group.py 的开口时段检测共用一套口径
 from voice_activity import voiced_mask, runs_from_mask, longest_in_window, extract_wav  # noqa: E402,F401
-try:
-    import offscreen_lines as _osl  # noqa: E402  声画分离(2026-10-03):os/vo 句不在 clip 音轨里,不核
+MERGE_GAP_S = 0.8                 # 句间停顿不切断一句台词(voice_activity 默认 0.5s 是给开口时段检测用的)
+
+try:   # 带包前缀:code/ 下另有同名 CLI offscreen_lines.py,裸 import 可能拿到它
+    from modules import offscreen_lines as _osl  # noqa: E402  声画分离(2026-10-03):os/vo 句不在 clip 音轨里,不核
 except Exception:  # pragma: no cover
     _osl = None
 
@@ -45,6 +50,7 @@ def main(argv=None):
         ap.add_argument("--pad", type=float, default=1.5, help="计划时段前后放宽秒数(默认 1.5)")
         ap.add_argument("--fail-ratio", type=float, default=0.3)
         ap.add_argument("--warn-ratio", type=float, default=0.5)
+        ap.add_argument("--merge-gap", type=float, default=MERGE_GAP_S, help=f"有声段合并间隔秒数(默认 {MERGE_GAP_S})")
         ap.add_argument("--no-report", action="store_true")
     args, base = parse_args("出片后对白镜有声段核对 dialogue_audible", configure=cfg, argv=argv)
     sl = json.loads((base / "directing" / args.ep / "shot_list.json").read_text(encoding="utf-8"))
@@ -72,7 +78,7 @@ def main(argv=None):
             wav = Path(td) / "a.wav"
             try:
                 extract_wav(clip, wav)
-                runs = runs_from_mask(voiced_mask(wav))
+                runs = runs_from_mask(voiced_mask(wav), merge_gap=args.merge_gap)
             except Exception as e:  # noqa: BLE001
                 warns.append(f"{gid} dialogue_audible: 音轨分析失败 {e}")
                 continue
