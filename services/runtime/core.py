@@ -980,7 +980,7 @@ DEFAULT_GENCONFIG = {
     # openrouter=OpenRouter 云端(base_url 固定 https://openrouter.ai/api/v1)
     "deepagents": {
         "provider": "agentics",   # agentics | local | cloud | openrouter
-        "agentics": {"model": "z-ai/glm-5.3", "custom_model": ""},
+        "agentics": {"model": "deepseek/deepseek-v4.1-flash-1017", "custom_model": ""},
         "local": {"base_url": "http://127.0.0.1:1234/v1",
                   "api_key": "lm-studio", "model": ""},
         "cloud": {"base_url": "https://api.deepseek.com",

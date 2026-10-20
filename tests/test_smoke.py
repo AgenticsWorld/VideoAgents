@@ -648,7 +648,7 @@ def test_genconfig_migrates_legacy_agentics_image_profile_and_empty_defaults():
     core._migrate_genconfig(empty)
     merged = core._merge(core.DEFAULT_GENCONFIG, empty)
     assert merged["image"]["agentics"] == {"t2i": "flux2-dev-t2i", "i2i": "flux2-dev-i2i-10ref"}
-    assert merged["deepagents"]["agentics"]["model"] == "z-ai/glm-5.3"
+    assert merged["deepagents"]["agentics"]["model"] == "deepseek/deepseek-v4.1-flash-1017"
 
 
 def test_agentics_tts_config_splits_voice_design_and_voice_clone(monkeypatch, tmp_path):
