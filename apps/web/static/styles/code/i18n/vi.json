@@ -1,0 +1,400 @@
+{
+ "_categories": {
+  "Hand-drawn & Painting": "Vẽ tay & hội họa",
+  "East Asian Traditions": "Truyền thống Đông Á",
+  "Print & Printmaking": "In ấn & tranh in",
+  "Graphic & Type": "Đồ họa & chữ",
+  "Information & Keynote": "Thông tin & thuyết trình",
+  "Cartoon & Anime": "Hoạt hình & anime",
+  "Games": "Trò chơi",
+  "Cinema & Eras": "Điện ảnh & thời đại",
+  "Materials & 3D": "Chất liệu & 3D"
+ },
+ "crayon-book": {
+  "name": "Sách tranh sáp màu",
+  "line": "Mặt trăng mất ngủ, nên một cô bé trèo lên mái nhà hát ru cho trăng nghe.",
+  "uses": [
+   "Sách tranh",
+   "Truyện trước giờ ngủ",
+   "Học tập cho trẻ em"
+  ]
+ },
+ "watercolor": {
+  "name": "Màu nước",
+  "line": "Theo chân cơn mưa từ trái tim sa mạc đỏ của nước Úc đến bờ biển xanh, trong một chuyến đi được vẽ liền mạch không cắt cảnh.",
+  "uses": [
+   "Phim tài liệu thiên nhiên",
+   "Du lịch",
+   "Giải thích khoa học"
+  ]
+ },
+ "ink-wash": {
+  "name": "Tranh thủy mặc Trung Hoa",
+  "line": "Một kiếm khách lướt trên mặt nước qua sông và chém đứt dòng chảy chỉ bằng một nhát kiếm.",
+  "uses": [
+   "Võ hiệp",
+   "Thương hiệu văn hóa",
+   "Thơ ca"
+  ]
+ },
+ "impasto": {
+  "name": "Sơn dầu đắp dày",
+  "line": "Trên quảng trường mưa xám xịt, một chiếc ô đỏ bung ra, và điệu valse tô màu cho cả quảng trường.",
+  "uses": [
+   "Video ca nhạc",
+   "Nghệ thuật & văn hóa",
+   "Quảng cáo cảm xúc"
+  ]
+ },
+ "one-line": {
+  "name": "Vẽ một nét",
+  "line": "Một nét vẽ liền không nhấc bút vẽ nên cả một đời người, rồi cây bút được trao cho một đứa trẻ.",
+  "uses": [
+   "Câu chuyện thương hiệu",
+   "Cột mốc cuộc đời",
+   "Quảng cáo tối giản"
+  ]
+ },
+ "whiteboard": {
+  "name": "Giải thích trên bảng trắng",
+  "line": "Điện thoại biết bạn ở đâu bằng cách nào: GPS, đồng hồ nguyên tử và 38 micro giây mà thuyết tương đối cộng thêm mỗi ngày.",
+  "uses": [
+   "Video giải thích",
+   "Khóa học trực tuyến",
+   "Khoa học"
+  ]
+ },
+ "urban-sketch": {
+  "name": "Ký họa đô thị · bút mực & màu nước",
+  "line": "Một công viên chỉ là bản ký họa bút mực; gió thổi chiếc mũ rơm của cô đến đâu, màu sắc theo đến đó.",
+  "uses": [
+   "Thành phố & du lịch",
+   "Kiến trúc",
+   "Thương hiệu phong cách sống"
+  ]
+ },
+ "shadow-puppet": {
+  "name": "Múa rối bóng",
+  "line": "Mười mặt trời thiêu đốt mặt đất cho đến khi cung thủ Hậu Nghệ giương cung, câu chuyện được kể bằng những con rối da trên màn sáng.",
+  "uses": [
+   "Thần thoại & dân gian",
+   "Di sản",
+   "Lễ hội"
+  ]
+ },
+ "ukiyoe": {
+  "name": "Ukiyo-e",
+  "line": "Một lữ khách đi về phía ngọn núi xa; mỗi cảnh quay là một bức tranh khắc gỗ, kết thúc bằng một con sóng lớn.",
+  "uses": [
+   "Du lịch",
+   "Văn hóa Nhật Bản",
+   "Thơ ca"
+  ]
+ },
+ "papercut-red": {
+  "name": "Cắt giấy đỏ",
+  "line": "Đêm giao thừa, quái thú Niên kéo vào làng, và bức tranh cắt giấy khổng lồ của một cô bé thắp sáng cả làng, xua nó đi.",
+  "uses": [
+   "Tết Nguyên đán",
+   "Lời chúc lễ Tết",
+   "Truyện dân gian"
+  ]
+ },
+ "paper-lantern": {
+  "name": "Hộp đèn giấy cắt",
+  "line": "Một chiếc bánh trung thu kể câu chuyện đoàn viên và nhớ nhung của Tết Trung thu, bên trong hộp đèn giấy cắt rực sáng.",
+  "uses": [
+   "Lễ hội",
+   "Thương hiệu quà tặng",
+   "Câu chuyện văn hóa"
+  ]
+ },
+ "risograph": {
+  "name": "In Risograph",
+  "line": "Chuyến đạp xe sáng Chủ nhật qua thành phố — tiệm bánh, công viên, bờ sông — bằng hai màu mực in lệch.",
+  "uses": [
+   "Thương hiệu độc lập",
+   "Zine",
+   "Phong cách sống"
+  ]
+ },
+ "halftone-dossier": {
+  "name": "Hồ sơ bán sắc",
+  "line": "Một chú mèo cam mũm mĩm bị đưa ra xét xử vì thử nghiệm trọng lực và chạy parkour lúc 4 giờ sáng, rồi được trắng án.",
+  "uses": [
+   "Hài hước",
+   "Nội dung thú cưng",
+   "Video ngắn mạng xã hội"
+  ]
+ },
+ "woodcut": {
+  "name": "Tranh khắc gỗ",
+  "line": "Một ngôi làng dành cả mùa đông để đúc một chiếc chuông; lần đầu chuông ngân, tuyết ngừng rơi.",
+  "uses": [
+   "Truyện dân gian",
+   "Thương hiệu thủ công",
+   "Trailer sách"
+  ]
+ },
+ "engraving": {
+  "name": "Tranh khắc đồng",
+  "line": "Một bản minh họa vạn vật học tự khắc nên chính mình: dao khắc cắt vào tấm đồng, chú ong thành hình từng nét, và lớp màu nước thổi hồn cho nó.",
+  "uses": [
+   "Chú thích bảo tàng",
+   "Giải thích khoa học",
+   "Di sản thương hiệu"
+  ]
+ },
+ "silkscreen-poster": {
+  "name": "Áp phích du lịch in lụa",
+  "line": "Ba áp phích đường mòn được in lụa từng màu một, rồi được leo trong một cảnh quay dài từ trưa đến hoàng hôn.",
+  "uses": [
+   "Hướng dẫn đường mòn & điểm đến",
+   "Quảng bá du lịch",
+   "Áp phích sự kiện"
+  ]
+ },
+ "swiss-motion": {
+  "name": "Đồ họa chuyển động kiểu Thụy Sĩ",
+  "line": "Một áp phích hòa nhạc tự dàn trang theo năm quy tắc thiết kế Thụy Sĩ; quy tắc thứ năm là phá vỡ đúng một quy tắc.",
+  "uses": [
+   "Nhận diện thương hiệu",
+   "Sự kiện",
+   "Đào tạo thiết kế"
+  ]
+ },
+ "spy-titles": {
+  "name": "Mở đầu phim điệp viên thập niên 60",
+  "line": "Đoạn mở đầu cho một bộ phim điệp viên tưởng tượng năm 1964: cuộc rượt đuổi chiếc chìa khóa bị đánh cắp cho đến khi các hình khối ghép thành tựa phim.",
+  "uses": [
+   "Đoạn mở đầu phim",
+   "Mở màn sự kiện",
+   "Trailer"
+  ]
+ },
+ "art-deco": {
+  "name": "Art Deco",
+  "line": "Một khách sạn lớn năm 1930: cậu bé khuân hành lý chạy đua qua thang máy và cửa xoay để kịp đưa một lá thư trước nửa đêm.",
+  "uses": [
+   "Xa xỉ & khách sạn",
+   "Dạ tiệc",
+   "Thiệp mời"
+  ]
+ },
+ "blueprint": {
+  "name": "Bản vẽ kỹ thuật",
+  "line": "Bản vẽ của một nhà phát minh tự vẽ, tách rời rồi lắp ráp một cỗ máy bắt mây, và đám mây đánh dấu sửa đổi bắt đầu đổ mưa.",
+  "uses": [
+   "Kỹ thuật",
+   "Ra mắt phần cứng",
+   "Giải thích công nghệ"
+  ]
+ },
+ "stained-glass": {
+  "name": "Kính màu",
+  "line": "Ánh nắng đi qua ô cửa kính nhà thờ từ bình minh đến hoàng hôn, đánh thức từng ô kính của câu chuyện hiệp sĩ và rồng.",
+  "uses": [
+   "Truyền thuyết",
+   "Di sản",
+   "Chuyện mùa lễ"
+  ]
+ },
+ "pictogram-motion": {
+  "name": "Pictogram chuyển động",
+  "line": "Toàn bộ 43 môn thể thao của Đại hội Thể thao châu Á 2026 dưới dạng pictogram hình học khớp theo nhịp.",
+  "uses": [
+   "Sự kiện thể thao",
+   "Nhận diện hình ảnh",
+   "Mở màn sự kiện"
+  ]
+ },
+ "ascii-crt": {
+  "name": "Terminal ASCII / CRT",
+  "line": "AI của một căn cứ trên Mặt Trăng thức dậy sau bốn mươi năm nhờ tín hiệu từ Trái Đất, và trả lời bằng cách vẽ chữ “nhà” bằng ký tự.",
+  "uses": [
+   "Công cụ cho lập trình viên",
+   "Khoa học viễn tưởng",
+   "Thương hiệu công nghệ"
+  ]
+ },
+ "dataviz": {
+  "name": "Kể chuyện bằng dữ liệu",
+  "line": "Một trăm năm nhiệt độ mùa hè, nơi chính biểu đồ kể câu chuyện.",
+  "uses": [
+   "Báo chí dữ liệu",
+   "Báo cáo",
+   "Khí hậu & khoa học"
+  ]
+ },
+ "iso-infographic": {
+  "name": "Infographic isometric",
+  "line": "Hành trình của một ly cà phê từ đồn điền đến tay bạn, xuyên qua một thế giới isometric.",
+  "uses": [
+   "Giải thích quy trình",
+   "Chuỗi cung ứng",
+   "Báo cáo thường niên"
+  ]
+ },
+ "dark-keynote": {
+  "name": "Keynote công nghệ nền tối",
+  "line": "Phim ra mắt Tidy, một ứng dụng hư cấu: một con trỏ bị vùi lấp đưa hàng trăm cửa sổ về đúng chỗ trong nháy mắt.",
+  "uses": [
+   "Ra mắt sản phẩm",
+   "SaaS",
+   "Keynote"
+  ]
+ },
+ "living-screencast": {
+  "name": "Quay màn hình sống động",
+  "line": "Clawd, linh vật pixel của Claude Code, nhảy ra khỏi terminal vào ứng dụng Claude và diễn lại chế độ lập kế hoạch, bình luận diff và tự kiểm tra trong một video quay màn hình liền một mạch.",
+  "uses": [
+   "Hướng dẫn sản phẩm",
+   "Ra mắt tính năng",
+   "Làm quen người dùng mới"
+  ]
+ },
+ "hologram-hud": {
+  "name": "HUD hologram khoa học viễn tưởng",
+  "line": "Một chiếc xe đạp điện được quét thành hologram; khung ngắm lần lượt khóa vào pin, động cơ và phanh, rồi từng thông số cuộn về đúng giá trị.",
+  "uses": [
+   "Giới thiệu thông số sản phẩm",
+   "Video ra mắt & gọi vốn cộng đồng",
+   "Màn hình hội chợ"
+  ]
+ },
+ "rubber-hose": {
+  "name": "Hoạt hình ống cao su thập niên 1930",
+  "line": "Một tách cà phê rượt đuổi viên đường bỏ trốn khắp căn bếp, theo phong cách hoạt hình thập niên 1930.",
+  "uses": [
+   "Đồ ăn & thức uống",
+   "Quảng cáo hoài cổ",
+   "Trẻ em"
+  ]
+ },
+ "cel-anime-80s": {
+  "name": "Anime cel thập niên 80",
+  "line": "Một cô gái giao hàng đạp xe qua thành phố neon ướt đẫm mưa để kịp giao cuộn băng trước giờ phóng lúc bình minh.",
+  "uses": [
+   "Video ca nhạc",
+   "Trailer game",
+   "Hoài niệm"
+  ]
+ },
+ "scifi-toon": {
+  "name": "Hoạt hình sitcom khoa học viễn tưởng",
+  "line": "Một thiên tài chán đời mở cổng không gian chỉ để mua cà phê, rồi lăn lộn qua những vũ trụ ngày càng kỳ quặc.",
+  "uses": [
+   "Hài kịch",
+   "Thương hiệu công nghệ",
+   "Video ngắn mạng xã hội"
+  ]
+ },
+ "midcentury-toon": {
+  "name": "Hoạt hình mid-century",
+  "line": "Cài đặt robot hút bụi trong ba bước, kể như một phim giáo dục thập niên 1950: đặt đế sạc, kết nối ứng dụng, nhấn bắt đầu.",
+  "uses": [
+   "Hướng dẫn cài đặt sản phẩm",
+   "Giải thích trung tâm trợ giúp",
+   "Hướng dẫn từng bước"
+  ]
+ },
+ "pixel-rpg": {
+  "name": "RPG pixel 16-bit",
+  "line": "Trước cửa phòng trùm cuối, người anh hùng lưu game, và màn hình lưu tua lại cả hành trình.",
+  "uses": [
+   "Trailer game",
+   "Video tóm tắt",
+   "Hoài niệm"
+  ]
+ },
+ "hd-2d": {
+  "name": "HD-2D",
+  "line": "Ngọn hải đăng tắt lửa; một cô bé mang ngọn lửa cuối cùng băng qua khu rừng đêm và leo lên vách đá giữa giông bão.",
+  "uses": [
+   "Trailer game",
+   "Kỳ ảo",
+   "Phim kể chuyện"
+  ]
+ },
+ "microgame": {
+  "name": "Cơn lốc microgame",
+  "line": "Một học viên vụng về vượt qua trại huấn luyện năm giây, ngày càng nhanh, cho đến màn trùm: hạ cánh về nhà.",
+  "uses": [
+   "Trailer game",
+   "Làm quen người dùng mới",
+   "Video ngắn mạng xã hội"
+  ]
+ },
+ "game-show": {
+  "name": "Gameshow phong cách phẳng",
+  "line": "Lịch sử AI dưới dạng một trò chơi nhịp điệu: các mô hình bước lên sân khấu theo nhịp, và bảng điểm khép lại chương trình.",
+  "uses": [
+   "Dòng thời gian công nghệ",
+   "Tổng kết năm",
+   "Chương trình tạp kỹ"
+  ]
+ },
+ "silent-film": {
+  "name": "Phim câm thập niên 1920",
+  "line": "Cậu học việc tiệm bánh đuổi theo ổ bánh mì lăn xuống dốc, rồi bẻ đôi nó cho một cô bé đói bụng.",
+  "uses": [
+   "Hài kịch",
+   "Thương hiệu hoài cổ",
+   "Kể chuyện không lời"
+  ]
+ },
+ "backrooms": {
+  "name": "Found footage không gian lưng chừng",
+  "line": "Một nhân viên ca đêm mới quay lại đêm đầu tiên trong văn phòng màu vàng vô tận, làm theo các quy định trên tường.",
+  "uses": [
+   "Kinh dị",
+   "Bí ẩn & ARG",
+   "Teaser game"
+  ]
+ },
+ "brick-toy": {
+  "name": "Đồ chơi lắp ghép",
+  "line": "Một phi hành gia lắp ghép dựng tên lửa từ những mảnh thừa và bay tới mặt trăng lắp ghép.",
+  "uses": [
+   "Đồ chơi & trẻ em",
+   "Lắp ráp sản phẩm",
+   "Vũ trụ"
+  ]
+ },
+ "paper-popup": {
+  "name": "Sách pop-up",
+  "line": "Một cuốn sách pop-up mở ra trên bàn; chú tiên nhỏ tên Pip phiêu lưu qua các thế giới giấy rồi nhảy ra thế giới của chúng ta.",
+  "uses": [
+   "Sách thiếu nhi",
+   "Trailer game",
+   "Phim kể chuyện"
+  ]
+ },
+ "tilt-shift": {
+  "name": "Thu nhỏ tilt-shift",
+  "line": "Giờ cao điểm buổi sáng ở một thị trấn trông như mô hình: xe cộ, tàu hỏa và những con người tí hon.",
+  "uses": [
+   "Quảng bá thành phố",
+   "Bất động sản",
+   "Giao thông"
+  ]
+ },
+ "lowpoly-island": {
+  "name": "Đảo isometric low-poly",
+  "line": "Hòn đảo và ngôi làng mọc lên từng ô một từ biển trống, mỗi ô là một nốt nhạc, cho đến đêm đầy sao.",
+  "uses": [
+   "Trailer game",
+   "Xây dựng thế giới",
+   "Nội dung thư giãn"
+  ]
+ },
+ "glass-product": {
+  "name": "Render sản phẩm chất liệu kính",
+  "line": "Mở hộp và cận cảnh Aura, tai nghe bằng kính hư cấu, với những vệt đèn dải lướt qua và hiệu ứng caustics.",
+  "uses": [
+   "Ra mắt sản phẩm",
+   "Công nghệ tiêu dùng",
+   "Làm đẹp"
+  ]
+ }
+}

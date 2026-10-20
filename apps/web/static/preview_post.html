@@ -300,6 +300,8 @@ table.tb input.f{width:100%}
 #lb img{max-width:92vw;max-height:88vh;border-radius:8px}
 @media(max-width:1100px){#work{grid-template-columns:220px minmax(0,1fr) 300px}}
 @media(max-width:860px){#work{grid-template-columns:1fr;grid-template-rows:auto auto auto;overflow-y:auto}.col{max-height:60vh}}
+/* 演示视频(cv-mode,2026-10-20):画面由代码渲染——分镜剪辑与画面 / 包装类处方收起,只留「音效与声音」 */
+.cv-mode #cutsec,.cv-mode .acc[data-sec="fill"],.cv-mode .acc[data-sec="grade"],.cv-mode .acc[data-sec="vfx"],.cv-mode .acc[data-sec="pack"]{display:none!important}
 </style>
 </head>
 <body>
@@ -313,6 +315,7 @@ table.tb input.f{width:100%}
   <button id="reload">刷新</button>
 </header>
 <div id="eps"></div>
+<div id="cv-note" style="display:none;padding:8px 16px;font-size:12.5px;background:rgba(108,158,248,.10);border-bottom:1px solid var(--border);color:var(--text)"><span>演示视频的画面由代码逐帧渲染:改画面或时长请到「🖥️ 代码预览」页对时刻写注释,修改师改代码后只重渲改动段;本页只开放「音效与声音」处方,成片由宿主 codevideo.py master 出。</span> <a id="cv-note-link" href="/preview/code">打开代码预览 ↗</a></div>
 <div id="work"><div class="empty" style="grid-column:1/-1">加载中…</div></div>
 <div id="foot"></div>
 
@@ -393,6 +396,9 @@ async function load(keep){
     {const m=new Map();for(const g of d.groups||[]){const x=m.get(g.group_id);if(x)x.duration=Math.round((x.duration+(g.duration||0))*1000)/1000;else m.set(g.group_id,g)}d.groups=[...m.values()];
      for(const sc of d.scenes||[])sc.groups=[...new Set(sc.groups)]}
     D=d;if(first)trkInit();stemBuild();
+    $('#cv-note').style.display=d.project_type==='code-video'?'':'none';   // 演示视频(2026-10-20):画面改动走代码预览页
+    document.body.classList.toggle('cv-mode',d.project_type==='code-video');
+    $('#cv-note-link').href='/preview/code?project='+encodeURIComponent(proj());
     if(first||!grpById(SEL)){
       const pos=first?posLoad():{},blks=snBlocks(),open=(pos.open||[]).filter(id=>blks.some(x=>x.key===id));
       SEL=(pos.sel&&grpById(pos.sel)?pos.sel:(d.groups.find(g=>g.has_clip)||d.groups[0]||{}).group_id)||'';VA=null;VB=null;RANGE=null;MASK=null;

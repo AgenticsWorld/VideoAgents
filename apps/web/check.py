@@ -18,7 +18,7 @@ REQUIRED = {
     "vendor/three/three.core.js", "vendor/three/OrbitControls.js", "vendor/three/LICENSE",
     "vendor/three/addons/postprocessing/Pass.js", "vendor/spark/spark.module.js", "vendor/spark/LICENSE",
     "world-viewer.js", "director-world.js", "preview_director.html", "world-view-export.html",
-    "preview_canvas.html", "canvas-entry.js",
+    "preview_canvas.html", "canvas-entry.js", "preview_code.html", "styles/code/code_styles.json",
 }
 
 
@@ -49,6 +49,19 @@ def main() -> None:
         bad = [k for k in ids if not (tr.get(k, {}).get("name") and tr.get(k, {}).get("prompt"))]
         if set(tr) != ids or bad:
             raise SystemExit(f"Style library translation styles/i18n/{lang}.json does not cover all styles")
+    # 演示视频风格画廊(2026-10-20):43 张封面 + 每种界面语言(英文除外;中文只取用途标签)一份 styles/code/i18n/<lang>.json
+    code = json.loads((STATIC / "styles" / "code" / "code_styles.json").read_text(encoding="utf-8"))
+    slugs = {s["slug"] for s in code["styles"]}
+    if len(slugs) != 43 or any(not (STATIC / "styles" / "code" / s["frame"]).is_file() for s in code["styles"]):
+        raise SystemExit("The code-video style gallery is incomplete")
+    for lang in [*(x for x in langs if x != "en"), "zh"]:
+        f = STATIC / "styles" / "code" / "i18n" / f"{lang}.json"
+        if not f.is_file():
+            raise SystemExit(f"Missing code-video style translation: styles/code/i18n/{lang}.json")
+        tr = json.loads(f.read_text(encoding="utf-8"))
+        bad = [k for k in slugs if not (tr.get(k, {}).get("name") and tr.get(k, {}).get("uses"))]
+        if bad or len(tr.get("_categories") or {}) != len(code["categories"]):
+            raise SystemExit(f"Code-video style translation styles/code/i18n/{lang}.json does not cover all styles")
     print("WebUI static package is complete; all application requests use /api/v1.")
 
 

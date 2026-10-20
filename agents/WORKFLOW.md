@@ -1278,7 +1278,9 @@ python3 modules/genmedia.py sfx \
   [--loop]                              # 环境床音:出可无缝循环的一段(写到 assets/audio/ambience/epNN/patches/)
   [--count <1-4>]                       # 候选条数;生成渠道每条单独计费,缺陷单没要求多条就用默认 1
 # 渠道 = 「生成模型」页音效段(2026-10-20;genmedia.py info 的 sfx 行回显):
-#   openverse(默认)检索 Openverse 收录的现成音效(CC0 / 公有领域,设置页可加 CC BY),不生成、不计费;检索词取 --query,
+#   code(代码音效,新装默认)不检索不生成:为这条补做写 Python 合成脚本(按 CODE_AUDIO_OUT 写 wav,CODE_AUDIO_LOOP=1 = 要循环),
+#     加 --script <脚本.py>、不加 --query;脚本契约见 agents/workflows/codevideo.md
+#   openverse 检索 Openverse 收录的现成音效(CC0 / 公有领域,设置页可加 CC BY),不生成、不计费;检索词取 --query,
 #     接口要求所有词都命中,长句搜不到,省略 --query 时从 --prompt 提取并逐个减词重搜;没搜到合用素材时换一两组关键词,
 #     仍没有就如实上报,不得自行加 --provider 改走付费生成渠道。--loop 时从素材截一段、首尾交叉淡化成循环并峰值归一。
 #   elevenlabs / fal:ElevenLabs Sound Effects v2 按 --prompt 生成(忽略 --query);Key 留空沿用音乐 / TTS、图像 / 视频段已填的。
@@ -1422,6 +1424,7 @@ plugins/<plugin-name>/
 | 🎙️ 音频配画 | `audio-to-video` | `agents/workflows/audiovideo.yaml` | `15-audio-video/*` + `11-qa/av-sync-qa` | 讲述音频 → `refs/audio/`,文稿 → `refs/text/transcript.txt` |
 | 🧑‍💼 数字人 | `digital-human` | `agents/workflows/digitalhuman.yaml` | `17-digital-human/*` + `11-qa/digital-human-sync-qa` | 人物照片 → `refs/characters/`,人物对应说明 → `brief.md`;声音来源(`project.voice_source`)= 原始录音:音频母带 → `refs/audio/`,文稿可选;= 克隆声音:每个说话人的声音样本 → `refs/voices/`,台词稿(必填)→ `refs/text/transcript.txt`,由 `dh0-voice` 逐句克隆合成母带(`code/dialogue_clone.py`) |
 | ✂️ 混剪 | `mashup` | `agents/workflows/mashup.yaml` | `16-mashup/*` + `11-qa/mashup-qa` | 文稿 → `refs/text/transcript.txt` + `novel/original.txt`,讲述音频(可选)→ `refs/audio/`,素材库 → `settings.json#project.footage_libraries` |
+| 🖥️ 演示视频 | `code-video` | `agents/workflows/codevideo.yaml` | `18-code-video/*` + `11-qa/code-video-qa` | 主题 / 文稿 → `refs/text/transcript.txt`,内容定位 → `brief.md`,风格(必选)→ `settings.json#project.code_style`,用户素材(logo、照片、字体、录音、音乐,可选)→ `refs/` 各分类 |
 
 1. **来历**:后三种原是 VideoAgents-Plugins 仓库的同名插件,2026-10-20 并入主程序——成员 SOUL 进 `agents/<类别>/`,
    DAG 与说明文档进 `agents/workflows/`(`<名>.yaml` + `<名>.md`),不再需要安装/启用。同名插件包在「插件」页标为已并入、
@@ -1429,7 +1432,7 @@ plugins/<plugin-name>/
 2. **立项与排产**:总制片的运行提示词按项目类型注入「项目类型」段(流程权威 DAG、输入约定、专属成员、调度纪律)。
    排产时主流程节点照 `workflow.yaml` 实例化,再并入类型 DAG 的全部节点,并在同一次改动里按其
    `main_dag_on_start.skip` 把不适用的主流程节点置 `skipped`(条件白名单同 §10.3 第 6 条);类型 DAG 的节点 id 前缀
-   (`av`/`ga`、`mx`/`gm`、`dh`)不与主流程冲突,工作流预览页按前缀归阶段泳道。
+   (`av`/`ga`、`mx`/`gm`、`dh`、`cv`/`gc`)不与主流程冲突,工作流预览页按前缀归阶段泳道。
 3. **主流程开关按类型强制**:非影视剧项目建项目时宿主强制关闭旁白、对白语音、声画分离、NPC、白模、长镜头、片头片尾,
    过场模式 = 极简且集尾不处理、每集时长 = 根据内容自动——这些开关只服务小说→视频主流程,在类型流程里要么没有对应节点,
    要么与「母带即成片声轨、零重编码」冲突。主流程按项目设置注入的条款只约束主流程节点,与类型 DAG 头部授权冲突时以 DAG 为准。
@@ -1442,3 +1445,13 @@ plugins/<plugin-name>/
    都没有 = 影视剧;下次保存项目设置时推断结果写回。
 7. **控制台**:左侧 Agent 列表只列共用成员与当前项目类型的专属团队;「参考文件」页在非影视剧项目里把「讲述音频」分类排第一,数字人项目另有「克隆声音」分类。
 8. **数字人克隆声音**:按任意样本零样本克隆只有 Agentics(Voice Clone 模型须收参考音频)、ComfyUI(Voice Clone 工作流)、火山 Doubao-音频生成 1.0 能做(`modules/genmedia.py tts --clone-from`),其余渠道直接报错,不退回音色库或声纹卡描述。
+9. **演示视频(2026-10-20,新增类型,不是由插件并入)**:不用任何视频 / 图像生成模型——画面是 `18-code-video/scene-coder` 写的网页
+   (`codevideo/index.html` 的 `window.render(t)`),宿主 CLI `python3 code/codevideo.py` 用无头浏览器逐帧截图、ffmpeg 出片;旁白走 TTS
+   (旁白声线卡),配乐默认代码作曲(`genmedia.py music --provider code --script`),拟音由混音脚本按页面事件程序化合成。导演方法与 43 个风格
+   来自 lemo-opuscar(MIT,`scripts/sync_lemo_opuscar.py` 按固定 commit 同步:风格规范 `agents/workflows/codevideo/styles/`,页面库与音频工具
+   `modules/codevideo/lib/`)。项目设置 `settings.json#project` = `code_style`(必选)、`storyboard_review`(默认开:cv1-board + CVH1)、
+   `narration`、`subtitles`、`length_s`、`fps`(24/25/30)、`music_source`(code 默认 / model);画幅、语言、成片分辨率沿用 output 段,
+   渲染尺寸由宿主按画幅 × 成片分辨率计算。一个项目 = 一部片 = ep01;`codevideo/timeline.json` 是唯一事实源,`codevideo.py sync` 写成
+   `directing/ep01/` 的镜头表与故事板(段 = 场次 = 组),段片段进 `assets/clips/ep01/`,成片 `edit/ep01/final.mp4`,现有预览页照常显示。
+   「代码预览」页(`/preview/code`)实时拖动 / 播放页面、按时刻写注释整批发修改师(kind=codevideo),改完只重渲改动段。
+   不做语音转写核对;详见 `agents/workflows/codevideo.md`。

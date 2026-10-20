@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>代码预览 · Agentics：VideoAgents</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Cmask%20id%3D%27m%27%3E%3Crect%20width%3D%2724%27%20height%3D%2724%27%20fill%3D%27%23fff%27%2F%3E%3Cpath%20d%3D%27M10%208.5%2016%2012l-6%203.5z%27%20fill%3D%27%23000%27%2F%3E%3C%2Fmask%3E%3Crect%20x%3D%273%27%20y%3D%274%27%20width%3D%2718%27%20height%3D%2716%27%20rx%3D%273%27%20fill%3D%27%236c9ef8%27%20mask%3D%27url%28%23m%29%27%2F%3E%3C%2Fsvg%3E">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/static/i18n/i18n.js"></script>
+<script>
+/* 兜底:i18n 运行时未加载时保持中文界面可用 */
+if(!window.I18N){
+  window.I18N={lang:'zh',langs:{zh:'中文'},t:function(s){return s},
+    f:function(s,p){p=p||{};return String(s).replace(/\{(\w+)\}/g,function(m,k){return k in p?p[k]:m})},
+    setLang:function(){return Promise.resolve()}};
+  window.t=function(s){return s};window.I18N_DICT={};
+}
+</script>
+<style>
+:root{
+  --bg:#0f1117; --panel:#161a23; --panel2:#1c2130; --border:#2a3040;
+  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --link:#fb923c; --green:#4ade80;
+  --red:#f87171; --yellow:#fbbf24; --purple:#c084fc;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+a{color:var(--link)}
+body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel)}
+header h1{font-size:15px;font-weight:600}
+header a.back{color:var(--dim);text-decoration:none;font-size:13px;border:1px solid var(--border);border-radius:6px;padding:3px 10px;line-height:1.4}
+header a.back:hover{color:var(--accent);border-color:var(--accent)}
+header .spacer{flex:1}
+header .meta{color:var(--dim);font-size:12px}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:13px}
+button:hover{border-color:var(--accent)}
+button:disabled{opacity:.45;cursor:default;border-color:var(--border)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
+header select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;cursor:pointer}
+main{flex:1;display:flex;min-height:0}
+#stage{flex:1;display:flex;flex-direction:column;min-width:0;padding:12px 14px;gap:10px}
+#viewport{flex:1;position:relative;background:#000;border:1px solid var(--border);border-radius:8px;overflow:hidden;min-height:200px}
+#film{position:absolute;left:0;top:0;border:0;transform-origin:0 0;background:#000}
+#texts{position:absolute;left:0;top:0;transform-origin:0 0;pointer-events:none}
+#texts div{position:absolute;border:1px dashed var(--yellow);background:rgba(251,191,36,.08);color:var(--yellow);font-size:22px;padding:0 4px;white-space:nowrap;overflow:hidden}
+#vmsg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim);text-align:center;padding:30px;line-height:1.9}
+#transport{display:flex;align-items:center;gap:10px;flex:none}
+#time{font:13px ui-monospace,Menlo,monospace;color:var(--text);min-width:150px}
+#rate{font-size:12px;color:var(--dim);min-width:90px}
+#track{flex:none;height:62px;position:relative;cursor:pointer;user-select:none;background:var(--panel);border:1px solid var(--border);border-radius:8px}
+#track canvas{width:100%;height:100%;display:block}
+#opts{display:flex;align-items:center;gap:14px;font-size:12px;color:var(--dim);flex:none;flex-wrap:wrap}
+#opts label{display:flex;align-items:center;gap:4px;cursor:pointer}
+aside{width:380px;flex:none;border-left:1px solid var(--border);background:var(--panel);overflow-y:auto;padding:12px 14px}
+aside h3{font-size:13px;margin:14px 0 6px;color:var(--text);display:flex;align-items:center;gap:8px}
+aside h3:first-child{margin-top:0}
+aside h3 .n{color:var(--dim);font-weight:400;font-size:12px}
+.kv{font-size:12px;color:var(--dim);line-height:1.8}
+.kv b{color:var(--text);font-weight:500}
+.sec{border:1px solid var(--border);border-radius:8px;padding:6px 8px;margin-bottom:6px;background:var(--panel2);cursor:pointer}
+.sec:hover{border-color:var(--accent)}
+.sec.cur{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.sec .hd{display:flex;align-items:center;gap:6px;font-size:12.5px}
+.sec .hd .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sec .sub{font-size:11.5px;color:var(--dim)}
+.badge{font-size:11px;border-radius:10px;padding:0 7px;border:1px solid var(--border);white-space:nowrap}
+.badge.fresh{color:var(--green);border-color:rgba(74,222,128,.4)}
+.badge.stale{color:var(--yellow);border-color:rgba(251,191,36,.45)}
+.badge.missing{color:var(--dim)}
+.sec button{padding:1px 8px;font-size:11.5px}
+.row{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+#joblog{font:11px/1.45 ui-monospace,Menlo,monospace;background:#0b0e14;color:#b9c2d6;border:1px solid var(--border);border-radius:6px;padding:6px 8px;max-height:170px;overflow:auto;white-space:pre-wrap;word-break:break-all;display:none}
+.note{border:1px solid var(--border);border-radius:8px;padding:6px 8px;margin-bottom:6px;font-size:12.5px;background:var(--panel2)}
+.note .at{color:var(--link);cursor:pointer;font:12px ui-monospace,Menlo,monospace}
+.note .del{float:right;color:var(--dim);cursor:pointer;font-size:12px}
+.note .del:hover{color:var(--red)}
+.note .tx{white-space:pre-wrap;margin-top:2px}
+textarea{width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font:13px/1.5 inherit;resize:vertical;min-height:60px}
+.hint{font-size:12px;color:var(--dim);line-height:1.7}
+.err{color:var(--red);font-size:12px;white-space:pre-wrap;word-break:break-word}
+#toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--accent);border-radius:8px;padding:8px 16px;font-size:13px;display:none;z-index:9}
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="/" onclick="if(history.length>1){history.back();return false}" title="后退">&lt;</a>
+  <a class="back" href="/">控制台</a>
+  <h1>🖥️ 代码预览</h1>
+  <span class="meta" id="hmeta"></span>
+  <div class="spacer"></div>
+  <input type="hidden" id="project">
+  <select id="pvnav" title="切换预览页"></select>
+  <button id="reload">刷新</button>
+</header>
+<main>
+  <section id="stage">
+    <div id="viewport"><iframe id="film" sandbox="allow-scripts allow-same-origin" title="film"></iframe><div id="texts"></div><div id="vmsg">加载中…</div></div>
+    <div id="transport">
+      <button id="play" title="播放 / 暂停(空格)">▶</button>
+      <button id="prev" title="上一帧(←;Shift 1 秒)">◀︎</button>
+      <button id="next" title="下一帧(→;Shift 1 秒)">▶︎</button>
+      <span id="time">0.00 / 0.00</span>
+      <span id="rate"></span>
+      <div class="spacer" style="flex:1"></div>
+      <button id="reframe" title="代码改过后重新载入页面">↻ 重新载入页面</button>
+    </div>
+    <div id="track"><canvas id="tc"></canvas></div>
+    <div id="opts">
+      <label><input type="checkbox" id="o-sound" checked><span>声音(混音 mix.wav)</span></label>
+      <label><input type="checkbox" id="o-texts"><span>显示文字框(TEXTS)</span></label>
+      <span id="o-hint">拖动时间轴即时渲染该帧;播放速度取决于页面渲染耗时,不代表成片帧率</span>
+    </div>
+  </section>
+  <aside>
+    <h3>片子</h3>
+    <div class="kv" id="info"></div>
+    <h3>段落与渲染 <span class="n" id="secn"></span></h3>
+    <div class="row">
+      <button id="r-stale" class="primary">渲染改动段</button>
+      <button id="r-all">全部重渲</button>
+      <button id="r-cancel" style="display:none">停止</button>
+    </div>
+    <div class="hint" id="r-hint">段指纹 = 页面代码 + 时间轴 + 本段专属文件(sections/段 id.js):只改某段的文件只重渲那一段,改引擎所有段都过期。</div>
+    <div id="secs"></div>
+    <pre id="joblog"></pre>
+    <h3>注释 <span class="n" id="noten"></span></h3>
+    <textarea id="ntext" placeholder="对当前时刻写修改意见…"></textarea>
+    <div class="row">
+      <button id="nadd">在当前时刻加注释</button>
+      <button id="nsubmit" class="primary">📨 提交注释</button>
+    </div>
+    <div class="hint">提交 = 全部注释一张修改单发给修改师:它改代码、同步时间轴、只重渲改动段;提交后注释清空。</div>
+    <div id="notes"></div>
+    <h3>成片</h3>
+    <div id="final" class="kv"></div>
+  </aside>
+</main>
+<div id="toast"></div>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const proj=()=>($('#project').value||'').trim()||'demo';
+async function api(path,body,method){
+  const r=await fetch(path,body!==undefined||method?{method:method||'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}:{});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(j.detail||j.error||r.status);
+  return j;
+}
+function toast(msg){const el=$('#toast');el.textContent=msg;el.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>el.style.display='none',3200)}
+const fmt=s=>(+s||0).toFixed(2);
+
+let D=null,FILM=null,READY=false,DUR=0,FPS=24,W=1920,H=1080,T=0,PLAYING=false,SEQ=0,INFLIGHT=false,WANT=null,LASTMS=0,FRAMES=0,FT0=0;
+let CLOCK0=0,T0=0;
+const audio=new Audio();audio.preload='auto';
+
+/* ---------- 布局:iframe 按片子尺寸摆,CSS 缩放适配视口 ---------- */
+function layout(){
+  const vp=$('#viewport'),k=Math.min(vp.clientWidth/W,vp.clientHeight/H)||1;
+  const x=(vp.clientWidth-W*k)/2,y=(vp.clientHeight-H*k)/2;
+  for(const el of [$('#film'),$('#texts')]){el.style.width=W+'px';el.style.height=H+'px';el.style.transform=`translate(${x}px,${y}px) scale(${k})`}
+  drawTrack();
+}
+addEventListener('resize',layout);
+
+/* ---------- 与片子页面通信(预览桥 /@bridge.js:seek → render(t)) ---------- */
+addEventListener('message',e=>{
+  if(!FILM||e.origin!==FILM.origin)return;
+  const d=e.data||{};if(!d.__cv)return;
+  if(d.type==='ready'){READY=true;DUR=+d.dur||DUR;$('#vmsg').style.display='none';seek(T,true);drawTrack()}
+  else if(d.type==='error'){$('#vmsg').style.display='flex';$('#vmsg').innerHTML='<div class="err">'+esc(t('页面报错:')+d.message)+'</div>';INFLIGHT=false}
+  else if(d.type==='rendered'){
+    INFLIGHT=false;LASTMS=d.ms||0;FRAMES++;
+    if($('#o-texts').checked)drawTexts(d.texts||[]);
+    if(WANT!==null){const w=WANT;WANT=null;send(w)}
+    else if(PLAYING)requestAnimationFrame(tick);
+  }
+});
+function send(t){
+  if(!READY)return;
+  if(INFLIGHT){WANT=t;return}
+  INFLIGHT=true;$('#film').contentWindow.postMessage({__cv:1,type:'seek',t,seq:++SEQ,texts:$('#o-texts').checked},FILM.origin);
+}
+function drawTexts(rows){
+  $('#texts').innerHTML=rows.map(b=>`<div style="left:${b.x0}px;top:${b.y0}px;width:${Math.max(4,b.x1-b.x0)}px;height:${Math.max(4,b.y1-b.y0)}px" title="${esc(b.id+': '+b.text)}"></div>`).join('');
+}
+function seek(t,force){
+  T=Math.max(0,Math.min(DUR||0,t));
+  $('#time').textContent=fmt(T)+' / '+fmt(DUR);
+  drawTrack();markCurrent();
+  if(PLAYING&&!audio.paused&&Math.abs(audio.currentTime-T)>0.25&&!force)audio.currentTime=T;
+  send(T);
+}
+function step(dt){pause();seek(Math.round((T+dt)*FPS)/FPS)}
+
+/* ---------- 播放:有混音且开声音时以音频为时钟,否则按墙钟 ---------- */
+function useAudio(){return $('#o-sound').checked&&D&&D.mix}
+function play(){
+  if(!READY)return;
+  if(T>=DUR-1/FPS)T=0;
+  PLAYING=true;$('#play').textContent='⏸';FRAMES=0;FT0=performance.now();
+  CLOCK0=performance.now();T0=T;
+  if(useAudio()){audio.currentTime=T;audio.play().catch(()=>{})}
+  tick();
+}
+function pause(){PLAYING=false;$('#play').textContent='▶';audio.pause()}
+function tick(){
+  if(!PLAYING)return;
+  const now=useAudio()&&!audio.paused?audio.currentTime:T0+(performance.now()-CLOCK0)/1000;
+  if(now>=DUR){seek(DUR);pause();return}
+  T=now;$('#time').textContent=fmt(T)+' / '+fmt(DUR);drawTrack();markCurrent();
+  const el=(performance.now()-FT0)/1000;
+  $('#rate').textContent=el>0.5?I18N.f('{n} 帧/秒 · {ms} ms',{n:(FRAMES/el).toFixed(1),ms:LASTMS}):'';
+  send(T);
+}
+$('#play').onclick=()=>PLAYING?pause():play();
+$('#prev').onclick=e=>step(e.shiftKey?-1:-1/FPS);
+$('#next').onclick=e=>step(e.shiftKey?1:1/FPS);
+addEventListener('keydown',e=>{
+  if(['TEXTAREA','INPUT','SELECT'].includes(document.activeElement.tagName))return;
+  if(e.code==='Space'){e.preventDefault();PLAYING?pause():play()}
+  else if(e.key==='ArrowLeft'){e.preventDefault();step(e.shiftKey?-1:-1/FPS)}
+  else if(e.key==='ArrowRight'){e.preventDefault();step(e.shiftKey?1:1/FPS)}
+});
+$('#o-sound').onchange=()=>{if(PLAYING){pause();play()}};
+$('#o-texts').onchange=()=>{if(!$('#o-texts').checked)$('#texts').innerHTML='';seek(T,true)};
+$('#reframe').onclick=()=>loadFilm(true);
+
+/* ---------- 时间轴:段色带 / 镜刻度 / 击点 / 注释 / 播放头 ---------- */
+const SEC_COLORS=['#2b4a7f','#3b2f6b','#2a5a4c','#5c3f22','#4b2a4f','#2f4f5f'];
+function drawTrack(){
+  const c=$('#tc'),r=c.getBoundingClientRect(),dpr=devicePixelRatio||1;
+  c.width=r.width*dpr;c.height=r.height*dpr;
+  const g=c.getContext('2d');g.scale(dpr,dpr);g.clearRect(0,0,r.width,r.height);
+  const tl=D&&D.timeline;if(!tl||!DUR)return;
+  const X=t=>t/DUR*r.width;
+  tl.sections.forEach((s,i)=>{
+    g.fillStyle=SEC_COLORS[i%SEC_COLORS.length];g.fillRect(X(s.t0),4,X(s.t1)-X(s.t0),26);
+    const st=(D.render||[]).find(x=>x.section===s.id);
+    g.fillStyle=st?({fresh:'#4ade80',stale:'#fbbf24'}[st.state]||'#555'):'#555';g.fillRect(X(s.t0),30,X(s.t1)-X(s.t0),3);
+    g.fillStyle='#dde3ee';g.font='11px -apple-system,sans-serif';
+    const label=s.title||s.id;if(X(s.t1)-X(s.t0)>40)g.fillText(label.slice(0,Math.floor((X(s.t1)-X(s.t0))/7)),X(s.t0)+4,21);
+    g.fillStyle='rgba(255,255,255,.35)';
+    s.shots.forEach(sh=>{if(sh.t0>s.t0)g.fillRect(X(sh.t0),8,1,18)});
+  });
+  g.fillStyle='#c084fc';(tl.hits||[]).forEach(h=>{const x=X(h.t);g.beginPath();g.moveTo(x-4,36);g.lineTo(x+4,36);g.lineTo(x,42);g.fill()});
+  g.fillStyle='#fb923c';(D.notes||[]).forEach(n=>{g.beginPath();g.arc(X(n.t),52,3.5,0,7);g.fill()});
+  g.fillStyle='#fff';g.fillRect(X(T)-1,0,2,r.height);
+}
+function trackT(ev){const r=$('#track').getBoundingClientRect();return Math.max(0,Math.min(1,(ev.clientX-r.left)/r.width))*DUR}
+$('#track').onpointerdown=ev=>{
+  if(!DUR)return;pause();$('#track').setPointerCapture(ev.pointerId);seek(trackT(ev));
+  $('#track').onpointermove=e=>seek(trackT(e));
+  $('#track').onpointerup=()=>{$('#track').onpointermove=null};
+};
+
+/* ---------- 侧栏 ---------- */
+function markCurrent(){
+  const tl=D&&D.timeline;if(!tl)return;
+  const cur=tl.sections.find(s=>T>=s.t0&&T<s.t1)||tl.sections[tl.sections.length-1];
+  document.querySelectorAll('.sec').forEach(el=>el.classList.toggle('cur',cur&&el.dataset.id===cur.id));
+}
+const STATE_LABEL={fresh:'已渲染',stale:'已过期',missing:'未渲染'};
+function renderSide(){
+  const d=D,tl=d.timeline,st=d.style||{};
+  $('#hmeta').textContent=tl?`${tl.title||d.project} · ${tl.size[0]}×${tl.size[1]} · ${tl.fps} fps · ${fmt(tl.dur)} s`:d.project;
+  const s=d.settings||{};
+  $('#info').innerHTML=[
+    [t('风格'),esc((I18N.lang==='zh'?st.cn:st.en)||st.slug||'—')],
+    [t('尺寸'),d.size?d.size.join(' × '):'—'],
+    [t('旁白 / 字幕'),`${s.narration?t('开'):t('关')} / ${s.subtitles?t('开'):t('关')}`],
+    [t('配乐'),s.music_source==='model'?t('按生成模型页音乐设置'):t('代码作曲')],
+  ].map(([k,v])=>`<div><b>${esc(k)}</b> ${v}</div>`).join('')
+    +(d.timeline_error?`<div class="err">${esc(d.timeline_error)}</div>`:'')
+    +(d.render_error?`<div class="err">${esc(d.render_error)}</div>`:'');
+  const rows=d.render||[];
+  $('#secn').textContent=tl?I18N.f('{n} 个段落',{n:tl.sections.length}):'';
+  $('#secs').innerHTML=tl?tl.sections.map(sec=>{
+    const r=rows.find(x=>x.section===sec.id)||{},state=r.state||'missing';
+    return `<div class="sec" data-id="${esc(sec.id)}"><div class="hd"><span class="nm">${esc(sec.scene_no)} · ${esc(sec.title||sec.id)}</span>`
+      +`<span class="badge ${state}">${esc(t(STATE_LABEL[state]||state))}</span><button data-render="${esc(sec.id)}">${esc(t('渲染'))}</button></div>`
+      +`<div class="sub">${esc(sec.id)} · ${esc(sec.group_id)} · ${fmt(sec.t0)}–${fmt(sec.t1)} s · ${esc(I18N.f('{n} 镜',{n:sec.shots.length}))}`
+      +(r.seconds?` · ${esc(I18N.f('上次 {s} 秒',{s:r.seconds}))}`:'')+`</div></div>`;
+  }).join(''):`<div class="hint">${esc(t('还没有时间轴(codevideo/timeline.json,cv1-treatment 产出)'))}</div>`;
+  document.querySelectorAll('.sec').forEach(el=>el.onclick=e=>{
+    if(e.target.dataset.render){renderSections([e.target.dataset.render],true);return}
+    const sec=tl.sections.find(s=>s.id===el.dataset.id);if(sec){pause();seek(sec.t0)}
+  });
+  const job=d.job,running=job&&job.status==='running';
+  $('#r-stale').disabled=$('#r-all').disabled=running||!d.has_page||!tl;
+  document.querySelectorAll('[data-render]').forEach(b=>b.disabled=running||!d.has_page);
+  $('#r-cancel').style.display=running?'':'none';
+  const log=$('#joblog');
+  if(job){log.style.display='block';log.textContent=(job.log||[]).join('\n')+(job.error?'\n✗ '+job.error:'');log.scrollTop=log.scrollHeight}
+  else log.style.display='none';
+  const ns=d.notes||[];
+  $('#noten').textContent=ns.length?I18N.f('{n} 条',{n:ns.length}):'';
+  $('#nsubmit').disabled=!ns.length;
+  $('#notes').innerHTML=ns.map(n=>`<div class="note"><span class="del" data-del="${esc(n.id)}" title="${esc(t('删除'))}">✕</span>`
+    +`<span class="at" data-t="${n.t}">${fmt(n.t)} s</span> <span class="hint">${esc([n.section,n.shot].filter(Boolean).join(' / '))}</span>`
+    +`<div class="tx">${esc(n.text)}</div></div>`).join('');
+  document.querySelectorAll('.note .at').forEach(el=>el.onclick=()=>{pause();seek(+el.dataset.t)});
+  document.querySelectorAll('.note .del').forEach(el=>el.onclick=async()=>{
+    try{D.notes=(await api(`/api/v1/projects/${encodeURIComponent(proj())}/codevideo/notes`,{id:el.dataset.del,text:''})).notes;renderSide();drawTrack()}
+    catch(e){toast(t('删除失败:')+e.message)}
+  });
+  $('#final').innerHTML=d.final?`<a href="${esc(d.final)}" target="_blank">edit/ep01/final.mp4</a>`:esc(t('还没有成片(cv4-master 产出)'));
+  drawTrack();markCurrent();
+}
+
+async function renderSections(sections,force){
+  try{await api(`/api/v1/projects/${encodeURIComponent(proj())}/codevideo/render`,{sections,force});toast(t('已开始渲染'));await load()}
+  catch(e){toast(t('渲染没能开始:')+e.message)}
+}
+$('#r-stale').onclick=()=>renderSections([],false);
+$('#r-all').onclick=()=>renderSections([],true);
+$('#r-cancel').onclick=async()=>{try{await api(`/api/v1/projects/${encodeURIComponent(proj())}/codevideo/render/cancel`,{})}catch(e){toast(e.message)}};
+$('#nadd').onclick=async()=>{
+  const text=$('#ntext').value.trim();if(!text){toast(t('先写注释内容'));return}
+  try{D.notes=(await api(`/api/v1/projects/${encodeURIComponent(proj())}/codevideo/notes`,{t:T,text})).notes;$('#ntext').value='';renderSide()}
+  catch(e){toast(t('保存失败:')+e.message)}
+};
+$('#nsubmit').onclick=async()=>{
+  try{const r=await api(`/api/v1/projects/${encodeURIComponent(proj())}/codevideo/notes/submit`,{});toast(I18N.f('已提交 {n} 条注释给修改师',{n:r.count}));await load()}
+  catch(e){toast(t('提交失败:')+e.message)}
+};
+
+/* ---------- 装载 ---------- */
+let FILM_PORT=null,POLL=null;
+async function loadFilm(reload){
+  if(!D.has_page){$('#vmsg').style.display='flex';$('#vmsg').textContent=t('片子页面还没写(codevideo/index.html,cv3-engine 产出)');$('#film').removeAttribute('src');return}
+  if(FILM_PORT===null){
+    try{FILM_PORT=((await (await fetch('/api/v1/runtime')).json()).film||{}).port||0}catch(e){FILM_PORT=0}
+  }
+  if(!FILM_PORT){$('#vmsg').style.display='flex';$('#vmsg').textContent=t('代码预览服务没有启动(重启 VideoAgents 服务后再试)');return}
+  const origin=`${location.protocol}//${location.hostname}:${FILM_PORT}`;
+  const src=origin+D.page+(reload?'?r='+Date.now():'');
+  if(!reload&&FILM&&FILM.src===src)return;
+  FILM={origin,src};READY=false;INFLIGHT=false;WANT=null;pause();
+  $('#vmsg').style.display='flex';$('#vmsg').textContent=t('页面加载中…(等 window.READY)');
+  $('#film').src=src;
+}
+async function load(){
+  try{
+    D=await api(`/api/v1/projects/${encodeURIComponent(proj())}/codevideo`);
+    const tl=D.timeline;
+    if(tl){DUR=tl.dur;FPS=tl.fps;[W,H]=tl.size}else if(D.size){[W,H]=D.size}
+    layout();renderSide();
+    if(D.mix&&FILM_PORT){const u=`${location.protocol}//${location.hostname}:${FILM_PORT}${D.mix}`;if(audio.dataset.u!==u){audio.src=u;audio.dataset.u=u}}
+    await loadFilm(false);
+    if(D.mix&&!audio.dataset.u&&FILM_PORT){const u=`${location.protocol}//${location.hostname}:${FILM_PORT}${D.mix}`;audio.src=u;audio.dataset.u=u}
+    $('#o-sound').disabled=!D.mix;
+    clearTimeout(POLL);
+    if(D.job&&D.job.status==='running')POLL=setTimeout(load,2500);
+  }catch(e){
+    $('#vmsg').style.display='flex';$('#vmsg').innerHTML='<div class="err">'+esc(t('加载失败:')+e.message)+'</div>';
+  }
+}
+$('#reload').onclick=load;
+const _q=new URLSearchParams(location.search);
+$('#project').value=_q.get('project')||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';
+load();
+
+const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/board','\u{1F4CB} 故事板'],['/preview/storyboard','\u{1F3A6} 分镜预览'],['/preview/code','\u{1F5A5}️ 代码预览'],['/preview/post','\u{1F39A}️ 后期处理'],['/preview/videos','\u{1F39E}️ 成片发布']];
+PV_PAGES.forEach(([u,n])=>{const o=document.createElement('option');o.value=u;o.textContent=n;if(location.pathname===u)o.selected=true;$('#pvnav').appendChild(o)});
+$('#pvnav').onchange=()=>{location.href=$('#pvnav').value+'?project='+encodeURIComponent(proj())};
+</script>
+</body>
+</html>

@@ -199,6 +199,10 @@ td.c .ln.un .v{color:var(--yellow);white-space:pre-wrap}
 #printbtn:hover{opacity:1}
 .legend{font-size:11.5px;color:var(--dim);margin:8px 2px 0;display:flex;gap:14px;flex-wrap:wrap}
 @media(max-width:900px){td.s{width:234px}.skbox{width:210px}td.no{width:90px}}
+/* 演示视频(cv-mode):隐藏图像模型出草图 / 手绘 / 画风 / 草图模型入口 */
+.cv-mode .sk-gen,.cv-mode .sk-draw,.cv-mode #skm,.cv-mode #sks{display:none!important}
+/* 修改 / 改草图 / 画板会改 storyboard.json 或草图本身(sync 会覆盖、草图是代码渲染的);只留「注释」(提交走代码修改师) */
+.cv-mode .editbtn:not(.notebtn),.cv-mode .cvbtn{display:none!important}
 </style>
 </head>
 <body>
@@ -347,6 +351,7 @@ document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if($('#lb').s
 
 /* ---------- 渲染 ---------- */
 function render(d){
+  document.body.classList.toggle('cv-mode',d.project_type==='code-video');   // 演示视频:关键帧是代码渲染的,不走图像模型出草图
   LAST=d;SK=d.sketches||{};JOBS=d.jobs||{};REDRAW=mergeRedraw(d.redraw_runs||{});ANIM=d.animatic||{};GATE=d.gate||{};NOTES=d.notes||{};
   $('#printbtn').hidden=!(d.ep&&d.has_storyboard);
   PORTRAIT=aspectPortrait(d.aspect);
@@ -359,6 +364,7 @@ function render(d){
   let h=`<h2 class="title">${esc(ep)} ${esc(d.title||epi.title||'')}<span class="sub">${d.has_storyboard?esc(I18N.f('{n} 场 · {m} 镜草案 · {g} 组草案 · 草案 Σ {d}s',{n:T.scenes??0,m:T.shots??0,g:T.groups??0,d:num(T.draft_sum_s,1)})):''}${T.final_total_s!=null?esc(I18N.f(' · 定稿 {f}s / 预算 {b}s({s} 镜 {g} 组)',{f:num(T.final_total_s,1),b:T.budget_s==null?'—':num(T.budget_s,0),s:T.final_shots??'—',g:T.final_groups??'—'})):''}${narrSummary(d)}</span><span class="spacer"></span><span id="skbatch">${d.has_storyboard?batchBtnHtml():''}</span>${editBtn(I18N.f('故事板 {ep} {title}(整体反馈;文件 directing/{ep}/storyboard.json、directing_plan.md)',{ep,title:d.title||epi.title||''}))}${d.has_storyboard?`<span id="epnotebtn">${noteBtn('*')}</span>`:''}</h2>`;
   if(d.has_storyboard)h+=`<div id="epnote">${epNoteHtml()}</div>`;
   const sm=d.storyboard_meta||{};
+  if(d.project_type==='code-video')h+=`<div class="src"><span>🖥️</span><span class="msg">${esc(t('演示视频:关键帧由 cv1-board 用真实绘制代码渲染(codevideo.py board),不是图像模型草图;要改画面请到「🖥️ 代码预览」页对时刻写注释'))}</span></div>`;
   if(d.has_storyboard)h+=`<div class="src"><span>🎬</span><span class="msg">${esc(I18N.f('分镜层产物 directing/{ep}/storyboard.json',{ep}))}${sm.task_id?` · ${esc(sm.task_id)}`:''}${sm.written_at?` · ${esc(sm.written_at)}`:''}${sm.status?` · ${esc(sm.status)}`:''} · ${esc(t('草图为铅笔手绘小图,只用于看构图与调度,不进视频参考图'))}</span></div>`;
   if(d.has_storyboard)h+=`<div id="gatebox">${gateHtml()}</div><div id="animbox">${animHtml()}</div>`;
   if(d.directing_plan){

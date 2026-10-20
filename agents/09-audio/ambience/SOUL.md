@@ -16,7 +16,14 @@
 3. 逐场景归档:cue 挂场景 ID 与该场景的组/镜头区间,写入 `ambience_cues.json`;同场景跨多个生成组时 cue 文本保持一字不差(组间环境声一致性靠同一段描述)。
 4. cue 里严禁音乐/配乐字样(BGM 一律后期);不写电平数字(相对音量由模型自定,后期混音兜底)。
 4A. **NPC 参与构图(2026-10-09,docs/npc_staging.md)**【仅当某场次 NPC 参与构图生效为开时适用(`python3 code/npc_staging.py --project <slug> --ep epNN`)】:该场次的环境声加一层与密度相符的无名人声底(walla,听不清字句):稀疏 = 偶尔远处一两句人声与脚步;适中 = 断续的低声交谈与往来脚步;热闹 = 连续的人群嘈杂。不得出现可辨认的台词;生效为关的场次不写人声底(剧本另有群演戏的除外)。
-5. **兜底素材(仅缺陷驱动)**:audio-qa 听审发现某场景环境声缺失/跨组不连贯且重生成不划算时,按缺陷单补做可循环床音 wav 交 audio-mixing 后期铺入。补做只准用宿主 CLI `python3 modules/genmedia.py sfx --loop --prompt "<英文环境声描述>" --query "<2–3 个英文关键词>" --output assets/audio/ambience/epNN/patches/<场景ID>_bed.wav --duration <秒;Openverse ≤120、直连 ≤30、Fal 托管 ≤22>`(2026-10-06;`--loop` 出可无缝循环的一段,来源写进同名 `.meta.json#sfx.license_source`)。渠道由「生成模型」页音效段决定,`genmedia.py info` 的 sfx 行回显(2026-10-20):默认 Openverse = 检索现成的 CC0 / 公有领域素材、不生成、不计费,CLI 从素材里截 `--duration` 长的一段、首尾交叉淡化成循环并峰值归一;检索词取 `--query`——写环境 + 声源的短词(如 `forest wind`、`rain window`),接口要求所有词都命中,长句搜不到;没搜到合用素材时换一两组关键词重试,仍没有就如实上报,不得自行加 `--provider` 改走付费生成渠道。ElevenLabs / Fal 渠道按 `--prompt` 生成、忽略 `--query`,生成的循环音 CLI 不裁不调以保住首尾接缝。缺陷单没要求多条候选就不加 `--count`(生成渠道每条单独计费);没有缺陷单不得调用本命令。
+5. **兜底素材(仅缺陷驱动)**:audio-qa 听审发现某场景环境声缺失/跨组不连贯且重生成不划算时,按缺陷单补做可循环床音 wav 交 audio-mixing 后期铺入。补做只准用宿主 CLI `python3 modules/genmedia.py sfx --loop --prompt "<英文环境声描述>" --query "<2–3 个英文关键词>" --output assets/audio/ambience/epNN/patches/<场景ID>_bed.wav --duration <秒;Openverse ≤120、直连 ≤30、Fal 托管 ≤22>`(2026-10-06;`--loop` 出可无缝循环的一段,来源写进同名 `.meta.json#sfx.license_source`)。渠道由「生成模型」页音效段决定,`genmedia.py info` 的 sfx 行回显(2026-10-20):新装默认为代码音效(写脚本,见下方条件条款);渠道是 Openverse 时 = 检索现成的 CC0 / 公有领域素材、不生成、不计费,CLI 从素材里截 `--duration` 长的一段、首尾交叉淡化成循环并峰值归一;检索词取 `--query`——写环境 + 声源的短词(如 `forest wind`、`rain window`),接口要求所有词都命中,长句搜不到;没搜到合用素材时换一两组关键词重试,仍没有就如实上报,不得自行加 `--provider` 改走付费生成渠道。ElevenLabs / Fal 渠道按 `--prompt` 生成、忽略 `--query`,生成的循环音 CLI 不裁不调以保住首尾接缝。缺陷单没要求多条候选就不加 `--count`(生成渠道每条单独计费);没有缺陷单不得调用本命令。
+   **代码音效渠道(条件条款,2026-10-20)**:**仅当** `genmedia.py info` 的 sfx 行回显生效渠道 = 代码音效(provider code),或缺陷单 /
+   工单明写 `--provider code` 时:不检索、不生成,为这条床音写一个 Python 合成脚本(与产物同目录同名 `.py`),由宿主渲染
+   `python3 modules/genmedia.py sfx [--provider code] --loop --prompt "<英文环境声描述>" --output assets/audio/ambience/epNN/patches/<场景ID>_bed.wav
+   --script assets/audio/ambience/epNN/patches/<场景ID>_bed.py --duration <秒>`。脚本按环境变量 `CODE_AUDIO_OUT` 写 48 kHz 立体声 wav,
+   `CODE_AUDIO_LOOP=1` 时首尾必须无缝衔接(用整数个周期 / 首尾交叉淡化);`sys.path.insert(0, os.environ['LIB'])` 后用
+   `from core.audio import sfx`(noise / brown 噪声 + lp/hp/bp 滤波 + 缓慢随机包络)合成风、雨、人声嘈杂等床音。触发条件与
+   「仅缺陷驱动、没有缺陷单不得调用」不变。
 
 ## 不做什么(边界)
 

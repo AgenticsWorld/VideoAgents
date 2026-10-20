@@ -117,8 +117,9 @@ Python:
         / minimax(POST /v1/music_generation,Music 3.0/2.6;仅 .mp3/.wav,--duration 忽略;
         force_instrumental 由「生成模型」页配置,默认纯音乐,关闭时按 prompt 自动写词演唱)
         / comfyui(本地/云端,需配置 API 格式工作流 JSON;推荐 ACE-Step,见 comfy/music-ace-step-v1-api.md)
-  音效: 渠道看「生成模型」页音效段 genconfig.sfx(2026-10-20;缺段 = openverse)——
-        openverse(默认,不生成:按关键词检索 Openverse 收录的 CC0 / 公有领域〔可选加 CC BY〕音效,主要来自 Freesound,
+  音效: 渠道看「生成模型」页音效段 genconfig.sfx(2026-10-20;缺段 = code)——
+        code(代码音效,新装默认:不检索不生成,--script 给 Agent 写的音效脚本,宿主程序合成;见 modules/codevideo/audio.py)
+        / openverse(不生成:按关键词检索 Openverse 收录的 CC0 / 公有领域〔可选加 CC BY〕音效,主要来自 Freesound,
         下载原文件后处理;免费,匿名每分钟 20 次 / 每天 200 次,见 modules/openverse.py;时长 0.5–120s,
         --query 给 2–3 个英文关键词,省略则从 --prompt 提取;--loop 截一段并首尾交叉淡化成无缝循环,再峰值归一)
         / elevenlabs(AI 生成,ElevenLabs Sound Effects v2 直连 POST /v1/sound-generation;时长 0.5–30s)
@@ -6537,7 +6538,8 @@ def _music_comfyui(cfg, prompt, output, duration_s=None):
 
 # ---------------- 音效:Openverse 检索 / ElevenLabs Sound Effects v2(直连 / Fal 托管) ----------------
 # 2026-10-06:缺陷单兜底贴片(09-audio/sound-effect 单条音效、09-audio/ambience 可循环床音)的生成入口。
-# 2026-10-20 起有独立配置段 genconfig.sfx(「生成模型」页「🔊 音效模型」),默认 openverse:
+# 2026-10-20 起有独立配置段 genconfig.sfx(「生成模型」页「🔊 音效模型」),新装默认 code(代码音效:--script 程序合成,
+# 见 _code_audio);以下为检索 / 生成渠道:
 #   openverse  不生成,按关键词检索 Openverse 收录的 CC0 / 公有领域(可选加 CC BY)音频并下载原文件(modules/openverse.py);
 #              免费。非循环音同下面的后处理,给了 --duration 且素材更长时截到该长度(尾部 30 ms 淡出);
 #              --loop 截 duration + 交叉淡化长度的一段,把超出的尾巴叠回开头做首尾交叉淡化,成为可无缝循环的床音,再峰值归一
@@ -6550,13 +6552,13 @@ def _music_comfyui(cfg, prompt, output, duration_s=None):
 # 后处理(非循环):裁掉首尾静音(中间的停顿不动,如三下敲门的间隔)+ 峰值归一到 -3 dBFS(与 modules/audiodsp.py
 # normalize_peak 同口径;成片电平由混音工位定)。生成的循环床音不裁不调,保住首尾接缝。
 
-SFX_PROVIDERS = ("openverse", "elevenlabs", "fal")
-SFX_DEFAULT_PROVIDER = "openverse"
+SFX_PROVIDERS = ("openverse", "elevenlabs", "fal", "code")    # code = 代码音效(2026-10-20,脚本程序合成)
+SFX_DEFAULT_PROVIDER = "code"      # 新装 / 缺音效段 = 代码音效(2026-10-20 用户拍板)
 SFX_FAL_ENDPOINT = "fal-ai/elevenlabs/sound-effects/v2"
 SFX_EL_MODEL = "eleven_text_to_sound_v2"
 SFX_SOURCE_FORMAT = "mp3_44100_128"
 SFX_FORMATS = (".wav", ".mp3", ".flac", ".opus")
-SFX_MAX_DURATION = {"openverse": 120.0, "elevenlabs": 30.0, "fal": 22.0}
+SFX_MAX_DURATION = {"openverse": 120.0, "elevenlabs": 30.0, "fal": 22.0, "code": 600.0}
 SFX_MIN_DURATION = 0.5
 SFX_FAL_MAX_PROMPT = 450
 SFX_MAX_COUNT = 4
@@ -6573,7 +6575,7 @@ SFX_OV_LOOP_MIN_SOURCE_S = 3.0   # Openverse --loop 不给 --duration 时素材�
 
 
 def _sfx_config(provider: str = "") -> dict:
-    """音效渠道:「生成模型」页音效段 sfx.provider(旧版配置没有这一段 = openverse);provider 显式指定优先。"""
+    """音效渠道:「生成模型」页音效段 sfx.provider(配置没有这一段 = code 代码音效);provider 显式指定优先。"""
     try:
         raw = json.loads(CONFIG_PATH.read_text())
     except Exception:
@@ -6583,6 +6585,8 @@ def _sfx_config(provider: str = "") -> dict:
     if chosen not in SFX_PROVIDERS:
         raise RuntimeError(f"音效渠道无效: {chosen}(可选 {' / '.join(SFX_PROVIDERS)};「🎨 生成模型」页音效段)")
     pc = sec.get(chosen) if isinstance(sec.get(chosen), dict) else {}
+    if chosen == "code":
+        return {"provider": "code", "model": "code"}
     if chosen == "openverse":
         from modules import openverse
         lic = str(pc.get("license") or "")
@@ -8030,8 +8034,65 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
     return fn(cfg, text, output, voice, speed, instructions)
 
 
+MUSIC_DEFAULT_PROVIDER = "code"     # 新装默认:代码作曲(2026-10-20);已保存过配置的沿用保存值
+
+
+def _music_provider(provider: str = "") -> str:
+    """显式指定的渠道,否则「生成模型」页保存的音乐渠道;没有保存过配置返回 ''(交给 get_config 报「先保存配置」)。"""
+    p = (provider or "").strip().lower()
+    if p:
+        return p
+    try:
+        sec = json.loads(CONFIG_PATH.read_text()).get("music") or {}
+    except Exception:
+        return ""
+    return str(sec.get("provider") or MUSIC_DEFAULT_PROVIDER).strip().lower()
+
+
+def _code_audio(kind: str, script: str, prompt: str, output: str, duration_s: float | None = None,
+                loop: bool = False) -> str:
+    """代码作曲 / 代码音效:在宿主库环境里跑 Agent 写的脚本 → 按输出扩展名转格式 → 写 .meta.json 与采样署名。"""
+    if not script:
+        raise RuntimeError(("音乐" if kind == "music" else "音效") + "渠道是「代码" + ("作曲" if kind == "music" else "音效")
+                           + "」:需要 --script <脚本.py>(Python;按环境变量 CODE_AUDIO_OUT 写 48 kHz wav,"
+                           "sys.path.insert(0, os.environ['LIB']) 后可用 core.audio.sampler / sfx;说明见 agents/workflows/codevideo.md)")
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from modules.codevideo import CodeVideoError
+    from modules.codevideo import audio as code_audio
+    out = Path(output) if Path(output).is_absolute() else Path.cwd() / output
+    ext = out.suffix.lower()
+    if ext not in (".wav", ".mp3", ".flac", ".opus"):
+        raise RuntimeError(f"代码{'作曲' if kind == 'music' else '音效'}输出仅支持 .wav / .mp3 / .flac / .opus,收到 {ext or '(无)'}")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    wav = out if ext == ".wav" else out.with_name(f".{out.stem}.code.wav")
+    try:
+        st = code_audio.run_script(Path(script), wav, duration=duration_s,
+                                   extra_env={"CODE_AUDIO_LOOP": "1" if loop else None, "CODE_AUDIO_PROMPT": prompt},
+                                   log=lambda m: print(m, file=sys.stderr))
+        if wav != out:
+            code_audio.convert(wav, out)
+            wav.unlink(missing_ok=True)
+            cred = wav.with_name(wav.name + ".credits.json")
+            if cred.is_file():
+                cred.replace(out.with_name(out.name + ".credits.json"))
+    except CodeVideoError as e:
+        raise RuntimeError(str(e)) from e
+    import hashlib
+    _merge_meta(str(out), kind, {
+        "provider": "code", "prompt": prompt, "script": str(Path(script).resolve()),
+        "script_sha256": hashlib.sha256(Path(script).read_bytes()).hexdigest(),
+        "requested_duration_s": duration_s, "loop": bool(loop) if kind == "sfx" else None,
+        "audio": {k: st.get(k) for k in ("duration_s", "sr", "channels", "peak_db", "rms_db")},
+        "credits": st.get("credits") or {}, "license_source": "代码生成(宿主采样乐器 / 程序合成)",
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S")})
+    print(f"[genmedia] 代码{'作曲' if kind == 'music' else '音效'} {out.name}:{st['duration_s']}s 峰值 {st['peak_db']} dB"
+          f"({st.get('seconds')}s)", file=sys.stderr, flush=True)
+    return str(out)
+
+
 def generate_music(prompt: str, output: str, duration_s: float | None = None,
-                   lyrics: str = "", instrumental: bool | None = None) -> str:
+                   lyrics: str = "", instrumental: bool | None = None, provider: str = "", script: str = "") -> str:
     """生成一段音乐(BGM),返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json 的 music 段。
 
     输出格式按 output 扩展名(openrouter:mp3/wav/flac/opus;elevenlabs:mp3/opus;
@@ -8041,9 +8102,16 @@ def generate_music(prompt: str, output: str, duration_s: float | None = None,
     AgenticsLLM 默认生成纯音乐并为必填歌词字段发送 [Instrumental]；显式 lyrics 时
     作为歌词提交并关闭 instrumental 标记。
     openrouter 时长由模型决定:Lyria 3 Pro 完整歌曲,Lyria 3 Clip 30s 片段/Loop。
+    code(代码作曲,2026-10-20 新装默认):不调模型,script = Agent 写的作曲脚本,宿主在采样乐器 / 合成器环境下运行
+    (modules/codevideo/audio.py run_script),脚本按环境变量 CODE_AUDIO_OUT 写 wav。
+    provider 显式指定渠道(演示视频项目 music_source=code 时传 code);省略 = 「生成模型」页音乐段。
     """
     _forbid_dispatch_layer("音乐")
-    cfg = get_config("music")
+    if _music_provider(provider) == "code":
+        return _code_audio("music", script, prompt, output, duration_s)
+    if script:
+        raise RuntimeError("--script 只用于代码作曲渠道(--provider code 或「生成模型」页音乐选「代码作曲」)")
+    cfg = get_config("music", provider_override=provider) if provider else get_config("music")
     if cfg["provider"] == "agentics":
         instrumental = not bool(lyrics.strip()) if instrumental is None else instrumental
         data = _agentics_generate("music", cfg, {
@@ -8069,10 +8137,11 @@ def generate_music(prompt: str, output: str, duration_s: float | None = None,
 
 def generate_sfx(prompt: str, output: str, duration_s: float | None = None, loop: bool = False,
                  count: int = 1, prompt_influence: float = 0.3, postprocess: bool = True,
-                 provider: str = "", query: str = "") -> list[str]:
+                 provider: str = "", query: str = "", script: str = "") -> list[str]:
     """音效 / 环境床音,返回保存的绝对路径列表(count 条候选)。
 
-    渠道看「生成模型」页音效段(默认 openverse = 检索现成的 CC0 / 公有领域素材,不生成;elevenlabs / fal =
+    渠道看「生成模型」页音效段(新装默认 code = 代码音效,script 为 Agent 写的音效脚本;openverse = 检索现成的 CC0 /
+    公有领域素材,不生成;elevenlabs / fal =
     ElevenLabs Sound Effects v2 生成),provider 可显式指定。query 是 Openverse 检索关键词(省略则从 prompt 提取)。
     输出格式按 output 扩展名(.wav/.mp3/.flac/.opus)。loop=True 出可无缝循环的床音;
     否则裁掉首尾静音并把峰值归一到 -3 dBFS。每条产物同名 .meta.json 的 sfx 段记来源、提示词与实测数据。"""
@@ -8091,6 +8160,12 @@ def generate_sfx(prompt: str, output: str, duration_s: float | None = None, loop
     hi = SFX_MAX_DURATION[cfg["provider"]]
     if duration_s is not None and not SFX_MIN_DURATION <= float(duration_s) <= hi:
         raise RuntimeError(f"--duration 须在 {SFX_MIN_DURATION}–{hi:g} 秒之间(渠道 {cfg['provider']})")
+    if cfg["provider"] == "code":
+        if int(count) != 1:
+            raise RuntimeError("代码音效一次出一条(--count 1);要几个版本就改脚本参数多跑几次")
+        return [_code_audio("sfx", script, prompt, output, duration_s, loop)]
+    if script:
+        raise RuntimeError("--script 只用于代码音效渠道(--provider code 或「生成模型」页音效选「代码音效」)")
     if cfg["provider"] == "fal" and len(prompt) > SFX_FAL_MAX_PROMPT:
         raise RuntimeError(f"Fal 音效描述上限 {SFX_FAL_MAX_PROMPT} 字符,当前 {len(prompt)}")
     if cfg["provider"] == "openverse":
@@ -8189,6 +8264,9 @@ def _check_video_prompt_signed(output):
 def _cmd_info(args):
     group = getattr(args, "group", "") or ""
     for kind in ("image", "video", "music", "tts"):
+        if kind == "music" and _music_provider() == "code":
+            print(f"{'music':5s} → {'code':10s} 代码作曲(Agent 写作曲脚本,genmedia music --script;不调模型)")
+            continue
         try:
             cfg = get_config(kind)
             if kind == "video" and group:
@@ -8215,7 +8293,9 @@ def _cmd_info(args):
     try:
         cfg = _sfx_config()
         desc = (f"检索现成素材(不生成) 许可={cfg['license']} 来源={cfg['source']}"
-                if cfg["provider"] == "openverse" else f"model={cfg['model']}")
+                if cfg["provider"] == "openverse" else
+                "代码音效(Agent 写音效脚本,genmedia sfx --script;不调模型)" if cfg["provider"] == "code"
+                else f"model={cfg['model']}")
         print(f"{'sfx':5s} → {cfg['provider']:10s} {desc}")
     except RuntimeError as e:
         print(f"{'sfx':5s} → ⚠ {e}")
@@ -8388,15 +8468,19 @@ def _cmd_upscale(args):
 
 
 def _cmd_music(args):
+    if args.dry_run and _music_provider(args.provider) == "code":
+        print(f"[dry-run] music via code(代码作曲)script={args.script or '(缺 --script)'} duration={args.duration or 'auto'}"
+              f" → {args.output}")
+        return
     if args.dry_run:
-        cfg = get_config("music")
+        cfg = get_config("music", provider_override=args.provider) if args.provider else get_config("music")
         desc = _comfy_desc(cfg) if cfg["provider"] == "comfyui" \
             else f"model={cfg.get('model') or '-'}"
         print(f"[dry-run] music via {cfg['provider']} {desc}"
               f" format={MUSIC_FORMATS.get(Path(args.output).suffix.lower(), 'mp3')} → {args.output}")
         return
     out = generate_music(args.prompt, args.output, args.duration, args.lyrics,
-                         not bool(args.lyrics.strip()))
+                         not bool(args.lyrics.strip()), provider=args.provider, script=args.script)
     print(f"已生成: {out}")
 
 
@@ -8405,6 +8489,10 @@ def _cmd_sfx(args):
     if args.dry_run:
         cfg = _sfx_config(args.provider)
         outs = _sfx_outputs(args.output, args.count)
+        if cfg["provider"] == "code":
+            print(f"[dry-run] sfx via code(代码音效)script={args.script or '(缺 --script)'}"
+                  f" loop={'on' if args.loop else 'off'} duration={args.duration or 'auto'} → {args.output}")
+            return
         if cfg["provider"] == "openverse":
             from modules import openverse
             ladder = openverse.query_ladder(args.query, args.prompt)
@@ -8418,7 +8506,7 @@ def _cmd_sfx(args):
               f" postprocess={'off' if (args.loop or args.no_postprocess) else 'on'} → {', '.join(outs)}")
         return
     for out in generate_sfx(args.prompt, args.output, args.duration, args.loop, args.count,
-                            args.prompt_influence, not args.no_postprocess, args.provider, args.query):
+                            args.prompt_influence, not args.no_postprocess, args.provider, args.query, args.script):
         print(f"已生成: {out}")
 
 
@@ -8647,9 +8735,14 @@ def main():
                          "openrouter/minimax 忽略;省略=模型/工作流默认)")
     pm.add_argument("--lyrics", default="",
                     help="歌词(AgenticsLLM profile 支持时提交；省略按纯音乐 [Instrumental])")
+    pm.add_argument("--provider", default="",
+                    help="渠道:code=代码作曲(配 --script)/ agentics / openrouter / elevenlabs / minimax / comfyui;"
+                         "省略=「生成模型」页音乐段选中的渠道(新装默认 code)")
+    pm.add_argument("--script", default="",
+                    help="代码作曲脚本(.py;按环境变量 CODE_AUDIO_OUT 写 wav,可用 core.audio.sampler / sfx);仅 code 渠道")
     pm.add_argument("--dry-run", action="store_true")
 
-    ps = sub.add_parser("sfx", help="音效 / 环境床音(默认 Openverse 检索现成素材;ElevenLabs / Fal 生成;缺陷单兜底贴片用)")
+    ps = sub.add_parser("sfx", help="音效 / 环境床音(新装默认代码音效 --script;Openverse 检索现成素材;ElevenLabs / Fal 生成;缺陷单兜底贴片用)")
     ps.add_argument("--prompt", required=True, help="英文声音描述:声源 / 材质 / 空间感(Fal 托管上限 450 字符);不写音乐与人声")
     ps.add_argument("--query", default="",
                     help="Openverse 检索关键词(2–3 个英文词,如 \"door slam\";接口要求所有词都命中,长句搜不到);"
@@ -8666,8 +8759,10 @@ def main():
                     help="贴合描述的程度 0–1(越高越贴描述、各条越相似,默认 0.3;Openverse 忽略)")
     ps.add_argument("--no-postprocess", action="store_true", help="不裁首尾静音、不做峰值归一(只转格式)")
     ps.add_argument("--provider", default="", choices=("", *SFX_PROVIDERS),
-                    help="渠道:openverse=检索现成素材 / elevenlabs=直连生成 / fal=Fal 托管生成;"
-                         "省略=「生成模型」页音效段选中的渠道(默认 openverse)")
+                    help="渠道:openverse=检索现成素材 / elevenlabs=直连生成 / fal=Fal 托管生成 / code=代码音效(配 --script);"
+                         "省略=「生成模型」页音效段选中的渠道(新装默认 code)")
+    ps.add_argument("--script", default="",
+                    help="代码音效脚本(.py;按环境变量 CODE_AUDIO_OUT 写 wav,CODE_AUDIO_LOOP=1 表示要无缝循环);仅 code 渠道")
     ps.add_argument("--dry-run", action="store_true")
 
     args = ap.parse_args()

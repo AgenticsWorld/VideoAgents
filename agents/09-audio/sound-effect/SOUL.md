@@ -15,7 +15,14 @@
 2. 为每个事件点写**音效描述 cue**:声音材质与场景匹配(石板路脚步 ≠ 木地板脚步),招式类音色风格与全片气质统一;描述要具体可听("heavy iron door creaks open, echoing"而非"door sound"),但不写时间戳数字进 cue 文本(模型对精确时间支持不稳定,时点靠所在镜的动作描述带出)。
 3. 逐镜归档:每条 cue 挂镜头 ID 与触发动作(与 blocking 节拍对应),写入 `audio_cues.json`。
 4. 保证关键动作(剧情动作、blocking 明确节拍)cue 覆盖率 ≥90%,未覆盖项逐条附原因。
-5. **兜底素材(仅缺陷驱动)**:audio-qa 听审发现组视频漏做/做错某音效且重生成不划算时,按缺陷单为该事件补做单条音效 wav 交 audio-mixing 后期贴入——这是例外路径,不是默认产出。补做只准用宿主 CLI `python3 modules/genmedia.py sfx --prompt "<英文声音描述>" --query "<2–3 个英文关键词>" --output assets/audio/sfx/epNN/patches/<镜号>_<事件>.wav [--duration <秒>]`(2026-10-06;不加 `--loop`;CLI 自动裁首尾静音并把峰值归一,来源写进同名 `.meta.json#sfx.license_source`)。渠道由「生成模型」页音效段决定,`genmedia.py info` 的 sfx 行回显(2026-10-20):默认 Openverse = 检索现成的 CC0 / 公有领域素材、不生成、不计费,检索词取 `--query`——写声源 + 动作的短词(如 `door slam`、`sword clash`),接口要求所有词都命中,长句搜不到;没搜到合用素材时换一两组关键词重试,仍没有就如实上报,不得自行加 `--provider` 改走付费生成渠道。ElevenLabs / Fal 渠道按 `--prompt` 生成、忽略 `--query`。缺陷单没要求多条候选就不加 `--count`(生成渠道每条单独计费);没有缺陷单不得调用本命令。
+5. **兜底素材(仅缺陷驱动)**:audio-qa 听审发现组视频漏做/做错某音效且重生成不划算时,按缺陷单为该事件补做单条音效 wav 交 audio-mixing 后期贴入——这是例外路径,不是默认产出。补做只准用宿主 CLI `python3 modules/genmedia.py sfx --prompt "<英文声音描述>" --query "<2–3 个英文关键词>" --output assets/audio/sfx/epNN/patches/<镜号>_<事件>.wav [--duration <秒>]`(2026-10-06;不加 `--loop`;CLI 自动裁首尾静音并把峰值归一,来源写进同名 `.meta.json#sfx.license_source`)。渠道由「生成模型」页音效段决定,`genmedia.py info` 的 sfx 行回显(2026-10-20):新装默认为代码音效(写脚本,见下方条件条款);渠道是 Openverse 时 = 检索现成的 CC0 / 公有领域素材、不生成、不计费,检索词取 `--query`——写声源 + 动作的短词(如 `door slam`、`sword clash`),接口要求所有词都命中,长句搜不到;没搜到合用素材时换一两组关键词重试,仍没有就如实上报,不得自行加 `--provider` 改走付费生成渠道。ElevenLabs / Fal 渠道按 `--prompt` 生成、忽略 `--query`。缺陷单没要求多条候选就不加 `--count`(生成渠道每条单独计费);没有缺陷单不得调用本命令。
+   **代码音效渠道(条件条款,2026-10-20)**:**仅当** `genmedia.py info` 的 sfx 行回显生效渠道 = 代码音效(provider code),或缺陷单 /
+   工单明写 `--provider code` 时:不检索、不生成,为这条补做音效写一个 Python 合成脚本(与产物同目录同名 `.py`),由宿主渲染
+   `python3 modules/genmedia.py sfx [--provider code] --prompt "<英文声音描述>" --output assets/audio/sfx/epNN/patches/<镜号>_<事件>.wav
+   --script assets/audio/sfx/epNN/patches/<镜号>_<事件>.py [--duration <秒>]`。脚本按环境变量 `CODE_AUDIO_OUT` 写 48 kHz wav;
+   `sys.path.insert(0, os.environ['LIB'])` 后用 `from core.audio import sfx`(滤波 lp/hp/bp、包络 env_exp、噪声 noise/brown、现成音色
+   click/clack/crash/whoosh/creak/thump/step/ding/pop/rumble/ignite/roar/heartbeat、compress/limit/add)按材质合成。触发条件与
+   「仅缺陷驱动、没有缺陷单不得调用」不变。
 
 ## 不做什么(边界)
 

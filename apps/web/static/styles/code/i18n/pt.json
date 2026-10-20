@@ -1,0 +1,400 @@
+{
+ "_categories": {
+  "Hand-drawn & Painting": "Desenho à mão e pintura",
+  "East Asian Traditions": "Tradições do Leste Asiático",
+  "Print & Printmaking": "Impressão e gravura",
+  "Graphic & Type": "Gráfico e tipografia",
+  "Information & Keynote": "Informação e keynote",
+  "Cartoon & Anime": "Desenho animado e anime",
+  "Games": "Jogos",
+  "Cinema & Eras": "Cinema e épocas",
+  "Materials & 3D": "Materiais e 3D"
+ },
+ "crayon-book": {
+  "name": "Livro ilustrado em giz de cera",
+  "line": "A lua não consegue dormir, então uma menina sobe no telhado para cantar uma canção de ninar para ela.",
+  "uses": [
+   "Livros ilustrados",
+   "Histórias para dormir",
+   "Aprendizado infantil"
+  ]
+ },
+ "watercolor": {
+  "name": "Aquarela",
+  "line": "Siga a chuva do coração vermelho do deserto australiano até a costa verde, em uma única caminhada pintada sem cortes.",
+  "uses": [
+   "Documentários de natureza",
+   "Viagem",
+   "Divulgação científica"
+  ]
+ },
+ "ink-wash": {
+  "name": "Pintura chinesa a nanquim",
+  "line": "Um espadachim atravessa o rio sobre a água e parte a correnteza com um único golpe.",
+  "uses": [
+   "Wuxia",
+   "Marcas culturais",
+   "Poesia"
+  ]
+ },
+ "impasto": {
+  "name": "Pintura a óleo em empaste",
+  "line": "Numa praça cinzenta e chuvosa, um guarda-chuva vermelho se abre, e uma valsa pinta a praça inteira de cores.",
+  "uses": [
+   "Videoclipes",
+   "Arte e cultura",
+   "Anúncios emocionais"
+  ]
+ },
+ "one-line": {
+  "name": "Desenho de linha única",
+  "line": "Uma linha contínua desenha uma vida inteira, e depois a caneta passa para uma criança.",
+  "uses": [
+   "Histórias de marca",
+   "Marcos da vida",
+   "Anúncios minimalistas"
+  ]
+ },
+ "whiteboard": {
+  "name": "Explicação em quadro branco",
+  "line": "Como o seu celular sabe onde você está: GPS, relógios atômicos e os 38 microssegundos que a relatividade acrescenta todo dia.",
+  "uses": [
+   "Vídeos explicativos",
+   "Cursos on-line",
+   "Ciência"
+  ]
+ },
+ "urban-sketch": {
+  "name": "Urban sketch · nanquim e aguada",
+  "line": "Um parque que é só um esboço a caneta; para onde o vento leva o chapéu de palha dela, a cor vai junto.",
+  "uses": [
+   "Cidade e viagem",
+   "Arquitetura",
+   "Marcas de estilo de vida"
+  ]
+ },
+ "shadow-puppet": {
+  "name": "Teatro de sombras",
+  "line": "Dez sóis queimam a terra até que o arqueiro Hou Yi retesa o arco, numa história contada com bonecos de couro sobre uma tela iluminada.",
+  "uses": [
+   "Mitos e folclore",
+   "Patrimônio cultural",
+   "Festividades"
+  ]
+ },
+ "ukiyoe": {
+  "name": "Ukiyo-e",
+  "line": "Um viajante caminha rumo a uma montanha distante; cada plano é uma xilogravura, terminando numa grande onda.",
+  "uses": [
+   "Viagem",
+   "Cultura japonesa",
+   "Poesia"
+  ]
+ },
+ "papercut-red": {
+  "name": "Recorte de papel vermelho",
+  "line": "Na véspera do Ano Novo Lunar, a fera Nian chega à cidade, e o enorme recorte de papel de uma menina ilumina a vila e a espanta.",
+  "uses": [
+   "Ano Novo Lunar",
+   "Mensagens festivas",
+   "Contos populares"
+  ]
+ },
+ "paper-lantern": {
+  "name": "Caixa de luz em papel recortado",
+  "line": "Um único bolo lunar conta a história do Festival do Meio do Outono, de reencontro e saudade, dentro de uma caixa de luz de papel recortado.",
+  "uses": [
+   "Festividades",
+   "Marcas de presentes",
+   "Histórias culturais"
+  ]
+ },
+ "risograph": {
+  "name": "Impressão Risograph",
+  "line": "Um passeio de bicicleta numa manhã de domingo pela cidade — padaria, parque, beira-rio — em duas tintas fora de registro.",
+  "uses": [
+   "Marcas independentes",
+   "Zines",
+   "Estilo de vida"
+  ]
+ },
+ "halftone-dossier": {
+  "name": "Dossiê em meio-tom",
+  "line": "Um gato laranja gorducho vai a julgamento por testar a gravidade e fazer parkour às 4 da manhã, e sai absolvido.",
+  "uses": [
+   "Humor",
+   "Conteúdo de pets",
+   "Vídeos curtos para redes"
+  ]
+ },
+ "woodcut": {
+  "name": "Xilogravura",
+  "line": "Uma aldeia passa um inverno inteiro fundindo um sino; na primeira vez que ele toca, a neve para.",
+  "uses": [
+   "Contos populares",
+   "Marcas artesanais",
+   "Trailers de livros"
+  ]
+ },
+ "engraving": {
+  "name": "Gravura em cobre",
+  "line": "Uma prancha de história natural grava a si mesma: o buril corta o cobre, a abelha surge linha a linha e uma aguada de aquarela lhe dá vida.",
+  "uses": [
+   "Legendas de museu",
+   "Divulgação científica",
+   "Herança de marca"
+  ]
+ },
+ "silkscreen-poster": {
+  "name": "Pôster de viagem em serigrafia",
+  "line": "Três pôsteres de trilhas são serigrafados uma cor de cada vez e depois percorridos num longo plano-sequência, do meio-dia ao entardecer.",
+  "uses": [
+   "Guias de trilhas e destinos",
+   "Promoção turística",
+   "Pôsteres de eventos"
+  ]
+ },
+ "swiss-motion": {
+  "name": "Motion graphics suíço",
+  "line": "Um pôster de show se diagrama sozinho seguindo cinco regras do design suíço; a quinta é quebrar apenas uma.",
+  "uses": [
+   "Identidade de marca",
+   "Eventos",
+   "Ensino de design"
+  ]
+ },
+ "spy-titles": {
+  "name": "Abertura de espionagem anos 60",
+  "line": "Abertura de um filme de espionagem imaginário de 1964: a perseguição a uma chave roubada, até que as formas se encaixam no título.",
+  "uses": [
+   "Sequências de abertura",
+   "Aberturas de eventos",
+   "Trailers"
+  ]
+ },
+ "art-deco": {
+  "name": "Art déco",
+  "line": "Um grande hotel, 1930: um mensageiro corre entre elevadores e portas giratórias para entregar uma carta antes da meia-noite.",
+  "uses": [
+   "Luxo e hotelaria",
+   "Galas",
+   "Convites"
+  ]
+ },
+ "blueprint": {
+  "name": "Planta técnica",
+  "line": "A planta de um inventor desenha, explode e monta uma máquina de capturar nuvens, e sua nuvem de revisão começa a chover.",
+  "uses": [
+   "Engenharia",
+   "Lançamentos de hardware",
+   "Explicações de tecnologia"
+  ]
+ },
+ "stained-glass": {
+  "name": "Vitral",
+  "line": "A luz do sol atravessa o vitral de uma catedral do amanhecer ao anoitecer, despertando cada painel de uma história de cavaleiro e dragão.",
+  "uses": [
+   "Lendas",
+   "Patrimônio cultural",
+   "Histórias de fim de ano"
+  ]
+ },
+ "pictogram-motion": {
+  "name": "Pictogramas animados",
+  "line": "Os 43 esportes dos Jogos Asiáticos de 2026 como pictogramas geométricos no ritmo da batida.",
+  "uses": [
+   "Eventos esportivos",
+   "Identidade visual",
+   "Aberturas de eventos"
+  ]
+ },
+ "ascii-crt": {
+  "name": "Terminal ASCII / CRT",
+  "line": "A IA de uma base lunar desperta depois de quarenta anos com um sinal da Terra e responde desenhando “casa” com caracteres.",
+  "uses": [
+   "Ferramentas para desenvolvedores",
+   "Ficção científica",
+   "Marcas de tecnologia"
+  ]
+ },
+ "dataviz": {
+  "name": "Narrativa com dados",
+  "line": "Cem anos de temperaturas de verão, em que o próprio gráfico conta a história.",
+  "uses": [
+   "Jornalismo de dados",
+   "Relatórios",
+   "Clima e ciência"
+  ]
+ },
+ "iso-infographic": {
+  "name": "Infográfico isométrico",
+  "line": "A jornada de um café da plantação até as suas mãos, atravessando um único mundo isométrico.",
+  "uses": [
+   "Explicação de processos",
+   "Cadeias de suprimentos",
+   "Relatórios anuais"
+  ]
+ },
+ "dark-keynote": {
+  "name": "Keynote tech escura",
+  "line": "Filme de lançamento do Tidy, um app fictício: um cursor soterrado coloca centenas de janelas de volta no lugar de uma só vez.",
+  "uses": [
+   "Lançamentos de produto",
+   "SaaS",
+   "Keynotes"
+  ]
+ },
+ "living-screencast": {
+  "name": "Screencast vivo",
+  "line": "Clawd, o mascote pixelado do Claude Code, salta do terminal para o app do Claude e encena o modo de planejamento, comentários em diffs e autoverificações num screencast sem cortes.",
+  "uses": [
+   "Tutoriais de produto",
+   "Lançamentos de recursos",
+   "Onboarding"
+  ]
+ },
+ "hologram-hud": {
+  "name": "HUD holográfico de ficção científica",
+  "line": "Uma bicicleta elétrica é escaneada em holograma; caixas de mira travam na bateria, no motor e nos freios, e cada especificação rola até o valor certo.",
+  "uses": [
+   "Apresentação de especificações",
+   "Vídeos de lançamento e financiamento coletivo",
+   "Telas de feiras"
+  ]
+ },
+ "rubber-hose": {
+  "name": "Desenho rubber hose dos anos 1930",
+  "line": "Uma xícara de café persegue um cubo de açúcar fugitivo pela cozinha, no estilo dos desenhos animados dos anos 1930.",
+  "uses": [
+   "Comidas e bebidas",
+   "Anúncios retrô",
+   "Infantil"
+  ]
+ },
+ "cel-anime-80s": {
+  "name": "Anime em acetato dos anos 80",
+  "line": "Uma entregadora pedala por uma cidade neon encharcada de chuva para entregar uma fita antes do lançamento ao amanhecer.",
+  "uses": [
+   "Videoclipes",
+   "Trailers de jogos",
+   "Nostalgia"
+  ]
+ },
+ "scifi-toon": {
+  "name": "Sitcom animada de ficção científica",
+  "line": "Um gênio entediado abre um portal só para comprar café e despenca por universos cada vez mais estranhos.",
+  "uses": [
+   "Comédia",
+   "Marcas de tecnologia",
+   "Vídeos curtos para redes"
+  ]
+ },
+ "midcentury-toon": {
+  "name": "Desenho animado mid-century",
+  "line": "Um robô aspirador configurado em três passos, narrado como um filme educativo dos anos 1950: posicione a base, conecte o app, aperte iniciar.",
+  "uses": [
+   "Guias de configuração",
+   "Explicações da central de ajuda",
+   "Passo a passo"
+  ]
+ },
+ "pixel-rpg": {
+  "name": "RPG em pixel de 16 bits",
+  "line": "Diante da porta do chefe final, um herói salva o jogo, e a tela de salvamento relembra toda a jornada.",
+  "uses": [
+   "Trailers de jogos",
+   "Recapitulações",
+   "Nostalgia"
+  ]
+ },
+ "hd-2d": {
+  "name": "HD-2D",
+  "line": "O farol se apaga; uma menina leva a última chama por uma floresta noturna e sobe os penhascos castigados pela tempestade.",
+  "uses": [
+   "Trailers de jogos",
+   "Fantasia",
+   "Filmes narrativos"
+  ]
+ },
+ "microgame": {
+  "name": "Frenesi de microgames",
+  "line": "Um cadete desajeitado sobrevive a um treinamento de cinco segundos, cada vez mais rápido, até o chefe final: pousar em casa.",
+  "uses": [
+   "Trailers de jogos",
+   "Onboarding",
+   "Vídeos curtos para redes"
+  ]
+ },
+ "game-show": {
+  "name": "Game show em estilo flat",
+  "line": "A história da IA como um jogo de ritmo: os modelos entram em cena no compasso, e um boletim encerra o show.",
+  "uses": [
+   "Linhas do tempo de tecnologia",
+   "Retrospectiva do ano",
+   "Programas de variedades"
+  ]
+ },
+ "silent-film": {
+  "name": "Cinema mudo dos anos 1920",
+  "line": "O aprendiz de padeiro persegue ladeira abaixo um pão fugitivo e depois o parte ao meio para uma menina faminta.",
+  "uses": [
+   "Comédia",
+   "Marcas retrô",
+   "Narrativa sem falas"
+  ]
+ },
+ "backrooms": {
+  "name": "Found footage liminar",
+  "line": "Um novo funcionário do turno da noite filma sua primeira noite num escritório amarelo sem fim, seguindo as regras da parede.",
+  "uses": [
+   "Terror",
+   "Mistério e ARG",
+   "Teasers de jogos"
+  ]
+ },
+ "brick-toy": {
+  "name": "Brinquedo de blocos",
+  "line": "Um astronauta de blocos monta um foguete com peças avulsas e voa até uma lua de blocos.",
+  "uses": [
+   "Brinquedos e crianças",
+   "Montagens de produto",
+   "Espaço"
+  ]
+ },
+ "paper-popup": {
+  "name": "Livro pop-up",
+  "line": "Um livro pop-up se abre sobre a mesa; um duende chamado Pip se aventura por mundos de papel e pula para o nosso.",
+  "uses": [
+   "Livros infantis",
+   "Trailers de jogos",
+   "Filmes narrativos"
+  ]
+ },
+ "tilt-shift": {
+  "name": "Miniatura tilt-shift",
+  "line": "A hora do rush matinal numa cidade que parece maquete: trânsito, trens e pessoas minúsculas.",
+  "uses": [
+   "Promoção de cidades",
+   "Imóveis",
+   "Transporte"
+  ]
+ },
+ "lowpoly-island": {
+  "name": "Ilha isométrica low poly",
+  "line": "Uma ilha e sua vila crescem bloco a bloco num mar vazio, cada bloco uma nota, até uma noite estrelada.",
+  "uses": [
+   "Trailers de jogos",
+   "Construção de mundos",
+   "Conteúdo relaxante"
+  ]
+ },
+ "glass-product": {
+  "name": "Render de produto em vidro",
+  "line": "Unboxing e closes de Aura, fones de ouvido de vidro fictícios, com varreduras de luz em faixa e cáusticas.",
+  "uses": [
+   "Lançamentos de produto",
+   "Tecnologia de consumo",
+   "Beleza"
+  ]
+ }
+}

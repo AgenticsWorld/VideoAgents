@@ -27,6 +27,26 @@ License is retained in `apps/web/static/vendor/spark/LICENSE`. Upstream:
 https://github.com/sparkjsdev/spark. World generation itself calls the hosted World
 Labs Marble API (https://docs.worldlabs.ai/api) with the user's own API key.
 
+The 演示视频 (code-video) project type bundles files from Lemo-Opuscar
+(https://github.com/lemomo-ai/lemo-opuscar, MIT, Copyright (c) 2026 LemoLab), pinned to the
+commit recorded in `modules/codevideo/lib/upstream.json` and synced by
+`scripts/sync_lemo_opuscar.py`: the page helpers and audio tools under `modules/codevideo/lib/core/`
+(`sampler.py` carries two marked VideoAgents patches: a configurable sample-library folder with
+optional automatic download, and a SciPy fallback when `soxr` is missing), the 43 style
+specifications under `agents/workflows/codevideo/styles/`, and gallery frames re-encoded as WebP in
+`apps/web/static/styles/code/frames/`. The license is retained in
+`modules/codevideo/lib/LICENSE.lemo-opuscar` and `agents/workflows/codevideo/styles/LICENSE.lemo-opuscar`.
+The four display fonts in `modules/codevideo/lib/core/fonts/` are OFL 1.1 subsets (details and the
+full license text in `modules/codevideo/lib/core/fonts/OFL.md`). The same project type bundles
+Three.js 0.170.0 (MIT; `build/three.module.js` and `examples/jsm` without the Draco, Basis,
+Rhino3dm and Ammo decoders) in `modules/codevideo/lib/vendor/three/`, license retained there,
+because Lemo-Opuscar's post-processing code targets r170. Sample libraries (VSCO 2 CE, VCSL,
+FreePats, Karoryfer: CC0; Salamander Grand Piano: CC BY 3.0; MuldjordKit: CC BY 4.0), Poly Haven
+HDRIs and models (CC0), and the styles' demo-film sources are not bundled: they are downloaded on
+demand from the Lemo-Opuscar release assets and repository at the pinned commit, verified by
+SHA-256. Films made with this project type carry no LemoLab credit; the instruments a score uses
+are listed in that film's `CREDITS`.
+
 On Windows x64 the desktop client can download FFmpeg from the VideoAgents package
 mirrors when none is installed. The package is the unmodified
 `ffmpeg-9.0.2-essentials_build.zip` static build from gyan.dev (FFmpeg 9.0.2, GPL v3),

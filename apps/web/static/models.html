@@ -68,6 +68,14 @@ button:disabled{opacity:.5;cursor:default}
 .ov-hit-text a{color:var(--text);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ov-hit-text a:hover{color:var(--accent)}
 .ov-hit-by{color:var(--yellow);margin-left:6px}
+/* 代码作曲 / 代码音效(2026-10-20):采样库清单 + 试听 */
+.cpacks{margin-left:120px;display:flex;flex-direction:column;gap:4px}
+.cpack{display:grid;grid-template-columns:minmax(220px,330px) 70px 100px auto;align-items:center;gap:8px;font-size:12.5px;justify-items:start}
+.cpack .nm{color:var(--text)}
+.cpack .sz{color:var(--dim)}
+.cpack .st{color:var(--dim)}
+.cpack .st.ok{color:var(--green)}
+.cpack button{padding:2px 10px;font-size:12px}
 .status.err{color:var(--red)}
 #savebar{display:flex;align-items:center;gap:14px;justify-content:flex-end}
 #save-status{font-size:13px;color:var(--green);opacity:0;transition:opacity .3s}
@@ -126,11 +134,13 @@ button:disabled{opacity:.5;cursor:default}
   <div class="card" id="card-sfx">
     <h2>🔊 音效模型 <span class="cur">音效 / 环境床音兜底贴片用(仅缺陷单要求补做时);生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
     <div class="tabs" id="sfx-tabs">
+      <div class="tab" id="tab-sfx-code">代码音效</div>
       <div class="tab" id="tab-sfx-openverse">Openverse</div>
       <div class="tab" id="tab-sfx-elevenlabs">ElevenLabs</div>
       <div class="tab" id="tab-sfx-fal">Fal</div>
     </div>
     <!-- 三个面板由 buildSfxPanels() 生成(配置段 sfx):Openverse 检索现成素材(默认,不生成)/ ElevenLabs 直连生成 / Fal 托管生成 -->
+    <div class="panel" id="panel-sfx-code"></div>
     <div class="panel" id="panel-sfx-openverse"></div>
     <div class="panel" id="panel-sfx-elevenlabs"></div>
     <div class="panel" id="panel-sfx-fal"></div>
@@ -386,6 +396,7 @@ const MINIMAX_TTS_MODELS=[
 ];
 
 const PROVIDER_META={
+  code:{label:'代码作曲'},
   agentics:{label:'Agentics'},
   openrouter:{label:'OpenRouter'},
   volcengine:{label:'火山引擎'},
@@ -406,7 +417,7 @@ const SECOND_WF={
 const SECTIONS={
   image:{providers:['agentics','openrouter','volcengine','byteplus','fal','minimax','rhapi','comfyui']},
   video:{providers:['agentics','openrouter','volcengine','byteplus','fal','minimax','rhapi','comfyui']},
-  music:{providers:['agentics','openrouter','elevenlabs','comfyui']},
+  music:{providers:['code','agentics','openrouter','elevenlabs','comfyui']},   // code=代码作曲(2026-10-20 首位,新装默认)
   tts:{providers:['agentics','openrouter','volcengine','elevenlabs','minimax','comfyui']},
 };
 /* 界面隐藏的渠道标签(面板仍构建、配置照常读写;已生效的渠道仍显示,免得选中项看不见) */
@@ -435,7 +446,7 @@ const EL_TTS_MODELS=[
 function el(tag,attrs={},html){const d=document.createElement(tag);Object.assign(d,attrs);if(html!==undefined)d.innerHTML=html;return d}
 
 /* 生效渠道=当前选中的标签页(✅ 标记,保存后生效),与文件托管存储渠道一致 */
-const SEL_PROVIDER={image:'agentics',video:'agentics',music:'agentics',tts:'agentics'};
+const SEL_PROVIDER={image:'agentics',video:'agentics',music:'code',tts:'agentics'};
 
 let DH_PROVIDER='agentics';
 
@@ -786,6 +797,7 @@ function ttsModeUI(p){
 
 function buildPanel(kind,p){
   const d=el('div',{className:'panel',id:`panel-${kind}-${p}`});
+  if(p==='code'){buildCodeMusicPanel(d);return d}
   if(p==='agentics'){
     const account=el('div',{className:'row'});
     account.appendChild(el('label',{},'账号'));
@@ -1411,21 +1423,21 @@ function buildUpscaleMinimaxPanel(){
 }
 
 /* 音效板块(2026-10-20,配置段 sfx):genmedia.py sfx 的渠道,只给 sound-effect / ambience 缺陷单兜底贴片用。
-   Openverse(默认,首位)= 不生成,按关键词检索现成的 CC0 / 公有领域音效(modules/openverse.py,匿名可用);
+   代码音效(2026-10-20 起首位、新装默认)= Agent 写音效脚本,宿主程序合成;Openverse = 不生成,按关键词检索现成的 CC0 / 公有领域音效(modules/openverse.py,匿名可用);
    ElevenLabs / Fal = ElevenLabs Sound Effects v2 生成,Key 留空沿用音乐 / TTS 段、图像 / 视频段已填的 Key */
-const SFX_PROVIDERS=['openverse','elevenlabs','fal'];
-let SFX_PROVIDER='openverse';
+const SFX_PROVIDERS=['code','openverse','elevenlabs','fal'];   // code=代码音效(2026-10-20 首位、新装默认)
+let SFX_PROVIDER='code';
 const SFX_OV_LICENSES=[['cc0,pdm','CC0 / 公有领域(免署名,默认)'],['cc0,pdm,by','CC0 / 公有领域 + CC BY(须署名)']];
 const SFX_OV_SOURCES=[['freesound','Freesound(默认)'],['freesound,wikimedia_audio','Freesound + Wikimedia Commons']];
 const SFX_EL_MODELS=[['eleven_text_to_sound_v2','Sound Effects v2(eleven_text_to_sound_v2)']];
 const SFX_FAL_MODELS=[['fal-ai/elevenlabs/sound-effects/v2','ElevenLabs Sound Effects v2(Fal 托管)']];
 function showSfxPanel(provider){
   SFX_PROVIDER=provider;
-  const labels={openverse:'Openverse',elevenlabs:'ElevenLabs',fal:'Fal'};
+  const labels={openverse:'Openverse',elevenlabs:'ElevenLabs',fal:'Fal',code:'代码音效'};
   SFX_PROVIDERS.forEach(p=>{
     const tab=$(`#tab-sfx-${p}`);
     tab.classList.toggle('active',p===provider);
-    tab.textContent=(p===provider?'✅ ':'')+labels[p];
+    tab.textContent=(p===provider?'✅ ':'')+t(labels[p]);
     $(`#panel-sfx-${p}`).classList.toggle('show',p===provider);
   });
 }
@@ -1478,6 +1490,9 @@ function buildSfxPanels(){
     'AI 生成:Fal 托管的 ElevenLabs Sound Effects v2,每条单独计费;时长 0.5–22 秒,描述不超过 450 字符。Key 在 '
     +'<a href="https://fal.ai/dashboard/keys" target="_blank">fal.ai 控制台「API Keys」</a>'
     +' 创建,留空沿用图像 / 视频段已填的 Fal Key。'));
+  const cp=$('#panel-sfx-code');
+  cp.appendChild(el('div',{className:'hint'},t('不检索也不调模型:Agent 写音效脚本,宿主用程序合成(点击、嗖声、闷响、纸张、环境底噪……),每个声音可以落在画面事件的那一帧;不计费。适合演示视频与动态图形,写实拟音仍建议用 Openverse 或 AI 生成。')));
+  cp.appendChild(codeDemoRow('sfx'));
 }
 function sfxSecs(v){return v==null?'?':(v<10?v.toFixed(1):String(Math.round(v)))+' s'}
 async function sfxOpenverseSearch(){
@@ -1512,6 +1527,83 @@ async function sfxOpenverseSearch(){
     status.className='status err';status.textContent=`${t('检索 Openverse 失败')}: ${e.message||e}`;
   }finally{btn.disabled=false}
 }
+
+/* ---------- 代码作曲 / 代码音效(2026-10-20,modules/codevideo):Agent 写脚本,宿主采样乐器 / 合成器渲染 ---------- */
+const CODE_PACK_LABELS={'instruments-vsco2ce':'VSCO 2 CE · 管弦乐(CC0)','instruments-vcsl':'VCSL · 打击 / 民族 / 键盘(CC0)',
+  'instruments-freepats':'FreePats · 通用音色与鼓组(CC0 / 鼓组 CC BY)','instruments-karoryfer':'Karoryfer · 木管 / 铜管 / 特色乐器(CC0)',
+  'instruments-salamander':'Salamander 三角钢琴(CC BY,片尾须署名)'};
+function buildCodeMusicPanel(d){
+  d.appendChild(el('div',{className:'hint'},t('不调用音乐模型:Agent(语言模型)按配乐需求写作曲脚本,宿主用采样乐器与合成器渲染成音频;不计费,节拍能与画面逐帧对齐。演示视频项目默认用它。')));
+  const ar=el('div',{className:'row'});
+  ar.appendChild(el('label',{},t('自动下载')));
+  const cb=el('input',{type:'checkbox',id:'music-code-autofetch',checked:true});cb.style.flex='none';
+  ar.appendChild(cb);ar.appendChild(el('span',{style:'font-size:12px;color:var(--dim)'},t('作曲脚本用到还没下载的采样库时自动下载(只下用到的那个)')));
+  d.appendChild(ar);
+  const pr=el('div',{className:'row'});pr.appendChild(el('label',{},t('采样乐器库')));
+  pr.appendChild(el('span',{id:'code-packs-status',style:'font-size:12px;color:var(--dim)'},''));
+  d.appendChild(pr);
+  d.appendChild(el('div',{className:'cpacks',id:'code-packs'}));
+  d.appendChild(codeDemoRow('music'));
+  d.appendChild(el('div',{className:'hint'},t('采样库来自开源项目 lemo-opuscar 的发布包,下载到本机 data/.videoagents/codevideo/;用到须署名的乐器时,署名行会自动进片子的 CREDITS。没有任何采样库时只能用合成器音色。')));
+}
+function codeDemoRow(kind){
+  const r=el('div',{className:'row'});r.appendChild(el('label',{},t('试听')));
+  const b=el('button',{},kind==='music'?t('渲一段示范配乐'):t('渲一串示范音效'));
+  const au=el('audio',{controls:true,preload:'none'});au.style.cssText='height:30px;width:280px;display:none';
+  const st=el('span',{style:'font-size:12px;color:var(--dim)'},'');
+  b.onclick=async()=>{
+    b.disabled=true;st.style.color='var(--dim)';st.textContent=t('渲染中…');
+    try{
+      const res=await api(`/api/v1/codevideo/audio-demo/${kind}`,{});
+      au.src=res.url;au.style.display='';au.play().catch(()=>{});
+      st.style.color='var(--green)';
+      st.textContent=kind==='music'?I18N.f('✓ {s} 秒 · 用的是 {i}',{s:res.duration_s,i:res.instrument&&res.instrument!=='synth'?res.instrument:t('合成器')})
+        :I18N.f('✓ {s} 秒',{s:res.duration_s});
+    }catch(e){st.style.color='var(--red)';st.textContent='✗ '+(e.message||e)}
+    b.disabled=false;
+  };
+  r.appendChild(b);r.appendChild(au);r.appendChild(st);
+  return r;
+}
+let CODE_PACK_TIMER=null;
+async function codePacksLoad(){
+  const box=$('#code-packs');if(!box)return;
+  let d;
+  try{d=await api('/api/v1/codevideo/packs')}catch(e){$('#code-packs-status').textContent=t('读取失败:')+e.message;return}
+  const rows=(d.packs||[]).filter(r=>r.kind==='instruments');
+  const busy=rows.some(r=>r.job&&r.job.status==='running');
+  box.innerHTML='';
+  rows.forEach(r=>{
+    const row=el('div',{className:'cpack'});
+    row.appendChild(el('span',{className:'nm'},t(CODE_PACK_LABELS[r.name]||r.name)));
+    row.appendChild(el('span',{className:'sz'},(r.size/1e6).toFixed(0)+' MB'));
+    const job=r.job||{};
+    const st=el('span',{className:'st'+(r.installed?' ok':'')},
+      job.status==='running'?I18N.f('下载中 {p}%',{p:job.size?Math.floor(job.done/job.size*100):0})
+      :r.installed?t('已下载'):job.status==='error'?t('下载失败'):t('未下载'));
+    if(job.status==='error')st.title=job.error||'';
+    row.appendChild(st);
+    if(r.installed){
+      const del=el('button',{},t('删除'));
+      del.onclick=async()=>{
+        const res=await fetch(`/api/v1/codevideo/packs/${r.name}`,{method:'DELETE'});
+        if(!res.ok)codePackErr((await res.json().catch(()=>({}))).detail||res.status);
+        codePacksLoad();
+      };
+      row.appendChild(del);
+    }else if(job.status!=='running'){
+      const dl=el('button',{},t('下载'));
+      dl.onclick=async()=>{try{await api(`/api/v1/codevideo/packs/${r.name}/fetch`,{});codePacksLoad()}catch(e){codePackErr(e.message||e)}};
+      row.appendChild(dl);
+    }
+    box.appendChild(row);
+  });
+  const n=rows.filter(r=>r.installed).length;
+  $('#code-packs-status').textContent=I18N.f('已下载 {n}/{m}',{n,m:rows.length});
+  clearTimeout(CODE_PACK_TIMER);
+  if(busy)CODE_PACK_TIMER=setTimeout(codePacksLoad,1500);
+}
+function codePackErr(msg){const st=$('#code-packs-status');st.style.color='var(--red)';st.textContent='✗ '+msg}
 
 async function testDigitalHuman(provider){
   const st=provider==='comfyui'?$('#digitalhuman-comfy-status'):$(`#dh-${provider}-status`);
@@ -1749,6 +1841,7 @@ function loadIntoForm(){
         ttsModeUI(p);
       });
     }
+    if(kind==='music'){$('#music-code-autofetch').checked=(c.code||{}).auto_fetch!==false;codePacksLoad()}
     const eff=c.provider&&SECTIONS[kind].providers.includes(c.provider)?c.provider:SECTIONS[kind].providers[0];
     showPanel(kind,eff);
     loadAgenticsModels(kind);
@@ -1800,7 +1893,7 @@ function loadIntoForm(){
   $('#sfx-el-model').value=pickOpt(SFX_EL_MODELS,sxEl.model);
   $('#sfx-fal-key').value=sfa.api_key||'';
   $('#sfx-fal-model').value=pickOpt(SFX_FAL_MODELS,sfa.model);
-  showSfxPanel(SFX_PROVIDERS.includes(sx.provider)?sx.provider:'openverse');
+  showSfxPanel(SFX_PROVIDERS.includes(sx.provider)?sx.provider:'code');
   const wm=(CFG.world||{}).marble||{};
   $('#world-marble-key').value=wm.api_key||'';
   fillSelect($('#world-marble-model'),WORLD_MODELS,wm.model||WORLD_MODELS[0][0],wm.custom_model);
@@ -1900,6 +1993,8 @@ function collect(){
       if(kind==='music')c.minimax.force_instrumental=$('#music-mm-instr').checked;
     }
     if(kind==='music')
+      c.code={auto_fetch:$('#music-code-autofetch').checked};
+    if(kind==='music')
       c.elevenlabs={api_key:$('#music-el-key').value.trim(),
         ...pickModel('#music-el-model','#music-el-custom'),
         force_instrumental:$('#music-el-instr').checked};
@@ -1935,7 +2030,8 @@ function collect(){
     openverse:{license:$('#sfx-ov-license').value,source:$('#sfx-ov-source').value,
                client_id:$('#sfx-ov-client-id').value.trim(),client_secret:$('#sfx-ov-client-secret').value.trim()},
     elevenlabs:{api_key:$('#sfx-el-key').value.trim(),model:$('#sfx-el-model').value},
-    fal:{api_key:$('#sfx-fal-key').value.trim(),model:$('#sfx-fal-model').value}};
+    fal:{api_key:$('#sfx-fal-key').value.trim(),model:$('#sfx-fal-model').value},
+    code:{}};
   out.world={provider:'marble',
     marble:{api_key:$('#world-marble-key').value.trim(),...pickModel('#world-marble-model','#world-marble-custom')}};
   // 生效渠道 = 当前选中的标签页(AgenticsLLM/本地模型/云端模型/OpenRouter)

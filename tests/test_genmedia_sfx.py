@@ -35,9 +35,10 @@ def _mp3(tmp_path, lead=0.4, tone=0.6, trail=0.5, volume=0.1) -> bytes:
     return out.read_bytes()
 
 
-def test_provider_follows_sfx_section_and_defaults_to_openverse(config):
+def test_provider_follows_sfx_section_and_defaults_to_code(config):
     config({})
-    cfg = g._sfx_config()
+    assert g._sfx_config() == {"provider": "code", "model": "code"}   # 新装 / 缺音效段 = 代码音效(2026-10-20)
+    cfg = g._sfx_config("openverse")
     assert cfg["provider"] == "openverse" and cfg["license"] == "cc0,pdm" and cfg["source"] == "freesound"
     assert cfg["client_id"] == "" and cfg["client_secret"] == ""
     config({"sfx": {"provider": "openverse", "openverse": {"license": "bogus", "source": "jamendo",

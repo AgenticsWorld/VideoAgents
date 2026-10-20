@@ -297,7 +297,7 @@ def test_genconfig_save_validates_openverse_settings(tmp_path, monkeypatch):
         return []
     monkeypatch.setattr(core, "_refresh_rh_wf_caches", no_refresh)
     cfg = core.load_genconfig()["sfx"]
-    assert cfg["provider"] == "openverse" and cfg["openverse"]["license"] == "cc0,pdm"
+    assert cfg["provider"] == "code" and cfg["openverse"]["license"] == "cc0,pdm"     # 新装默认代码音效(2026-10-20)
     saved = asyncio.run(core.api_genconfig_set({"sfx": {"provider": "fal", "openverse": {"license": "cc0,pdm,by"}}}))
     assert saved["config"]["sfx"]["provider"] == "fal" and saved["config"]["sfx"]["openverse"]["license"] == "cc0,pdm,by"
     for body in ({"sfx": {"provider": "freesound"}}, {"sfx": {"openverse": {"license": "by-sa"}}},

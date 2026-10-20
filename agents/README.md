@@ -3,7 +3,7 @@
 基于 `data/Novel_to_Video_MultiAgent_System.xlsx` 的总体规划落地:91 个 Agent、13 个类别。
 每个 Agent 一个目录,目录下的 `SOUL.md` 定义它的职责、输入输出、工作指令格式与质量标准。
 
-- **流程权威**:`WORKFLOW.md`(人读)/ `workflow.yaml`(orchestrator 执行输入);音频配画 / 数字人 / 混剪三种项目类型的 DAG 在 `workflows/`(WORKFLOW.md §11)
+- **流程权威**:`WORKFLOW.md`(人读)/ `workflow.yaml`(orchestrator 执行输入);音频配画 / 数字人 / 混剪 / 演示视频四种项目类型的 DAG 在 `workflows/`(WORKFLOW.md §11)
 - **项目数据**:`data/projects/<slug>/`(布局见 WORKFLOW.md §2)
 
 ## 目录结构(编号 = 大致流水线顺序;实际依赖以 DAG 为准)
@@ -21,11 +21,12 @@
 | `08-video-gen/` | 视频生成 | 8 | prompt, image-generation, character-consistency, video-generation, lip-sync, animation, upscale, shot-plates |
 | `09-audio/` | 音频 | 7 | voice-generation, narrator, music, sound-effect, ambience, audio-mixing, audio-transcription |
 | `10-editing/` | 剪辑 | 8 | edit, transition, subtitle, caption, title, thumbnail, post-finishing, grade-planner |
-| `11-qa/` | 审核 | 11 | logic-qa, character-consistency-qa, timeline-qa, world-consistency-qa, visual-qa, audio-qa, content-safety, copyright;项目类型专属:av-sync-qa(音频配画)、mashup-qa(混剪)、digital-human-sync-qa(数字人) |
+| `11-qa/` | 审核 | 12 | logic-qa, character-consistency-qa, timeline-qa, world-consistency-qa, visual-qa, audio-qa, content-safety, copyright;项目类型专属:av-sync-qa(音频配画)、mashup-qa(混剪)、digital-human-sync-qa(数字人)、code-video-qa(演示视频) |
 | `12-publishing/` | 发布 | 4 | platform-adapter, seo, metadata, publisher |
 | `15-audio-video/` | 音频配画(项目类型 audio-to-video) | 5 | audio-ingest, transcript-aligner, era-researcher, visual-scripter, timeline-planner |
 | `16-mashup/` | 混剪(项目类型 mashup) | 6 | audio-ingest, transcript-aligner, shot-designer, footage-scout, footage-curator, clip-cutter |
 | `17-digital-human/` | 数字人(项目类型 digital-human) | 5 | dialogue-ingest, speaker-aligner, avatar-director, avatar-generator, dialogue-editor |
+| `18-code-video/` | 演示视频(项目类型 code-video) | 4 | film-director, scene-coder, code-composer, sound-designer |
 
 ## SOUL.md 统一结构
 
@@ -48,7 +49,7 @@
 
 ## 插件扩展
 
-15/16/17 三个类别原是同名插件,2026-10-20 并入本目录成为项目类型(WORKFLOW.md §11);13/14 号段留给插件。
+15/16/17 三个类别原是同名插件,2026-10-20 并入本目录成为项目类型;18 是同日新增的演示视频项目类型(WORKFLOW.md §11);13/14 号段留给插件。
 主流程之外的其余业务(如衍生小说创作)不进本目录,做成**声明式插件**放仓库根 `plugins/<name>/`:
 plugin.json(manifest)+ agents/…/SOUL.md(同一模板)+ 可选 workflows/*.yaml(独立 DAG)。
 复制目录即安装,启停在 Web 控制台 ⚙️ 设置 →「插件」页;机制与纪律见 `WORKFLOW.md` §10,

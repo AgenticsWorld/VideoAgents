@@ -51,9 +51,9 @@ VideoAgents is an open-source, file-based multi-agent production system for turn
 
 **If a video model is a _camera_, VideoAgents is the _studio_.**
 
-113 specialist agents in 16 departments — story, worldbuilding, characters, creatures, scenes, art, directing, video generation, audio, editing, QA, publishing, plus dedicated audio-to-video, mashup and digital-human teams — work through a declarative workflow, and stop at human sign-off gates so the creative direction stays yours. It runs on your machine: the novel, the project files and the generated media stay in a local workspace.
+118 specialist agents in 17 departments — story, worldbuilding, characters, creatures, scenes, art, directing, video generation, audio, editing, QA, publishing, plus dedicated audio-to-video, mashup, digital-human and code-video teams — work through a declarative workflow, and stop at human sign-off gates so the creative direction stays yours. It runs on your machine: the novel, the project files and the generated media stay in a local workspace.
 
-A new project starts by picking its type: 🎬 film & series (a novel adapted into episodes, the default), 🎙️ audio to video (generated pictures for a narration recording), 🧑‍💼 digital human (portrait photos plus a conversation recording become lip-synced speaker video) or ✂️ mashup (shots picked from ready-made clips in your local footage library).
+A new project starts by picking its type: 🎬 film & series (a novel adapted into episodes, the default), 🎙️ audio to video (generated pictures for a narration recording), 🧑‍💼 digital human (portrait photos plus a conversation recording become lip-synced speaker video), ✂️ mashup (shots picked from ready-made clips in your local footage library) or 🖥️ code video (no video model: agents write the film as code in one of 43 styles — a web page rendered frame by frame, with an original score written in code and procedural sound).
 
 |        | Step                  | What happens                                                                                                              |
 | ------ | --------------------- | ------------------------------------------------------------------------------------------------------------------------- |
@@ -75,8 +75,8 @@ Bring your own engines and providers. Each modality is configured on its own, so
 | 🖼 **Image**            | Agentics · OpenRouter · Volcano Engine · BytePlus · Fal · RunningHub · ComfyUI                                                  |
 | 🎬 **Video**            | Agentics · OpenRouter · Volcano Engine · BytePlus · Fal · RunningHub · ComfyUI                                                  |
 | 🎙 **Voice / TTS**      | Agentics · OpenRouter · Volcano Engine · ElevenLabs · MiniMax · ComfyUI                                                         |
-| 🎵 **Music**            | Agentics · OpenRouter · ElevenLabs · ComfyUI                                                                                    |
-| 🔊 **Sound effects**    | Openverse · ElevenLabs · Fal                                                                                                    |
+| 🎵 **Music**            | Code composition · Agentics · OpenRouter · ElevenLabs · ComfyUI                                                                 |
+| 🔊 **Sound effects**    | Code-synthesized · Openverse · ElevenLabs · Fal                                                                                 |
 | 🧑 **Digital human**    | Agentics · HeyGen · Kling AI · ComfyUI                                                                                          |
 | 🔍 **Upscale**          | FFmpeg · Agentics · Volcano Engine · MiniMax · ComfyUI                                                                          |
 | 🌍 **World model**      | World Labs                                                                                                                      |

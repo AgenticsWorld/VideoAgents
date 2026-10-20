@@ -135,8 +135,9 @@ const PHASE_NAMES={p0:'摄入与立项',p1:'剧情理解',p2:'世界圣经',p3:'
   // 项目类型 DAG(agents/workflows/*.yaml 的 phase 名;服务端 _wf_phase_of 按 av/mx/dh 前缀归阶段)
   av0:'音频立项',av1:'设定与美术',av2:'画面规划',av3:'视觉生成',av4:'剪辑与封装',av5:'终审',
   mx0:'音频立项与分镜',mx1:'素材检索与选片',mx1m:'选片合并与确认',mx2:'下载与切片',mx3:'剪辑封装',mx4:'终审',
-  dh0:'输入与时间轴',dh1:'数字人导演',dh2:'片段生成',dh3:'合成与终审'};
-const PHASE_ORDER=['p','av','mx','dh'];   // 泳道顺序:主流程 → 各项目类型(av/mx/dh)→ 其它 → 加派任务
+  dh0:'输入与时间轴',dh1:'数字人导演',dh2:'片段生成',dh3:'合成与终审',
+  cv0:'立项与风格',cv1:'导演方案与故事板',cv2:'旁白与配乐',cv3:'画面编程与渲染',cv4:'混音与成片',cv5:'终审'};
+const PHASE_ORDER=['p','av','mx','dh','cv'];   // 泳道顺序:主流程 → 各项目类型(av/mx/dh/cv)→ 其它 → 加派任务
 const DONE=new Set(['done','passed','passed_human_override']);
 const SKIP=new Set(['skipped','cancelled','waived']);
 const STRUCT=new Set(['expanded','template']);   // 结构节点:已扇出的模板,本身不执行
@@ -267,9 +268,9 @@ function render(){
     if(!phases.has(u.phase))phases.set(u.phase,[]);
     phases.get(u.phase).push(u);
   }
-  const rank=ph=>{   // [前缀序, 编号, 后缀]:p0..p11 → av0..av5 → mx0, mx1, mx1m.. → dh0.. → 其它 → extra
+  const rank=ph=>{   // [前缀序, 编号, 后缀]:p0..p11 → av0..av5 → mx0, mx1, mx1m.. → dh0.. → cv0.. → 其它 → extra
     if(ph==='extra')return [PHASE_ORDER.length+1,0,''];
-    const m=/^(p|av|mx|dh)(\d+)(\w*)$/.exec(ph);
+    const m=/^(p|av|mx|dh|cv)(\d+)(\w*)$/.exec(ph);
     return m?[PHASE_ORDER.indexOf(m[1]),+m[2],m[3]]:[PHASE_ORDER.length,0,ph];
   };
   const order=[...phases.keys()].sort((a,b)=>{

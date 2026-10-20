@@ -1,0 +1,400 @@
+{
+ "_categories": {
+  "Hand-drawn & Painting": "Dessin et peinture",
+  "East Asian Traditions": "Traditions d'Asie de l'Est",
+  "Print & Printmaking": "Impression et estampe",
+  "Graphic & Type": "Graphisme et typographie",
+  "Information & Keynote": "Information et keynote",
+  "Cartoon & Anime": "Dessin animé et anime",
+  "Games": "Jeux vidéo",
+  "Cinema & Eras": "Cinéma et époques",
+  "Materials & 3D": "Matières et 3D"
+ },
+ "crayon-book": {
+  "name": "Album aux crayons de cire",
+  "line": "La lune n'arrive pas à dormir, alors une petite fille grimpe sur le toit pour lui chanter une berceuse.",
+  "uses": [
+   "Albums jeunesse",
+   "Histoires du soir",
+   "Apprentissage des enfants"
+  ]
+ },
+ "watercolor": {
+  "name": "Aquarelle",
+  "line": "Suivre la pluie du cœur rouge du désert australien jusqu'à sa côte verdoyante, en une seule promenade peinte sans coupe.",
+  "uses": [
+   "Documentaires nature",
+   "Voyage",
+   "Vulgarisation scientifique"
+  ]
+ },
+ "ink-wash": {
+  "name": "Lavis d'encre chinois",
+  "line": "Un épéiste traverse le fleuve en marchant sur l'eau et fend le courant d'un seul coup de lame.",
+  "uses": [
+   "Wuxia",
+   "Marques culturelles",
+   "Poésie"
+  ]
+ },
+ "impasto": {
+  "name": "Peinture à l'huile en empâtement",
+  "line": "Sur une place grise et pluvieuse, un parapluie rouge s'ouvre, et une valse peint toute la place en couleurs.",
+  "uses": [
+   "Clips musicaux",
+   "Art et culture",
+   "Publicités émotionnelles"
+  ]
+ },
+ "one-line": {
+  "name": "Dessin d'un seul trait",
+  "line": "Une ligne continue dessine toute une vie, puis le stylo passe à un enfant.",
+  "uses": [
+   "Récits de marque",
+   "Étapes de la vie",
+   "Publicités minimalistes"
+  ]
+ },
+ "whiteboard": {
+  "name": "Explication au tableau blanc",
+  "line": "Comment votre téléphone sait où vous êtes : GPS, horloges atomiques et les 38 microsecondes que la relativité ajoute chaque jour.",
+  "uses": [
+   "Vidéos explicatives",
+   "Cours en ligne",
+   "Sciences"
+  ]
+ },
+ "urban-sketch": {
+  "name": "Urban sketch · plume et lavis",
+  "line": "Un parc qui n'est qu'un croquis à la plume ; partout où le vent emporte son chapeau de paille, la couleur suit.",
+  "uses": [
+   "Ville et voyage",
+   "Architecture",
+   "Marques lifestyle"
+  ]
+ },
+ "shadow-puppet": {
+  "name": "Théâtre d'ombres",
+  "line": "Dix soleils brûlent la terre jusqu'à ce que l'archer Hou Yi bande son arc, une histoire racontée avec des marionnettes de cuir sur un écran éclairé.",
+  "uses": [
+   "Mythes et folklore",
+   "Patrimoine",
+   "Fêtes"
+  ]
+ },
+ "ukiyoe": {
+  "name": "Ukiyo-e",
+  "line": "Un voyageur marche vers une montagne lointaine ; chaque plan est une estampe sur bois, jusqu'à une grande vague finale.",
+  "uses": [
+   "Voyage",
+   "Culture japonaise",
+   "Poésie"
+  ]
+ },
+ "papercut-red": {
+  "name": "Papier découpé rouge",
+  "line": "La veille du Nouvel An lunaire, la bête Nian arrive en ville, et le grand papier découpé d'une fillette illumine le village pour la faire fuir.",
+  "uses": [
+   "Nouvel An lunaire",
+   "Vœux festifs",
+   "Contes populaires"
+  ]
+ },
+ "paper-lantern": {
+  "name": "Boîte lumineuse en papier découpé",
+  "line": "Un seul gâteau de lune raconte la fête de la Mi-Automne, entre retrouvailles et nostalgie, dans une boîte lumineuse en papier découpé.",
+  "uses": [
+   "Fêtes",
+   "Marques de cadeaux",
+   "Récits culturels"
+  ]
+ },
+ "risograph": {
+  "name": "Impression Risograph",
+  "line": "Une balade à vélo un dimanche matin à travers la ville — boulangerie, parc, bord de rivière — en deux encres mal repérées.",
+  "uses": [
+   "Marques indépendantes",
+   "Fanzines",
+   "Lifestyle"
+  ]
+ },
+ "halftone-dossier": {
+  "name": "Dossier en demi-teintes",
+  "line": "Un gros chat roux est jugé pour avoir testé la gravité et fait du parkour à 4 h du matin, puis ressort libre.",
+  "uses": [
+   "Humour",
+   "Contenus animaliers",
+   "Vidéos courtes pour les réseaux"
+  ]
+ },
+ "woodcut": {
+  "name": "Gravure sur bois",
+  "line": "Un village passe tout un hiver à fondre une cloche ; la première fois qu'elle sonne, la neige s'arrête.",
+  "uses": [
+   "Contes populaires",
+   "Marques artisanales",
+   "Bandes-annonces de livres"
+  ]
+ },
+ "engraving": {
+  "name": "Gravure sur cuivre",
+  "line": "Une planche d'histoire naturelle se grave d'elle-même : le burin entaille le cuivre, l'abeille prend forme trait par trait, et un lavis d'aquarelle lui donne vie.",
+  "uses": [
+   "Cartels de musée",
+   "Vulgarisation scientifique",
+   "Patrimoine de marque"
+  ]
+ },
+ "silkscreen-poster": {
+  "name": "Affiche de voyage sérigraphiée",
+  "line": "Trois affiches de sentiers sont sérigraphiées une encre à la fois, puis gravies en un long plan-séquence de midi au crépuscule.",
+  "uses": [
+   "Guides de sentiers et de destinations",
+   "Promotion touristique",
+   "Affiches d'événements"
+  ]
+ },
+ "swiss-motion": {
+  "name": "Motion design suisse",
+  "line": "Une affiche de concert se met en page d'elle-même selon cinq règles du design suisse ; la cinquième consiste à en enfreindre une seule.",
+  "uses": [
+   "Identité de marque",
+   "Événements",
+   "Enseignement du design"
+  ]
+ },
+ "spy-titles": {
+  "name": "Générique d'espionnage années 60",
+  "line": "Le générique d'un film d'espionnage imaginaire de 1964 : la poursuite d'une clé volée, jusqu'à ce que les formes s'assemblent en titre.",
+  "uses": [
+   "Génériques",
+   "Ouvertures d'événements",
+   "Bandes-annonces"
+  ]
+ },
+ "art-deco": {
+  "name": "Art déco",
+  "line": "Un grand hôtel, 1930 : un groom file entre ascenseurs et portes tambour pour livrer une lettre avant minuit.",
+  "uses": [
+   "Luxe et hôtellerie",
+   "Galas",
+   "Invitations"
+  ]
+ },
+ "blueprint": {
+  "name": "Plan technique",
+  "line": "Le plan d'un inventeur dessine, éclate et assemble une machine à attraper les nuages, et son nuage de révision se met à pleuvoir.",
+  "uses": [
+   "Ingénierie",
+   "Lancements de matériel",
+   "Vulgarisation technologique"
+  ]
+ },
+ "stained-glass": {
+  "name": "Vitrail",
+  "line": "La lumière du soleil traverse un vitrail de cathédrale de l'aube au crépuscule, éveillant chaque panneau d'une histoire de chevalier et de dragon.",
+  "uses": [
+   "Légendes",
+   "Patrimoine",
+   "Contes des fêtes"
+  ]
+ },
+ "pictogram-motion": {
+  "name": "Pictogrammes animés",
+  "line": "Les 43 sports des Jeux asiatiques 2026 en pictogrammes géométriques calés sur le rythme.",
+  "uses": [
+   "Événements sportifs",
+   "Identité visuelle",
+   "Ouvertures d'événements"
+  ]
+ },
+ "ascii-crt": {
+  "name": "Terminal ASCII / CRT",
+  "line": "L'IA d'une base lunaire se réveille après quarante ans grâce à un signal venu de la Terre, et répond en dessinant « maison » avec des caractères.",
+  "uses": [
+   "Outils pour développeurs",
+   "Science-fiction",
+   "Marques tech"
+  ]
+ },
+ "dataviz": {
+  "name": "Data storytelling",
+  "line": "Cent ans de températures estivales, où le graphique raconte lui-même l'histoire.",
+  "uses": [
+   "Journalisme de données",
+   "Rapports",
+   "Climat et science"
+  ]
+ },
+ "iso-infographic": {
+  "name": "Infographie isométrique",
+  "line": "Le voyage d'un café de la plantation jusqu'à vos mains, à travers un seul monde isométrique.",
+  "uses": [
+   "Explications de processus",
+   "Chaînes d'approvisionnement",
+   "Rapports annuels"
+  ]
+ },
+ "dark-keynote": {
+  "name": "Keynote tech sombre",
+  "line": "Film de lancement de Tidy, une app fictive : un curseur enseveli remet d'un coup des centaines de fenêtres en place.",
+  "uses": [
+   "Lancements de produits",
+   "SaaS",
+   "Keynotes"
+  ]
+ },
+ "living-screencast": {
+  "name": "Screencast vivant",
+  "line": "Clawd, la mascotte pixel de Claude Code, saute du terminal dans l'app Claude et met en scène le mode plan, les commentaires de diff et les autovérifications dans un screencast en un seul plan.",
+  "uses": [
+   "Tutoriels produit",
+   "Lancements de fonctionnalités",
+   "Onboarding"
+  ]
+ },
+ "hologram-hud": {
+  "name": "HUD holographique de SF",
+  "line": "Un vélo électrique est scanné en hologramme ; des cadres de visée se verrouillent sur la batterie, le moteur et les freins, et chaque caractéristique défile jusqu'à sa valeur.",
+  "uses": [
+   "Présentations de fiches techniques",
+   "Vidéos de lancement et de financement participatif",
+   "Écrans de salons"
+  ]
+ },
+ "rubber-hose": {
+  "name": "Cartoon rubber hose des années 1930",
+  "line": "Une tasse de café poursuit un sucre en fuite dans toute la cuisine, façon dessin animé des années 1930.",
+  "uses": [
+   "Alimentation et boissons",
+   "Publicités rétro",
+   "Enfants"
+  ]
+ },
+ "cel-anime-80s": {
+  "name": "Anime sur celluloïd des années 80",
+  "line": "Une coursière traverse à vélo une ville néon trempée de pluie pour livrer une cassette avant le lancement de l'aube.",
+  "uses": [
+   "Clips musicaux",
+   "Bandes-annonces de jeux",
+   "Nostalgie"
+  ]
+ },
+ "scifi-toon": {
+  "name": "Sitcom animée de SF",
+  "line": "Un génie blasé ouvre un portail juste pour acheter un café et dégringole à travers des univers de plus en plus étranges.",
+  "uses": [
+   "Comédie",
+   "Marques tech",
+   "Vidéos courtes pour les réseaux"
+  ]
+ },
+ "midcentury-toon": {
+  "name": "Cartoon mid-century",
+  "line": "Un robot aspirateur installé en trois étapes, raconté comme un film éducatif des années 1950 : poser la base, connecter l'app, appuyer sur démarrer.",
+  "uses": [
+   "Guides d'installation",
+   "Explications du centre d'aide",
+   "Tutoriels pas à pas"
+  ]
+ },
+ "pixel-rpg": {
+  "name": "RPG pixel 16 bits",
+  "line": "Devant la porte du boss final, un héros sauvegarde sa partie, et l'écran de sauvegarde retrace tout le voyage.",
+  "uses": [
+   "Bandes-annonces de jeux",
+   "Récapitulatifs",
+   "Nostalgie"
+  ]
+ },
+ "hd-2d": {
+  "name": "HD-2D",
+  "line": "Le phare s'éteint ; une fillette porte la dernière flamme à travers une forêt nocturne et jusqu'en haut des falaises battues par la tempête.",
+  "uses": [
+   "Bandes-annonces de jeux",
+   "Fantasy",
+   "Films narratifs"
+  ]
+ },
+ "microgame": {
+  "name": "Frénésie de micro-jeux",
+  "line": "Un cadet maladroit survit à un camp d'entraînement de cinq secondes, de plus en plus vite, jusqu'au boss : l'atterrissage sur Terre.",
+  "uses": [
+   "Bandes-annonces de jeux",
+   "Onboarding",
+   "Vidéos courtes pour les réseaux"
+  ]
+ },
+ "game-show": {
+  "name": "Jeu télévisé en flat design",
+  "line": "L'histoire de l'IA en jeu de rythme : les modèles entrent en scène en rythme, et un bulletin de notes clôt le spectacle.",
+  "uses": [
+   "Chronologies tech",
+   "Rétrospectives de l'année",
+   "Émissions de divertissement"
+  ]
+ },
+ "silent-film": {
+  "name": "Cinéma muet des années 1920",
+  "line": "Un apprenti boulanger poursuit une miche en fuite dans la descente, puis la rompt en deux pour une fillette affamée.",
+  "uses": [
+   "Comédie",
+   "Marques rétro",
+   "Récit sans paroles"
+  ]
+ },
+ "backrooms": {
+  "name": "Found footage liminal",
+  "line": "Une nouvelle recrue de l'équipe de nuit filme sa première nuit dans un bureau jaune sans fin, en suivant les règles affichées au mur.",
+  "uses": [
+   "Horreur",
+   "Mystère et ARG",
+   "Teasers de jeux"
+  ]
+ },
+ "brick-toy": {
+  "name": "Jouet en briques",
+  "line": "Un astronaute en briques construit une fusée avec des pièces détachées et s'envole vers une lune en briques.",
+  "uses": [
+   "Jouets et enfants",
+   "Montages de produits",
+   "Espace"
+  ]
+ },
+ "paper-popup": {
+  "name": "Livre pop-up",
+  "line": "Un livre pop-up s'ouvre sur un bureau ; un lutin nommé Pip part à l'aventure dans des mondes de papier et saute dans le nôtre.",
+  "uses": [
+   "Livres pour enfants",
+   "Bandes-annonces de jeux",
+   "Films narratifs"
+  ]
+ },
+ "tilt-shift": {
+  "name": "Miniature tilt-shift",
+  "line": "L'heure de pointe du matin dans une ville qui ressemble à une maquette : circulation, trains et personnages minuscules.",
+  "uses": [
+   "Promotion de villes",
+   "Immobilier",
+   "Transports"
+  ]
+ },
+ "lowpoly-island": {
+  "name": "Île isométrique low poly",
+  "line": "Une île et son village poussent tuile après tuile dans une mer vide, chaque tuile une note, jusqu'à une nuit étoilée.",
+  "uses": [
+   "Bandes-annonces de jeux",
+   "Création d'univers",
+   "Contenus apaisants"
+  ]
+ },
+ "glass-product": {
+  "name": "Rendu produit en verre",
+  "line": "Déballage et gros plans d'Aura, des écouteurs en verre fictifs, sous des balayages de lumière en bande et des caustiques.",
+  "uses": [
+   "Lancements de produits",
+   "Électronique grand public",
+   "Beauté"
+  ]
+ }
+}

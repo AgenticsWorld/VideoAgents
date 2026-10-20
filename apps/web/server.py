@@ -33,6 +33,10 @@ WEB_PORT = int(os.environ.get("VIDEOAGENTS_WEB_PORT", os.environ.get("VIDEOAGENT
 # VIDEOAGENTS_DRAW_PORT=0 可禁用。
 DRAW_HOST = os.environ.get("VIDEOAGENTS_DRAW_HOST", "0.0.0.0")
 DRAW_PORT = int(os.environ.get("VIDEOAGENTS_DRAW_PORT", str(WEB_PORT + 1)))
+# 演示视频「代码预览」页侧车(2026-10-20,modules/codevideo/serve.py 预览模式):Agent 写的片子网页单独一个源(端口)服务,
+# 与控制台不同源、带 CSP(只能连自己),页面代码碰不到控制台接口;绑定与控制台相同的地址。VIDEOAGENTS_FILM_PORT=0 可禁用。
+FILM_PORT = int(os.environ.get("VIDEOAGENTS_FILM_PORT", str(WEB_PORT + 2)))
+FILM_SERVER = None
 API_PORT = int(os.environ.get("VIDEOAGENTS_API_PORT", "8640"))
 API_ORIGIN = os.environ.get("VIDEOAGENTS_API_URL", f"http://127.0.0.1:{API_PORT}").rstrip("/")
 START_API = os.environ.get("VIDEOAGENTS_START_API", "" if os.environ.get("VIDEOAGENTS_API_URL") else "1").lower() in {
@@ -53,7 +57,7 @@ HOP_HEADERS = {
 }
 PREVIEW_FILES = {
     "refs", "characters", "props", "creatures", "scenes", "script", "board", "storyboard", "videos", "workflow", "worldview",
- "post", "director", "canvas"}
+ "post", "director", "canvas", "code"}
 
 # 直连本机 API,绕过系统/环境代理(macOS 上 urllib 会自动读取系统代理设置)。
 _DIRECT_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -295,6 +299,7 @@ async def runtime_info():
     return {
         "web": {"host": WEB_HOST, "port": WEB_PORT, "origin": f"http://{WEB_HOST}:{WEB_PORT}"},
         "api": {"port": API_PORT, "origin": API_ORIGIN},
+        "film": {"port": FILM_SERVER.port if FILM_SERVER else 0},
     }
 
 
@@ -598,6 +603,24 @@ async def draw_sessions_lan(token: str, request: Request):
 draw_app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
+def _start_film_server() -> None:
+    """代码预览侧车:/@film/<项目>/ → data/projects/<项目>/codevideo/;起不来(端口占用等)只告警,不影响控制台。"""
+    global FILM_SERVER
+    if not FILM_PORT:
+        return
+    try:
+        if str(ROOT) not in sys.path:
+            sys.path.insert(0, str(ROOT))
+        from modules.codevideo.serve import FilmServer
+        try:
+            FILM_SERVER = FilmServer(projects=DATA_DIR / "projects", preview=True, host=WEB_HOST, port=FILM_PORT).start()
+        except OSError:      # 端口被占:改用系统分配的空闲端口(预览页从 /api/v1/runtime 取实际端口)
+            FILM_SERVER = FilmServer(projects=DATA_DIR / "projects", preview=True, host=WEB_HOST, port=0).start()
+        print(f"VideoAgents code preview (films) → http://{WEB_HOST}:{FILM_SERVER.port}/@film/<project>/")
+    except Exception as error:  # noqa: BLE001
+        print(f"VideoAgents code preview server not started ({error})", file=sys.stderr)
+
+
 def main() -> None:
     global DRAW_SERVER, DRAW_THREAD
     if not STATIC_DIR.is_dir():
@@ -612,6 +635,7 @@ def main() -> None:
             target=DRAW_SERVER.run, daemon=True, name="draw-lan")
         DRAW_THREAD.start()
         print(f"VideoAgents Draw canvas (LAN) → http://{DRAW_HOST}:{DRAW_PORT}/draw/<token>")
+    _start_film_server()
     print(f"VideoAgents WebUI → http://{WEB_HOST}:{WEB_PORT} (API: {API_ORIGIN})")
     config = uvicorn.Config(
         app, host=WEB_HOST, port=WEB_PORT, log_level="info",

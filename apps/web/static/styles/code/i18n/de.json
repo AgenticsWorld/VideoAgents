@@ -1,0 +1,400 @@
+{
+ "_categories": {
+  "Hand-drawn & Painting": "Handgezeichnet & Malerei",
+  "East Asian Traditions": "Ostasiatische Traditionen",
+  "Print & Printmaking": "Druck & Druckgrafik",
+  "Graphic & Type": "Grafik & Typografie",
+  "Information & Keynote": "Information & Keynote",
+  "Cartoon & Anime": "Cartoon & Anime",
+  "Games": "Spiele",
+  "Cinema & Eras": "Kino & Epochen",
+  "Materials & 3D": "Materialien & 3D"
+ },
+ "crayon-book": {
+  "name": "Wachsmalstift-Bilderbuch",
+  "line": "Der Mond kann nicht schlafen, also klettert ein kleines Mädchen aufs Dach und singt ihm ein Schlaflied.",
+  "uses": [
+   "Bilderbücher",
+   "Gutenachtgeschichten",
+   "Lernen für Kinder"
+  ]
+ },
+ "watercolor": {
+  "name": "Aquarell",
+  "line": "Dem Regen folgen: vom roten Wüstenherz Australiens bis zur grünen Küste, in einem einzigen ununterbrochenen gemalten Gang.",
+  "uses": [
+   "Naturdokumentation",
+   "Reisen",
+   "Wissenschaft erklärt"
+  ]
+ },
+ "ink-wash": {
+  "name": "Chinesische Tuschmalerei",
+  "line": "Ein Schwertkämpfer überquert den Fluss auf dem Wasser und teilt die Strömung mit einem einzigen Hieb.",
+  "uses": [
+   "Wuxia",
+   "Kulturmarken",
+   "Poesie"
+  ]
+ },
+ "impasto": {
+  "name": "Impasto-Ölmalerei",
+  "line": "Auf einem grauen, verregneten Platz öffnet sich ein roter Schirm, und ein Walzer malt den ganzen Platz bunt.",
+  "uses": [
+   "Musikvideos",
+   "Kunst & Kultur",
+   "Emotionale Werbung"
+  ]
+ },
+ "one-line": {
+  "name": "One-Line-Zeichnung",
+  "line": "Eine ununterbrochene Linie zeichnet ein ganzes Leben, dann geht der Stift an ein Kind über.",
+  "uses": [
+   "Markengeschichten",
+   "Lebensmeilensteine",
+   "Minimalistische Werbung"
+  ]
+ },
+ "whiteboard": {
+  "name": "Whiteboard-Erklärvideo",
+  "line": "Woher dein Handy weiß, wo du bist: GPS, Atomuhren und die 38 Mikrosekunden, die die Relativität jeden Tag hinzufügt.",
+  "uses": [
+   "Erklärvideos",
+   "Onlinekurse",
+   "Wissenschaft"
+  ]
+ },
+ "urban-sketch": {
+  "name": "Urban Sketch · Feder & Lavierung",
+  "line": "Ein Park, der nur eine Federskizze ist; wohin der Wind ihren Strohhut trägt, folgt die Farbe.",
+  "uses": [
+   "Stadt & Reisen",
+   "Architektur",
+   "Lifestyle-Marken"
+  ]
+ },
+ "shadow-puppet": {
+  "name": "Schattenspiel",
+  "line": "Zehn Sonnen versengen die Erde, bis der Bogenschütze Hou Yi seinen Bogen spannt – erzählt mit Lederfiguren vor einer beleuchteten Leinwand.",
+  "uses": [
+   "Mythen & Sagen",
+   "Kulturerbe",
+   "Feste"
+  ]
+ },
+ "ukiyoe": {
+  "name": "Ukiyo-e",
+  "line": "Ein Reisender wandert auf einen fernen Berg zu; jede Einstellung ist ein Holzschnitt, und am Ende kommt eine große Welle.",
+  "uses": [
+   "Reisen",
+   "Japanische Kultur",
+   "Poesie"
+  ]
+ },
+ "papercut-red": {
+  "name": "Roter Scherenschnitt",
+  "line": "Am Vorabend des Mondneujahrs kommt das Ungeheuer Nian in den Ort, und der riesige Scherenschnitt eines Mädchens erhellt das Dorf und verjagt es.",
+  "uses": [
+   "Mondneujahr",
+   "Festtagsgrüße",
+   "Volksmärchen"
+  ]
+ },
+ "paper-lantern": {
+  "name": "Scherenschnitt-Leuchtkasten",
+  "line": "Ein einziger Mondkuchen erzählt in einem leuchtenden Scherenschnitt-Leuchtkasten die Geschichte des Mondfests von Wiedersehen und Sehnsucht.",
+  "uses": [
+   "Feste",
+   "Geschenkmarken",
+   "Kulturgeschichten"
+  ]
+ },
+ "risograph": {
+  "name": "Risograph-Druck",
+  "line": "Eine Radtour am Sonntagmorgen durch die Stadt – Bäckerei, Park, Flussufer – in zwei leicht versetzt gedruckten Farben.",
+  "uses": [
+   "Indie-Marken",
+   "Zines",
+   "Lifestyle"
+  ]
+ },
+ "halftone-dossier": {
+  "name": "Halbton-Dossier",
+  "line": "Ein dicker orangefarbener Kater steht vor Gericht, weil er die Schwerkraft getestet und um 4 Uhr morgens Parkour gemacht hat – und wird freigesprochen.",
+  "uses": [
+   "Humor",
+   "Haustier-Content",
+   "Social-Media-Clips"
+  ]
+ },
+ "woodcut": {
+  "name": "Holzschnitt",
+  "line": "Ein Dorf verbringt einen ganzen Winter damit, eine Glocke zu gießen; als sie zum ersten Mal läutet, hört der Schnee auf.",
+  "uses": [
+   "Volksmärchen",
+   "Handwerksmarken",
+   "Buchtrailer"
+  ]
+ },
+ "engraving": {
+  "name": "Kupferstich",
+  "line": "Eine naturkundliche Bildtafel sticht sich selbst: Der Grabstichel schneidet ins Kupfer, die Biene entsteht Linie für Linie, und eine Aquarelllavierung erweckt sie zum Leben.",
+  "uses": [
+   "Museumsschilder",
+   "Wissenschaft erklärt",
+   "Markentradition"
+  ]
+ },
+ "silkscreen-poster": {
+  "name": "Siebdruck-Reiseplakat",
+  "line": "Drei Wanderwegplakate werden Farbe für Farbe im Siebdruck gedruckt und dann in einer langen Einstellung von Mittag bis zur Dämmerung erwandert.",
+  "uses": [
+   "Wanderweg- & Reiseziel-Guides",
+   "Tourismuswerbung",
+   "Veranstaltungsplakate"
+  ]
+ },
+ "swiss-motion": {
+  "name": "Schweizer Motion Graphics",
+  "line": "Ein Konzertplakat gestaltet sich selbst nach fünf Regeln des Schweizer Designs; die fünfte lautet, genau eine davon zu brechen.",
+  "uses": [
+   "Markenidentität",
+   "Veranstaltungen",
+   "Designausbildung"
+  ]
+ },
+ "spy-titles": {
+  "name": "60er-Agentenfilm-Vorspann",
+  "line": "Vorspann eines erfundenen Agentenfilms von 1964: eine Jagd nach einem gestohlenen Schlüssel, bis sich die Formen zum Titel fügen.",
+  "uses": [
+   "Vorspanne",
+   "Event-Openings",
+   "Trailer"
+  ]
+ },
+ "art-deco": {
+  "name": "Art déco",
+  "line": "Ein Grandhotel im Jahr 1930: Ein Page hetzt durch Aufzüge und Drehtüren, um vor Mitternacht einen Brief zuzustellen.",
+  "uses": [
+   "Luxus & Hotellerie",
+   "Galas",
+   "Einladungen"
+  ]
+ },
+ "blueprint": {
+  "name": "Blaupause",
+  "line": "Die Blaupause eines Erfinders zeichnet, zerlegt und montiert eine Wolkenfangmaschine – und ihre Revisionswolke beginnt zu regnen.",
+  "uses": [
+   "Ingenieurwesen",
+   "Hardware-Launches",
+   "Technik erklärt"
+  ]
+ },
+ "stained-glass": {
+  "name": "Buntglasfenster",
+  "line": "Sonnenlicht wandert von morgens bis abends über ein Kathedralenfenster und erweckt Feld für Feld eine Geschichte von Ritter und Drache.",
+  "uses": [
+   "Legenden",
+   "Kulturerbe",
+   "Festtagsgeschichten"
+  ]
+ },
+ "pictogram-motion": {
+  "name": "Piktogramm-Animation",
+  "line": "Alle 43 Sportarten der Asienspiele 2026 als taktgenaue geometrische Piktogramme.",
+  "uses": [
+   "Sportevents",
+   "Visuelle Identität",
+   "Event-Openings"
+  ]
+ },
+ "ascii-crt": {
+  "name": "ASCII / CRT-Terminal",
+  "line": "Eine Mondbasis-KI erwacht nach vierzig Jahren durch ein Signal von der Erde und antwortet, indem sie „Zuhause“ aus Zeichen malt.",
+  "uses": [
+   "Entwicklertools",
+   "Science-Fiction",
+   "Tech-Marken"
+  ]
+ },
+ "dataviz": {
+  "name": "Daten-Storytelling",
+  "line": "Hundert Jahre Sommertemperaturen – das Diagramm selbst erzählt die Geschichte.",
+  "uses": [
+   "Datenjournalismus",
+   "Berichte",
+   "Klima & Wissenschaft"
+  ]
+ },
+ "iso-infographic": {
+  "name": "Isometrische Infografik",
+  "line": "Die Reise eines Kaffees von der Plantage bis in deine Hände, durch eine einzige isometrische Welt.",
+  "uses": [
+   "Prozesserklärungen",
+   "Lieferketten",
+   "Geschäftsberichte"
+  ]
+ },
+ "dark-keynote": {
+  "name": "Dunkle Tech-Keynote",
+  "line": "Launchfilm für Tidy, eine fiktive App: Ein verschütteter Cursor rückt mit einem Schlag Hunderte Fenster zurecht.",
+  "uses": [
+   "Produktlaunches",
+   "SaaS",
+   "Keynotes"
+  ]
+ },
+ "living-screencast": {
+  "name": "Lebendiger Screencast",
+  "line": "Clawd, das Pixel-Maskottchen von Claude Code, hüpft aus dem Terminal in die Claude-App und führt in einem Screencast ohne Schnitt Plan-Modus, Diff-Kommentare und Selbstprüfungen vor.",
+  "uses": [
+   "Produkt-Tutorials",
+   "Feature-Launches",
+   "Onboarding"
+  ]
+ },
+ "hologram-hud": {
+  "name": "Sci-Fi-Hologramm-HUD",
+  "line": "Ein E-Bike wird zum Hologramm gescannt; Zielrahmen erfassen Akku, Motor und Bremsen, und jeder Wert rollt an seinen Platz.",
+  "uses": [
+   "Produktdaten im Überblick",
+   "Launch- & Crowdfunding-Videos",
+   "Messebildschirme"
+  ]
+ },
+ "rubber-hose": {
+  "name": "1930er-Rubber-Hose-Cartoon",
+  "line": "Eine Kaffeetasse jagt einen entlaufenen Zuckerwürfel durch die Küche, im Stil der Cartoons der 1930er.",
+  "uses": [
+   "Essen & Trinken",
+   "Retro-Werbung",
+   "Kinder"
+  ]
+ },
+ "cel-anime-80s": {
+  "name": "80er-Cel-Anime",
+  "line": "Ein Kuriermädchen radelt durch eine regennasse Neonstadt, um vor dem Raketenstart im Morgengrauen eine Kassette abzuliefern.",
+  "uses": [
+   "Musikvideos",
+   "Spieletrailer",
+   "Nostalgie"
+  ]
+ },
+ "scifi-toon": {
+  "name": "Sci-Fi-Sitcom-Cartoon",
+  "line": "Ein abgestumpftes Genie öffnet ein Portal nur, um Kaffee zu holen, und stürzt durch immer seltsamere Universen.",
+  "uses": [
+   "Comedy",
+   "Tech-Marken",
+   "Social-Media-Clips"
+  ]
+ },
+ "midcentury-toon": {
+  "name": "Mid-Century-Cartoon",
+  "line": "Ein Saugroboter in drei Schritten eingerichtet, erzählt wie ein Schulfilm der 1950er: Ladestation aufstellen, App verbinden, Start drücken.",
+  "uses": [
+   "Einrichtungsanleitungen",
+   "Hilfecenter-Erklärungen",
+   "Schritt-für-Schritt-Anleitungen"
+  ]
+ },
+ "pixel-rpg": {
+  "name": "16-Bit-Pixel-RPG",
+  "line": "Vor der Tür des Endbosses speichert ein Held das Spiel, und der Speicherbildschirm lässt die ganze Reise Revue passieren.",
+  "uses": [
+   "Spieletrailer",
+   "Rückblicke",
+   "Nostalgie"
+  ]
+ },
+ "hd-2d": {
+  "name": "HD-2D",
+  "line": "Der Leuchtturm erlischt; ein Mädchen trägt die letzte Flamme durch einen nächtlichen Wald und die Sturmklippen hinauf.",
+  "uses": [
+   "Spieletrailer",
+   "Fantasy",
+   "Erzählfilme"
+  ]
+ },
+ "microgame": {
+  "name": "Microgame-Rausch",
+  "line": "Ein tollpatschiger Kadett übersteht ein Fünf-Sekunden-Bootcamp, immer schneller, bis zum Endboss: der Landung zu Hause.",
+  "uses": [
+   "Spieletrailer",
+   "Onboarding",
+   "Social-Media-Clips"
+  ]
+ },
+ "game-show": {
+  "name": "Gameshow im Flat-Stil",
+  "line": "Die Geschichte der KI als Rhythmusspiel: Modelle betreten im Takt die Bühne, und ein Zeugnis beendet die Show.",
+  "uses": [
+   "Tech-Zeitleisten",
+   "Jahresrückblicke",
+   "Unterhaltungsshows"
+  ]
+ },
+ "silent-film": {
+  "name": "1920er-Stummfilm",
+  "line": "Ein Bäckerjunge jagt einem entlaufenen Brotlaib bergab hinterher und bricht ihn dann für ein hungriges Mädchen entzwei.",
+  "uses": [
+   "Comedy",
+   "Retro-Marken",
+   "Erzählen ohne Worte"
+  ]
+ },
+ "backrooms": {
+  "name": "Liminaler Found Footage",
+  "line": "Ein neuer Mitarbeiter der Nachtschicht filmt seine erste Nacht in einem endlosen gelben Büro und befolgt dabei die Regeln an der Wand.",
+  "uses": [
+   "Horror",
+   "Mystery & ARG",
+   "Spiele-Teaser"
+  ]
+ },
+ "brick-toy": {
+  "name": "Bausteinspielzeug",
+  "line": "Ein Baustein-Astronaut baut aus Ersatzteilen eine Rakete und fliegt zu einem Baustein-Mond.",
+  "uses": [
+   "Spielzeug & Kinder",
+   "Produkt-Aufbauten",
+   "Weltraum"
+  ]
+ },
+ "paper-popup": {
+  "name": "Pop-up-Buch",
+  "line": "Ein Pop-up-Buch öffnet sich auf einem Schreibtisch; ein Kobold namens Pip erlebt Abenteuer in Papierwelten und springt hinaus in unsere.",
+  "uses": [
+   "Kinderbücher",
+   "Spieletrailer",
+   "Erzählfilme"
+  ]
+ },
+ "tilt-shift": {
+  "name": "Tilt-Shift-Miniatur",
+  "line": "Morgendlicher Berufsverkehr in einer Stadt, die wie ein Modell aussieht: Autos, Züge und winzige Menschen.",
+  "uses": [
+   "Stadtmarketing",
+   "Immobilien",
+   "Verkehr"
+  ]
+ },
+ "lowpoly-island": {
+  "name": "Low-Poly-Isometrie-Insel",
+  "line": "Eine Insel und ihr Dorf wachsen Kachel für Kachel aus einem leeren Meer – jede Kachel ein Ton – bis in eine Sternennacht.",
+  "uses": [
+   "Spieletrailer",
+   "Worldbuilding",
+   "Entspannende Inhalte"
+  ]
+ },
+ "glass-product": {
+  "name": "Glas-Produktrendering",
+  "line": "Unboxing und Nahaufnahmen von Aura, fiktiven Ohrhörern aus Glas, mit Lichtleisten-Schwenks und Kaustiken.",
+  "uses": [
+   "Produktlaunches",
+   "Unterhaltungselektronik",
+   "Beauty"
+  ]
+ }
+}

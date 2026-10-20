@@ -303,6 +303,7 @@ CATEGORY_NAMES = {
     # 项目类型专属团队(2026-10-20 由同名插件并入,services/runtime/project_types.py);
     # 编号沿用插件时期的 15/16/17,13/14 留给衍生小说/双书融合插件
     "15-audio-video": "音频配画", "16-mashup": "混剪", "17-digital-human": "数字人",
+    "18-code-video": "演示视频",      # 2026-10-20 新增项目类型(不用视频模型,语言模型写网页逐帧渲染)
 }
 
 # ---------------- 修改师(00-orchestration/reviser):预览页「✏️ 修改」的默认收件人 ----------------
@@ -337,6 +338,8 @@ REVISION_KIND_AGENTS: dict[str, list[str]] = {
     # 分镜预览页「过场卡」✏️ 反馈(2026-09-24):组边界过场设计(shot_list transition_in / directing/epNN/transition_design.json);
     # 2026-09-26 二期工位 07-directing/transition-design 代行为主(宿主 CLI transition_design.py design/card),shot-planning / transition 附规约
     "transition":      ["07-directing/transition-design", "07-directing/shot-planning", "10-editing/transition"],
+    # 演示视频「代码预览」页 📨 提交注释(2026-10-20):画面是 codevideo/ 下的网页代码,改完由宿主 codevideo.py 按段重渲
+    "codevideo":       ["18-code-video/scene-coder", "18-code-video/film-director"],
 }
 REVISION_SOUL_MAX_CHARS = 60_000      # 单个代行工位 SOUL 附入提示词的截断上限
 REVISION_HISTORY_MAX = 3              # 修改单头里列出的同对象历史修改记录条数
@@ -846,7 +849,11 @@ DEFAULT_GENCONFIG = {
                     "rh_instance_type": "standard"},
     },
     "music": {
-        "provider": "agentics",   # agentics | openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax
+        # code(代码作曲,2026-10-20 起新装默认)= 不调音乐模型:Agent 写作曲脚本,genmedia music --script 在宿主采样乐器 /
+        # 合成器环境下渲染(modules/codevideo/audio.py);auto_fetch = 缺采样库时自动下载(lemo-opuscar release 包)。
+        # 已保存过配置的沿用保存值(不迁移)
+        "provider": "code",   # code | agentics | openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax | comfyui
+        "code": {"auto_fetch": True},
         # 默认 profile 2026-09-20 定为 minimax-music-3(此前为空 = 取服务目录首个);存量空值由
         # _migrate_genconfig 视为未选、回落到此默认
         "agentics": {"profile_code": "minimax-music-3"},
@@ -908,14 +915,16 @@ DEFAULT_GENCONFIG = {
                     "rh_instance_type": "standard"},
     },
     # 音效(2026-10-20,生成模型页「🔊 音效模型」):genmedia.py sfx 的渠道,只给 sound-effect / ambience 的缺陷单兜底贴片用。
-    #   openverse  = 默认;不生成,按关键词检索 Openverse 收录的现成音频(modules/openverse.py),免费。
+    #   code       = 代码音效,新装默认(2026-10-20 用户拍板,标签页首位):Agent 写音效脚本,宿主程序合成(genmedia sfx --script),不检索不计费
+    #   openverse  = 不生成,按关键词检索 Openverse 收录的现成音频(modules/openverse.py),免费。
     #                license 许可范围(cc0,pdm = CC0 / 公有领域免署名;cc0,pdm,by = 另收须署名的 CC BY),
     #                source 来源(freesound / freesound,wikimedia_audio);client_id / client_secret 可选,留空 = 匿名访问
     #   elevenlabs = ElevenLabs Sound Effects v2 直连生成;fal = Fal 托管的同一模型。api_key 留空沿用音乐 / TTS 段的
     #                ElevenLabs Key、图像 / 视频段的 Fal Key
     "sfx": {
-        "provider": "openverse",   # openverse | elevenlabs | fal
+        "provider": "code",   # code(代码音效,新装默认)| openverse | elevenlabs | fal;已保存过音效段的沿用保存值
         "openverse": {"license": "cc0,pdm", "source": "freesound", "client_id": "", "client_secret": ""},
+        "code": {},
         "elevenlabs": {"api_key": "", "model": "eleven_text_to_sound_v2"},
         "fal": {"api_key": "", "model": "fal-ai/elevenlabs/sound-effects/v2"},
     },
@@ -3770,8 +3779,8 @@ def build_role_prompt(agent_id: str, project: str,
   (新生成供视频参考的图统一出图规格:16:9 用 2560x1440、9:16 用 1440x2560、21:9 用 2968x1272;无最小像素硬限,复用图/前组尾帧不设像素门槛)
 - 生成视频(组级多镜头,默认路径):`python3 modules/genmedia.py video --prompt "<Shot 1:/Shot 2: 分镜结构>" --output <路径.mp4> --ref 锚点图... [--ref-video 组 json video_refs 的白模 camera.mp4 等,按序] [--audio-ref 音色样本...] [--generate-audio on] [--return-last-frame tail.png] --duration <组Σ,4–{sg_max}整数> [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`
 - 生成视频(单镜首尾帧,兜底路径):`python3 modules/genmedia.py video --prompt "..." --output <路径.mp4> [--first-frame a.png] [--last-frame b.png] [--duration 4] [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`(--ref 与首尾帧互斥)
-- 生成音乐(BGM,仅音乐类工位):`python3 modules/genmedia.py music --prompt "<英文音乐描述:风格/情绪/乐器/节奏>" --output <路径.mp3> [--duration <秒>]`(渠道/模型由「🎨 生成模型」页音乐生成配置;OpenRouter:Lyria 3 Pro 完整歌曲、Lyria 3 Clip 30s 片段/Loop;ElevenLabs Eleven Music:--duration 3–600s 按 cue 精确出段;ComfyUI:ACE-Step 本地工作流、--duration 1–240s;默认纯音乐)
-- 音效 / 环境床音兜底贴片(仅 sound-effect / ambience 工位、且仅当缺陷单要求补做贴片时):`python3 modules/genmedia.py sfx --prompt "<英文声音描述>" --query "<2–3 个英文关键词>" --output <路径.wav> [--duration <秒>] [--loop] [--count <1-4>]`(渠道由「🎨 生成模型」页音效段配置,`info` 的 sfx 行回显:默认 Openverse 检索现成的 CC0 / 公有领域素材、不生成不计费,检索词取 `--query`,长句搜不到;没搜到就换关键词重试,仍没有如实上报,不得自行加 `--provider` 改走付费渠道;ElevenLabs / Fal 按 `--prompt` 生成、每条单独计费;`--loop` 出可无缝循环床音;非循环音自动裁首尾静音并峰值归一)
+- 生成音乐(BGM,仅音乐类工位):`python3 modules/genmedia.py music --prompt "<英文音乐描述:风格/情绪/乐器/节奏>" --output <路径.mp3> [--duration <秒>]`(渠道/模型由「🎨 生成模型」页音乐生成配置;OpenRouter:Lyria 3 Pro 完整歌曲、Lyria 3 Clip 30s 片段/Loop;ElevenLabs Eleven Music:--duration 3–600s 按 cue 精确出段;ComfyUI:ACE-Step 本地工作流、--duration 1–240s;默认纯音乐)。**仅当 `genmedia.py info` 的 music 行回显 code(代码作曲),或工单写明 `--provider code` 时**:不调音乐模型,先写作曲脚本(Python,`sys.path.insert(0, os.environ['LIB'])` 后用 `core.audio.sampler` 采样乐器 / `core.audio.sfx` 合成,按环境变量 `CODE_AUDIO_OUT` 写 48 kHz wav),再 `python3 modules/genmedia.py music --prompt "<描述>" --output <路径.wav|.mp3> --script <脚本.py> [--duration <秒>] [--provider code]` 由宿主渲染;缺采样库时宿主按「生成模型」页开关自动下载或报出下载命令(脚本契约见 agents/workflows/codevideo.md)
+- 音效 / 环境床音兜底贴片(仅 sound-effect / ambience 工位、且仅当缺陷单要求补做贴片时):`python3 modules/genmedia.py sfx --prompt "<英文声音描述>" --query "<2–3 个英文关键词>" --output <路径.wav> [--duration <秒>] [--loop] [--count <1-4>]`(渠道由「🎨 生成模型」页音效段配置,以 `info` 的 sfx 行回显为准:**code(代码音效,新装默认)**= 不检索不生成,写音效脚本(契约同代码作曲,另有 `CODE_AUDIO_LOOP=1` 表示要无缝循环)后加 `--script <脚本.py>` 调用,不加 `--query`;openverse = 检索现成的 CC0 / 公有领域素材、不生成不计费,检索词取 `--query`,长句搜不到,没搜到就换关键词重试,仍没有如实上报,不得自行加 `--provider` 改走付费渠道;ElevenLabs / Fal 按 `--prompt` 生成、每条单独计费;`--loop` 出可无缝循环床音;非循环音自动裁首尾静音并峰值归一)
 - TTS 旁白/音色样本(narrator/voice 类工位):`python3 modules/genmedia.py tts --text "<文本>" --output <路径.mp3> [--character CHAR-0001] [--variant child] [--voice <音色;仅音色库模式>] [--speed 1.0] [--instructions "<语气/情绪指令>"]`(渠道/模式/模型由「🎨 生成模型」页 TTS语音模型配置;**每个渠道有语音模式,`genmedia.py info` 的 tts 行回显「模式=音色设计 / 音色库 / 音色库(本地)」,以回显为准**:音色设计=不选音色,按声纹卡描述出嗓音样本、对白拿样本当参考,一律不传 --voice;音色库=先 `python3 modules/genmedia.py voices --character <CHAR-ID> [--variant <形态>]` 取宿主自动拉取并打分的候选,选定登记 casting.json 后按 casting 传 --voice(本地音色库传条目文件名);设置页没有「默认音色」也不列音色,不带人物也没给音色时宿主自动取旁白型音色。**旁白一律不传 --voice**——项目有旁白声线卡 `assets/audio/voice/narrator.json`(由 voice-generation 设计冻结,旁白声线唯一事实源)时 genmedia 自动按卡固定声线:同渠道用卡冻结 tts_voice、seed-audio 用卡冻结描述+冻结样本参考锚、ComfyUI 直接用冻结样本作参考音频,**用户改 TTS 设置不影响旁白声线**(渠道与卡不一致时 genmedia 告警回退并提示重定卡,如实上报);无卡时宿主按语音模式自动处理(音色库模式从音色库取旁白型音色,音色设计模式按声线描述出声)。音色库模式下角色配音按 casting 传 --voice,语义随渠道:OpenRouter=音色名、火山=speaker 名、MiniMax / ElevenLabs=voice_id、本地音色库=条目文件名。**火山音色设计模式(Doubao-音频生成 1.0)= 描述定制嗓音**:免选音色——角色配音传 `--character`(+`--variant`),声线描述由声纹卡 voice.json 声学字段自动拼装;旁白声线=旁白声线卡冻结描述(无卡按 `--instructions` 描述,缺省内置旁白声线);均不传 --voice(speaker 名会被忽略);项目已有冻结 voiceprint 样本时自动作 @音频1 参考锚,逐句/逐段合成不漂音色。ComfyUI:根据项目 voice/personality/appearance 从内置音色目录(远端 ComfyUI-Index-TTS/TimbreModel 音频库,首次使用自动下载缓存到 `data/TimbreModel/`)自动选参考音频,角色传 `--character`,旁白留空,禁止手填 `--voice`。instructions:OpenRouter 仅 OpenAI 系模型生效,火山注入情绪指令,ElevenLabs 忽略,ComfyUI 参与音色自动匹配、不注入合成)
 - 详细纪律见 agents/WORKFLOW.md §9;生成失败如实上报,严禁伪造或占位产物
 
@@ -9803,6 +9812,8 @@ def _preview_board(project: str, ep: str):
                     used["characters"].add(ln["speaker"])
     data["assets"] = _asset_thumbs(base, catalog, used)
     data["sketches"] = _board_sketch_rows(base, ep, sbb.load_index(base, ep))
+    # 演示视频(2026-10-20):关键帧由 cv1-board 用真实绘制代码渲(codevideo.py board,provider=code),页面隐藏图像模型出草图入口
+    data["project_type"] = (load_project_settings(base.name).get("project") or {}).get("type") or "film"
     data["jobs"] = {k.split("/", 2)[2]: v for k, v in BOARD_SKETCH_JOBS.items()
                     if k.startswith(f"{base.name}/{ep}/")}
     data["redraw_runs"] = _board_redraw_runs(base.name, ep)
@@ -9947,6 +9958,9 @@ async def api_board_notes_submit(project: str, ep: str, body: dict | None = None
     body = body or {}
     base = _proj_base(project)
     ep = re.sub(r"[^\w\-]", "", ep)
+    if (load_project_settings(base.name).get("project") or {}).get("type") == "code-video":
+        from services.runtime import codevideo_api
+        return await codevideo_api.board_notes_submit(base, ep, body)
     notes = sbb.load_notes(base, ep)["notes"]
     if not notes:
         raise ServiceError(400, "本集没有注释可提交" if _notes_submit_zh() else "This episode has no notes to submit")
@@ -9973,6 +9987,9 @@ async def api_grpnotes_submit(body: dict):
     ep = re.sub(r"[^\w\-]", "", body.get("ep") or "")
     if not project or not ep:
         raise ServiceError(400, "project and ep are required")
+    if (load_project_settings(project).get("project") or {}).get("type") == "code-video":
+        from services.runtime import codevideo_api
+        return await codevideo_api.grp_notes_submit(_proj_base(project), ep, body)
     zh = _notes_submit_zh()
     ndir = PROJECTS_DIR / project / "assets" / "notes" / ep
     groups = _shot_groups_for(project, ep)
@@ -11529,6 +11546,8 @@ def _post_audio_lanes(base: Path, ep: str, groups: list[dict], sfx: dict) -> dic
     2026-10-03 后期配音去人声:配音过的组(dub_manifest 带 bed_file,且当前版本的声轨没再被后期页改过、不早于配音)
     原声条目带 file=去人声底床 bed.wav——前端此时把 <video> 静音、原声轨播 bed、配音轨播逐句 TTS,两轨各放各的不重复
     (配音后 clip 自带声轨 = bed + TTS,直接出声会和配音轨叠两遍)。"""
+    if (load_project_settings(base.name).get("project") or {}).get("type") == "code-video":
+        return _code_video_audio_lanes(base)
     cum = {g["group_id"]: g["cum_start_s"] for g in groups}
     lanes = {"native": [], "dialogue": [], "narration": [], "bgm": [], "sfx": []}
     pp = _post_pp()
@@ -11643,6 +11662,34 @@ def _post_audio_lanes(base: Path, ep: str, groups: list[dict], sfx: dict) -> dic
         lanes["sfx"].append({"id": r.get("id"), "group_id": r.get("group_id"), "t": r.get("t"), "t_abs": r.get("t_abs"),
                              "label": r.get("event") or r.get("text") or "", "resolved": bool(skip or (r.get("source") and r.get("file"))),
                              "file": None if skip else _post_sfx_file_url(base, r.get("file")), "gain_db": _f(r.get("gain_db"), -12.0)})
+    return lanes
+
+
+def _code_video_audio_lanes(base: Path) -> dict:
+    """演示视频的后期页声音轨(2026-10-20):画面段无声;旁白 = codevideo/voices/<句>.wav 按 timeline lines 的时刻,
+    配乐 = 混音分轨 out/stems/music.wav(没混就用 music/score.wav)整条,音效 = events.json 的事件点(程序合成,
+    声音在 out/stems/sfx.wav 里,只画点位不单独随播)。"""
+    film = base / "codevideo"
+    lanes = {"native": [], "dialogue": [], "narration": [], "bgm": [], "sfx": []}
+    tl = _read_json_safe(film / "timeline.json") or {}
+    dur = float(tl.get("dur") or 0)
+    durs = _read_json_safe(film / "voices" / "dur.json") or {}
+    when = {str(x.get("id")): float(x.get("t") or 0) for x in tl.get("lines") or [] if isinstance(x, dict) and x.get("id")}
+    for lid, d in durs.items():
+        if lid in when:
+            lanes["narration"].append({"seg_id": lid, "t0": round(when[lid], 3), "t1": round(when[lid] + float(d or 0), 3),
+                                       "label": lid, "file": _post_url(base, f"codevideo/voices/{lid}.wav"), "gain_db": 0.0})
+    for rel, label in (("codevideo/out/stems/music.wav", "music (stem)"), ("codevideo/music/score.wav", "score")):
+        url = _post_url(base, rel)
+        if url:
+            lanes["bgm"].append({"cue_id": "score", "t0": 0.0, "t1": round(dur, 3), "label": label, "sheet": "",
+                                 "file": url, "gain_db": 0.0, "fade_in": 0.0, "fade_out": 0.0})
+            break
+    ev = (_read_json_safe(film / "events.json") or {}).get("ev") or []
+    for i, e in enumerate(ev[:2000]):
+        if isinstance(e, dict) and isinstance(e.get("t"), (int, float)):
+            lanes["sfx"].append({"id": f"ev{i}", "group_id": "", "t": e["t"], "t_abs": e["t"], "label": str(e.get("type") or ""),
+                                 "resolved": True, "file": None, "gain_db": 0.0})
     return lanes
 
 
@@ -11797,6 +11844,7 @@ def _preview_post(project: str, ep: str):
     data.update({
         "plan": plan, "summary": pp.summary(plan), "groups": groups, "scenes": scenes, "transitions": transitions,
         "lanes": _post_audio_lanes(base, ep, groups, sfx), "sfx": sfx, "sfx_saved": sfx_saved,
+        "project_type": (load_project_settings(base.name).get("project") or {}).get("type") or "film",
         "defects": _post_defects(base, ep), "gate": _post_gate(base, ep, plan),
         "check": {**check, "fresh": bool(check) and check.get("plan_fingerprint") == pp.plan_fingerprint(plan)},
         "job": POST_JOBS.get(f"{base.name}/{ep}") or {},
@@ -11864,7 +11912,26 @@ def _post_transition_hold_resolve(base: Path, ep: str, plan: dict, r: dict) -> s
     return why
 
 
+def _post_code_video_guard(project: str, what: str):
+    """演示视频(code-video)的画面是网页代码逐帧渲染的:改画面 / 改时长要改代码后按段重渲(代码预览页注释 → 修改师),
+    后期页只开放「音效与声音」处方。画面类处方与分镜剪辑在这里拦下。"""
+    try:
+        ptype = (load_project_settings(safe_slug(project)).get("project") or {}).get("type")
+    except Exception:  # noqa: BLE001
+        return
+    if ptype == "code-video":
+        zh = _notes_submit_zh()
+        raise ServiceError(400, (f"演示视频的画面由代码渲染,{what}请到「🖥️ 代码预览」页对时刻写注释(修改师改代码后只重渲改动段);"
+                                 "后期页只开放「音效与声音」处方") if zh else
+                           (f"Code-video pictures are rendered from code: for {what}, write a note on the Code Preview page "
+                            "(the reviser edits the code and re-renders only the changed sections); the post page only allows sound recipes"))
+
+
 async def api_post_recipe_create(project: str, ep: str, body: dict):
+    kind = next((k for k in _post_pp().KINDS if k["id"] == str((body or {}).get("kind") or "")), None)
+    if kind and kind.get("section") != "sound":
+        _post_code_video_guard(project, "画面 / 包装类调整" if _notes_submit_zh() else "picture or packaging changes")
+
     def _do():
         pp, base, ep2, plan = _post_load(project, ep)
         try:
@@ -12309,6 +12376,7 @@ async def api_post_pick_file(project: str, ep: str, body: dict):
 
 async def api_post_import(project: str, ep: str, body: dict):
     """按本机路径导入另一版本:{group_id, path} → 登记为新版本。"""
+    _post_code_video_guard(project, "导入版本" if _notes_submit_zh() else "importing versions")
     def _do():
         pp, base, ep2, plan = _post_load(project, ep)
         gid = _post_group_guard(str(body.get("group_id") or ""))
@@ -12321,6 +12389,7 @@ async def api_post_import(project: str, ep: str, body: dict):
 
 async def api_post_import_upload(project: str, ep: str, gid: str, data: bytes, filename: str):
     """浏览器上传方式导入另一版本(原生对话框不可用时的退路)。"""
+    _post_code_video_guard(project, "导入版本" if _notes_submit_zh() else "importing versions")
     def _do():
         pp, base, ep2, plan = _post_load(project, ep)
         g = _post_group_guard(gid)
@@ -12376,6 +12445,7 @@ async def api_post_insert_clip(project: str, ep: str, body: dict):
     """分镜剪辑·插段(2026-09-30,取代换段):{group_id, base_v, ins_v, pos:start|end|here, t?, audio?, fit?:pad|crop|blur};
     把 ins_v 整段插到 base_v 的最前面 / 最后面 / t 秒处,ffmpeg 一次编码到 assets/post/epNN/<grp>/vN.mp4 并登记(不动指针);
     时长变长,版本条目记 time_ops,出成片时外挂声轨/字幕按 timemap 平移(audio = 插入块处外挂声轨策略,缺省淡出)。"""
+    _post_code_video_guard(project, "插段" if _notes_submit_zh() else "inserting clips")
     def _do():
         from modules import post_fx
         pp, base, ep2, plan = _post_load(project, ep)
@@ -12449,6 +12519,7 @@ def _post_cut_args(pp, plan: dict, gid: str, body: dict) -> tuple[int, list[dict
 async def api_post_cutout(project: str, ep: str, body: dict):
     """分镜剪辑·删段:{group_id, base_v, cuts:[{t0,t1}]};base_v 时间线上 cuts 各段直接删除,
     剩余内容按序拼成新版本(时长变短),ffmpeg 一次编码到 assets/post/epNN/<grp>/vN.mp4 并登记(不动指针)。"""
+    _post_code_video_guard(project, "删段" if _notes_submit_zh() else "cutting segments")
     def _do():
         from modules import post_fx
         pp, base, ep2, plan = _post_load(project, ep)
@@ -12528,6 +12599,7 @@ async def api_post_insert_hold(project: str, ep: str, body: dict):
     """分镜剪辑·插黑 / 定格(组内):{group_id, base_v, t, freeze_s, hold_s, audio} → 在 base_v 的 t 秒处插入
     [前一帧定格 freeze_s] + [黑场 hold_s],其余原样,ffmpeg 一次编码到 assets/post/epNN/<grp>/vN.mp4 并登记(不动指针);
     版本条目记 time_ops,出成片时 post_apply sync-timeline 汇成 timemap,外挂声轨/字幕随之平移(§9B/§9C)。"""
+    _post_code_video_guard(project, "插黑 / 定格" if _notes_submit_zh() else "inserting black / freeze frames")
     def _do():
         from modules import post_fx
         pp, base, ep2, plan = _post_load(project, ep)
@@ -12581,6 +12653,7 @@ async def api_post_insert_hold(project: str, ep: str, body: dict):
 async def api_post_edit_dispatch(project: str, ep: str, body: dict):
     """分镜剪辑·派单剪辑师:{group_id, base_v, instruction, cuts?:[{t0,t1}]} → 把用户指令(附基准版本、
     时间段)发给 10-editing/edit,产物用 post_apply.py register --group --file 登记为本组新版本;工单记入台账 edit_orders。"""
+    _post_code_video_guard(project, "派单剪辑" if _notes_submit_zh() else "edit orders")
     pp, base, ep2, plan = _post_load(project, ep)
     gid = _post_group_guard(str(body.get("group_id") or ""))
     instruction = str(body.get("instruction") or "").strip()
@@ -13041,7 +13114,8 @@ _WF_TERMINAL_SKIP = {"skipped", "cancelled", "waived"}   # 不再执行,也不�
 
 # 项目类型 DAG 的闸门 → 所属阶段(与 agents/workflows/*.yaml 同步;服务端不读 yaml)
 _WF_TYPE_GATE_PHASE = {**{f"ga{i}": f"av{i}" for i in range(6)},
-                       "gm0": "mx0", "gm1": "mx1m", "gm2": "mx3", "gm3": "mx4"}
+                       "gm0": "mx0", "gm1": "mx1m", "gm2": "mx3", "gm3": "mx4",
+                       "gc1": "cv1", "gc2": "cv5"}
 
 
 def _wf_phase_of(n: dict) -> str:
@@ -13051,10 +13125,10 @@ def _wf_phase_of(n: dict) -> str:
     if n.get("phase"):
         return str(n["phase"])
     nid = n.get("id") or ""
-    m = re.match(r"^(av|mx|dh)(\d+m?)\b", nid)
+    m = re.match(r"^(av|mx|dh|cv)(\d+m?)\b", nid)
     if m:
         return m.group(1) + m.group(2)
-    m = re.match(r"^(g[am]\d+)\b", nid)
+    m = re.match(r"^(g[amc]\d+)\b", nid)
     if m and m.group(1) in _WF_TYPE_GATE_PHASE:
         return _WF_TYPE_GATE_PHASE[m.group(1)]
     m = re.match(r"^[pg](\d+)\b", nid)
@@ -15635,6 +15709,15 @@ async def api_projects_create(body: dict):
         if vs not in project_types.VOICE_SOURCES:
             raise ServiceError(400, f"voice_source must be one of {project_types.VOICE_SOURCES}")
         cfg["project"]["voice_source"] = vs
+    if ptype == "code-video":
+        # 演示视频(2026-10-20):风格必选(lemo-opuscar 风格库 slug),其余设置缺省 = project_types.CODE_VIDEO_DEFAULTS
+        try:
+            cv = project_types.code_video_settings(body.get("code_video"), strict=True)
+        except ValueError as e:
+            raise ServiceError(400, f"code_video: {e}") from None
+        if not cv["code_style"]:
+            raise ServiceError(400, "code_video.code_style is required (a style slug from the code-video style library)")
+        cfg["project"].update(cv)
     _validate_duration(cfg["duration"])
     _validate_shot_group(cfg["shot_group"])
     _validate_output(cfg["output"])
@@ -15658,6 +15741,8 @@ async def api_projects_create(body: dict):
         if ptype != project_types.DEFAULT:
             (pdir / "refs" / "text").mkdir(parents=True, exist_ok=True)
             (pdir / "refs" / "text" / PROJECT_TRANSCRIPT).write_text(novel + "\n")
+    if ptype == "code-video":
+        style = _code_video_style_text(cfg["project"]["code_style"])
     brief_text = format_brief(brief, style, rhythm)
     if brief_text:
         (pdir / "brief.md").write_text(brief_text)
@@ -15666,6 +15751,15 @@ async def api_projects_create(body: dict):
         return {"ok": True, "name": name, "init": "pending"}
     await _dispatch_project_init(name)
     return {"ok": True, "name": name}
+
+
+def _code_video_style_text(slug: str) -> str:
+    """演示视频项目 brief.md「设计风格」小节:风格名 + 风格规范文件路径(全文太长不贴,成员按路径读)。"""
+    from modules.codevideo import style_row
+    row = style_row(slug) or {}
+    return (f"{row.get('cn') or slug} / {row.get('en') or slug}(演示视频风格库 `{slug}`)。风格规范见 "
+            f"agents/workflows/codevideo/styles/{slug}/STYLE.md(立项后锁定副本在 codevideo/style/STYLE.md):"
+            "全片的画面材质、色彩、字体、运动、镜头语法、声音调色板与媒介原生手法以它为准;故事、结构、镜头与时长由本片自己导演")
 
 
 async def api_projects_init(project: str):
@@ -15763,6 +15857,24 @@ def _typed_project_init_message(name: str, cfg: dict) -> str:
                 ("文稿", f"refs/text/{PROJECT_TRANSCRIPT}(约 {t_len} 字)" if t_len else
                  ("未提供(可选:按 DAG 派 dh0-transcribe 自动转写)" if ptype == "digital-human"
                   else "**未提供(必需)**"))]
+    if ptype == "code-video":
+        from modules.codevideo import style_row
+        cv = project_types.code_video_settings(block, strict=False)
+        row = style_row(cv["code_style"]) or {}
+        mats = sorted(f.relative_to(pdir).as_posix() for f in refs.rglob("*")
+                      if f.is_file() and not f.name.startswith(".") and f.parent.name != "text" and f.name != "NOTES.md") \
+            if refs.is_dir() else []
+        has_brief = (pdir / "brief.md").is_file()
+        rows = [("主题 / 文稿", f"refs/text/{PROJECT_TRANSCRIPT}(约 {t_len} 字)" if t_len else
+                 ("未单独提供(主题写在 brief.md 内容定位里)" if has_brief else "**未提供(必需:主题或文稿至少一项)**")),
+                ("风格", f"{row.get('cn') or cv['code_style']} / {row.get('en') or ''}(`{cv['code_style']}`,"
+                 f"agents/workflows/codevideo/styles/{cv['code_style']}/STYLE.md)" if cv["code_style"] else "**未选(必需)**"),
+                ("片长 / 帧率", f"约 {cv['length_s']} 秒 / {cv['fps']} fps"),
+                ("旁白 / 字幕", f"{'开' if cv['narration'] else '关'} / {'开' if cv['subtitles'] else '关'}"),
+                ("先审故事板", "开(cv1-board 渲关键镜,CVH1 签字后再做声音与画面)" if cv["storyboard_review"] else "关(不停顿)"),
+                ("配乐", "代码作曲(code-composer 写作曲脚本,宿主采样乐器渲染)" if cv["music_source"] == "code"
+                 else "按「生成模型」页音乐设置生成"),
+                ("用户素材", "、".join(mats) if mats else "无(logo、产品照、字体、录音、音乐都可在「参考文件」页补传)")]
     if ptype == "mashup":
         rows[1] = (rows[1][0], rows[1][1] + ("(同一份已写入 novel/original.txt 作 p0 的文本输入)" if t_len else ""))
         libs = block.get("footage_libraries") or []
@@ -15776,13 +15888,16 @@ def _typed_project_init_message(name: str, cfg: dict) -> str:
            "2) 核对新建向导放进项目的输入素材(标「必需」的缺了就是缺项):"]
     msg += [f"   - {k}:{v}" for k, v in rows]
     if (pdir / "brief.md").is_file():
-        what = "人物与声音的对应说明" if ptype == "digital-human" else "内容定位与画面风格"
+        what = ("人物与声音的对应说明" if ptype == "digital-human" else
+                "内容定位与风格" if ptype == "code-video" else "内容定位与画面风格")
         msg.append(f"3) 用户填写的{what}已写入 brief.md(系统会自动注入团队每个成员的系统提示词):"
                    "请通读,并在汇报中简要复述你的理解以便用户纠偏")
     aspect, aspect_name, lang = resolve_output(cfg)
     msg.append(
         f"另:用户已在新建向导完成项目初始设置并写入 settings.json——输出画幅 {aspect}({aspect_name})、输出语言 {lang};"
-        "旁白、对白语音、白模、片头片尾、过场设计等主流程开关已按项目类型关闭,无需再向用户逐项确认。")
+        "旁白、对白语音、白模、片头片尾、过场设计等主流程开关已按项目类型关闭,无需再向用户逐项确认。"
+        + ("本类型自己的旁白 / 字幕 / 先审故事板 / 配乐设置见上(settings.json#project),它们不受主流程开关影响;"
+           "渲染尺寸按画幅与成片分辨率由宿主 codevideo.py 计算。" if ptype == "code-video" else ""))
     msg.append(
         "完成以上工作后只做汇报,并【提醒用户】:缺项可在控制台顶栏「预览设定产物」菜单的【参考文件】页补传"
         "(讲述音频放「讲述音频」分类,克隆声音样本放「克隆声音」分类,人物图片放「角色」分类,文稿放「文本」分类);"

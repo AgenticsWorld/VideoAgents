@@ -98,7 +98,8 @@ def test_agentics_is_first_generation_provider_and_desktop_only_account_ui():
 
     assert "image:{providers:['agentics','openrouter'" in models
     assert "video:{providers:['agentics','openrouter'" in models
-    assert "music:{providers:['agentics','openrouter'" in models
+    # 音乐首位是「代码作曲」(2026-10-20 用户拍板:新装默认,不调模型),其后才是 Agentics
+    assert "music:{providers:['code','agentics','openrouter'" in models
     assert "tts:{providers:['agentics','openrouter'" in models
     assert "const TEXT_TABS={agentics:'Agentics'" in models
     assert "window.videoagentsDesktop" in models

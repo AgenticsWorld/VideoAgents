@@ -4,6 +4,8 @@
 - audio-to-video(音频配画):讲述音频 + 文稿 → 按音频生成画面,agents/workflows/audiovideo.yaml
 - digital-human(数字人):音频母带 + 人物图片 → 说话人口型视频,agents/workflows/digitalhuman.yaml
 - mashup(混剪):文稿 + 本地素材库(+ 可选讲述音频)→ 素材库切片配画,agents/workflows/mashup.yaml
+- code-video(演示视频,2026-10-20):主题 / 文稿 + 风格(lemo-opuscar 43 种)→ 语言模型写网页逐帧渲染出片,
+  不用视频生成模型,agents/workflows/codevideo.yaml(宿主工具链 modules/codevideo/ + code/codevideo.py)
 
 后三种原是 VideoAgents-Plugins 仓库的同名插件,2026-10-20 并入主程序:成员 SOUL 进 agents/<类别>/,
 DAG 与说明文档进 agents/workflows/(随桌面端打包),不再需要安装/启用;同名插件包在「插件」页标为已并入、不再注册。
@@ -53,6 +55,14 @@ TYPES: dict[str, dict] = {
         "inputs": "文稿在 refs/text/ 与 novel/original.txt(后者是 p0 的文本输入),讲述音频(可选)在 refs/audio/——"
                   "没有音频时按 DAG 头部「音频可选」条款先派 09-audio/narrator 按文稿 TTS 合成母带",
     },
+    "code-video": {
+        "label": "演示视频", "icon": "🖥️", "workflow": "agents/workflows/codevideo.yaml",
+        "doc": "agents/workflows/codevideo.md",
+        "categories": ("18-code-video",), "agents": ("11-qa/code-video-qa",),
+        "outputs_ns": "codevideo", "first_node": "cv0-ingest", "gates": "CVH1 故事板(project.storyboard_review=false 时跳过)、CVH2 成片",
+        "inputs": "主题 / 文稿在 refs/text/transcript.txt,内容定位在 brief.md;风格 = settings.json#project.code_style"
+                  "(agents/workflows/codevideo/styles/<slug>/STYLE.md);用户素材(logo、照片、字体、录音、音乐)在 refs/ 各分类",
+    },
 }
 
 # 原插件 manifest 里声明 stateless 的成员(11-qa/ 前缀本就无状态,不必列)
@@ -67,6 +77,15 @@ INTEGRATED_PLUGINS = frozenset(t for t in TYPES if t != DEFAULT)
 # 数字人的声音来源(2026-10-20):recording = 用户上传的原始录音作母带(默认);clone = 没有录音,
 # 按台词稿逐句用 refs/voices/ 里的样本克隆合成母带(dh0-voice,code/dialogue_clone.py)
 VOICE_SOURCES = ("recording", "clone")
+
+# 演示视频的项目设置(2026-10-20,建项目时写定):code_style = 风格 slug(lemo-opuscar 风格库);storyboard_review = 先审故事板
+# (默认开,CVH1);narration / subtitles = 旁白 / 字幕;length_s = 目标片长;fps;music_source = code(代码作曲,默认)
+# | model(按「生成模型」页音乐设置)。画幅 / 语言 / 成片分辨率沿用 output 段
+CODE_VIDEO_DEFAULTS = {"code_style": "", "storyboard_review": True, "narration": True, "subtitles": True,
+                       "length_s": 45, "fps": 24, "music_source": "code"}
+CODE_VIDEO_FPS = (24, 25, 30)
+CODE_VIDEO_MUSIC = ("code", "model")
+CODE_VIDEO_LENGTH = (5, 600)
 
 _LIB_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.\-]{0,79}")
 
@@ -96,6 +115,51 @@ def resolve(saved, project_dir: Path) -> dict:
         out["footage_libraries"] = clean_libraries(block.get("footage_libraries"))
     if out["type"] == "digital-human":
         out["voice_source"] = block.get("voice_source") if block.get("voice_source") in VOICE_SOURCES else "recording"
+    if out["type"] == "code-video":
+        out.update(code_video_settings(block, strict=False))
+    return out
+
+
+def code_video_settings(block, strict: bool = True) -> dict:
+    """演示视频设置规范化;strict 时非法值抛 ValueError(建项目接口转 400),否则回落默认。"""
+    block = block if isinstance(block, dict) else {}
+    out = dict(CODE_VIDEO_DEFAULTS)
+
+    def bad(msg):
+        if strict:
+            raise ValueError(msg)
+
+    style = str(block.get("code_style") or "").strip()
+    if style:
+        from modules.codevideo import style_slugs
+        if style in style_slugs():
+            out["code_style"] = style
+        else:
+            bad(f"code_style 不在风格库:{style}")
+    for k in ("storyboard_review", "narration", "subtitles"):
+        if k in block:
+            if isinstance(block[k], bool):
+                out[k] = block[k]
+            else:
+                bad(f"{k} 须为 true / false")
+    if "length_s" in block:
+        try:
+            v = float(block["length_s"])
+            if not CODE_VIDEO_LENGTH[0] <= v <= CODE_VIDEO_LENGTH[1]:
+                raise ValueError
+            out["length_s"] = int(v) if v == int(v) else round(v, 1)
+        except (TypeError, ValueError):
+            bad(f"length_s 须在 {CODE_VIDEO_LENGTH[0]}–{CODE_VIDEO_LENGTH[1]} 秒之间")
+    if "fps" in block:
+        if block["fps"] in CODE_VIDEO_FPS:
+            out["fps"] = block["fps"]
+        else:
+            bad(f"fps 只能是 {CODE_VIDEO_FPS}")
+    if "music_source" in block:
+        if block["music_source"] in CODE_VIDEO_MUSIC:
+            out["music_source"] = block["music_source"]
+        else:
+            bad(f"music_source 只能是 {CODE_VIDEO_MUSIC}")
     return out
 
 
@@ -170,6 +234,22 @@ def orchestrator_section(block: dict, proj_rel: str, agent_ids) -> str:
             "- 新建项目时选定的素材库:" + ("、".join(libs) if libs else "(未选)")
             + "——写 mashup/footage_source.json 时以此为准;用户在指令里另行指定时以用户指令为准"
             + ("" if libs else ";未选且用户也没指明时必须先向用户要库名,不得替用户选"))
+    if tid == "code-video":
+        cv = code_video_settings(block, strict=False)
+        lines.append(
+            f"- 演示视频设置(settings.json#project,建项目时写定):风格 `{cv['code_style'] or '(未选)'}`"
+            f"(agents/workflows/codevideo/styles/{cv['code_style'] or '<slug>'}/STYLE.md)、目标片长约 {cv['length_s']} 秒、"
+            f"{cv['fps']} fps、旁白{'开' if cv['narration'] else '关'}、字幕{'开' if cv['subtitles'] else '关'}、"
+            f"先审故事板{'开' if cv['storyboard_review'] else '关'}、配乐 "
+            + ("代码作曲(code-composer 写作曲脚本)" if cv["music_source"] == "code" else "按「生成模型」页音乐设置生成")
+            + "。按这些设置裁定 DAG 条件节点:"
+            + ("cv1-board 与 gc1(CVH1)照常派" if cv["storyboard_review"] else "cv1-board 与 gc1(CVH1)置 skipped")
+            + ";" + ("cv2-voice 照常派" if cv["narration"] else "cv2-voice 置 skipped(全片无旁白)")
+            + ("" if cv["code_style"] else ";风格未选时 cv0-ingest 停下向用户要风格,不得替用户选"))
+        lines.append(
+            "- 本类型不用任何视频生成模型:画面由 scene-coder 写的网页(window.render(t))经宿主 CLI "
+            "`python3 code/codevideo.py` 逐帧渲染;一个项目 = 一部片 = ep01;段(timeline.json sections)= 组(grp)= 场次,"
+            "cv3-sec 按组扇出")
     lines += [
         f"- 立项/排产:生成或改写 {proj_rel}/runs/dag.json 时,主流程节点照 agents/workflow.yaml 实例化(p0-init/g0 照常),"
         f"再把 `{t['workflow']}` 的全部节点并入同一份 dag.json,并在**同一次改动**中按该文件顶层 `main_dag_on_start.skip` "

@@ -61,6 +61,24 @@ python3 code/music_library.py sync   --project <slug> --ep epNN --write
 python3 code/music_library.py check  --project <slug> --ep epNN
 ```
 
+**代码作曲渠道(条件条款,2026-10-20)**:**仅当**以下任一成立时才走本段,否则一律按上面的生成命令执行、不写作曲脚本——
+① `python3 modules/genmedia.py info` 回显音乐生效渠道 = 代码作曲(provider code;「🎨 生成模型」页音乐的「代码作曲」标签页);
+② 工单 instruction 明写 `--provider code`。成立时:**不调音乐模型**,为每条配乐点写一个 Python 作曲脚本(与产物同目录同名,
+如 `assets/audio/bgm/epNN/ep01_bgm_02.py`),再由宿主渲染:
+
+```bash
+python3 modules/genmedia.py music [--provider code] --prompt "<英文一句描述:曲风/配器/速度/段落>" \
+  --output assets/audio/bgm/epNN/ep01_bgm_02.wav --script assets/audio/bgm/epNN/ep01_bgm_02.py --duration <配乐点时长>
+```
+
+脚本契约:按环境变量 `CODE_AUDIO_OUT` 写 48 kHz 立体声 wav,可读 `CODE_AUDIO_DURATION`;`sys.path.insert(0, os.environ['LIB'])` 后
+`from core.audio import sampler as S` / `from core.audio import sfx`(用法见 `modules/codevideo/lib/core/audio/INSTRUMENTS.md`;
+`core.audio.pluck` 要 numba,桌面端没有,不用);`S.seed(n)` 固定随机。配器按 style.json 基调选真实乐器采样,不写千篇一律的钢琴加弦乐;
+低频控制(20–120 Hz 约比其余低 3 dB、铺底不低于 MIDI 48)。缺采样库时宿主按「缺采样库时自动下载」开关处理,关着就把报错里的
+`python3 code/codevideo.py packs --fetch instruments-<库>` 原样写进回执上报。宿主另写 `<输出>.meta.json`(provider=code、脚本 sha256)
+与 `<输出>.credits.json`(用到的乐器署名行):cue sheet 的 license 记 `code`(原创代码作曲)+ credits 行,`11-qa/copyright` 据此核 CC BY 署名。
+音乐库入库、复用配额、cue 标记字段等其余条款不变。
+
 输出格式按扩展名(openrouter:mp3/wav/flac/opus;elevenlabs:仅 mp3/opus;minimax:仅 mp3/wav;comfyui 取决于 SaveAudio 节点)。elevenlabs/minimax 渠道默认 force_instrumental=纯音乐(「🎨 生成模型」页可关,需人声吟唱时提醒用户;minimax 关闭后按 prompt 自动写词演唱);comfyui 默认纯音乐。失败(未配 Key/模型/工作流、超时或拦截)如实写回执上报,严禁伪造或占位产物。详见 WORKFLOW.md §9。
 
 ## 不做什么(边界)

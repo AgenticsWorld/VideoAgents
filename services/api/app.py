@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from services.runtime import core, feishu, media_push, netcheck, wechat, whatsapp
+from services.runtime import codevideo_api, core, feishu, media_push, netcheck, wechat, whatsapp
 
 from . import __version__
 from .runtime_bridge import install_runtime_store
@@ -1062,6 +1062,64 @@ async def fal_models(kind: str = "video", q: str = "", refresh: bool = False) ->
 async def openverse_search(body: dict[str, Any]) -> dict[str, Any]:
     """音效 › Openverse 标签页「搜索测试」:{q, license?, source?, client_id?, client_secret?},缺项用已保存的配置。"""
     return await core.api_openverse_search(body)
+
+
+# ---- 演示视频(code-video,2026-10-20;services/runtime/codevideo_api.py)----
+@api.get("/codevideo/packs", tags=["providers"])
+async def codevideo_packs() -> dict[str, Any]:
+    """「生成模型」页代码作曲 / 代码音效:采样库与 HDRI 包状态(含下载进度)。"""
+    return await asyncio.to_thread(codevideo_api.packs_status)
+
+
+@api.post("/codevideo/packs/{name}/fetch", tags=["providers"])
+async def codevideo_pack_fetch(name: str) -> dict[str, Any]:
+    """后台下载一个包(lemo-opuscar release,sha256 校验);完成发 SSE codevideo_pack。"""
+    return codevideo_api.packs_fetch(name)
+
+
+@api.delete("/codevideo/packs/{name}", tags=["providers"])
+async def codevideo_pack_remove(name: str) -> dict[str, Any]:
+    return await asyncio.to_thread(codevideo_api.packs_remove, name)
+
+
+@api.post("/codevideo/audio-demo/{kind}", tags=["providers"])
+async def codevideo_audio_demo(kind: str) -> dict[str, Any]:
+    """代码作曲 / 代码音效「试听」:跑内置示范脚本(与 Agent 写的脚本同一条链路),返回音频地址。"""
+    return await asyncio.to_thread(codevideo_api.audio_demo, kind)
+
+
+@api.get("/codevideo/audio-demo/{kind}.wav", tags=["providers"])
+async def codevideo_audio_demo_file(kind: str):
+    return FileResponse(codevideo_api.audio_demo_file(kind), media_type="audio/wav")
+
+
+@api.get("/projects/{project}/codevideo", tags=["artifacts"])
+async def codevideo_preview(project: str) -> dict[str, Any]:
+    """「🖥️ 代码预览」页:时间轴、各段渲染新鲜度、混音 / 成片、注释、后台渲染任务。"""
+    return await asyncio.to_thread(codevideo_api.preview_info, project)
+
+
+@api.post("/projects/{project}/codevideo/render", tags=["artifacts"])
+async def codevideo_render(project: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    """后台按段渲染:{sections?:[段 id], force?};不带 sections = 只渲过期段。完成发 SSE codevideo_render。"""
+    return await asyncio.to_thread(codevideo_api.render_start, project, body or {})
+
+
+@api.post("/projects/{project}/codevideo/render/cancel", tags=["artifacts"])
+async def codevideo_render_cancel(project: str) -> dict[str, Any]:
+    return codevideo_api.render_cancel(project)
+
+
+@api.post("/projects/{project}/codevideo/notes", tags=["artifacts"])
+async def codevideo_note(project: str, body: dict[str, Any]) -> dict[str, Any]:
+    """代码预览页「🗒 注释」:{id?, t, text}(无 id 新增;空 text 删除)→ codevideo/notes.json。"""
+    return await asyncio.to_thread(codevideo_api.note_set, project, body)
+
+
+@api.post("/projects/{project}/codevideo/notes/submit", tags=["artifacts"])
+async def codevideo_notes_submit(project: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    """代码预览页「📨 提交注释」:全部注释一张修改单发修改师(kind=codevideo),派单成功后清空。"""
+    return await codevideo_api.notes_submit(project, body or {})
 
 
 @api.post("/providers/minimax/voices", tags=["providers"])

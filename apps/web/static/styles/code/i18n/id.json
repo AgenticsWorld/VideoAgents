@@ -1,0 +1,400 @@
+{
+ "_categories": {
+  "Hand-drawn & Painting": "Gambar tangan & lukisan",
+  "East Asian Traditions": "Tradisi Asia Timur",
+  "Print & Printmaking": "Cetak & seni grafis",
+  "Graphic & Type": "Grafis & tipografi",
+  "Information & Keynote": "Informasi & keynote",
+  "Cartoon & Anime": "Kartun & anime",
+  "Games": "Gim",
+  "Cinema & Eras": "Sinema & era",
+  "Materials & 3D": "Material & 3D"
+ },
+ "crayon-book": {
+  "name": "Buku bergambar krayon",
+  "line": "Bulan tak bisa tidur, jadi seorang gadis kecil memanjat atap untuk menyanyikan lagu nina bobo untuknya.",
+  "uses": [
+   "Buku bergambar",
+   "Dongeng sebelum tidur",
+   "Belajar anak"
+  ]
+ },
+ "watercolor": {
+  "name": "Cat air",
+  "line": "Ikuti hujan dari jantung gurun merah Australia hingga pesisirnya yang hijau dalam satu perjalanan lukis tanpa putus.",
+  "uses": [
+   "Dokumenter alam",
+   "Wisata",
+   "Penjelasan sains"
+  ]
+ },
+ "ink-wash": {
+  "name": "Lukisan tinta Tiongkok",
+  "line": "Seorang pendekar pedang menyeberangi sungai di atas air dan membelah arusnya dengan satu tebasan.",
+  "uses": [
+   "Wuxia",
+   "Merek budaya",
+   "Puisi"
+  ]
+ },
+ "impasto": {
+  "name": "Lukisan minyak impasto",
+  "line": "Di alun-alun kelabu yang diguyur hujan, sebuah payung merah terbuka, dan alunan waltz mewarnai seluruh alun-alun.",
+  "uses": [
+   "Video musik",
+   "Seni & budaya",
+   "Iklan emosional"
+  ]
+ },
+ "one-line": {
+  "name": "Gambar satu garis",
+  "line": "Satu garis tak terputus menggambar seluruh hidup seseorang, lalu penanya diserahkan kepada seorang anak.",
+  "uses": [
+   "Kisah merek",
+   "Tonggak kehidupan",
+   "Iklan minimalis"
+  ]
+ },
+ "whiteboard": {
+  "name": "Penjelasan papan tulis",
+  "line": "Bagaimana ponsel tahu di mana Anda berada: GPS, jam atom, dan 38 mikrodetik yang ditambahkan relativitas setiap hari.",
+  "uses": [
+   "Video penjelasan",
+   "Kursus daring",
+   "Sains"
+  ]
+ },
+ "urban-sketch": {
+  "name": "Sketsa urban · pena & cat air",
+  "line": "Taman yang hanya berupa sketsa pena; ke mana pun angin membawa topi jeraminya, warna mengikutinya.",
+  "uses": [
+   "Kota & wisata",
+   "Arsitektur",
+   "Merek gaya hidup"
+  ]
+ },
+ "shadow-puppet": {
+  "name": "Wayang kulit Tiongkok",
+  "line": "Sepuluh matahari membakar bumi hingga pemanah Hou Yi menarik busurnya, dikisahkan dengan wayang kulit di layar yang bercahaya.",
+  "uses": [
+   "Mitos & cerita rakyat",
+   "Warisan budaya",
+   "Festival"
+  ]
+ },
+ "ukiyoe": {
+  "name": "Ukiyo-e",
+  "line": "Seorang pengembara berjalan menuju gunung yang jauh; setiap bidikan adalah cetakan balok kayu, berakhir dengan ombak besar.",
+  "uses": [
+   "Wisata",
+   "Budaya Jepang",
+   "Puisi"
+  ]
+ },
+ "papercut-red": {
+  "name": "Guntingan kertas merah",
+  "line": "Pada malam Tahun Baru Imlek, monster Nian datang ke kota, dan guntingan kertas raksasa seorang gadis menerangi desa untuk mengusirnya.",
+  "uses": [
+   "Tahun Baru Imlek",
+   "Ucapan hari raya",
+   "Cerita rakyat"
+  ]
+ },
+ "paper-lantern": {
+  "name": "Kotak lampu kertas potong",
+  "line": "Sebuah kue bulan menceritakan kisah Festival Pertengahan Musim Gugur tentang reuni dan kerinduan, di dalam kotak lampu kertas potong yang bercahaya.",
+  "uses": [
+   "Festival",
+   "Merek hadiah",
+   "Kisah budaya"
+  ]
+ },
+ "risograph": {
+  "name": "Cetak Risograph",
+  "line": "Bersepeda Minggu pagi menyusuri kota — toko roti, taman, tepi sungai — dalam dua tinta yang sedikit meleset.",
+  "uses": [
+   "Merek indie",
+   "Zine",
+   "Gaya hidup"
+  ]
+ },
+ "halftone-dossier": {
+  "name": "Berkas halftone",
+  "line": "Seekor kucing oranye gemuk diadili karena menguji gravitasi dan parkur pukul 4 pagi, lalu dibebaskan.",
+  "uses": [
+   "Humor",
+   "Konten hewan peliharaan",
+   "Video pendek media sosial"
+  ]
+ },
+ "woodcut": {
+  "name": "Cukil kayu",
+  "line": "Sebuah desa menghabiskan sepanjang musim dingin untuk mengecor satu lonceng; saat pertama kali berbunyi, salju berhenti turun.",
+  "uses": [
+   "Cerita rakyat",
+   "Merek kerajinan",
+   "Trailer buku"
+  ]
+ },
+ "engraving": {
+  "name": "Gravir pelat tembaga",
+  "line": "Lembar ilustrasi sejarah alam mengukir dirinya sendiri: pahat gravir memotong tembaga, lebah terbentuk garis demi garis, dan sapuan cat air menghidupkannya.",
+  "uses": [
+   "Label museum",
+   "Penjelasan sains",
+   "Warisan merek"
+  ]
+ },
+ "silkscreen-poster": {
+  "name": "Poster wisata sablon",
+  "line": "Tiga poster jalur pendakian disablon satu warna demi satu warna, lalu didaki dalam satu bidikan panjang dari siang hingga senja.",
+  "uses": [
+   "Panduan jalur & destinasi",
+   "Promosi wisata",
+   "Poster acara"
+  ]
+ },
+ "swiss-motion": {
+  "name": "Grafis gerak gaya Swiss",
+  "line": "Sebuah poster konser menata dirinya sendiri dengan lima aturan desain Swiss; aturan kelima adalah melanggar satu saja.",
+  "uses": [
+   "Identitas merek",
+   "Acara",
+   "Pendidikan desain"
+  ]
+ },
+ "spy-titles": {
+  "name": "Pembuka film mata-mata 60-an",
+  "line": "Judul pembuka film mata-mata khayalan tahun 1964: pengejaran kunci curian hingga bentuk-bentuknya menyatu menjadi judul.",
+  "uses": [
+   "Sekuens judul",
+   "Pembuka acara",
+   "Trailer"
+  ]
+ },
+ "art-deco": {
+  "name": "Art Deco",
+  "line": "Sebuah hotel megah, 1930: seorang bellboy berpacu melewati lift dan pintu putar untuk mengantar sepucuk surat sebelum tengah malam.",
+  "uses": [
+   "Kemewahan & perhotelan",
+   "Gala",
+   "Undangan"
+  ]
+ },
+ "blueprint": {
+  "name": "Cetak biru",
+  "line": "Cetak biru seorang penemu menggambar, mengurai, dan merakit mesin penangkap awan, lalu awan revisinya mulai menurunkan hujan.",
+  "uses": [
+   "Teknik",
+   "Peluncuran perangkat keras",
+   "Penjelasan teknologi"
+  ]
+ },
+ "stained-glass": {
+  "name": "Kaca patri",
+  "line": "Sinar matahari menyusuri jendela katedral dari fajar hingga senja, membangunkan setiap panel kisah ksatria dan naga.",
+  "uses": [
+   "Legenda",
+   "Warisan budaya",
+   "Kisah hari raya"
+  ]
+ },
+ "pictogram-motion": {
+  "name": "Piktogram bergerak",
+  "line": "Ke-43 cabang olahraga Asian Games 2026 sebagai piktogram geometris yang mengikuti ketukan.",
+  "uses": [
+   "Acara olahraga",
+   "Identitas visual",
+   "Pembuka acara"
+  ]
+ },
+ "ascii-crt": {
+  "name": "Terminal ASCII / CRT",
+  "line": "AI pangkalan bulan terbangun setelah empat puluh tahun oleh sinyal dari Bumi, lalu membalas dengan menggambar “rumah” dari karakter.",
+  "uses": [
+   "Alat pengembang",
+   "Fiksi ilmiah",
+   "Merek teknologi"
+  ]
+ },
+ "dataviz": {
+  "name": "Bercerita dengan data",
+  "line": "Seratus tahun suhu musim panas, dengan grafik itu sendiri yang bercerita.",
+  "uses": [
+   "Jurnalisme data",
+   "Laporan",
+   "Iklim & sains"
+  ]
+ },
+ "iso-infographic": {
+  "name": "Infografis isometrik",
+  "line": "Perjalanan secangkir kopi dari perkebunan hingga ke tangan Anda, melintasi satu dunia isometrik.",
+  "uses": [
+   "Penjelasan proses",
+   "Rantai pasok",
+   "Laporan tahunan"
+  ]
+ },
+ "dark-keynote": {
+  "name": "Keynote teknologi gelap",
+  "line": "Film peluncuran Tidy, aplikasi fiktif: satu kursor yang terkubur mengembalikan ratusan jendela ke tempatnya sekaligus.",
+  "uses": [
+   "Peluncuran produk",
+   "SaaS",
+   "Keynote"
+  ]
+ },
+ "living-screencast": {
+  "name": "Screencast hidup",
+  "line": "Clawd, maskot piksel Claude Code, melompat keluar dari terminal ke aplikasi Claude dan memeragakan mode rencana, komentar diff, dan pemeriksaan mandiri dalam screencast satu kali ambil.",
+  "uses": [
+   "Tutorial produk",
+   "Peluncuran fitur",
+   "Orientasi pengguna"
+  ]
+ },
+ "hologram-hud": {
+  "name": "HUD hologram fiksi ilmiah",
+  "line": "Sebuah sepeda listrik dipindai menjadi hologram; kotak bidik mengunci baterai, motor, dan rem, lalu setiap spesifikasi bergulir ke nilainya.",
+  "uses": [
+   "Pemaparan spesifikasi produk",
+   "Video peluncuran & crowdfunding",
+   "Layar pameran"
+  ]
+ },
+ "rubber-hose": {
+  "name": "Kartun rubber hose 1930-an",
+  "line": "Sebuah cangkir kopi mengejar gula batu yang kabur keliling dapur, bergaya kartun 1930-an.",
+  "uses": [
+   "Makanan & minuman",
+   "Iklan retro",
+   "Anak-anak"
+  ]
+ },
+ "cel-anime-80s": {
+  "name": "Anime cel 80-an",
+  "line": "Seorang gadis kurir bersepeda menembus kota neon yang basah oleh hujan untuk mengantar sebuah kaset sebelum peluncuran saat fajar.",
+  "uses": [
+   "Video musik",
+   "Trailer gim",
+   "Nostalgia"
+  ]
+ },
+ "scifi-toon": {
+  "name": "Kartun sitkom fiksi ilmiah",
+  "line": "Seorang jenius yang jenuh membuka portal hanya untuk membeli kopi dan terjungkal melewati semesta yang makin aneh.",
+  "uses": [
+   "Komedi",
+   "Merek teknologi",
+   "Video pendek media sosial"
+  ]
+ },
+ "midcentury-toon": {
+  "name": "Kartun mid-century",
+  "line": "Robot penyedot debu disiapkan dalam tiga langkah, dikisahkan seperti film pelajaran tahun 1950-an: pasang dok, sambungkan aplikasi, tekan mulai.",
+  "uses": [
+   "Panduan penyiapan produk",
+   "Penjelasan pusat bantuan",
+   "Langkah-langkah panduan"
+  ]
+ },
+ "pixel-rpg": {
+  "name": "RPG piksel 16-bit",
+  "line": "Di depan pintu bos terakhir, sang pahlawan menyimpan permainan, dan layar penyimpanan memutar ulang seluruh perjalanan.",
+  "uses": [
+   "Trailer gim",
+   "Rekap",
+   "Nostalgia"
+  ]
+ },
+ "hd-2d": {
+  "name": "HD-2D",
+  "line": "Mercusuar padam; seorang gadis membawa nyala api terakhir menembus hutan malam dan mendaki tebing badai.",
+  "uses": [
+   "Trailer gim",
+   "Fantasi",
+   "Film cerita"
+  ]
+ },
+ "microgame": {
+  "name": "Hiruk-pikuk gim mikro",
+  "line": "Seorang kadet ceroboh bertahan melewati kamp pelatihan lima detik yang makin cepat, hingga bos terakhir: mendarat di rumah.",
+  "uses": [
+   "Trailer gim",
+   "Orientasi pengguna",
+   "Video pendek media sosial"
+  ]
+ },
+ "game-show": {
+  "name": "Game show gaya flat",
+  "line": "Sejarah AI sebagai gim ritme: model-model naik panggung mengikuti ketukan, dan rapor menutup pertunjukan.",
+  "uses": [
+   "Linimasa teknologi",
+   "Kilas balik tahunan",
+   "Acara varietas"
+  ]
+ },
+ "silent-film": {
+  "name": "Film bisu 1920-an",
+  "line": "Seorang bocah toko roti mengejar sebongkah roti yang menggelinding menuruni bukit, lalu membelahnya dua untuk seorang gadis yang lapar.",
+  "uses": [
+   "Komedi",
+   "Merek retro",
+   "Bercerita tanpa dialog"
+  ]
+ },
+ "backrooms": {
+  "name": "Found footage liminal",
+  "line": "Seorang karyawan baru shift malam merekam malam pertamanya di kantor kuning tanpa ujung, sambil mengikuti aturan di dinding.",
+  "uses": [
+   "Horor",
+   "Misteri & ARG",
+   "Teaser gim"
+  ]
+ },
+ "brick-toy": {
+  "name": "Mainan balok susun",
+  "line": "Astronaut balok merakit roket dari suku cadang dan terbang ke bulan balok.",
+  "uses": [
+   "Mainan & anak",
+   "Rakitan produk",
+   "Luar angkasa"
+  ]
+ },
+ "paper-popup": {
+  "name": "Buku pop-up",
+  "line": "Sebuah buku pop-up terbuka di atas meja; peri kecil bernama Pip bertualang menembus dunia kertas lalu melompat keluar ke dunia kita.",
+  "uses": [
+   "Buku anak",
+   "Trailer gim",
+   "Film cerita"
+  ]
+ },
+ "tilt-shift": {
+  "name": "Miniatur tilt-shift",
+  "line": "Jam sibuk pagi di kota yang tampak seperti maket: lalu lintas, kereta, dan orang-orang mungil.",
+  "uses": [
+   "Promosi kota",
+   "Properti",
+   "Transportasi"
+  ]
+ },
+ "lowpoly-island": {
+  "name": "Pulau isometrik low-poly",
+  "line": "Sebuah pulau dan desanya tumbuh petak demi petak dari laut kosong, setiap petak satu nada, hingga malam berbintang.",
+  "uses": [
+   "Trailer gim",
+   "Pembangunan dunia",
+   "Konten menenangkan"
+  ]
+ },
+ "glass-product": {
+  "name": "Render produk kaca",
+  "line": "Unboxing dan close-up Aura, earbud kaca fiktif, dengan sapuan lampu strip dan kaustik.",
+  "uses": [
+   "Peluncuran produk",
+   "Teknologi konsumen",
+   "Kecantikan"
+  ]
+ }
+}

@@ -1,0 +1,312 @@
+# codevideo.yaml — 演示视频流水线 DAG(项目类型 code-video;机器可读)
+# 与 agents/workflow.yaml 同构;项目类型机制见 agents/WORKFLOW.md §11,并入/跳过规则沿用 §10.3。
+# 节点 id 前缀 cv/gc,不与主流程 p*/g*、音频配画 av*/ga*、混剪 mx*/gm*、数字人 dh* 冲突;
+# 人工签字点 CVH1(故事板,可关)/ CVH2(成片),不与主流程 H1–H5/H3S/H3A/H3V/H3B/H3P、AVH*、MH* 冲突。
+# orchestrator 把本 DAG 节点并入项目 runs/dag.json 统一跟踪;说明文档 agents/workflows/codevideo.md。
+#
+# ══════════════════════════════════════════════════════════════════════════════
+# ⚠️ 本流程的特殊口径(覆盖主流程默认纪律)
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# ① 不用任何视频生成模型、不用图像模型出画面。画面 = scene-coder 写的网页 codevideo/index.html
+#    (window.render(t) 按时间画出任意一帧),由宿主 CLI `python3 code/codevideo.py` 用无头浏览器逐帧截图、
+#    ffmpeg 编码;声音 = 旁白 TTS(旁白声线卡)+ 代码作曲(采样乐器 / 合成)+ 程序化拟音,混音脚本出成片声轨。
+#    导演与制作方法沿用 lemo-opuscar(MIT,github.com/lemomo-ai/lemo-opuscar),43 个风格的规范在
+#    agents/workflows/codevideo/styles/<slug>/STYLE.md,立项时锁定副本到 codevideo/style/。
+# ② 一个项目 = 一部片 = ep01。codevideo/timeline.json 是唯一事实源:段(sections)= 现有页面里的「场次」与
+#    「生成组」(第 i 段 → 场次号 S{i*10:03d}、组号 grp{i*10:04d}),由 `codevideo.py sync` 写成
+#    directing/ep01/shot_list.json + storyboard.json,故事板 / 分镜预览 / 后期 / 成片发布页零改动显示。
+#    「直改」directing/ep01/ 的这两份文件只准经 sync(_meta.source=codevideo),不得手写。
+# ③ 不做语音转写核对(用户 2026-09-23 规定:非转写工位不得自发调 faster-whisper / WhisperModel);
+#    字幕时间取每句 TTS 的实测时长(codevideo/voices/dur.json)。用户明确要求转写时才由调度层派
+#    09-audio/audio-transcription。
+# ④ 主流程不适用的机检(narration_anchors、audio_track_present、group_duration_pm_1s、prompt 绑定类、
+#    check_generation_groups 等)一律不跑,由 `codevideo.py check` 的五段机检替换(见各节点 validation)。
+# ⑤ 无片头片尾 / 过场设计 / 花字 / 超分节点:渲染即按成片分辨率出(settings.json output.final_resolution
+#    × 画幅,宿主算尺寸);字幕与标题是风格的一部分,由页面自己画。
+#
+# 输入(新建向导收,总制片在初始化工单里核对):
+#   - 主题 / 文稿:refs/text/transcript.txt(可空,主题写在 brief.md「内容定位」也可;两者至少一项)
+#   - 风格:settings.json#project.code_style(lemo-opuscar 风格 slug,必选)
+#   - 设置:settings.json#project = {storyboard_review(默认 true), narration(默认 true), subtitles(默认 true),
+#           length_s(默认 45), fps(24/25/30), music_source(code 默认 | model)};画幅 / 语言 / 成片分辨率沿用 output 段
+#   - 用户素材(可选):refs/ 各分类里的 logo、产品照、字体、录音、音乐;用户声明有权使用才进片,否则画替身
+#
+# 条件节点(orchestrator 按 settings.json#project 裁定,未派发的依赖视同满足,不 HOLD):
+#   storyboard_review = false → cv1-board 与 gc1 置 skipped(不停顿,直接进声音与画面)
+#   narration_on      = project.narration == true;false → cv2-voice 置 skipped(全片无旁白)
+#
+# ★宿主工具链(随 VideoAgents 本体发布):
+#   code/codevideo.py           CLI:doctor / style / demo / sync / still / board / events / readcheck / voice /
+#                               render / mix / master / check / build / info / packs(用法见文件头注释)
+#   modules/codevideo/          静态服务、Playwright 逐帧渲染、按段指纹、混音与两遍 loudnorm、机检
+#   modules/codevideo/lib/      页面库 /core/lib.js、/core/three/post.js、/core/post/crt.js、/core/fonts/、
+#                               three.js r170(页面写 /node_modules/three/…)、音频 core.audio.{sampler,sfx}
+#   modules/genmedia.py music|sfx --provider code --script …   代码作曲 / 代码音效(脚本在宿主库环境下运行)
+#   源码环境未更新或 Chromium / ffmpeg 不可用时流程照样能立项,直到渲染那步才炸,
+#   故 cv0-ingest 的 host_toolchain_verified(`codevideo.py doctor` 退出 0)是唯一拦截点。
+
+version: 1
+project_type: code-video
+
+# 主流程分支联动跳过(WORKFLOW.md §10 规则 6)。本流程是**自起流程**:输入是主题与风格不是小说,
+# 主 DAG 从解析到发布整条不适用——导演方案由 cv1-treatment 替代剧本与分镜,画面由 cv3 代码渲染替代
+# 视觉生成,声音由 cv2/cv4 替代主流程音频阶段。
+# 全部未开工(pending/template/blocked)时整组置 skipped(写 skip_reason 含项目类型名);
+# 清单内存在任一已开工节点则视为视频制作进行中,一个也不跳。
+# skipped 是挂起不是放弃:用户其后要求按主流程做视频时恢复 pending 重新排产。
+# ⚠️ 刻意不含 p0-init 与 g0:项目创建时 orchestrator 已跑过项目初始化(状态 done),
+#    把已开工节点列进清单会触发「一个也不跳」的白名单条件,导致整组跳过失效。
+main_dag_on_start:
+  skip:                # p*- 为前缀通配(含按集展开后的逐集节点);g1–g10 为闸门节点精确 id
+    - p0-scan          # 小说分章扫描——本流程没有小说
+    - p0-parse-*       # 小说分章解析
+    - p1-*             # 剧情理解——由 cv1-treatment 导演方案替代
+    - p2-*             # 世界圣经九维——不适用(风格规范 STYLE.md 即视觉权威)
+    - p3-*             # 角色与资产——角色在页面代码里画,不出概念图
+    - p4-*             # 美术风格——由锁定的 STYLE.md 替代
+    - p5-*             # 剧本改编——由 cv1-treatment 替代
+    - p6-*             # 导演分镜——由 timeline.json + codevideo.py sync 替代
+    - p7-*             # 视觉生成——由 cv3 代码渲染替代(不调任何视频 / 图像模型)
+    - p8-*             # 音频——由 cv2-voice / cv2-score / cv4-mix 替代
+    - p9-*             # 剪辑合成——由 cv4-master 替代
+    - p10-*            # 成片终审——由 cv5-qa 替代
+    - p11-*            # 视频发布——按需另点单(成片发布页照常可用)
+    - g1
+    - g2               # H1-世界圣经确认
+    - g3               # H1A-角色与资产确认
+    - g4               # H2-美术风格锁定
+    - g5               # H3-第1集剧本确认
+    - g6               # H3A-分镜确认
+    - g7               # H3B-视觉生成确认
+    - g8
+    - g9               # H4-首集成片确认
+    - g10              # H5-发布签字
+
+defaults:
+  eval_threshold: 80
+  max_retries: 3
+  on_fail: escalate_human
+  run_record: [result.json, eval.json, meta.json]
+  gate_auto: [open_blocker_major_defects_zero_or_waived, due_gate_defects_closed,
+              qa_hold_requires_waiver, human_checks_executed_or_waived]
+
+# orchestrator 注意:并入 runs/dag.json 时给每个节点显式写 phase 字段(值取所属 phase 的 id),
+# 否则工作流预览页按 cv/gc 前缀推断泳道(gc1 → cv1、gc2 → cv5)。
+# 机检 id 与 `python3 code/codevideo.py check --stage … --json` 的输出项同名(clip_<段 id> 汇总为
+# clips_fresh_frames_silent);其余为节点专有检查,写在各节点注释里。
+
+phases:
+  - id: cv0
+    name: 立项与风格
+    tasks:
+      - id: cv0-ingest
+        agent: 18-code-video/film-director
+        outputs: [codevideo/brief.json, codevideo/style/lock.json, codevideo/style/STYLE.md]
+        # 命令(按序,前台跑完):
+        #   python3 code/codevideo.py doctor --project <slug>     # 退出 0 才往下;✗ 项原样上报用户,停在本节点
+        #   python3 code/codevideo.py style  --project <slug>     # 锁定 settings.json#project.code_style 的风格副本
+        # host_toolchain_verified:doctor 退出 0(Chromium / ffmpeg / Python 依赖 / 宿主库 / 风格库);
+        #   webgl 软件渲染(「!」项)不拦,但 3D / 着色器风格须在 brief.json 记风险并告知用户渲染会慢;
+        # style_locked:codevideo/style/lock.json 的 slug == settings.json#project.code_style;风格未选 → 停下向用户要,不得替用户选;
+        # brief_complete:brief.json 写齐 主题(取 refs/text/transcript.txt 与 brief.md)、风格、目标片长、画幅与渲染尺寸
+        #   (`codevideo.py info` 的 size)、fps、语言、旁白 / 字幕 / 先审故事板 / 配乐来源、用户素材清单
+        #   (refs/ 逐件:用途 + 用户是否声明有权使用;未声明的一律画替身,不进片)。
+        validation:
+          auto: [schema, host_toolchain_verified, style_locked, brief_complete, ascii_filename]
+          rubric: extraction_v1
+
+  - id: cv1
+    name: 导演方案与故事板
+    depends_on: [cv0-ingest]
+    tasks:
+      - id: cv1-treatment
+        agent: 18-code-video/film-director
+        depends_on: [cv0-ingest]
+        outputs: [codevideo/TREATMENT.md, codevideo/timeline.json, codevideo/lines.json,
+                  "directing/{ep}/shot_list.json", "directing/{ep}/storyboard.json"]
+        # ★先写方案、后看样片:写完 TREATMENT.md 之前不得跑 `codevideo.py demo`(宿主退出码 3);codevideo/style/DEMO.md
+        #   与样片源码都是 demo 命令放出来的,方案没写成时根本不存在
+        #   (样片只用来学技法,不能拿它的故事、结构、镜头、配乐、结尾);result.json 登记 demo_opened_after_treatment。
+        # treatment_sections_complete:TREATMENT.md 八项齐(三个候选结构与选择理由 / logline 与弧线 / 对标参考
+        #   学什么不学什么 / 镜头表(景别·角度·运动·时长·为什么)/ 逐秒节拍 / cue map(速度·小节网格·每段配器·
+        #   每个切点与击点落在第几拍)/ 声音设计表(每段 环境床·主要拟音·音乐状态)/ 字幕与标题设计);
+        # timeline_valid + directing_synced:写完 timeline.json 跑 `python3 code/codevideo.py sync --project <slug>` 退出 0;
+        #   dur 贴近 settings.json#project.length_s(偏差 > 20% 在方案里写明理由);size 取 `codevideo.py info` 的 size;
+        # lines_match_timeline:旁白开时 lines.json 每条 id 在 timeline.lines 里有时点,无旁白时不写 lines.json;
+        #   数字在 text 里写成阿拉伯数字、在 say 里写成读法(TTS 读法与字幕写法分开)。
+        validation:
+          auto: [treatment_sections_complete, timeline_valid, directing_synced, lines_match_timeline,
+                 demo_opened_after_treatment, ascii_filename]
+          rubric: creative_v1
+      - id: cv1-look
+        agent: 18-code-video/scene-coder
+        depends_on: [cv1-treatment]
+        outputs: [codevideo/index.html, "codevideo/stills/look_*.jpg", codevideo/sheets/look_sheet.jpg]
+        # 用**正式的绘制代码**证明风格(不是示意图):有角色 = model sheet(转面 / 3–4 表情 / 2–3 关键姿势 / 色板)
+        #   + 2 张风格帧;无角色 = 片中 3 张风格帧(其一为招牌镜头)。逐张对照 codevideo/style/STYLE.md 自检。
+        # 写完方案后可 `python3 code/codevideo.py demo --project <slug>` 拉样片源码学技法(只读,禁止整段照搬故事与镜头)。
+        # 命令:python3 code/codevideo.py still --project <slug> <t…> --prefix look_ --sheet
+        #       python3 code/codevideo.py check --project <slug> --stage contract
+        # look_frames_reviewed:result.json 逐张写 对照 STYLE.md 哪几条、发现的偏差与处置。
+        validation:
+          auto: [page_globals, deterministic, no_external_requests, no_page_errors, look_frames_reviewed]
+          rubric: visual_gen_v1
+      - id: cv1-board
+        agent: 18-code-video/scene-coder
+        depends_on: [cv1-look]
+        condition: storyboard_review     # settings.json#project.storyboard_review(默认 true);false = 不派发
+        outputs: ["assets/storyboard/{ep}/index.json", "assets/storyboard/{ep}/board_sheet.jpg"]
+        # 6–9 个关键镜用真代码渲出(timeline shots[].key 标关键镜;没标则宿主均匀取 ≤ 9 镜,每镜取中点):
+        #   python3 code/codevideo.py board --project <slug> [--keys s1,s4,…]
+        # 关键镜画面须已是成片质量的构图与风格(其余镜可以还没写);故事板页「📋 故事板」直接显示这些帧(provider=code)。
+        # board_rendered:index.json 里本次 provider=code 的条目数 ∈ [6, 9](镜头总数不足 6 时 = 全部);
+        # board_brief_written:result.json 写 logline、每镜一句画面说明、最没把握的一两点(给 CVH1 签字用)。
+        validation:
+          auto: [board_rendered, board_sheet_present, timeline_valid, board_brief_written]
+          rubric: visual_plan_v1
+      - { id: gc1, gate: true, human: true, checkpoint: CVH1-故事板签字,
+          condition: storyboard_review, depends_on: [cv1-board] }
+        # 签字前用户在「📋 故事板」页看关键帧与联系表(assets/storyboard/{ep}/board_sheet.jpg),
+        # 签字单附 logline 与 cv1-board 回执里「最没把握的点」。不满意 → 按意见退回 cv1-treatment / cv1-look
+        # (改 timeline.json 后须重跑 sync 与 board,再发签字单)。storyboard_review=false 时本闸门 skipped。
+
+  - id: cv2
+    name: 旁白与配乐
+    depends_on: [gc1]           # gc1 skipped 视同满足
+    tasks:
+      - id: cv2-voice
+        agent: 09-audio/narrator
+        depends_on: [gc1, cv1-treatment]
+        condition: narration_on        # settings.json#project.narration;false = 不派发
+        outputs: ["codevideo/voices/", codevideo/voices/dur.json]
+        # 只跑宿主 CLI:python3 code/codevideo.py voice --project <slug>
+        #   逐句 genmedia tts(不带 --character / --voice = 旁白声线卡;lines.json 的 delivery → --instructions),
+        #   出 voices/<id>.wav(48 kHz 单声道、修首尾静音)+ dur.json;只补新句与改过的句(--force 全部重出)。
+        # 台词一字不改(改稿归 film-director);不自写 TTS / 拼接脚本;不做语音转写核对(特殊口径 ③)。
+        # 项目还没有旁白声线卡时先派 09-audio/voice-generation 按 brief 基调设计并冻结 narrator.json(同主流程口径)。
+        # voices_complete:lines.json 每个 id 都有 wav 且 dur.json 有时长;voices_fit_timeline:每句时长 + 0.6 s
+        #   不超过它在 timeline 里到下一句(或段尾)的间隔,超了在回执逐条列出交 film-director 改稿或改时间,不压语速硬塞。
+        validation:
+          auto: [voices_complete, voices_fit_timeline, narrator_card_voice, ascii_filename]
+          rubric: edit_v1
+      - id: cv2-score
+        agent: 18-code-video/code-composer
+        depends_on: [gc1, cv1-treatment]
+        outputs: [codevideo/music/score.py, codevideo/music/score.wav]
+        # music_source = code(默认):照 TREATMENT.md 的 cue map 写作曲脚本 codevideo/music/score.py,宿主渲染:
+        #   python3 modules/genmedia.py music --provider code --prompt "<英文一句描述>" \
+        #     --output codevideo/music/score.wav --script codevideo/music/score.py --duration <timeline dur>
+        #   (同时写出 score.meta.json 与 score.wav.credits.json——用到的采样乐器署名,CREDITS 必收)
+        # music_source = model:按「生成模型」页音乐设置生成(去掉 --provider code 与 --script,只写 --prompt),
+        #   画面击点改由 film-director 按实测成品对齐;回执写明生成渠道与模型。
+        # score_rendered:score.wav 存在、≥ 片长、非静音;hits_on_grid:timeline.hits 每个击点落在 cue map 写的拍上
+        #   (脚本里用同一份 timeline.json 计算时间,不手抄秒数);low_end_balanced:20–120 Hz 能量不高出其余频段约 3 dB。
+        validation:
+          auto: [score_rendered, score_provider_matches_setting, hits_on_grid, low_end_balanced, ascii_filename]
+          rubric: creative_v1
+
+  - id: cv3
+    name: 画面编程与渲染
+    depends_on: [gc1]
+    tasks:
+      - id: cv3-engine
+        agent: 18-code-video/scene-coder
+        depends_on: [gc1, cv1-look]
+        outputs: [codevideo/index.html, codevideo/main.js, "codevideo/js/", "codevideo/fonts/"]
+        # 片子引擎:按 timeline.json 驱动的时间轴、镜头 / 投影、world→screen 换算、风格绘制、字幕层、window.EV、
+        #   window.TEXTS;每段的画面写在 codevideo/sections/<段 id>.js(cv3-sec),引擎只 import 它们。
+        # 命令:python3 code/codevideo.py check --project <slug> --stage contract,timeline
+        validation:
+          auto: [page_globals, deterministic, no_external_requests, no_page_errors, page_dur_matches,
+                 timeline_valid]
+          rubric: visual_plan_v1
+      - id: cv3-sec
+        agent: 18-code-video/scene-coder
+        depends_on: [cv3-engine, cv2-voice]     # 字幕时间要用 voices/dur.json;cv2-voice skipped 视同满足
+        for_each: group                         # 按 directing/{ep}/shot_list.json generation_groups 实例化(1 段 = 1 组)
+        outputs: ["codevideo/sections/{section}.js", "codevideo/stills/{section}_*.jpg"]
+        # {section} = 该组的 generation_groups[].codevideo_section(段 id)。只改 sections/<本段>.js;
+        #   要改引擎 / 共用代码(其余文件 = 全部段过期重渲)先在回执写明原因,由 orchestrator 协调,不得顺手改。
+        # 自检:python3 code/codevideo.py still --project <slug> --range <t0>:<t1>:1 --prefix <段id>_ --sheet
+        #   + 关键动作 0.2 s 抽帧条(--range a:b:0.2);python3 code/codevideo.py render --project <slug> --section <段id>
+        #   出本段片段看一遍(只渲本段,指纹没变自动跳过)。
+        # section_module_only:本单改动只落在 sections/<本段>.js 及其新增素材;section_stills_reviewed:回执写联系表
+        #   看到的问题与处置(主体太小 / 太暗 / 字幕压主体 / 转场空帧 / 跟随特效脱靶)。
+        validation:
+          auto: [section_module_only, deterministic, no_page_errors, section_stills_reviewed]
+          rubric: visual_gen_v1
+      - id: cv3-render
+        agent: 18-code-video/scene-coder
+        depends_on: [cv3-sec]
+        outputs: ["assets/clips/{ep}/", codevideo/render.json, codevideo/events.json, codevideo/cues.json]
+        # 全片按段渲染(指纹没变的段自动跳过)+ 阅读时长 + 音效事件:
+        #   python3 code/codevideo.py render --project <slug> [--workers N]
+        #   python3 code/codevideo.py readcheck --project <slug>        # 退出 0;2 = 页面没有 TEXTS,不算通过
+        #   python3 code/codevideo.py events --project <slug>
+        #   python3 code/codevideo.py check --project <slug> --stage clips
+        # 字幕开(settings.json#project.subtitles)时须有 codevideo/cues.json = [{t0,t1,text}](页面字幕时间线原样导出,
+        #   master 据此写 srt);字幕关时不写。
+        validation:
+          auto: [clips_fresh_frames_silent, readcheck_pass, events_exported, cues_exported]
+          rubric: visual_gen_v1
+
+  - id: cv4
+    name: 混音与成片
+    depends_on: [cv3-render]
+    tasks:
+      - id: cv4-mix
+        agent: 18-code-video/sound-designer
+        depends_on: [cv3-render, cv2-voice, cv2-score]
+        outputs: [codevideo/mix.py, codevideo/out/mix.wav, "codevideo/out/stems/", codevideo/out/mix.json,
+                  "assets/audio/final/{ep}.wav"]
+        # 写 codevideo/mix.py(读 events.json 驱动程序化拟音,铺环境床,放旁白与配乐,闪避、压限),宿主运行:
+        #   python3 code/codevideo.py mix --project <slug>
+        # mix_written:退出 0(mix.wav ≥ 片长,宿主复制到 assets/audio/final/{ep}.wav 并写 out/mix.json);
+        # stems_present:out/stems/ 下 voice / music / sfx / ambience 有哪层写哪层,与 mix.wav 同长;
+        # sound_table_rows_mixed:TREATMENT.md 声音设计表逐行在 mix.py 里有对应代码(回执逐行对照);
+        # voice_over_music:有旁白时旁白 RMS 高出同时段音乐约 10 dB。
+        validation:
+          auto: [mix_written, stems_present, sound_table_rows_mixed, voice_over_music]
+          rubric: edit_v1
+      - id: cv4-master
+        agent: 18-code-video/sound-designer
+        depends_on: [cv4-mix]
+        outputs: ["edit/{ep}/final.mp4", "edit/{ep}/subtitles.srt", "edit/{ep}/poster.jpg",
+                  codevideo/CREDITS, codevideo/build.sh]
+        # 先写 codevideo/CREDITS(字体、采样乐器署名 music/*.credits.json、用户素材及其权利声明、TTS 渠道;
+        #   不写 LemoLab / Opus 署名),再出成片:
+        #   python3 code/codevideo.py master --project <slug> [--grain N]   # 拼段 + 两遍 loudnorm −14 LUFS + srt + 海报 + build.sh
+        #   python3 code/codevideo.py check --project <slug> --stage final,delivery
+        # grain:像素 / 矢量 / 平面风格 0;胶片、纸张类风格按 STYLE.md 给 1–2。
+        validation:
+          auto: [final_frames, final_has_audio, no_black_frames, loudness, true_peak, credits_present,
+                 credits_fonts, credits_instruments, build_sh, no_library_signoff]
+          rubric: edit_v1
+
+  - id: cv5
+    name: 终审
+    depends_on: [cv4-master]
+    tasks:
+      - id: cv5-qa
+        agent: 11-qa/code-video-qa
+        depends_on: [cv4-master]
+        outputs: ["qa/reports/{ep}/codevideo.json", "codevideo/sheets/qa_*.jpg"]
+        pass: blocker_eq_0
+        # check_all_pass:python3 code/codevideo.py check --project <slug> --stage all 退出 0;
+        # 人工级抽检(lemo DIRECTOR §11):全片联系表两遍、关键动作 0.2 s 抽帧条、整片带声音看一遍;
+        # not_the_demo_again:与样片对比 结构 / 开场 / 招牌镜头 / 机位路线 / 配乐形状 / 结尾 六项至少四项不同;
+        # sound_table_verified、subtitles_clear_of_subject、user_assets_rights_checked(用户素材都有权利声明)。
+        validation:
+          auto: [check_all_pass, contact_sheets_reviewed, not_the_demo_again, sound_table_verified,
+                 subtitles_clear_of_subject, user_assets_rights_checked]
+          rubric: analysis_v1
+      - { id: gc2, gate: true, human: true, checkpoint: CVH2-成片签字, depends_on: [cv5-qa] }
+        # 放行前必须:codevideo.py check --stage all 全 PASS、cv5-qa 报告 blocker = 0;
+        # 签字单附 成片路径 edit/{ep}/final.mp4、海报、片长与响度、CREDITS 摘要、与用户原构想不同的地方(逐条)。
+        # 用户要改:在「代码预览」页按时刻写注释 → 📨 提交注释给修改师(kind=codevideo),改完只重渲改动段。
+
+# 贯穿型服务与主流程一致(evaluation/memory-bible/version/orchestrator 钩子),
+# 见 agents/workflow.yaml services 段。
+#
+# 发布(12-publishing/*)按需另点单,不在本 DAG 内;成片在 edit/{ep}/final.mp4,成片发布页直接可用。

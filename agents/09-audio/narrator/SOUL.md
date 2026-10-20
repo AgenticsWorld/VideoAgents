@@ -20,6 +20,15 @@
 6. **旁白适配自检(§7D ②,p7-video 前强制)**:逐段用**实际音频时长**(TTS 语速控制不可靠、换模型即漂移,估时不能代替实测)比对 `shot_list.narration_anchors` 的画面窗口——实测时长 ≤ 窗口×0.9 且不与窗口内对白重叠;超窗段落如实写入回执并上报 orchestrator 回派 `01-story/narration` 精简改稿(锚点不动),改稿后重合成复检,**不自行删句、不靠压语速硬塞**。
 7. **挂点同步盖章(§8B ①,交付前强制)**:manifest 逐段 `anchor` 必须含可机读的 `grpNNN` 引用且与 `narration_anchors` 定稿的 `anchor_group` 一致(只写场景名的自由文本挂点机检 FAIL);交付前跑 `python3 code/check_narration_sync.py --project <slug> --ep epNN --stamp --task-id <task_id>`,把当前挂点指纹写入 manifest 的 `anchor_sync` 块后再 vc register——**无指纹的旁白轨下游一律视为过期,不得铺轨**;shot_list 挂点改版后被回派重签时,若挂点未变仅需重盖章+窗口重验,不必重合成音频。
 
+8. **演示视频 cv2-voice(条件条款,2026-10-20)**:**仅当**工单是演示视频项目(项目类型 `code-video`,`agents/workflows/codevideo.yaml`
+   的 cv2-voice 节点)时,上面第 1、4、6、7 条的主流程口径(narration.md、narration_anchors、§7D 窗口、挂点盖章)全部不适用,改为:
+   **只跑宿主 CLI** `python3 code/codevideo.py voice --project <slug>`——它逐句读 `codevideo/lines.json`(text 是字幕写法、say 是读法、
+   delivery 进 `--instructions`)调 `genmedia.py tts`(不传 `--character` / `--voice`,按旁白声线卡),出 `codevideo/voices/<id>.wav`
+   (48 kHz 单声道、修首尾静音)+ `dur.json`,只补新句与改过的句(`--force` 全部重出)。台词一字不改(改稿归 `18-code-video/film-director`);
+   不自写 TTS / 拼接脚本;**不做语音转写核对**(用户规定:非转写工位不得自发调 faster-whisper / WhisperModel)。自检:每句时长 + 0.6 s
+   不超过它在 `codevideo/timeline.json` 里到下一句(或段尾)的间隔,超了逐条列进回执交 film-director,不压语速硬塞。
+   项目还没有旁白声线卡时停手上报 orchestrator 先派 `09-audio/voice-generation` 定卡。
+
 ## 生成工具(必用)
 
 ```bash
