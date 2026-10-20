@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 import time
 from pathlib import Path
@@ -157,7 +158,12 @@ def train(data: dict, *, steps: int, max_gaussians: int, log=print) -> dict:
         ss = ssim_loss(rgb, imgs[i])
         dm = depth_masks[i]
         dloss = (dep[0][dm] - depths[i][dm]).abs().mean() if dm.any() else torch.tensor(0.0, device=device)
-        loss = 0.8 * l1 + 0.2 * ss + 0.05 * dloss
+        # 尺度正则(2026-10-20,对齐 HY-World 2.0 world_gs_trainer 的 use_scale_regularization):
+        # 抑制拉长针状高斯(深度突变边缘的杂刺),惩罚对数尺度极差超过阈值的部分
+        ls = splats['scales']                                   # log 尺度
+        ratio = ls.max(dim=1).values - ls.min(dim=1).values     # log(最长轴/最短轴)
+        scale_reg = torch.relu(ratio - math.log(5.0)).mean()
+        loss = 0.8 * l1 + 0.2 * ss + 0.05 * dloss + 0.01 * scale_reg
         loss.backward()
         for opt in optimizers.values():
             opt.step()

@@ -205,7 +205,9 @@ def _run_stage(job: dict, stage: str, cancel: threading.Event) -> bool:
     elif stage == 'render':
         cmd += ['--views', str(int(params.get('views') or 24)),
                 '--camera-height-m', str(float(params.get('camera_height_m') or 1.6)),
-                '--radius-m', str(float(params.get('radius_m') or 0.35))]
+                '--radius-m', str(float(params.get('radius_m') or 0.35)),
+                '--width', str(int(params.get('render_width') or 1600)),
+                '--height', str(int(params.get('render_height') or 900))]
     elif stage == 'gs':
         cmd += ['--steps', str(int(params.get('gs_steps') or 8000)),
                 '--max-gaussians', str(int(params.get('max_gaussians') or 1000000))]

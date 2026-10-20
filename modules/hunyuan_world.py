@@ -125,10 +125,12 @@ def gen_params(base: Path, sid: str, camera: dict, overrides: dict | None = None
         'classes': str(cfg.get('classes') or ('indoor' if indoor else 'outdoor')),
         'fp8': bool(cfg.get('fp8', False)),
         'fp8_attention': bool(cfg.get('fp8_attention', False)),
-        'views': int(cfg.get('views') or 24),
+        'views': int(cfg.get('views') or 32),
         'gs_steps': int(cfg.get('gs_steps') or 8000),
         'max_gaussians': int(cfg.get('max_gaussians') or 1000000),
         'radius_m': float(cfg.get('radius_m') or 0.35),
+        'render_width': int(cfg.get('render_width') or 1600),   # 清晰度上限 = 训练视图分辨率
+        'render_height': int(cfg.get('render_height') or 900),
         'camera_height_m': float(camera.get('height_m') or wl.CAMERA_HEIGHT_M),
     }
     params.update({k: v for k, v in (overrides or {}).items() if v is not None})

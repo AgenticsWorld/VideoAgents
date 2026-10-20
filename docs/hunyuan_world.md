@@ -59,6 +59,10 @@ worker 侧任务工作区 `work_root/jobs/<job_id>/`(中间产物:scenegen/ rend
 
 ## 已知限制
 
+- **清晰度上限 = 训练视图分辨率**:`render_width/render_height`(缺省 1600×900,worker config defaults 可调;
+  再高 24G 显存吃紧)远低于全景源,想更锐先保证全景源本身清晰、再调渲染分辨率与 views。
+- **针状杂刺**:深度突变边缘的拉长高斯由训练里的尺度正则抑制(权重 0.01,宽长轴比限 5);
+  仍明显就加大视图数或降 radius_m。
 - **世界范围限于全景包络**:链路没有 2.0 的 WorldStereo 世界扩展,漫游轨迹按 0.35 m 环设计,
   离全景机位越远越退化(与 Marble 单视点 world 同类限制);遮挡背面是 1.0 分层补全的近似。
 - **尺度是拟合值**:地面平面拟合的 ground_plane_offset 误差进 scale_fix,必要时手动微调。
