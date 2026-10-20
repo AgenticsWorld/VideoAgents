@@ -86,8 +86,8 @@ Prompting: Qwen Image 2.1 reads prose — write full sentences like a caption of
 ### Without the GGUF node
 
 If you have a safetensors build of the same model (for example Comfy-Org's `qwen_image_2.1_bf16.safetensors`
-in `models/diffusion_models`), fork the JSON and replace node `1` with the core loader; nothing else changes
-and no custom node is needed:
+in `models/diffusion_models`), use [`image-qwen-image-2.1-bf16-api.json`](image-qwen-image-2.1-bf16-api.md) —
+this graph with node `1` replaced by the core loader; nothing else changes and no custom node is needed:
 
 ```json
 "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "qwen_image_2.1_bf16.safetensors", "weight_dtype": "default"}}
@@ -174,7 +174,8 @@ ComfyUI/models/
 ### 不用 GGUF 节点
 
 手头有同一模型的 safetensors 版(例如 Comfy-Org 的 `qwen_image_2.1_bf16.safetensors`,放
-`models/diffusion_models`)时,fork 本 JSON,把节点 `1` 换成原生加载器即可,其余不变,也不需要自定义节点:
+`models/diffusion_models`)时,用 [`image-qwen-image-2.1-bf16-api.json`](image-qwen-image-2.1-bf16-api.md)——
+即本图把节点 `1` 换成原生加载器,其余不变,也不需要自定义节点:
 
 ```json
 "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "qwen_image_2.1_bf16.safetensors", "weight_dtype": "default"}}
