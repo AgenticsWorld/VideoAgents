@@ -51,6 +51,14 @@ demand from the Lemo-Opuscar release assets and repository at the pinned commit,
 SHA-256. Films made with this project type carry no LemoLab credit; the instruments a score uses
 are listed in that film's `CREDITS`.
 
+The design style library (`apps/web/static/styles/style_library.json`) includes the 916 visual styles of
+Flick's Flickpedia gallery (https://flick.art/flickpedia/visual-styles, collected 2026-10-20): each style's
+gallery image, resized to 640 px wide and re-encoded as WebP, is the cover of a style card (882 new
+styles, plus 34 existing styles whose covers were replaced), and the style prompts were written in
+Chinese from Flick's style descriptions and those images, then translated. Entries taken from Flick carry
+`"source": "flick.art"` and the original Flick style name in `source_name`. These images and descriptions
+remain subject to Flick's terms.
+
 On Windows x64 the desktop client can download FFmpeg from the VideoAgents package
 mirrors when none is installed. The package is the unmodified
 `ffmpeg-9.0.2-essentials_build.zip` static build from gyan.dev (FFmpeg 9.0.2, GPL v3),
