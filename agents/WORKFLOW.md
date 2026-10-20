@@ -1272,13 +1272,19 @@ python3 modules/genmedia.py music \
 #          组视频的音效与环境声由视频模型随片生成,这条不是默认产出)
 python3 modules/genmedia.py sfx \
   --prompt "<英文声音描述:声源/材质/空间感,不写音乐与人声>" \
+  --query "<2–3 个英文关键词,如 sword clash>" \
   --output assets/audio/sfx/ep01/patches/sh014_sword_clash.wav \
-  [--duration <秒>]                     # 直连 0.5–30、Fal 托管 0.5–22;省略=模型按描述自定
+  [--duration <秒>]                     # Openverse 0.5–120(素材更长时截到该长度)、直连 0.5–30、Fal 托管 0.5–22;省略=模型自定 / 素材原长
   [--loop]                              # 环境床音:出可无缝循环的一段(写到 assets/audio/ambience/epNN/patches/)
-  [--count <1-4>]                       # 候选条数,每条单独计费;缺陷单没要求多条就用默认 1
-# ElevenLabs Sound Effects v2:配置里有 ElevenLabs Key(音乐 / TTS 段)走直连,否则用 Fal Key(图像 / 视频段)走托管端点。
-# 非循环音自动裁首尾静音并把峰值归一到 -3 dBFS(成片电平仍由 audio-mixing 定);循环音不裁不调。
-# 同名 .meta.json 的 sfx 段记来源(license_source)、提示词与实测时长 / 电平,copyright 终审按此核对。
+  [--count <1-4>]                       # 候选条数;生成渠道每条单独计费,缺陷单没要求多条就用默认 1
+# 渠道 = 「生成模型」页音效段(2026-10-20;genmedia.py info 的 sfx 行回显):
+#   openverse(默认)检索 Openverse 收录的现成音效(CC0 / 公有领域,设置页可加 CC BY),不生成、不计费;检索词取 --query,
+#     接口要求所有词都命中,长句搜不到,省略 --query 时从 --prompt 提取并逐个减词重搜;没搜到合用素材时换一两组关键词,
+#     仍没有就如实上报,不得自行加 --provider 改走付费生成渠道。--loop 时从素材截一段、首尾交叉淡化成循环并峰值归一。
+#   elevenlabs / fal:ElevenLabs Sound Effects v2 按 --prompt 生成(忽略 --query);Key 留空沿用音乐 / TTS、图像 / 视频段已填的。
+# 非循环音自动裁首尾静音并把峰值归一到 -3 dBFS(成片电平仍由 audio-mixing 定);生成的循环音不裁不调。
+# 同名 .meta.json 的 sfx 段记来源(license_source;Openverse 素材另有 sfx.openverse 作者 / 许可 / 原链接 / 署名文字,
+# attribution_required=true 的须片尾署名)、提示词与实测时长 / 电平,copyright 终审按此核对。
 
 # TTS 干声(narrator 旁白后期轨、voice-generation 角色 voiceprint 样本——样本仅作 reference_audio 嗓音特点锚,严禁进成片对白,§8A 红线;
 #          角色音色先查项目级选角注册表 assets/audio/voice/casting.json,缺条目先登记,§8A;

@@ -68,7 +68,8 @@ CLI:
       [--speed 1.0] [--instructions "<语气/情绪指令>"] [--dry-run]
 
   python3 modules/genmedia.py sfx --prompt "<英文声音描述>" --output hit.wav \
-      [--duration 1.5] [--loop] [--count 1-4] [--provider elevenlabs|fal] [--dry-run]
+      [--query "<英文关键词;Openverse 检索用>"] [--duration 1.5] [--loop] [--count 1-4] \
+      [--provider openverse|elevenlabs|fal] [--dry-run]
 
 Python:
   from modules.genmedia import generate_image, generate_video, generate_upscale, \
@@ -116,10 +117,14 @@ Python:
         / minimax(POST /v1/music_generation,Music 3.0/2.6;仅 .mp3/.wav,--duration 忽略;
         force_instrumental 由「生成模型」页配置,默认纯音乐,关闭时按 prompt 自动写词演唱)
         / comfyui(本地/云端,需配置 API 格式工作流 JSON;推荐 ACE-Step,见 comfy/music-ace-step-v1-api.md)
-  音效: ElevenLabs Sound Effects v2,无独立配置段——elevenlabs(直连 POST /v1/sound-generation,用音乐 / TTS 段的
-        ElevenLabs Key;时长 0.5–30s)/ fal(托管端点 fal-ai/elevenlabs/sound-effects/v2,用图像 / 视频段的 Fal Key;
-        时长 0.5–22s、描述 ≤450 字符);有 ElevenLabs Key 走直连,否则 Fal。--loop 出可无缝循环床音;非循环音
-        自动裁首尾静音并峰值归一到 -3 dBFS(需 ffmpeg)
+  音效: 渠道看「生成模型」页音效段 genconfig.sfx(2026-10-20;缺段 = openverse)——
+        openverse(默认,不生成:按关键词检索 Openverse 收录的 CC0 / 公有领域〔可选加 CC BY〕音效,主要来自 Freesound,
+        下载原文件后处理;免费,匿名每分钟 20 次 / 每天 200 次,见 modules/openverse.py;时长 0.5–120s,
+        --query 给 2–3 个英文关键词,省略则从 --prompt 提取;--loop 截一段并首尾交叉淡化成无缝循环,再峰值归一)
+        / elevenlabs(AI 生成,ElevenLabs Sound Effects v2 直连 POST /v1/sound-generation;时长 0.5–30s)
+        / fal(AI 生成,托管端点 fal-ai/elevenlabs/sound-effects/v2;时长 0.5–22s、描述 ≤450 字符);
+        ElevenLabs / Fal 的 Key 先取音效段自填的,留空沿用音乐 / TTS 段的 ElevenLabs Key、图像 / 视频段的 Fal Key。
+        非循环音自动裁首尾静音并峰值归一到 -3 dBFS;--loop 的生成床音不裁不调(均需 ffmpeg)
   TTS : 每个渠道有语音模式(2026-10-02,modules/voice_library.py):音色设计=Voice Design 模型按声纹卡描述出嗓音样本、
         Voice Clone 模型拿样本当参考出对白/旁白;音色库=从音色库给每个人物选音色(登记 casting.json)再合成。音色库不在
         界面设置,宿主自动拉取,候选见 `voices` 子命令;不带人物也没给音色的调用自动取旁白型音色。
@@ -6530,23 +6535,28 @@ def _music_comfyui(cfg, prompt, output, duration_s=None):
     return _comfy_run(base, wf, output, want_video=False, headers=hdrs)
 
 
-# ---------------- 音效:ElevenLabs Sound Effects v2(直连 / Fal 托管) ----------------
+# ---------------- 音效:Openverse 检索 / ElevenLabs Sound Effects v2(直连 / Fal 托管) ----------------
 # 2026-10-06:缺陷单兜底贴片(09-audio/sound-effect 单条音效、09-audio/ambience 可循环床音)的生成入口。
-# 没有独立的配置段:直连用音乐 / TTS 段已填的 ElevenLabs Key,Fal 托管用图像 / 视频段已填的 Fal Key。
-#   直连 POST /v1/sound-generation?output_format=…  body {text, model_id, duration_seconds?, prompt_influence, loop}
-#        → 音频字节流;duration_seconds 0.5–30
-#   Fal  fal-ai/elevenlabs/sound-effects/v2(队列)  body {text≤450, duration_seconds? 0.5–22, prompt_influence,
-#        output_format, loop} → audio.url
-# 两边都固定取 mp3_44100_128(各档账号都可用),再用 ffmpeg 转成 --output 扩展名的格式。
+# 2026-10-20 起有独立配置段 genconfig.sfx(「生成模型」页「🔊 音效模型」),默认 openverse:
+#   openverse  不生成,按关键词检索 Openverse 收录的 CC0 / 公有领域(可选加 CC BY)音频并下载原文件(modules/openverse.py);
+#              免费。非循环音同下面的后处理,给了 --duration 且素材更长时截到该长度(尾部 30 ms 淡出);
+#              --loop 截 duration + 交叉淡化长度的一段,把超出的尾巴叠回开头做首尾交叉淡化,成为可无缝循环的床音,再峰值归一
+#   elevenlabs 直连 POST /v1/sound-generation?output_format=…  body {text, model_id, duration_seconds?, prompt_influence, loop}
+#              → 音频字节流;duration_seconds 0.5–30
+#   fal        fal-ai/elevenlabs/sound-effects/v2(队列)  body {text≤450, duration_seconds? 0.5–22, prompt_influence,
+#              output_format, loop} → audio.url
+# ElevenLabs / Fal 的 Key 先取音效段自填的,留空沿用音乐 / TTS 段的 ElevenLabs Key、图像 / 视频段的 Fal Key,再环境变量兜底。
+# 两个生成渠道都固定取 mp3_44100_128(各档账号都可用),再用 ffmpeg 转成 --output 扩展名的格式。
 # 后处理(非循环):裁掉首尾静音(中间的停顿不动,如三下敲门的间隔)+ 峰值归一到 -3 dBFS(与 modules/audiodsp.py
-# normalize_peak 同口径;成片电平由混音工位定)。循环床音不裁不调,保住首尾接缝。
+# normalize_peak 同口径;成片电平由混音工位定)。生成的循环床音不裁不调,保住首尾接缝。
 
-SFX_PROVIDERS = ("elevenlabs", "fal")
+SFX_PROVIDERS = ("openverse", "elevenlabs", "fal")
+SFX_DEFAULT_PROVIDER = "openverse"
 SFX_FAL_ENDPOINT = "fal-ai/elevenlabs/sound-effects/v2"
 SFX_EL_MODEL = "eleven_text_to_sound_v2"
 SFX_SOURCE_FORMAT = "mp3_44100_128"
 SFX_FORMATS = (".wav", ".mp3", ".flac", ".opus")
-SFX_MAX_DURATION = {"elevenlabs": 30.0, "fal": 22.0}
+SFX_MAX_DURATION = {"openverse": 120.0, "elevenlabs": 30.0, "fal": 22.0}
 SFX_MIN_DURATION = 0.5
 SFX_FAL_MAX_PROMPT = 450
 SFX_MAX_COUNT = 4
@@ -6554,38 +6564,52 @@ SFX_TIMEOUT = 300
 SFX_SILENCE_DB = -45.0       # 低于此电平算静音
 SFX_SILENCE_MIN_S = 0.03     # 短于此的静音不算
 SFX_TAIL_KEEP_S = 0.02       # 裁尾时留一点余量,不切在衰减尾音上
+SFX_CUT_FADE_S = 0.03        # 按 --duration 截短时尾部淡出,免得切在波形中间出爆音
 SFX_PEAK_DBFS = -3.0
 SFX_SAMPLE_RATE = 48000      # 后处理产物统一采样率(同 modules/audiodsp.py SR)
+SFX_OV_ONESHOT_PREFER_S = 15.0   # Openverse 非循环音:这么长以内的素材排前面(更像单次音效)
+SFX_OV_LOOP_DEFAULT_S = 30.0     # Openverse --loop 不给 --duration 时循环段长度上限
+SFX_OV_LOOP_MIN_SOURCE_S = 3.0   # Openverse --loop 不给 --duration 时素材至少这么长
 
 
 def _sfx_config(provider: str = "") -> dict:
-    """音效渠道与 Key:provider 为空时自动选——配置里有 ElevenLabs Key 走直连,否则有 Fal Key 走 Fal 托管。"""
-    provider = (provider or "").strip().lower()
-    if provider and provider not in SFX_PROVIDERS:
-        raise RuntimeError(f"音效渠道无效: {provider}(可选 {' / '.join(SFX_PROVIDERS)})")
+    """音效渠道:「生成模型」页音效段 sfx.provider(旧版配置没有这一段 = openverse);provider 显式指定优先。"""
     try:
         raw = json.loads(CONFIG_PATH.read_text())
     except Exception:
         raw = {}
+    sec = raw.get("sfx") if isinstance(raw.get("sfx"), dict) else {}
+    chosen = (provider or str(sec.get("provider") or "") or SFX_DEFAULT_PROVIDER).strip().lower()
+    if chosen not in SFX_PROVIDERS:
+        raise RuntimeError(f"音效渠道无效: {chosen}(可选 {' / '.join(SFX_PROVIDERS)};「🎨 生成模型」页音效段)")
+    pc = sec.get(chosen) if isinstance(sec.get(chosen), dict) else {}
+    if chosen == "openverse":
+        from modules import openverse
+        lic = str(pc.get("license") or "")
+        src = str(pc.get("source") or "")
+        return {"provider": "openverse", "model": "openverse",
+                "license": lic if lic in openverse.LICENSE_SETS else openverse.DEFAULT_LICENSES,
+                "source": src if src in openverse.SOURCE_SETS else openverse.DEFAULT_SOURCES,
+                "client_id": str(pc.get("client_id") or "").strip(),
+                "client_secret": str(pc.get("client_secret") or "").strip()}
 
-    def key_of(name: str, kinds: tuple) -> str:
+    def legacy_key(kinds: tuple) -> str:
         for kind in kinds:
-            seg = (raw.get(kind) or {}).get(name)
+            seg = (raw.get(kind) or {}).get(chosen)
             key = str((seg or {}).get("api_key") or "").strip() if isinstance(seg, dict) else ""
             if key:
                 return key
-        return os.environ.get(ENV_KEYS[name], "").strip()
+        return os.environ.get(ENV_KEYS[chosen], "").strip()
 
-    keys = {"elevenlabs": key_of("elevenlabs", ("music", "tts")),
-            "fal": key_of("fal", ("image", "video"))}
-    chosen = provider or next((p for p in SFX_PROVIDERS if keys[p]), "")
-    if not chosen or not keys[chosen]:
-        where = {"elevenlabs": f"「🎨 生成模型」页音乐或 TTS 的 ElevenLabs 标签页(或环境变量 {ENV_KEYS['elevenlabs']})",
-                 "fal": f"「🎨 生成模型」页图像或视频的 Fal 标签页(或环境变量 {ENV_KEYS['fal']})"}
-        need = where[chosen] if chosen else ";或 ".join(where[p] for p in SFX_PROVIDERS)
-        raise RuntimeError(f"音效生成未找到可用的 API Key:请在{need}填入")
-    return {"provider": chosen, "api_key": keys[chosen],
-            "model": SFX_EL_MODEL if chosen == "elevenlabs" else SFX_FAL_ENDPOINT}
+    key = str(pc.get("api_key") or "").strip() or legacy_key(("music", "tts") if chosen == "elevenlabs"
+                                                             else ("image", "video"))
+    if not key:
+        where = {"elevenlabs": "音效、音乐或 TTS 的 ElevenLabs 标签页",
+                 "fal": "音效、图像或视频的 Fal 标签页"}[chosen]
+        raise RuntimeError(f"音效生成未找到可用的 API Key:请在「🎨 生成模型」页{where}填入"
+                           f"(或环境变量 {ENV_KEYS[chosen]})")
+    model = str(pc.get("model") or "").strip() or (SFX_EL_MODEL if chosen == "elevenlabs" else SFX_FAL_ENDPOINT)
+    return {"provider": chosen, "api_key": key, "model": model}
 
 
 def _sfx_outputs(output: str, count: int) -> list[str]:
@@ -6614,7 +6638,7 @@ def _sfx_fetch_fal(cfg, prompt, duration_s, loop, influence, output) -> bytes:
             "output_format": SFX_SOURCE_FORMAT}
     if duration_s:
         body["duration_seconds"] = duration_s
-    res = _fal_queue_run(cfg, SFX_FAL_ENDPOINT, body, SFX_TIMEOUT, Path(output).name, kind="音效", poll=3,
+    res = _fal_queue_run(cfg, cfg["model"], body, SFX_TIMEOUT, Path(output).name, kind="音效", poll=3,
                          output=output)
     audio = res.get("audio")
     url = audio.get("url") if isinstance(audio, dict) else ""
@@ -6663,11 +6687,12 @@ def _sfx_analyze(path: str) -> dict:
             "leading_silence_s": round(max(0.0, lead), 3), "trailing_silence_s": round(max(0.0, trail), 3)}
 
 
-def _sfx_finish(src: str, output: str, loop: bool, postprocess: bool) -> dict:
-    """把渠道返回的 mp3 落成 output:循环音只转格式;非循环音裁首尾静音 + 峰值归一。返回处理记录。"""
+def _sfx_finish(src: str, output: str, loop: bool, postprocess: bool, max_len: float | None = None) -> dict:
+    """把渠道返回的音频落成 output:循环音只转格式;非循环音裁首尾静音 + 峰值归一,
+    给了 max_len 且裁完仍更长时截到 max_len(尾部淡出)。返回处理记录。"""
     ext = Path(output).suffix.lower()
     if loop or not postprocess:
-        if ext == ".mp3":
+        if Path(src).suffix.lower() == ext:
             Path(output).write_bytes(Path(src).read_bytes())    # 原样落盘,不重编码
         else:
             _sfx_ffmpeg(["-y", "-i", src, output], "转格式")
@@ -6679,14 +6704,145 @@ def _sfx_finish(src: str, output: str, loop: bool, postprocess: bool) -> dict:
     start = before["leading_silence_s"]
     end = dur - max(0.0, before["trailing_silence_s"] - SFX_TAIL_KEEP_S)
     if before["peak_db"] is None or end - start < 0.05:
-        raise RuntimeError("生成的音效几乎全程静音(峰值读不到或裁完不足 0.05 s),请改描述重出")
+        raise RuntimeError("音效几乎全程静音(峰值读不到或裁完不足 0.05 s),请改描述重出")
+    cut = bool(max_len) and end - start > float(max_len)
+    if cut:
+        end = start + float(max_len)
     gain = round(SFX_PEAK_DBFS - before["peak_db"], 2)
     filters = f"atrim=start={start:.3f}:end={end:.3f},asetpts=PTS-STARTPTS,volume={gain}dB"
+    if cut:
+        filters += f",afade=t=out:st={end - start - SFX_CUT_FADE_S:.3f}:d={SFX_CUT_FADE_S}"
     _sfx_ffmpeg(["-y", "-i", src, "-af", filters, "-ar", str(SFX_SAMPLE_RATE), output], "后处理")
     after = _sfx_analyze(output)
     return {"postprocessed": True, "filters": filters, "gain_db": gain,
             "trimmed_s": {"leading": start, "trailing": round(dur - end, 3)},
             "before": before, "after": after}
+
+
+def _sfx_loop_xfade(length: float | None) -> float:
+    """循环段首尾交叉淡化长度:段长的 1/4,0.25–1 s。"""
+    return 1.0 if not length else round(max(0.25, min(1.0, float(length) / 4)), 3)
+
+
+def _sfx_make_loop(src: str, output: str, length: float | None) -> dict:
+    """从素材截一段做成可无缝循环的床音(Openverse 用):跳过开头静音,取 length + xf 秒,把超出的 xf 秒尾巴
+    等功率交叉淡化叠回开头——循环播放时末尾样本接的正是原素材里紧随其后的声音,接缝处连续。
+    再按这一段的实测峰值整体归一到 -3 dBFS(现成录音电平差得很远;整体增益不影响接缝)。"""
+    before = _sfx_analyze(src)
+    dur = before["duration_s"] or 0.0
+    start = before["leading_silence_s"]
+    usable = dur - start - before["trailing_silence_s"]
+    if before["peak_db"] is None or usable <= 0:
+        raise RuntimeError("素材几乎全程静音")
+    xf = _sfx_loop_xfade(length)
+    if length is None:
+        length = round(min(SFX_OV_LOOP_DEFAULT_S, usable - xf), 3)
+    if length < SFX_MIN_DURATION or usable < length + xf:
+        raise RuntimeError(f"素材有声部分只有 {usable:.1f} s,不够截 {length:g} s 的循环段(另需 {xf:g} s 交叉淡化)")
+    end = start + length + xf
+    graph = (f"[0:a]atrim=start={start:.3f}:end={end:.3f},asetpts=PTS-STARTPTS,asplit=3[a][b][c];"
+             f"[a]atrim=end={xf:.3f},afade=t=in:st=0:d={xf:.3f}:curve=qsin[h1];"
+             f"[b]atrim=start={length:.3f},asetpts=PTS-STARTPTS,afade=t=out:st=0:d={xf:.3f}:curve=qsin[h2];"
+             f"[h1][h2]amix=inputs=2:normalize=0:duration=longest[head];"
+             f"[c]atrim=start={xf:.3f}:end={length:.3f},asetpts=PTS-STARTPTS[body];"
+             f"[head][body]concat=n=2:v=0:a=1[out]")
+    raw = Path(output).with_name(f".{Path(output).name}.loop.wav")
+    try:
+        _sfx_ffmpeg(["-y", "-i", src, "-filter_complex", graph, "-map", "[out]", "-ar", str(SFX_SAMPLE_RATE),
+                     "-c:a", "pcm_f32le", str(raw)], "做循环段")
+        cut = _sfx_analyze(str(raw))
+        if cut["peak_db"] is None:
+            raise RuntimeError("截出的循环段几乎全程静音")
+        gain = round(SFX_PEAK_DBFS - cut["peak_db"], 2)
+        _sfx_ffmpeg(["-y", "-i", str(raw), "-af", f"volume={gain}dB", output], "归一")
+    finally:
+        raw.unlink(missing_ok=True)
+    return {"postprocessed": True, "filters": f"loop crossfade {xf:g}s,volume={gain}dB", "gain_db": gain,
+            "loop_cut": {"start_s": round(start, 3), "length_s": length, "crossfade_s": xf},
+            "before": before, "after": _sfx_analyze(output)}
+
+
+def _sfx_openverse(cfg: dict, prompt: str, query: str, output: str, duration_s: float | None, loop: bool,
+                   count: int, postprocess: bool) -> list[str]:
+    """Openverse 渠道:检索 → 按时长挑素材 → 下载 → 后处理 / 做循环段。count 条取不同素材;素材坏链、太大或
+    后处理不合用就换下一条。返回保存的绝对路径列表。"""
+    from modules import openverse
+    ladder = openverse.query_ladder(query, prompt)
+    if not ladder:
+        raise RuntimeError('Openverse 检索需要英文关键词:用 --query 给 2–3 个词(如 "door slam"),'
+                           "或在 --prompt 里写英文声音描述")
+    if loop:
+        xf = _sfx_loop_xfade(duration_s)
+        need = float(duration_s) + xf if duration_s else SFX_OV_LOOP_MIN_SOURCE_S
+        length = openverse.length_buckets(need, 600)   # 不取 10 分钟以上的长录音(下载太大)
+        fits = lambda d: d is not None and d >= need + 0.2   # noqa: E731  首尾静音另扣,留一点余量
+        prefer = lambda d: d <= max(60.0, 3 * need)   # noqa: E731  够长就行,短的先下(长录音动辄几 MB)
+    else:
+        # 单次音效:都收(太短的点击声也算),排序时把时长像单次音效的(给了 --duration 则不短于它一半)排前面
+        hi = max(SFX_OV_ONESHOT_PREFER_S, 2 * float(duration_s or 0))
+        lo = 0.5 * float(duration_s or 0)
+        length = "shortest" if hi < 30 else openverse.length_buckets(0, 600)
+        fits = lambda d: d is not None and d > 0   # noqa: E731
+        prefer = lambda d: lo <= d <= hi   # noqa: E731
+    tried, cands, used_q = [], [], ""
+    for q in ladder:
+        try:
+            res = openverse.search(q, cfg["license"], cfg["source"], length, cfg["client_id"], cfg["client_secret"])
+        except openverse.OpenverseError as e:
+            raise RuntimeError(f"Openverse 检索失败:{e}") from e
+        hits = [r for r in res["results"] if fits(r["duration_s"])]
+        tried.append(f"「{q}」{len(hits)}/{res['result_count']} 条")
+        if hits:
+            cands, used_q = sorted(hits, key=lambda r: not prefer(r["duration_s"])), q   # 稳定排序:保留相关度次序
+            break
+    print(f"[genmedia] Openverse 检索({cfg['license']} · {cfg['source']}):{';'.join(tried)}",
+          file=sys.stderr, flush=True)
+    if not cands:
+        raise RuntimeError(f"Openverse 没找到合用的素材(试过 {';'.join(tried)};条数=时长合用/命中)。换 --query 关键词"
+                           "(2–3 个英文词,如 door slam / rain window),或在「生成模型」页音效切到 ElevenLabs / Fal 生成")
+    saved, skipped = [], []
+    outs = _sfx_outputs(output, int(count))
+    for item in cands:
+        if len(saved) == len(outs):
+            break
+        out = outs[len(saved)]
+        p = Path(out) if Path(out).is_absolute() else Path.cwd() / out
+        p.parent.mkdir(parents=True, exist_ok=True)
+        ext = "." + (item["filetype"] or Path(urllib.parse.urlparse(item["url"]).path).suffix.lstrip(".") or "mp3")
+        src = p.with_name(f".{p.name}.src{ext}")
+        try:
+            openverse.download(item["url"], src)
+            analysis = (_sfx_make_loop(str(src), str(p), duration_s) if loop   # 现成素材不做成循环段就接不上
+                        else _sfx_finish(str(src), str(p), False, postprocess, max_len=duration_s))
+        except (RuntimeError, OSError) as e:      # OpenverseError 是 RuntimeError
+            skipped.append(f"{item['title'] or item['id']}:{e}")
+            p.unlink(missing_ok=True)
+            continue
+        finally:
+            src.unlink(missing_ok=True)
+        open_lic = item["license"] in ("cc0", "pdm")
+        _merge_meta(str(p), "sfx", {
+            "provider": "openverse", "model": "openverse",
+            "license_source": " · ".join(x for x in ("Openverse", item["source_label"], item["license_label"],
+                                                     item["landing_url"]) if x),
+            "attribution_required": not open_lic,
+            "openverse": {k: item[k] for k in ("id", "title", "creator", "creator_url", "license", "license_version",
+                                               "license_url", "landing_url", "source", "attribution", "filetype")}
+                         | {"original_url": item["url"], "original_duration_s": item["duration_s"]},
+            "prompt": prompt, "query": used_q, "loop": bool(loop), "requested_duration_s": duration_s,
+            "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"), "audio": analysis})
+        after = analysis["after"]
+        print(f"[genmedia] 音效 {p.name} ← Openverse「{item['title']}」({item['source_label']} · {item['license_label']}"
+              f"{'' if open_lic else ',须署名'}):{after['duration_s']}s 峰值 {after['peak_db']} dB",
+              file=sys.stderr, flush=True)
+        saved.append(str(p))
+    if skipped:
+        print("[genmedia] Openverse 跳过的素材:" + ";".join(skipped)[:800], file=sys.stderr, flush=True)
+    if not saved:
+        raise RuntimeError(f"Openverse 找到 {len(cands)} 条素材但都不合用:" + ";".join(skipped)[:600])
+    if len(saved) < len(outs):
+        print(f"[genmedia] ⚠ 只取到 {len(saved)}/{len(outs)} 条合用素材", file=sys.stderr, flush=True)
+    return saved
 
 
 # ---------------- TTS 旁白:OpenRouter(/api/v1/audio/speech) ----------------
@@ -7827,16 +7983,17 @@ def generate_music(prompt: str, output: str, duration_s: float | None = None,
 
 def generate_sfx(prompt: str, output: str, duration_s: float | None = None, loop: bool = False,
                  count: int = 1, prompt_influence: float = 0.3, postprocess: bool = True,
-                 provider: str = "") -> list[str]:
-    """生成音效 / 环境床音(ElevenLabs Sound Effects v2),返回保存的绝对路径列表(count 条候选)。
+                 provider: str = "", query: str = "") -> list[str]:
+    """音效 / 环境床音,返回保存的绝对路径列表(count 条候选)。
 
-    渠道自动选:配置里有 ElevenLabs Key 走直连,否则走 Fal 托管;provider 可显式指定。
-    输出格式按 output 扩展名(.wav/.mp3/.flac/.opus)。loop=True 出可无缝循环的床音(不做后处理);
+    渠道看「生成模型」页音效段(默认 openverse = 检索现成的 CC0 / 公有领域素材,不生成;elevenlabs / fal =
+    ElevenLabs Sound Effects v2 生成),provider 可显式指定。query 是 Openverse 检索关键词(省略则从 prompt 提取)。
+    输出格式按 output 扩展名(.wav/.mp3/.flac/.opus)。loop=True 出可无缝循环的床音;
     否则裁掉首尾静音并把峰值归一到 -3 dBFS。每条产物同名 .meta.json 的 sfx 段记来源、提示词与实测数据。"""
     _forbid_dispatch_layer("音效")
     prompt = (prompt or "").strip()
     if not prompt:
-        raise RuntimeError("音效生成需要 --prompt(英文声音描述)")
+        raise RuntimeError("音效需要 --prompt(英文声音描述)")
     ext = Path(output).suffix.lower()
     if ext not in SFX_FORMATS:
         raise RuntimeError(f"音效输出仅支持 {' / '.join(SFX_FORMATS)} 扩展名,收到 {ext or '(无)'}")
@@ -7850,12 +8007,15 @@ def generate_sfx(prompt: str, output: str, duration_s: float | None = None, loop
         raise RuntimeError(f"--duration 须在 {SFX_MIN_DURATION}–{hi:g} 秒之间(渠道 {cfg['provider']})")
     if cfg["provider"] == "fal" and len(prompt) > SFX_FAL_MAX_PROMPT:
         raise RuntimeError(f"Fal 音效描述上限 {SFX_FAL_MAX_PROMPT} 字符,当前 {len(prompt)}")
+    if cfg["provider"] == "openverse":
+        _sfx_ffmpeg(["-version"], "自检")     # 素材格式各异、循环段要重编码,一律要 ffmpeg
+        return _sfx_openverse(cfg, prompt, query, output, duration_s, loop, int(count), postprocess)
     needs_ffmpeg = ext != ".mp3" or (postprocess and not loop)
     if needs_ffmpeg:
         _sfx_ffmpeg(["-version"], "自检")     # 先确认 ffmpeg 可用,再发计费请求
     fetch = _sfx_fetch_elevenlabs if cfg["provider"] == "elevenlabs" else _sfx_fetch_fal
     source = ("ElevenLabs Sound Effects v2(AI 生成)· " +
-              ("ElevenLabs 直连" if cfg["provider"] == "elevenlabs" else f"Fal 托管 {SFX_FAL_ENDPOINT}"))
+              ("ElevenLabs 直连" if cfg["provider"] == "elevenlabs" else f"Fal 托管 {cfg['model']}"))
     saved = []
     for out in _sfx_outputs(output, int(count)):
         p = Path(out) if Path(out).is_absolute() else Path.cwd() / out
@@ -7966,6 +8126,13 @@ def _cmd_info(args):
             print(f"{kind:5s} → {cfg['provider']:10s} {desc}")
         except RuntimeError as e:
             print(f"{kind:5s} → ⚠ {e}")
+    try:
+        cfg = _sfx_config()
+        desc = (f"检索现成素材(不生成) 许可={cfg['license']} 来源={cfg['source']}"
+                if cfg["provider"] == "openverse" else f"model={cfg['model']}")
+        print(f"{'sfx':5s} → {cfg['provider']:10s} {desc}")
+    except RuntimeError as e:
+        print(f"{'sfx':5s} → ⚠ {e}")
 
 
 def _cmd_image(args):
@@ -8152,12 +8319,20 @@ def _cmd_sfx(args):
     if args.dry_run:
         cfg = _sfx_config(args.provider)
         outs = _sfx_outputs(args.output, args.count)
+        if cfg["provider"] == "openverse":
+            from modules import openverse
+            ladder = openverse.query_ladder(args.query, args.prompt)
+            print(f"[dry-run] sfx via openverse license={cfg['license']} source={cfg['source']}"
+                  f" auth={'client' if cfg['client_id'] else 'anonymous'}"
+                  f" queries={' | '.join(ladder) or '(无关键词)'}"
+                  f" loop={'on' if args.loop else 'off'} duration={args.duration or 'auto'} → {', '.join(outs)}")
+            return
         print(f"[dry-run] sfx via {cfg['provider']} model={cfg['model']}"
               f" loop={'on' if args.loop else 'off'} duration={args.duration or 'auto'}"
               f" postprocess={'off' if (args.loop or args.no_postprocess) else 'on'} → {', '.join(outs)}")
         return
     for out in generate_sfx(args.prompt, args.output, args.duration, args.loop, args.count,
-                            args.prompt_influence, not args.no_postprocess, args.provider):
+                            args.prompt_influence, not args.no_postprocess, args.provider, args.query):
         print(f"已生成: {out}")
 
 
@@ -8377,19 +8552,25 @@ def main():
                     help="歌词(AgenticsLLM profile 支持时提交；省略按纯音乐 [Instrumental])")
     pm.add_argument("--dry-run", action="store_true")
 
-    ps = sub.add_parser("sfx", help="生成音效 / 环境床音(ElevenLabs Sound Effects v2;缺陷单兜底贴片用)")
+    ps = sub.add_parser("sfx", help="音效 / 环境床音(默认 Openverse 检索现成素材;ElevenLabs / Fal 生成;缺陷单兜底贴片用)")
     ps.add_argument("--prompt", required=True, help="英文声音描述:声源 / 材质 / 空间感(Fal 托管上限 450 字符);不写音乐与人声")
+    ps.add_argument("--query", default="",
+                    help="Openverse 检索关键词(2–3 个英文词,如 \"door slam\";接口要求所有词都命中,长句搜不到);"
+                         "省略=从 --prompt 提取,0 条时逐个减词重搜。生成渠道忽略")
     ps.add_argument("--output", required=True, help="输出音频路径(.wav/.mp3/.flac/.opus);--count>1 时为 <名>_1…_N")
     ps.add_argument("--duration", type=float, default=None,
-                    help="时长秒(直连 0.5–30,Fal 托管 0.5–22;省略=模型按描述自定)")
+                    help="时长秒(Openverse 0.5–120:素材更长时截到该长度,循环床音按此截段;"
+                         "直连 0.5–30,Fal 托管 0.5–22;省略=模型按描述自定 / 素材原长)")
     ps.add_argument("--loop", action="store_true",
-                    help="出可无缝循环的床音(环境声用);循环音不做裁静音 / 归一")
-    ps.add_argument("--count", type=int, default=1, help=f"候选条数 1–{SFX_MAX_COUNT}(每条单独计费,默认 1)")
+                    help="出可无缝循环的床音(环境声用);生成的循环音不做裁静音 / 归一,Openverse 素材截段后首尾交叉淡化")
+    ps.add_argument("--count", type=int, default=1,
+                    help=f"候选条数 1–{SFX_MAX_COUNT}(生成渠道每条单独计费;Openverse 取不同素材,不计费;默认 1)")
     ps.add_argument("--prompt-influence", type=float, default=0.3,
-                    help="贴合描述的程度 0–1(越高越贴描述、各条越相似,默认 0.3)")
+                    help="贴合描述的程度 0–1(越高越贴描述、各条越相似,默认 0.3;Openverse 忽略)")
     ps.add_argument("--no-postprocess", action="store_true", help="不裁首尾静音、不做峰值归一(只转格式)")
     ps.add_argument("--provider", default="", choices=("", *SFX_PROVIDERS),
-                    help="渠道:elevenlabs=直连 / fal=Fal 托管;省略=有 ElevenLabs Key 走直连,否则 Fal")
+                    help="渠道:openverse=检索现成素材 / elevenlabs=直连生成 / fal=Fal 托管生成;"
+                         "省略=「生成模型」页音效段选中的渠道(默认 openverse)")
     ps.add_argument("--dry-run", action="store_true")
 
     args = ap.parse_args()

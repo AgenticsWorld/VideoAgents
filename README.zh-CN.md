@@ -74,7 +74,7 @@ VideoAgents 是一套开源、文件驱动的多 Agent 视频生产系统，用�
 | 🎬 **视频**         | Agentics · OpenRouter · 火山引擎 · BytePlus · Fal · RunningHub · ComfyUI                                           |
 | 🎙 **语音 / TTS**   | Agentics · OpenRouter · 火山引擎 · ElevenLabs · MiniMax · ComfyUI                                                  |
 | 🎵 **音乐**         | Agentics · OpenRouter · ElevenLabs · ComfyUI                                                                       |
-| 🔊 **音效**         | ElevenLabs · Fal                                                                                                   |
+| 🔊 **音效**         | Openverse · ElevenLabs · Fal                                                                                       |
 | 🧑 **数字人**       | Agentics · HeyGen · Kling AI · ComfyUI                                                                             |
 | 🔍 **超分**         | FFmpeg · Agentics · 火山引擎 · MiniMax · ComfyUI                                                                   |
 | 🌍 **世界模型**     | World Labs                                                                                                         |

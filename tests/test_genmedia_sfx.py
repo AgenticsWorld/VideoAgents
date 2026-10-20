@@ -1,4 +1,5 @@
-"""genmedia sfx:渠道 / Key 选取、参数校验、请求体、后处理(裁首尾静音 + 峰值归一)与循环音直落。"""
+"""genmedia sfx:渠道 / Key 选取、参数校验、请求体、后处理(裁首尾静音 + 峰值归一)与循环音直落;
+Openverse 渠道的检索、挑素材、截段 / 循环段与来源记录见 tests/test_openverse_sfx.py。"""
 import json
 import shutil
 import subprocess
@@ -34,22 +35,41 @@ def _mp3(tmp_path, lead=0.4, tone=0.6, trail=0.5, volume=0.1) -> bytes:
     return out.read_bytes()
 
 
-def test_auto_provider_prefers_elevenlabs_then_fal(config):
-    config({"tts": {"elevenlabs": {"api_key": "el-key"}}, "video": {"fal": {"api_key": "fal-key"}}})
-    assert g._sfx_config() == {"provider": "elevenlabs", "api_key": "el-key", "model": g.SFX_EL_MODEL}
-    assert g._sfx_config("fal")["api_key"] == "fal-key"
-    config({"image": {"fal": {"api_key": "fal-key"}}})
-    assert g._sfx_config()["provider"] == "fal"
+def test_provider_follows_sfx_section_and_defaults_to_openverse(config):
+    config({})
+    cfg = g._sfx_config()
+    assert cfg["provider"] == "openverse" and cfg["license"] == "cc0,pdm" and cfg["source"] == "freesound"
+    assert cfg["client_id"] == "" and cfg["client_secret"] == ""
+    config({"sfx": {"provider": "openverse", "openverse": {"license": "bogus", "source": "jamendo",
+                                                          "client_id": " id ", "client_secret": "sec"}}})
+    cfg = g._sfx_config()
+    assert (cfg["license"], cfg["source"], cfg["client_id"]) == ("cc0,pdm", "freesound", "id")
+    config({"sfx": {"provider": "elevenlabs", "elevenlabs": {"api_key": "own"}}})
+    assert g._sfx_config() == {"provider": "elevenlabs", "api_key": "own", "model": g.SFX_EL_MODEL}
+    assert g._sfx_config("openverse")["provider"] == "openverse"       # 显式指定优先
+    config({"sfx": {"provider": "magic"}})
+    with pytest.raises(RuntimeError, match="音效渠道无效"):
+        g._sfx_config()
+
+
+def test_generation_keys_fall_back_to_other_sections(config):
+    config({"tts": {"elevenlabs": {"api_key": "el-key"}}, "video": {"fal": {"api_key": "fal-key"}},
+            "sfx": {"provider": "elevenlabs", "fal": {"model": "fal-ai/other/endpoint"}}})
+    assert g._sfx_config()["api_key"] == "el-key"
+    fal = g._sfx_config("fal")
+    assert fal["api_key"] == "fal-key" and fal["model"] == "fal-ai/other/endpoint"
+    config({"image": {"fal": {"api_key": "img-fal"}}, "sfx": {"provider": "fal", "fal": {"api_key": ""}}})
+    assert g._sfx_config() == {"provider": "fal", "api_key": "img-fal", "model": g.SFX_FAL_ENDPOINT}
 
 
 def test_missing_key_reports_where_to_fill(config, monkeypatch):
-    config({})
-    with pytest.raises(RuntimeError, match="未找到可用的 API Key"):
+    config({"sfx": {"provider": "elevenlabs"}})
+    with pytest.raises(RuntimeError, match="未找到可用的 API Key.*ElevenLabs 标签页"):
         g._sfx_config()
     with pytest.raises(RuntimeError, match="Fal 标签页"):
         g._sfx_config("fal")
     monkeypatch.setenv("FAL_KEY", "env-key")
-    assert g._sfx_config()["api_key"] == "env-key"
+    assert g._sfx_config("fal")["api_key"] == "env-key"
 
 
 def test_outputs_for_count():
@@ -63,12 +83,15 @@ def test_outputs_for_count():
     ({"prompt_influence": 1.5}, "--prompt-influence"),
     ({"duration_s": 25, "provider": "fal"}, "--duration"),
     ({"duration_s": 0.2}, "--duration"),
+    ({"duration_s": 121, "provider": "openverse"}, "--duration"),
     ({"prompt": "x" * 451, "provider": "fal"}, "450"),
 ])
 def test_validation_rejects_before_any_request(config, monkeypatch, tmp_path, kwargs, message):
-    config({"music": {"elevenlabs": {"api_key": "el"}}, "image": {"fal": {"api_key": "fal"}}})
+    config({"music": {"elevenlabs": {"api_key": "el"}}, "image": {"fal": {"api_key": "fal"}},
+            "sfx": {"provider": "elevenlabs"}})
     monkeypatch.setattr(g, "_request", lambda *a, **k: pytest.fail("不该发请求"))
     monkeypatch.setattr(g, "_fal_queue_run", lambda *a, **k: pytest.fail("不该发请求"))
+    monkeypatch.setattr(g, "_sfx_openverse", lambda *a, **k: pytest.fail("不该检索"))
     args = {"prompt": "door slam", "output": str(tmp_path / "x.mp3"), **kwargs}
     if "output" in kwargs:
         args["output"] = str(tmp_path / kwargs["output"])
@@ -77,14 +100,14 @@ def test_validation_rejects_before_any_request(config, monkeypatch, tmp_path, kw
 
 
 def test_dispatch_layer_is_refused(config, monkeypatch, tmp_path):
-    config({"music": {"elevenlabs": {"api_key": "el"}}})
+    config({"music": {"elevenlabs": {"api_key": "el"}}, "sfx": {"provider": "elevenlabs"}})
     monkeypatch.setenv("VIDEOAGENTS_AGENT", "00-orchestration/producer")
     with pytest.raises(SystemExit):
         g.generate_sfx("door slam", str(tmp_path / "x.mp3"))
 
 
 def test_loop_mp3_is_saved_untouched_via_elevenlabs(config, monkeypatch, tmp_path):
-    config({"music": {"elevenlabs": {"api_key": "el"}}})
+    config({"music": {"elevenlabs": {"api_key": "el"}}, "sfx": {"provider": "elevenlabs"}})
     sent = {}
 
     def fake_request(url, data=None, headers=None, **kw):
@@ -106,7 +129,7 @@ def test_loop_mp3_is_saved_untouched_via_elevenlabs(config, monkeypatch, tmp_pat
 
 
 def test_fal_body_and_count(config, monkeypatch, tmp_path):
-    config({"video": {"fal": {"api_key": "fal"}}})
+    config({"video": {"fal": {"api_key": "fal"}}, "sfx": {"provider": "fal"}})
     calls = []
 
     def fake_queue(cfg, endpoint, body, timeout, label, kind="视频", poll=None, output=""):
@@ -127,7 +150,7 @@ def test_fal_body_and_count(config, monkeypatch, tmp_path):
 
 @needs_ffmpeg
 def test_postprocess_trims_edges_and_normalizes_peak(config, monkeypatch, tmp_path):
-    config({"music": {"elevenlabs": {"api_key": "el"}}})
+    config({"music": {"elevenlabs": {"api_key": "el"}}, "sfx": {"provider": "elevenlabs"}})
     data = _mp3(tmp_path)
     monkeypatch.setattr(g, "_request", lambda *a, **k: data)
     out = tmp_path / "hit.wav"
@@ -147,7 +170,7 @@ def test_postprocess_trims_edges_and_normalizes_peak(config, monkeypatch, tmp_pa
 @needs_ffmpeg
 def test_postprocess_keeps_gaps_between_hits(config, monkeypatch, tmp_path):
     """中间的停顿不能被吃掉:两声之间隔 0.5 s,处理后总长仍含这段间隔。"""
-    config({"music": {"elevenlabs": {"api_key": "el"}}})
+    config({"music": {"elevenlabs": {"api_key": "el"}}, "sfx": {"provider": "elevenlabs"}})
     src = tmp_path / "two.mp3"
     graph = ("anullsrc=r=44100:cl=mono:d=0.3[a];sine=f=440:r=44100:d=0.3[b];anullsrc=r=44100:cl=mono:d=0.5[c];"
              "sine=f=660:r=44100:d=0.3[d];anullsrc=r=44100:cl=mono:d=0.3[e];[a][b][c][d][e]concat=n=5:v=0:a=1")
@@ -161,7 +184,7 @@ def test_postprocess_keeps_gaps_between_hits(config, monkeypatch, tmp_path):
 
 @needs_ffmpeg
 def test_silent_result_is_reported(config, monkeypatch, tmp_path):
-    config({"music": {"elevenlabs": {"api_key": "el"}}})
+    config({"music": {"elevenlabs": {"api_key": "el"}}, "sfx": {"provider": "elevenlabs"}})
     src = tmp_path / "silent.mp3"
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono:d=1", str(src)],
                    check=True)

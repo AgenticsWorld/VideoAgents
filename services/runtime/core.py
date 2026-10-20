@@ -43,6 +43,7 @@ from modules import id_scheme
 from modules.entity_ids import extract_actor_id
 from modules.volc_openapi import signed_call as _volc_signed_call
 from modules import voice_library as _voice_library
+from modules import openverse as _openverse
 from services.runtime import rhythm as narrative_rhythm
 from services.runtime import engine_setup
 from services.runtime import dagcheck
@@ -895,6 +896,18 @@ DEFAULT_GENCONFIG = {
                     "rh_api_key_cn": "", "rh_api_key_ai": "",
                     "rh_workflow_id": "", "rh_design_workflow_id": "", "rh_workflows": [],
                     "rh_instance_type": "standard"},
+    },
+    # 音效(2026-10-20,生成模型页「🔊 音效模型」):genmedia.py sfx 的渠道,只给 sound-effect / ambience 的缺陷单兜底贴片用。
+    #   openverse  = 默认;不生成,按关键词检索 Openverse 收录的现成音频(modules/openverse.py),免费。
+    #                license 许可范围(cc0,pdm = CC0 / 公有领域免署名;cc0,pdm,by = 另收须署名的 CC BY),
+    #                source 来源(freesound / freesound,wikimedia_audio);client_id / client_secret 可选,留空 = 匿名访问
+    #   elevenlabs = ElevenLabs Sound Effects v2 直连生成;fal = Fal 托管的同一模型。api_key 留空沿用音乐 / TTS 段的
+    #                ElevenLabs Key、图像 / 视频段的 Fal Key
+    "sfx": {
+        "provider": "openverse",   # openverse | elevenlabs | fal
+        "openverse": {"license": "cc0,pdm", "source": "freesound", "client_id": "", "client_secret": ""},
+        "elevenlabs": {"api_key": "", "model": "eleven_text_to_sound_v2"},
+        "fal": {"api_key": "", "model": "fal-ai/elevenlabs/sound-effects/v2"},
     },
     # 数字人:任意人物图片 + 对白音频生成单人说话片段。Kling 固定中国北京接口；
     # ComfyUI 渠道与图像/视频等段同口径:运行方式 mode=local(本地 InfiniteTalk)/
@@ -3735,7 +3748,7 @@ def build_role_prompt(agent_id: str, project: str,
 - 生成视频(组级多镜头,默认路径):`python3 modules/genmedia.py video --prompt "<Shot 1:/Shot 2: 分镜结构>" --output <路径.mp4> --ref 锚点图... [--ref-video 组 json video_refs 的白模 camera.mp4 等,按序] [--audio-ref 音色样本...] [--generate-audio on] [--return-last-frame tail.png] --duration <组Σ,4–{sg_max}整数> [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`
 - 生成视频(单镜首尾帧,兜底路径):`python3 modules/genmedia.py video --prompt "..." --output <路径.mp4> [--first-frame a.png] [--last-frame b.png] [--duration 4] [--aspect 16:9] --resolution <草稿{draft_res}|成片{final_res}>`(--ref 与首尾帧互斥)
 - 生成音乐(BGM,仅音乐类工位):`python3 modules/genmedia.py music --prompt "<英文音乐描述:风格/情绪/乐器/节奏>" --output <路径.mp3> [--duration <秒>]`(渠道/模型由「🎨 生成模型」页音乐生成配置;OpenRouter:Lyria 3 Pro 完整歌曲、Lyria 3 Clip 30s 片段/Loop;ElevenLabs Eleven Music:--duration 3–600s 按 cue 精确出段;ComfyUI:ACE-Step 本地工作流、--duration 1–240s;默认纯音乐)
-- 音效 / 环境床音兜底贴片(仅 sound-effect / ambience 工位、且仅当缺陷单要求补做贴片时):`python3 modules/genmedia.py sfx --prompt "<英文声音描述>" --output <路径.wav> [--duration <秒>] [--loop] [--count <1-4>]`(ElevenLabs Sound Effects v2,用已填的 ElevenLabs 或 Fal Key;`--loop` 出可无缝循环床音;非循环音自动裁首尾静音并峰值归一;每条单独计费,没要求多条就用默认 1 条)
+- 音效 / 环境床音兜底贴片(仅 sound-effect / ambience 工位、且仅当缺陷单要求补做贴片时):`python3 modules/genmedia.py sfx --prompt "<英文声音描述>" --query "<2–3 个英文关键词>" --output <路径.wav> [--duration <秒>] [--loop] [--count <1-4>]`(渠道由「🎨 生成模型」页音效段配置,`info` 的 sfx 行回显:默认 Openverse 检索现成的 CC0 / 公有领域素材、不生成不计费,检索词取 `--query`,长句搜不到;没搜到就换关键词重试,仍没有如实上报,不得自行加 `--provider` 改走付费渠道;ElevenLabs / Fal 按 `--prompt` 生成、每条单独计费;`--loop` 出可无缝循环床音;非循环音自动裁首尾静音并峰值归一)
 - TTS 旁白/音色样本(narrator/voice 类工位):`python3 modules/genmedia.py tts --text "<文本>" --output <路径.mp3> [--character CHAR-0001] [--variant child] [--voice <音色;仅音色库模式>] [--speed 1.0] [--instructions "<语气/情绪指令>"]`(渠道/模式/模型由「🎨 生成模型」页 TTS语音模型配置;**每个渠道有语音模式,`genmedia.py info` 的 tts 行回显「模式=音色设计 / 音色库 / 音色库(本地)」,以回显为准**:音色设计=不选音色,按声纹卡描述出嗓音样本、对白拿样本当参考,一律不传 --voice;音色库=先 `python3 modules/genmedia.py voices --character <CHAR-ID> [--variant <形态>]` 取宿主自动拉取并打分的候选,选定登记 casting.json 后按 casting 传 --voice(本地音色库传条目文件名);设置页没有「默认音色」也不列音色,不带人物也没给音色时宿主自动取旁白型音色。**旁白一律不传 --voice**——项目有旁白声线卡 `assets/audio/voice/narrator.json`(由 voice-generation 设计冻结,旁白声线唯一事实源)时 genmedia 自动按卡固定声线:同渠道用卡冻结 tts_voice、seed-audio 用卡冻结描述+冻结样本参考锚、ComfyUI 直接用冻结样本作参考音频,**用户改 TTS 设置不影响旁白声线**(渠道与卡不一致时 genmedia 告警回退并提示重定卡,如实上报);无卡时宿主按语音模式自动处理(音色库模式从音色库取旁白型音色,音色设计模式按声线描述出声)。音色库模式下角色配音按 casting 传 --voice,语义随渠道:OpenRouter=音色名、火山=speaker 名、MiniMax / ElevenLabs=voice_id、本地音色库=条目文件名。**火山音色设计模式(Doubao-音频生成 1.0)= 描述定制嗓音**:免选音色——角色配音传 `--character`(+`--variant`),声线描述由声纹卡 voice.json 声学字段自动拼装;旁白声线=旁白声线卡冻结描述(无卡按 `--instructions` 描述,缺省内置旁白声线);均不传 --voice(speaker 名会被忽略);项目已有冻结 voiceprint 样本时自动作 @音频1 参考锚,逐句/逐段合成不漂音色。ComfyUI:根据项目 voice/personality/appearance 从内置音色目录(远端 ComfyUI-Index-TTS/TimbreModel 音频库,首次使用自动下载缓存到 `data/TimbreModel/`)自动选参考音频,角色传 `--character`,旁白留空,禁止手填 `--voice`。instructions:OpenRouter 仅 OpenAI 系模型生效,火山注入情绪指令,ElevenLabs 忽略,ComfyUI 参与音色自动匹配、不注入合成)
 - 详细纪律见 agents/WORKFLOW.md §9;生成失败如实上报,严禁伪造或占位产物
 
@@ -13304,10 +13317,15 @@ async def api_genconfig_set(body: dict):
     body.pop("project", None)
     old = load_genconfig()
     cfg = _merge(load_genconfig(), body)
-    for kind in ("image", "video", "music", "tts", "digital_human", "upscale", "world", "deepagents"):
+    for kind in ("image", "video", "music", "tts", "sfx", "digital_human", "upscale", "world", "deepagents"):
         allowed = set(DEFAULT_GENCONFIG[kind]) - {"provider"}
         if cfg.get(kind, {}).get("provider") not in allowed:
             raise ServiceError(400, f"{kind}.provider must be one of {sorted(allowed)}")
+    sfx_ov = (cfg.get("sfx") or {}).get("openverse") or {}
+    if sfx_ov.get("license") not in _openverse.LICENSE_SETS:
+        raise ServiceError(400, f"sfx.openverse.license must be one of {list(_openverse.LICENSE_SETS)}")
+    if sfx_ov.get("source") not in _openverse.SOURCE_SETS:
+        raise ServiceError(400, f"sfx.openverse.source must be one of {list(_openverse.SOURCE_SETS)}")
     for prov, pc in (cfg.get("tts") or {}).items():
         if not isinstance(pc, dict):
             continue
@@ -14532,6 +14550,29 @@ async def api_fal_models(kind: str, q: str = "", refresh: bool = False) -> dict:
     return {"kind": kind, "query": q.strip(),
             "models": [{"id": r["id"], "name": r["name"], "tasks": r["tasks"], "description": r["description"],
                         "builtin": family(r["id"]) != "generic"} for r in rows]}
+
+
+async def api_openverse_search(body: dict) -> dict:
+    """音效 › Openverse 标签页「搜索测试」:按页面当前填的许可范围 / 来源 / 凭证(没带就用已保存的)搜一页,
+    结果可在页面试听。与 genmedia.py sfx 同一套检索(modules/openverse.py),不下载、不写盘。"""
+    body = dict(body or {})
+    saved = ((load_genconfig().get("sfx") or {}).get("openverse") or {})
+
+    def pick(name: str, default: str = "") -> str:
+        v = body.get(name)
+        return str(v if v is not None else saved.get(name) or default).strip()
+
+    q = str(body.get("q") or "").strip()
+    if not q:
+        raise ServiceError(400, "q is required")
+    try:
+        return await asyncio.to_thread(_openverse.search, q, pick("license", _openverse.DEFAULT_LICENSES),
+                                       pick("source", _openverse.DEFAULT_SOURCES), "",
+                                       pick("client_id"), pick("client_secret"))
+    except _openverse.OpenverseError as e:
+        # 参数 / 凭证不对 = 400(本地校验也记 400),限流原样 429,连不上或对方出错 = 502
+        status = 429 if e.status == 429 else 400 if 400 <= e.status < 500 else 502
+        raise ServiceError(status, str(e)[:500]) from e
 
 
 # ---------------- MiniMax 音色(设置页 TTS → MiniMax 用) ----------------

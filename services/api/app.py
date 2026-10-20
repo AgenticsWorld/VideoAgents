@@ -1052,6 +1052,12 @@ async def fal_models(kind: str = "video", q: str = "", refresh: bool = False) ->
     return await core.api_fal_models(kind, q, refresh)
 
 
+@api.post("/providers/openverse/search", tags=["providers"])
+async def openverse_search(body: dict[str, Any]) -> dict[str, Any]:
+    """音效 › Openverse 标签页「搜索测试」:{q, license?, source?, client_id?, client_secret?},缺项用已保存的配置。"""
+    return await core.api_openverse_search(body)
+
+
 @api.post("/providers/minimax/voices", tags=["providers"])
 async def minimax_voices(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_minimax_voices(body.model_dump())

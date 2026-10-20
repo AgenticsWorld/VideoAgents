@@ -54,13 +54,20 @@ button:disabled{opacity:.5;cursor:default}
 .hint a{color:var(--link)}
 .status{font-size:12px;margin-left:120px}
 .status.ok{color:var(--green)}
-.fal-hits{margin-left:120px;display:flex;flex-direction:column;gap:4px;max-height:260px;overflow:auto}
-.fal-hits:empty{display:none}
-.fal-hit{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px}
+.fal-hits,.ov-hits{margin-left:120px;display:flex;flex-direction:column;gap:4px;max-height:260px;overflow:auto}
+.fal-hits:empty,.ov-hits:empty{display:none}
+.fal-hit,.ov-hit{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px}
 .fal-hit button{padding:2px 10px;font-size:12px}
 .fal-hit-name{color:var(--text)}
 .fal-hit code{color:var(--dim);font-size:11px}
-.fal-hit-tasks,.fal-hit-tag{color:var(--dim)}
+.fal-hit-tasks,.fal-hit-tag,.ov-hit-meta{color:var(--dim)}
+.ov-hits{max-height:340px}
+.ov-hit{flex-wrap:nowrap}
+.ov-hit audio{height:28px;width:210px;flex:none}
+.ov-hit-text{display:flex;flex-direction:column;min-width:0;line-height:1.35}
+.ov-hit-text a{color:var(--text);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ov-hit-text a:hover{color:var(--accent)}
+.ov-hit-by{color:var(--yellow);margin-left:6px}
 .status.err{color:var(--red)}
 #savebar{display:flex;align-items:center;gap:14px;justify-content:flex-end}
 #save-status{font-size:13px;color:var(--green);opacity:0;transition:opacity .3s}
@@ -92,7 +99,7 @@ button:disabled{opacity:.5;cursor:default}
   <a class="back" href="/" onclick="if(history.length>1){history.back();return false}" title="后退">&lt;</a>
   <a class="back" href="/">控制台</a>
   <h1>🎨 生成模型设置</h1>
-  <span class="pill">图像 / 视频 / 数字人 / 超分 / 音乐 / TTS旁白 / 世界模型 生成渠道与模型</span>
+  <span class="pill">图像 / 视频 / 数字人 / 超分 / 音乐 / 音效 / TTS旁白 / 世界模型 生成渠道与模型</span>
   <div class="spacer"></div>
 </header>
 <main>
@@ -115,6 +122,18 @@ button:disabled{opacity:.5;cursor:default}
     <h2>🎙 TTS语音模型 <span class="cur">旁白/角色音色样本/兜底配音由 TTS 生成;生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
     <div class="tabs" id="tts-tabs"></div>
     <div id="tts-panels"></div>
+  </div>
+  <div class="card" id="card-sfx">
+    <h2>🔊 音效模型 <span class="cur">音效 / 环境床音兜底贴片用(仅缺陷单要求补做时);生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
+    <div class="tabs" id="sfx-tabs">
+      <div class="tab" id="tab-sfx-openverse">Openverse</div>
+      <div class="tab" id="tab-sfx-elevenlabs">ElevenLabs</div>
+      <div class="tab" id="tab-sfx-fal">Fal</div>
+    </div>
+    <!-- 三个面板由 buildSfxPanels() 生成(配置段 sfx):Openverse 检索现成素材(默认,不生成)/ ElevenLabs 直连生成 / Fal 托管生成 -->
+    <div class="panel" id="panel-sfx-openverse"></div>
+    <div class="panel" id="panel-sfx-elevenlabs"></div>
+    <div class="panel" id="panel-sfx-fal"></div>
   </div>
   <div class="card" id="card-digital-human">
     <h2>🧑 数字人 <span class="cur">人物图片 + 对白音频生成说话片段；插件使用当前选中的渠道</span></h2>
@@ -1391,6 +1410,109 @@ function buildUpscaleMinimaxPanel(){
   return d;
 }
 
+/* 音效板块(2026-10-20,配置段 sfx):genmedia.py sfx 的渠道,只给 sound-effect / ambience 缺陷单兜底贴片用。
+   Openverse(默认,首位)= 不生成,按关键词检索现成的 CC0 / 公有领域音效(modules/openverse.py,匿名可用);
+   ElevenLabs / Fal = ElevenLabs Sound Effects v2 生成,Key 留空沿用音乐 / TTS 段、图像 / 视频段已填的 Key */
+const SFX_PROVIDERS=['openverse','elevenlabs','fal'];
+let SFX_PROVIDER='openverse';
+const SFX_OV_LICENSES=[['cc0,pdm','CC0 / 公有领域(免署名,默认)'],['cc0,pdm,by','CC0 / 公有领域 + CC BY(须署名)']];
+const SFX_OV_SOURCES=[['freesound','Freesound(默认)'],['freesound,wikimedia_audio','Freesound + Wikimedia Commons']];
+const SFX_EL_MODELS=[['eleven_text_to_sound_v2','Sound Effects v2(eleven_text_to_sound_v2)']];
+const SFX_FAL_MODELS=[['fal-ai/elevenlabs/sound-effects/v2','ElevenLabs Sound Effects v2(Fal 托管)']];
+function showSfxPanel(provider){
+  SFX_PROVIDER=provider;
+  const labels={openverse:'Openverse',elevenlabs:'ElevenLabs',fal:'Fal'};
+  SFX_PROVIDERS.forEach(p=>{
+    const tab=$(`#tab-sfx-${p}`);
+    tab.classList.toggle('active',p===provider);
+    tab.textContent=(p===provider?'✅ ':'')+labels[p];
+    $(`#panel-sfx-${p}`).classList.toggle('show',p===provider);
+  });
+}
+SFX_PROVIDERS.forEach(p=>{
+  $(`#tab-sfx-${p}`).onclick=()=>showSfxPanel(p);
+});
+function sfxSelectRow(label,id,options){
+  const r=el('div',{className:'row'});
+  r.appendChild(el('label',{},label));
+  const sel=el('select',{id});
+  options.forEach(([v,l])=>sel.appendChild(el('option',{value:v,textContent:l})));
+  r.appendChild(sel);
+  return r;
+}
+function buildSfxPanels(){
+  const ov=$('#panel-sfx-openverse');
+  ov.appendChild(sfxSelectRow('许可范围','sfx-ov-license',SFX_OV_LICENSES));
+  ov.appendChild(sfxSelectRow('来源','sfx-ov-source',SFX_OV_SOURCES));
+  const ir=el('div',{className:'row'});
+  ir.appendChild(el('label',{},'Client ID'));
+  ir.appendChild(el('input',{type:'text',id:'sfx-ov-client-id',placeholder:'可选,留空 = 匿名访问'}));
+  ov.appendChild(ir);
+  const sr=keyRow('sfx-ov-client-secret','可选,与 Client ID 一起填');
+  sr.querySelector('label').textContent='Client Secret';
+  ov.appendChild(sr);
+  const qr=el('div',{className:'row'});
+  qr.appendChild(el('label',{},'搜索测试'));
+  const q=el('input',{type:'text',id:'sfx-ov-q',placeholder:'英文关键词,如 door slam / rain window'});
+  const b=el('button',{id:'sfx-ov-search'},'搜索');
+  b.onclick=()=>sfxOpenverseSearch();
+  q.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();sfxOpenverseSearch()}};
+  qr.appendChild(q);qr.appendChild(b);ov.appendChild(qr);
+  ov.appendChild(el('div',{className:'status',id:'sfx-ov-status'}));
+  ov.appendChild(el('div',{className:'ov-hits',id:'sfx-ov-hits'}));
+  ov.appendChild(el('div',{className:'hint'},'不生成音频:按英文关键词检索 Openverse 上现成的免费音效(主要来自 Freesound),不需要 Key。'));
+  ov.appendChild(el('div',{className:'hint'},
+    'Client ID / Client Secret 可不填(匿名每分钟 20 次、每天 200 次);要更高额度见 '
+    +'<a href="https://api.openverse.org/v1/#tag/auth" target="_blank">Openverse API 文档</a>'));
+  const elp=$('#panel-sfx-elevenlabs');
+  elp.appendChild(keyRow('sfx-el-key','留空=沿用音乐 / TTS 段的 ElevenLabs Key'));
+  elp.appendChild(sfxSelectRow('模型','sfx-el-model',SFX_EL_MODELS));
+  elp.appendChild(el('div',{className:'hint'},
+    'AI 生成:ElevenLabs Sound Effects v2 直连,每条单独计费;时长 0.5–30 秒。Key 在 '
+    +'<a href="https://elevenlabs.io/app/settings/api-keys" target="_blank">elevenlabs.io 控制台</a>'
+    +' 创建,留空沿用音乐 / TTS 段已填的 ElevenLabs Key。'));
+  const fp=$('#panel-sfx-fal');
+  fp.appendChild(keyRow('sfx-fal-key','留空=沿用图像 / 视频段的 Fal Key'));
+  fp.appendChild(sfxSelectRow('模型','sfx-fal-model',SFX_FAL_MODELS));
+  fp.appendChild(el('div',{className:'hint'},
+    'AI 生成:Fal 托管的 ElevenLabs Sound Effects v2,每条单独计费;时长 0.5–22 秒,描述不超过 450 字符。Key 在 '
+    +'<a href="https://fal.ai/dashboard/keys" target="_blank">fal.ai 控制台「API Keys」</a>'
+    +' 创建,留空沿用图像 / 视频段已填的 Fal Key。'));
+}
+function sfxSecs(v){return v==null?'?':(v<10?v.toFixed(1):String(Math.round(v)))+' s'}
+async function sfxOpenverseSearch(){
+  const status=$('#sfx-ov-status'),box=$('#sfx-ov-hits'),btn=$('#sfx-ov-search');
+  const q=$('#sfx-ov-q').value.trim();
+  if(btn.disabled)return;
+  if(!q){status.className='status err';status.textContent=t('请先输入英文关键词');return}
+  btn.disabled=true;box.innerHTML='';
+  status.className='status';status.textContent=t('正在检索 Openverse…');
+  try{
+    const r=await api('/api/v1/providers/openverse/search',{q,
+      license:$('#sfx-ov-license').value,source:$('#sfx-ov-source').value,
+      client_id:$('#sfx-ov-client-id').value.trim(),client_secret:$('#sfx-ov-client-secret').value.trim()});
+    const rows=r.results||[],rate=r.rate||{};
+    const quota=rate.burst||rate.sustained
+      ?' · '+I18N.f('本分钟剩余 {a} 次,今天剩余 {b} 次',{a:rate.burst?.available??'?',b:rate.sustained?.available??'?'}):'';
+    status.className=rows.length?'status ok':'status err';
+    status.textContent=(rows.length?I18N.f('共 {n} 条,显示前 {m} 条,可直接试听',{n:r.result_count,m:rows.length})
+      :t('没有找到匹配的音效:接口要求所有关键词都命中,换 2–3 个更短的英文词再试'))+quota;
+    rows.forEach(m=>{
+      const row=el('div',{className:'ov-hit',title:(m.tags||[]).join(', ')});
+      row.appendChild(el('audio',{controls:true,preload:'none',src:m.url}));
+      const text=el('div',{className:'ov-hit-text'});
+      text.appendChild(el('a',{href:m.landing_url||m.url,target:'_blank',rel:'noopener',textContent:m.title||m.id}));
+      const meta=el('span',{className:'ov-hit-meta',
+        textContent:[sfxSecs(m.duration_s),m.license_label,m.source_label,m.creator].filter(Boolean).join(' · ')});
+      if(!['cc0','pdm'].includes(m.license))meta.appendChild(el('span',{className:'ov-hit-by'},t('须署名')));
+      text.appendChild(meta);row.appendChild(text);
+      box.appendChild(row);
+    });
+  }catch(e){
+    status.className='status err';status.textContent=`${t('检索 Openverse 失败')}: ${e.message||e}`;
+  }finally{btn.disabled=false}
+}
+
 async function testDigitalHuman(provider){
   const st=provider==='comfyui'?$('#digitalhuman-comfy-status'):$(`#dh-${provider}-status`);
   st.className='status';st.textContent=provider==='comfyui'?'连接中…':'验证中…';
@@ -1668,6 +1790,17 @@ function loadIntoForm(){
   $('#scale-mm-model').value=UP_MINIMAX_MODELS[0][0];
   showUpscalePanel(UP_PROVIDERS.includes(up.provider)?up.provider:'ffmpeg');
   loadAgenticsModels('scale');
+  const sx=CFG.sfx||{},sov=sx.openverse||{},sxEl=sx.elevenlabs||{},sfa=sx.fal||{};   // 旧版实例无 sfx 段时按默认填
+  const pickOpt=(opts,v)=>opts.some(([x])=>x===v)?v:opts[0][0];
+  $('#sfx-ov-license').value=pickOpt(SFX_OV_LICENSES,sov.license);
+  $('#sfx-ov-source').value=pickOpt(SFX_OV_SOURCES,sov.source);
+  $('#sfx-ov-client-id').value=sov.client_id||'';
+  $('#sfx-ov-client-secret').value=sov.client_secret||'';
+  $('#sfx-el-key').value=sxEl.api_key||'';
+  $('#sfx-el-model').value=pickOpt(SFX_EL_MODELS,sxEl.model);
+  $('#sfx-fal-key').value=sfa.api_key||'';
+  $('#sfx-fal-model').value=pickOpt(SFX_FAL_MODELS,sfa.model);
+  showSfxPanel(SFX_PROVIDERS.includes(sx.provider)?sx.provider:'openverse');
   const wm=(CFG.world||{}).marble||{};
   $('#world-marble-key').value=wm.api_key||'';
   fillSelect($('#world-marble-model'),WORLD_MODELS,wm.model||WORLD_MODELS[0][0],wm.custom_model);
@@ -1798,6 +1931,11 @@ function collect(){
     minimax:{api_key_io:$('#scale-mm-key-io').value.trim(),api_key_cn:$('#scale-mm-key-cn').value.trim(),
              api_base:$('#scale-mm-base').value,model:$('#scale-mm-model').value||'MiniMax-H3'},
     comfyui:collectComfy('scale')};
+  out.sfx={provider:SFX_PROVIDER,
+    openverse:{license:$('#sfx-ov-license').value,source:$('#sfx-ov-source').value,
+               client_id:$('#sfx-ov-client-id').value.trim(),client_secret:$('#sfx-ov-client-secret').value.trim()},
+    elevenlabs:{api_key:$('#sfx-el-key').value.trim(),model:$('#sfx-el-model').value},
+    fal:{api_key:$('#sfx-fal-key').value.trim(),model:$('#sfx-fal-model').value}};
   out.world={provider:'marble',
     marble:{api_key:$('#world-marble-key').value.trim(),...pickModel('#world-marble-model','#world-marble-custom')}};
   // 生效渠道 = 当前选中的标签页(AgenticsLLM/本地模型/云端模型/OpenRouter)
@@ -1868,6 +2006,7 @@ $('#save').onclick=async()=>{
   const upAgenticsPanel=buildPanel('scale','agentics');upAgenticsPanel.id='panel-up-agentics';
   $('#panel-up-agentics').replaceWith(upAgenticsPanel);
   $('#world-marble-model-row').replaceWith(modelRow('world-marble-model','world-marble-custom'));
+  buildSfxPanels();
   const [cfg,wfs]=await Promise.all([
     api('/api/v1/config/generation'),
     api('/api/v1/comfy/workflows').catch(()=>({workflows:{}})),

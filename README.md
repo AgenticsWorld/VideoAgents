@@ -74,7 +74,7 @@ Bring your own engines and providers. Each modality is configured on its own, so
 | 🎬 **Video**            | Agentics · OpenRouter · Volcano Engine · BytePlus · Fal · RunningHub · ComfyUI                                                  |
 | 🎙 **Voice / TTS**      | Agentics · OpenRouter · Volcano Engine · ElevenLabs · MiniMax · ComfyUI                                                         |
 | 🎵 **Music**            | Agentics · OpenRouter · ElevenLabs · ComfyUI                                                                                    |
-| 🔊 **Sound effects**    | ElevenLabs · Fal                                                                                                                |
+| 🔊 **Sound effects**    | Openverse · ElevenLabs · Fal                                                                                                    |
 | 🧑 **Digital human**    | Agentics · HeyGen · Kling AI · ComfyUI                                                                                          |
 | 🔍 **Upscale**          | FFmpeg · Agentics · Volcano Engine · MiniMax · ComfyUI                                                                          |
 | 🌍 **World model**      | World Labs                                                                                                                      |
