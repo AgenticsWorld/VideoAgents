@@ -1,8 +1,9 @@
 """HunyuanWorld 世界模型(本地算力,2026-10-10):场景全景 → 远程 GPU 主机 worker(1.0 分层重建 +
 多视图渲染 + 3DGS 训练)→ 与 Marble 完全相同的 world.json 契约落盘,viewer / 导演台 / 分镜截图链零改动。
 
-架构:本模块是薄 HTTP 客户端;真正的 GPU 计算在 gpu_worker/(自包含,部署在 Windows/Linux GPU 主机,
-见 docs/hunyuan_deploy.md)。调用形态对齐 Marble(modules/worldlabs.py):提交 → 轮询 → 下载 →
+架构:本模块是薄 HTTP 客户端;真正的 GPU 计算在独立仓库 AgenticsWorld/hunyuan-rpc
+(自包含 worker,部署在 Windows/Linux GPU 主机,见 https://github.com/AgenticsWorld/hunyuan-rpc )。
+调用形态对齐 Marble(modules/worldlabs.py):提交 → 轮询 → 下载 →
 world/worlds/<key>/world.json + splats_<res>.spz + collider.glb + world_pano.jpg + thumbnail.jpg。
 
 坐标与标定:worker 导出的 splats 与 Marble 同为 OpenCV 惯例(x 右、y 下、+z = 全景中心列,原点 = 全景

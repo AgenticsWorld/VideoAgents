@@ -4,8 +4,8 @@
 (HunyuanWorld-1.0 分层 3D 重建 + 多视图渲染 + 3DGS 训练)→ 与 Marble 完全相同的产物契约**,
 视窗漫游、对齐微调、导演台世界视角、背景图模式「世界模型」截图链全部零改动复用。不耗云端 credits。
 
-架构边界:GPU 计算全部在 `gpu_worker/`(自包含 FastAPI 服务,部署见
-[docs/hunyuan_deploy.md](hunyuan_deploy.md),默认 Windows + 3090);仓库其余部分只有 HTTP 调用逻辑
+架构边界:GPU 计算全部在独立仓库 **[AgenticsWorld/hunyuan-rpc](https://github.com/AgenticsWorld/hunyuan-rpc)**
+(自包含 FastAPI worker,部署文档即其 README,默认 Windows + 3090);本仓其余部分只有 HTTP 调用逻辑
 (`modules/hunyuan_world.py` 薄客户端 + `code/hunyuan_world.py` CLI + 宿主派发分支)。
 
 ## 配置
@@ -69,4 +69,4 @@ worker 侧任务工作区 `work_root/jobs/<job_id>/`(中间产物:scenegen/ rend
 - **单卡单任务**:worker 忙时提交回 409,稍后重试;跨主机多 worker 暂不支持。
 - 首次运行要下载 ~60 GB 权重;SPZ 为 DC-only(shDegree 0),视角相关效果(高光)弱于 Marble。
 - HunyuanWorld-1.0 社区许可证:EU/UK/韩国不适用;产品月活 >100 万须向腾讯申请商用许可
-  (详见 docs/hunyuan_deploy.md 第 9 节)。
+  (详见 [hunyuan-rpc README](https://github.com/AgenticsWorld/hunyuan-rpc) 末尾 License 节)。

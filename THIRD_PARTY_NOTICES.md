@@ -37,7 +37,8 @@ binaries; `ffplay.exe` is removed after extraction. FFmpeg runs as a separate pr
 and is not linked into VideoAgents. Upstream: https://www.gyan.dev/ffmpeg/builds/ and
 https://github.com/GyanD/codexffmpeg/releases/tag/9.0.2.
 
-The optional HunyuanWorld world-generation channel (`gpu_worker/`, deployed by the
+The optional HunyuanWorld world-generation channel (the worker lives in the separate
+repository https://github.com/AgenticsWorld/hunyuan-rpc, deployed by the
 user on their own GPU host) drives Tencent HunyuanWorld-1.0
 (https://github.com/Tencent-Hunyuan/HunyuanWorld-1.0), which is subject to the
 TENCENT HUNYUANWORLD-1.0 COMMUNITY LICENSE AGREEMENT: the license does not apply in

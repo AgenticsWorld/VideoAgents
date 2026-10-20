@@ -939,7 +939,7 @@ DEFAULT_GENCONFIG = {
     # 世界模型(2026-09-12):按场景全景生成可漫游 3D world(高斯泼溅);
     # 场景预览页「🌍 世界模型」板块用(仅项目「白模」选项开启时显示)。渠道(2026-10-10):
     # marble=World Labs 云端(Key 在 https://platform.worldlabs.ai/api-keys,API 文档 https://docs.worldlabs.ai/api);
-    # hunyuan=本地算力(远程 GPU worker,配置见 docs/hunyuan_deploy.md;views/gs_steps 为 null 时走 worker 缺省)
+    # hunyuan=本地算力(远程 GPU worker,部署见独立仓库 https://github.com/AgenticsWorld/hunyuan-rpc ;views/gs_steps 为 null 时走 worker 缺省)
     "world": {
         "provider": "marble",   # marble | hunyuan
         "marble": {"api_key": "", "model": "marble-1.1", "custom_model": ""},
