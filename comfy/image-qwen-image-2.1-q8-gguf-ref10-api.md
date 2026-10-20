@@ -15,6 +15,10 @@ text-to-image: 25 steps, `cfg 1.0`, `euler` / `simple`.
 
 Placeholders: `PROMPT` `FIRST_FRAME` `WIDTH` `HEIGHT` `GEN_WIDTH` `GEN_HEIGHT` `SEED`.
 
+Tested 2026-10-20 on a local ComfyUI 0.42.1 with ComfyUI-GGUF (Windows, RTX 4080 SUPER 32 GB, 32 GB RAM): two
+reference images, 1280x720 output, about 38 s of execution, image correct. The bf16 companion took about 750 s
+for the same request on the same machine. 3 to 10 references were not run.
+
 > **Local only** (needs the ComfyUI-GGUF custom node, which Comfy Cloud does not have) and
 > **non-commercial only** (Qwen Research License). See
 > [`image-qwen-image-2.1-q8-gguf-api.md`](image-qwen-image-2.1-q8-gguf-api.md).
@@ -96,6 +100,9 @@ placeholder (`cfg 1.0`; use `negative_mode: "append_exclusions"`) behave as in t
 相同:25 步、`cfg 1.0`、`euler` / `simple`。
 
 占位符:`PROMPT` `FIRST_FRAME` `WIDTH` `HEIGHT` `GEN_WIDTH` `GEN_HEIGHT` `SEED`。
+
+2026-10-20 实测:本地 ComfyUI 0.42.1 + ComfyUI-GGUF(Windows、RTX 4080 SUPER 32 GB、内存 32 GB),两张参考图、出
+1280x720,执行约 38 秒,成图正确;同一台机器上 bf16 版同样的请求约 750 秒。3–10 张参考图没有跑过。
 
 > **只能在本地跑**(需要 ComfyUI-GGUF 自定义节点,Comfy Cloud 没有),且**仅限非商业用途**
 > (Qwen Research License)。详见

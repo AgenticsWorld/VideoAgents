@@ -19,9 +19,12 @@ images and a 1280x720 output: the image came out right, but execution took about
 renders text-to-image at that size in about 20 s — and the ComfyUI HTTP server stopped answering for minutes at
 a time while it ran, so `genmedia.py` gave up polling after 669 s and reported a failure although ComfyUI
 finished the job. The bf16 diffusion model and text encoder together are about 31.7 GB; the cause was not
-investigated further. The int8 files listed in
-[`image-qwen-image-2.1-bf16-api.md`](image-qwen-image-2.1-bf16-api.md#install) are the first thing to try on
-such a machine (not tested). 3 to 10 references were not run.
+investigated further. On the same machine the Q8_0 companion
+[`image-qwen-image-2.1-q8-gguf-ref10-api.json`](image-qwen-image-2.1-q8-gguf-ref10-api.md) (diffusion model
+7.6 GB, needs ComfyUI-GGUF) ran the same request in about 38 s with a nearly identical image — prefer it on a
+32 GB card. The int8 files listed in
+[`image-qwen-image-2.1-bf16-api.md`](image-qwen-image-2.1-bf16-api.md#install) are the option without a custom
+node (not tested). 3 to 10 references were not run.
 
 > **Comfy Cloud** cannot run it as is (the diffusion model and VAE are not in Cloud's shared model catalog)
 > and the model is **non-commercial only** (Qwen Research License). See
@@ -92,7 +95,9 @@ placeholder (`cfg 1.0`; use `negative_mode: "append_exclusions"`) behave as in t
 2026-10-20 实测:本地 ComfyUI 0.42.1(Windows、RTX 4080 SUPER 32 GB、内存 32 GB),两张参考图、出 1280x720,成图
 正确,但执行约 750 秒——同一台机器文生图出同尺寸约 20 秒——而且执行期间 ComfyUI 的 HTTP 服务一连几分钟不响应,
 `genmedia.py` 轮询到 669 秒超时放弃并报失败,实际 ComfyUI 那边跑完了。bf16 底模与文本编码器合计约 31.7 GB;
-原因没有进一步排查。这类机器上可先试
+原因没有进一步排查。同一台机器上 Q8_0 版
+[`image-qwen-image-2.1-q8-gguf-ref10-api.json`](image-qwen-image-2.1-q8-gguf-ref10-api.md)(底模 7.6 GB,需要
+ComfyUI-GGUF)同样的请求约 38 秒、成图几乎一致——32 GB 显卡上优先用它。不装自定义节点的办法是
 [`image-qwen-image-2.1-bf16-api.md`](image-qwen-image-2.1-bf16-api.md#安装) 里列的 int8 文件(未实测)。3–10 张
 参考图没有跑过。
 

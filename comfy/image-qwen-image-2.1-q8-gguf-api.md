@@ -17,6 +17,10 @@ Placeholders: `PROMPT` `WIDTH` `HEIGHT` `GEN_WIDTH` `GEN_HEIGHT` `SEED`.
 Reference-image companion:
 [`image-qwen-image-2.1-q8-gguf-ref10-api.md`](image-qwen-image-2.1-q8-gguf-ref10-api.md).
 
+Tested 2026-10-20 on a local ComfyUI 0.42.1 with ComfyUI-GGUF (Windows, RTX 4080 SUPER 32 GB): 1024x1024 in
+about 93 s including the first model load, 1280x720 in about 23 s after that; with the same seed the images are
+nearly identical to [`image-qwen-image-2.1-bf16-api.json`](image-qwen-image-2.1-bf16-api.md).
+
 > **Local only.** `UnetLoaderGGUF` comes from the ComfyUI-GGUF custom node pack. Comfy Cloud's node catalog
 > (checked 2026-10-10, Cloud v0.39.2) does not include it, so on Cloud the submission is rejected with
 > `missing_node_type`. See [Without the GGUF node](#without-the-gguf-node) for a variant that needs no
@@ -111,6 +115,10 @@ API 格式文生图工作流。由 `image_qwen_image_2_1_t2i_gguf.json` 转换�
 
 参考图配套工作流:
 [`image-qwen-image-2.1-q8-gguf-ref10-api.md`](image-qwen-image-2.1-q8-gguf-ref10-api.md)。
+
+2026-10-20 实测:本地 ComfyUI 0.42.1 + ComfyUI-GGUF(Windows、RTX 4080 SUPER 32 GB),1024x1024 约 93 秒(含首次加载
+模型),之后 1280x720 约 23 秒;同一种子下与 [`image-qwen-image-2.1-bf16-api.json`](image-qwen-image-2.1-bf16-api.md)
+的成图几乎一致。
 
 > **只能在本地跑。** `UnetLoaderGGUF` 来自 ComfyUI-GGUF 自定义节点包。Comfy Cloud 的节点目录(2026-10-10 核对,
 > 云端 v0.39.2)里没有它,所以选云端提交会被 `missing_node_type` 拒收。不需要自定义节点的变体见
