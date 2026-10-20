@@ -1,7 +1,7 @@
 """画板(2026-10-10,docs/image_canvas.md):对一张已有图片做圈选编辑 / 放大 / 裁剪翻转旋转缩放,保留全部历史版本,选一张作最终版。
 
 入口:场景预览(场景图、分镜背景图)、人物预览(人物图、服装图)、生物 / 道具预览、故事板草图、成片发布页封面,各自「✏️ 修改」后的
-「🖌 画板」按钮 → /preview/canvas?project=&file=<项目内相对路径>。
+「🖌 画板」按钮;参考文件页(refs/ 里的图片)在文件名右侧 → /preview/canvas?project=&file=<项目内相对路径>。
 
 存放:assets/canvas/<原图相对路径压平>.<sha8>/
     history.json            版本台账(schema image_canvas/1.0)+ 参考图托盘 + 最近任务号
@@ -37,7 +37,7 @@ from pathlib import Path
 SCHEMA = 'image_canvas/1.0'
 ROOT_REL = 'assets/canvas'
 IMG_EXTS = ('.png', '.jpg', '.jpeg', '.webp')
-KINDS = ('scene', 'plate', 'character', 'costume', 'creature', 'prop', 'sketch', 'cover', 'image')
+KINDS = ('scene', 'plate', 'character', 'costume', 'creature', 'prop', 'sketch', 'cover', 'ref', 'image')
 ACTIVE = ('queued', 'drafting', 'awaiting_confirm', 'running')
 STALE_S = {'queued': 15 * 60, 'drafting': 45 * 60, 'running': 30 * 60, 'awaiting_confirm': 24 * 3600}
 MAX_REGIONS = 12
@@ -158,6 +158,7 @@ _PLATE_RE = re.compile(r'^assets/concepts/scenes/([^/]+)/plates/([^/]+)\.(?:png|
 _CONCEPT_RE = re.compile(r'^assets/concepts/(scenes|characters|creatures|props)/([^/]+)/')
 _SKETCH_RE = re.compile(r'^assets/storyboard/([^/]+)/([^/_][^/]*)\.(?:png|jpe?g|webp)$', re.I)
 _COVER_RE = re.compile(r'^edit/([^/]+)/(?:[^/]+/)*[^/]*thumb[^/]*\.(?:png|jpe?g|webp)$', re.I)   # 成片发布页的封面:edit/<ep>/ 下文件名带 thumb 的图
+_REF_RE = re.compile(r'^refs/')                                                                  # 参考文件页的图片(用户上传的参考素材)
 _CONCEPT_KINDS = {'scenes': 'scene', 'characters': 'character', 'creatures': 'creature', 'props': 'prop'}
 
 
@@ -173,13 +174,15 @@ def locate(rel: str, kind: str = '') -> dict:
     m = _COVER_RE.match(rel)
     if m:
         return {'storage': 'fixed', 'kind': 'cover', 'ep': m.group(1)}
+    if _REF_RE.match(rel):
+        return {'storage': 'fixed', 'kind': 'ref'}
     m = _CONCEPT_RE.match(rel)
     if m:
         k = _CONCEPT_KINDS[m.group(1)]
         if k == 'character' and kind == 'costume':
             k = 'costume'
         return {'storage': 'fixed', 'kind': k, 'id': m.group(2)}
-    return {'storage': 'fixed', 'kind': kind if kind in KINDS and kind not in ('plate', 'sketch') else 'image'}
+    return {'storage': 'fixed', 'kind': kind if kind in KINDS and kind not in ('plate', 'sketch', 'ref') else 'image'}
 
 
 def canvas_root(base: Path) -> Path:

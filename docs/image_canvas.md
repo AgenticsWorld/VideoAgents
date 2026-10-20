@@ -6,7 +6,7 @@
 
 ## 入口
 
-各处「✏️ 修改」后面的「🖌 画板」按钮(`apps/web/static/canvas-entry.js`,`CanvasEntry.btn({url, kind, label, oid})`),在当前窗口跳到
+各处「✏️ 修改」后面的「🖌 画板」按钮(参考文件页在文件名右侧)(`apps/web/static/canvas-entry.js`,`CanvasEntry.btn({url, kind, label, oid})`),在当前窗口跳到
 `/preview/canvas?project=&file=<项目内相对路径>&kind=&label=&oid=`(桌面端不允许开新窗口;画板页左上角「<」返回)。
 
 | 页面 | 图片 | kind |
@@ -18,8 +18,10 @@
 | 生物 / 道具预览 | 概念图 | creature / prop |
 | 故事板 | 草图 `assets/storyboard/<ep>/<键>.png` | sketch |
 | 成片发布 | 封面(`edit/<ep>/` 下文件名带 thumb 的图) | cover |
+| 参考文件 | `refs/` 里的 png / jpg / webp(gif / bmp / tif 不出按钮) | ref |
 
 最终版怎么落**只按路径判**(`modules/image_canvas.locate`):分镜背景图、草图、其余固定路径三种;页面传的 kind 只细化显示与设定归属(服装 / 封面)。
+参考图(`refs/` 下)也按路径判为 ref:设为最终版写回原路径,注释(`refs/annotations.json` / `NOTES.md`)按路径记、不受影响;没有设定卡,不出「同步设定文字」。
 
 ## 存放
 

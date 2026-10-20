@@ -61,7 +61,8 @@ def test_locate_storage_by_path_and_kind_refinement():
     assert ic.locate('edit/ep02/covers/youtube_thumb_v2.jpg')['kind'] == 'cover' and ic.locate('edit/ep02/final.png')['kind'] == 'image'
     assert ic.locate(SHEET)['kind'] == 'character' and ic.locate(SHEET, 'costume')['kind'] == 'costume'
     assert ic.locate('assets/concepts/props/P1/main_01.png', 'costume')['kind'] == 'prop'                # 页面传的类别只细化人物图
-    assert ic.locate('refs/style/a.png', 'plate')['kind'] == 'image'                                     # storage 相关的类别不认页面说法
+    assert ic.locate('assets/misc/a.png', 'plate')['kind'] == 'image' and ic.locate('assets/misc/a.png', 'ref')['kind'] == 'image'   # storage / 路径相关的类别不认页面说法
+    assert ic.locate('refs/characters/hero/a.png') == {'storage': 'fixed', 'kind': 'ref'} and ic.locate('refs/a.webp', 'plate')['kind'] == 'ref'   # 参考文件页的图片
 
 
 def test_safe_rel_rejects_escape_history_and_non_images(base):
