@@ -4518,6 +4518,13 @@ window.I18N_DICT = {
 "本机插值(Lanczos)": "Lokale Interpolation (Lanczos)",
 "agent·画板修图师": "Leinwand-Retusche-Agent",
 "版本对比": "Vergleich",
+"已打开:本图的编辑与重绘放大走 NSFW 模式的备用模型;点击关闭": "An: Bearbeitungen und Hochskalieren per Neuzeichnen dieses Bildes laufen über die Ausweichmodelle des NSFW-Modus; klicken zum Ausschalten",
+"打开后,本图的编辑与重绘放大改走「设置→高级→NSFW 模式」的备用模型:画板修图 Agent 用备用语言模型,图像用备用渠道": "Eingeschaltet laufen Bearbeitungen und Hochskalieren per Neuzeichnen dieses Bildes über die Ausweichmodelle aus „Einstellungen → Erweitert → NSFW-Modus“: Der Leinwand-Retusche-Agent nutzt das Ausweich-Sprachmodell, Bilder den Ausweichanbieter",
+"🔞 图像改用 NSFW 备用渠道:{ch}": "🔞 Bilder über den NSFW-Ausweichanbieter: {ch}",
+"🔞 没有配置 NSFW 备用图像渠道,按这里选的模型出图": "🔞 Kein NSFW-Ausweichanbieter für Bilder eingestellt; es wird das hier gewählte Modell verwendet",
+"🔞 语言模型改用 {m}": "🔞 Sprachmodell gewechselt zu {m}",
+"🔞 没有配置 NSFW 备用语言模型,沿用当前引擎": "🔞 Kein NSFW-Ausweich-Sprachmodell eingestellt; die aktuelle Engine wird verwendet",
+"按 NSFW 模式的备用模型出的图": "Mit den Ausweichmodellen des NSFW-Modus erzeugt",
 "不对比": "Aus",
 "选作对比": "Vergleichen",
 // 生成模型设置·音效板块(2026-10-20,models.html)

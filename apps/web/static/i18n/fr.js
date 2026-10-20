@@ -4520,6 +4520,13 @@ window.I18N_DICT = {
 "本机插值(Lanczos)": "Interpolation locale (Lanczos)",
 "agent·画板修图师": "Agent retouche de canevas",
 "版本对比": "Comparer",
+"已打开:本图的编辑与重绘放大走 NSFW 模式的备用模型;点击关闭": "Activé : les retouches et agrandissements par redessin de cette image utilisent les modèles de secours du mode NSFW ; cliquer pour désactiver",
+"打开后,本图的编辑与重绘放大改走「设置→高级→NSFW 模式」的备用模型:画板修图 Agent 用备用语言模型,图像用备用渠道": "Une fois activé, les retouches et agrandissements par redessin de cette image passent par les modèles de secours définis dans « Paramètres → Avancé → Mode NSFW » : l'Agent retouche de canevas utilise le modèle de langage de secours et les images le fournisseur de secours",
+"🔞 图像改用 NSFW 备用渠道:{ch}": "🔞 Images via le fournisseur de secours NSFW : {ch}",
+"🔞 没有配置 NSFW 备用图像渠道,按这里选的模型出图": "🔞 Aucun fournisseur d'images de secours NSFW défini ; le modèle choisi ici est utilisé",
+"🔞 语言模型改用 {m}": "🔞 Modèle de langage remplacé par {m}",
+"🔞 没有配置 NSFW 备用语言模型,沿用当前引擎": "🔞 Aucun modèle de langage de secours NSFW défini ; le moteur actuel est utilisé",
+"按 NSFW 模式的备用模型出的图": "Généré avec les modèles de secours du mode NSFW",
 "不对比": "Désactivé",
 "选作对比": "Comparer",
 // 生成模型设置·音效板块(2026-10-20,models.html)

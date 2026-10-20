@@ -49,7 +49,7 @@ assets/canvas/index.json    aliases:分镜背景图登记出去的 <key>_revN �
 
 ## 编辑
 
-页面发 `POST /api/v1/projects/<p>/canvas/edit`:`{file, parent, regions[], text, refs[参考图编号], provider, model, lock, mode: agent|direct, preview}`。
+页面发 `POST /api/v1/projects/<p>/canvas/edit`:`{file, parent, regions[], text, refs[参考图编号], provider, model, lock, mode: agent|direct, preview, nsfw}`。
 
 - **圈选**:矩形 / 椭圆 / 套索 / 画笔,页面只传几何(0..1 归一化坐标),蒙版与带圈标注图由服务端用 PIL 画(`render_mask` / `render_marked`)。每个区域带编号与一条说明,最多 12 个。
 - **参考图**:托盘里每张有编号 n 和注释;文字里写 `@图n`(非中文界面 `@refn`)点名,拼提示词时换成 `[Image N]`。一次最多带 8 张。
@@ -64,10 +64,14 @@ assets/canvas/index.json    aliases:分镜背景图登记出去的 <key>_revN �
   模型返回图与底图画幅差超过 3% 时无法对位,不合成,版本标「画幅变了」。
 - 用量:接口返回了 usage 的渠道(目前只有火山 / BytePlus)记在版本的 `usage` 上,历史里显示;其余渠道不显示。任务目录里的 `usage_ledger.jsonl` 与别处同一格式。
 - 同一张图同时只跑一个任务(`active_job`);Agent 结束却没交提示词、或任务长时间没进展,下次读状态时记为失败。
+- **🔞 NSFW 开关**(工具栏最右;控制台「设置→高级→NSFW 模式」开着才显示,开关状态按图记在本机浏览器 `localStorage`):打开后本图的编辑与重绘放大按 NSFW 路由,同工单 `nsfw: true`——
+  配了备用图像渠道时服务端把任务的渠道 / 模型换成它(页面的模型下拉变灰并注明);经 Agent 时派单带 `nsfw`,修图 Agent 跑在备用语言模型上(`nsfw_route_for_run`,未配备用语言模型时沿用当前引擎),工单多一行 `nsfw: true`;
+  出图子进程(Agent 的、宿主直接发送 / 确认 / 放大起的)都带 `VIDEOAGENTS_NSFW=1`,genmedia 记 `nsfw_route`。任务与版本记 `nsfw: true`,历史里标 🔞。
+  保真超分不受影响;NSFW 模式关着时带 `nsfw` 的请求 400。
 
 ## 放大
 
-`POST …/canvas/upscale`:`{file, parent, mode: redraw|fidelity, provider, model, upscaler, width}`(高按画幅推)。宿主直接跑 `canvas_edit.py upscale`,不经 Agent。
+`POST …/canvas/upscale`:`{file, parent, mode: redraw|fidelity, provider, model, upscaler, width, nsfw}`(高按画幅推;`nsfw` 只作用于重绘放大)。宿主直接跑 `canvas_edit.py upscale`,不经 Agent。
 
 - **重绘放大**:图像模型以底图为唯一参考图 + 固定提示词(`UPSCALE_PROMPT`)重出。模型会重画,人脸 / 文字 / 纹理可能走样。
 - **保真超分**(`genmedia.upscale_image`):`local` 本机 Lanczos 插值(不新增细节),或 Fal 的专用超分端点(SeedVR2 / Topaz Precision / Real-ESRGAN / AuraSR / Bria,需要 Fal Key)。

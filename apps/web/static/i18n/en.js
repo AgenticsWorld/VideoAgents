@@ -4529,6 +4529,13 @@ window.I18N_DICT = {
 "本机插值(Lanczos)": "Local interpolation (Lanczos)",
 "agent·画板修图师": "Canvas Retouch Agent",
 "版本对比": "Compare",
+"已打开:本图的编辑与重绘放大走 NSFW 模式的备用模型;点击关闭": "On: edits and redraw upscales of this image use the NSFW-mode fallback models; click to turn off",
+"打开后,本图的编辑与重绘放大改走「设置→高级→NSFW 模式」的备用模型:画板修图 Agent 用备用语言模型,图像用备用渠道": "When on, edits and redraw upscales of this image use the fallback models set in “Settings → Advanced → NSFW mode”: the Canvas Retouch Agent runs on the fallback language model and images go to the fallback provider",
+"🔞 图像改用 NSFW 备用渠道:{ch}": "🔞 Images use the NSFW fallback provider: {ch}",
+"🔞 没有配置 NSFW 备用图像渠道,按这里选的模型出图": "🔞 No NSFW fallback image provider is set; the model picked here is used",
+"🔞 语言模型改用 {m}": "🔞 Language model switched to {m}",
+"🔞 没有配置 NSFW 备用语言模型,沿用当前引擎": "🔞 No NSFW fallback language model is set; the current engine is used",
+"按 NSFW 模式的备用模型出的图": "Generated with the NSFW-mode fallback models",
 "不对比": "Off",
 "选作对比": "Compare",
 // 生成模型设置·音效板块(2026-10-20,models.html)

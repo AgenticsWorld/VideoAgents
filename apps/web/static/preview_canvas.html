@@ -165,6 +165,8 @@ dl.kv dd{min-width:0;word-break:break-all}
       </select>
       <input type="range" id="split" min="0" max="100" value="50" title="滑杆位置" hidden>
       <button id="blink" title="按住看对比版本,松开回到当前版本" hidden>按住看 B</button>
+      <span class="sep" id="nsfw-sep" hidden></span>
+      <button id="nsfw" hidden>🔞 NSFW</button>
     </div>
     <div id="vp" class="t-pan"><canvas id="cv"></canvas></div>
     <div id="foot"><span id="f-ver"></span><div class="spacer"></div><span id="f-zoom" data-no-i18n></span></div>
@@ -177,7 +179,7 @@ dl.kv dd{min-width:0;word-break:break-all}
       <button data-tab="info">信息</button>
     </div>
     <div class="pane on" id="p-edit">
-      <div class="sec"><h3>图像模型</h3><span id="imp-edit"></span></div>
+      <div class="sec"><h3>图像模型</h3><span id="imp-edit"></span><div class="hint warn" id="imp-edit-nsfw" hidden></div></div>
       <div class="sec"><h3>圈选区域<span class="n" id="rg-n"></span></h3>
         <div id="rgs"></div>
         <div class="hint" id="rg-hint">用上方的矩形 / 椭圆 / 套索 / 画笔在图上圈出要改的位置,每个区域可以单独写修改内容;不圈就是对整张图提要求</div>
@@ -208,7 +210,7 @@ dl.kv dd{min-width:0;word-break:break-all}
         <label class="opt"><input type="radio" name="upmode" value="redraw" checked><span>重绘放大:用图像模型以原图为参考重出一张更大的(细节更多,但人脸、文字、纹理可能走样)</span></label>
         <label class="opt"><input type="radio" name="upmode" value="fidelity"><span>保真超分:专用超分模型,不重画内容</span></label>
       </div>
-      <div class="sec" id="up-redraw"><h3>图像模型</h3><span id="imp-up"></span>
+      <div class="sec" id="up-redraw"><h3>图像模型</h3><span id="imp-up"></span><div class="hint warn" id="imp-up-nsfw" hidden></div>
         <div class="hint" id="up-lim" style="margin-top:6px"></div>
       </div>
       <div class="sec" id="up-fid" hidden><h3>超分模型</h3>
@@ -255,6 +257,10 @@ const NOTE_TEXT={
 };
 let S=null, VIEW=null, CMP=null, REGIONS=[], TOOL='pan', LASTJOB='', pollTimer=null, LIM=null;
 let PICK_EDIT=null, PICK_UP=null, lastField=null;
+// 工具栏 🔞(控制台「设置→高级→NSFW 模式」开着才显示):本图的编辑 / 重绘放大按 NSFW 路由——经 Agent 时修图 Agent 换备用语言模型,
+// 配了备用图像渠道时图像改用它(服务端套用,所选模型让位)。开关按图记在本机浏览器
+const NSFW_KEY='canvas_nsfw_'+PROJECT+'|'+FILE;
+let NSFW_ON=false;try{NSFW_ON=localStorage.getItem(NSFW_KEY)==='1'}catch(_){}
 
 function toast(msg,bad){const el=$('#toast');el.textContent=msg;el.className=bad?'bad':'';el.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>el.style.display='none',bad?6000:3200)}
 async function api(path,body,raw){
@@ -505,16 +511,37 @@ document.addEventListener('input',e=>{
     const p=el.selectionStart;el.setSelectionRange(p-1,p);insertAt(el,mention(d.dataset.n)+' ');mbox.style.display='none'};
 });
 document.addEventListener('click',e=>{if(!e.target.closest('#mention'))mbox.style.display='none'});
+const nsfwMode=()=>(S&&S.nsfw_mode)||{enabled:false};
+const nsfwActive=()=>NSFW_ON&&nsfwMode().enabled;
+const nsfwImage=()=>nsfwActive()?nsfwMode().image||null:null;
+const chDesc=c=>[c.provider,c.model].filter(Boolean).join(' ');
+function syncNsfw(){
+  const m=nsfwMode(), on=nsfwActive(), img=nsfwImage(), b=$('#nsfw');
+  b.hidden=$('#nsfw-sep').hidden=!m.enabled;
+  b.classList.toggle('warn',on);
+  b.title=on?t('已打开:本图的编辑与重绘放大走 NSFW 模式的备用模型;点击关闭')
+    :t('打开后,本图的编辑与重绘放大改走「设置→高级→NSFW 模式」的备用模型:画板修图 Agent 用备用语言模型,图像用备用渠道');
+  [['#imp-edit','#imp-edit-nsfw'],['#imp-up','#imp-up-nsfw']].forEach(([host,note])=>{
+    $(host).style.opacity=img?'.45':'';$(host).style.pointerEvents=img?'none':'';
+    $(note).hidden=!on;
+    $(note).textContent=!on?'':img?F('🔞 图像改用 NSFW 备用渠道:{ch}',{ch:chDesc(img)}):t('🔞 没有配置 NSFW 备用图像渠道,按这里选的模型出图');
+  });
+}
+$('#nsfw').onclick=()=>{
+  NSFW_ON=!NSFW_ON;try{localStorage.setItem(NSFW_KEY,NSFW_ON?'1':'')}catch(_){}
+  syncNsfw();syncSendHint();if(upMode()==='redraw')loadLimits();
+};
 function syncSendHint(){
-  const direct=$('#o-direct').checked;
-  $('#send-hint').textContent=!direct&&S&&!S.agent?t('没有找到画板修图 Agent,只能直接发送'):direct?t('直接发给图像模型'):t('先由画板修图 Agent 整理成提示词');
+  const direct=$('#o-direct').checked, txt=nsfwMode().text;
+  $('#send-hint').textContent=(!direct&&S&&!S.agent?t('没有找到画板修图 Agent,只能直接发送'):direct?t('直接发给图像模型'):t('先由画板修图 Agent 整理成提示词'))
+    +(nsfwActive()&&!direct&&S&&S.agent?' · '+(txt?F('🔞 语言模型改用 {m}',{m:txt.engine+' / '+(txt.model||t('引擎默认'))}):t('🔞 没有配置 NSFW 备用语言模型,沿用当前引擎')):'');
 }
 $('#o-direct').onchange=syncSendHint;
 $('#send').onclick=async()=>{
   $('#edit-err').textContent='';
   const ch=PICK_EDIT?PICK_EDIT.value():{};
   const body=withFile({parent:VIEW,regions:REGIONS,text:$('#txt').value.trim(),refs:usedRefs(),provider:ch.provider||'',model:ch.model||'',
-    lock:$('#o-lock').checked&&!!REGIONS.length,mode:$('#o-direct').checked||!S.agent?'direct':'agent',preview:$('#o-preview').checked});
+    lock:$('#o-lock').checked&&!!REGIONS.length,mode:$('#o-direct').checked||!S.agent?'direct':'agent',preview:$('#o-preview').checked,nsfw:nsfwActive()});
   $('#send').disabled=true;
   try{apply(await api('/edit',body));toast(t('已发送'))}
   catch(err){$('#edit-err').textContent=err.message}
@@ -525,7 +552,7 @@ $('#send').onclick=async()=>{
 const JOB_TEXT={queued:'排队中',drafting:'画板修图 Agent 正在整理提示词',awaiting_confirm:'提示词待确认',running:'出图中',done:'完成',failed:'失败',cancelled:'已取消'};
 function jobHtml(j,failed){
   if(j){
-    let h=`<div class="st">${j.status==='awaiting_confirm'?'📝':'<span class="spin">⏳</span>'} ${esc(t(JOB_TEXT[j.status]||j.status))}<span class="badge" data-no-i18n>${esc(j.id)}</span></div>`;
+    let h=`<div class="st">${j.status==='awaiting_confirm'?'📝':'<span class="spin">⏳</span>'} ${esc(t(JOB_TEXT[j.status]||j.status))}<span class="badge" data-no-i18n>${esc(j.id)}</span>${j.nsfw?'<span class="badge warn" data-no-i18n>🔞 NSFW</span>':''}</div>`;
     if(j.status==='awaiting_confirm')h+=`<div class="hint" style="margin:6px 0 4px">${esc(t('将要发给图像模型的提示词,可以直接改:'))}</div><textarea id="j-prompt" rows="9" data-no-i18n>${esc(j.prompt||'')}</textarea>`
       +`<div class="row" style="margin-top:6px"><button class="pri" id="j-ok">${esc(t('确认出图'))}</button><button id="j-cancel">${esc(t('取消'))}</button></div>`;
     else if(j.status==='drafting')h+=`<div class="hint">${esc(t('可以到控制台看 Agent 的进展'))}</div><div class="row"><button id="j-cancel">${esc(t('取消'))}</button></div>`;
@@ -616,7 +643,7 @@ function renderLimits(){
 let limSeq=0;
 async function loadLimits(){
   if(!S||upMode()!=='redraw'){renderUp();return}
-  const ch=PICK_UP?PICK_UP.value():{}, seq=++limSeq;
+  const ch=nsfwImage()||(PICK_UP?PICK_UP.value():{}), seq=++limSeq;
   LIM=null;renderUp();
   try{
     const d=await (await fetch(API+'/limits?file='+encodeURIComponent(FILE)+'&version='+encodeURIComponent(VIEW||'')+'&provider='+encodeURIComponent(ch.provider||'')+'&model='+encodeURIComponent(ch.model||''))).json();
@@ -631,7 +658,8 @@ $('#up-go').onclick=async()=>{
   $('#up-err').textContent='';
   const ch=PICK_UP?PICK_UP.value():{};
   $('#up-go').disabled=true;
-  try{apply(await api('/upscale',withFile({parent:VIEW,mode:upMode(),upscaler:$('#up-model').value,width:+$('#up-w').value||0,provider:ch.provider||'',model:ch.model||''})));toast(t('已开始放大'))}
+  try{apply(await api('/upscale',withFile({parent:VIEW,mode:upMode(),upscaler:$('#up-model').value,width:+$('#up-w').value||0,provider:ch.provider||'',model:ch.model||'',
+    nsfw:nsfwActive()&&upMode()==='redraw'})));toast(t('已开始放大'))}
   catch(err){$('#up-err').textContent=err.message}
   finally{syncBusy()}
 };
@@ -680,6 +708,7 @@ function renderVers(){
     if(v.plate_key)b.push(`<span class="badge key" data-no-i18n title="${esc(t('已登记进背景图库'))}">${esc(v.plate_key)}</span>`);
     if(lock.applied)b.push(`<span class="badge${lock.warn?' warn':''}" title="${esc(lock.warn?t('模型把圈外也改了不少(可能整张图挪了位置):圈内贴回原图后接缝可能对不上,可以改用整图看看'):t('圈外保持原图不变'))}">${esc(t(lock.warn?'圈外漂移':'圈外锁定'))}</span>`);
     if(v.aspect_changed)b.push(`<span class="badge warn">${esc(t('画幅变了'))}</span>`);
+    if(v.nsfw)b.push(`<span class="badge warn" title="${esc(t('按 NSFW 模式的备用模型出的图'))}">🔞</span>`);
     const use=v.usage&&v.usage.total_tokens?F('用量 {n} tokens',{n:v.usage.total_tokens}):'';
     const meta=[`${v.width}×${v.height}`,fmtSize(v.bytes),[v.provider,v.model].filter(Boolean).join(' '),use,fmtTime(v.created_at),v.parent?'← '+v.parent:''].filter(Boolean).join(' · ');
     const desc=verDesc(v);
@@ -780,7 +809,7 @@ function apply(st,fromPoll){
     else if(done.status==='failed')toast(t(done.op==='upscale'?'放大失败':'编辑失败'),true);
   }
   $('#obj').textContent=((st.ui||{}).label||st.file)+'  ·  '+t(KIND_NAMES[st.kind]||st.kind);
-  renderRefs();renderJob();renderVers();renderInfo();renderUp();syncBusy();syncSendHint();draw();poll();
+  renderRefs();renderJob();renderVers();renderInfo();renderUp();syncBusy();syncNsfw();syncSendHint();draw();poll();
 }
 function mountPickers(){
   const m=S.models||{channels:[],global:{},pref:{}};

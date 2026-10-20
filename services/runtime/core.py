@@ -8195,7 +8195,24 @@ def _canvas_state(base: Path, doc: Path, hist: dict | None = None) -> dict:
                     "pref": image_model_pref(st["pref_kind"]) if st["pref_kind"] else {"provider": "", "model": ""}}
     st["upscalers"] = genmedia.image_upscalers()
     st["agent"] = CANVAS_AGENT if agent_dir(CANVAS_AGENT) else ""
+    nc = nsfw_settings()
+    st["nsfw_mode"] = ({"enabled": True, "text": nc["text"] if nc["text"]["engine"] else None,
+                        "image": nc["image"] if nc["image"]["provider"] else None} if nc["enabled"] else {"enabled": False})
     return st
+
+
+def _canvas_nsfw(body: dict, provider: str, model: str) -> tuple[bool, str, str]:
+    """画板工具栏 🔞:本次编辑 / 重绘放大按 NSFW 路由(同工单 nsfw: true)。返回 (nsfw, provider, model):
+    配了备用图像渠道时图像改用它(页面所选渠道让位);备用语言模型由派单(api_chat nsfw)套用。NSFW 模式关着时拒收。"""
+    if not (body or {}).get("nsfw"):
+        return False, provider, model
+    cfg = nsfw_settings()
+    if not cfg["enabled"]:
+        raise ServiceError(400, "NSFW 模式没有开启(控制台「设置→高级→NSFW 模式」),不能按 🔞 发送" if _canvas_zh()
+                           else "NSFW mode is off (Settings → Advanced → NSFW mode in the console), so 🔞 cannot be used")
+    if cfg["image"]["provider"]:
+        provider, model = _canvas_channel(cfg["image"])
+    return True, provider, model
 
 
 def _canvas_channel(body: dict) -> tuple[str, str]:
@@ -8260,7 +8277,10 @@ def _canvas_spawn(base: Path, doc: Path, jid: str, action: str, *flags: str) -> 
                "--doc", doc.name, "--job", jid, *flags]
         err = ""
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=CANVAS_CLI_TIMEOUT, cwd=str(ROOT))
+            env = None
+            if ic.load_job(doc, jid).get("nsfw"):        # 🔞 任务:出图走 NSFW 路由(modules/genmedia.py nsfw_route_reason)
+                env = {**os.environ, "VIDEOAGENTS_NSFW": "1"}
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=CANVAS_CLI_TIMEOUT, cwd=str(ROOT), env=env)
             if r.returncode != 0:
                 err = (r.stderr or r.stdout or "").strip()[-600:] or f"exit {r.returncode}"
         except Exception as e:  # noqa: BLE001
@@ -8299,8 +8319,11 @@ def _canvas_work_order(base: Path, doc: Path, job: dict, hist: dict) -> str:
         lines.append("参考图(用户文字里的 @图N / @refN 指的就是它们):")
         for i in refs:
             lines.append(f"  @图{i['ref']} = [Image {i['n']}] {absp(i['file'])}:{i.get('note') or '(用户没写注释)'}")
-    lines.append(f"图像模型:{job.get('provider') or '全局图像渠道'} {job.get('model') or ''}(用户在画板里选的,由宿主命令套用,不要改)")
+    lines.append(f"图像模型:{job.get('provider') or '全局图像渠道'} {job.get('model') or ''}"
+                 f"({'🔞 任务按 NSFW 模式定的' if job.get('nsfw') else '用户在画板里选的'},由宿主命令套用,不要改)")
     lines.append("圈外锁定:" + ("开(出图后宿主只取圈内贴回底图,圈外像素不变)" if job.get("lock") else "关(整张图以模型返回的为准)"))
+    if job.get("nsfw"):
+        lines.append("nsfw: true  # 用户在画板工具栏打开了 🔞:本单按 NSFW 模式路由,语言模型与图像渠道由宿主套用,不要改")
     lines.append("宿主按模板拼的提示词(图序与位置说法以它为准,请按你看到的画面把每处要改的东西写具体):")
     lines.append("<<<\n" + (job.get("template_prompt") or "") + "\n>>>")
     prompt_file = doc / "jobs" / job["id"] / "prompt.txt"
@@ -8312,17 +8335,18 @@ def _canvas_work_order(base: Path, doc: Path, job: dict, hist: dict) -> str:
 
 
 async def api_canvas_edit(project: str, body: dict):
-    """画板「编辑」发送:{file, kind, parent, regions[], text, refs[参考图编号], provider, model, lock, mode: agent|direct, preview}。
-    直接发送 = 宿主按模板提示词出图;经 Agent = 派画板修图 Agent 整理提示词;preview = 先停在待确认,用户看过提示词再出图。"""
+    """画板「编辑」发送:{file, kind, parent, regions[], text, refs[参考图编号], provider, model, lock, mode: agent|direct, preview, nsfw}。
+    直接发送 = 宿主按模板提示词出图;经 Agent = 派画板修图 Agent 整理提示词;preview = 先停在待确认,用户看过提示词再出图。
+    nsfw = 工具栏 🔞:图像改用 NSFW 备用渠道,经 Agent 时派单带 nsfw(备用语言模型),出图子进程带 VIDEOAGENTS_NSFW=1。"""
     from modules import image_canvas as ic
     body = body or {}
     base, doc, hist = _canvas_open(project, body.get("file"), body.get("kind"))
-    provider, model = _canvas_channel(body)
+    nsfw, provider, model = _canvas_nsfw(body, *_canvas_channel(body))
     mode = "direct" if body.get("mode") == "direct" else "agent"
     if mode == "agent" and not agent_dir(CANVAS_AGENT):
         raise ServiceError(404, f"Unknown agent: {CANVAS_AGENT}")
     payload = {k: body.get(k) for k in ("parent", "regions", "text", "refs", "lock", "preview")}
-    payload.update({"provider": provider, "model": model, "mode": mode})
+    payload.update({"provider": provider, "model": model, "mode": mode, "nsfw": nsfw})
     try:
         job = await asyncio.to_thread(ic.create_edit_job, base, doc, payload, run_ended=_canvas_run_ended)
     except ic.CanvasError as e:
@@ -8332,7 +8356,7 @@ async def api_canvas_edit(project: str, body: dict):
     elif job["status"] == "drafting":
         try:
             res = await api_chat({"agent": CANVAS_AGENT, "message": _canvas_work_order(base, doc, job, ic.load_history(doc)),
-                                  "project": base.name, "source": "user"})
+                                  "project": base.name, "source": "user", "nsfw": bool(job.get("nsfw"))})
             ic.set_job(doc, job["id"], run_id=res.get("run_id") or "")
         except Exception as e:  # noqa: BLE001
             why = getattr(e, "detail", None) or e
@@ -8368,13 +8392,14 @@ async def api_canvas_confirm(project: str, body: dict):
 
 
 async def api_canvas_upscale(project: str, body: dict):
-    """画板「放大」:{file, parent, mode: redraw|fidelity, provider, model, upscaler, width}(高按画幅推)。宿主直接出图,不经 Agent。"""
+    """画板「放大」:{file, parent, mode: redraw|fidelity, provider, model, upscaler, width, nsfw}(高按画幅推)。宿主直接出图,不经 Agent。
+    nsfw(工具栏 🔞)只作用于重绘放大;保真超分是专用超分模型,不涉内容审核。"""
     from modules import image_canvas as ic
     body = body or {}
     base, doc, _ = _canvas_open(project, body.get("file"), body.get("kind"))
-    provider, model = _canvas_channel(body) if body.get("mode") != "fidelity" else ("", "")
+    nsfw, provider, model = (_canvas_nsfw(body, *_canvas_channel(body)) if body.get("mode") != "fidelity" else (False, "", ""))
     payload = {k: body.get(k) for k in ("parent", "mode", "upscaler", "width")}
-    payload.update({"provider": provider, "model": model})
+    payload.update({"provider": provider, "model": model, "nsfw": nsfw})
     try:
         job = await asyncio.to_thread(ic.create_upscale_job, base, doc, payload, run_ended=_canvas_run_ended)
     except ic.CanvasError as e:

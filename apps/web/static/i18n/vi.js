@@ -4518,6 +4518,13 @@ window.I18N_DICT = {
 "本机插值(Lanczos)": "Nội suy trên máy (Lanczos)",
 "agent·画板修图师": "Agent chỉnh ảnh bảng vẽ",
 "版本对比": "So sánh",
+"已打开:本图的编辑与重绘放大走 NSFW 模式的备用模型;点击关闭": "Đang bật: chỉnh sửa và vẽ lại để phóng to ảnh này dùng các mô hình dự phòng của Chế độ NSFW; bấm để tắt",
+"打开后,本图的编辑与重绘放大改走「设置→高级→NSFW 模式」的备用模型:画板修图 Agent 用备用语言模型,图像用备用渠道": "Khi bật, chỉnh sửa và vẽ lại để phóng to ảnh này chuyển sang các mô hình dự phòng trong “Cài đặt → Nâng cao → Chế độ NSFW”: Agent chỉnh ảnh bảng vẽ dùng mô hình ngôn ngữ dự phòng, hình ảnh dùng kênh dự phòng",
+"🔞 图像改用 NSFW 备用渠道:{ch}": "🔞 Hình ảnh dùng kênh dự phòng NSFW: {ch}",
+"🔞 没有配置 NSFW 备用图像渠道,按这里选的模型出图": "🔞 Chưa cấu hình kênh hình ảnh dự phòng NSFW; dùng mô hình đã chọn ở đây",
+"🔞 语言模型改用 {m}": "🔞 Đã chuyển mô hình ngôn ngữ sang {m}",
+"🔞 没有配置 NSFW 备用语言模型,沿用当前引擎": "🔞 Chưa cấu hình mô hình ngôn ngữ dự phòng NSFW; dùng engine hiện tại",
+"按 NSFW 模式的备用模型出的图": "Tạo bằng các mô hình dự phòng của Chế độ NSFW",
 "不对比": "Tắt",
 "选作对比": "So sánh",
 // 生成模型设置·音效板块(2026-10-20,models.html)

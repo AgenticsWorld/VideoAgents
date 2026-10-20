@@ -4518,6 +4518,13 @@ window.I18N_DICT = {
 "本机插值(Lanczos)": "Interpolasi lokal (Lanczos)",
 "agent·画板修图师": "Agen Retus Kanvas",
 "版本对比": "Bandingkan",
+"已打开:本图的编辑与重绘放大走 NSFW 模式的备用模型;点击关闭": "Aktif: edit dan perbesar dengan gambar ulang untuk gambar ini memakai model cadangan Mode NSFW; klik untuk mematikan",
+"打开后,本图的编辑与重绘放大改走「设置→高级→NSFW 模式」的备用模型:画板修图 Agent 用备用语言模型,图像用备用渠道": "Jika aktif, edit dan perbesar dengan gambar ulang untuk gambar ini memakai model cadangan di “Pengaturan → Lanjutan → Mode NSFW”: Agen Retus Kanvas memakai model bahasa cadangan, gambar memakai penyedia cadangan",
+"🔞 图像改用 NSFW 备用渠道:{ch}": "🔞 Gambar memakai penyedia cadangan NSFW: {ch}",
+"🔞 没有配置 NSFW 备用图像渠道,按这里选的模型出图": "🔞 Penyedia gambar cadangan NSFW belum diatur; dipakai model yang dipilih di sini",
+"🔞 语言模型改用 {m}": "🔞 Model bahasa diganti ke {m}",
+"🔞 没有配置 NSFW 备用语言模型,沿用当前引擎": "🔞 Model bahasa cadangan NSFW belum diatur; dipakai engine saat ini",
+"按 NSFW 模式的备用模型出的图": "Dibuat dengan model cadangan Mode NSFW",
 "不对比": "Mati",
 "选作对比": "Bandingkan",
 // 生成模型设置·音效板块(2026-10-20,models.html)

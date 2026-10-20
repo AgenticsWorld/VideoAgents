@@ -636,6 +636,84 @@ def test_api_agent_edit_dispatches_work_order(runtime):
     assert st['job'] is None and st['last_job']['status'] == 'cancelled'
 
 
+def nsfw_cfg(enabled=True, text=('deepagents', ''), image=('fal', 'nsfw-m')):
+    return {'enabled': enabled, 'failover': True, 'text': {'engine': text[0], 'model': text[1]},
+            'image': {'provider': image[0], 'model': image[1]}, 'video': {'provider': '', 'model': ''}}
+
+
+def test_api_nsfw_toggle_routes_edit_and_upscale(runtime, monkeypatch):
+    """工具栏 🔞:图像改用 NSFW 备用渠道、派单带 nsfw(备用语言模型)、工单写 nsfw: true、任务留痕;模式关着拒收;保真超分不受影响。"""
+    core, base, spawned, chats = runtime
+    cfg = nsfw_cfg()
+    monkeypatch.setattr(core, 'nsfw_settings', lambda: cfg)
+    doc = ic.doc_dir_of(base, SHEET)
+    st = asyncio.run(core.api_canvas_get('p', SHEET))
+    assert st['nsfw_mode'] == {'enabled': True, 'text': cfg['text'], 'image': cfg['image']}
+    st = asyncio.run(core.api_canvas_edit('p', {'file': SHEET, **edit_payload(refs=[], mode='agent', preview=False),
+                                                'provider': 'volcengine', 'model': 'seedream', 'nsfw': True}))
+    job = st['job']
+    assert job['nsfw'] is True and (job['provider'], job['model']) == ('fal', 'nsfw-m')          # 所选渠道让位给备用图像渠道
+    assert chats[-1]['nsfw'] is True and 'nsfw: true  # 用户在画板工具栏打开了 🔞' in chats[-1]['message']
+    assert core._wo_nsfw_flag(chats[-1]['message']) and '图像模型:fal nsfw-m(🔞 任务按 NSFW 模式定的' in chats[-1]['message']
+    ic.set_job(doc, job['id'], status='failed', error='x')
+    st = asyncio.run(core.api_canvas_edit('p', {'file': SHEET, **edit_payload(refs=[], mode='agent', preview=False),
+                                                'provider': 'volcengine', 'model': 'seedream'}))
+    assert 'nsfw' not in st['job'] and st['job']['provider'] == 'volcengine' and chats[-1]['nsfw'] is False
+    assert 'nsfw:' not in chats[-1]['message'] and not core._wo_nsfw_flag(chats[-1]['message'])
+    ic.set_job(doc, st['job']['id'], status='failed', error='x')
+    cfg['image'] = {'provider': '', 'model': ''}                                     # 没配备用图像渠道:按所选渠道,仍记 nsfw
+    st = asyncio.run(core.api_canvas_edit('p', {'file': SHEET, **edit_payload(refs=[], mode='direct', preview=False),
+                                                'provider': 'volcengine', 'model': 'seedream', 'nsfw': True}))
+    assert st['job']['nsfw'] is True and st['job']['provider'] == 'volcengine' and spawned[-1][1] == 'submit'
+    assert ic.load_job(doc, st['job']['id'])['nsfw'] is True
+    assert asyncio.run(core.api_canvas_get('p', SHEET))['nsfw_mode']['image'] is None
+    ic.set_job(doc, st['job']['id'], status='done')
+    cfg['image'] = {'provider': 'fal', 'model': 'nsfw-m'}
+    st = asyncio.run(core.api_canvas_upscale('p', {'file': SHEET, 'parent': 'v000', 'mode': 'redraw', 'width': 640,
+                                                   'provider': 'volcengine', 'model': 'seedream', 'nsfw': True}))
+    assert st['job']['nsfw'] is True and (st['job']['provider'], st['job']['model']) == ('fal', 'nsfw-m')
+    ic.set_job(doc, st['job']['id'], status='done')
+    st = asyncio.run(core.api_canvas_upscale('p', {'file': SHEET, 'parent': 'v000', 'mode': 'fidelity', 'upscaler': 'local',
+                                                   'width': 640, 'nsfw': True}))
+    assert 'nsfw' not in st['job'] and st['job']['provider'] == 'local'             # 保真超分不涉内容审核
+    ic.set_job(doc, st['job']['id'], status='done')
+    cfg['enabled'] = False
+    assert asyncio.run(core.api_canvas_get('p', SHEET))['nsfw_mode'] == {'enabled': False}
+    with pytest.raises(core.ServiceError) as e:
+        asyncio.run(core.api_canvas_edit('p', {'file': SHEET, **edit_payload(refs=[], mode='direct', preview=False), 'nsfw': True}))
+    assert e.value.status_code == 400 and 'NSFW' in str(e.value.detail)
+
+
+def test_nsfw_job_spawns_with_nsfw_env_and_marks_version(base, channel, monkeypatch):
+    from services.runtime import core
+    doc, _ = ic.open_doc(base, SHEET)
+    seen = []
+
+    class Now:                                                                       # 后台线程改成当场跑
+        def __init__(self, target, **_):
+            self.target = target
+
+        def start(self):
+            self.target()
+    monkeypatch.setattr(core.threading, 'Thread', Now)
+    monkeypatch.setattr(core.subprocess, 'run', lambda cmd, **kw: seen.append(kw.get('env')) or
+                        type('R', (), {'returncode': 0, 'stderr': '', 'stdout': ''})())
+    monkeypatch.setattr(core.HUB, 'publish', lambda *_: None)
+    for nsfw in (True, False):
+        job = ic.create_edit_job(base, doc, edit_payload(refs=[], preview=False, nsfw=nsfw))
+        core._canvas_spawn(base, doc, job['id'], 'submit', '--template')
+        ic.set_job(doc, job['id'], status='done')
+    assert seen[0]['VIDEOAGENTS_NSFW'] == '1' and seen[1] is None                    # 非 🔞 任务沿用服务端环境
+    job = ic.create_edit_job(base, doc, edit_payload(refs=[], preview=False, nsfw=True))
+    v = ic.run_edit(base, doc, job['id'], 'Darker.', generate=lambda p, o, r, s, sd: Image.new('RGB', (320, 180), 'navy').save(o, 'PNG'),
+                    log=QUIET)
+    assert v['nsfw'] is True and ic.public_job(ic.load_job(doc, job['id']))['nsfw'] is True
+    plain = ic.create_edit_job(base, doc, edit_payload(refs=[], preview=False))
+    v2 = ic.run_edit(base, doc, plain['id'], 'Darker.', generate=lambda p, o, r, s, sd: Image.new('RGB', (320, 180), 'navy').save(o, 'PNG'),
+                     log=QUIET)
+    assert 'nsfw' not in v2
+
+
 def test_api_transform_upscale_version_refs_limits(runtime, monkeypatch):
     core, base, spawned, chats = runtime
     st = asyncio.run(core.api_canvas_transform('p', {'file': SHEET, 'version': 'v000', 'op': 'flip_h'}))

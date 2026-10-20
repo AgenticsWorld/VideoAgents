@@ -673,7 +673,8 @@ def compose_prompt(job: dict) -> str:
 
 def create_edit_job(base: Path, doc: Path, payload: dict, *, run_ended=None) -> dict:
     """建一个编辑任务:校验 → 画蒙版 / 带圈标注图 / 各区域裁切图 → 写 job.json(状态由调用方按发送方式定)。
-    payload: {parent, regions, text, refs:[n…], provider, model, lock, mode: agent|direct, preview}。"""
+    payload: {parent, regions, text, refs:[n…], provider, model, lock, mode: agent|direct, preview, nsfw}。
+    nsfw = 用户在画板工具栏打开了 🔞(宿主已把 provider / model 换成 NSFW 备用图像渠道),记进任务供派单 / 出图子进程路由。"""
     from PIL import Image
     regions = norm_regions(payload.get('regions'))
     text = str(payload.get('text') or '').strip()[:MAX_TEXT]
@@ -698,7 +699,8 @@ def create_edit_job(base: Path, doc: Path, payload: dict, *, run_ended=None) -> 
         status = 'drafting' if mode == 'agent' else ('awaiting_confirm' if preview else 'queued')
         job = _new_job(doc, h, {'op': 'edit', 'status': status, 'parent': parent['id'], 'mode': mode, 'preview': preview,
                                 'lock': bool(payload.get('lock')) and bool(regions), 'text': text, 'regions': regions,
-                                'provider': str(payload.get('provider') or ''), 'model': str(payload.get('model') or '')})
+                                'provider': str(payload.get('provider') or ''), 'model': str(payload.get('model') or ''),
+                                **({'nsfw': True} if payload.get('nsfw') else {})})
         jd = _job_dir(doc, job['id'])
         src = doc / parent['file']
         suffix = src.suffix
@@ -732,7 +734,7 @@ def create_edit_job(base: Path, doc: Path, payload: dict, *, run_ended=None) -> 
 
 
 def create_upscale_job(base: Path, doc: Path, payload: dict, *, run_ended=None) -> dict:
-    """建一个放大任务。payload: {parent, mode: redraw|fidelity, provider, model, upscaler, width, height}。
+    """建一个放大任务。payload: {parent, mode: redraw|fidelity, provider, model, upscaler, width, height, nsfw}(nsfw 只对重绘放大)。
     目标宽高按原图画幅校正(高由宽推),必须比原图大;保真超分另核对该模型的最大倍数。"""
     mode = 'fidelity' if payload.get('mode') == 'fidelity' else 'redraw'
 
@@ -755,7 +757,8 @@ def create_upscale_job(base: Path, doc: Path, payload: dict, *, run_ended=None) 
         if w * hgt < sw * sh * 1.05:
             raise CanvasError(f'目标尺寸 {w}x{hgt} 没有比当前 {sw}x{sh} 大', en=f'Target size {w}x{hgt} is not larger than the current {sw}x{sh}')
         rec = {'op': 'upscale', 'status': 'queued', 'parent': parent['id'], 'mode': mode, 'target': [w, hgt], 'parent_size': [sw, sh],
-               'provider': str(payload.get('provider') or ''), 'model': str(payload.get('model') or '')}
+               'provider': str(payload.get('provider') or ''), 'model': str(payload.get('model') or ''),
+               **({'nsfw': True} if payload.get('nsfw') and mode == 'redraw' else {})}
         if mode == 'fidelity':
             from modules import genmedia
             up = next((u for u in genmedia.image_upscalers() if u['id'] == str(payload.get('upscaler') or '')), None)
@@ -894,7 +897,7 @@ def run_edit(base: Path, doc: Path, jid: str, prompt: str, *, generate=None, log
                              provider=facts['provider'], model=facts['model'], prompt=prompt, text=job.get('text'),
                              regions=[{k: r[k] for k in r if k != 'crop'} for r in regions],
                              refs=[{'n': i['ref'], 'file': i['file'], 'note': i.get('note') or ''} for i in images if i['role'] == 'ref'],
-                             seed=seed, model_size=model_size, lock=lock, usage=_job_usage(jd),
+                             seed=seed, model_size=model_size, lock=lock, usage=_job_usage(jd), nsfw=job.get('nsfw') or None,
                              aspect_changed=not _same_aspect(tuple(model_size), (W, H)) or None)
             if lock.get('applied') and raw_im is not None:
                 name = f"{v['id']}.raw{Path(v['file']).suffix}"
@@ -955,7 +958,7 @@ def run_upscale(base: Path, doc: Path, jid: str, *, generate=None, upscale=None,
         info['factor'] = info.get('factor') or round(out.size[0] / sw, 3)
         data = encode_image(out, encoding_of(src_bytes))
         ver = mutate(doc, lambda h: _add_version(doc, h, data, op='upscale', parent=job['parent'], job=jid, provider=provider, model=model,
-                                                 upscale=info, usage=_job_usage(jd),
+                                                 upscale=info, usage=_job_usage(jd), nsfw=job.get('nsfw') or None,
                                                  aspect_changed=not _same_aspect(out.size, (sw, sh)) or None))
         set_job(doc, jid, status='done', version=ver['id'])
         log(f"[canvas] 已存为 {ver['id']}({ver['width']}x{ver['height']})")
@@ -1016,7 +1019,7 @@ def unlock_version(base: Path, doc: Path, vid: str) -> dict:
     if not raw or not (doc / raw).is_file():
         raise CanvasError('这个版本没有可用的整图(不是圈外锁定出的)', en='This version has no full-image result (it was not produced with outside-lock)')
     data = (doc / raw).read_bytes()
-    keep = {k: v.get(k) for k in ('job', 'mode', 'provider', 'model', 'prompt', 'text', 'regions', 'refs', 'seed', 'model_size')}
+    keep = {k: v.get(k) for k in ('job', 'mode', 'provider', 'model', 'prompt', 'text', 'regions', 'refs', 'seed', 'model_size', 'nsfw')}
     return mutate(doc, lambda hist: _add_version(doc, hist, data, op='edit', parent=v.get('parent'), from_raw=vid,
                                                  lock={'applied': False, 'from_raw': vid}, **keep))
 
@@ -1190,7 +1193,7 @@ def public_job(job: dict | None) -> dict | None:
     if not job:
         return None
     keep = ('id', 'op', 'status', 'mode', 'preview', 'parent', 'created_at', 'updated_at', 'error', 'error_en', 'version', 'run_id', 'prompt',
-            'template_prompt', 'provider', 'model', 'target', 'upscaler', 'lock', 'text')
+            'template_prompt', 'provider', 'model', 'target', 'upscaler', 'lock', 'text', 'nsfw')
     return {k: job.get(k) for k in keep if job.get(k) not in (None, '')}
 
 

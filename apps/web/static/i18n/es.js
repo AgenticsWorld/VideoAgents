@@ -4520,6 +4520,13 @@ window.I18N_DICT = {
 "本机插值(Lanczos)": "Interpolación local (Lanczos)",
 "agent·画板修图师": "Agente de retoque del lienzo",
 "版本对比": "Comparar",
+"已打开:本图的编辑与重绘放大走 NSFW 模式的备用模型;点击关闭": "Activado: las ediciones y ampliaciones con redibujado de esta imagen usan los modelos de respaldo del modo NSFW; haz clic para desactivar",
+"打开后,本图的编辑与重绘放大改走「设置→高级→NSFW 模式」的备用模型:画板修图 Agent 用备用语言模型,图像用备用渠道": "Al activarlo, las ediciones y ampliaciones con redibujado de esta imagen pasan a los modelos de respaldo de «Ajustes → Avanzado → Modo NSFW»: el Agente de retoque del lienzo usa el modelo de lenguaje de respaldo y las imágenes, el proveedor de respaldo",
+"🔞 图像改用 NSFW 备用渠道:{ch}": "🔞 Imágenes con el proveedor de respaldo NSFW: {ch}",
+"🔞 没有配置 NSFW 备用图像渠道,按这里选的模型出图": "🔞 No hay proveedor de imagen de respaldo NSFW configurado; se usa el modelo elegido aquí",
+"🔞 语言模型改用 {m}": "🔞 Modelo de lenguaje cambiado a {m}",
+"🔞 没有配置 NSFW 备用语言模型,沿用当前引擎": "🔞 No hay modelo de lenguaje de respaldo NSFW configurado; se usa el motor actual",
+"按 NSFW 模式的备用模型出的图": "Generada con los modelos de respaldo del modo NSFW",
 "不对比": "Desactivado",
 "选作对比": "Comparar",
 // 生成模型设置·音效板块(2026-10-20,models.html)
