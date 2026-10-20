@@ -268,11 +268,9 @@ button:disabled{opacity:.5;cursor:default}
   <div class="card" id="card-moderation">
     <h2>🛡 审核模型 <span class="cur">生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
     <div class="tabs" id="mod-tabs">
-      <div class="tab active" id="tab-mod-agentics">Agentics</div>
-      <div class="tab" id="tab-mod-openrouter">OpenRouter</div>
+      <div class="tab active" id="tab-mod-openrouter">✅ OpenRouter</div>
     </div>
-    <!-- 两个面板由 buildModeration() 生成:Agentics = 账号行 + 模型 + 测试;OpenRouter = API Key + 模型 + 测试 -->
-    <div id="panel-mod-agentics"></div>
+    <!-- 面板由 buildModeration() 生成:API Key + 模型 + 测试(Jev 决策模型只走 OpenRouter Decisions API,Agentics 不支持) -->
     <div id="panel-mod-openrouter"></div>
   </div>
   <div id="savebar">
@@ -1347,69 +1345,37 @@ function buildDeepagents(){
   Object.keys(TEXT_TABS).forEach(p=>{$(`#tab-text-${p}`).onclick=()=>showTextPanel(p)});
 }
 
-/* ---------- 审核模型(2026-10-20,NSFW 模式的拒绝判定):两渠道都走 OpenAI 兼容 chat/completions;
-   模型清单与 modules/refusal_judge.MODELS 一致,只能选清单里的 ---------- */
-let MOD_PROVIDER='agentics';
-const MOD_TABS={agentics:'Agentics',openrouter:'OpenRouter'};
-const MOD_MODELS=[['typesafe/jev-router','Jev Router(TypeSafe)· 按请求挑选底层模型与推理强度']];
+/* ---------- 审核模型(2026-10-20,NSFW 模式的拒绝判定):TypeSafe 决策模型 Jev,走 OpenRouter Decisions API
+   (Agentics 不支持该接口,只有 OpenRouter 一个渠道);模型清单与 modules/refusal_judge.MODELS 一致,只能选清单里的 ---------- */
+const MOD_MODELS=[['typesafe/jev-1.13','Jev 1.13(TypeSafe)· 决策模型,直接给出各类别的概率']];
 function buildModeration(){
-  const modelSel=id=>{
-    const r=el('div',{className:'row'});
-    r.appendChild(el('label',{},'模型'));
-    const sel=el('select',{id});
-    MOD_MODELS.forEach(([v,l])=>sel.appendChild(el('option',{value:v,textContent:t(l)})));
-    r.appendChild(sel);
-    return r;
-  };
-  const testRow=p=>{
-    const r=el('div',{className:'row'});
-    r.appendChild(el('label',{},''));
-    const b=el('button',{title:t('用一段拒绝样例真实调用一次(计费,约 $0.002)')},'测试');
-    b.onclick=()=>testModeration(p);
-    r.appendChild(b);
-    return [r,el('div',{className:'status',id:`mod-${p}-status`})];
-  };
-  const a=el('div',{className:'panel show',id:'panel-mod-agentics'});
-  const account=el('div',{className:'row'});
-  account.appendChild(el('label',{},'账号'));
-  account.appendChild(el('span',{className:'agentics-account'},t('检查登录状态…')));
-  const auth=el('button',{className:'agentics-auth'},t('登录'));
-  auth.onclick=()=>agenticsAuth(auth);
-  account.appendChild(auth);a.appendChild(account);
-  a.appendChild(modelSel('mod-agentics-model'));
-  testRow('agentics').forEach(n=>a.appendChild(n));
-  a.appendChild(el('div',{className:'hint'},t('AgenticsLLM 使用已登录的桌面端账号请求 Agentics 服务')));
-  $('#panel-mod-agentics').replaceWith(a);
-  const o=el('div',{className:'panel',id:'panel-mod-openrouter'});
+  const o=el('div',{className:'panel show',id:'panel-mod-openrouter'});
   o.appendChild(keyRow('mod-or-key','sk-or-v1-…'));
-  o.appendChild(modelSel('mod-or-model'));
-  testRow('openrouter').forEach(n=>o.appendChild(n));
+  const r=el('div',{className:'row'});
+  r.appendChild(el('label',{},'模型'));
+  const sel=el('select',{id:'mod-or-model'});
+  MOD_MODELS.forEach(([v,l])=>sel.appendChild(el('option',{value:v,textContent:t(l)})));
+  r.appendChild(sel);o.appendChild(r);
+  const tr=el('div',{className:'row'});
+  tr.appendChild(el('label',{},''));
+  const b=el('button',{title:t('用一段拒绝样例真实调用一次(计费,约 $0.00003)')},'测试');
+  b.onclick=testModeration;
+  tr.appendChild(b);o.appendChild(tr);
+  o.appendChild(el('div',{className:'status',id:'mod-or-status'}));
   $('#panel-mod-openrouter').replaceWith(o);
-  Object.keys(MOD_TABS).forEach(p=>{$(`#tab-mod-${p}`).onclick=()=>showModPanel(p)});
-}
-function showModPanel(p){
-  MOD_PROVIDER=p;
-  Object.keys(MOD_TABS).forEach(x=>{
-    const tb=$(`#tab-mod-${x}`);
-    tb.classList.toggle('active',x===p);
-    tb.textContent=(x===p?'✅ ':'')+window.t(MOD_TABS[x]);
-    $(`#panel-mod-${x}`).classList.toggle('show',x===p);
-  });
 }
 function loadModerationForm(){
-  const m=CFG.moderation||{},pick=(sel,v)=>{if(v&&[...sel.options].some(o=>o.value===v))sel.value=v};
-  pick($('#mod-agentics-model'),(m.agentics||{}).model);
-  pick($('#mod-or-model'),(m.openrouter||{}).model);
-  $('#mod-or-key').value=(m.openrouter||{}).api_key||'';
-  showModPanel(MOD_TABS[m.provider]?m.provider:'agentics');
+  const m=(CFG.moderation||{}).openrouter||{},sel=$('#mod-or-model');
+  if(m.model&&[...sel.options].some(o=>o.value===m.model))sel.value=m.model;
+  $('#mod-or-key').value=m.api_key||'';
 }
-async function testModeration(p){
-  const st=$(`#mod-${p}-status`);st.className='status';st.textContent=t('测试中…');
-  const body={provider:p,model:$(`#mod-${p==='openrouter'?'or':p}-model`).value,
-              api_key:p==='openrouter'?$('#mod-or-key').value.trim():''};
+async function testModeration(){
+  const st=$('#mod-or-status');st.className='status';st.textContent=t('测试中…');
+  const body={model:$('#mod-or-model').value,api_key:$('#mod-or-key').value.trim()};
   const r=await api('/api/v1/providers/moderation/test',body).catch(e=>({ok:false,error:e.message}));
   if(!r.ok){st.className='status err';st.textContent='✗ '+(r.error||t('测试失败'));return}
-  const extra=[r.routed_model&&I18N.f('实际由 {m} 判断',{m:r.routed_model}),r.cost!=null&&('$'+Number(r.cost).toFixed(4)),r.ms+' ms'].filter(Boolean).join(' · ');
+  const extra=[r.confidence!=null&&I18N.f('置信度 {p}',{p:Number(r.confidence).toFixed(2)}),r.snapshot,
+               r.cost!=null&&('$'+Number(r.cost).toPrecision(2)),r.ms+' ms'].filter(Boolean).join(' · ');
   st.className='status '+(r.refusal?'ok':'err');
   st.textContent=(r.refusal?t('✓ 可用:拒绝样例判为 policy'):I18N.f('⚠ 能调用,但拒绝样例被判成 {kind}(应为 policy)',{kind:r.kind}))+' · '+extra;
 }
@@ -2161,9 +2127,8 @@ function collect(){
       ...pickModel('#dc-model','#dc-custom')},
     openrouter:{api_key:$('#text-or-key').value.trim(),
       ...pickModel('#text-or-model','#text-or-custom')}};
-  // 审核模型:生效渠道 = 当前选中的标签页;不进下面「Agentics 须登录」的保存校验(只在 NSFW 拒绝判定打开时才用)
-  out.moderation={provider:MOD_PROVIDER,
-    agentics:{model:$('#mod-agentics-model').value},
+  // 审核模型:只有 OpenRouter 一个渠道(Jev 决策模型);不进下面「Agentics 须登录」的保存校验
+  out.moderation={provider:'openrouter',
     openrouter:{api_key:$('#mod-or-key').value.trim(),model:$('#mod-or-model').value}};
   return out;
 }

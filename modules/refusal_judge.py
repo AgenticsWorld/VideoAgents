@@ -5,41 +5,39 @@
 宿主先按运行形态零成本预筛(正常结束、回复不长、没交产物,见 core._refusal_judge_gate),筛中的才调本模块
 把 Agent 最后的回复交给审核模型判一次。
 
-- 只给回复正文末尾 TAIL 字,不给原始请求与图片:审核模型看到的只是一段说明,自身不容易拒判。
-- 要求只回 JSON {"kind": ...};只有 policy(因内容 / 安全 / 政策拒绝)算拒绝,缺文件、反问用户、已完成都不算。
-- 两个渠道(Agentics 桌面端账号 / OpenRouter)都走 OpenAI 兼容 chat/completions。
-- 模型清单 MODELS 与「🎨 生成模型 → 审核模型」一致。typesafe/jev-router 是路由模型(按请求挑底层模型与推理强度);
-  2026-10-20 实测一次约 1.3k 输入 token、$0.002、3.5 s,路由到 x-ai/grok-4.7;它不在 OpenRouter 的
-  Decisions API(/api/alpha/decisions)上,那里只有 typesafe/jev-1.13 这类决策模型。
+- 审核模型是 TypeSafe 的决策模型 Jev(typesafe/jev-1.13),走 OpenRouter 的 Decisions API(POST /api/alpha/decisions):
+  不生成文字,对「state + 带类别说明的 choice 题」直接给出各类别概率。只有 policy(因内容 / 安全 / 政策拒绝)算拒绝。
+- 只给回复正文末尾 TAIL 字,不给原始请求与图片。
+- 2026-10-20 实测(用户拍板换掉路由聊天模型 typesafe/jev-router):原工单 4542f699e746 的拒绝判 policy(概率 1),
+  缺文件 / 反问 / 已完成三类各判对;单次约 700 输入 token、$0.00002–0.00003、1.4 s。Agentics 渠道不支持该接口,只走 OpenRouter。
 """
 from __future__ import annotations
 
 import json
-import re
 import time
 import urllib.error
 import urllib.request
 
-MODELS = ("typesafe/jev-router",)
+MODELS = ("typesafe/jev-1.13",)
+URL = "https://openrouter.ai/api/alpha/decisions"
 KINDS = ("policy", "missing_input", "clarification", "done", "other")
 TAIL = 1500
 TIMEOUT = 30
 
-SYSTEM = (
-    "You classify why an AI agent ended a task. The user message is the final reply the agent wrote "
-    "when it stopped without producing the requested output. It may be in any language.\n"
-    'Answer with JSON only, no other text: {"kind": "<policy|missing_input|clarification|done|other>"}\n'
-    "- policy: the agent itself declined the request on content, safety, ethics, legal or policy grounds "
-    "(for example sexual content, nudity, violence, real-person imagery), in any wording.\n"
-    "- missing_input: it could not proceed because files, inputs, tools, credentials or permissions were missing or broken.\n"
-    "- clarification: it stopped to ask the user a question or to wait for a decision.\n"
-    "- done: it reports the task as completed.\n"
-    "- other: anything else.")
+SITUATION = "An AI agent ended a task without producing the requested output. This is its final reply (any language)."
+QUESTION = {
+    "type": "choice",
+    "instructions": "Why did the agent stop without producing the requested output?",
+    "criteria": {
+        "policy": "The agent itself declined on content, safety, ethics, legal or policy grounds "
+                  "(e.g. sexual content, nudity, violence, real-person imagery), in any wording or language.",
+        "missing_input": "It could not proceed because files, inputs, tools, credentials or permissions were missing or broken.",
+        "clarification": "It stopped to ask the user a question or to wait for a decision.",
+        "done": "It reports the task as completed.",
+        "other": "Anything else."}}
 
 # 测试按钮用的样例:自然措辞的拒绝,拒绝套话正则认不出(应判 policy)
 SAMPLE = "这单我没有提交。按要求要把画面里的人物改成裸体,这类编辑我不做。"
-
-_JSON_RE = re.compile(r"\{[^{}]*\}")
 
 
 class JudgeError(RuntimeError):
@@ -47,39 +45,36 @@ class JudgeError(RuntimeError):
 
 
 def request_body(text: str, model: str) -> dict:
-    return {"model": model, "temperature": 0, "max_tokens": 400,
-            "messages": [{"role": "system", "content": SYSTEM},
-                         {"role": "user", "content": (text or "").strip()[-TAIL:]}]}
+    return {"model": model,
+            "state": {"situation": SITUATION, "final_reply": (text or "").strip()[-TAIL:]},
+            "questions": {"kind": QUESTION}}
 
 
 def parse(data: dict) -> dict:
-    """chat/completions 返回 → {kind, refusal, routed_model, cost};没有可读的判定时 JudgeError。"""
+    """Decisions API 返回 → {kind, refusal, confidence, probabilities, snapshot, cost};没有可读的判定时 JudgeError。"""
     try:
-        content = str(data["choices"][0]["message"].get("content") or "")
-    except (KeyError, IndexError, TypeError, AttributeError):
+        ans = data["answers"]["kind"]
+        kind = str(ans.get("choice") or "").strip().lower()
+    except (KeyError, TypeError, AttributeError):
         raise JudgeError(f"unexpected response: {json.dumps(data, ensure_ascii=False)[:200]}") from None
-    kind = ""
-    for m in _JSON_RE.finditer(content):
-        try:
-            kind = str(json.loads(m.group(0)).get("kind") or "").strip().lower()
-        except (ValueError, AttributeError):
-            continue
-        if kind:
-            break
     if not kind:
-        raise JudgeError(f"no verdict in reply: {content[:200]}")
+        raise JudgeError(f"no verdict in response: {json.dumps(ans, ensure_ascii=False)[:200]}")
     if kind not in KINDS:
         kind = "other"
+    probs = ans.get("probabilities") if isinstance(ans.get("probabilities"), dict) else {}
     cost = (data.get("usage") or {}).get("cost")
-    return {"kind": kind, "refusal": kind == "policy", "routed_model": str(data.get("model") or ""),
+    conf = ans.get("confidence")
+    return {"kind": kind, "refusal": kind == "policy",
+            "confidence": conf if isinstance(conf, (int, float)) else None,
+            "probabilities": {k: v for k, v in probs.items() if isinstance(v, (int, float))},
+            "snapshot": str(data.get("model") or ""),
             "cost": cost if isinstance(cost, (int, float)) else None}
 
 
-def classify(text: str, *, base_url: str, api_key: str, model: str, timeout: float = TIMEOUT) -> dict:
-    """判一次:返回 {kind, refusal, routed_model, cost, model, ms};网络 / HTTP / 返回格式出错时 JudgeError。"""
+def classify(text: str, *, api_key: str, model: str, timeout: float = TIMEOUT) -> dict:
+    """判一次:返回 parse() 的结果加 {model, ms};网络 / HTTP / 返回格式出错时 JudgeError。"""
     req = urllib.request.Request(
-        base_url.rstrip("/") + "/chat/completions",
-        data=json.dumps(request_body(text, model)).encode(),
+        URL, data=json.dumps(request_body(text, model)).encode(),
         headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}",
                  "X-Title": "VideoAgents"})
     t0 = time.time()

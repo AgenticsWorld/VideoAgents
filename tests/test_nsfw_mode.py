@@ -173,20 +173,26 @@ def test_group_nsfw_state_precedence(tmp_path, monkeypatch):
 # ---------------------------------------------------------------- 拒绝判定用审核模型(2026-10-20)
 def test_refusal_judge_request_and_parse():
     from modules import refusal_judge as rj
-    body = rj.request_body("x" * 3000 + "我不做这种编辑", "typesafe/jev-router")
-    user = body["messages"][1]["content"]
-    assert body["model"] == "typesafe/jev-router" and len(user) == rj.TAIL and user.endswith("我不做这种编辑")
-    ok = {"model": "x-ai/grok-4.7", "choices": [{"message": {"content": '```json\n{"kind": "Policy"}\n```'}}],
-          "usage": {"cost": 0.0018}}
-    assert rj.parse(ok) == {"kind": "policy", "refusal": True, "routed_model": "x-ai/grok-4.7", "cost": 0.0018}
-    assert rj.parse({"choices": [{"message": {"content": '{"kind": "missing_input"}'}}]})["refusal"] is False
-    assert rj.parse({"choices": [{"message": {"content": '{"kind": "weird"}'}}]})["kind"] == "other"
-    for bad in ({}, {"choices": [{"message": {"content": "policy"}}]}):
+    body = rj.request_body("x" * 3000 + "我不做这种编辑", "typesafe/jev-1.13")
+    reply = body["state"]["final_reply"]
+    assert body["model"] == "typesafe/jev-1.13" and len(reply) == rj.TAIL and reply.endswith("我不做这种编辑")
+    q = body["questions"]["kind"]
+    assert q["type"] == "choice" and set(q["criteria"]) == set(rj.KINDS)
+    ok = {"model": "typesafe/jev-1.13-20260917", "provider": "TypeSafe",
+          "answers": {"kind": {"type": "choice", "choice": "policy", "confidence": 0.97,
+                               "probabilities": {"policy": 0.97, "missing_input": 0.03, "clarification": 0}}},
+          "usage": {"input_tokens": 732, "output_tokens": 55, "cost": 3.07e-05}}
+    assert rj.parse(ok) == {"kind": "policy", "refusal": True, "confidence": 0.97,
+                            "probabilities": {"policy": 0.97, "missing_input": 0.03, "clarification": 0},
+                            "snapshot": "typesafe/jev-1.13-20260917", "cost": 3.07e-05}
+    assert rj.parse({"answers": {"kind": {"choice": "missing_input"}}})["refusal"] is False
+    assert rj.parse({"answers": {"kind": {"choice": "weird"}}})["kind"] == "other"
+    for bad in ({}, {"answers": {}}, {"answers": {"kind": {"choice": ""}}}):
         with pytest.raises(rj.JudgeError):
             rj.parse(bad)
 
 
-def test_refusal_judge_classify_posts_chat_completions(monkeypatch):
+def test_refusal_judge_classify_posts_decisions_api(monkeypatch):
     from modules import refusal_judge as rj
     seen = {}
 
@@ -199,29 +205,31 @@ def test_refusal_judge_classify_posts_chat_completions(monkeypatch):
 
     def fake(req, timeout):
         seen.update(url=req.full_url, auth=req.headers.get("Authorization"), body=json.loads(req.data))
-        return Resp(json.dumps({"model": "m2", "choices": [{"message": {"content": '{"kind":"clarification"}'}}]}).encode())
+        return Resp(json.dumps({"model": "typesafe/jev-1.13-20260917",
+                                "answers": {"kind": {"choice": "clarification", "confidence": 1}}}).encode())
     monkeypatch.setattr(rj.urllib.request, "urlopen", fake)
-    v = rj.classify("要不要继续?", base_url="https://openrouter.ai/api/v1/", api_key="sk", model="typesafe/jev-router")
-    assert seen["url"] == "https://openrouter.ai/api/v1/chat/completions" and seen["auth"] == "Bearer sk"
-    assert seen["body"]["messages"][0]["content"] == rj.SYSTEM
-    assert v["kind"] == "clarification" and v["refusal"] is False and v["model"] == "typesafe/jev-router"
+    v = rj.classify("要不要继续?", api_key="sk", model="typesafe/jev-1.13")
+    assert seen["url"] == "https://openrouter.ai/api/alpha/decisions" and seen["auth"] == "Bearer sk"
+    assert seen["body"]["questions"]["kind"] == rj.QUESTION and seen["body"]["state"]["final_reply"] == "要不要继续?"
+    assert v["kind"] == "clarification" and v["refusal"] is False and v["model"] == "typesafe/jev-1.13"
 
     def boom(req, timeout):
         raise rj.urllib.error.HTTPError(req.full_url, 401, "no", {}, io.BytesIO(b'{"error":"bad key"}'))
     monkeypatch.setattr(rj.urllib.request, "urlopen", boom)
     with pytest.raises(rj.JudgeError, match="HTTP 401"):
-        rj.classify("x", base_url="https://openrouter.ai/api/v1", api_key="sk", model="typesafe/jev-router")
+        rj.classify("x", api_key="sk", model="typesafe/jev-1.13")
 
 
 def test_moderation_config_gates_judge_switch(monkeypatch):
-    """审核模型没配好时拒绝打开 judge;OpenRouter 填了 Key / Agentics 桌面端已登录才算可用;只认清单里的模型。"""
+    """审核模型只走 OpenRouter:没填 Key 时拒绝打开 judge;只认清单里的模型;首版存下的 Agentics / jev-router 配置迁成 OpenRouter + jev-1.13。"""
     from services.runtime import core
     monkeypatch.setattr(core, "ui_lang_code", lambda cfg=None: "zh")
-    for k in ("OPENROUTER_API_KEY", "VIDEOAGENTS_USER_JWT", "VIDEOAGENTS_SERVICE_API_ORIGIN",
-              "VIDEOAGENTS_OPENROUTER_WRAPPER_URL"):
-        monkeypatch.delenv(k, raising=False)
-    gc = {"moderation": {"provider": "openrouter", "openrouter": {"api_key": "", "model": "typesafe/jev-router"},
-                         "agentics": {"model": "typesafe/jev-router"}}}
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    old = {"moderation": {"provider": "agentics", "agentics": {"model": "typesafe/jev-router"},
+                          "openrouter": {"api_key": "", "model": "typesafe/jev-router"}}}
+    core._migrate_genconfig(old)
+    gc = core._merge(core.DEFAULT_GENCONFIG, old)
+    assert gc["moderation"] == {"provider": "openrouter", "openrouter": {"api_key": "", "model": "typesafe/jev-1.13"}}
     monkeypatch.setattr(core, "load_genconfig", lambda: gc)
     monkeypatch.setattr(core, "video_provider_options", lambda cfg=None: [])
     monkeypatch.setattr(core, "_image_channels", lambda: [])
@@ -234,21 +242,17 @@ def test_moderation_config_gates_judge_switch(monkeypatch):
         asyncio.run(core.api_nsfw_set({"judge": True}))
     assert e.value.status_code == 400 and "审核模型" in e.value.detail and not saved
     gc["moderation"]["openrouter"]["api_key"] = "sk-or"
-    assert core.resolve_moderation() == {"provider": "openrouter", "base_url": "https://openrouter.ai/api/v1",
-                                         "api_key": "sk-or", "model": "typesafe/jev-router"}
+    assert core.resolve_moderation() == {"provider": "openrouter", "api_key": "sk-or", "model": "typesafe/jev-1.13"}
     d = asyncio.run(core.api_nsfw_set({"judge": True}))
     assert d["judge"] is True and d["judge_model"]["ready"] is True and saved[-1]["judge"] is True
     assert asyncio.run(core.api_nsfw_set({"judge": False}))["judge"] is False     # 关闭不需要审核模型可用
-    gc["moderation"]["openrouter"]["model"] = "openai/gpt-6"
+    gc["moderation"]["openrouter"]["model"] = "typesafe/jev-router"
     assert core.moderation_status()["ready"] is False                              # 只认清单里的模型
-    gc["moderation"]["provider"] = "agentics"
-    assert "桌面端" in core.moderation_status()["error"]
-    monkeypatch.setenv("VIDEOAGENTS_USER_JWT", "jwt")
-    monkeypatch.setenv("VIDEOAGENTS_SERVICE_API_ORIGIN", "https://api.agentics.world")
-    monkeypatch.setenv("VIDEOAGENTS_OPENROUTER_WRAPPER_URL", "https://api.agentics.world/wrapper/openrouter")
-    r = core.resolve_moderation()
-    assert (r["provider"], r["base_url"], r["api_key"]) == (
-        "agentics", "https://api.agentics.world/wrapper/openrouter/api/v1", "jwt")
+    gc["moderation"]["openrouter"].update(api_key="", model="typesafe/jev-1.13")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-env")
+    assert core.resolve_moderation()["api_key"] == "sk-env"                       # 没填 Key 时用环境变量
+    r = asyncio.run(core.api_test_moderation({"provider": "agentics", "api_key": "", "model": "typesafe/jev-router"}))
+    assert r["ok"] is False and "不支持" in r["error"]
 
 
 def test_refusal_postcheck_prescreen_then_judge(tmp_path, monkeypatch):
@@ -259,14 +263,14 @@ def test_refusal_postcheck_prescreen_then_judge(tmp_path, monkeypatch):
            "image": {"provider": "", "model": ""}, "video": {"provider": "", "model": ""}}
     monkeypatch.setattr(core, "nsfw_settings", lambda: cfg)
     monkeypatch.setattr(core, "resolve_moderation", lambda cfg=None: {
-        "provider": "openrouter", "base_url": "https://openrouter.ai/api/v1", "api_key": "k", "model": "typesafe/jev-router"})
+        "provider": "openrouter", "api_key": "k", "model": "typesafe/jev-1.13"})
     verdict, calls = ["policy"], []
 
     def fake(text, **kw):
         calls.append(text)
         if verdict[0] == "boom":
             raise core._refusal_judge.JudgeError("HTTP 500: upstream")
-        return {"kind": verdict[0], "refusal": verdict[0] == "policy", "routed_model": "m", "cost": 0.002,
+        return {"kind": verdict[0], "refusal": verdict[0] == "policy", "confidence": 1, "cost": 0.00003,
                 "model": kw["model"], "ms": 1}
     monkeypatch.setattr(core._refusal_judge, "classify", fake)
     reply = "这一段我不写:要求把强迫的性场面写细,这类内容我不接。"

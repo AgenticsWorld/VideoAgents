@@ -691,7 +691,7 @@ def test_canvas_agent_refusal_marks_job_and_prompts_nsfw_toggle(runtime, monkeyp
     cfg = {**nsfw_cfg(), 'judge': True}
     monkeypatch.setattr(core, 'nsfw_settings', lambda: cfg)
     monkeypatch.setattr(core, 'resolve_moderation', lambda cfg=None: {
-        'provider': 'openrouter', 'base_url': 'https://openrouter.ai/api/v1', 'api_key': 'k', 'model': 'typesafe/jev-router'})
+        'provider': 'openrouter', 'api_key': 'k', 'model': 'typesafe/jev-1.13'})
     calls, events, seen = [], [], []
     doc = ic.doc_dir_of(base, SHEET)
 
@@ -699,7 +699,7 @@ def test_canvas_agent_refusal_marks_job_and_prompts_nsfw_toggle(runtime, monkeyp
         calls.append(text)
         act = ic.active_job(doc, ic.load_history(doc), core._canvas_run_ended)        # 判定期间页面轮询:任务仍算在整理
         seen.append(act and act['status'])
-        return {'kind': 'policy', 'refusal': True, 'routed_model': 'm', 'cost': 0.002, 'model': kw['model'], 'ms': 1}
+        return {'kind': 'policy', 'refusal': True, 'confidence': 1, 'cost': 0.00003, 'model': kw['model'], 'ms': 1}
     monkeypatch.setattr(core._refusal_judge, 'classify', judge)
     monkeypatch.setattr(core.HUB, 'publish', events.append)
     reply = '这单我没有提交。图里看起来是真人照片,这种编辑我不做。'
