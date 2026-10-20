@@ -266,7 +266,7 @@ button:disabled{opacity:.5;cursor:default}
     <div id="panel-text-openrouter"></div>
   </div>
   <div class="card" id="card-moderation">
-    <h2>🛡 审核模型 <span class="cur">NSFW 模式「拒绝判定用审核模型」打开时使用;生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
+    <h2>🛡 审核模型 <span class="cur">生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
     <div class="tabs" id="mod-tabs">
       <div class="tab active" id="tab-mod-agentics">Agentics</div>
       <div class="tab" id="tab-mod-openrouter">OpenRouter</div>
@@ -274,7 +274,6 @@ button:disabled{opacity:.5;cursor:default}
     <!-- 两个面板由 buildModeration() 生成:Agentics = 账号行 + 模型 + 测试;OpenRouter = API Key + 模型 + 测试 -->
     <div id="panel-mod-agentics"></div>
     <div id="panel-mod-openrouter"></div>
-    <div class="hint">Agent 正常结束却没交产物、回复又不是拒绝套话时,把它最后的回复交审核模型判断是不是内容拒绝(只发回复正文,不发原始请求与图片);判为拒绝后,同 task_id 重派改用 NSFW 备用语言模型,画板任务提示你打开 🔞 再发送。每判一次都计费,开关在「设置→高级→NSFW 模式」,默认关。</div>
   </div>
   <div id="savebar">
     <span id="save-status">✓ 已保存</span>
