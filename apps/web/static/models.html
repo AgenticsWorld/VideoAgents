@@ -217,12 +217,19 @@ button:disabled{opacity:.5;cursor:default}
     <h2>🌍 世界模型 <span class="cur">场景预览页「生成世界模型」按钮使用(仅项目「白模」开启时);生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
     <div class="tabs" id="world-tabs">
       <div class="tab active" id="tab-world-marble">✅ World Labs</div>
+      <div class="tab" id="tab-world-hunyuan">HunyuanWorld(远程)</div>
     </div>
     <div class="panel show" id="panel-world-marble">
       <div class="row"><label>API Key</label><input type="password" id="world-marble-key" placeholder="World Labs API Key"><button onclick="testWorldLabs()">验证 Key</button></div>
       <div class="status" id="world-marble-status"></div>
       <div class="row" id="world-marble-model-row"></div>
       <div class="hint">按场景白模/全景图生成可漫游的 3D 世界(高斯泼溅),在场景预览页「🌍 世界模型」板块查看;Key 在 <a href="https://platform.worldlabs.ai/api-keys" target="_blank">platform.worldlabs.ai</a> 创建。</div>
+    </div>
+    <div class="panel" id="panel-world-hunyuan">
+      <div class="row"><label>worker 地址</label><input type="text" id="world-hunyuan-url" placeholder="http://192.168.x.x:8310"><input type="password" id="world-hunyuan-token" placeholder="X-Worker-Token"><button onclick="testHunyuan()">验证</button></div>
+      <div class="status" id="world-hunyuan-status"></div>
+      <div class="row"><label>高级参数</label><input type="number" id="world-hunyuan-views" min="4" max="64" step="1" placeholder="24" title="轨迹渲染视图数"><input type="number" id="world-hunyuan-steps" min="200" max="30000" step="100" placeholder="8000" title="3DGS 训练步数"><label class="chk"><input type="checkbox" id="world-hunyuan-fp8"> FP8 量化(Windows 暂不推荐,见部署文档)</label></div>
+      <div class="hint">本地算力生成(不耗 credits):场景全景 → GPU 主机 worker(HunyuanWorld-1.0 分层重建 + 3DGS 训练),约 20–40 分钟;worker 部署参考 <a href="https://github.com/AgenticsWorld/VideoAgents-hunyuan-rpc" target="_blank">github.com/AgenticsWorld/VideoAgents-hunyuan-rpc</a>(默认 Windows + 3090 24G)。</div>
     </div>
   </div>
   <div class="card" id="card-text">
@@ -1446,6 +1453,26 @@ async function testWorldLabs(){
   st.textContent=r.ok?I18N.f('✓ Key 有效 · 余额 {c} credits',{c:r.remaining_credits}):'✗ '+(r.error||t('验证失败'));
 }
 
+/* 世界模型渠道(2026-10-10):marble(云端,耗 credits)/ hunyuan(本地算力,远程 GPU worker);生效 = 当前选中标签页 */
+const WORLD_PROVIDERS={marble:'World Labs',hunyuan:'HunyuanWorld(远程)'};
+let WORLD_PROVIDER='marble';
+function showWorldPanel(p){
+  WORLD_PROVIDER=p;
+  Object.keys(WORLD_PROVIDERS).forEach(x=>{
+    const tb=$(`#tab-world-${x}`);
+    tb.classList.toggle('active',x===p);
+    tb.textContent=(x===p?'✅ ':'')+t(WORLD_PROVIDERS[x]);
+    $(`#panel-world-${x}`).classList.toggle('show',x===p);
+  });
+}
+async function testHunyuan(){
+  const st=$('#world-hunyuan-status');st.className='status';st.textContent='验证中…';
+  const r=await api('/api/v1/providers/hunyuan/test',{base_url:$('#world-hunyuan-url').value.trim(),token:$('#world-hunyuan-token').value.trim()}).catch(e=>({ok:false,error:e.message}));
+  st.className='status '+(r.ok?'ok':'err');
+  st.textContent=r.ok?('✓ worker 在线 · '+(r.gpu||'GPU ?')+(r.busy?' · 忙':' · 空闲')+(r.disk_free_gb!=null?` · 磁盘余 ${r.disk_free_gb} GB`:''))
+    :'✗ '+(r.error||t('验证失败'));
+}
+
 const DH_PROVIDERS=['agentics','heygen','klingai','comfyui'];
 function showDigitalHumanPanel(provider){
   DH_PROVIDER=provider;
@@ -1972,9 +1999,15 @@ function loadIntoForm(){
   $('#sfx-fal-key').value=sfa.api_key||'';
   $('#sfx-fal-model').value=pickOpt(SFX_FAL_MODELS,sfa.model);
   showSfxPanel(SFX_PROVIDERS.includes(sx.provider)?sx.provider:'code');
-  const wm=(CFG.world||{}).marble||{};
+  const wm=(CFG.world||{}).marble||{},wh=(CFG.world||{}).hunyuan||{};
   $('#world-marble-key').value=wm.api_key||'';
   fillSelect($('#world-marble-model'),WORLD_MODELS,wm.model||WORLD_MODELS[0][0],wm.custom_model);
+  $('#world-hunyuan-url').value=wh.base_url||'';
+  $('#world-hunyuan-token').value=wh.token||'';
+  $('#world-hunyuan-views').value=wh.views||'';
+  $('#world-hunyuan-steps').value=wh.gs_steps||'';
+  $('#world-hunyuan-fp8').checked=wh.fp8===true;
+  showWorldPanel(WORLD_PROVIDERS[(CFG.world||{}).provider]?(CFG.world||{}).provider:'marble');
   loadDeepagentsForm();
   loadModerationForm();
 }
@@ -2111,8 +2144,11 @@ function collect(){
     elevenlabs:{api_key:$('#sfx-el-key').value.trim(),model:$('#sfx-el-model').value},
     fal:{api_key:$('#sfx-fal-key').value.trim(),model:$('#sfx-fal-model').value},
     code:{}};
-  out.world={provider:'marble',
-    marble:{api_key:$('#world-marble-key').value.trim(),...pickModel('#world-marble-model','#world-marble-custom')}};
+  out.world={provider:WORLD_PROVIDER,
+    marble:{api_key:$('#world-marble-key').value.trim(),...pickModel('#world-marble-model','#world-marble-custom')},
+    hunyuan:{base_url:$('#world-hunyuan-url').value.trim(),token:$('#world-hunyuan-token').value.trim(),
+             views:parseInt($('#world-hunyuan-views').value)||null,gs_steps:parseInt($('#world-hunyuan-steps').value)||null,
+             fp8:$('#world-hunyuan-fp8').checked}};
   // 生效渠道 = 当前选中的标签页(AgenticsLLM/本地模型/云端模型/OpenRouter)
   out.deepagents={provider:TEXT_PROVIDER,
     agentics:{model:$('#text-agentics-model').value||'',custom_model:''},
@@ -2186,6 +2222,7 @@ $('#save').onclick=async()=>{
   $('#panel-up-agentics').replaceWith(upAgenticsPanel);
   $('#world-marble-model-row').replaceWith(modelRow('world-marble-model','world-marble-custom'));
   buildSfxPanels();
+  Object.keys(WORLD_PROVIDERS).forEach(p=>{$(`#tab-world-${p}`).onclick=()=>showWorldPanel(p)});
   const [cfg,wfs]=await Promise.all([
     api('/api/v1/config/generation'),
     api('/api/v1/comfy/workflows').catch(()=>({workflows:{}})),

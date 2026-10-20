@@ -78,6 +78,13 @@ def marble_config() -> dict:
     return cfg
 
 
+def world_provider() -> str:
+    """世界模型渠道(2026-10-10):genconfig#world.provider,'marble'(缺省)/ 'hunyuan'(本地算力,远程 worker)。"""
+    world = (_genconfig().get('world') or {}) if isinstance(_genconfig(), dict) else {}
+    p = str(world.get('provider') or PROVIDER).strip().lower()
+    return p if p in ('marble', 'hunyuan') else PROVIDER
+
+
 def api_key() -> str:
     key = marble_config().get('api_key') or ''
     if not key:
@@ -579,7 +586,8 @@ def default_prompt(base: Path, sid: str) -> str:
 def _summary(base: Path, w: dict, url_prefix: str, is_default: bool) -> dict:
     wj, wdir = w['record'], w['dir']
     files = wj.get('files') or {}
-    world = {k: wj.get(k) for k in ('world_id', 'model', 'world_marble_url', 'caption', 'written_at', 'semantics_metadata', 'alignment')}
+    world = {k: wj.get(k) for k in ('world_id', 'provider', 'model', 'world_marble_url', 'caption', 'written_at', 'semantics_metadata', 'alignment')}
+    world['provider'] = world['provider'] or PROVIDER      # 旧记录(无 provider 字段)按 Marble 读
     world['key'] = w['key']
     world['default'] = is_default
     world['input'] = {k: (wj.get('input') or {}).get(k) for k in ('source', 'anchor_id', 'scheme', 'camera')}

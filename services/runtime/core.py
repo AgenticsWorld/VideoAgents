@@ -989,12 +989,14 @@ DEFAULT_GENCONFIG = {
                     "rh_workflow_id": "", "rh_workflows": [],
                     "rh_instance_type": "standard"},
     },
-    # 世界模型(2026-09-12):World Labs Marble,按场景全景生成可漫游 3D world(高斯泼溅);
-    # 场景预览页「🌍 世界模型」板块用(仅项目「白模」选项开启时显示)。API 文档 https://docs.worldlabs.ai/api,
-    # Key 在 https://platform.worldlabs.ai/api-keys 创建;model 与 docs.worldlabs.ai/api/models 一致
+    # 世界模型(2026-09-12):按场景全景生成可漫游 3D world(高斯泼溅);
+    # 场景预览页「🌍 世界模型」板块用(仅项目「白模」选项开启时显示)。渠道(2026-10-10):
+    # marble=World Labs 云端(Key 在 https://platform.worldlabs.ai/api-keys,API 文档 https://docs.worldlabs.ai/api);
+    # hunyuan=本地算力(远程 GPU worker,部署见独立仓库 https://github.com/AgenticsWorld/VideoAgents-hunyuan-rpc ;views/gs_steps 为 null 时走 worker 缺省)
     "world": {
-        "provider": "marble",   # marble
+        "provider": "marble",   # marble | hunyuan
         "marble": {"api_key": "", "model": "marble-1.1", "custom_model": ""},
+        "hunyuan": {"base_url": "", "token": "", "views": None, "gs_steps": None, "fp8": True},
     },
     # deepagents 文字模型:local=OpenAI 兼容本地端点(LM Studio/Ollama/vLLM…);
     # cloud=OpenAI 兼容云端端点(默认 DeepSeek 官方 API,可换任意兼容服务商);
@@ -8040,8 +8042,10 @@ def _preview_scenes(project: str):
         plate_mode = _pm(base)
     except Exception:  # noqa: BLE001
         plate_mode = "pano"
+    from modules import worldlabs as _wl
     return {"project": base.name, "scenes": scenes, "whitebox_enabled": whitebox_enabled, "format": fmt,
-            "scene_plates_mode": scene_plates_mode, "plate_mode": plate_mode}
+            "scene_plates_mode": scene_plates_mode, "plate_mode": plate_mode,
+            "world_provider": _wl.world_provider()}
 
 
 async def api_preview_scenes(project: str = "demo"):
@@ -9082,7 +9086,8 @@ async def api_scene_world_start(project: str, sid: str, body: dict):
     """场景预览页「生成世界模型」:{source: scene_pano, anchor?, scheme?}。
     仅项目「白模」选项开启且场景已建白模、且已有全景图时可用(2026-09-13 起世界模型必须基于全景图,
     depth2rgb 白模深度转世界模型不再对页面开放,仅 CLI 保留)。2026-10-04 起每次都新增一个世界模型(world/worlds/<key>/),
-    已有的不动;旧页面传的 force 不再有意义。"""
+    已有的不动;旧页面传的 force 不再有意义。渠道按生成模型配置 world.provider 派发(2026-10-10):
+    marble → code/worldlabs_world.py(云端);hunyuan → code/hunyuan_world.py(本地算力,远程 GPU worker)。"""
     from modules import worldlabs
     base = _proj_base(project)
     sid = re.sub(r"[^\w\-]", "", sid)
@@ -9097,14 +9102,22 @@ async def api_scene_world_start(project: str, sid: str, body: dict):
         raise ServiceError(400, "世界模型必须基于全景图(source=scene_pano);白模深度转世界模型选项已去掉")
     if not any(a.get("schemes") for a in worldlabs.list_sources(base, sid).get("anchors") or []):
         raise ServiceError(409, f"{sid} 还没有全景图:请先在场景预览页「🌐 全景图」板块创建全景图,再生成世界模型")
-    if not worldlabs.marble_config().get("api_key"):
-        raise ServiceError(400, "World Labs API Key 未配置:请到控制台「🎨 生成模型」→「🌍 世界模型」填写")
+    provider = worldlabs.world_provider()
+    if provider == "hunyuan":
+        from modules import hunyuan_world as hw
+        if not hw.base_url():
+            raise ServiceError(400, "HunyuanWorld worker 地址未配置:请到控制台「🎨 生成模型」→「🌍 世界模型」→ HunyuanWorld(远程)填写")
+        script = "hunyuan_world.py"
+    else:
+        if not worldlabs.marble_config().get("api_key"):
+            raise ServiceError(400, "World Labs API Key 未配置:请到控制台「🎨 生成模型」→「🌍 世界模型」填写")
+        script = "worldlabs_world.py"
     anchor = re.sub(r"[^\w\-]", "", str(body.get("anchor") or ""))
     scheme = re.sub(r"[^\w\-]", "", str(body.get("scheme") or ""))
     jobkey = f"{base.name}/{sid}"
     if (WORLD_JOBS.get(jobkey) or {}).get("status") == "running":
         raise ServiceError(409, f"{sid} 的世界模型正在生成中")
-    cmd = [sys.executable, "-u", str(ROOT / "code" / "worldlabs_world.py"), "--project", base.name, "--scene", sid, "--source", source, "--new"]
+    cmd = [sys.executable, "-u", str(ROOT / "code" / script), "--project", base.name, "--scene", sid, "--source", source, "--new"]
     if anchor:
         cmd += ["--anchor", anchor]
     if scheme:
@@ -9172,6 +9185,30 @@ async def api_test_worldlabs(body: dict):
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": str(e)[:240]}
     return {"ok": True, "provider": "marble", "remaining_credits": credits}
+
+
+async def api_test_hunyuan(body: dict):
+    """验证 HunyuanWorld worker 连接(GET /health,回 GPU/env 自检)。"""
+    from modules import hunyuan_world as hw
+    base = (body.get("base_url") or "").strip().rstrip("/")
+    token = (body.get("token") or "").strip()
+    if not base:
+        return {"ok": False, "error": "worker 地址(base_url)未填写"}
+    try:
+        health = await asyncio.to_thread(hw.check_health, base=base, token=token, timeout=10)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)[:240]}
+    gpu = health.get("gpu") or {}
+    out = {"ok": bool(health.get("ok")), "provider": "hunyuan", "version": health.get("version"),
+           "busy": health.get("busy"), "disk_free_gb": health.get("disk_free_gb"),
+           "gpu": f"{gpu.get('name')}({gpu.get('vram_gb')} GB)" if gpu.get("cuda") else None,
+           "checks": {k: (v.get("ok") if isinstance(v, dict) else v) for k, v in health.items()
+                      if k in ("python", "hyworld_repo")}}
+    if not out["ok"]:
+        hints = [v["hint"] for v in health.values() if isinstance(v, dict) and v.get("hint")]
+        out["error"] = "worker 自检未过:" + "; ".join(hints) if hints else \
+            "worker 自检未过:" + ", ".join(f"{k}={v}" for k, v in health.items() if k in ("python", "hyworld_repo", "gpu"))
+    return out
 
 
 def _preview_worldview(project: str):

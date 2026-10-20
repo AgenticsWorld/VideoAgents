@@ -490,6 +490,7 @@ function plateLoc(s,p,used){
 // 2026-10-04:一个场景可有多个世界模型——每次「生成世界模型」都新增一个(已有的不动);板块里每个世界模型一张卡片
 // (正面预览图 + 基于哪张全景图),点卡片打开全屏视窗(world-viewer.js openWorld:漫游预览 / 💾 截图存背景图 / ⚙ 设置)
 let WORLD_LIVE=null;   // 当前挂载的板块 {sid, onEvent}
+let WORLD_PROVIDER='marble';   // 世界模型渠道(genconfig world.provider,随预览数据下发):marble=云端 credits;hunyuan=本地算力(远程 GPU worker)
 // 全景来源的显示名:只写锚点编号(全景图 A3),不带光照方案;同一锚点出了多套方案的全景时才补方案编号尾段区分,完整编号放悬停提示
 function worldSourceLabel(s,anchorId,scheme){
   const a=((s.world_sources&&s.world_sources.anchors)||[]).find(x=>x.anchor_id===anchorId);
@@ -514,8 +515,9 @@ function mountWorldSection(whitebox,s){
   const opts=worldSourceOptions(s);
   const srcOf=w=>{const inp=w.input||{};return inp.source==='scene_pano'?worldSourceLabel(s,inp.anchor_id,inp.scheme):inp.source==='depth2rgb'?I18N.f('Marble 深度转全景(锚点 {a})',{a:inp.anchor_id||'-'}):'';};
   const running=job&&job.status==='running';
-  const idle=worlds.length?t('点卡片打开全屏视窗:漫游预览、截图存背景图、调整设置。选一张全景图可再生成一个世界模型(约 5–10 分钟,消耗 World Labs credits),已有的不受影响')
-    :t('尚未生成世界模型;选择全景来源后点「生成世界模型」(约 5–10 分钟,消耗 World Labs credits)');
+  const costHint=WORLD_PROVIDER==='hunyuan'?t('约 20–40 分钟,本地算力不耗 credits'):t('约 5–10 分钟,消耗 World Labs credits');
+  const idle=worlds.length?I18N.f('点卡片打开全屏视窗:漫游预览、截图存背景图、调整设置。选一张全景图可再生成一个世界模型({hint}),已有的不受影响',{hint:costHint})
+    :I18N.f('尚未生成世界模型;选择全景来源后点「生成世界模型」({hint})',{hint:costHint});
   let h=`<div class="wb-toolbar"><div class="wb-heading"><strong>🌍 ${esc(t('世界模型'))} · ${esc(s.id)}</strong>`
     +(worlds.length?`<span style="color:var(--dim);font-weight:400">${esc(I18N.f('{n} 个',{n:worlds.length}))}</span>`:'')
     +`</div><label style="color:var(--dim)">${esc(t('全景来源'))} <select class="ws-source">${opts.map(o=>`<option value="${esc(o.v)}" title="${esc(o.title||'')}">${esc(o.label)}</option>`).join('')}</select></label>`
@@ -576,7 +578,7 @@ async function reloadKeep(){
   try{
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/scenes');
     if(!r.ok)return;
-    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled===true;SP_MODE=d.scene_plates_mode||'auto';FORMAT=d.format||null;PLATE_MODE=d.plate_mode||'grid';
+    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled===true;SP_MODE=d.scene_plates_mode||'auto';FORMAT=d.format||null;PLATE_MODE=d.plate_mode||'grid';WORLD_PROVIDER=d.world_provider||'marble';
   }catch(e){return}
   renderList();
   const cur=DATA.find(x=>x.id===CUR);
@@ -1136,7 +1138,7 @@ async function load(){
   try{
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/scenes');
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
-    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled===true;SP_MODE=d.scene_plates_mode||'auto';FORMAT=d.format||null;PLATE_MODE=d.plate_mode||'grid';
+    const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled===true;SP_MODE=d.scene_plates_mode||'auto';FORMAT=d.format||null;PLATE_MODE=d.plate_mode||'grid';WORLD_PROVIDER=d.world_provider||'marble';
   }catch(e){$('#items').innerHTML='';$('#detail').innerHTML=`<div class="empty">加载失败:${esc(e.message)}</div>`;return}
   DATA.sort((a,b)=>(b.images.length?2:0)+(Object.keys(b.docs).length?1:0)-((a.images.length?2:0)+(Object.keys(a.docs).length?1:0))||a.id.localeCompare(b.id));
   await epf;
