@@ -1,0 +1,527 @@
+# mashup.yaml — 混剪配画流水线 DAG(项目类型 mashup;机器可读)
+# 与 agents/workflow.yaml 同构;项目类型机制见 agents/WORKFLOW.md §11,并入/跳过规则沿用 §10.3。
+# 节点 id 前缀 mx/gm,不与主流程 p*/g*、derivative-fiction nv*/gn*、
+# fusion-fiction fs*/gf*、audio-to-video av*/ga* 冲突;
+# 人工签字点 MH1–MH3,不与主流程 H1–H5、DH*、FH*、AVH* 冲突。
+# orchestrator 把本 DAG 节点并入项目 runs/dag.json 统一跟踪。
+#
+# ══════════════════════════════════════════════════════════════════════════════
+# ⚠️ 本流程的五项特殊授权(覆盖主流程默认纪律,均由 MH1 用户签字兜底)
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# ① 直改正史(覆盖 §10.3.5 命名空间纪律,同 audio-to-video/fusion-fiction 先例)
+#    分镜/画面剧本直接写 directing/、story/,成片写 edit/,组片段与选片帧写 assets/,
+#    让分镜预览页/视频预览页零改动呈现;mashup/ 只存过程件(audio_map/beat_track/
+#    candidates/picks/sources/downloads/previews)。分支与版本用户自理,流程不做克隆/回滚。
+#    ★分镜预览页即编辑界面:shot_list.json 按标准 schema 落正史,用户在页面上用
+#      📝 组注释调整检索意图(注入 assets/prompts/{ep}/{grp}.json 的 video_prompt,
+#      scout 开工必重读)、用 ✏️ 修改把指令发给总制片回派对应工位。
+#
+# ② 音频权威 + 零公差切片(与 audio-to-video 同宗,但更严)
+#    母带 MP3 是唯一时长事实源,禁止任何重编码/归一化/剪裁。
+#    时间结构两层(v2,2026-08-06 节奏改版,源于摸底反馈「3–5s 均拍无节奏感」):
+#      拍(beat) = transcript-aligner 按句切的语义时间事实(缺省界 [1,20]s,拍=句,
+#                  不再逼 3–5s 均拍);
+#      镜(shot) = shot-designer 在拍内细分的画面单元,逐镜带**绝对** t_in/t_out
+#                  恰好铺满所属拍——直给拍(literal)1 镜,渲染拍(render)多镜快切,
+#                  **节奏感来源于镜,不来源于拍**;镜长无上限、硬下限 0.5s。
+#    1 镜 = 1 组不变(下游检索/选片/切片/预览页粒度全不动)。
+#    切片帧数按**累计取整** round(t_out×fps)−round(t_in×fps) 零公差交付
+#    (逐镜 round(dur×fps) 会累积舍入;镜长不齐不影响该数学:镜铺满 [0,total]
+#    则全片帧数恒 == round(total×fps));时间轴无缝隙精确覆盖 [0, master_duration_s]。
+#    封装铁律:严禁 ffmpeg -shortest(静默截断音频末帧且总长检查仍 PASS,
+#    只有逐帧 md5 能发现);统一用 modules/footage.py mux(内置该铁律)。
+#
+# ③ 素材版权责任用户自担(用户决策 2026-08-06:不加许可过滤)
+#    素材库为用户自备素材,权属由用户自证(license 恒 "user-provided(素材库自备素材)"),
+#    只强制**如实登记**:mashup/sources.json 逐源记 provider/id/url/title/uploader/
+#    license/used_by,机检 sources_registered 兜底;权属情况在终审报告 copyright_notes
+#    列明,MH3 签字时用户可见。11-qa/copyright 转为风险评估与上报(report_only),
+#    不作放行门槛。
+#
+# ④ 素材库唯一通道(v3 用户决策 2026-08-28:混剪不再走网络,素材只来自本地素材库)
+#    通道唯一事实源 = mashup/footage_source.json(schema mashup/footage_source@v1):
+#      总制片解析工单时写入(工单必须指明用哪些素材库,可多库;未指明必须向用户要,
+#      不得开工);scout/curator/cutter 三工位的**第一动作**是读它;字段:
+#      libraries[]{name,dir,clip_count,info_coverage,source_title,source_duration_s,
+#      source_fps} + decided_by(工单原文摘录)/written_by_task/written_at。
+#    素材库落盘:data/footage/<name>/(宿主 modules/footage_library.py 维护)——
+#      clips.json(逐分镜 id/start_s/end_s 源片绝对秒/subtitle 字幕/info 画面解读)、
+#      clips/*.mp4+jpg+sheet.jpg(切片/缩略图/联系图)、source/source.<ext>(原片)。
+#    全局 clip 寻址恒为 "<库名>:<clip_id>"(如 fabuhui:clip_006),picks/sources/台账
+#    全链路用它,跨库不撞号;绝对秒坐标各自相对所属库源片,cutter 按条目 library
+#    找对应源片。任何网络调用(yt-dlp/素材站 API)即违规。
+#
+# ⑤ 转场限定写权(v4 用户决策 2026-09-02:有限放开,快切节奏仍靠硬切)
+#    shot_list 的 generation_groups[].transition_in 缺省一律 hard_cut(不写);
+#    **mx1-curate-merge 单获得限定写权**——仅两种情形许写
+#    {"type":"dissolve","duration_s":0.3,"reason":"<picks 证据>","intent":"montage"}:
+#      ① 时间轴相邻两组 picks 认领同一 <库名>:<clip_id>;
+#      ② 相邻两组均为 still:true 静帧兜底。
+#    依据:两情形都在选片后才成立,designer 设计时无从预知;dissolve 0.3s 在
+#    render_transitions 合法域 (0.25,1.0) 内;渲染由 mx3-transition 节点走宿主
+#    code/render_transitions.py(tpad+xfade pad 补偿,总时长 ±1 帧不变、声轨不碰,
+#    不破零漂移数学)。机检 transition_two_cases_only(merge 侧)与宿主
+#    render_transitions check(timeline 侧)双保险。转场清单随 gm1(MH2)签字确认。
+#
+# ══════════════════════════════════════════════════════════════════════════════
+# 文画对应两逻辑(用户方法论 2026-08-06,shot-designer 的核心纪律,QA 同口径)
+# ══════════════════════════════════════════════════════════════════════════════
+#   literal(一致):文字与画面讲同一个事——说曹操,画面就是曹操。具名实体/具体
+#     动作直给,通常 1 镜,可长镜。
+#   render(相辅相成):文字与画面各承担不同信息——「喜欢的事」无画面可直接对应,
+#     须先找**信息焦点**(重点在「喜欢」不在「事情」),用人的状态/氛围渲染;
+#     一个画面渲染力度不够就群像多镜快切(2–6 镜,0.8–2.5s/镜),节奏感来源于此。
+#   每拍必须在 shot_list.json 的 beat_design 声明 mode+focus(机检 shotlist_match 第 6 项)。
+#
+# 剧情参考(v4.1 用户决策 2026-09-02:只保留最核心流程,快速匹配、高质量声画对齐):
+#   保留 p0(剧情理解)+ p1 的 structure/events(story_graph 的情绪曲线是节奏设计的
+#   真实输入);**p2 世界圣经九工位+merge 整段跳过**——v2 保留它是为「检索语言按
+#   文化圈定」与「网络检索词形」服务的(culture/dictionary/geography),v4 素材库
+#   通道下检索语言照库、意象照 catalog,这些产物已无消费者;宗教/经济/政治/修炼
+#   体系对纪实混剪本就只会写「现实世界/无」的占位。主题基调(theme_tone)由
+#   shot-designer 通读全稿自行提炼(3 分钟量级文稿完全够),不再依赖 bible/world.json。
+#   - 意象选择须服务全片主题(designer 自提炼的主题基调 + story/story_graph.json),
+#     选大家熟悉、能引发共鸣的主体,拒绝字面名词匹配(「事情」≠刷油漆);
+#   - 检索/匹配语言照素材库 info/subtitle 的实际语言。
+#   文稿即 p0 的文本输入(短文即单批)。
+#
+# 检索纪律(v3,素材库唯一通道):catalog 一次通读全部声明库的 info/subtitle/标签,
+#   逐组**语义匹配**选候选(literal 配主体/动作/景别,render 配「人的状态是否在讲
+#   focus」);search --provider library 作关键词辅助与 queries_run 登记载体。
+#   fallback 阶梯(全程库内,禁网络):① 语义放宽(氛围/情绪近似 clip,note 写明
+#   理由)→ ② 邻镜素材延长顶替(限同库相邻 clip)→ ③ 静帧+Ken Burns
+#   (footage.py still,零公差可直接进 concat)。
+# 成本阶梯(v3 全程零流量):catalog/search 元数据 → 库内 sheet/thumbnail 现成 jpg
+#   逐图目视 → cut 直切库内源片(本地转码)。无 preview 下载、无 fetch 拉流。
+#
+# 前置:无需主流程其余阶段(新建项目选「混剪」即本流程)。用户输入:
+#   文稿(refs/ 下或工单内)+ 工单指明素材库(data/footage/<name>,可多个,
+#   建议 info 覆盖率 100%)+ 讲述音频(refs/ 下,**可选**)。
+# ★音频可选(v4.3 正式化,leijun 项目先例):用户只给文稿时,总制片在派 mx0-ingest
+#   **之前**先加派一张 09-audio/narrator 单——按文稿分段合成旁白(统一走宿主
+#   genmedia tts,声线可在点单工单指定语气/声线描述)落 assets/audio/narration/{ep}/,
+#   逐字对应文稿(text_lossless_verbatim),流拷贝 concat 为 assets/audio/master/{ep}.mp3,
+#   audio_map 登记 master_origin=tts_synthesized 与 tts_synthesis 元数据;此后母带纪律
+#   与用户上传完全一致(母带即声轨,零重编码,任何环节不得重制)。TTS 前置需宿主
+#   「生成模型」页已配置 TTS 渠道,未配置时停工向用户要音频或要配置,不得带病开工。
+#   母带来源(用户上传/TTS 合成+声线)随 MH1 第 1 签字项呈报。
+# v1 限定:一个母带 = 一个项目 = ep01;无 BGM/音效叠加(会破坏零重编码)、无片头片尾。
+#
+# ★宿主工具链(随 VideoAgents 本体发布)——
+#   modules/footage.py       素材库检索/切片原语(doctor 子命令自检)
+#   modules/footage_library.py  素材库落盘与读取(clips.json 契约;v4 sheet 角标带绝对秒)
+#   code/check_footage.py    机检 footage_sync(--stamp 盖章;timeline/picks/clips/final 四段)
+#   code/mashup_align.py     v4 拍时间轴+word_track 构建(ASR 词级对齐,mx0-align 主命令)
+#   code/render_captions.py  speech-lookup 查词时刻(designer 切镜/cutter 入点/机检共用)
+#   code/render_transitions.py  转场渲染(mx3-transition;pad 补偿总时长不变)
+#   modules/avsync.py / modules/speechalign.py  音频侧与词级对齐原语
+#   外部命令:ffmpeg/ffprobe;python 包 faster-whisper(词级对齐,缺失自动降级
+#   字数估时并在 MH1 呈报降级警告,不拦但强烈建议装上——它是 v4 声画对齐的核心)。
+#   ⚠️ 源码环境未更新或依赖未装时流程照样能立项,
+#   mx0-ingest 的 host_toolchain_verified 是唯一拦截点,缺失即停在第一个节点。
+#   ⚠️ v2 需宿主 check_footage.py 为拍/镜两层口径(check 5 名为 beat_span_in_range);
+#   ⚠️ v3 需宿主 footage.py 含 catalog/still 子命令与 search --provider library;
+#   ⚠️ v4 需宿主 code/mashup_align.py 可跑、check_footage.py 文档头含 word_track_fresh
+#   (新 6 项机检:word_track_fresh/beat_boundary_on_word/shot_cut_on_word/
+#   rhythm_differentiated/no_uniform_shots/fast_cut_present),自检时一并确认。
+
+version: 2
+project_type: mashup
+
+# 主流程分支联动跳过(WORKFLOW.md §10 规则 6)。本流程是自起流程:输入是音频+文稿+素材库。
+# v4.1 起只保留 p0(剧情理解)+ p1 structure/events(story_graph 供节奏映射),
+# mx0-design 依赖 p1-structure/p1-events;**p2 世界圣经整段跳过**(理由见上方
+# 「剧情参考」段)。p3 起仍整段跳过——不建角色/美术底座
+# (不生成故 prompt 机检链无对象),分镜由 mx0-design 替代,视觉生成由 mx1/mx2
+# 检索切片替代,音频阶段绝不能跑(母带即声轨)。
+# 全部未开工(pending/template/blocked)时整组置 skipped(写 skip_reason 含项目类型名);
+# 清单内存在任一已开工节点则视为视频制作进行中,一个也不跳。
+# skipped 是挂起不是放弃:用户其后要求按主流程做视频时恢复 pending 重新排产。
+# ⚠️ 刻意不含 p0-init 与 g0:项目创建时已跑过初始化(状态 done),
+#    列入会触发「一个也不跳」的白名单条件,导致整组跳过失效。
+main_dag_on_start:
+  skip:
+    - p1-timeline      # 故事时间线——混剪节奏映射只用 story_graph/events,不消费它
+    - g1               # p1 自动门——mx0-design 直依赖 p1-structure/p1-events,不走门
+    - p2-*             # ★世界圣经九工位+merge(v4.1 整段跳过,理由见头部「剧情参考」段:
+                       #   检索语言/词形消费者已随 v4 素材库通道消亡,纪实题材全是占位)
+    - g2               # H1-世界圣经确认——p2 已跳,无签字对象
+    - p3-*             # 角色与资产——不生成,无角色底座需求
+    - p4-*             # 美术风格——不生成,无美术底座需求
+    - p5-*             # 剧本改编——由 mx0-design 画面设计替代
+    - p6-*             # 导演分镜——由 mx0-align + mx0-design 替代
+    - p7-*             # 视觉生成——由 mx1 检索选片 + mx2 下载切片替代
+    - p8-*             # ★主流程音频阶段——母带即成片声轨,绝不重制/混音
+                       #  (与 v4.3「无音频时 TTS 前置合成母带」不冲突:那发生在
+                       #   mx0-ingest 之前、产出的就是母带本身,而非对母带再加工)
+    - p9-*             # 剪辑合成——由 mx3-edit 完成
+    - p10-*            # 成片终审——由 mx4-* 完成
+    - p11-*            # 视频发布——按需另点单
+    - g3               # H1A-角色与资产确认
+    - g4               # H2-美术风格锁定
+    - g5               # H3-第1集剧本确认
+    - g6               # H3A-分镜确认
+    - g7               # H3B-视觉生成确认
+    - g8
+    - g9               # H4-首集成片确认
+    - g10              # H5-发布签字
+
+defaults:
+  eval_threshold: 80
+  max_retries: 3
+  on_fail: escalate_human
+  run_record: [result.json, eval.json, meta.json]
+  gate_auto: [open_blocker_major_defects_zero_or_waived, due_gate_defects_closed,
+              qa_hold_requires_waiver, human_checks_executed_or_waived]
+
+# orchestrator 注意:并入 runs/dag.json 时给每个节点显式写 phase 字段(值取所属 phase 的 id),
+# 否则工作流预览页的 _wf_phase_of() 只认 ^[pg]\d+,mx* 节点会全落进「加派任务」泳道。
+
+phases:
+  - id: mx0
+    name: 音频立项与分镜
+    tasks:
+      - id: mx0-ingest
+        agent: 16-mashup/audio-ingest
+        outputs: [mashup/audio_map.json, "assets/audio/master/{ep}.mp3"]
+        # host_toolchain_verified:★modules/footage.py doctor 与 code/check_footage.py --help
+        #   实测通过——唯一能拦住旧版宿主/缺依赖环境的检查,必须在第一个节点拦住;
+        #   缺失时报文须含缺失项与升级/安装指引;v2 另确认 check 5 名为 beat_span_in_range;
+        #   v2.1 另确认 footage.py --help 含 ledger 子命令(mx2 台账并发安全依赖它);
+        #   v3 另确认 footage.py --help 含 catalog/still 子命令(素材库通道原语);
+        #   v4 另确认 code/mashup_align.py --help 可跑、check_footage.py 文档头含
+        #   word_track_fresh、faster-whisper 可导入(缺失不拦但登记降级警告,随 MH1 呈报);
+        #   doctor 的 yt-dlp/youtube_search 项失败不拦(v3 起不走网络),ffmpeg/ffprobe 必须过
+        # footage_source_declared:★mashup/footage_source.json 可读、libraries 非空,
+        #   且**逐库**核验:data/footage/<name>/clips.json 存在、clip 数>0、info 覆盖率
+        #   实测并登记(建议 100%,不足即报,由用户决定先补分析还是带缺开工)、
+        #   source/source.<ext> 存在且规格(时长/分辨率/fps)ffprobe 实测与登记一致;
+        #   工单未指明素材库时本节点即停,上报总制片向用户要库名,不得替用户选
+        validation:
+          auto: [schema, host_toolchain_verified, footage_source_declared,
+                 master_copied_verbatim, duration_measured, silences_detected,
+                 loudness_reported, ascii_filename]
+          rubric: extraction_v1
+      - id: mx0-align
+        agent: 16-mashup/transcript-aligner
+        depends_on: [mx0-ingest]
+        outputs: [mashup/beat_track.json, "edit/{ep}/word_track.json"]
+        # v4:拍边界改 ASR 实测——跑宿主 code/mashup_align.py build 一条命令产两件套
+        #   (faster-whisper 逐词时间戳 → difflib 对齐文稿 → 句边界取实测词界/停顿中点;
+        #   同一份 ASR 装配 word_track,下游切镜吸词/入点公式/字幕/机检全靠它);
+        #   faster-whisper 缺失或 match_ratio<0.6 自动降级字数估时+吸附(v3 现状),
+        #   降级须在回执与 MH1 呈报。拍=语义句不变:拍长缺省界 [1,20]s。
+        # word_track_fresh / beat_boundary_on_word:check_footage v4 新增(5b/5c);
+        # boundaries_anchored_reported:回执登记 ASR 锚定率(anchored/interp 逐类计数)
+        #   与未锚定拍清单——锚定率衡量的是「有多少边界是实测的」,不是吸附率;
+        # footage_stamped:code/check_footage.py --stamp --task-id 已过并写入 footage_sync
+        #   (timeline 段 1–5、7 全过方许盖章;第 6 项 shot_list 属下游,盖章时 SKIP)
+        validation:
+          auto: [schema, text_lossless, beats_monotonic, beats_cover_master,
+                 beat_span_in_range, word_track_fresh, beat_boundary_on_word,
+                 footage_stamped, boundaries_anchored_reported]
+          rubric: analysis_v1
+      - id: mx0-design
+        agent: 16-mashup/shot-designer
+        depends_on: [mx0-align, p1-structure, p1-events]   # ★v4.1:等 story_graph/events 就位即设计(p2 已跳)
+        outputs: ["directing/{ep}/shot_list.json", "directing/{ep}/storyboard.json",
+                  "assets/prompts/{ep}/"]
+        # v4 解说体总纲:literal 密度最大化——设计前先 catalog --brief 通读全部声明库
+        #   概貌,库里有这句话的所指就必 literal(说什么画面就是什么),render 仅留给
+        #   真无对应画面的抽象句;设计 >4s 长镜前核库存(≥镜长+1s 的 clip 数)。
+        # 切镜吸词(v4):拍内切点先按内容定,再用宿主 speech-lookup 查焦点词 onset,
+        #   **t_in = 词 start**;非拍首镜必填增量字段 cut_word:{text,start}(词锚登记,
+        #   机检 shot_cut_on_word 凭据;页面忽略未知键)。
+        # literal 镜长 = 所指实体的语音区间(词区间前后留 0.3–0.5s 呼吸),不平分整拍;
+        # render 快切 0.8–2.5s 硬口径;严禁镜长在 3–5s 舒适区堆积(节奏三项机检硬卡:
+        #   rhythm_differentiated / no_uniform_shots / fast_cut_present,阈值见宿主
+        #   check_footage.py 顶部常量,依据 leijun 摸底数据校准)。
+        # shot_list 按标准 schema 落正史(shots+generation_groups,1 镜=1 组,
+        # narration_anchors 恒 [],另加 beat_design 节),分镜预览页零改动呈现;
+        # 组 prompt 的 video_prompt 承载画面需求+检索意图——预览页组注释的编辑回路挂在这
+        validation:
+          auto: [schema, beats_all_covered, shots_tile_beats, shot_min_span,
+                 one_shot_one_group, focus_mode_declared, narration_anchors_empty,
+                 no_speaking_characters, queries_concrete, query_language_reasoned,
+                 shot_cut_on_word, rhythm_differentiated, no_uniform_shots,
+                 fast_cut_present, ascii_filename]
+          rubric: writing_v1
+          qa: [11-qa/logic-qa]
+      - { id: gm0, gate: true, human: true, checkpoint: MH1-时间轴与分镜签字,
+          depends_on: [mx0-design] }
+        # ★全流程最关键签字点,基线错了整片重做。签字项(缺一不得放行,
+        # 登记进 mashup/audio_map.json 的 user_confirmations):
+        #   1. design_plan:实测时长、M 拍与逐拍设计(mode/focus/镜数)、N 镜切分
+        #      (镜长自由,硬下限 0.5s;渲染拍快切、直给拍长镜)——节奏安排在此一并签认;
+        #      主题基调(designer 从文稿自提炼)与 story_graph 情绪曲线随本项阅看
+        #   2. canon_write:直改本项目正史(directing/、story/、edit/),版本回滚自理,
+        #      开工前建议自行留备份(如 git 分支)
+        #   3. copyright_self_assumed:素材来源版权责任自担,流程只登记不过滤;
+        #      license=unknown 的源将在 MH3 报告中列明
+        #   4. no_repackage:母带零重编码、响度不归一化;关闭片头/片尾/预告
+        #      (settings.json packaging 三项置 false,片头会重编码并破坏零漂移)
+        #   5. footage_source:逐库确认素材库(库名/clip 数/info 覆盖率/源片规格),
+        #      自备素材权属由用户自证(随第 3 项 copyright_self_assumed 一并兜底);
+        #      素材只来自这些库,全程不联网找素材
+        # 签字后用户可随时在分镜预览页看逐镜安排,用组注释微调检索意图
+
+  - id: mx1
+    name: 素材检索与选片      # 按主题簇批(scene_batch)扇出;scout 无状态可并发,
+    depends_on: [gm0]         # curator 须带视觉能力引擎(要看帧)
+    for_each: scene_batch     # 按 directing/{ep}/shot_list.json 的 scenes 顺序切片,
+                              # **每批 4 簇**(3-5 弹性),批号 b01..bNN;
+                              # ★首批派出后批次划分不得再改(按顺序切片,改了会错位)。
+    # ══ 批扇出与派单纪律(2026-08-12 提速改版,leijun 100 簇实测)══
+    # 逐簇一单时,单簇 run 里检索开销极小,大头是会话固定开销(读底本/定向/逐项
+    # 自检/长汇报)——打包多簇摊薄后总墙钟约砍 2/3。
+    # v3 批宽:scout 零网络零等待(catalog 一次通读,逐组纯语义匹配),8–10 簇/单;
+    # curate 免预览下载但逐图看图仍吃上下文,4–6 簇/批;批过大单会话超 agent 寿命
+    # (p7-video reclaim 循环同款坑),10 簇/批对 curate 实测不可行。
+    # v4.2.1:curator 无状态化,**多批并行派**(分片写+ledger 锁并发安全,受
+    # agent_concurrency 额度与全局 8 槽约束);并行批间同 clip 认领竞态由 merge
+    # 复检兜底。追求出片速度时 curate 全部批一次派出。
+    # ★批次划分数(for_each 切片)以 curate 口径(4 簇/批)冻结,scout 一单可带
+    # 2–3 个批段,产物与回执仍逐簇落盘,批号对位不变。
+    # 派单指令必须写明提速纪律:工单底本与 bible 语言 policy 只读一遍,簇间不重读;
+    # 自检每簇一轮通过即止,不逐项复述;回执只填短字段;全批完成后总汇报 ≤3 行。
+    # 幂等判据 = 逐簇产物已落盘 或 该簇已有 queued/running/done 的 run
+    # (只看产物会漏判在飞任务,导致重复派单)。
+    tasks:
+      - id: mx1-scout
+        agent: 16-mashup/footage-scout
+        outputs: ["mashup/candidates/{scene}.json"]   # 批内逐簇一份,独立落盘
+        # 回执也逐簇一份(runs/mx1-scout-{scene}/result.json,批派单不合并),
+        # 只填:组数/每组候选数/命中库分布/fallback 档位,不写过程长文
+        # 第一动作:读 mashup/footage_source.json 定库(缺失即停,上报总制片);
+        # prompt_reread:随后重读组 prompt(用户组注释可能已改检索意图);
+        # 主检索:catalog 带全部声明库一次通读,逐组语义匹配(跨库同权,按贴合度选,
+        #   不设库间优先级);search --provider library 作关键词辅助与登记载体;
+        # query_language_followed(v3 语义):检索/匹配语言照库 info/subtitle 实际语言;
+        # 渲染簇逐镜换主体候选(群像=不同主体同情绪,禁把同一 clip 列为多镜唯一候选;
+        #   跨组共享同一 clip 是常态,允许,簇内治理归 curator);
+        # footage_source_followed:候选全部来自声明的库(provider 恒 library,
+        #   id 库名前缀 ∈ libraries),混入网络候选即 FAIL;
+        # no_video_downloaded(v3 语义)= 零新增视频字节:不下载不复制任何视频进项目
+        #   目录,mashup/previews|downloads/ 零新增;读/probe 库内既有文件不算;
+        #   scout 不取帧不看图(看图归 curator)
+        # duration_fit_checked(v4,前置拦「时长塞不下」——leijun 79 组栽这):
+        #   候选条目登记 clip_duration_s;组镜长 > 候选可用时长的标 too_short:true;
+        #   每组至少给 1 个时长足够(≥镜长+0.5s)的候选,给不出在回执点名该组建议缩镜
+        validation:
+          auto: [schema, prompt_reread, footage_source_followed,
+                 candidates_min_5_per_group, duration_fit_checked,
+                 query_language_followed, metadata_complete, rejects_reasoned,
+                 no_video_downloaded]
+          rubric: analysis_v1
+      - id: mx1-curate
+        agent: 16-mashup/footage-curator
+        depends_on: [mx1-scout]
+        outputs: ["mashup/picks/{batch}.json", "mashup/sources/{batch}.json",
+                  "assets/keyframes/{ep}/"]
+        # 第一动作:读 mashup/footage_source.json 定库;
+        # 预览(v3)= 直读库内 clips/<stem>.jpg 与 <stem>.sheet.jpg 逐图目视,零下载;
+        #   sheet 粒度不够时对库内文件本地 montage/frame(产物落 mashup/previews/,
+        #   jpg 不算视频字节);frames_inspected = 逐图目视留痕,禁只看 info 文本定剪;
+        # rough_in/rough_out 用**所属库源片的绝对秒**(与该库 clips.json 的
+        #   start_s/end_s 同坐标,picks 条目必须带 library 字段标明坐标系);
+        # ★铁律:精剪窗口(镜长)必须完整落在所选 clip 的 [start_s,end_s] 内
+        #   (跨 clip 边界=区间内硬切,一票否决);rough 垫料允许越界但须 note 注明;
+        # 一票否决:区间内硬切(=跨 clip 边界)/剧烈晃动/虚焦/构图废;
+        #   水印降为抽查(自备源;源若是转播录屏仍盯台标);
+        # 渲染簇选片按情绪核验(人的状态是否在讲 focus);montage_subjects_distinct
+        #   (v3 语义):簇内各镜不同 clip;确需同 clip 时必须不同区间且景别/构图
+        #   肉眼可辨,回执逐镜登记 clip_id+区间;
+        # reuse_checked(v3 语义,复用是默认策略)= 复用冲突检查:同 clip 多组精剪
+        #   窗口互不重叠;时间轴相邻两组不共用同 clip 视觉近似区间;同 clip 同区间
+        #   双组开缺陷单;
+        # 库内兜底三档:语义放宽(note 写理由)→ 邻镜延长顶替(限同库相邻 clip,
+        #   picks 照常落本组)→ 静帧+Ken Burns(picks 标 still:true + 取帧绝对秒,
+        #   执行归 cutter);每档在 result.json 登记;
+        # ★只写本批分片,严禁写全局 picks.json/sources.json——多批并发写单文件必然
+        #   互相覆盖;全局单文件由 mx1-curate-merge 统一合并。复用查询读 mashup/sources/
+        #   目录下已落盘的全部分片,跨批复用关系由 merge 归并,不改别批的分片;
+        # 选片帧 frame --input <库源片> --at <绝对秒> 直取入 keyframes 供预览页与 MH2。
+        # check_footage 第 9/10 项(picks_complete/sources_registered)针对全局单文件,
+        # 分片阶段跑不过属正常,由 merge 盖章;本节点只做批内自检(within_batch)。
+        # v4 增补:sheet 角标带绝对秒(sheet_stamps 已落盘 clips.json),rough/锚点
+        #   直接抄真实坐标不再插值猜;info 多行含「切口/稳定/主体」(旧库缺行时按
+        #   缺失处理,必须回退看图);anchor_word:{text}(本组画面动作应对位的词,
+        #   通常=focus,供 cutter 入点公式,可选但建议逐组登记);
+        # still_last_resort(v4):still 前必须先穷尽 ②邻镜延长与复用,每个 still 组
+        #   在分片 note+result.json 写逐组理由;本批 still 占比 >20% 必须上报不许静默。
+        # 回执只填:本批组数/定剪数、淘汰的候选及理由(选中的不逐条复述,分片即结论)、
+        # 渲染簇逐镜 clip 清单、复用命中数、兜底档位统计、候选耗尽需退回重搜的组。
+        validation:
+          auto: [schema, picks_complete_within_batch, sources_registered_within_batch,
+                 pick_frames_present, frames_inspected, montage_subjects_distinct,
+                 reuse_checked, still_last_resort, library_coverage, ascii_filename]
+          rubric: visual_plan_v1
+
+  - id: mx1m
+    name: 选片合并与确认      # 收口:全部批次 fan-in,单实例
+    depends_on: [mx1]
+    tasks:
+      - id: mx1-curate-merge
+        agent: 16-mashup/footage-curator
+        outputs: [mashup/picks.json, mashup/sources.json]
+        # 合并全部分片(以 mashup/picks|sources/ 目录实际文件为准):
+        # - picks:组号唯一键,全组齐全(总数=shot_list 组数);同组在两个分片都有定剪
+        #   = 批次划分出错,开缺陷单上报,不许随便挑一个;
+        # - sources:按 provider+video_id 去重,used_by 取**并集**(跨批复用关系的唯一
+        #   落点,漏并会让 clip-cutter 重复下载同一区间);字段冲突以先落盘分片为准并
+        #   在回执列差异;license=unknown 只登记不过滤,清单单独汇总供 MH3;
+        # - 合并后复检:同一 video_id 被不同组认领的,区间互不重叠/写清差异,
+        #   同源同区间(画面会重复)开缺陷单点名两组;
+        # - 统一盖章:code/check_footage.py --require picks --stamp(第 9/10 项在此必过);
+        # - ★转场限定写权(v4,特殊授权⑤):合并后按 picks 实况给 shot_list 的
+        #   generation_groups[].transition_in 写 dissolve 0.3s,**仅两情形**:
+        #   ①时间轴相邻两组同 <库名>:<clip_id>;②相邻两组均 still:true。
+        #   每条带 reason(picks 证据)与 intent:"montage";其余边界一律不写(hard_cut);
+        #   transition_two_cases_only:两情形之外出现任何非 hard_cut 即 FAIL;
+        # - 不做选片本身:缺组/缺帧/区间不合格退回对应批次,不替选(替选绕过逐帧核验)。
+        validation:
+          auto: [schema, picks_complete, sources_registered, groups_complete,
+                 sources_deduped_by_video_id, used_by_union_preserved,
+                 transition_two_cases_only, footage_stamped]
+          rubric: analysis_v1
+      - { id: gm1, gate: true, scope: episode, human: true,
+          checkpoint: MH2-选片确认, depends_on: [mx1-curate-merge] }
+        # 签字前在分镜预览页逐组看选片帧(keyframes 即组锚点图);
+        # v4 增签字项:转场清单(哪些边界叠化、依据两情形之一)随选片一并确认;
+        # 不满意的组:改组注释(调检索意图)→ 退回该簇所在批的 mx1-scout 重搜,
+        # 或直接 ✏️ 修改点名换区间 → 退回对应批 mx1-curate(改完需重跑 merge);
+        # 时间轴不动,不需重签 MH1
+
+  - id: mx2
+    name: 下载与切片          # 纯机械,全量并发;零公差交付
+    depends_on: [gm1]
+    for_each: group           # 按 shot_list generation_groups 实例化(1 镜=1 组)
+    tasks:
+      - id: mx2-cut
+        agent: 16-mashup/clip-cutter
+        outputs: ["assets/clips/{ep}/{group}.mp4"]
+        # 第一动作:读 mashup/footage_source.json 定库;
+        # 镜时长取 shot_list 的绝对 t_in/t_out(v2 起拍内多镜,beat_track 只供 fps/宽高);
+        # clip_frames_exact:帧数 == round(t_out×fps)−round(t_in×fps)(累计取整,
+        #   footage.frames_for_beat 口径),零公差——素材现成,无生成公差概念,
+        #   差一帧即废品(check_footage.py 第 11 项);
+        # 切片来源(v3):按 picks 条目的 library 字段找对应库 source/source.<ext>,
+        #   cut --input <库源片> --in-point <picks 绝对秒> 直切(fps 归一由 cut 内建;
+        #   不从库 clip mp4 切——那是二次编码,再切成三代画质);降级:源片缺失时才许
+        #   切库 clip mp4(in_point = 绝对秒 − start_s),回执登记;
+        # still 兜底:picks 标 still:true 的组跑 footage.py still(帧数同累计取整口径);
+        # 入点公式(v4,替代「文稿重音」散文指令):picks 有 anchor_word 时,
+        #   w = speech-lookup(anchor_word.text, near=t_in).start(母带坐标:词被念出的时刻),
+        #   in_point = action_anchor_s − (w − t_in)(让素材动作恰在词时刻出现);
+        #   越界 clamp 进 rough 并登记 anchor_clamped;无 anchor_word 走现状最干净起点;
+        # anchor_alignment_registered:result.json 逐组登记
+        #   anchor_word/word_time_s/in_point/anchor_clamped(可复核公式成立);
+        # no_network_fetch(替代 v2 的 section_downloaded_only):免下载免拉流,
+        #   mashup/downloads/ 零新增、无任何网络调用;
+        # library_input_verified(替代 v2 的 download_reused):cut 实际输入文件与
+        #   footage_source 声明的库及台账 file 字段一致;
+        # ★台账补录(file/sha256/unavailable 标记)只许走 footage.py ledger 子命令
+        #   (内置文件锁+原子替换写)——本节点全量并发,直接编辑 sources.json
+        #   必然互相覆盖丢更新(2026-08-12 教训固化,v2.1 需带 ledger 的宿主);
+        #   每库源片 sha256 首录一次即可,后续组先读台账、已有即跳过(逐组重算
+        #   百 MB 级源片是浪费)
+        validation:
+          auto: [clip_frames_exact, clip_silent, clip_spec_normalized,
+                 no_network_fetch, library_input_verified,
+                 anchor_alignment_registered, sources_sha256_updated]
+          rubric: visual_gen_v1
+
+  - id: mx3
+    name: 剪辑封装
+    depends_on: [mx2]
+    tasks:
+      - id: mx3-edit
+        agent: 10-editing/edit
+        outputs: ["edit/{ep}/timeline.json", "edit/{ep}/cut_v1.mp4"]
+        # v4:本节点只 concat 出无声粗装 cut_v1.mp4,**不 mux 母带、不产 final.mp4**
+        #   ——封装归 mx3-transition(转场渲染后统一 mux)。
+        # 工单必须显式声明(否则 edit 按其 SOUL 会跑 check_narration_sync 并停手上报):
+        #   「本流程无 TTS 旁白轨,narration_anchor_sync 不适用,改跑 code/check_footage.py;
+        #    拼接用 modules/footage.py 的 concat 子命令,产物名 cut_v1.mp4」
+        # timeline.json 只写组级条目,顺序即 shot_list 镜序(=时间序),恰好首尾相接;
+        #   ★video 轨逐条必带 group_id 与 in/out(render_transitions.boundaries_of
+        #   靠它定组边界,缺了 mx3-transition 直接 FAIL)
+        validation:
+          auto: [cut_duration_match, timeline_video_entries_valid]
+          rubric: edit_v1
+      - id: mx3-transition
+        agent: 10-editing/transition
+        depends_on: [mx3-edit]
+        outputs: ["edit/{ep}/final.mp4", "edit/{ep}/transitions_render.json"]
+        # v4 新节点(特殊授权⑤的执行端):宿主 code/render_transitions.py
+        #   plan → render(cut_v1 → cut_v2;tpad+xfade pad 补偿,总时长 ±1 帧不变、
+        #   不碰声轨)→ check 全 PASS;plan 无可渲染条目(全 hard_cut)时跳过 render,
+        #   mux 源直接用 cut_v1;
+        # 收尾统一封装:footage.py mux(-c:v copy -c:a copy,拒绝视频短于母带,
+        #   天然规避 -shortest)产 final.mp4——本节点是 mux 的唯一授权执行者;
+        # no_black_frames 衔接:读 transitions_render.json 的黑场白名单窗口豁免
+        #   (本期只 dissolve 无黑场,白名单恒空;将来放开 dip_black 零改动)
+        validation:
+          auto: [transition_render_ok, final_duration_match,
+                 final_audio_no_transcode, no_black_frames]
+          rubric: edit_v1
+      - id: mx3-subtitle
+        agent: 10-editing/subtitle
+        depends_on: [mx3-transition]
+        outputs: ["edit/{ep}/subtitles.srt", "edit/{ep}/subtitles_final.srt"]
+        # 字幕白捡:mashup/beat_track.json 自带精确时间码,逐**拍** text 直转 SRT
+        # (字幕跟拍=句,不跟镜——渲染拍多镜同句,字幕不切);
+        # v4 微调:cue end 提前到 min(t_out, 该拍末词 end + 0.2s)(用 word_track,
+        #   避免字幕挂在长句间停顿上);cue start 保持 t_in;
+        # 无片头 ⇒ 两时基一致,subtitles_final.srt 为原样拷贝
+        validation:
+          auto: [srt_valid, cues_match_beat_track, subtitle_offset_ok]
+          rubric: edit_v1
+      - { id: mx3-thumb, agent: 10-editing/thumbnail, depends_on: [mx3-transition],
+          outputs: ["edit/{ep}/thumbnail_01.png"] }
+      - { id: gm2, gate: true, depends_on: [mx3-subtitle, mx3-thumb] }
+
+  - id: mx4
+    name: 终审
+    depends_on: [gm2]
+    tasks:
+      - { id: mx4-qa, agent: 11-qa/mashup-qa,
+          outputs: ["qa/reports/{ep}/mashup.json"], pass: blocker_eq_0 }
+        # v4:check_footage --require final 全 21 项(15+词级对齐/节奏 6 项);
+        # 报告加 still_ratio 字段(目标 ≤15%,>25% 列 major——leijun 摸底 50% 即节奏
+        # 病根)与快切卡点抽检(词 onset vs 镜切点);
+        # check_footage --require final 全项 + 语义抽检 ≥6 拍(按 beat_design 的
+        # mode 分口径:literal 查画面即所指,render 查情绪/状态是否在讲 focus,
+        # 不得因渲染拍画面不含字面名词误判)+ 水印抽查(v3 自备源降档)+ 台账终核
+        # (v3:逐条核 provider=library、url 指向库内存在文件、source_file sha256
+        # 与台账一致、id 库名 ∈ footage_source 声明)
+      - { id: mx4-visual, agent: 11-qa/visual-qa,
+          outputs: ["qa/reports/{ep}/visual.json"], pass: score_gte_80 }
+        # 口径注意:素材异源,镜间色调/画质不一致是混剪美学预期,不按主流程
+        # 角色/场景一致性扣分;只审构图、可视性、明显瑕疵
+      - { id: mx4-safety, agent: 11-qa/content-safety,
+          outputs: ["qa/reports/{ep}/safety.json"], pass: blocker_eq_0 }
+      - id: mx4-copyright
+        agent: 11-qa/copyright
+        outputs: ["qa/reports/{ep}/copyright.json"]
+        # ★report_only(用户决策:版权责任自担,MH1 第 3 项签字兜底):
+        #   基于 mashup/sources.json 做风险分级上报;v3 源恒为 library
+        #   (user-provided 自备素材),重点上报素材库原片本身的权属提示
+        #   (如源片是他人发布会/影视内容的录制,由用户自证使用权);
+        #   不作放行门槛;台账完整性已由 mashup-qa 的 sources_registered 机检兜底
+        pass: report_only
+        validation:
+          auto: [sources_ledger_reviewed, risk_graded_reported]
+      - { id: gm3, gate: true, human: true, checkpoint: MH3-成片签字,
+          depends_on: [mx4-qa, mx4-visual, mx4-safety, mx4-copyright] }
+        # 放行前必须:code/check_footage.py --require final 全 PASS;
+        # 人工抽查开头/中段/结尾三点声画对位;
+        # 阅看 copyright 报告与 mashup.json 的 copyright_notes(unknown license 清单)
+
+# 贯穿型服务与主流程一致(evaluation/memory-bible/version/orchestrator 钩子),
+# 见 agents/workflow.yaml services 段。
+#
+# 发布(12-publishing/*)按需另点单,不在本 DAG 内:platform-adapter 必然按平台规格转码,
+# 「零重编码」的保证止于 edit/{ep}/final.mp4;转码副本文件名不得含 final/master
+# (否则被视频预览页当成第二个成片)。

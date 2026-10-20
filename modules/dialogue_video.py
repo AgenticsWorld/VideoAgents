@@ -483,7 +483,7 @@ def main(argv: list[str] | None = None) -> int:
     plan = sub.add_parser("plan")
     plan.add_argument("--audio", required=True)
     plan.add_argument("--transcript", required=True)
-    plan.add_argument("--cast", help="可选人物映射 JSON；项目插件会从自然语言自动生成")
+    plan.add_argument("--cast", help="可选人物映射 JSON；数字人流程会从自然语言自动生成")
     plan.add_argument("--speaker-image", action="append", default=[], metavar="NAME=PATH",
                       help="不使用 cast.json 时直接指定人物，可重复；单人稿只传一次")
     plan.add_argument("--output", required=True)

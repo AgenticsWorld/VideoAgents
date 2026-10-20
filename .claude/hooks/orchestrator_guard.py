@@ -31,13 +31,13 @@ ASR_FORBIDDEN = re.compile(
     r"modules/transcription\.py|speechalign|speech-align|mashup_align|"
     r"\bvosk\b|funasr|paraformer|sensevoice|wav2vec",
     re.IGNORECASE)
-# SOUL 把宿主 ASR 入口列为固定工序的工位(按 id 前缀匹配);插件工位按业务前缀放行
+# SOUL 把宿主 ASR 入口列为固定工序的工位(按 id 前缀匹配);项目类型工位按业务前缀放行
 ASR_ALLOWED_AGENTS = (
     "09-audio/audio-transcription",   # 按需转写工位(WORKFLOW.md「按需音频转写」)
     "10-editing/caption",             # 花字逐字时间轴 render_captions.py speech-align
-    "17-digital-human/",              # 数字人插件 dh0-transcribe(dialogue-ingest)
+    "17-digital-human/",              # 数字人项目类型 dh0-transcribe(dialogue-ingest)
 )
-ASR_ALLOWED_KEYWORDS = ("mashup", "footage")   # 混剪/素材库插件工位(v4 声画对齐)
+ASR_ALLOWED_KEYWORDS = ("mashup", "footage")   # 混剪项目类型/素材库工位(v4 声画对齐)
 
 
 def _asr_guard(agent: str, command: str):

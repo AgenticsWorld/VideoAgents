@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""check_av_sync.py — 音画锁定同步机检(av_sync,audio-to-video 插件)。
+"""check_av_sync.py — 音画锁定同步机检(av_sync,音频配画项目类型 audio-to-video)。
 
 事实源:用户提供的母带 MP3(`assets/audio/master/epNN.mp3`)与 `av/audio_map.json` 的实测时长。
 被检方:`av/beat_track.json`、`directing/epNN/shot_list.json`、`edit/epNN/timeline.json`、

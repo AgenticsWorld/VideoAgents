@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-"""footage.py — 现成素材检索/下载/切片原语(mashup 混剪插件的宿主工具链;零第三方依赖)。
+"""footage.py — 现成素材检索/下载/切片原语(混剪项目类型 mashup 的宿主工具链;零第三方依赖)。
 
 依赖外部命令:yt-dlp(检索与下载)、ffmpeg/ffprobe(探测/抽帧/切片)、node(yt-dlp 的
 JS runtime,缺失时部分 YouTube 视频 403)。装机自检用 `doctor` 子命令,任何 Agent
-使用本模块前先跑它——插件 plugin.json 的 requires 字段从不被运行时读取,
-doctor 是唯一拦截点。
+使用本模块前先跑它——外部命令缺失时 doctor 是唯一拦截点。
 
 成本阶梯(设计约束,Agent 按此顺序花流量):
   search(纯元数据,零视频流量) → preview ≤360p(几 MB) → fetch 1080p 区间(几十 MB)。
   正片流量只许花在已经视觉确认过的候选上;严禁整片下载超过 --max-duration 的源。
   素材库(library)通道零流量三档:catalog/search 元数据 → 看库内 sheet/thumbnail
-  (现成 jpg,零下载) → cut 直切库内源片(本地转码)。mashup 插件 v3 起只走此通道。
+  (现成 jpg,零下载) → cut 直切库内源片(本地转码)。混剪流程 v3 起只走此通道。
 
 CLI(全部子命令输出 JSON 到 stdout,便于 Agent 解析;失败 exit 非 0):
   python3 modules/footage.py doctor

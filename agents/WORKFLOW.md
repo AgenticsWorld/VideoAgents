@@ -1323,7 +1323,7 @@ Python 内调用(批量循环时省进程开销):`from modules.genmedia import g
 
 ## 10. Agent 插件机制(团队扩展)
 
-内置 87 个 Agent 覆盖「小说→视频」主流程;主流程之外的衍生业务(如基于世界圣经的衍生小说创作)
+内置 Agent 覆盖「小说→视频」主流程与音频配画 / 数字人 / 混剪三种项目类型(§11);其余衍生业务(如基于世界圣经的衍生小说创作)
 通过**声明式插件**扩展团队,不改内核。插件不含任何可执行代码——SOUL.md 即身份、YAML 即流程,
 与内置 Agent 享受完全相同的派单/评审/闸门待遇。编写规范详见 `plugins/README.md`。
 
@@ -1410,3 +1410,34 @@ plugins/<plugin-name>/
 **白模人物参考图规约(2026-09-09,白模项目=「人物精确空间位置」开启且本组已编译白模)**:只有在本组白模摄影机视频里**实际出现**的人物/生物(该 actor 至少一镜 presence 非 absent/remote、关键帧 visible 非 false、未被该镜 `visible_actor_ids` 排除、且按姿态(站/坐/卧)的**包围盒**落在该镜摄影机画幅内;宿主 `modules/whitebox_refs.appearing_cast` 判定,不计几何遮挡;2026-09-14 起弃用包围球——1.7 m 人物的球半径 0.9 m 横向外扩近 4 倍身宽,把坐在画幅外的人也判成入画,前科 liaozhai3 ep01 grp014 范生)的参考图才进本组 refs;其余同场次人物(镜头外在场、已离场/未入场、缺席/远程)**不挂图、不写 @Image 绑定、正文也不提及**(2026-09-14:Shot 段 staging、【人物】/【主体设定】、Global constraints 里都不写其名字或 id——写「只在画幅外坐着」模型照样会把人画进来;机检 `whitebox_hidden_mention` 在宿主固定段之外发现其 id/白模 label 即按违规报)——`sync_scene_cast.py` 只为出现者补图并在 `scene_cast_refs` 记 `whitebox_hidden` 原因,`sync_whitebox_refs.py --write` 把已挂的多余人物图移出 refs 并重排 `[Image N]`(`Whitebox legend:` 也只列出现者),两者机检(whitebox_cast_ref / whitebox_ref_bound)与 refs_referenced_check 都按违规报;正文仍引用被移除图时宿主不动 refs,须先删正文引用再跑 `--write`。白模链关闭或本组尚未编译时不限制、沿用同场次全员关联。
 
 **对话身体朝向（grp028–grp035 反馈）**：grp028–grp030 的“面向老道儿”被文字“朝南”覆盖，产生约85°偏差；grp031–grp034 则沿用旧稿“并肩朝东”，两人同向。今后先登记对话对象 ID，身体 yaw 由双方同一时刻世界坐标计算，不从画面左右或词语方位直接套角度；面对面两人分别算朝向，不复制同一角度。身体、头部/眼神与行走方向分开：不对视不等于背身；走向矮凳阶段可同向行走，落座交谈前完成转身。逐帧检查正面向量与对象向量的夹角，覆盖走位、起坐、切镜、组间首尾；直接面对面参考误差≤3°。朝向变更后复核正反打是否仍拍到正确面向。同步修订上游动线、逐镜调度、构图、草描、prompt 和白模中的旧朝向，避免重生成恢复错误；具体检查见 docs/whitebox.md。
+
+## 11. 项目类型(2026-10-20)
+
+新建项目向导第一步选**项目类型**,决定这个项目走哪条流程 DAG。类型写进项目 `settings.json#project.type`,建项目时定下、
+此后不可改(设置接口不接受这一段);宿主定义在 `services/runtime/project_types.py`。
+
+| 类型 | `project.type` | 流程 DAG | 专属团队 | 输入(新建向导收) |
+|---|---|---|---|---|
+| 🎬 影视剧(默认) | `film` | `agents/workflow.yaml`(本文 §3–§9) | — | 小说原文 → `novel/original.txt` |
+| 🎙️ 音频配画 | `audio-to-video` | `agents/workflows/audiovideo.yaml` | `15-audio-video/*` + `11-qa/av-sync-qa` | 讲述音频 → `refs/audio/`,文稿 → `refs/text/transcript.txt` |
+| 🧑‍💼 数字人 | `digital-human` | `agents/workflows/digitalhuman.yaml` | `17-digital-human/*` + `11-qa/digital-human-sync-qa` | 音频母带 → `refs/audio/`,人物照片 → `refs/characters/`,文稿可选,人物对应说明 → `brief.md` |
+| ✂️ 混剪 | `mashup` | `agents/workflows/mashup.yaml` | `16-mashup/*` + `11-qa/mashup-qa` | 文稿 → `refs/text/transcript.txt` + `novel/original.txt`,讲述音频(可选)→ `refs/audio/`,素材库 → `settings.json#project.footage_libraries` |
+
+1. **来历**:后三种原是 VideoAgents-Plugins 仓库的同名插件,2026-10-20 并入主程序——成员 SOUL 进 `agents/<类别>/`,
+   DAG 与说明文档进 `agents/workflows/`(`<名>.yaml` + `<名>.md`),不再需要安装/启用。同名插件包在「插件」页标为已并入、
+   不注册成员,也不能再上传安装。
+2. **立项与排产**:总制片的运行提示词按项目类型注入「项目类型」段(流程权威 DAG、输入约定、专属成员、调度纪律)。
+   排产时主流程节点照 `workflow.yaml` 实例化,再并入类型 DAG 的全部节点,并在同一次改动里按其
+   `main_dag_on_start.skip` 把不适用的主流程节点置 `skipped`(条件白名单同 §10.3 第 6 条);类型 DAG 的节点 id 前缀
+   (`av`/`ga`、`mx`/`gm`、`dh`)不与主流程冲突,工作流预览页按前缀归阶段泳道。
+3. **主流程开关按类型强制**:非影视剧项目建项目时宿主强制关闭旁白、对白语音、声画分离、NPC、白模、长镜头、片头片尾,
+   过场模式 = 极简且集尾不处理、每集时长 = 根据内容自动——这些开关只服务小说→视频主流程,在类型流程里要么没有对应节点,
+   要么与「母带即成片声轨、零重编码」冲突。主流程按项目设置注入的条款只约束主流程节点,与类型 DAG 头部授权冲突时以 DAG 为准。
+4. **成员提示词**:类型专属成员带「你属于某项目类型团队」段(流程权威文件、过程件命名空间);被类型流程复用的内置成员
+   (06-art、08-video-gen、10-editing、11-qa 等)带一条「本项目类型」口径提醒:工单与 DAG 节点注释优先于 SOUL 中的主流程默认口径。
+5. **初始化**:新建向导选了音频/照片时先建项目不派单(`defer_init`),把文件传进 `refs/` 后再调
+   `POST /api/v1/projects/<slug>/init` 派总制片初始化;总制片核对输入、汇报缺项,**等用户回复开工**才按类型 DAG 立项派单。
+6. **存量项目**:没有 `settings.json#project` 段的项目按插件时期留下的产物推断类型(`av/audio_map.json` → 音频配画;
+   `mashup/audio_map.json`、`footage_source.json` 或 `beat_track.json` → 混剪;`digital-human/input_manifest.json` → 数字人),
+   都没有 = 影视剧;下次保存项目设置时推断结果写回。
+7. **控制台**:左侧 Agent 列表只列共用成员与当前项目类型的专属团队;「参考文件」页在非影视剧项目里把「讲述音频」分类排第一。

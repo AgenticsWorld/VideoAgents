@@ -167,6 +167,24 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .modal .trclose-opts>span{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim)}   /* 集尾收束附属项(2026-09-26):样式走类,trCloseSync 只切 display */
 .modal .rhythm-detail b{color:var(--text);font-weight:500}
 .np-step{display:flex;flex-direction:column;gap:12px}
+/* 新建向导第一步「项目类型」(2026-10-20):四张图标卡 + 选中类型的说明;.np-hide 由 npApplyType 按 data-np-types 加,
+   用类而不是 style.display,免得与各行自身的显隐逻辑(白模/背景图模式等)互相覆盖 */
+.np-types{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.np-type{display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 6px 12px;border:1px solid var(--border);border-radius:10px;background:var(--panel);color:var(--text);cursor:pointer}
+.np-type:hover{border-color:var(--dim)}
+.np-type.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.np-type-ico{font-size:30px;line-height:1}
+.np-type-nm{font-size:13px}
+.np-type-desc{font-size:13px;line-height:1.7;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+.np-type-need{color:var(--dim);font-size:12px;margin-top:6px}
+.np-files{flex:1;min-width:0;display:flex;align-items:center;gap:8px}
+.np-picked{flex:1;min-width:0;font-size:12px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.np-libs{flex:1;min-width:0;max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:4px 8px;background:var(--panel);font-size:12px}
+.modal .row .np-libs label{display:flex;align-items:center;gap:6px;width:auto;flex:none;color:var(--text);font-size:12px;padding:3px 0;cursor:pointer}
+.modal .row .np-libs input{flex:none}
+.np-libs .np-lib-meta{color:var(--dim)}
+.np-libs .np-libs-empty{color:var(--dim);padding:4px 0;line-height:1.6}
+.np-hide{display:none!important}
 .modal .actions{display:flex;justify-content:flex-end;gap:10px}
 #eng-modal .box{width:520px}
 #eng-modal .eng-cmd{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:6px 8px;word-break:break-all;user-select:all}
@@ -411,21 +429,51 @@ a.hdr-icon:hover{border-color:var(--accent)}
 <div id="np-modal" class="modal">
   <div class="box" style="width:580px">
     <h3>🆕 新建项目 — <span id="np-step-label" style="color:var(--accent)"></span></h3>
-    <div class="np-step" data-step="1">
+    <!-- 项目类型(2026-10-20,services/runtime/project_types.py):第一步选类型,后续步骤与字段按类型增减(data-np-types 列出适用类型) -->
+    <div class="np-step" data-step="type">
+      <div class="np-types">
+        <button type="button" class="np-type" data-type="film"><span class="np-type-ico">🎬</span><span class="np-type-nm">影视剧</span></button>
+        <button type="button" class="np-type" data-type="audio-to-video"><span class="np-type-ico">🎙️</span><span class="np-type-nm">音频配画</span></button>
+        <button type="button" class="np-type" data-type="digital-human"><span class="np-type-ico">🧑‍💼</span><span class="np-type-nm">数字人</span></button>
+        <button type="button" class="np-type" data-type="mashup"><span class="np-type-ico">✂️</span><span class="np-type-nm">混剪</span></button>
+      </div>
+      <div class="np-type-desc" data-np-types="film">
+        <div>把小说改编成多集视频:剧情理解 → 世界观与角色 → 美术 → 剧本 → 分镜 → 视频生成 → 配音配乐 → 剪辑,关键节点停下来等你签字。</div>
+        <div class="np-type-need">需要:小说原文(可留空,之后再放)</div></div>
+      <div class="np-type-desc" data-np-types="audio-to-video">
+        <div>给一段讲述音频配上 AI 生成的画面。音频原样作为成片声轨(不转码、不剪裁),画面按音频实测时长整秒切分去贴合,适合历史故事、知识讲解、播客。</div>
+        <div class="np-type-need">需要:讲述音频 + 对应文稿</div></div>
+      <div class="np-type-desc" data-np-types="digital-human">
+        <div>用人物照片和一段对话音频生成口型同步的数字人视频:按说话人切换单人全屏画面,最后接回原始音频。支持多人对话,没有文稿会自动语音转写。</div>
+        <div class="np-type-need">需要:音频 + 每个说话人一张照片</div></div>
+      <div class="np-type-desc" data-np-types="mashup">
+        <div>不生成画面,从本地素材库的现成镜头里挑片配画:按文稿逐句找画面、按语音逐词对齐切点,音频原样作为成片声轨。没有讲述音频时可按文稿合成配音。</div>
+        <div class="np-type-need">需要:文稿 + 素材库(先在 设置 → 高级 → 素材库 准备好)</div></div>
+    </div>
+    <div class="np-step" data-step="basic" style="display:none">
       <div class="row"><label>项目名称</label>
         <input type="text" id="np-name" placeholder="仅英文字母和数字,如 MyNovel01"></div>
-      <div class="row" style="align-items:flex-start"><label style="padding-top:6px">故事文本</label>
+      <div class="row" data-np-types="audio-to-video digital-human mashup"><label><span data-np-types="audio-to-video mashup">讲述音频</span><span data-np-types="digital-human">音频母带</span></label>
+        <div class="np-files"><button type="button" class="np-pick" data-pick="np-audio">选择文件</button><span class="np-picked" id="np-audio-picked"></span>
+          <input type="file" id="np-audio" accept=".mp3,.wav,.flac,.m4a,.aac,.ogg" hidden></div></div>
+      <div class="row" data-np-types="digital-human"><label>人物照片</label>
+        <div class="np-files"><button type="button" class="np-pick" data-pick="np-images">选择文件</button><span class="np-picked" id="np-images-picked"></span>
+          <input type="file" id="np-images" accept=".png,.jpg,.jpeg,.webp" multiple hidden></div></div>
+      <div class="row" style="align-items:flex-start"><label style="padding-top:6px"><span data-np-types="film">故事文本</span><span data-np-types="audio-to-video mashup">文稿</span><span data-np-types="digital-human">文稿(可选)</span></label>
         <textarea id="np-novel" style="height:150px" placeholder="粘贴小说原文(可留空,之后手动放入 novel/ 目录)"></textarea></div>
-      <div class="row" style="align-items:flex-start"><label style="padding-top:6px">内容定位</label>
+      <div class="row" style="align-items:flex-start" data-np-types="mashup"><label style="padding-top:6px">素材库</label>
+        <div class="np-libs" id="np-libs"></div></div>
+      <div class="row" style="align-items:flex-start"><label style="padding-top:6px"><span data-np-types="film audio-to-video mashup">内容定位</span><span data-np-types="digital-human">人物对应说明</span></label>
         <textarea id="np-brief" style="height:90px" placeholder="如:剧情片还是纪录片、题材类型与基调、目标受众、改编取舍……"></textarea></div>
-      <div class="row" style="align-items:flex-start"><label style="padding-top:6px">画面风格</label>
+      <div class="row" style="align-items:flex-start" data-np-types="film audio-to-video"><label style="padding-top:6px">画面风格</label>
         <div style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0">
           <button type="button" id="np-style-pick" style="align-self:flex-start">🎨 选择风格库</button>
           <textarea id="np-style" style="flex:none;height:74px" placeholder="画面视觉风格的系统提示词:影像质感、色调、光影、构图……可从风格库选择或自行填写"></textarea>
         </div></div>
-      <div class="note">创建后总制片将自动完成项目初始化:建目录、小说文本清洗与规范分章;内容定位、画面风格与叙事节奏会注入整个 workflow 每个成员的系统提示词,作为最高创作前提。初始化完成后总制片会提醒你从预览菜单的「参考文件」页上传参考素材。接下来几步完成项目初始设置(均有默认值,创建后可在 🎛️ 项目设置菜单随时修改)</div>
+      <div class="note" data-np-types="film">创建后总制片将自动完成项目初始化:建目录、小说文本清洗与规范分章;内容定位、画面风格与叙事节奏会注入整个 workflow 每个成员的系统提示词,作为最高创作前提。初始化完成后总制片会提醒你从预览菜单的「参考文件」页上传参考素材。接下来几步完成项目初始设置(均有默认值,创建后可在 🎛️ 项目设置菜单随时修改)</div>
+      <div class="note" data-np-types="audio-to-video digital-human mashup">创建时把选中的文件放进项目的参考文件里(没选的可之后在预览菜单「参考文件」页补传)。总制片会核对素材并汇报缺项;素材齐了你回复开工,它再按该类型的流程立项派单。旁白、片头片尾、白模等影视剧专用开关已按类型关闭</div>
     </div>
-    <div class="np-step" data-step="2" style="display:none">
+    <div class="np-step" data-step="pace" style="display:none">
       <div class="row" style="align-items:flex-start"><label style="padding-top:6px">叙事节奏</label>
         <div class="rhythm-box" data-prefix="np" style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0">
           <div style="display:flex;gap:8px;align-items:center"><span class="rhythm-kind">单集节奏</span><select id="np-rhythm-episode" style="flex:1"></select></div>
@@ -477,7 +525,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <div class="row"><label>新场景首镜</label><input type="checkbox" id="npd-trestab" style="flex:none"><span style="color:var(--dim);font-size:12px">必须先出定场镜头(设计期规则,storyboard / shot-planning 照做)</span></div>
       </div>
     </div>
-    <div class="np-step" data-step="3" style="display:none">
+    <div class="np-step" data-step="model" style="display:none">
       <div class="row"><label>默认值</label><div class="sg-presets" data-sg-presets="npsg"><button type="button" data-preset="sd20">Seedance 2.0</button><button type="button" data-preset="sd25">Seedance 2.5</button><button type="button" data-preset="mmh3">MiniMax H3</button><button type="button" data-preset="wan30">Wan 3.0</button></div></div>
       <div class="note" id="npsg-model-hint" style="display:none;color:#e8a33d"></div>
       <div class="row"><label>最大分镜组时长(秒)</label><input type="number" id="npsg-maxs" min="4" max="30" step="1" value="30"></div>
@@ -485,9 +533,9 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <div class="row"><label>最大参考视频数量</label><input type="number" id="npsg-vids" min="0" max="10" step="1" value="10"></div>
       <div class="row"><label>最大参考音频数量</label><input type="number" id="npsg-auds" min="0" max="10" step="1" value="10"></div>
       <div class="note">约束每个生成组(generation group)的总时长与参考素材数量上限。这些数值需要与所选视频生成模型的能力对应(Seedance 2.0 系列:组时长 ≤15s、参考图 ≤9、参考视频 ≤3、参考音频 ≤3;Seedance 2.5:组时长 ≤30s、参考图 ≤30、参考视频 ≤10、参考音频 ≤10),如果不清楚建议不要修改。</div>
-      <div class="note">选择 Seedance 2.0 时自动关闭「白模」,其他模型默认开启;可在下一步「输出设置」再手动调整。</div>
+      <div class="note" data-np-types="film">选择 Seedance 2.0 时自动关闭「白模」,其他模型默认开启;可在下一步「输出设置」再手动调整。</div>
     </div>
-    <div class="np-step" data-step="4" style="display:none">
+    <div class="np-step" data-step="output" style="display:none">
       <div class="row"><label>输出画幅</label>
         <select id="npo-aspect" style="flex:1">
           <option value="youtube">YouTube 画幅(16:9)</option>
@@ -502,14 +550,14 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <!-- 发布渠道 2026-10-07 移到「🎞️ 成片发布」页(每渠道勾选 + 发布按钮),新建项目默认不选 -->
       <div class="row"><label>输出语言</label>
         <select id="npo-lang" style="flex:1" data-no-i18n></select></div>
-      <div class="row"><label>草稿分辨率</label>
+      <div class="row" data-np-types="film audio-to-video digital-human"><label>草稿分辨率</label>
         <select id="npo-draft-res" style="flex:1">
           <option value="480p">480p</option>
           <option value="720p">720p</option>
           <option value="1080p">1080p</option>
           <option value="4k">4K</option>
         </select></div>
-      <div class="row"><label>成片分辨率</label>
+      <div class="row" data-np-types="film audio-to-video digital-human"><label>成片分辨率</label>
         <select id="npo-final-res" style="flex:1">
           <option value="480p">480p</option>
           <option value="720p">720p</option>
@@ -517,10 +565,10 @@ a.hdr-icon:hover{border-color:var(--accent)}
           <option value="2k">2K</option>
           <option value="4k">4K</option>
         </select></div>
-      <div class="row"><label>白模</label>
+      <div class="row" data-np-types="film"><label>白模</label>
         <input type="checkbox" id="npo-spatial" style="flex:none" checked>
         <span id="npo-spatial-hint" style="color:var(--dim);font-size:12px">建场景白模，并导出白模摄影机视角视频作为视频的参考定位人物</span></div>
-      <div class="row" id="npo-plate-mode-row"><label>背景图模式</label>
+      <div class="row" id="npo-plate-mode-row" data-np-types="film"><label>背景图模式</label>
         <select id="npo-plate-mode" style="flex:none">
           <option value="grid" selected>九宫格自动补图</option>
           <option value="grid_manual">九宫格手动补图</option>
@@ -528,46 +576,46 @@ a.hdr-icon:hover{border-color:var(--accent)}
           <option value="world" hidden>世界模型</option><!-- 2026-10-04 用户拍板:界面露两项(九宫格自动补图 默认 / 九宫格手动补图);全景图/世界模型隐藏但保留,存量项目旧值仍能正确显示 -->
         </select>
         <button type="button" class="info-btn" data-info="npo-plate-mode-hint" title="说明">i</button></div>
-      <div class="note info-note" id="npo-plate-mode-hint">白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖)。两种模式都先为每个场景以俯视图为参考一次生成一张 3×3 宫格(同一站位朝八个方向各一格,外加一格仰拍;站位和机高按本集机位自动确定),拆成 9 张背景图入库,每镜按白模机位自动选最合适的一格。区别在选不到合适格子(朝向/俯仰/距离/机高超限)时:九宫格自动补图 = 自动按本镜机位补出一张(每张计一次出图费用);九宫格手动补图 = 不自动出图,由你在场景预览页的全景图或世界模型视窗里用「💾 背景图」手工截取。</div>
-      <div class="row" id="npo-scene-plates-row"><label>场景图模式</label>
+      <div class="note info-note" id="npo-plate-mode-hint" data-np-types="film">白模开启时分镜背景图的参考来源(全局设置,场景预览页可按场景覆盖)。两种模式都先为每个场景以俯视图为参考一次生成一张 3×3 宫格(同一站位朝八个方向各一格,外加一格仰拍;站位和机高按本集机位自动确定),拆成 9 张背景图入库,每镜按白模机位自动选最合适的一格。区别在选不到合适格子(朝向/俯仰/距离/机高超限)时:九宫格自动补图 = 自动按本镜机位补出一张(每张计一次出图费用);九宫格手动补图 = 不自动出图,由你在场景预览页的全景图或世界模型视窗里用「💾 背景图」手工截取。</div>
+      <div class="row" id="npo-scene-plates-row" data-np-types="film"><label>场景图模式</label>
         <select id="npo-scene-plates" style="flex:none">
           <option value="auto">自动:正向必出,反向按分镜按需</option>
           <option value="single">只出正向</option>
           <option value="pair">正反两张都出</option>
         </select>
         <button type="button" class="info-btn" data-info="npo-scene-plates-hint" title="说明">i</button></div>
-      <div class="note info-note" id="npo-scene-plates-hint">白模关闭时的场景一致性方案:每场景一张正向图(门口往内看),分镜看回望方向时再补一张反向图;平面动画/单面布景选「只出正向」</div>
-      <div class="row"><label>NPC 参与构图</label>
+      <div class="note info-note" id="npo-scene-plates-hint" data-np-types="film">白模关闭时的场景一致性方案:每场景一张正向图(门口往内看),分镜看回望方向时再补一张反向图;平面动画/单面布景选「只出正向」</div>
+      <div class="row" data-np-types="film"><label>NPC 参与构图</label>
         <select id="npo-npc" style="flex:1">
           <option value="auto">按场次判定(默认)</option>
           <option value="off">全部关闭</option>
         </select>
         <button type="button" class="info-btn" data-info="npo-info-npc" title="说明">i</button></div>
-      <div class="note info-note" id="npo-info-npc">在画面里加入路人、前景物体等 NPC 元素补充空间,让场景有前中后三层。按场次判定=剧本拆解时逐场自动判断是否开启与密度(稀疏/适中/热闹),可在剧本预览页或故事板页按场次改为开或关;全部关闭=所有场次都不加。剧本里点名的群演不受影响</div>
-      <div class="row"><label>旁白</label>
+      <div class="note info-note" id="npo-info-npc" data-np-types="film">在画面里加入路人、前景物体等 NPC 元素补充空间,让场景有前中后三层。按场次判定=剧本拆解时逐场自动判断是否开启与密度(稀疏/适中/热闹),可在剧本预览页或故事板页按场次改为开或关;全部关闭=所有场次都不加。剧本里点名的群演不受影响</div>
+      <div class="row" data-np-types="film"><label>旁白</label>
         <input type="checkbox" id="npo-narration" style="flex:none">
         <button type="button" class="info-btn" data-info="npo-info-narration" title="说明">i</button></div>
-      <div class="note info-note" id="npo-info-narration">启用后按流程产出旁白稿与旁白配音轨;关闭=约定全片不出现任何旁白,叙事全部由画面与对白承担。仅控制旁白者叙述;人物画外/V.O. 由「声画分离」控制</div>
-      <div class="row"><label>对白配音</label>
+      <div class="note info-note" id="npo-info-narration" data-np-types="film">启用后按流程产出旁白稿与旁白配音轨;关闭=约定全片不出现任何旁白,叙事全部由画面与对白承担。仅控制旁白者叙述;人物画外/V.O. 由「声画分离」控制</div>
+      <div class="row" data-np-types="film"><label>对白配音</label>
         <select id="npo-dialogue-voice" style="flex:1">
           <option value="native">视频原声(默认)</option>
           <option value="dubbing">后期配音</option>
         </select>
         <button type="button" class="info-btn" data-info="npo-info-voice" title="说明">i</button></div>
-      <div class="note info-note" id="npo-info-voice">对白配音:视频原声=对白语音由视频模型随画面原生合成,不做对白 TTS;后期配音=组视频生成后按画面中人物开口的时间位置,结合角色嗓音设定用 TTS 逐句合成该角色对白并尽量贴合口型(替换对白轨,画面不变)</div>
-      <div class="row"><label>生成对白语音</label>
+      <div class="note info-note" id="npo-info-voice" data-np-types="film">对白配音:视频原声=对白语音由视频模型随画面原生合成,不做对白 TTS;后期配音=组视频生成后按画面中人物开口的时间位置,结合角色嗓音设定用 TTS 逐句合成该角色对白并尽量贴合口型(替换对白轨,画面不变)</div>
+      <div class="row" data-np-types="film"><label>生成对白语音</label>
         <input type="checkbox" id="npo-dialogue-tts" style="flex:none">
       <span class="note" id="npo-dialogue-tts-lock" style="display:none;margin:0;flex:1">后期配音模式下必须开启</span>
         <button type="button" class="info-btn" data-info="npo-info-dialogue-tts" title="说明">i</button></div>
-      <div class="note info-note" id="npo-info-dialogue-tts">开启后不论对白配音选哪种,项目都按人物嗓音模板为全部对白维护一份逐句 TTS 语音库(台词或音色变了在使用时自动更新),用于动态样片、白模样片与后期配音</div>
-      <div class="row"><label>声画分离</label>
+      <div class="note info-note" id="npo-info-dialogue-tts" data-np-types="film">开启后不论对白配音选哪种,项目都按人物嗓音模板为全部对白维护一份逐句 TTS 语音库(台词或音色变了在使用时自动更新),用于动态样片、白模样片与后期配音</div>
+      <div class="row" data-np-types="film"><label>声画分离</label>
         <select id="npo-sound-split" style="flex:1">
           <option value="off">关(默认)</option>
           <option value="script_only">仅剧本标记</option>
           <option value="auto">自动</option>
         </select>
         <button type="button" class="info-btn" data-info="npo-info-sound-split" title="说明">i</button></div>
-      <div class="note info-note" id="npo-info-sound-split">人物台词可以不在画内开口:画外 O.S.(说话人在场但不入画)/ V.O.(内心独白、读信、回忆声)。画外句在后期按该人物声线合成,不进组视频生成。自动=剧本标记 + 分镜按白名单自动转画外;仅剧本标记=只认剧本写的 (O.S.)/(V.O.);关=全部台词画内开口。与旁白开关正交:旁白只管旁白者声线</div>
+      <div class="note info-note" id="npo-info-sound-split" data-np-types="film">人物台词可以不在画内开口:画外 O.S.(说话人在场但不入画)/ V.O.(内心独白、读信、回忆声)。画外句在后期按该人物声线合成,不进组视频生成。自动=剧本标记 + 分镜按白名单自动转画外;仅剧本标记=只认剧本写的 (O.S.)/(V.O.);关=全部台词画内开口。与旁白开关正交:旁白只管旁白者声线</div>
     </div>
     <div class="err" id="np-err"></div>
     <div class="actions">
@@ -1315,8 +1363,18 @@ function setProject(name){
   }
   sel.value=name;
 }
+// 当前项目的项目类型(settings.json#project.type):左侧只列共用成员 + 本类型专属团队(project_types.of_agent)
+let PROJ_TYPE='film';
+async function loadProjType(){
+  const p=curProj();
+  try{
+    const c=await api('/api/v1/projects/'+encodeURIComponent(p)+'/config');
+    if(p===curProj()){PROJ_TYPE=(c.project||{}).type||'film';renderAgents()}
+  }catch(e){}
+}
 function afterProjectSwitch(){
   savePrefs();
+  loadProjType();
   initWatchdog();   // 自动运行逐项目独立:切项目刷新 🤖 开关状态
   renderRuns();renderAgents();   // 运行面板/左侧状态只显示当前项目的任务
   if(CURRENT)selectAgent(CURRENT);   // 各项目对话独立:切项目重载当前 Agent 的对话
@@ -1381,16 +1439,77 @@ $('#proj-import-file').onchange=async()=>{
 };
 
 /* ---------- 新建项目向导(基础信息→视频节奏→模型限制→输出设置;2026-09-13 时长设置改名视频节奏并提到第二步、叙事节奏从基础信息移入;片头片尾步删除,开关移到后期处理页,新建默认三段全关由服务端兜底;2026-09-09 模型限制提到第二步;审核设置不进向导,新建默认全 0,只能在项目设置「审核设置」修改,2026-09-07) ---------- */
-const NP_STEP_NAMES=['基础信息','视频节奏','模型限制','输出设置'];
-let NP_STEP=1;
+/* 项目类型(2026-10-20,services/runtime/project_types.py):第一步选类型,各类型走的步骤不同——影视剧专用的「视频节奏」
+   其它类型都不走,「模型限制」只有生成视频的音频配画保留;字段按 data-np-types 显隐,服务端再按类型强制关掉主流程专用开关 */
+const NP_TYPE_STEPS={film:['type','basic','pace','model','output'],'audio-to-video':['type','basic','model','output'],
+  'digital-human':['type','basic','output'],mashup:['type','basic','output']};
+const NP_STEP_LABELS={type:'项目类型',basic:'基础信息',pace:'视频节奏',model:'模型限制',output:'输出设置'};
+const NP_TEXT_PH={film:'粘贴小说原文(可留空,之后手动放入 novel/ 目录)',
+  'audio-to-video':'粘贴与讲述音频逐字对应的文稿(用来对齐时间轴)',
+  'digital-human':'可留空:没有文稿会自动语音转写;有文稿请逐段写明起止时间、说话人和台词',
+  mashup:'粘贴讲述文稿(画面按文稿逐句匹配;没有讲述音频时按它合成配音)'};
+const NP_BRIEF_PH={film:'如:剧情片还是纪录片、题材类型与基调、目标受众、改编取舍……',
+  'audio-to-video':'如:题材与时代背景、基调、目标受众、画面取舍……',
+  'digital-human':'说明每个说话人用哪张照片,如:第一个出现的说话人是主持人,用 host.png;第二个是嘉宾,用 guest.png',
+  mashup:'如:题材与基调、画面偏好;没有讲述音频时可写配音的声线与语气……'};
+const NP_MAX_FILE=100*1024*1024;   // 与服务端参考文件上传上限 MAX_REF_UPLOAD 一致
+let NP_TYPE='film',NP_STEP=1;
+const npSteps=()=>NP_TYPE_STEPS[NP_TYPE]||NP_TYPE_STEPS.film;
+function npApplyType(type){
+  NP_TYPE=NP_TYPE_STEPS[type]?type:'film';
+  document.querySelectorAll('#np-modal .np-type').forEach(b=>b.classList.toggle('active',b.dataset.type===NP_TYPE));
+  document.querySelectorAll('#np-modal [data-np-types]').forEach(el=>
+    el.classList.toggle('np-hide',!el.dataset.npTypes.split(' ').includes(NP_TYPE)));
+  $('#np-novel').placeholder=t(NP_TEXT_PH[NP_TYPE]);
+  $('#np-brief').placeholder=t(NP_BRIEF_PH[NP_TYPE]);
+  ['np-audio','np-images'].forEach(id=>{$('#'+id+'-picked').textContent=npPickedText(id)});
+  if(NP_TYPE==='mashup')npLoadLibs();
+}
+document.querySelectorAll('#np-modal .np-type').forEach(b=>b.onclick=()=>{npApplyType(b.dataset.type);npShowStep(NP_STEP)});   // 总步数随类型变
+// 讲述音频 / 人物照片:先只在本地选好,创建项目后逐个传进 refs/(defer_init → references → init)
+function npPickedText(id){
+  const fs=[...$('#'+id).files];
+  if(fs.length)return fs.map(f=>f.name+' · '+(f.size/1048576).toFixed(1)+' MB').join('、');
+  if(id==='np-images')return t('未选择(每个说话人一张,也可创建后在参考文件页上传)');
+  return t(NP_TYPE==='mashup'?'未选择(可选:没有讲述音频时按文稿合成配音)':'未选择(也可创建后在参考文件页上传)');
+}
+document.querySelectorAll('#np-modal .np-pick').forEach(b=>{
+  const inp=$('#'+b.dataset.pick);
+  b.onclick=()=>inp.click();
+  inp.onchange=()=>{$('#'+inp.id+'-picked').textContent=npPickedText(inp.id)};
+});
+function npFiles(){   // [{file,category}]:只收当前类型用得上的
+  if(NP_TYPE==='film')return [];
+  const out=[...$('#np-audio').files].map(file=>({file,category:'audio'}));
+  if(NP_TYPE==='digital-human')out.push(...[...$('#np-images').files].map(file=>({file,category:'characters'})));
+  return out;
+}
+// 混剪素材库:只列已分割完成(ready 且有分镜)的库,多选
+let NP_LIBS_REQ=0;
+const npCheckedLibs=()=>[...document.querySelectorAll('#np-libs input:checked')].map(i=>i.value);
+async function npLoadLibs(){
+  const box=$('#np-libs'),checked=new Set(npCheckedLibs()),req=++NP_LIBS_REQ;
+  if(!box.childElementCount)box.innerHTML=`<div class="np-libs-empty">${esc(t('读取中…'))}</div>`;
+  let list=[];
+  try{list=(await api('/api/v1/footage/projects')).projects||[]}
+  catch(e){if(req===NP_LIBS_REQ)box.innerHTML=`<div class="np-libs-empty">${esc(t('素材库列表读取失败:')+e.message)}</div>`;return}
+  if(req!==NP_LIBS_REQ)return;
+  const ready=list.filter(x=>x.status==='ready'&&x.clip_count>0);
+  box.innerHTML=ready.length?ready.map(x=>{
+    const nm=x.title||(x.source||{}).title||x.name;
+    return `<label><input type="checkbox" value="${esc(x.name)}"${checked.has(x.name)?' checked':''}><span>${esc(nm)}</span>`
+      +`<span class="np-lib-meta">${esc(I18N.f('{n} 个分镜 · 已分析 {a}',{n:x.clip_count,a:x.analyzed_count||0}))}${nm!==x.name?' · '+esc(x.name):''}</span></label>`;
+  }).join(''):`<div class="np-libs-empty">${esc(t('还没有可用的素材库:先在 设置 → 高级 → 素材库 导入源视频并完成分割'))}</div>`;
+}
 function npShowStep(n){
+  const steps=npSteps(),key=steps[n-1];
   NP_STEP=n;
-  document.querySelectorAll('.np-step').forEach(d=>d.style.display=(+d.dataset.step===n)?'':'none');
+  document.querySelectorAll('.np-step').forEach(d=>d.style.display=(d.dataset.step===key)?'':'none');
   $('#np-step-label').textContent=I18N.f('第 {n}/{total} 步 · {name}',
-    {n,total:NP_STEP_NAMES.length,name:t(NP_STEP_NAMES[n-1])});
+    {n,total:steps.length,name:t(NP_STEP_LABELS[key])});
   $('#np-prev').style.display=n>1?'':'none';
-  $('#np-skip').style.display=(n>1&&n<NP_STEP_NAMES.length)?'':'none';
-  $('#np-ok').textContent=n<NP_STEP_NAMES.length?'下一步':'创建';
+  $('#np-skip').style.display=(n>2&&n<steps.length)?'':'none';   // 类型、基础信息两步之后才能跳
+  $('#np-ok').textContent=n<steps.length?'下一步':'创建';
   $('#np-err').textContent='';
 }
 function npInitOnce(){   // 语言下拉首次打开时构建(OUT_LANGS 在下方声明)
@@ -1515,6 +1634,8 @@ function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置�
 function openNpModal(){
   npInitOnce();
   $('#np-name').value='';$('#np-novel').value='';$('#np-brief').value='';$('#np-style').value='';
+  $('#np-audio').value='';$('#np-images').value='';$('#np-libs').innerHTML='';
+  npApplyType('film');   // 默认影视剧
   npResetDefaults();
   NP_VIDEO_MODEL=null;NP_SG_TOUCHED=false;npsgModelHint();
   const vmReq=++NP_VM_REQ;
@@ -1523,18 +1644,21 @@ function openNpModal(){
   npShowStep(1);
   trModeApply('npd',{mode:'classic'});   // 过场模式(2026-09-24):新项目默认经典
   $('#np-modal').style.display='flex';
-  $('#np-name').focus();
+  document.querySelector('#np-modal .np-type.active')?.focus();
 }
 function npValidateStep(n){   // 返回错误文案,''=通过(规则与各设置弹窗/服务端校验一致)
-  if(n===1){
+  const key=npSteps()[n-1];
+  if(key==='basic'){
     if(!/^[A-Za-z0-9]+$/.test($('#np-name').value.trim()))return '项目名称只能使用英文字母和数字';
-  }else if(n===3){   // 模型限制
+    const big=npFiles().find(x=>x.file.size>NP_MAX_FILE);
+    if(big)return I18N.f('文件超过 100 MB:{name}',{name:big.file.name});
+  }else if(key==='model'){   // 模型限制
     return sgValidate(parseFloat($('#npsg-maxs').value),parseInt($('#npsg-imgs').value),
       parseInt($('#npsg-vids').value),parseInt($('#npsg-auds').value));
-  }else if(n===4){   // 输出设置
+  }else if(key==='output'){   // 输出设置
     if($('#npo-aspect').value==='custom'&&!/^\d+\s*:\s*\d+$/.test($('#npo-custom').value.trim()))
       return '自定义画幅格式:宽:高,如 21:9';
-  }else if(n===2){   // 视频节奏(时长)
+  }else if(key==='pace'){   // 视频节奏(时长)
     trModeInit('npd');
     const ep=parseFloat($('#npd-ep').value),mn=parseFloat($('#npd-smin').value),mx=parseFloat($('#npd-smax').value);
     if($('#npd-trmode').value==='custom'){const pct=parseFloat($('#npd-trpct').value);if(!(pct>=0&&pct<=30))return '过场时长预算需在 0–30% 之间'}
@@ -1574,20 +1698,37 @@ function npCollectSettings(){   // 不含 review:新建项目审核全 0(评委 
   };
 }
 async function npCreate(){
-  const name=$('#np-name').value.trim();
+  const name=$('#np-name').value.trim(),type=NP_TYPE,files=npFiles();
   const btn=$('#np-ok'),skip=$('#np-skip');
   const old=btn.textContent;
   btn.disabled=skip.disabled=true;btn.textContent='创建中…';
   $('#np-err').textContent='';
+  const body={name,project_type:type,novel:$('#np-novel').value,brief:$('#np-brief').value,settings:npCollectSettings()};
+  if(type==='film'||type==='audio-to-video')body.style=$('#np-style').value;
+  if(type==='film')body.rhythm=rhythmCollect('np');
+  if(type==='mashup')body.footage_libraries=npCheckedLibs();
+  if(files.length)body.defer_init=true;   // 先把音频/照片传进 refs/ 再派初始化,总制片一次看全
+  let created=false;
   try{
-    await api('/api/v1/projects',{name,novel:$('#np-novel').value,brief:$('#np-brief').value,
-      style:$('#np-style').value,rhythm:rhythmCollect('np'),settings:npCollectSettings()});
+    await api('/api/v1/projects',body);created=true;
+    const failed=[];
+    for(const [i,{file,category}] of files.entries()){
+      btn.textContent=I18N.f('上传中 {n}/{total}…',{n:i+1,total:files.length});
+      try{
+        const r=await fetch('/api/v1/projects/'+encodeURIComponent(name)+'/references?category='+category
+          +'&filename='+encodeURIComponent(file.name),{method:'POST',body:file});
+        if(!r.ok)throw new Error((await r.json()).detail||r.status);
+      }catch(e){failed.push(file.name+'('+e.message+')')}
+    }
+    if(files.length)await api('/api/v1/projects/'+encodeURIComponent(name)+'/init',{});
     await initProjects(name);
     savePrefs();
+    loadProjType();
     $('#np-modal').style.display='none';
+    if(failed.length)projImportMsg(t('项目已创建,以下文件上传失败,请到「参考文件」页补传:')+failed.join('、'),{done:true,error:true});
     const d=AGENTS.find(a=>a.dispatcher);
     if(d)selectAgent(d.id);   // 跳到总制片,看初始化进度与 refs 提醒
-  }catch(e){$('#np-err').textContent='创建失败:'+e.message}
+  }catch(e){$('#np-err').textContent=(created?t('项目已创建,但派发初始化失败:'):t('创建失败:'))+e.message}
   btn.disabled=skip.disabled=false;btn.textContent=old;
 }
 $('#np-cancel').onclick=()=>$('#np-modal').style.display='none';
@@ -1595,11 +1736,11 @@ $('#np-prev').onclick=()=>npShowStep(NP_STEP-1);
 $('#np-ok').onclick=async()=>{
   const err=npValidateStep(NP_STEP);
   if(err){$('#np-err').textContent=err;return}
-  if(NP_STEP<NP_STEP_NAMES.length){npShowStep(NP_STEP+1);return}
+  if(NP_STEP<npSteps().length){npShowStep(NP_STEP+1);return}
   await npCreate();
 };
 $('#np-skip').onclick=async()=>{   // 后续步骤按当前值(未改即默认)保存;有问题跳到出错步
-  for(let i=1;i<=NP_STEP_NAMES.length;i++){
+  for(let i=1;i<=npSteps().length;i++){
     const err=npValidateStep(i);
     if(err){npShowStep(i);$('#np-err').textContent=err;return}
   }
@@ -3015,21 +3156,27 @@ $('#res-ok').onclick=async()=>{
 async function plugRefreshAgents(){                    // 启停/装卸后左侧 Agent 列表立即生效
   try{AGENTS=await api('/api/v1/agents?refresh=1');renderAgents()}catch(e){}
 }
+const PLUG_INTEGRATED={'audio-to-video':'音频配画','digital-human':'数字人',mashup:'混剪'};   // 2026-10-20 并入主程序的插件 → 项目类型名
 function plugRow(p){
   const d=document.createElement('div');
   d.style.cssText='border:1px solid var(--border);border-radius:8px;padding:9px 12px';
-  const st=p.errors.length?`<span style="color:var(--red)">${t('无效')}</span>`
+  const merged=p.integrated&&PLUG_INTEGRATED[p.integrated];
+  if(merged)p={...p,errors:[]};   // 已并入的旧包:不算无效,只提示可删
+  const st=merged?`<span style="color:var(--accent)">${t('已并入主程序')}</span>`
+    :p.errors.length?`<span style="color:var(--red)">${t('无效')}</span>`
     :(p.enabled?`<span style="color:var(--green)">${t('已启用')}</span>`:`<span style="color:var(--dim)">${t('已停用')}</span>`);
   d.innerHTML=`<div style="display:flex;align-items:center;gap:8px">
       <b>${esc(p.name)}</b><span style="color:var(--dim);font-size:11px">${esc(p.version||'')}</span>
       <span style="font-size:12px">${st}</span>
       <span style="margin-left:auto;display:flex;gap:6px">
-        <button class="plug-toggle" style="font-size:11px;padding:2px 8px">${p.enabled?t('停用'):t('启用')}</button>
+        ${merged?'':`<button class="plug-toggle" style="font-size:11px;padding:2px 8px">${p.enabled?t('停用'):t('启用')}</button>`}
         ${p.builtin?'':`<button class="plug-del" style="font-size:11px;padding:2px 8px;color:var(--red)">${t('删除')}</button>`}</span></div>
     <div style="color:var(--dim);font-size:12px;margin-top:3px">${esc(p.description||'')}</div>
-    <div style="color:var(--dim);font-size:11.5px;margin-top:2px">${I18N.f(t('{n} 个 Agent'),{n:p.agents.length})}${p.workflows.length?' · '+esc(p.workflows.join(', ')):''}</div>
-    ${p.errors.length?`<div style="color:var(--red);font-size:11.5px;margin-top:3px">${p.errors.map(esc).join('<br>')}</div>`:''}`;
-  d.querySelector('.plug-toggle').onclick=async()=>{
+    ${merged?'':`<div style="color:var(--dim);font-size:11.5px;margin-top:2px">${I18N.f(t('{n} 个 Agent'),{n:p.agents.length})}${p.workflows.length?' · '+esc(p.workflows.join(', ')):''}</div>`}
+    ${p.errors.length?`<div style="color:var(--red);font-size:11.5px;margin-top:3px">${p.errors.map(esc).join('<br>')}</div>`:''}
+    ${merged?`<div style="color:var(--dim);font-size:11.5px;margin-top:3px">${esc(I18N.f(t('新建项目时选择「{type}」项目类型即可使用,本插件包不再需要,可以删除'),{type:t(merged)}))}</div>`:''}`;
+  const tog=d.querySelector('.plug-toggle');
+  if(tog)tog.onclick=async()=>{
     $('#plug-err').textContent='';
     try{
       const r=await api('/api/v1/plugins/'+encodeURIComponent(p.name),{name:p.name,enabled:!p.enabled});
@@ -3220,7 +3367,8 @@ function renderAgents(){
   const q=$('#search').value.trim().toLowerCase(), busy=busyAgents();
   const list=$('#agent-list'); list.innerHTML='';
   // 调度组置顶
-  const pin=AGENTS.filter(a=>a.dispatcher), rest=AGENTS.filter(a=>!a.dispatcher);
+  const pin=AGENTS.filter(a=>a.dispatcher),
+        rest=AGENTS.filter(a=>!a.dispatcher&&(!a.project_type||a.project_type===PROJ_TYPE));   // 别的项目类型的专属团队不列
   const groups={[GROUP_DISPATCH]:pin};
   rest.forEach(a=>{(groups[agentGroup(a)]??=[]).push(a)});
   for(const [g,items] of Object.entries(groups)){
@@ -3750,6 +3898,7 @@ function liveBox(runId){
   const qp=new URLSearchParams(location.search);
   if(qp.get('project')){setProject(qp.get('project'));savePrefs()}
   renderAgents();renderRuns();
+  loadProjType();
   initWatchdog();   // 等项目下拉框就绪后再查,否则 curProj() 回退 demo 导致误显示「已停」
   syncDaProvider();   // deepagents 生效渠道同步到顶栏语言模型下拉
   // 左下角版本号:来自 API health 的 __version__,随 release 升版自动变化

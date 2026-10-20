@@ -45,6 +45,7 @@ from modules.volc_openapi import signed_call as _volc_signed_call
 from modules import voice_library as _voice_library
 from modules import openverse as _openverse
 from services.runtime import rhythm as narrative_rhythm
+from services.runtime import project_types
 from services.runtime import engine_setup
 from services.runtime import dagcheck
 
@@ -212,7 +213,8 @@ DISPATCHERS = {"00-orchestration/workflow-orchestrator"}
 # 13-derivative-fiction/line-editor(插件 Agent,每章一单)章节级扇出,2026-07-29 纳入;
 # prose-writer 不纳入:上一章正文是下一章输入,须线性串行执行(保持有状态)
 STATELESS_AGENTS = {"00-orchestration/evaluation", "00-orchestration/reviser",
-                    "01-story/novel-parser", "09-audio/audio-transcription"}
+                    "01-story/novel-parser", "09-audio/audio-transcription",
+                    *project_types.STATELESS_AGENTS}
 STATELESS_PREFIXES = ("11-qa/", "08-video-gen/", "05-scenes/",
                       "03-characters/", "06-art/",
                       "13-derivative-fiction/line-editor")
@@ -298,6 +300,9 @@ CATEGORY_NAMES = {
     "03-characters": "角色", "04-creatures": "生物资产", "05-scenes": "场景资产",
     "06-art": "美术资产", "07-directing": "导演", "08-video-gen": "视频生成",
     "09-audio": "音频", "10-editing": "剪辑", "11-qa": "审核", "12-publishing": "发布",
+    # 项目类型专属团队(2026-10-20 由同名插件并入,services/runtime/project_types.py);
+    # 编号沿用插件时期的 15/16/17,13/14 留给衍生小说/双书融合插件
+    "15-audio-video": "音频配画", "16-mashup": "混剪", "17-digital-human": "数字人",
 }
 
 # ---------------- 修改师(00-orchestration/reviser):预览页「✏️ 修改」的默认收件人 ----------------
@@ -686,6 +691,11 @@ def list_plugins(refresh: bool = False) -> list[dict]:
             plugin_names.add(pdir.name)
             info = _read_plugin_manifest(pdir)
             info["builtin"] = bundled
+            if pdir.name in project_types.INTEGRATED_PLUGINS:
+                # 2026-10-20 已并入主程序成为项目类型:成员是内置 Agent,旧包一律不注册(否则整包报 id 冲突)
+                info.update(agents=[], workflows=[], integrated=pdir.name, errors=[
+                    f"已并入主程序:新建项目时选择「{project_types.label(pdir.name)}」项目类型即可使用,"
+                    "本插件包不再需要,可以删除"])
             kept = []
             for a in info["agents"]:
                 if (AGENTS_DIR / a["id"] / "SOUL.md").is_file():
@@ -1145,6 +1155,10 @@ DEFAULT_GENCONFIG = {
     # step=10 预留插入位制(S010/grp0010/sh0010,之后插入用 S011/grp0011/sh0011)。
     # 新建项目时由 api_projects_create 盖 step=10,此后不可改(api_projconfig_set 不接受此段)
     "numbering": {"step": 1},
+    # 项目类型(项目级,services/runtime/project_types.py,2026-10-20):film 影视剧 / audio-to-video 音频配画 /
+    # digital-human 数字人 / mashup 混剪(另记建项目时选的 footage_libraries)。新建项目向导第一步选定,
+    # 此后不可改(api_projconfig_set 不接受此段);存量项目无此段按命名空间产物推断
+    "project": {"type": "film"},
     # 界面语言(设置菜单「界面语言」,全局):影响界面文案与 agent 对话/汇报语言;
     # ""=未设置(首次打开浏览器自动判断后写入),成片内容语言仍由项目级 output.language 决定;
     # 持久化以 state.json 的 ui_lang 为准(写入时双写,此键保留兼容旧版回读)
@@ -2099,9 +2113,9 @@ def resolve_deepagents(cfg: dict | None = None) -> dict:
 # output/duration/review 落盘 data/projects/<项目>/settings.json,随项目走。
 PROJECT_SETTINGS_KEYS = ("output", "duration", "shot_group", "review",
                          "packaging", "prompt_skill", "project_skills", "transitions",
-                         "numbering")
+                         "numbering", "project")
 # 建项目时锁定、设置接口不可改的段
-PROJECT_SETTINGS_LOCKED = ("numbering",)
+PROJECT_SETTINGS_LOCKED = ("numbering", "project")
 
 
 def project_settings_path(project: str) -> Path:
@@ -2117,7 +2131,12 @@ def load_project_settings(project: str) -> dict:
     cfg = _merge(base, {k: v for k, v in saved.items()
                         if k in PROJECT_SETTINGS_KEYS})
     cfg["numbering"] = id_scheme.normalize(saved.get("numbering"))
+    cfg["project"] = project_types.resolve(saved.get("project"), PROJECTS_DIR / safe_slug(project))
     return cfg
+
+
+def project_type_of(project: str) -> str:
+    return load_project_settings(project)["project"]["type"]
 
 
 def _validate_duration(d: dict):
@@ -2318,7 +2337,7 @@ AM_AGENT_TIERS = {                                      # 分类内的例外
     "06-art/image-retouch": "low",                      # 画板修图:看图把用户圈的位置和说明整理成一条编辑提示词,求快
     "08-video-gen/prompt": "high",                      # 生成 prompt 质量决定画面上限
     "08-video-gen/video-generation": "high",            # 视频生成主力
-    # audio-to-video 插件:类别 15-audio-video 不在 AM_CATEGORY_TIERS,默认落 low;
+    # 音频配画(原 audio-to-video 插件):类别 15-audio-video 不在 AM_CATEGORY_TIERS,默认落 low;
     # 其中两个创作型工位需高档(其余三个是测量/算术活,low 即可)
     "15-audio-video/era-researcher": "high",            # 时代考据 = 创作+史料判断
     "15-audio-video/visual-scripter": "high",           # 逐段画面设计 = 创作核心
@@ -3116,6 +3135,8 @@ def list_agents(refresh: bool = False) -> list[dict]:
             "category_name": cats.get(cat, cat),
             "dispatcher": is_dispatcher_agent(aid),
             "plugin": plugin,
+            # 项目类型专属成员(控制台左侧只在该类型的项目里列出;共用成员为 None)
+            "project_type": project_types.of_agent(aid),
         })
 
     for cat_dir in sorted(AGENTS_DIR.iterdir()):
@@ -3545,6 +3566,8 @@ def build_role_prompt(agent_id: str, project: str,
                  if whitebox_selfcheck_setting() else
                  "- 白模自检:**关闭** —— 不运行 `render_whitebox.py --stills`、不自行开浏览器截图验证白模,只做数值自检与宿主机检;"
                  "回执 `stills_checked` 写 `\"disabled\"`"))
+    if not is_dispatcher_agent(agent_id):
+        p += project_types.member_section(ps["project"], agent_id, proj_rel)
     plug = plugin_of_agent(agent_id)
     if plug:
         plug_path = plugin_prompt_path(plug)
@@ -3831,6 +3854,7 @@ def build_role_prompt(agent_id: str, project: str,
    只有签字单已经发起、确有 blocker/暂缓，或 DAG 全部完成时才可结束。严禁只回复“后续必须签字”后关单，
    严禁自行把人工节点写成 passed；服务端漏单守卫只负责补建同类永久签字单，不替代本项职责"""
         p += episode_order_prompt_section(project)
+        p += project_types.orchestrator_section(ps["project"], proj_rel, [a["id"] for a in list_agents()])
         plugs = active_plugins()
         if plugs:
             lines = []
@@ -13015,12 +13039,25 @@ async def api_music_library_sync(project: str = "demo", body: dict | None = None
 _WF_TERMINAL_SKIP = {"skipped", "cancelled", "waived"}   # 不再执行,也不进剩余预估
 
 
+# 项目类型 DAG 的闸门 → 所属阶段(与 agents/workflows/*.yaml 同步;服务端不读 yaml)
+_WF_TYPE_GATE_PHASE = {**{f"ga{i}": f"av{i}" for i in range(6)},
+                       "gm0": "mx0", "gm1": "mx1m", "gm2": "mx3", "gm3": "mx4"}
+
+
 def _wf_phase_of(n: dict) -> str:
-    """节点所属阶段:优先落盘 phase 字段;否则按 id 前缀 pN-/gN 推断;加派的
-    自由任务(如 ep06-costume-blue-arbitration)归入 extra。"""
+    """节点所属阶段:优先落盘 phase 字段;否则按 id 前缀 pN-/gN 推断;项目类型 DAG 的
+    avN/mxN/mx1m/dhN 节点与 gaN/gmN 闸门按各自前缀归阶段;加派的自由任务
+    (如 ep06-costume-blue-arbitration)归入 extra。"""
     if n.get("phase"):
         return str(n["phase"])
-    m = re.match(r"^[pg](\d+)\b", n.get("id") or "")
+    nid = n.get("id") or ""
+    m = re.match(r"^(av|mx|dh)(\d+m?)\b", nid)
+    if m:
+        return m.group(1) + m.group(2)
+    m = re.match(r"^(g[am]\d+)\b", nid)
+    if m and m.group(1) in _WF_TYPE_GATE_PHASE:
+        return _WF_TYPE_GATE_PHASE[m.group(1)]
+    m = re.match(r"^[pg](\d+)\b", nid)
     return f"p{m.group(1)}" if m else "extra"
 
 
@@ -13532,7 +13569,8 @@ async def api_brief_set(body: dict):
 
 # ---------------- 参考文件页(refs/ 分类预览、上传、逐文件注释) ----------------
 REF_CATEGORIES = ("style", "thumbnail", "characters", "scenes", "creatures", "props", "music",
-                  "video", "fonts", "text", "other")
+                  "video", "fonts", "text", "other",
+                  "audio")   # 讲述音频 / 音频母带(音频配画、数字人、混剪项目的主输入,2026-10-20)
 REF_FONT_EXTS = (".ttf", ".otf", ".ttc")      # 与花字引擎 modules/captions.py 扫描口径一致
 REF_SKIP_FILES = {"README.md", "NOTES.md", "annotations.json"}
 AUDIO_EXTS = (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg")
@@ -13598,6 +13636,11 @@ async def api_refs_list(project: str = "demo"):
         return [entry(f) for f in sorted(files, key=lambda f: str(f).lower())]
 
     cats = [{"key": c, "files": listing(refs / c, True)} for c in REF_CATEGORIES]
+    if project_type_of(base.name) == project_types.DEFAULT:
+        # 「讲述音频」是非影视剧项目的输入口:那些项目排第一,影视剧项目没放过文件就不列这一类
+        cats = [c for c in cats if c["key"] != "audio" or c["files"]]
+    else:
+        cats.sort(key=lambda c: c["key"] != "audio")
     root = listing(refs, False)          # 散放在 refs/ 根的文件 = 整体风格参考
     if root:
         cats.append({"key": "", "files": root})
@@ -13620,6 +13663,8 @@ async def api_refs_upload(data: bytes, project: str = "demo",
     ext = re.sub(r"[^a-z0-9.]", "", ext.lower())[:10]
     if category == "fonts" and ext not in REF_FONT_EXTS:
         raise ServiceError(400, "字体分类只接受 " + " / ".join(REF_FONT_EXTS) + " 字体文件")
+    if category == "audio" and ext not in AUDIO_EXTS:
+        raise ServiceError(400, "讲述音频分类只接受 " + " / ".join(AUDIO_EXTS) + " 音频文件")
     stem = re.sub(r"[^A-Za-z0-9._-]", "_", stem).strip("._-")
     stem = re.sub(r"_{2,}", "_", stem)[:80] or "ref"
     sub = re.sub(r"[^A-Za-z0-9._-]", "_", subdir).strip("._-")[:60]
@@ -14997,6 +15042,9 @@ async def api_plugins_upload(data: bytes):
         raise ServiceError(400, f"{PLUGIN_MANIFEST} 解析失败:{e}")
     if not _PLUGIN_NAME_RE.fullmatch(name or ""):
         raise ServiceError(400, f"非法插件名:{name!r}")
+    if name in project_types.INTEGRATED_PLUGINS:
+        raise ServiceError(400, f"插件 {name} 已并入主程序,无需安装:新建项目时选择「"
+                                f"{project_types.label(name)}」项目类型即可使用")
     target = PLUGINS_DIR / name
     if name in {p["name"] for p in list_plugins(refresh=True)}:
         raise ServiceError(409, f"插件 {name} 已存在;请先删除旧版再安装")
@@ -15536,14 +15584,23 @@ async def api_projects():
                    if d.is_dir() and not d.name.startswith(".")])
 
 
+PROJECT_INIT_PENDING = ".init_pending"   # 延后初始化标记:向导先传素材再派初始化(api_projects_init 一次性消费)
+
+
 async def api_projects_create(body: dict):
-    """新建项目(顶栏「＋新建项目」弹窗):建目录、存小说原文与主创构想,
-    并自动派总制片完成初始化(整理文本结构,完成后提醒用户放参考图)。"""
+    """新建项目(顶栏「＋新建项目」弹窗):建目录、存文本输入与主创构想,
+    并自动派总制片完成初始化(整理文本结构,完成后提醒用户放参考图)。
+    project_type(2026-10-20,services/runtime/project_types.py)决定流程 DAG,缺省 film;
+    defer_init=true 时只建项目不派单,向导把音频/人物图片传进 refs/ 后再调 api_projects_init。"""
     name = (body.get("name") or "").strip()
     if not re.fullmatch(r"[A-Za-z0-9]+", name):
         raise ServiceError(400, "Project name may only contain ASCII letters and digits")
     if (PROJECTS_DIR / name).exists():
         raise ServiceError(400, f"Project already exists: {name}")
+    raw_type = str(body.get("project_type") or "").strip()
+    if raw_type and raw_type not in project_types.TYPES:
+        raise ServiceError(400, f"Unknown project type: {raw_type} (valid: {', '.join(project_types.TYPES)})")
+    ptype = project_types.normalize(raw_type)
     # 向导初始设置(输出/时长/模型限制):先校验后建目录,校验失败不留下半成品项目
     # 新建项目审核默认全 0:质量评委 0(跳过不派单)+各维度力度 0(不审核);2026-09-07 用户拍板,向导不再传 review,只能在项目设置「审核设置」改;调用方显式给值仍可覆盖
     settings = body.get("settings") or {}
@@ -15556,8 +15613,21 @@ async def api_projects_create(body: dict):
     # 编号制(2026-09-28):新建项目一律预留插入位制(S010/grp0010/sh0010);存量项目无此段仍按逐一制
     cfg["numbering"] = {"step": id_scheme.STEP_SPACED}
     # 过场模式(2026-09-24):新项目默认经典;向导传了整段则以其为准
-    cfg["transitions"] = _validate_transitions(settings.get("transitions") if isinstance(settings.get("transitions"), dict)
-                                               else {**cfg.get("transitions", {}), "mode": "classic"})
+    transitions = (settings.get("transitions") if isinstance(settings.get("transitions"), dict)
+                   else {**cfg.get("transitions", {}), "mode": "classic"})
+    # 非影视剧类型:主流程专用开关按类型强制(project_types.creation_overrides 写明理由),向导传值不生效
+    overrides = project_types.creation_overrides(ptype)
+    if overrides:
+        cfg = _merge(cfg, {k: v for k, v in overrides.items() if k != "transitions"})
+        transitions = {**transitions, **overrides["transitions"]}
+    cfg["transitions"] = _validate_transitions(transitions)
+    cfg["project"] = {"type": ptype}
+    if ptype == "mashup":
+        libs = project_types.clean_libraries(body.get("footage_libraries"))
+        missing = [n for n in libs if not (_footage_lib().FOOTAGE_DIR / n / "project.json").is_file()]
+        if missing:
+            raise ServiceError(400, "Footage library not found: " + ", ".join(missing))
+        cfg["project"]["footage_libraries"] = libs
     _validate_duration(cfg["duration"])
     _validate_shot_group(cfg["shot_group"])
     _validate_output(cfg["output"])
@@ -15566,55 +15636,144 @@ async def api_projects_create(body: dict):
     ensure_project(name)
     project_settings_path(name).write_text(
         json.dumps(cfg, ensure_ascii=False, indent=2))
+    pdir = PROJECTS_DIR / name
     novel = (body.get("novel") or "").strip()
     brief = (body.get("brief") or "").strip()
     style = (body.get("style") or "").strip()
-    rhythm = narrative_rhythm.normalize(body.get("rhythm") if isinstance(body.get("rhythm"), dict) else None)
+    # 叙事节奏只服务小说→视频主流程的分集/分场节拍
+    rhythm = (narrative_rhythm.normalize(body.get("rhythm") if isinstance(body.get("rhythm"), dict) else None)
+              if ptype == project_types.DEFAULT else None)
     if novel:
-        nd = PROJECTS_DIR / name / "novel"
-        nd.mkdir(parents=True, exist_ok=True)
-        (nd / "original.txt").write_text(novel)
+        # 影视剧:小说原文;其余类型:文稿进 refs/text/(对齐/转写工位的输入),混剪另存一份作 p0 的文本输入
+        if ptype in (project_types.DEFAULT, "mashup"):
+            (pdir / "novel").mkdir(parents=True, exist_ok=True)
+            (pdir / "novel" / "original.txt").write_text(novel)
+        if ptype != project_types.DEFAULT:
+            (pdir / "refs" / "text").mkdir(parents=True, exist_ok=True)
+            (pdir / "refs" / "text" / PROJECT_TRANSCRIPT).write_text(novel + "\n")
     brief_text = format_brief(brief, style, rhythm)
     if brief_text:
-        (PROJECTS_DIR / name / "brief.md").write_text(brief_text)
+        (pdir / "brief.md").write_text(brief_text)
+    if body.get("defer_init"):
+        (pdir / PROJECT_INIT_PENDING).write_text(datetime.now().isoformat(timespec="seconds"))
+        return {"ok": True, "name": name, "init": "pending"}
+    await _dispatch_project_init(name)
+    return {"ok": True, "name": name}
 
-    # 交给总制片完成初始化;完成后提醒用户放参考图,不自行启动后续流水线
+
+async def api_projects_init(project: str):
+    """延后初始化(新建向导传完音频/人物图片后调用):只认 defer_init 建出、尚未派过初始化的项目,标记一次性消费。"""
+    base = _proj_base(project)
+    try:
+        (base / PROJECT_INIT_PENDING).unlink()
+    except FileNotFoundError:
+        raise ServiceError(409, f"Project initialization is not pending: {base.name}") from None
+    await _dispatch_project_init(base.name)
+    return {"ok": True, "name": base.name}
+
+
+PROJECT_TRANSCRIPT = "transcript.txt"   # 非影视剧项目向导填的文稿:refs/text/transcript.txt
+
+
+async def _dispatch_project_init(name: str):
+    """交给总制片完成初始化;完成后提醒用户放参考图/补素材,不自行启动后续流水线。"""
     orch = next(iter(DISPATCHERS))
+    gm = agent_effective_model(orch)
+    await api_chat({"agent": orch, "message": _project_init_message(name),
+                    "project": name, "source": "user",
+                    "engine": gm["engine"], "model": gm["model"]})
+
+
+def _project_init_message(name: str) -> str:
+    """初始化工单正文:一律按项目目录现状拼(建项目时写入的 settings.json / novel / refs / brief.md)。"""
+    pdir = PROJECTS_DIR / name
+    cfg = load_project_settings(name)
+    if cfg["project"]["type"] != project_types.DEFAULT:
+        return _typed_project_init_message(name, cfg)
+    novel_p = pdir / "novel" / "original.txt"
+    novel_len = len(novel_p.read_text()) if novel_p.is_file() else 0
+    has_brief = (pdir / "brief.md").is_file()
     msg = [f"【项目初始化】新项目 {name} 刚创建,请完成初始化:",
            f"1) 检查并补全项目目录结构(data/projects/{name}/,布局见 WORKFLOW.md §2)"]
-    if novel:
+    if novel_len:
         msg.append(
-            f"2) 小说原文已导入 novel/original.txt(约 {len(novel)} 字):请优化文本结构与格式"
+            f"2) 小说原文已导入 novel/original.txt(约 {novel_len} 字):请优化文本结构与格式"
             "——清洗乱码与冗余空白、规范分章分段,按章节拆分为 novel/ 下的规范文件;"
             "工作量大时派单给 01-story/novel-parser 执行")
     else:
         msg.append("2) 用户暂未导入小说文本:在汇报中提醒用户把小说原文放入 novel/ 目录")
-    if brief_text:
+    if has_brief:
         msg.append(
             "3) 用户创作定调(主要构想 + 设计风格 + 叙事节奏)已写入 brief.md(系统会把它自动注入团队每个成员的系统提示词,"
             "是后续全部工作的最高创作前提,其中设计风格约束全部画面视觉产出、叙事节奏约束剧本分集/分场与分镜节拍):"
             "请通读,并在汇报中简要复述你的理解以便用户纠偏")
-    if cfg is not None:
-        aspect, aspect_name, lang = resolve_output(cfg)
-        dur = cfg["duration"]
-        ep_desc = ("每集时长根据剧本自动决定" if dur.get("episode_minutes") == "auto"
-                   else f"每集约 {dur['episode_minutes']} 分钟")
-        narr_off = ("" if cfg["output"].get("narration_enabled") is True
-                    else "、**旁白已关闭(用户约定全片没有任何旁白,p5-narration/p8-narrator 不派发)**")
-        msg.append(
-            f"另:用户已在新建向导完成项目初始设置并写入 settings.json——输出画幅 {aspect}({aspect_name})、"
-            f"输出语言 {lang}、{ep_desc}{narr_off}、各维度审核力度与片头片尾开关等,"
-            "后续派单自动生效,无需再向用户逐项确认。")
+    aspect, aspect_name, lang = resolve_output(cfg)
+    dur = cfg["duration"]
+    ep_desc = ("每集时长根据剧本自动决定" if dur.get("episode_minutes") == "auto"
+               else f"每集约 {dur['episode_minutes']} 分钟")
+    narr_off = ("" if cfg["output"].get("narration_enabled") is True
+                else "、**旁白已关闭(用户约定全片没有任何旁白,p5-narration/p8-narrator 不派发)**")
+    msg.append(
+        f"另:用户已在新建向导完成项目初始设置并写入 settings.json——输出画幅 {aspect}({aspect_name})、"
+        f"输出语言 {lang}、{ep_desc}{narr_off}、各维度审核力度与片头片尾开关等,"
+        "后续派单自动生效,无需再向用户逐项确认。")
     msg.append(
         "完成以上工作后只做汇报,并【提醒用户】:可从控制台顶栏「预览设定产物」菜单进入【参考文件】页,"
         "按分类(视觉风格/角色/场景/道具/音频/封面/文本)上传参考图、希望使用的音频与文本资料,并可为每个文件添加注释说明用途"
         "(注释会写入 refs/NOTES.md,视觉与配乐 Agent 必读);"
         "等用户确认参考图就绪或明确表示跳过后,再启动后续流水线——现在不要派发剧情/设定类任务。")
-    gm = agent_effective_model(orch)
-    await api_chat({"agent": orch, "message": "\n".join(msg),
-                    "project": name, "source": "user",
-                    "engine": gm["engine"], "model": gm["model"]})
-    return {"ok": True, "name": name}
+    return "\n".join(msg)
+
+
+def _typed_project_init_message(name: str, cfg: dict) -> str:
+    """非影视剧项目的初始化工单:核对向导放进来的输入素材,汇报缺项,等用户说开工。"""
+    pdir = PROJECTS_DIR / name
+    block = cfg["project"]
+    ptype = block["type"]
+    t = project_types.TYPES[ptype]
+    refs = pdir / "refs"
+
+    def _files(sub: str, exts: tuple) -> list[str]:
+        d = refs / sub
+        return sorted(f.relative_to(pdir).as_posix() for f in d.rglob("*")
+                      if f.is_file() and f.suffix.lower() in exts) if d.is_dir() else []
+
+    audios = _files("audio", AUDIO_EXTS)
+    transcript = refs / "text" / PROJECT_TRANSCRIPT
+    t_len = len(transcript.read_text().strip()) if transcript.is_file() else 0
+    rows = [("讲述音频" if ptype != "digital-human" else "音频母带",
+             "、".join(audios) if audios else
+             ("未上传(可选:没有音频时按 DAG「音频可选」条款先派 narrator 按文稿 TTS 合成母带)"
+              if ptype == "mashup" else "**未上传(必需)**")),
+            ("文稿", f"refs/text/{PROJECT_TRANSCRIPT}(约 {t_len} 字)" if t_len else
+             ("未提供(可选:按 DAG 派 dh0-transcribe 自动转写)" if ptype == "digital-human"
+              else "**未提供(必需)**"))]
+    if ptype == "mashup":
+        rows[1] = (rows[1][0], rows[1][1] + ("(同一份已写入 novel/original.txt 作 p0 的文本输入)" if t_len else ""))
+        libs = block.get("footage_libraries") or []
+        rows.append(("素材库", "、".join(f"data/footage/{n}" for n in libs) if libs else "**未选(必需)**"))
+    if ptype == "digital-human":
+        imgs = _files("characters", tuple(IMG_EXTS))
+        rows.append(("人物图片", "、".join(imgs) if imgs else "**未上传(必需,每个说话人一张)**"))
+    msg = [f"【项目初始化】新项目 {name} 刚创建,项目类型 = {t['label']}({ptype};流程 DAG `{t['workflow']}`,"
+           f"说明 `{t['doc']}`),请完成初始化:",
+           f"1) 检查并补全项目目录结构(data/projects/{name}/,布局见 WORKFLOW.md §2)",
+           "2) 核对新建向导放进项目的输入素材(标「必需」的缺了就是缺项):"]
+    msg += [f"   - {k}:{v}" for k, v in rows]
+    if (pdir / "brief.md").is_file():
+        what = "人物与声音的对应说明" if ptype == "digital-human" else "内容定位与画面风格"
+        msg.append(f"3) 用户填写的{what}已写入 brief.md(系统会自动注入团队每个成员的系统提示词):"
+                   "请通读,并在汇报中简要复述你的理解以便用户纠偏")
+    aspect, aspect_name, lang = resolve_output(cfg)
+    msg.append(
+        f"另:用户已在新建向导完成项目初始设置并写入 settings.json——输出画幅 {aspect}({aspect_name})、输出语言 {lang};"
+        "旁白、对白语音、白模、片头片尾、过场设计等主流程开关已按项目类型关闭,无需再向用户逐项确认。")
+    msg.append(
+        "完成以上工作后只做汇报,并【提醒用户】:缺项可在控制台顶栏「预览设定产物」菜单的【参考文件】页补传"
+        "(讲述音频放「讲述音频」分类,人物图片放「角色」分类,文稿放「文本」分类);"
+        f"素材齐了由用户回复开工,你再按 `{t['workflow']}` 立项生成 runs/dag.json 并按依赖派单"
+        f"({t['first_node']} 先做宿主工具链自检)——现在不要派单。")
+    return "\n".join(msg)
 
 
 # ---------------- 完整复制项目(版本管理页「复制项目」板块) ----------------

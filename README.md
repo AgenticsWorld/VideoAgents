@@ -51,7 +51,9 @@ VideoAgents is an open-source, file-based multi-agent production system for turn
 
 **If a video model is a _camera_, VideoAgents is the _studio_.**
 
-94 specialist agents in 13 departments — story, worldbuilding, characters, creatures, scenes, art, directing, video generation, audio, editing, QA and publishing — work through a declarative workflow, and stop at human sign-off gates so the creative direction stays yours. It runs on your machine: the novel, the project files and the generated media stay in a local workspace.
+113 specialist agents in 16 departments — story, worldbuilding, characters, creatures, scenes, art, directing, video generation, audio, editing, QA, publishing, plus dedicated audio-to-video, mashup and digital-human teams — work through a declarative workflow, and stop at human sign-off gates so the creative direction stays yours. It runs on your machine: the novel, the project files and the generated media stay in a local workspace.
+
+A new project starts by picking its type: 🎬 film & series (a novel adapted into episodes, the default), 🎙️ audio to video (generated pictures for a narration recording), 🧑‍💼 digital human (portrait photos plus a conversation recording become lip-synced speaker video) or ✂️ mashup (shots picked from ready-made clips in your local footage library).
 
 |        | Step                  | What happens                                                                                                              |
 | ------ | --------------------- | ------------------------------------------------------------------------------------------------------------------------- |
@@ -258,7 +260,7 @@ Desktop development, packaging, releases and DeepAgents tuning are covered in [`
 
 ## More
 
-- **Plugins** — [VideoAgents-Plugins](https://github.com/AgenticsWorld/VideoAgents-Plugins): add-on agent teams and workflows such as derivative fiction, fusion fiction, audio-to-video, mashup, audio drama and digital-human dialogue. Install a zip from ⚙️ Settings → Plugins. Uploaded plugins live in the writable runtime data directory.
+- **Plugins** — [VideoAgents-Plugins](https://github.com/AgenticsWorld/VideoAgents-Plugins): add-on agent teams and workflows such as derivative fiction, fusion fiction and audio drama (audio-to-video, mashup and digital human are now built in — pick the project type when creating a project). Install a zip from ⚙️ Settings → Plugins. Uploaded plugins live in the writable runtime data directory.
 - **Skills** — [VideoAgents-Skills](https://github.com/AgenticsWorld/VideoAgents-Skills): `SKILL.md` packs that teach one agent one craft. Install a zip from the **Skill** button in the console.
 - **Sample projects** — [VideoAgents-Samples](https://github.com/AgenticsWorld/VideoAgents-Samples): complete projects to open and explore, including the _alices_ project shown on this page. Import a project zip with **Import Project…** in the project dropdown.
 

@@ -1,0 +1,215 @@
+"""项目类型(2026-10-20):影视剧 / 音频配画 / 数字人 / 混剪,原三个插件并入主程序。"""
+import asyncio
+import io
+import json
+import zipfile
+from pathlib import Path
+
+import pytest
+
+from services.runtime import core, project_types
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.fixture
+def env(tmp_path, monkeypatch):
+    monkeypatch.setattr(core, "PROJECTS_DIR", tmp_path / "projects")
+    core.PROJECTS_DIR.mkdir()
+    sent = []
+
+    async def fake_chat(body):
+        sent.append(body)
+        return {"ok": True}
+
+    async def no_op(*args, **kwargs):
+        return {"ok": True}
+    monkeypatch.setattr(core, "api_chat", fake_chat)
+    monkeypatch.setattr(core, "_notify_settings_change", no_op)
+    footage = tmp_path / "footage"
+    (footage / "fabuhui").mkdir(parents=True)
+    (footage / "fabuhui" / "project.json").write_text("{}")
+    monkeypatch.setattr(core._footage_lib(), "FOOTAGE_DIR", footage)
+    return sent
+
+
+def _create(body):
+    return asyncio.run(core.api_projects_create(body))
+
+
+def test_registry_files_and_agents_exist():
+    for tid, t in project_types.TYPES.items():
+        assert (ROOT / t["workflow"]).is_file(), tid
+        if tid == project_types.DEFAULT:
+            continue
+        assert (ROOT / t["doc"]).is_file(), tid
+        for cat in t["categories"]:
+            assert cat in core.CATEGORY_NAMES
+            assert any((ROOT / "agents" / cat).glob("*/SOUL.md"))
+        for aid in t["agents"]:
+            assert (ROOT / "agents" / aid / "SOUL.md").is_file()
+    for aid in project_types.STATELESS_AGENTS:
+        assert (ROOT / "agents" / aid / "SOUL.md").is_file()
+        assert core.is_stateless_agent(aid)
+    assert project_types.of_agent("16-mashup/clip-cutter") == "mashup"
+    assert project_types.of_agent("11-qa/av-sync-qa") == "audio-to-video"
+    assert project_types.of_agent("11-qa/visual-qa") is None
+    assert project_types.of_agent("06-art/art-director") is None
+
+
+def test_workflow_dags_reference_existing_agents():
+    yaml = pytest.importorskip("yaml")
+    for tid, t in project_types.TYPES.items():
+        dag = yaml.safe_load((ROOT / t["workflow"]).read_text(encoding="utf-8"))
+        if tid != project_types.DEFAULT:
+            assert dag.get("project_type") == tid
+            assert "plugin" not in dag
+        for ph in dag["phases"]:
+            for task in ph.get("tasks", []):
+                if task.get("agent"):
+                    assert (ROOT / "agents" / task["agent"] / "SOUL.md").is_file(), (tid, task["id"])
+
+
+def test_agent_list_tags_project_type():
+    by_id = {a["id"]: a for a in core.list_agents(refresh=True)}
+    assert by_id["17-digital-human/avatar-generator"]["project_type"] == "digital-human"
+    assert by_id["17-digital-human/avatar-generator"]["plugin"] is None
+    assert by_id["16-mashup/shot-designer"]["category_name"] == "混剪"
+    assert by_id["07-directing/storyboard"]["project_type"] is None
+
+
+def test_film_project_unchanged(env):
+    _create({"name": "novel", "novel": "第一章", "settings": {"output": {"narration_enabled": True}}})
+    cfg = core.load_project_settings("novel")
+    assert cfg["project"] == {"type": "film"}
+    assert cfg["output"]["narration_enabled"] is True
+    pdir = core.PROJECTS_DIR / "novel"
+    assert (pdir / "novel" / "original.txt").read_text() == "第一章"
+    assert not (pdir / "refs" / "text" / "transcript.txt").exists()
+    msg = env[0]["message"]
+    assert "小说原文已导入 novel/original.txt(约 3 字)" in msg and "项目类型" not in msg
+
+
+def test_mashup_project_forces_settings_and_writes_inputs(env):
+    _create({"name": "mx", "project_type": "mashup", "novel": "说曹操曹操到", "brief": "纪实",
+             "footage_libraries": ["fabuhui", "fabuhui", "../x"],
+             "rhythm": {"episode": "classic"},
+             "settings": {"output": {"narration_enabled": True, "spatial_blocking": True},
+                          "transitions": {"mode": "cinematic"}}})
+    cfg = core.load_project_settings("mx")
+    assert cfg["project"] == {"type": "mashup", "footage_libraries": ["fabuhui"]}
+    assert cfg["output"]["narration_enabled"] is False and cfg["output"]["spatial_blocking"] is False
+    assert cfg["transitions"]["mode"] == "minimal"
+    assert cfg["transitions"]["episode_close"]["type"] == "hard_cut"
+    assert cfg["duration"]["episode_minutes"] == "auto"
+    assert not any(cfg["packaging"][k] for k in ("intro_enabled", "outro_enabled", "teaser_enabled"))
+    pdir = core.PROJECTS_DIR / "mx"
+    assert (pdir / "refs" / "text" / "transcript.txt").read_text().strip() == "说曹操曹操到"
+    assert (pdir / "novel" / "original.txt").read_text() == "说曹操曹操到"
+    assert "叙事节奏" not in (pdir / "brief.md").read_text()
+    msg = env[0]["message"]
+    assert "agents/workflows/mashup.yaml" in msg and "data/footage/fabuhui" in msg
+    assert "讲述音频:未上传(可选" in msg and "现在不要派单" in msg
+
+
+def test_unknown_type_and_missing_library_rejected(env):
+    with pytest.raises(core.ServiceError) as e:
+        _create({"name": "bad", "project_type": "anime"})
+    assert e.value.status_code == 400
+    with pytest.raises(core.ServiceError) as e:
+        _create({"name": "bad", "project_type": "mashup", "footage_libraries": ["nope"]})
+    assert "nope" in e.value.detail
+    assert not (core.PROJECTS_DIR / "bad").exists()
+
+
+def test_deferred_init_dispatches_once_after_uploads(env):
+    r = _create({"name": "dh", "project_type": "digital-human", "brief": "第一个说话人是主持人",
+                 "defer_init": True})
+    assert r["init"] == "pending" and env == []
+    asyncio.run(core.api_refs_upload(b"ID3fake", "dh", "audio", "", "podcast.mp3"))
+    asyncio.run(core.api_refs_upload(b"\x89PNG", "dh", "characters", "", "host.png"))
+    with pytest.raises(core.ServiceError):          # 讲述音频分类只收音频
+        asyncio.run(core.api_refs_upload(b"x", "dh", "audio", "", "notes.txt"))
+    asyncio.run(core.api_projects_init("dh"))
+    assert len(env) == 1
+    msg = env[0]["message"]
+    assert "refs/audio/podcast.mp3" in msg and "refs/characters/host.png" in msg
+    assert "文稿:未提供(可选" in msg and "人物与声音的对应说明" in msg
+    with pytest.raises(core.ServiceError) as e:
+        asyncio.run(core.api_projects_init("dh"))
+    assert e.value.status_code == 409 and len(env) == 1
+
+
+def test_type_is_locked_and_legacy_projects_inferred(env):
+    _create({"name": "av", "project_type": "audio-to-video"})
+    # 设置接口里 project 是项目名;project 段锁定,保存其它段时原样保留
+    asyncio.run(core.api_projconfig_set({"project": "av", "review": {"evaluation": 50}}))
+    assert core.project_type_of("av") == "audio-to-video"
+    assert core.load_project_settings("av")["review"]["evaluation"] == 50
+
+    legacy = core.PROJECTS_DIR / "old"
+    (legacy / "mashup").mkdir(parents=True)
+    (legacy / "settings.json").write_text("{}")
+    assert core.project_type_of("old") == "film"
+    (legacy / "mashup" / "beat_track.json").write_text("{}")
+    assert core.project_type_of("old") == "mashup"
+    asyncio.run(core.api_projconfig_set({"project": "old", "review": {"evaluation": 0}}))
+    saved = json.loads((legacy / "settings.json").read_text())
+    assert saved["project"]["type"] == "mashup"
+
+
+def test_prompts_carry_project_type(env):
+    _create({"name": "mx", "project_type": "mashup", "footage_libraries": ["fabuhui"]})
+    _create({"name": "novel"})
+    orch = core.build_role_prompt("00-orchestration/workflow-orchestrator", "mx")
+    assert "## 项目类型:混剪(mashup" in orch and "fabuhui" in orch and "16-mashup/clip-cutter" in orch
+    member = core.build_role_prompt("16-mashup/footage-scout", "mx")
+    assert "你属于「混剪」项目类型团队" in member and "/mashup/" in member
+    reused = core.build_role_prompt("10-editing/edit", "mx")
+    assert "## 本项目类型:混剪" in reused
+    for agent in ("00-orchestration/workflow-orchestrator", "10-editing/edit"):
+        film = core.build_role_prompt(agent, "novel")
+        assert "\n## 项目类型:" not in film and "\n## 本项目类型:" not in film
+
+
+def test_refs_audio_category_by_type(env):
+    _create({"name": "novel"})
+    _create({"name": "av", "project_type": "audio-to-video"})
+    film = [c["key"] for c in asyncio.run(core.api_refs_list("novel"))["categories"]]
+    assert "audio" not in film
+    assert [c["key"] for c in asyncio.run(core.api_refs_list("av"))["categories"]][0] == "audio"
+
+
+def _plugin_zip(name):
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr(f"{name}/plugin.json", json.dumps({"name": name, "agents": ["16-mashup/audio-ingest"]}))
+        zf.writestr(f"{name}/agents/16-mashup/audio-ingest/SOUL.md", "# SOUL.md — x\n")
+    return buf.getvalue()
+
+
+def test_integrated_plugin_packages(tmp_path, monkeypatch):
+    monkeypatch.setattr(core, "BUNDLED_PLUGINS_DIR", tmp_path / "bundled")
+    monkeypatch.setattr(core, "PLUGINS_DIR", tmp_path / "user")
+    old = tmp_path / "user" / "mashup"
+    (old / "agents" / "16-mashup" / "audio-ingest").mkdir(parents=True)
+    (old / "plugin.json").write_text(json.dumps({"name": "mashup", "agents": ["16-mashup/audio-ingest"]}))
+    (old / "agents" / "16-mashup" / "audio-ingest" / "SOUL.md").write_text("# SOUL.md — x\n")
+    monkeypatch.setitem(core.STATE, "plugins_enabled", ["mashup"])
+    try:
+        info = next(p for p in core.list_plugins(refresh=True) if p["name"] == "mashup")
+        assert info["integrated"] == "mashup" and not info["active"] and info["agents"] == []
+        assert info["errors"] and "混剪" in info["errors"][0]
+        assert core.plugin_of_agent("16-mashup/audio-ingest") is None
+        with pytest.raises(core.ServiceError) as e:
+            asyncio.run(core.api_plugins_upload(_plugin_zip("digital-human")))
+        assert e.value.status_code == 400
+    finally:
+        core._expire_agent_caches()
+
+
+@pytest.mark.parametrize("nid,phase", [
+    ("av0-ingest", "av0"), ("ga3-ep01", "av3"), ("mx1-scout-b01", "mx1"), ("mx1m-merge", "mx1m"),
+    ("gm1", "mx1m"), ("gm2", "mx3"), ("dh2-avatar-utt0001", "dh2"), ("p6-shots-ep01", "p6"), ("ep06-x", "extra")])
+def test_workflow_preview_phase_of(nid, phase):
+    assert core._wf_phase_of({"id": nid}) == phase

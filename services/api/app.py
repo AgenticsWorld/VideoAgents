@@ -164,6 +164,12 @@ async def delete_project(project: str, body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_projects_delete(body)
 
 
+@api.post("/projects/{project}/init", tags=["projects"])
+async def init_project(project: str) -> dict[str, Any]:
+    """新建向导 defer_init 建出的项目:素材上传完后派总制片初始化(只能调一次)。"""
+    return await core.api_projects_init(project)
+
+
 @api.post("/projects/{project}/copy", tags=["projects"])
 async def copy_project(project: str, body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_projects_copy(body)
