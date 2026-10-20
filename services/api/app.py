@@ -946,6 +946,11 @@ async def grok_models(refresh: bool = False) -> dict[str, Any]:
     return await core.api_grok_models(refresh)
 
 
+@api.get("/engines/antigravity/models", tags=["configuration"])
+async def antigravity_models(refresh: bool = False) -> dict[str, Any]:
+    return await core.api_antigravity_models(refresh)
+
+
 @api.get("/providers/openrouter/models", tags=["providers"])
 async def openrouter_models(modality: str = "image", refresh: bool = False) -> dict[str, Any]:
     return await core.api_openrouter_models(modality, refresh)

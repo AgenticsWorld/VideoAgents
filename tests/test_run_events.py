@@ -85,3 +85,114 @@ def test_other_engines_receipts(bus):
     core.handle_deepagents_event(run, {"type": "tool_result", "name": "execute", "output": "x", "is_error": False})
     descs = [e["desc"] for e in bus if e["type"] == "tool" and e.get("kind") == "result"]
     assert descs == ["↩ 3 B · ok", "↩ 4 B · done", "↩ 6 B · 1\tline", "↩ 4 B · text", "↩ execute 1 B · x"]
+
+
+# ---------------------------------------------------------------- antigravity(agy stream-json,实测 1.4.3)
+AGY_CID = "99f20100-0660-4c45-bb7f-524230bbffb6"
+AGY_RUN = [   # 真实样本(init.tools 截短):跑一条 shell 命令后回复 done
+    {"event": "init", "conversation_id": AGY_CID, "init": {
+        "model": "gemini-3.8-flash-low", "cwd": "/w", "tools": ["run_command", "write_to_file"],
+        "permission_mode": "always-proceed"}},
+    {"event": "step_update", "step_update": {"conversation_id": AGY_CID, "step_index": 0,
+                                             "state": "DONE", "step_type": "user_input"}},
+    {"event": "step_update", "step_update": {
+        "conversation_id": AGY_CID, "step_index": 1, "state": "DONE", "step_type": "agent_response",
+        "duration_seconds": 4.38622, "usage": {"input_tokens": 6735, "output_tokens": 49,
+                                               "thinking_tokens": 0, "cache_read_tokens": 0,
+                                               "total_tokens": 6784}}},
+    {"event": "step_update", "step_update": {
+        "conversation_id": AGY_CID, "step_index": 2, "state": "ACTIVE", "step_type": "tool",
+        "tool_name": "run_command", "tool_info": {"name": "run_command", "parameters": {
+            "CommandLine": "echo hello-agy > out.txt && cat out.txt"}}}},
+    {"event": "step_update", "step_update": {
+        "conversation_id": AGY_CID, "step_index": 2, "state": "DONE", "step_type": "tool",
+        "tool_name": "run_command", "duration_seconds": 0.256088, "tool_info": {
+            "name": "run_command", "parameters": {"CommandLine": "echo hello-agy > out.txt && cat out.txt"},
+            "output": "Command exited with code 0.\n\nCommand output:\nhello-agy\r\n"}}},
+    {"event": "step_update", "step_update": {"conversation_id": AGY_CID, "step_index": 3,
+                                             "state": "ACTIVE", "step_type": "agent_response",
+                                             "text_delta": "done"}},
+    {"event": "step_update", "step_update": {
+        "conversation_id": AGY_CID, "step_index": 3, "state": "DONE", "step_type": "agent_response",
+        "text_delta": "\n", "duration_seconds": 3.276829, "usage": {
+            "input_tokens": 6873, "output_tokens": 1, "thinking_tokens": 0, "cache_read_tokens": 0,
+            "total_tokens": 6874}}},
+    {"event": "result", "result": {
+        "conversation_id": AGY_CID, "status": "SUCCESS", "response": "done\n",
+        "duration_seconds": 7.713853, "num_turns": 1, "usage": {
+            "input_tokens": 13608, "output_tokens": 50, "thinking_tokens": 0,
+            "cache_read_tokens": 0, "total_tokens": 13658}}},
+]
+
+
+def test_antigravity_stream(bus):
+    run = _run()
+    for obj in AGY_RUN:
+        core.handle_antigravity_event(run, obj)
+    assert run["session_id"] == AGY_CID
+    assert [e["text"] for e in bus if e["type"] == "text"] == ["done", "\n"]   # DONE 带的是末段增量
+    assert run["text"] == run["result"] == "done\n"
+    assert run["activity"] == ["⚙ Bash: echo hello-agy > out.txt && cat out.txt"]   # ACTIVE/DONE 只登记一次
+    receipts = [e["desc"] for e in bus if e["type"] == "tool" and e.get("kind") == "result"]
+    assert receipts == ["↩ 56 B · Command exited with code 0."]
+    assert run["tokens"] == 13658 and run["turns"] == 1
+    assert "error" not in run and not run.get("_session_lost")
+
+
+def test_antigravity_file_tools_and_errors(bus):
+    run = _run()
+    for i, (name, params) in enumerate([
+            ("write_to_file", {"TargetFile": str(core.ROOT / "data/projects/p/a.md"), "CodeContent": "x"}),
+            ("replace_file_content", {"TargetFile": "b.json"}),
+            ("view_file", {"AbsolutePath": "agents/x/skills/s1/SKILL.md"}),
+            ("grep_search", {"SearchPath": "/w", "Query": "TODO"})]):
+        core.handle_antigravity_event(run, {"event": "step_update", "step_update": {
+            "step_index": i, "state": "DONE", "step_type": "tool", "tool_name": name,
+            "tool_info": {"name": name, "parameters": params, "output": "ok"}}})
+    assert run["files"] == ["data/projects/p/a.md", "b.json"]   # 只有写/改算产物,绝对路径转相对 ROOT
+    assert run["activity"][2] == "📖 Read: agents/x/skills/s1/SKILL.md"   # prompt_skill_read 按此匹配
+    assert run["activity"][3] == "🔍 Grep: TODO"
+    core.handle_antigravity_event(run, {"event": "step_update", "step_update": {
+        "step_index": 9, "state": "DONE", "step_type": "tool", "tool_name": "run_command",
+        "tool_info": {"name": "run_command", "parameters": {"CommandLine": "false"},
+                      "error": {"type": "EXEC", "message": "exit status 1"}}}})
+    assert bus[-2]["desc"] == "✗ 工具报错 · exit status 1"
+    core.handle_antigravity_event(run, {"event": "result", "result": {
+        "conversation_id": "c", "status": "ERROR", "error": "authentication required", "response": ""}})
+    assert "result" not in run and run["error"] == "authentication required"
+
+
+def test_antigravity_resume_silently_replaced(bus):
+    """--conversation 指向已不存在的会话:agy 只打 warning、静默新开会话,init 里 id 不同。"""
+    run = {**_run(), "_resume_sid": "old-id"}
+    core.handle_antigravity_event(run, {"event": "init", "conversation_id": "new-id", "init": {}})
+    assert run["_session_lost"] is True and "session_id" not in run
+    ok = {**_run(), "_resume_sid": AGY_CID}
+    core.handle_antigravity_event(ok, AGY_RUN[0])
+    assert ok["session_id"] == AGY_CID and not ok.get("_session_lost")
+
+
+def test_antigravity_usage_parse(tmp_path):
+    full = tmp_path / "full.jsonl"
+    full.write_text("\n".join(json.dumps(o) for o in AGY_RUN) + "\n")
+    assert core._parse_run_usage(full) == {"in": 13608, "out": 50}
+    cut = tmp_path / "cut.jsonl"          # 被停止/超时:无 result,逐步累加
+    cut.write_text("\n".join(json.dumps(o) for o in AGY_RUN[:-1]) + "\n")
+    assert core._parse_run_usage(cut) == {"in": 13608, "out": 50}
+    # cache_read 若不含在 input_tokens 里,按 total_tokens 反推,不漏算
+    assert core._agy_usage_io({"input_tokens": 100, "cache_read_tokens": 40, "output_tokens": 5,
+                               "thinking_tokens": 7, "total_tokens": 152}) == (140, 12)
+
+
+def test_antigravity_models_and_effort():
+    out = ("Fetching available models...\n"
+           "gemini-4-argon-high\tGemini 4 Argon (High)\n"
+           "claude-opus-5-5-low\tClaude Opus 5.5 (Low)\n")
+    models = core._parse_agy_models(out)
+    assert [m["id"] for m in models] == ["gemini-4-argon-high", "claude-opus-5-5-low"]
+    assert models[0]["name"] == "Gemini 4 Argon (High)"
+    assert core.engine_effort_args("antigravity", "max") == ["--effort", "max"]
+    assert core.engine_effort_args("antigravity", "") == []
+    assert core.SMART_MODE_BY_ENGINE["antigravity"] == "smart_antigravity"
+    assert core.AM_MODE_MODELS["smart_antigravity"]["high"]["model"] == "gemini-4-argon-high"
+    assert core.CLI_ENV_VARS["antigravity"] == "AGY_BIN" and "antigravity" in core.ENGINES

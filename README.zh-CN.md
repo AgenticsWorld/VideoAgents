@@ -71,7 +71,7 @@ VideoAgents 是一套开源、文件驱动的多 Agent 视频生产系统，用�
 
 |                     | 支持                                                                                                              |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| 🤖 **执行引擎**     | Claude Code · Codex CLI · Kimi Code · Pi · OpenCode · Grok Build · DeepAgents（任意 OpenAI 兼容模型：本地、云端或 OpenRouter） |
+| 🤖 **执行引擎**     | Claude Code · Codex CLI · Kimi Code · Pi · OpenCode · Grok Build · Antigravity CLI · DeepAgents（任意 OpenAI 兼容模型：本地、云端或 OpenRouter） |
 | 🖼 **图像**         | Agentics · OpenRouter · 火山引擎 · BytePlus · Fal · RunningHub · ComfyUI                                           |
 | 🎬 **视频**         | Agentics · OpenRouter · 火山引擎 · BytePlus · Fal · RunningHub · ComfyUI                                           |
 | 🎙 **语音 / TTS**   | Agentics · OpenRouter · 火山引擎 · ElevenLabs · MiniMax · ComfyUI                                                  |

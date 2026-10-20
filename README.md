@@ -71,7 +71,7 @@ Bring your own engines and providers. Each modality is configured on its own, so
 
 |                         | Supported                                                                                                                      |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| 🤖 **Agent engines**    | Claude Code · Codex CLI · Kimi Code · Pi · OpenCode · Grok Build · DeepAgents (any OpenAI-compatible model: local, cloud or OpenRouter) |
+| 🤖 **Agent engines**    | Claude Code · Codex CLI · Kimi Code · Pi · OpenCode · Grok Build · Antigravity CLI · DeepAgents (any OpenAI-compatible model: local, cloud or OpenRouter) |
 | 🖼 **Image**            | Agentics · OpenRouter · Volcano Engine · BytePlus · Fal · RunningHub · ComfyUI                                                  |
 | 🎬 **Video**            | Agentics · OpenRouter · Volcano Engine · BytePlus · Fal · RunningHub · ComfyUI                                                  |
 | 🎙 **Voice / TTS**      | Agentics · OpenRouter · Volcano Engine · ElevenLabs · MiniMax · ComfyUI                                                         |

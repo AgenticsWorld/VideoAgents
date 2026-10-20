@@ -55,7 +55,7 @@ Python 运行时与 Electron 应用完全分开版本化。运行时写入用户
 
 ### CLI 发现与模型下拉
 
-macOS 桌面端从 Finder 启动时会读取用户登录 Shell 的 `PATH`，并补充 Homebrew、`~/.local/bin`、Kimi、OpenCode、Grok、Volta、pnpm 等常见 CLI 目录。因此终端中已安装的 `claude`、`codex`、`kimi`、`pi`、`opencode`、`grok` 会被本地 Python 服务及其 Agent 子进程继承，无需把第三方 CLI 打入客户端安装包。切换到 `pi` 引擎后，语言模型下拉会通过 `pi --list-models` 动态读取当前 Pi 登录凭证实际可用的渠道与模型。`opencode` 引擎同样通过 `opencode models` 动态读取；`grok` 引擎（Grok Build CLI，安装见 https://grok.com/build，`grok login` 登录）通过 `grok models` 动态读取。各引擎（deepagents 除外）的语言模型下拉均默认「智能分配」：按 Agent 任务复杂度自动选模型（如 opencode 引擎把创作核心 Agent 派给 DeepSeek V4 Pro、其余派给 DeepSeek V4 Flash），切换引擎或语言模型会自动同步全部 Agent 的模型设置。
+macOS 桌面端从 Finder 启动时会读取用户登录 Shell 的 `PATH`，并补充 Homebrew、`~/.local/bin`、Kimi、OpenCode、Grok、Volta、pnpm 等常见 CLI 目录。因此终端中已安装的 `claude`、`codex`、`kimi`、`pi`、`opencode`、`grok`、`agy`（Antigravity CLI）会被本地 Python 服务及其 Agent 子进程继承，无需把第三方 CLI 打入客户端安装包。切换到 `pi` 引擎后，语言模型下拉会通过 `pi --list-models` 动态读取当前 Pi 登录凭证实际可用的渠道与模型。`opencode` 引擎同样通过 `opencode models` 动态读取；`grok` 引擎（Grok Build CLI，安装见 https://grok.com/build，`grok login` 登录）通过 `grok models` 动态读取；`antigravity` 引擎（Antigravity CLI，命令 `agy`，安装见 https://antigravity.google/docs/getting-started?tab=cli，在终端运行一次 `agy` 完成登录）通过 `agy models` 动态读取。各引擎（deepagents 除外）的语言模型下拉均默认「智能分配」：按 Agent 任务复杂度自动选模型（如 opencode 引擎把创作核心 Agent 派给 DeepSeek V4 Pro、其余派给 DeepSeek V4 Flash），切换引擎或语言模型会自动同步全部 Agent 的模型设置。
 
 ### 安装与登录引导
 

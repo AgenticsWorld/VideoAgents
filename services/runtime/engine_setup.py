@@ -1,6 +1,6 @@
 """执行引擎 CLI 一键安装 + 登录引导(2026-10-09)。
 
-顶栏切到 claude/codex/kimi/pi/opencode/grok 时前端检测本机 CLI,弹窗里三件事:
+顶栏切到 claude/codex/kimi/pi/opencode/grok/antigravity 时前端检测本机 CLI,弹窗里三件事:
 
 1. 一键安装:后台子进程跑各家**官方安装脚本**(固定命令,不经语言模型),日志实时回传。
    子进程开新会话(无控制终端,脚本里读 /dev/tty 的提问自动走非交互分支)、stdin 关闭,
@@ -53,6 +53,9 @@ INSTALLERS: dict[str, dict] = {
                  "npm": "opencode-ai"},
     "grok": {"sh": ("https://x.ai/cli/install.sh", "bash"),
              "ps1": "https://x.ai/cli/install.ps1"},
+    # 2026-10-20 核对:装到 ~/.local/bin/agy(Windows %LOCALAPPDATA%\agy\bin\agy.exe),无交互提问
+    "antigravity": {"sh": ("https://antigravity.google/cli/install.sh", "bash"),
+                    "ps1": "https://antigravity.google/cli/install.ps1"},
 }
 
 # 官方脚本的默认安装位置:服务进程 PATH 不含这些目录(脚本只改用户 shell rc / 用户 PATH,
@@ -65,6 +68,7 @@ BIN_FALLBACKS_POSIX: dict[str, tuple[str, ...]] = {
     "pi": (".pi/agent/bin/pi", ".local/bin/pi"),
     "opencode": (".opencode/bin/opencode",),
     "grok": (".grok/bin/grok", ".local/bin/grok"),
+    "antigravity": (".local/bin/agy",),
 }
 BIN_FALLBACKS_WIN: dict[str, tuple[tuple[str, str], ...]] = {
     "claude": (("USERPROFILE", r".local\bin\claude.exe"),),
@@ -73,10 +77,12 @@ BIN_FALLBACKS_WIN: dict[str, tuple[tuple[str, str], ...]] = {
     "pi": (("APPDATA", r"npm\pi.cmd"), ("USERPROFILE", r".pi\agent\bin\pi.cmd")),
     "opencode": (("APPDATA", r"npm\opencode.cmd"),),
     "grok": (("USERPROFILE", r".grok\bin\grok.exe"),),
+    "antigravity": (("LOCALAPPDATA", r"agy\bin\agy.exe"),),
 }
 
 # 登录命令(在弹出的终端里跑,接在可执行文件绝对路径后);pi 没有 login 子命令,
-# 进 TUI 后由用户输入 /login(终端提示行写明)
+# 进 TUI 后由用户输入 /login(终端提示行写明);antigravity 也没有,首次启动 TUI 即走
+# Google 账号登录引导(终端提示行写明完成后 /exit)
 LOGIN_ARGS: dict[str, tuple[str, ...]] = {
     "claude": ("auth", "login"),
     "codex": ("login",),
@@ -84,6 +90,7 @@ LOGIN_ARGS: dict[str, tuple[str, ...]] = {
     "pi": (),
     "opencode": ("auth", "login"),
     "grok": ("login",),
+    "antigravity": (),
 }
 
 # 超时按「无进展」判:claude 二进制约 240 MB,实测经代理 ~110–140 KB/s 要半小时以上,固定总时长会误杀
@@ -95,7 +102,8 @@ WATCH_INTERVAL_S = 5
 # 官方脚本静默下载大文件期间不输出日志:按下载目录里本次新文件的大小报进度。
 # 各家下载位置:claude / grok 下到 HOME 下固定目录(相对 HOME);kimi / codex 等用 mktemp,
 # 安装子进程的 TMPDIR(Windows TEMP/TMP)指到本任务专属临时目录,一并统计
-DOWNLOAD_DIRS = {"claude": ".claude/downloads", "grok": ".grok/downloads"}
+DOWNLOAD_DIRS = {"claude": ".claude/downloads", "grok": ".grok/downloads",
+                 "antigravity": ".cache/antigravity/staging"}
 STATUS_TIMEOUT_S = 20
 LOG_LINES = 400
 
@@ -452,6 +460,21 @@ def _login_status(engine: str, exe: str | None) -> dict:
                                           for v in auth.values()):
             return {"logged_in": True, "method": "oauth"}
         return {"logged_in": False, "method": ""}
+    if engine == "antigravity":
+        # 令牌存系统钥匙串,没有凭证文件可读:用 `agy models`(只拉模型目录,不耗额度)探测,
+        # 列得出模型=已登录;未登录时报 authentication required
+        if _env_any("GEMINI_API_KEY"):
+            return {"logged_in": True, "method": "api_key"}
+        if not exe:
+            return {"logged_in": None, "method": ""}
+        r = _run_status([exe, "models"])
+        if r is None:
+            return {"logged_in": None, "method": ""}
+        if r.returncode == 0 and any("\t" in ln for ln in (r.stdout or "").splitlines()):
+            return {"logged_in": True, "method": "oauth"}
+        if re.search(r"auth|log ?in|sign ?in|credential", f"{r.stdout}\n{r.stderr}", re.I):
+            return {"logged_in": False, "method": ""}
+        return {"logged_in": None, "method": ""}
     return {"logged_in": None, "method": ""}
 
 
@@ -462,6 +485,7 @@ _TEXT = {
         "login_browser": "接下来会打开浏览器授权页面,请用你自己的账号登录并授权;授权完成后回到 VideoAgents 窗口,会自动检测。",
         "login_pi": "pi 启动后输入 /login 回车,按提示选择服务商登录(订阅账号或 API Key);完成后输入 /quit 退出。",
         "login_kimi": "如提示选择区域:中国大陆账号选 mainland-cn(kimi.com),海外账号选 global(kimi.ai)。",
+        "login_antigravity": "agy 启动后按引导用 Google 账号登录(浏览器授权);进入对话界面后输入 /exit 退出。",
         "install_title": "VideoAgents · 安装 {label}",
         "install_note": "正在运行官方安装命令;如脚本提问,请在此窗口回答。安装完成后回到 VideoAgents 窗口点「重新检测」。",
         "ok": "完成。可以关闭此窗口,回到 VideoAgents。",
@@ -473,6 +497,7 @@ _TEXT = {
         "login_browser": "A browser authorization page will open. Sign in with your own account and approve; then return to VideoAgents, which checks automatically.",
         "login_pi": "Once pi starts, type /login and press Enter, then pick a provider and sign in (subscription or API key). Type /quit when done.",
         "login_kimi": "If asked for a region: choose mainland-cn (kimi.com) for mainland China accounts, global (kimi.ai) otherwise.",
+        "login_antigravity": "Once agy starts, follow the setup to sign in with your Google account (browser authorization). When the chat screen appears, type /exit to quit.",
         "install_title": "VideoAgents · Install {label}",
         "install_note": "Running the official install command. Answer any questions the script asks in this window, then go back to VideoAgents and click \"Re-check\".",
         "ok": "Done. You can close this window and return to VideoAgents.",
@@ -517,7 +542,8 @@ def terminal_script(lines: list[str], command_line: str, zh: bool,
 def login_lines(engine: str, label: str, zh: bool) -> list[str]:
     t = _TEXT["zh" if zh else "en"]
     lines = [t["login_title"].format(label=label), ""]
-    lines.append(t["login_pi"] if engine == "pi" else t["login_browser"])
+    lines.append(t["login_pi"] if engine == "pi" else
+                 t["login_antigravity"] if engine == "antigravity" else t["login_browser"])
     if engine == "kimi":
         lines.append(t["login_kimi"])
     return lines

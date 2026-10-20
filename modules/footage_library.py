@@ -1082,10 +1082,13 @@ def run_engine_vision(image_path: Path, prompt: str, spec: dict, cwd: Path,
 
     spec = {"engine", "model", "executable", "permission_mode", "deepagents": {python, runner, base_url, api_key}}
     claude/kimi/grok/opencode/pi:提示词里给图片绝对路径,由 CLI 自带的文件读取工具看图;
-    codex:走 `--image` + `-o` 取最后一条消息;deepagents:runner 无看图能力,仅文本兜底。"""
+    codex:走 `--image` + `-o` 取最后一条消息;deepagents:runner 无看图能力,仅文本兜底;
+    antigravity:暂不支持(首期未接,直接报错,不落到 claude 分支用错参数)。"""
     engine = str(spec.get("engine") or "claude")
     model = str(spec.get("model") or "")
     exe = spec.get("executable")
+    if engine == "antigravity":
+        raise FootageLibError(400, "AI 画面分析暂不支持 Antigravity CLI 引擎,请在顶栏把默认引擎切到其他引擎后再分析")
     if engine != "deepagents" and not exe:
         raise FootageLibError(500, f"未找到 {engine} 命令行工具,请先安装或在设置里切换默认引擎")
     env = os.environ.copy()

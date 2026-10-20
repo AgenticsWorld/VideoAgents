@@ -41,6 +41,7 @@ function commonExecutableDirectories(environment: NodeJS.ProcessEnv): string[] {
       path.join(profile, '.grok', 'bin'),
       path.join(profile, '.pi', 'agent', 'bin'),
       environment.LOCALAPPDATA && path.join(environment.LOCALAPPDATA, 'Programs', 'OpenAI', 'Codex', 'bin'),
+      environment.LOCALAPPDATA && path.join(environment.LOCALAPPDATA, 'agy', 'bin'),
     ].filter(Boolean) as string[]
   }
   return [

@@ -61,6 +61,7 @@ def test_install_plans_use_official_commands(monkeypatch):
         "pi": "curl -fsSL https://pi.dev/install.sh | sh",
         "opencode": "curl -fsSL https://opencode.ai/install | bash",
         "grok": "curl -fsSL https://x.ai/cli/install.sh | bash",
+        "antigravity": "curl -fsSL https://antigravity.google/cli/install.sh | bash",
     }
     for engine, line in expect.items():
         plan = es.install_plan(engine, windows=False)
@@ -403,3 +404,29 @@ def test_install_job_finishes_when_orphan_holds_pipe(tmp_path):
     snap = _wait("pi", timeout=15)
     assert snap["state"] == "ok" and time.time() - t0 < 12
     assert snap["log"][:2] == ["before", "after"]
+
+
+@posix_only
+def test_antigravity_login_status_probe(home, tmp_path, monkeypatch):
+    """agy 令牌在系统钥匙串、无凭证文件:用 `agy models` 探测。"""
+    ok = _exe(tmp_path / "agy1", 'printf "Fetching available models...\\ngemini-4-argon-high\\tGemini 4 Argon (High)\\n"')
+    out = _exe(tmp_path / "agy2", 'echo "Error: authentication required" >&2; exit 1')
+    odd = _exe(tmp_path / "agy3", "exit 3")
+    assert es.login_status("antigravity", str(ok)) == {"logged_in": True, "method": "oauth"}
+    assert es.login_status("antigravity", str(out))["logged_in"] is False
+    assert es.login_status("antigravity", str(odd))["logged_in"] is None       # 判断不了不打扰
+    assert es.login_status("antigravity", None)["logged_in"] is None
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    assert es.login_status("antigravity", str(out)) == {"logged_in": True, "method": "api_key"}
+
+
+@posix_only
+def test_antigravity_install_location_and_login_line(home, monkeypatch):
+    assert es.fallback_executable("antigravity") is None
+    exe = _exe(home / ".local/bin/agy", "exit 0")
+    assert es.fallback_executable("antigravity") == str(exe)
+    assert es.login_command_line("antigravity", "/u/.local/bin/agy", windows=False) == "/u/.local/bin/agy"
+    assert any("/exit" in ln for ln in es.login_lines("antigravity", "Antigravity CLI", zh=True))
+    monkeypatch.setattr(es.shutil, "which", lambda name: None)
+    assert es.install_plan("antigravity", windows=True)["display"] == \
+        "irm https://antigravity.google/cli/install.ps1 | iex"

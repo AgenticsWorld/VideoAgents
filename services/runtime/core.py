@@ -118,12 +118,28 @@ def _default_grok_bin() -> str:
 
 
 GROK_BIN = os.environ.get("GROK_BIN") or _default_grok_bin()
+
+
+def _default_agy_bin() -> str:
+    # Antigravity CLI(antigravity.google)官方安装脚本装到 ~/.local/bin/agy,同 grok:
+    # 非交互环境 PATH 可能不含该目录,回退绝对路径
+    found = shutil.which("agy")
+    if found:
+        return found
+    fallback = Path.home() / ".local" / "bin" / "agy"
+    return str(fallback) if fallback.is_file() else "agy"
+
+
+AGY_BIN = os.environ.get("AGY_BIN") or _default_agy_bin()
 CLI_BINS = {"claude": CLAUDE_BIN, "codex": CODEX_BIN, "kimi": KIMI_BIN,
-            "pi": PI_BIN, "opencode": OPENCODE_BIN, "grok": GROK_BIN}
+            "pi": PI_BIN, "opencode": OPENCODE_BIN, "grok": GROK_BIN,
+            "antigravity": AGY_BIN}
 CLI_LABELS = {"claude": "Claude Code", "codex": "Codex CLI", "kimi": "Kimi Code",
-              "pi": "Pi Coding Agent", "opencode": "OpenCode", "grok": "Grok Build"}
+              "pi": "Pi Coding Agent", "opencode": "OpenCode", "grok": "Grok Build",
+              "antigravity": "Antigravity CLI"}
 CLI_ENV_VARS = {"claude": "CLAUDE_BIN", "codex": "CODEX_BIN", "kimi": "KIMI_BIN",
-                "pi": "PI_BIN", "opencode": "OPENCODE_BIN", "grok": "GROK_BIN"}
+                "pi": "PI_BIN", "opencode": "OPENCODE_BIN", "grok": "GROK_BIN",
+                "antigravity": "AGY_BIN"}
 
 
 def resolve_cli_executable(engine: str) -> str | None:
@@ -172,13 +188,14 @@ def deepagents_python() -> str:
     if importlib.util.find_spec("deepagents") is not None:
         return sys.executable
     return DEEPAGENTS_PY_DEFAULT
-ENGINES = ("claude", "codex", "kimi", "pi", "opencode", "grok", "deepagents")   # 执行引擎:CLI 或 deepagents runner
+ENGINES = ("claude", "codex", "kimi", "pi", "opencode", "grok", "antigravity",
+           "deepagents")   # 执行引擎:CLI 或 deepagents runner
 PERMISSION_MODE = os.environ.get("VIDEOAGENTS_PERMISSION_MODE", "acceptEdits")
 CLAUDE_USAGE_PROBE_ENABLED = os.environ.get(
     "VIDEOAGENTS_ENABLE_CLAUDE_USAGE_PROBE", ""
 ).lower() in {"1", "true", "yes"}
 # 单次运行引擎轮次上限(设置菜单「高级→Agent 高级设置」可调,存 state.json):
-# 仅 claude/grok 引擎有此参数(--max-turns);codex/pi/opencode 不传轮次上限,
+# 仅 claude/grok 引擎有此参数(--max-turns);codex/pi/opencode/antigravity 不传轮次上限,
 # deepagents 走 LangGraph recursion_limit。撞上限时引擎直接退出且无续跑机制
 # (回执只见退出码 1),大批量工位(curate/cut)实测 100 轮不够,缺省放宽到 250
 MAX_TURNS_DEFAULT = 250
@@ -248,6 +265,7 @@ CONFIRM_TIMEOUT_MIN, CONFIRM_TIMEOUT_MAX = 5, 3600
 #   pi       --thinking <level>                  (原样)
 #   opencode --variant <level>                   (模型无该 variant 时由 opencode 忽略)
 #   grok     --reasoning-effort <level>          (low/medium/high/xhigh,无 max,max→xhigh)
+#   antigravity --effort <level>                 (low/medium/high/xhigh/max 原样,实测 1.4.3 帮助)
 #   deepagents --reasoning-effort <level>        (仅云端/OpenRouter 渠道;本地端点不传)
 #   kimi     CLI 无推理强度参数,不传(沿用其自身默认)
 # 空串=引擎默认(不传任何参数,沿用各引擎 CLI 自身配置),亦为缺省值
@@ -583,6 +601,8 @@ def engine_effort_args(engine: str, level: str, *, local_endpoint: bool = False)
         return ["--variant", level]
     if engine == "grok":
         return ["--reasoning-effort", "xhigh" if level == "max" else level]
+    if engine == "antigravity":
+        return ["--effort", level]
     if engine == "deepagents":
         return [] if local_endpoint else ["--reasoning-effort", level]
     return []   # kimi 等无对应参数
@@ -2322,8 +2342,10 @@ AGENTMODELS_PATH = RUNTIME_DIR / "agentmodels.json"
 #   smart_pi     按任务复杂度自动选 pi 模型(high→openai-codex/gpt-6.1-sol low→openai-codex/gpt-6-luna)
 #   smart_deepseek 按任务复杂度自动选 DeepSeek 模型(opencode 引擎,high→V4 Pro low→V4 Flash)
 #   smart_grok   按任务复杂度自动选 grok 模型(high→Grok 4.6 low→Grok 4.5)
+#   smart_antigravity 按任务复杂度自动选 antigravity 模型(high→Gemini 4 Argon High
+#                low→Gemini 3.8 Flash Medium)
 AM_MODES = ("global", "smart_claude", "smart_codex", "smart_kimi", "smart_pi",
-            "smart_deepseek", "smart_grok")
+            "smart_deepseek", "smart_grok", "smart_antigravity")
 
 # 任务复杂度分两层:high=创作核心 low=分析/索引/评审/机械活
 AM_CATEGORY_TIERS = {
@@ -2369,9 +2391,14 @@ AM_MODE_MODELS = {
     # grok 引擎(Grok Build CLI,grok.com 登录凭证;模型 id 同 `grok models` 列表)
     "smart_grok": {"high": {"engine": "grok", "model": "grok-4.6"},
                    "low": {"engine": "grok", "model": "grok-4.5"}},
+    # antigravity 引擎(Antigravity CLI,Google 账号登录凭证;模型 id 同 `agy models` 列表,
+    # 推理档位写在模型 id 后缀里)
+    "smart_antigravity": {"high": {"engine": "antigravity", "model": "gemini-4-argon-high"},
+                          "low": {"engine": "antigravity", "model": "gemini-3.8-flash-medium"}},
 }
 
-AM_ENGINES = ("", "claude", "codex", "kimi", "pi", "opencode", "grok", "deepagents")      # "" = 跟随全局
+AM_ENGINES = ("", "claude", "codex", "kimi", "pi", "opencode", "grok", "antigravity",
+              "deepagents")      # "" = 跟随全局
 # Agent 级配置只含执行引擎/语言模型;图像/视频渠道曾可按 Agent 覆盖,因易被遗忘导致实际生成
 # 渠道与「🎨 生成模型」页显示不符,已整体移除(存量 agentmodels.json 里的旧字段读入时剔除)
 AM_FIELDS = ("engine", "model")
@@ -2434,7 +2461,8 @@ def agent_effective_model(agent_id: str) -> dict:
 # 各引擎对应的智能分配策略(deepagents 无智能分配,不在表内→global)
 SMART_MODE_BY_ENGINE = {"claude": "smart_claude", "codex": "smart_codex",
                         "kimi": "smart_kimi", "pi": "smart_pi",
-                        "opencode": "smart_deepseek", "grok": "smart_grok"}
+                        "opencode": "smart_deepseek", "grok": "smart_grok",
+                        "antigravity": "smart_antigravity"}
 
 
 def migrate_agent_memory_default():
@@ -3853,7 +3881,7 @@ def build_role_prompt(agent_id: str, project: str,
    择优交付)。同一任务返工达到重跑次数上限({max_retries} 次)仍未过,必须走 --confirm 升级用户裁决;确有必要时可在
    --confirm 征询或升级说明中向用户**建议**赛马,只有用户明确下达赛马指令后,才可改派职责相近的
    Agent 并行重做、先达标者交付(赛马也不换引擎)。**任何情况下禁止切换执行引擎**(不得传 --engine 覆盖,
-   不得因 GraphRecursionError/超时/API 5xx 等报错改用 claude/codex/kimi/pi/opencode/grok/deepagents 中的另一个)。
+   不得因 GraphRecursionError/超时/API 5xx 等报错改用 claude/codex/kimi/pi/opencode/grok/antigravity/deepagents 中的另一个)。
    报错后重试一律沿用原引擎与 Agent/全局模型配置——不要在同一条路上串行耗死,也不要用换引擎当兜底
 9. 【结束前 DAG 前沿巡检】每次准备结束当前运行前,必须先运行
    `python3 services/runtime/dagcheck.py --project {project} --strict --frontier` 并检查它列出的依赖已满足节点
@@ -4503,6 +4531,26 @@ async def execute_run(run: dict, message: str, model: str | None):
                 if sid:
                     base += ["--resume", sid]
                 return base
+            if engine == "antigravity":
+                # Antigravity CLI(agy)print 模式:-p 单轮;--output-format stream-json 为其自有
+                # 事件流(init/step_update/result,实测 1.4.3);--dangerously-skip-permissions
+                # 必传:不传时 shell 命令被软拒且退出码仍为 0。无 --append-system-prompt:首轮把
+                # 角色说明拼进 prompt,续轮走 --conversation(会话已带上下文;会话不存在时 agy
+                # 只打 warning 静默新开会话,由 handle_antigravity_event 比对 init 的
+                # conversation_id 识别)。--print-timeout 0 不限时(帮助写缺省 0、文档写 5m,
+                # 显式传避免长任务被掐),时限交给宿主运行超时;无 --max-turns
+                base = [cli_executable, "--output-format", "stream-json",
+                        "--dangerously-skip-permissions", "--print-timeout", "0"]
+                if not DATA_DIR.is_relative_to(ROOT):
+                    # 工作区只有 cwd=ROOT;数据目录在安装目录之外(桌面端)时加进工作区
+                    base += ["--add-dir", str(DATA_DIR)]
+                if model:
+                    base += ["--model", model]
+                base += engine_effort_args("antigravity", thinking_effort)
+                if sid:
+                    return base + ["--conversation", sid,
+                                   "-p", skill_resume_message(message, skill_contract, True)]
+                return base + ["-p", f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
             if engine == "pi":
                 # pi 原生 JSON 事件流与持久会话。系统提示通过文件传入，既避免
                 # Windows 命令行长度限制，也让续接进程每轮恢复同一 Agent 身份。
@@ -4584,6 +4632,7 @@ async def execute_run(run: dict, message: str, model: str | None):
             session_retried = False
             while True:
                 stdin_payload = codex_stdin(session_id)
+                run["_resume_sid"] = session_id   # 引擎处理器据此识别「续接被静默换成新会话」
                 proc = await asyncio.create_subprocess_exec(
                     *make_cmd(session_id), cwd=ROOT, env=env, limit=STREAM_LIMIT,
                     start_new_session=True,   # 独立进程组:停止时可连同其派生子进程一起杀
@@ -4642,6 +4691,8 @@ async def execute_run(run: dict, message: str, model: str | None):
                         handle_opencode_event(run, obj)
                     elif engine == "grok":
                         handle_grok_event(run, obj)
+                    elif engine == "antigravity":
+                        handle_antigravity_event(run, obj)
                     elif engine == "deepagents":
                         handle_deepagents_event(run, obj)
                     else:
@@ -4650,13 +4701,19 @@ async def execute_run(run: dict, message: str, model: str | None):
                         # 连接层错误快速失败:不等 CLI 的退避重试,直接杀进程组
                         _kill_proc_tree(proc)
                         break
+                    if run.get("_session_lost") and proc.returncode is None:
+                        # 续接的会话已不存在、引擎静默新开了会话(续轮 prompt 不带角色说明):
+                        # 趁还没调用任何工具立刻杀掉,下面按会话失效回退带完整角色重跑
+                        _kill_proc_tree(proc)
+                        break
                 await proc.wait()
                 # 成员结单但其进程组里还有派生子进程在跑(把长命令留在后台就回复了):
                 # 宿主代等其排空,已在跑的出图/出视频不白白被杀;标记透传给调度层
                 await _drain_orphaned_children(run, proc, deadline)
                 stderr = (await stderr_task).decode("utf-8", "replace").strip()
                 failed = ((proc.returncode != 0 and not run.get("result"))
-                          or (engine == "pi" and bool(run.get("error"))))
+                          or (engine in ("pi", "antigravity") and bool(run.get("error")))
+                          or bool(run.get("_session_lost")))
                 if run.get("stopped"):
                     # 用户在运行面板手动停止(或服务关闭):不走会话失效重试,不让引擎的
                     # aborted/退出码信息覆盖「手动停止」结论(下游总制片据此免于追查错误原因)
@@ -4666,13 +4723,14 @@ async def execute_run(run: dict, message: str, model: str | None):
                 if failed:
                     # 会话失效回退:记录的会话已被引擎清理(换机/清缓存/引擎升级)时,
                     # resume 必然失败且下轮还会用同一失效 id;清掉记录换全新会话重试一次
-                    if (session_id and not session_retried and re.search(
+                    if (session_id and not session_retried and (run.pop("_session_lost", False) or re.search(
                             r"no conversation found|session[^\n]{0,80}not found"
                             r"|no session found|thread[^\n]{0,40}not found",
-                            f"{run.get('error') or ''} {stderr}", re.I)):
+                            f"{run.get('error') or ''} {stderr}", re.I))):
                         session_retried = True
                         session_id = None
                         run.pop("error", None)
+                        run.pop("session_id", None)
                         run["session_reset"] = True
                         STATE["sessions"].pop(session_key, None)
                         save_state(STATE)
@@ -5162,6 +5220,109 @@ def handle_grok_event(run: dict, obj: dict):
                 blocks.append(c)
             obj = {**obj, "message": {**message, "content": blocks}}
     handle_claude_event(run, obj)
+
+
+# Antigravity CLI 内置工具名 → claude 同义工具名(tool_summary 按 claude 命名归类活动/产物文件)
+AGY_TOOL_ALIASES = {"write_to_file": "Write", "replace_file_content": "Edit",
+                    "multi_replace_file_content": "MultiEdit", "sed_file": "Edit",
+                    "notebook_edit": "NotebookEdit", "view_file": "Read",
+                    "run_command": "Bash", "grep_search": "Grep", "find_by_name": "Glob",
+                    "invoke_subagent": "Task", "browser_subagent": "Task"}
+# 参数名为 PascalCase(run_command.CommandLine 实测);其余按 Antigravity 工具惯用名兜底
+_AGY_PARAM_KEYS = {"file_path": ("TargetFile", "AbsolutePath", "FilePath", "DirectoryPath"),
+                   "command": ("CommandLine", "Command"),
+                   "pattern": ("Query", "Pattern", "SearchPattern"),
+                   "description": ("Description", "TaskDescription", "Prompt", "Task")}
+
+
+def _agy_tool_input(params) -> dict:
+    inp = dict(params) if isinstance(params, dict) else {}
+    for key, cands in _AGY_PARAM_KEYS.items():
+        if key not in inp:
+            v = next((inp[c] for c in cands if isinstance(inp.get(c), str) and inp[c]), None)
+            if v is not None:
+                inp[key] = v
+    return inp
+
+
+def handle_antigravity_event(run: dict, obj: dict):
+    """解析 agy --output-format stream-json 的 JSONL 事件(实测 1.4.3)。
+
+    每行 {"event": init|step_update|result, <同名键>: {...}}。init 顶层带 conversation_id;
+    step_update 按 step_index/state(ACTIVE→DONE)推进:agent_response 的 ACTIVE 与 DONE
+    都可能带 text_delta(DONE 带的是末段增量,不是全文),DONE 带本次模型调用的 usage;
+    tool 步 ACTIVE 带 tool_info.name/parameters,DONE 再带 output 或 error。result 汇总
+    status/response(末轮全文)/usage(累计)/num_turns。续接(--conversation)的会话不存在
+    时 agy 不报错、静默新开会话,init 里的 conversation_id 与请求的不同 → 标 _session_lost。"""
+    ev = obj.get("event")
+    if ev == "init":
+        cid = obj.get("conversation_id") or ""
+        want = run.get("_resume_sid")
+        if want and cid and cid != want:
+            run["_session_lost"] = True
+            run["error"] = f'Antigravity conversation "{want}" not found'
+            return
+        if cid:
+            run["session_id"] = cid
+        run_progress(run, "💭 模型思考中…")
+        return
+    if ev == "step_update":
+        su = obj.get("step_update") or {}
+        st = su.get("step_type")
+        done = su.get("state") == "DONE"
+        if st == "agent_response":
+            delta = su.get("text_delta") or ""
+            if delta:
+                run["text"] = run.get("text", "") + delta
+                HUB.publish({"type": "text", "run_id": run["id"],
+                             "agent": run["agent"], "text": delta})
+            if done:
+                usage = su.get("usage") or {}
+                run["tokens"] = (run.get("tokens") or 0) + int(usage.get("total_tokens") or 0)
+                run_progress(run, None)
+            else:
+                run_progress(run, "✍ 输出中…" if delta else "💭 模型思考中…")
+        elif st == "tool":
+            info = su.get("tool_info") or {}
+            name = str(info.get("name") or su.get("tool_name") or "?")
+            seen = run.setdefault("_agy_tool_steps", {})
+            idx = su.get("step_index")
+            if idx not in seen:
+                # ACTIVE 先到;个别工具可能只发 DONE,同样在首见时登记活动
+                seen[idx] = name
+                desc, fp = tool_summary(AGY_TOOL_ALIASES.get(name, name),
+                                        _agy_tool_input(info.get("parameters")))
+                run.setdefault("activity", []).append(desc)
+                if fp:
+                    run.setdefault("files", []).append(fp)
+                    HUB.publish({"type": "file", "run_id": run["id"],
+                                 "agent": run["agent"], "path": fp})
+                HUB.publish({"type": "tool", "run_id": run["id"],
+                             "agent": run["agent"], "desc": desc})
+                publish_run(run)
+                run_progress(run, f"⚙ 执行工具中… {name}")
+            if done:
+                err = info.get("error")
+                if isinstance(err, dict) and err:
+                    tool_receipt(run, err.get("message") or err.get("type"), is_error=True)
+                else:
+                    tool_receipt(run, info.get("output"))
+        elif st == "user_input" and done:
+            run_progress(run, "💭 模型思考中…")
+        return
+    if ev == "result":
+        res = obj.get("result") or {}
+        run["session_id"] = res.get("conversation_id") or run.get("session_id")
+        run["turns"] = res.get("num_turns")
+        usage = res.get("usage") or {}
+        if usage.get("total_tokens") is not None:
+            run["tokens"] = int(usage.get("total_tokens") or 0)   # 累计值,覆盖逐步累加
+        if res.get("status") == "SUCCESS":
+            run["result"] = res.get("response") or ""
+        else:
+            # ERROR/CANCELED/INTERRUPTED 等:留空 result,错误文案进 error
+            run["error"] = run.get("error") or str(
+                res.get("error") or f"Antigravity status {res.get('status')}")[:500]
 
 
 def handle_deepagents_event(run: dict, obj: dict):
@@ -10797,11 +10958,21 @@ def _project_media_tokens(base: Path):
 _LLM_INDEX_LOCK = threading.Lock()
 
 
+def _agy_usage_io(u: dict) -> tuple[int, int]:
+    """antigravity usage → (输入, 输出)。输出含 thinking_tokens;cache_read_tokens 是否已含在
+    input_tokens 里未见文档,用 total_tokens 反推输入,两种口径都不漏算。"""
+    out = int(u.get("output_tokens") or 0) + int(u.get("thinking_tokens") or 0)
+    inp = int(u.get("input_tokens") or 0)
+    return max(inp, int(u.get("total_tokens") or 0) - out), out
+
+
 def _parse_run_usage(path: Path):
     """解析单个 runs/<run_id>.jsonl 的 LLM token 消耗,返回 {"in","out"} 或 None。
     claude stream-json 末尾 result.usage(整个 run 的累计,grok 同格式);codex exec 末尾
-    turn.completed.usage;pi 的每个 assistant message_end 各带一次调用用量;
-    opencode 的每个 step_finish 各带一次调用用量(part.tokens);
+    turn.completed.usage;antigravity 末尾 result 事件的 result.usage(累计);
+    pi 的每个 assistant message_end 各带一次调用用量;
+    opencode 的每个 step_finish 各带一次调用用量(part.tokens);antigravity 的每个
+    agent_response 步 DONE 各带一次调用用量;
     无终态事件(被停止/超时/仍在跑)则全文逐条累加。"""
     try:
         with open(path, "rb") as fh:
@@ -10817,6 +10988,14 @@ def _parse_run_usage(path: Path):
         try:
             d = json.loads(ln)
         except Exception:
+            continue
+        if not isinstance(d, dict):
+            continue
+        if d.get("event") == "result":       # antigravity:用量在 result.usage
+            u = (d.get("result") or {}).get("usage")
+            if isinstance(u, dict):
+                tin, tout = _agy_usage_io(u)
+                return {"in": tin, "out": tout}
             continue
         u = d.get("usage")
         if not isinstance(u, dict):
@@ -10840,6 +11019,18 @@ def _parse_run_usage(path: Path):
                 try:
                     d = json.loads(ln)
                 except Exception:
+                    continue
+                if not isinstance(d, dict):
+                    continue
+                if d.get("event") == "step_update":   # antigravity:每次模型调用各一条
+                    su = d.get("step_update") or {}
+                    u = su.get("usage")
+                    if (su.get("step_type") == "agent_response" and su.get("state") == "DONE"
+                            and isinstance(u, dict)):
+                        i_, o_ = _agy_usage_io(u)
+                        tin += i_
+                        tout += o_
+                        found = True
                     continue
                 t = d.get("type")
                 if t == "assistant":
@@ -10922,7 +11113,7 @@ def _llm_usage_index() -> dict:
 def _project_llm_tokens(project: str):
     """项目级语言模型 token 消耗:runs/<run_id>.jsonl 的 usage 索引 × chats/<project>/
     派单记录的 run_id 归集(含未提集数的全局任务,run_id 去重)。
-    口径 = 输入(含缓存写/读)+ 输出 的总和,含全部引擎(claude/codex/kimi/pi/opencode/grok/deepagents)。
+    口径 = 输入(含缓存写/读)+ 输出 的总和,含全部引擎(claude/codex/kimi/pi/opencode/grok/antigravity/deepagents)。
     无任何记录返回 None(会话日志按 TTL 清理后查不到属正常,前端显示 —)。"""
     cdir = CHATS_DIR / safe_slug(project)
     if not cdir.is_dir():
@@ -15560,6 +15751,54 @@ async def api_grok_models(refresh: bool = False):
     return {"models": models, "cached": False}
 
 
+_AGY_MODELS_CACHE: tuple[float, list[dict]] = (0, [])
+_AGY_MODELS_TTL = 30
+
+
+def _parse_agy_models(output: str) -> list[dict]:
+    """`agy models` 输出(实测 1.4.3):首行 `Fetching available models...`,之后
+    `gemini-4-argon-high<TAB>Gemini 4 Argon (High)` 一行一个模型;无默认模型标记。"""
+    models = []
+    for raw in output.splitlines():
+        mid, sep, name = _ANSI_ESCAPE_RE.sub("", raw).strip().partition("\t")
+        if sep and mid and " " not in mid:
+            models.append({"id": mid, "name": name.strip() or mid, "provider": "antigravity",
+                           "model": mid, "default": False})
+    return models
+
+
+async def api_antigravity_models(refresh: bool = False):
+    """列出当前 Antigravity 登录凭证实际可用的模型,供全部语言模型选择器复用。"""
+    global _AGY_MODELS_CACHE
+    ts, cached = _AGY_MODELS_CACHE
+    if ts and not refresh and time.time() - ts < _AGY_MODELS_TTL:
+        return {"models": cached, "cached": True}
+    executable = await asyncio.to_thread(resolve_cli_executable, "antigravity")
+    if not executable:
+        raise ServiceError(503, cli_not_found_error("antigravity"))
+    env = {**os.environ, "NO_COLOR": "1"}
+    proc = await asyncio.create_subprocess_exec(
+        executable, "models", cwd=ROOT, env=env,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=20)
+    except asyncio.TimeoutError as exc:
+        proc.kill()
+        await proc.wait()
+        raise ServiceError(504, "读取 Antigravity 模型列表超时") from exc
+    output = stdout.decode("utf-8", "replace")
+    if proc.returncode != 0:
+        detail = stderr.decode("utf-8", "replace").strip() or output.strip()
+        raise ServiceError(502, f"读取 Antigravity 模型列表失败:{detail[:300]}")
+    models = _parse_agy_models(output)
+    if not models:
+        detail = stderr.decode("utf-8", "replace").strip() or output.strip()
+        raise ServiceError(502, "Antigravity 未返回可用模型(未登录请先在终端运行 agy 完成登录):"
+                                f"{detail[:300]}")
+    _AGY_MODELS_CACHE = (time.time(), models)
+    return {"models": models, "cached": False}
+
+
 async def api_soul(agent: str):
     d = agent_dir(safe_agent(agent))
     if not d:
@@ -15568,8 +15807,8 @@ async def api_soul(agent: str):
 
 
 async def api_enginecheck(engine: str):
-    """检测执行引擎 CLI 是否已安装、是否已登录(顶栏切换 claude/codex/kimi/pi/opencode/grok
-    时前端调用;一键安装 / 登录后前端轮询)。logged_in:True/False/None(判断不了,不打扰)。
+    """检测执行引擎 CLI 是否已安装、是否已登录(顶栏切换 claude/codex/kimi/pi/opencode/grok/
+    antigravity 时前端调用;一键安装 / 登录后前端轮询)。logged_in:True/False/None(判断不了,不打扰)。
     deepagents 为进程内 runner,无 CLI 依赖,视为始终可用。"""
     if engine not in CLI_BINS:
         return {"engine": engine, "available": True, "bin": ""}
