@@ -147,6 +147,18 @@ async def projects() -> list[str]:
     return await core.api_projects()
 
 
+@api.get("/projects/overview", tags=["projects"])
+async def projects_overview() -> dict[str, Any]:
+    """顶栏项目选择弹窗:各项目类型 / 自动运行 / 运行中 Agent 数 / 最近更新 / 所属源项目(备份折叠)。"""
+    return await core.api_projects_overview()
+
+
+@api.get("/projects/disk", tags=["projects"])
+async def projects_disk(names: str = "") -> dict[str, Any]:
+    """顶栏项目选择弹窗:逗号分隔的项目目录磁盘占用(字节,缓存 10 分钟)。"""
+    return await core.api_projects_disk(names)
+
+
 @api.post("/projects", tags=["projects"])
 async def create_project(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_projects_create(body)

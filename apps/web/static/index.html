@@ -264,6 +264,42 @@ a.hdr-icon{display:flex;align-items:center;background:var(--panel2);color:var(--
 a.hdr-icon:hover{border-color:var(--accent)}
 #preview-btn{display:flex;align-items:center;color:var(--accent)}
 .empty{color:var(--dim);text-align:center;margin-top:40px;font-size:13px}
+/* 顶栏项目按钮 + 项目选择弹窗(2026-10-20,代替原下拉):备份折叠在源项目名下,每页 10 个 */
+#proj-btn{display:flex;align-items:center;gap:6px;min-width:130px;max-width:190px;padding:5px 8px;text-align:start}
+#proj-btn-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#proj-btn .caret{flex:none;color:var(--dim);font-size:10px}
+#proj-modal .box{width:800px;max-width:94vw;max-height:90vh;overflow:hidden}
+.pm-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pm-head h3{margin-inline-end:4px}
+.pm-head .pm-sp{flex:1}
+.pm-seg{display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.pm-seg button{border:0;border-radius:0;background:transparent;color:var(--dim);padding:4px 10px;font-size:12px}
+.pm-seg button+button{border-inline-start:1px solid var(--border)}
+.pm-seg button.on{background:var(--panel);color:var(--accent)}
+.pm-wrap{min-height:0;overflow:auto;border:1px solid var(--border);border-radius:8px}
+#pm-table{width:100%;border-collapse:collapse;font-size:13px}
+#pm-table th{position:sticky;top:0;z-index:1;background:var(--panel);color:var(--dim);font-weight:500;font-size:12px;text-align:start;padding:6px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
+#pm-table td{padding:6px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
+#pm-table tbody tr:last-child td{border-bottom:0}
+#pm-table .num{text-align:end;font-variant-numeric:tabular-nums}
+#pm-table tr.pm-row{cursor:pointer}
+#pm-table tr.pm-row:hover td,#pm-table tr.pm-row:focus-visible td{background:var(--panel)}
+#pm-table tr.pm-row:focus-visible{outline:none}
+#pm-table tr.cur td:first-child{box-shadow:inset 2px 0 var(--accent)}
+[dir="rtl"] #pm-table tr.cur td:first-child{box-shadow:inset -2px 0 var(--accent)}
+#pm-table tr.cur .pm-nm{color:var(--accent);font-weight:600}
+#pm-table .pm-nm{display:inline-block;max-width:270px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
+#pm-table tr.pm-bk td{background:rgba(255,255,255,.025);font-size:12px}
+#pm-table tr.pm-bk td:first-child{padding-inline-start:28px}
+#pm-table .pm-dim{color:var(--dim)}
+#pm-table .pm-on{color:var(--green)}
+.pm-bkbtn{display:inline-flex;align-items:center;gap:4px;padding:0 8px;border-radius:10px;font-size:12px;color:var(--accent);line-height:18px}
+.pm-bkbtn .dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
+.pm-foot{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim)}
+#pm-pager{margin-inline-start:auto;display:flex;gap:4px}
+#pm-pager button{padding:2px 8px;font-size:12px;min-width:28px}
+#pm-pager button.on{border-color:var(--accent);color:var(--accent)}
+#pm-pager button:disabled{opacity:.4;cursor:default;border-color:var(--border)}
 </style>
 </head>
 <body>
@@ -271,7 +307,8 @@ a.hdr-icon:hover{border-color:var(--accent)}
   <h1><svg width="20" height="20" viewBox="0 0 54 54" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M27.0003 11.417C29.1569 11.417 31.6501 11.6093 34.0189 11.8652C34.1395 11.8783 34.2587 11.8917 34.3763 11.9043C37.2021 12.2081 39.1789 12.4205 40.931 13.4863C42.4071 14.3844 43.7298 15.8578 44.4642 17.4219C45.3361 19.2791 45.335 21.3999 45.3333 24.4561V29.5439C45.335 32.6001 45.3361 34.7209 44.4642 36.5781C43.7298 38.1422 42.4071 39.6156 40.931 40.5137C39.1789 41.5795 37.2021 41.7919 34.3763 42.0957C34.2587 42.1083 34.1395 42.1217 34.0189 42.1348C31.6501 42.3907 29.1569 42.583 27.0003 42.583C24.8437 42.583 22.3506 42.3907 19.9818 42.1348C19.8611 42.1217 19.742 42.1084 19.6243 42.0957C16.7982 41.7919 14.8209 41.5797 13.0687 40.5137C11.5925 39.6155 10.2698 38.1422 9.53547 36.5781C8.66357 34.721 8.66469 32.6001 8.66633 29.5439C8.6664 29.4098 8.6673 29.2736 8.6673 29.1357V24.8643C8.6673 24.7264 8.6664 24.5902 8.66633 24.4561C8.66469 21.3999 8.66357 19.279 9.53547 17.4219C10.2698 15.8578 11.5925 14.3845 13.0687 13.4863C14.8209 12.4203 16.7982 12.2081 19.6243 11.9043C19.742 11.8916 19.8611 11.8783 19.9818 11.8652C22.3506 11.6093 24.8437 11.417 27.0003 11.417ZM27.0003 15.083C25.0334 15.083 22.6877 15.2609 20.3753 15.5107C17.0484 15.8702 15.9447 16.0291 14.9749 16.6191C14.1142 17.1428 13.283 18.0685 12.8548 18.9805C12.3747 20.0032 12.3333 21.2326 12.3333 24.8643V29.1357C12.3333 32.7674 12.3747 33.9968 12.8548 35.0195C13.283 35.9315 14.1142 36.8572 14.9749 37.3809C15.9447 37.9709 17.0484 38.1298 20.3753 38.4893C22.6877 38.7391 25.0334 38.917 27.0003 38.917C28.9671 38.917 31.3121 38.7391 33.6243 38.4893C36.9515 38.1298 38.0558 37.9709 39.0257 37.3809C39.8863 36.8572 40.7177 35.9314 41.1458 35.0195C41.6259 33.9969 41.6673 32.7673 41.6673 29.1357V24.8643C41.6673 21.2327 41.6258 20.0031 41.1458 18.9805C40.7177 18.0686 39.8863 17.1428 39.0257 16.6191C38.0558 16.0291 36.9515 15.8702 33.6243 15.5107C31.3121 15.2609 28.9671 15.083 27.0003 15.083ZM23.3333 21.1338C24.5989 21.1338 25.6252 22.1592 25.6253 23.4248V28.0918C25.6252 29.3574 24.5989 30.3838 23.3333 30.3838C22.0678 30.3837 21.0414 29.3573 21.0413 28.0918V23.4248C21.0414 22.1593 22.0678 21.1339 23.3333 21.1338ZM36.1663 21.1338C37.4319 21.1338 38.4582 22.1592 38.4583 23.4248V28.0918C38.4582 29.3574 37.4319 30.3838 36.1663 30.3838C34.9009 30.3835 33.8754 29.3572 33.8753 28.0918V23.4248C33.8754 22.1594 34.9009 21.134 36.1663 21.1338Z" fill="currentColor"/></svg> 数码体: VideoAgents</h1>
   <div class="spacer"></div>
   <label style="color:var(--dim);font-size:12px">项目</label>
-  <select id="project" style="width:130px" title="产物写入 data/projects/<项目>/;各项目的 Agent 对话记录相互独立"></select>
+  <button id="proj-btn" title="产物写入 data/projects/<项目>/;各项目的 Agent 对话记录相互独立" aria-haspopup="dialog"><span id="proj-btn-name" data-no-i18n></span><span class="caret">▾</span></button>
+  <input type="hidden" id="project">
   <input type="file" id="proj-import-file" accept=".zip,application/zip" style="display:none">
   <label style="color:var(--dim);font-size:12px">引擎</label>
   <select id="engine" title="Agent 执行引擎:claude / codex / kimicode / pi / opencode / grok / antigravity / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)">
@@ -971,6 +1008,30 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="actions"><button id="conc-cancel">取消</button><button class="primary" id="conc-ok">保存</button></div>
   </div>
 </div>
+<div id="proj-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="proj-modal-heading">
+  <div class="box">
+    <div class="pm-head">
+      <h3 id="proj-modal-heading">项目</h3>
+      <div class="pm-seg" role="group">
+        <button type="button" data-sort="name">按项目名称</button><button type="button" data-sort="updated">按最新更新</button>
+      </div>
+      <span class="pm-sp"></span>
+      <button type="button" id="pm-import">› 导入项目…</button>
+      <button type="button" id="pm-new" class="primary">＋ 新建项目…</button>
+    </div>
+    <div class="pm-wrap"><table id="pm-table">
+      <thead><tr>
+        <th>项目</th><th>类型</th>
+        <th title="自动运行">自动</th>
+        <th class="num" title="备份数量(源项目名-日期),点击展开">备份</th>
+        <th class="num" title="正在运行的 Agent 数">运行</th>
+        <th class="num" title="项目目录占用的磁盘空间(10 分钟内复用上次统计)">磁盘</th>
+      </tr></thead>
+      <tbody id="pm-body"></tbody>
+    </table></div>
+    <div class="pm-foot"><span id="pm-count"></span><div id="pm-pager"></div></div>
+  </div>
+</div>
 <div id="project-skills-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="project-skills-heading">
   <div class="box" style="width:740px;max-width:94vw;max-height:92vh;box-sizing:border-box;overflow:hidden">
     <h3 id="project-skills-heading">项目技能 <span id="project-skills-project" style="color:var(--dim);font-weight:400;font-size:12px"></span></h3>
@@ -1432,25 +1493,17 @@ async function restorePrefs(){
   savePrefs();   // 开屏把本浏览器的顶栏选择同步到服务端副本(换浏览器/首次同步兜底)
 }
 
-/* ---------- 项目下拉(自动读取 data/projects/ 目录) ---------- */
+/* ---------- 当前项目(顶栏按钮显示项目名,值存隐藏的 #project;点按钮开项目选择弹窗) ---------- */
 const curProj=()=>$('#project').value||'demo';
 const runProj=id=>(RUNS[id]||{}).project;
 async function initProjects(selected){
   let list=[];try{list=await api('/api/v1/projects')}catch(e){}
   if(!list.length)list=['demo'];
-  const sel=$('#project');sel.innerHTML='';
-  list.forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;sel.appendChild(o)});
-  const im=document.createElement('option');im.value='__import';im.textContent='› 导入项目…';sel.appendChild(im);   // 2026-09-23:选 zip 包解压到 data/projects/ 后自动切过去
-  const nw=document.createElement('option');nw.value='__new';nw.textContent='＋ 新建项目…';sel.appendChild(nw);
-  sel.value=(selected&&list.includes(selected))?selected:list[0];
+  setProject((selected&&list.includes(selected))?selected:list[0]);
 }
 function setProject(name){
-  const sel=$('#project');
-  if(![...sel.options].some(o=>o.value===name)){
-    const o=document.createElement('option');o.value=name;o.textContent=name;
-    sel.insertBefore(o,[...sel.options].find(x=>x.value.startsWith('__'))||null);   // 插在「导入/新建」两个动作项之前
-  }
-  sel.value=name;
+  $('#project').value=name;
+  $('#proj-btn-name').textContent=name;
 }
 // 当前项目的项目类型(settings.json#project.type):左侧只列共用成员 + 本类型专属团队(project_types.of_agent)
 let PROJ_TYPE='film';
@@ -1469,15 +1522,138 @@ function afterProjectSwitch(){
   renderRuns();renderAgents();   // 运行面板/左侧状态只显示当前项目的任务
   if(CURRENT)selectAgent(CURRENT);   // 各项目对话独立:切项目重载当前 Agent 的对话
 }
-$('#project').onchange=async()=>{
-  const v=$('#project').value;
-  if(v==='__new'||v==='__import'){
-    setProject(loadPrefs().project||'demo');   // 先复位选择,创建/导入成功后再切换
-    if(v==='__new')openNpModal();else $('#proj-import-file').click();
-    return;
+
+/* ---------- 项目选择弹窗(2026-10-20,代替原下拉):新建 / 导入、按名称 / 最新更新排序、每页 10 个;
+   备份(<源项目>-YYYYMMDD…,服务端 backup_of 判定)折叠在源项目名下,点「备份」数展开。
+   磁盘占用按当前页可见项目另取(大项目冷扫要几秒,服务端缓存 10 分钟),先显示「…」 ---------- */
+const PM_PAGE_SIZE=10,PM_SORT_KEY='webui_proj_sort';
+const PM={open:false,list:[],err:'',sort:'name',page:0,expanded:new Set(),disk:{},diskAsked:new Set(),liveTimer:0};
+try{if(localStorage.getItem(PM_SORT_KEY)==='updated')PM.sort='updated'}catch(e){}
+function pmTypeCell(type){   // 类型名与图标取新建向导的类型卡(已按界面语言翻译)
+  const b=document.querySelector('.np-type[data-type="'+type+'"]');
+  if(!b)return esc(type);
+  return esc(b.querySelector('.np-type-ico').textContent)+' '+esc(b.querySelector('.np-type-nm').textContent);
+}
+function pmBytes(n){
+  if(n==null)return '…';
+  const u=['B','KB','MB','GB','TB'];let i=0;
+  while(n>=1024&&i<u.length-1){n/=1024;i++}
+  return (i&&n<10?n.toFixed(1):Math.round(n))+' '+u[i];
+}
+function pmGroups(){
+  const by={},groups=[];
+  PM.list.forEach(p=>{if(!p.backup_of)by[p.name]={...p,backups:[],latest:p.updated}});
+  PM.list.forEach(p=>{const g=p.backup_of&&by[p.backup_of];if(g){g.backups.push(p);g.latest=Math.max(g.latest,p.updated)}});
+  const cmp=PM.sort==='updated'?(a,b)=>(b.latest??b.updated)-(a.latest??a.updated)||a.name.localeCompare(b.name)
+    :(a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'});
+  Object.values(by).forEach(g=>{g.backups.sort(cmp);groups.push(g)});
+  return groups.sort(cmp);   // 按最新更新时源项目取整组(含备份)最近一次更新
+}
+function pmRow(p,{backup=false,group=null}={}){
+  const cur=p.name===curProj();
+  const run=p.running?'<span class="pm-on">'+p.running+'</span>':'<span class="pm-dim">—</span>';
+  const q=p.queued?' <span class="pm-dim" title="'+esc(I18N.f(t('{n} 个排队中'),{n:p.queued}))+'">+'+p.queued+'</span>':'';
+  let bk='<span class="pm-dim">—</span>';
+  if(group&&group.backups.length){
+    const open=PM.expanded.has(group.name),busy=group.backups.some(b=>b.running||b.queued);
+    bk='<button type="button" class="pm-bkbtn" data-bk="'+esc(group.name)+'" aria-expanded="'+open+'">'
+      +(busy?'<span class="dot" title="'+esc(t('有备份项目正在运行'))+'"></span>':'')+group.backups.length+' '+(open?'▾':'▸')+'</button>';
   }
+  return '<tr class="pm-row'+(backup?' pm-bk':'')+(cur?' cur':'')+'" tabindex="0" data-name="'+esc(p.name)+'"'
+    +(p.updated?' title="'+esc(I18N.f(t('最近更新 {t}'),{t:fmtTs(p.updated)}))+'"':'')+'>'
+    +'<td><span class="pm-nm" data-no-i18n>'+esc(p.name)+'</span></td>'
+    +'<td>'+pmTypeCell(p.type)+'</td>'
+    +'<td>'+(p.watchdog?'<span class="pm-on" title="'+esc(t('自动运行已开启'))+'">🤖</span>':'<span class="pm-dim">—</span>')+'</td>'
+    +'<td class="num">'+(backup?'':bk)+'</td>'
+    +'<td class="num"><span dir="ltr">'+run+q+'</span></td>'
+    +'<td class="num"><span dir="ltr" data-disk="'+esc(p.name)+'">'+pmBytes(PM.disk[p.name])+'</span></td></tr>';
+}
+function pmRender(){
+  const groups=pmGroups(),pages=Math.max(1,Math.ceil(groups.length/PM_PAGE_SIZE));
+  PM.page=Math.min(Math.max(0,PM.page),pages-1);
+  const shown=groups.slice(PM.page*PM_PAGE_SIZE,(PM.page+1)*PM_PAGE_SIZE);
+  $('#pm-body').innerHTML=shown.map(g=>pmRow(g,{group:g})
+    +(PM.expanded.has(g.name)?g.backups.map(b=>pmRow(b,{backup:true})).join(''):'')).join('');
+  document.querySelectorAll('#proj-modal .pm-seg button').forEach(b=>b.classList.toggle('on',b.dataset.sort===PM.sort));
+  const nb=PM.list.length-groups.length;
+  $('#pm-count').textContent=PM.err?t('读取项目列表失败:')+PM.err:nb?I18N.f(t('{n} 个项目 · {b} 个备份'),{n:groups.length,b:nb}):I18N.f(t('{n} 个项目'),{n:groups.length});
+  // 页码:页数多时只留首尾与当前页前后两页,其余用 … 代替
+  const nums=[];
+  for(let i=0;i<pages;i++)if(pages<=9||i===0||i===pages-1||Math.abs(i-PM.page)<=2)nums.push(i);
+  let html='<button type="button" data-pg="'+(PM.page-1)+'"'+(PM.page?'':' disabled')+' title="上一页">‹</button>';
+  nums.forEach((i,k)=>{
+    if(k&&i-nums[k-1]>1)html+='<span>…</span>';
+    html+='<button type="button" data-pg="'+i+'"'+(i===PM.page?' class="on" aria-current="page"':'')+'>'+(i+1)+'</button>';
+  });
+  html+='<button type="button" data-pg="'+(PM.page+1)+'"'+(PM.page<pages-1?'':' disabled')+' title="下一页">›</button>';
+  $('#pm-pager').innerHTML=pages>1?html:'';
+  pmLoadDisk([...document.querySelectorAll('#pm-body [data-disk]')].map(el=>el.dataset.disk));
+}
+async function pmLoadDisk(names){
+  const want=names.filter(n=>!PM.diskAsked.has(n));
+  if(!want.length)return;
+  want.forEach(n=>PM.diskAsked.add(n));
+  let sizes={};
+  try{sizes=(await api('/api/v1/projects/disk?names='+encodeURIComponent(want.join(',')))).sizes||{}}catch(e){}
+  want.forEach(n=>{
+    if(!(n in sizes)){PM.diskAsked.delete(n);return}   // 取不到的下次翻到再试
+    PM.disk[n]=sizes[n];
+    document.querySelectorAll('#pm-body [data-disk]').forEach(el=>{if(el.dataset.disk===n)el.textContent=pmBytes(sizes[n])});
+  });
+}
+async function pmFetch(){
+  try{PM.list=(await api('/api/v1/projects/overview')).projects||[];PM.err=''}
+  catch(e){   // 后端还没重启到带总览接口的版本等:退回只有项目名的列表,至少还能切换项目
+    PM.err=e.message;
+    try{PM.list=(await api('/api/v1/projects')).map(n=>({name:n,type:'',watchdog:false,running:0,queued:0,updated:0,backup_of:null}))}catch(_){}
+  }
+}
+async function openProjModal(){
+  PM.diskAsked.clear();   // 每次打开重新取一遍(服务端 10 分钟内直接回缓存)
+  await pmFetch();
+  const cur=PM.list.find(p=>p.name===curProj());
+  const home=cur&&cur.backup_of||curProj();   // 当前是备份项目:展开它的源项目并翻到那一页
+  if(cur&&cur.backup_of)PM.expanded.add(home);
+  const idx=pmGroups().findIndex(g=>g.name===home);
+  PM.page=idx>=0?Math.floor(idx/PM_PAGE_SIZE):0;
+  PM.open=true;
+  $('#proj-modal').style.display='flex';
+  pmRender();
+  ($('#pm-body tr.cur')||$('#pm-body tr'))?.focus();
+}
+function pmClose(){PM.open=false;$('#proj-modal').style.display='none';$('#proj-btn').focus()}
+function pmChoose(name){
+  pmClose();
+  if(name===curProj())return;
+  setProject(name);
   afterProjectSwitch();
+}
+function pmLiveRefresh(){   // 弹窗开着时运行 / 自动运行状态变了:合并 1 秒内的变化再重取一次总览
+  if(!PM.open)return;
+  clearTimeout(PM.liveTimer);
+  PM.liveTimer=setTimeout(async()=>{if(!PM.open)return;await pmFetch();if(PM.open)pmRender()},1000);
+}
+$('#proj-btn').onclick=openProjModal;
+$('#pm-new').onclick=()=>{pmClose();openNpModal()};
+$('#pm-import').onclick=()=>{pmClose();$('#proj-import-file').click()};   // 2026-09-23:选 zip 包解压到 data/projects/ 后自动切过去
+document.querySelectorAll('#proj-modal .pm-seg button').forEach(b=>b.onclick=()=>{
+  PM.sort=b.dataset.sort;PM.page=0;
+  try{localStorage.setItem(PM_SORT_KEY,PM.sort)}catch(e){}
+  pmRender();
+});
+$('#pm-pager').onclick=e=>{const b=e.target.closest('button[data-pg]');if(b&&!b.disabled){PM.page=+b.dataset.pg;pmRender()}};
+$('#pm-body').onclick=e=>{
+  const bk=e.target.closest('[data-bk]');
+  if(bk){const n=bk.dataset.bk;PM.expanded.has(n)?PM.expanded.delete(n):PM.expanded.add(n);pmRender();
+    document.querySelector('#pm-body [data-bk="'+CSS.escape(n)+'"]')?.focus();return}
+  const tr=e.target.closest('tr[data-name]');if(tr)pmChoose(tr.dataset.name);
 };
+$('#pm-body').onkeydown=e=>{
+  if(e.key!=='Enter'||e.target.closest('[data-bk]'))return;
+  const tr=e.target.closest('tr[data-name]');if(tr){e.preventDefault();pmChoose(tr.dataset.name)}
+};
+$('#proj-modal').onclick=e=>{if(e.target===e.currentTarget)pmClose()};
+document.addEventListener('keydown',e=>{if(PM.open&&e.key==='Escape')pmClose()});
 
 /* ---------- 导入项目(zip → POST /api/v1/projects/import 流式上传 → 解压到 data/projects/<名> → 自动切到该项目) ---------- */
 function projImportBox(){   // 右上角悬浮状态条:上传进度 / 解压中 / 结果;失败留在页面上可关
@@ -3937,6 +4113,7 @@ function connect(){
   es.onerror=()=>{$('#conn').classList.remove('ok');updateConnTitle(false);es.close();setTimeout(connect,2000)};
   es.onmessage=e=>{
     const ev=JSON.parse(e.data);
+    if(ev.type==='watchdog'||ev.type==='run'&&(RUNS[ev.run.id]||{}).status!==ev.run.status)pmLiveRefresh();   // 项目选择弹窗里的自动运行 / 运行数
     if(ev.type==='run'){RUNS[ev.run.id]=ev.run;renderRuns();renderAgents()}
     else if(ev.type==='chat'&&ev.agent===CURRENT&&ev.project===curProj()){
       if(ev.role==='user')appendMsg('user',ev.text,ev);

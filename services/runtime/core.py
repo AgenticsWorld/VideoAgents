@@ -16132,6 +16132,133 @@ async def api_projects():
                    if d.is_dir() and not d.name.startswith(".")])
 
 
+# ---------------- 顶栏项目选择弹窗(2026-10-20):项目总览 + 磁盘占用 ----------------
+# 备份 = 版本管理页「复制项目」的默认命名 <源项目>-YYYYMMDD(同日重名再加 -1、-2…,
+# 也有手工改的 -sd25 / -unsensor 之类后缀);源项目还在时折叠到它名下,源项目没了就照常单列。
+_BACKUP_NAME_RE = re.compile(r"^(?P<base>.+?)-(?P<date>20\d{6})(?:-.+)?$")
+
+
+def _backup_base(name: str, names) -> str | None:
+    m = _BACKUP_NAME_RE.match(name)
+    if not m or m["base"] not in names:
+        return None
+    try:
+        datetime.strptime(m["date"], "%Y%m%d")
+    except ValueError:
+        return None
+    return m["base"]
+
+
+def _project_mtime(path: Path) -> float:
+    """「最近更新」:项目目录、一级、二级条目的最大修改时间(runs/ 只看目录本身——新开运行会建子目录;
+    逐个 run 目录 stat 太慢)。全量 60 多个项目约 70 ms。"""
+    try:
+        latest = path.stat().st_mtime
+    except OSError:
+        return 0.0
+    try:
+        with os.scandir(path) as top:
+            for e in top:
+                try:
+                    latest = max(latest, e.stat(follow_symlinks=False).st_mtime)
+                    if e.name == "runs" or not e.is_dir(follow_symlinks=False):
+                        continue
+                    with os.scandir(e.path) as sub:
+                        for e2 in sub:
+                            try:
+                                latest = max(latest, e2.stat(follow_symlinks=False).st_mtime)
+                            except OSError:
+                                pass
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    return latest
+
+
+def _projects_overview() -> list[dict]:
+    names = [d.name for d in PROJECTS_DIR.iterdir() if d.is_dir() and not d.name.startswith(".")]
+    name_set = set(names)
+    wd = STATE.get("watchdog", {})
+    running, queued, last_run = {}, {}, {}
+    for r in list(RUNS.values()):
+        p = r.get("project")
+        if r.get("status") == "running":
+            running[p] = running.get(p, 0) + 1
+        elif r.get("status") == "queued":
+            queued[p] = queued.get(p, 0) + 1
+        ts = max((r.get(k) or 0) for k in ("created", "started", "ended"))
+        last_run[p] = max(last_run.get(p, 0), ts)
+    out = []
+    for n in sorted(names):
+        try:   # 同 load_project_settings 的类型判定,只是不合并整份缺省设置
+            saved = json.loads(project_settings_path(n).read_text())
+        except Exception:
+            saved = {}
+        block = saved.get("project") if isinstance(saved, dict) else None
+        ptype = (project_types.normalize(block["type"]) if isinstance(block, dict) and block.get("type")
+                 else project_types.infer(PROJECTS_DIR / n))
+        out.append({"name": n, "type": ptype, "watchdog": bool(wd.get(n, False)),
+                    "running": running.get(n, 0), "queued": queued.get(n, 0),
+                    "updated": max(_project_mtime(PROJECTS_DIR / n), last_run.get(n, 0)),
+                    "backup_of": _backup_base(n, name_set)})
+    return out
+
+
+async def api_projects_overview():
+    return {"projects": await asyncio.to_thread(_projects_overview)}
+
+
+PROJECT_DISK_TTL = 600                   # 磁盘占用缓存 10 分钟:大项目冷扫一遍要几秒
+PROJECT_DISK_CACHE: dict = {}            # 项目名 → (算出时刻, 字节数)
+_PROJECT_DISK_INFLIGHT: dict = {}        # 项目名 → 进行中的扫描 Task(同名并发请求共用一次)
+
+
+def _dir_bytes(path: Path) -> int:
+    """文件字节数之和(不跟符号链接,链接本身算 lstat 大小)。"""
+    total, stack = 0, [str(path)]
+    while stack:
+        try:
+            with os.scandir(stack.pop()) as it:
+                for e in it:
+                    try:
+                        if e.is_dir(follow_symlinks=False):
+                            stack.append(e.path)
+                        else:
+                            total += e.stat(follow_symlinks=False).st_size
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+    return total
+
+
+async def _project_disk(name: str) -> int:
+    hit = PROJECT_DISK_CACHE.get(name)
+    if hit and time.time() - hit[0] < PROJECT_DISK_TTL:
+        return hit[1]
+    task = _PROJECT_DISK_INFLIGHT.get(name)
+    if task is None:
+        task = asyncio.ensure_future(asyncio.to_thread(_dir_bytes, PROJECTS_DIR / name))
+        _PROJECT_DISK_INFLIGHT[name] = task
+        task.add_done_callback(lambda _t: _PROJECT_DISK_INFLIGHT.pop(name, None))
+    size = await task
+    PROJECT_DISK_CACHE[name] = (time.time(), size)
+    return size
+
+
+async def api_projects_disk(names: str = ""):
+    """弹窗当前页可见项目的磁盘占用(逗号分隔,最多 60 个);不存在的项目不返回。"""
+    want = []
+    for n in str(names or "").split(","):
+        n = n.strip()
+        if n and re.fullmatch(r"[\w-]{1,80}", n) and n not in want and (PROJECTS_DIR / n).is_dir():
+            want.append(n)
+    want = want[:60]
+    sizes = await asyncio.gather(*(_project_disk(n) for n in want))
+    return {"sizes": dict(zip(want, sizes))}
+
+
 PROJECT_INIT_PENDING = ".init_pending"   # 延后初始化标记:向导先传素材再派初始化(api_projects_init 一次性消费)
 
 
