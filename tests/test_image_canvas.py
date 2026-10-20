@@ -684,6 +684,49 @@ def test_api_nsfw_toggle_routes_edit_and_upscale(runtime, monkeypatch):
     assert e.value.status_code == 400 and 'NSFW' in str(e.value.detail)
 
 
+def test_canvas_agent_refusal_marks_job_and_prompts_nsfw_toggle(runtime, monkeypatch):
+    """NSFW 模式 + 拒绝判定:画板修图 Agent 没交提示词就结束、回复不是套话 → 审核模型判 policy → 任务标失败、
+    提示打开 🔞 再发送(不自动重发);已交提示词的运行不调审核模型。"""
+    core, base, spawned, chats = runtime
+    cfg = {**nsfw_cfg(), 'judge': True}
+    monkeypatch.setattr(core, 'nsfw_settings', lambda: cfg)
+    monkeypatch.setattr(core, 'resolve_moderation', lambda cfg=None: {
+        'provider': 'openrouter', 'base_url': 'https://openrouter.ai/api/v1', 'api_key': 'k', 'model': 'typesafe/jev-router'})
+    calls, events, seen = [], [], []
+    doc = ic.doc_dir_of(base, SHEET)
+
+    def judge(text, **kw):
+        calls.append(text)
+        act = ic.active_job(doc, ic.load_history(doc), core._canvas_run_ended)        # 判定期间页面轮询:任务仍算在整理
+        seen.append(act and act['status'])
+        return {'kind': 'policy', 'refusal': True, 'routed_model': 'm', 'cost': 0.002, 'model': kw['model'], 'ms': 1}
+    monkeypatch.setattr(core._refusal_judge, 'classify', judge)
+    monkeypatch.setattr(core.HUB, 'publish', events.append)
+    reply = '这单我没有提交。图里看起来是真人照片,这种编辑我不做。'
+
+    def finish(jid_status=None):
+        st = asyncio.run(core.api_canvas_edit('p', {'file': SHEET, **edit_payload(refs=[], mode='agent', preview=False)}))
+        if jid_status:
+            ic.set_job(doc, st['job']['id'], status=jid_status)
+        run = {'id': f'r{len(chats)}', 'agent': core.CANVAS_AGENT, 'project': 'p', 'message': chats[-1]['message'],
+               'status': 'done', 'result': reply}
+        monkeypatch.setitem(core.RUNS, run['id'], run)
+        asyncio.run(core._nsfw_refusal_postcheck(run))
+        return run, ic.load_job(doc, st['job']['id'])
+    run, job = finish()
+    assert calls == [reply] and run['nsfw_suspect'] == {'task_id': '', 'at': run['nsfw_suspect']['at'], 'by': 'judge'}
+    assert seen == ['drafting'] and '_refusal_checking' not in run
+    assert job['status'] == 'failed' and job['refused'] == 'judge' and '打开工具栏的 🔞 再发送' in job['error']
+    assert 'deepagents' in job['error'] and 'turn on 🔞' in job['error_en'] and not spawned          # 只提示,不重发
+    assert events[-1] == {'type': 'canvas', 'project': 'p', 'file': SHEET, 'job': job['id'], 'status': 'failed'}
+    assert asyncio.run(core.api_canvas_get('p', SHEET))['last_job']['refused'] == 'judge'
+    cfg['text'] = {'engine': '', 'model': ''}                                        # 没配备用语言模型:提示先去配置
+    run, job = finish()
+    assert job['refused'] == 'judge' and '没有配置备用语言模型' in job['error'] and len(calls) == 2
+    run, job = finish('queued')                                                     # 已交提示词:不是拒绝,不花钱
+    assert len(calls) == 2 and 'nsfw_suspect' not in run and job['status'] == 'queued'
+
+
 def test_nsfw_job_spawns_with_nsfw_env_and_marks_version(base, channel, monkeypatch):
     from services.runtime import core
     doc, _ = ic.open_doc(base, SHEET)

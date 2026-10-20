@@ -1,8 +1,12 @@
 """NSFW 模式(2026-09-25):genmedia 三层路由(显式标记 / 审核拒收兜底 / 粘性回写)、审核错误判定、
-nsfw_hint 词表机检、宿主侧工单字段/拒绝句式识别。"""
+nsfw_hint 词表机检、宿主侧工单字段/拒绝句式识别;拒绝判定用审核模型(2026-10-20)。"""
+import asyncio
+import io
 import json
 import sys
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -164,3 +168,132 @@ def test_group_nsfw_state_precedence(tmp_path, monkeypatch):
     assert core.group_nsfw_state("pj", "ep01", "grp001", {"nsfw": True})["nsfw"] is False
     (tmp_path / "pj/assets/group_settings/ep01/grp001.json").write_text(json.dumps({"nsfw": True, "nsfw_reason": "failover"}))
     assert core.group_nsfw_state("pj", "ep01", "grp001", None)["source"] == "failover"
+
+
+# ---------------------------------------------------------------- 拒绝判定用审核模型(2026-10-20)
+def test_refusal_judge_request_and_parse():
+    from modules import refusal_judge as rj
+    body = rj.request_body("x" * 3000 + "我不做这种编辑", "typesafe/jev-router")
+    user = body["messages"][1]["content"]
+    assert body["model"] == "typesafe/jev-router" and len(user) == rj.TAIL and user.endswith("我不做这种编辑")
+    ok = {"model": "x-ai/grok-4.7", "choices": [{"message": {"content": '```json\n{"kind": "Policy"}\n```'}}],
+          "usage": {"cost": 0.0018}}
+    assert rj.parse(ok) == {"kind": "policy", "refusal": True, "routed_model": "x-ai/grok-4.7", "cost": 0.0018}
+    assert rj.parse({"choices": [{"message": {"content": '{"kind": "missing_input"}'}}]})["refusal"] is False
+    assert rj.parse({"choices": [{"message": {"content": '{"kind": "weird"}'}}]})["kind"] == "other"
+    for bad in ({}, {"choices": [{"message": {"content": "policy"}}]}):
+        with pytest.raises(rj.JudgeError):
+            rj.parse(bad)
+
+
+def test_refusal_judge_classify_posts_chat_completions(monkeypatch):
+    from modules import refusal_judge as rj
+    seen = {}
+
+    class Resp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    def fake(req, timeout):
+        seen.update(url=req.full_url, auth=req.headers.get("Authorization"), body=json.loads(req.data))
+        return Resp(json.dumps({"model": "m2", "choices": [{"message": {"content": '{"kind":"clarification"}'}}]}).encode())
+    monkeypatch.setattr(rj.urllib.request, "urlopen", fake)
+    v = rj.classify("要不要继续?", base_url="https://openrouter.ai/api/v1/", api_key="sk", model="typesafe/jev-router")
+    assert seen["url"] == "https://openrouter.ai/api/v1/chat/completions" and seen["auth"] == "Bearer sk"
+    assert seen["body"]["messages"][0]["content"] == rj.SYSTEM
+    assert v["kind"] == "clarification" and v["refusal"] is False and v["model"] == "typesafe/jev-router"
+
+    def boom(req, timeout):
+        raise rj.urllib.error.HTTPError(req.full_url, 401, "no", {}, io.BytesIO(b'{"error":"bad key"}'))
+    monkeypatch.setattr(rj.urllib.request, "urlopen", boom)
+    with pytest.raises(rj.JudgeError, match="HTTP 401"):
+        rj.classify("x", base_url="https://openrouter.ai/api/v1", api_key="sk", model="typesafe/jev-router")
+
+
+def test_moderation_config_gates_judge_switch(monkeypatch):
+    """审核模型没配好时拒绝打开 judge;OpenRouter 填了 Key / Agentics 桌面端已登录才算可用;只认清单里的模型。"""
+    from services.runtime import core
+    monkeypatch.setattr(core, "ui_lang_code", lambda cfg=None: "zh")
+    for k in ("OPENROUTER_API_KEY", "VIDEOAGENTS_USER_JWT", "VIDEOAGENTS_SERVICE_API_ORIGIN",
+              "VIDEOAGENTS_OPENROUTER_WRAPPER_URL"):
+        monkeypatch.delenv(k, raising=False)
+    gc = {"moderation": {"provider": "openrouter", "openrouter": {"api_key": "", "model": "typesafe/jev-router"},
+                         "agentics": {"model": "typesafe/jev-router"}}}
+    monkeypatch.setattr(core, "load_genconfig", lambda: gc)
+    monkeypatch.setattr(core, "video_provider_options", lambda cfg=None: [])
+    monkeypatch.setattr(core, "_image_channels", lambda: [])
+    saved = []
+    monkeypatch.setattr(core, "save_state", lambda st: saved.append(dict(st.get("nsfw") or {})))
+    monkeypatch.setitem(core.STATE, "nsfw", {"enabled": True})
+    st = core.moderation_status()
+    assert st["ready"] is False and "API Key" in st["error"]
+    with pytest.raises(core.ServiceError) as e:
+        asyncio.run(core.api_nsfw_set({"judge": True}))
+    assert e.value.status_code == 400 and "审核模型" in e.value.detail and not saved
+    gc["moderation"]["openrouter"]["api_key"] = "sk-or"
+    assert core.resolve_moderation() == {"provider": "openrouter", "base_url": "https://openrouter.ai/api/v1",
+                                         "api_key": "sk-or", "model": "typesafe/jev-router"}
+    d = asyncio.run(core.api_nsfw_set({"judge": True}))
+    assert d["judge"] is True and d["judge_model"]["ready"] is True and saved[-1]["judge"] is True
+    assert asyncio.run(core.api_nsfw_set({"judge": False}))["judge"] is False     # 关闭不需要审核模型可用
+    gc["moderation"]["openrouter"]["model"] = "openai/gpt-6"
+    assert core.moderation_status()["ready"] is False                              # 只认清单里的模型
+    gc["moderation"]["provider"] = "agentics"
+    assert "桌面端" in core.moderation_status()["error"]
+    monkeypatch.setenv("VIDEOAGENTS_USER_JWT", "jwt")
+    monkeypatch.setenv("VIDEOAGENTS_SERVICE_API_ORIGIN", "https://api.agentics.world")
+    monkeypatch.setenv("VIDEOAGENTS_OPENROUTER_WRAPPER_URL", "https://api.agentics.world/wrapper/openrouter")
+    r = core.resolve_moderation()
+    assert (r["provider"], r["base_url"], r["api_key"]) == (
+        "agentics", "https://api.agentics.world/wrapper/openrouter/api/v1", "jwt")
+
+
+def test_refusal_postcheck_prescreen_then_judge(tmp_path, monkeypatch):
+    """套话直接认;没认出时只有「正常结束、回复不长、带 task_id、没写文件」的运行才调审核模型,policy 才标 nsfw_suspect。"""
+    from services.runtime import core
+    monkeypatch.setattr(core, "PROJECTS_DIR", tmp_path)
+    cfg = {"enabled": True, "failover": True, "judge": True, "text": {"engine": "codex", "model": ""},
+           "image": {"provider": "", "model": ""}, "video": {"provider": "", "model": ""}}
+    monkeypatch.setattr(core, "nsfw_settings", lambda: cfg)
+    monkeypatch.setattr(core, "resolve_moderation", lambda cfg=None: {
+        "provider": "openrouter", "base_url": "https://openrouter.ai/api/v1", "api_key": "k", "model": "typesafe/jev-router"})
+    verdict, calls = ["policy"], []
+
+    def fake(text, **kw):
+        calls.append(text)
+        if verdict[0] == "boom":
+            raise core._refusal_judge.JudgeError("HTTP 500: upstream")
+        return {"kind": verdict[0], "refusal": verdict[0] == "policy", "routed_model": "m", "cost": 0.002,
+                "model": kw["model"], "ms": 1}
+    monkeypatch.setattr(core._refusal_judge, "classify", fake)
+    reply = "这一段我不写:要求把强迫的性场面写细,这类内容我不接。"
+    assert not core.llm_refusal_suspect(reply)
+
+    def check(**kw):
+        run = {"id": "r1", "agent": "01-story/script", "project": "pj", "message": "task_id: p5-ep01-script\ninstruction: x",
+               "status": "done", "result": reply, **kw}
+        asyncio.run(core._nsfw_refusal_postcheck(run))
+        return run
+    r = check()
+    assert calls == [reply] and r["nsfw_suspect"]["by"] == "judge" and r["refusal_judge"]["kind"] == "policy"
+    assert "p5-ep01-script" in core.nsfw_suspect_tasks("pj")
+    for kw in ({"files": ["a.md"]}, {"message": "instruction: x"}, {"result": reply * 200}, {"status": "error"},
+               {"stopped": "user"}):
+        assert "nsfw_suspect" not in check(**kw)                                    # 预筛不过:不调审核模型
+    assert len(calls) == 1
+    r = check(result="I'm sorry, but I can't help with that request.")
+    assert r["nsfw_suspect"]["by"] == "regex" and len(calls) == 1                   # 套话直接认,不花钱
+    verdict[0] = "missing_input"
+    r = check()
+    assert "nsfw_suspect" not in r and r["refusal_judge"]["kind"] == "missing_input"
+    verdict[0] = "boom"
+    r = check()
+    assert "nsfw_suspect" not in r and "HTTP 500" in r["refusal_judge"]["error"]    # 调用失败:只记录,退回套话
+    cfg["judge"] = False
+    assert "nsfw_suspect" not in check()
+    cfg["judge"] = True
+    assert "nsfw_suspect" not in check(nsfw_route={"reason": "workorder", "engine": "codex"})   # 备用模型也拒:交用户
+    assert len(calls) == 3

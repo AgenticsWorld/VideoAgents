@@ -527,6 +527,16 @@ function syncNsfw(){
     $(note).textContent=!on?'':img?F('🔞 图像改用 NSFW 备用渠道:{ch}',{ch:chDesc(img)}):t('🔞 没有配置 NSFW 备用图像渠道,按这里选的模型出图');
   });
 }
+// 🔞 相关的按钮 / 提示 / 标记只在 NSFW 模式开着时显示;控制台里开关(或换备用模型)后切回本页即重读状态,不用手动刷新
+const nsfwSig=m=>m.enabled?JSON.stringify([m.text||null,m.image||null]):'off';
+document.addEventListener('visibilitychange',async()=>{
+  if(document.visibilityState!=='visible'||!S)return;
+  try{
+    const d=await (await fetch('/api/v1/config/nsfw')).json();
+    const now={enabled:!!d.enabled,text:d.text&&d.text.engine?d.text:null,image:d.image&&d.image.provider?d.image:null};
+    if(nsfwSig(now)!==nsfwSig(nsfwMode()))apply(await api('?file='+encodeURIComponent(FILE)),true);
+  }catch(_){}
+});
 $('#nsfw').onclick=()=>{
   NSFW_ON=!NSFW_ON;try{localStorage.setItem(NSFW_KEY,NSFW_ON?'1':'')}catch(_){}
   syncNsfw();syncSendHint();if(upMode()==='redraw')loadLimits();
@@ -552,13 +562,16 @@ $('#send').onclick=async()=>{
 const JOB_TEXT={queued:'排队中',drafting:'画板修图 Agent 正在整理提示词',awaiting_confirm:'提示词待确认',running:'出图中',done:'完成',failed:'失败',cancelled:'已取消'};
 function jobHtml(j,failed){
   if(j){
-    let h=`<div class="st">${j.status==='awaiting_confirm'?'📝':'<span class="spin">⏳</span>'} ${esc(t(JOB_TEXT[j.status]||j.status))}<span class="badge" data-no-i18n>${esc(j.id)}</span>${j.nsfw?'<span class="badge warn" data-no-i18n>🔞 NSFW</span>':''}</div>`;
+    let h=`<div class="st">${j.status==='awaiting_confirm'?'📝':'<span class="spin">⏳</span>'} ${esc(t(JOB_TEXT[j.status]||j.status))}<span class="badge" data-no-i18n>${esc(j.id)}</span>${j.nsfw&&nsfwMode().enabled?'<span class="badge warn" data-no-i18n>🔞 NSFW</span>':''}</div>`;
     if(j.status==='awaiting_confirm')h+=`<div class="hint" style="margin:6px 0 4px">${esc(t('将要发给图像模型的提示词,可以直接改:'))}</div><textarea id="j-prompt" rows="9" data-no-i18n>${esc(j.prompt||'')}</textarea>`
       +`<div class="row" style="margin-top:6px"><button class="pri" id="j-ok">${esc(t('确认出图'))}</button><button id="j-cancel">${esc(t('取消'))}</button></div>`;
     else if(j.status==='drafting')h+=`<div class="hint">${esc(t('可以到控制台看 Agent 的进展'))}</div><div class="row"><button id="j-cancel">${esc(t('取消'))}</button></div>`;
     else h+=`<div class="hint">${esc(j.op==='upscale'?F('目标 {w}×{h}',{w:j.target[0],h:j.target[1]}):t('通常一分钟左右'))}</div>`;
     return h;
   }
+  if(failed&&failed.refused)return nsfwMode().enabled   // NSFW 模式下识别出的拒绝:只提示,发不发由用户定;模式已关时提示里的 🔞 建议不适用,只报被拒
+    ?`<div class="st" style="color:var(--yellow)">🔞 ${esc(t('上一次编辑被画板修图 Agent 拒绝'))}</div><div class="hint warn">${esc(failed.error||'')}</div>`
+    :`<div class="st" style="color:var(--red)">✗ ${esc(t('上一次编辑被画板修图 Agent 拒绝'))}</div>`;
   if(failed)return `<div class="st" style="color:var(--red)">✗ ${esc(t(failed.op==='upscale'?'上一次放大失败':'上一次编辑失败'))}</div><div class="err">${esc(failed.error||'')}</div>`;
   return '';
 }
@@ -708,7 +721,7 @@ function renderVers(){
     if(v.plate_key)b.push(`<span class="badge key" data-no-i18n title="${esc(t('已登记进背景图库'))}">${esc(v.plate_key)}</span>`);
     if(lock.applied)b.push(`<span class="badge${lock.warn?' warn':''}" title="${esc(lock.warn?t('模型把圈外也改了不少(可能整张图挪了位置):圈内贴回原图后接缝可能对不上,可以改用整图看看'):t('圈外保持原图不变'))}">${esc(t(lock.warn?'圈外漂移':'圈外锁定'))}</span>`);
     if(v.aspect_changed)b.push(`<span class="badge warn">${esc(t('画幅变了'))}</span>`);
-    if(v.nsfw)b.push(`<span class="badge warn" title="${esc(t('按 NSFW 模式的备用模型出的图'))}">🔞</span>`);
+    if(v.nsfw&&nsfwMode().enabled)b.push(`<span class="badge warn" title="${esc(t('按 NSFW 模式的备用模型出的图'))}">🔞</span>`);
     const use=v.usage&&v.usage.total_tokens?F('用量 {n} tokens',{n:v.usage.total_tokens}):'';
     const meta=[`${v.width}×${v.height}`,fmtSize(v.bytes),[v.provider,v.model].filter(Boolean).join(' '),use,fmtTime(v.created_at),v.parent?'← '+v.parent:''].filter(Boolean).join(' · ');
     const desc=verDesc(v);

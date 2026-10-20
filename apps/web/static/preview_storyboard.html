@@ -2329,6 +2329,14 @@ $('#content').addEventListener('scroll',()=>{
   });
 });
 
+// 组卡 🔞 开关只在 NSFW 模式开着时显示:控制台里开 / 关后切回本页即就地重载(keep 模式保留滚动位置),不用手动刷新
+document.addEventListener('visibilitychange',async()=>{
+  if(document.visibilityState!=='visible')return;
+  try{
+    const d=await (await fetch('/api/v1/config/nsfw')).json();
+    if(!!d.enabled!==NSFW_MODE)load(true);
+  }catch(_){}
+});
 async function load(keep){
   if(keep)KEEP_SCROLL=true;
   const proj=$('#project').value.trim()||'demo';

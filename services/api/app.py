@@ -1006,6 +1006,11 @@ async def test_deepagents(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_test_deepagents(body.model_dump())
 
 
+@api.post("/providers/moderation/test", tags=["providers"])
+async def test_moderation(body: ProviderProbe) -> dict[str, Any]:
+    return await core.api_test_moderation(body.model_dump())
+
+
 @api.post("/providers/elevenlabs/voices", tags=["providers"])
 async def elevenlabs_voices(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_elevenlabs_voices(body.model_dump())

@@ -1100,6 +1100,11 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <input type="checkbox" id="nsfw-failover" style="width:auto;flex:none;margin:0">
         <span class="note">关闭后只按显式标记路由,主渠道审核拒收照常报错</span>
       </div>
+      <div class="row"><label style="width:auto">拒绝判定用审核模型</label>
+        <input type="checkbox" id="nsfw-judge" style="width:auto;flex:none;margin:0">
+        <span class="note" id="nsfw-judge-st"></span>
+      </div>
+      <div class="note">语言模型的拒绝默认只按套话认(如「无法协助」「违反内容政策」);换了说法的拒绝要靠审核模型。打开后,只有正常结束、回复不长、没交产物的运行(画板修图 Agent 没提交提示词;带 task_id 的工单没写任何文件)才把末尾回复交给「🎨 生成模型」页的「🛡 审核模型」判一次,每次计费(jev-router 实测约 $0.002);判为拒绝时同 task_id 重派改用备用语言模型,画板任务提示你打开 🔞 再发送。默认关;没配置审核模型时不能打开。</div>
     </div>
     <div class="err" id="nsfw-err"></div>
     <div class="actions">
@@ -3137,6 +3142,12 @@ function nsfwRender(d){
   NSFW=d;
   $('#nsfw-on').checked=!!d.enabled;
   $('#nsfw-failover').checked=!!d.failover;
+  // 拒绝判定:审核模型没配好时不能打开(已打开的仍可关;此时运行里只按套话判)
+  const jm=d.judge_model||{};
+  $('#nsfw-judge').checked=!!d.judge;
+  $('#nsfw-judge').disabled=!jm.ready&&!d.judge;
+  $('#nsfw-judge-st').textContent=jm.ready?I18N.f('审核模型:{p} · {m}',{p:jm.provider==='openrouter'?'OpenRouter':'Agentics',m:jm.model})
+    :(d.judge?t('⚠ 审核模型现在不可用,运行里只按拒绝套话判'):t('未配置审核模型:先到「🎨 生成模型」页「🛡 审核模型」配置'))+(jm.error?' ('+jm.error+')':'');
   $('#nsfw-st').textContent=d.enabled?t('✓ 已开启:标记 NSFW 的工单/分镜组改走备用模型'):t('已关闭:全部按主模型执行');
   $('#nsfw-body').style.opacity=d.enabled?'1':'.55';
   nsfwOpt($('#nsfw-t-engine'),(d.engines||[]).map(e=>({id:e,label:e==='claude'?'claudecode':e==='kimi'?'kimicode':e})),d.text.engine,t('不设置'));
@@ -3167,6 +3178,7 @@ $('#menu-nsfw').onclick=e=>{e.preventDefault();openNsfwModal()};
 $('#nsfw-close').onclick=()=>{$('#nsfw-modal').style.display='none'};
 $('#nsfw-on').onchange=()=>nsfwSave({enabled:$('#nsfw-on').checked});
 $('#nsfw-failover').onchange=()=>nsfwSave({failover:$('#nsfw-failover').checked});
+$('#nsfw-judge').onchange=()=>nsfwSave({judge:$('#nsfw-judge').checked});
 ['t','i','v'].forEach(k=>{
   $(`#nsfw-${k}-${k==='t'?'engine':'prov'}`).onchange=()=>{NSFW[k==='t'?'text':k==='i'?'image':'video'].model='';nsfwRenderModels(k);if($(`#nsfw-${k}-model`).value!=='__custom')nsfwSave(nsfwCollect(k))};
   $(`#nsfw-${k}-model`).onchange=()=>{const c=$(`#nsfw-${k}-custom`);c.style.display=$(`#nsfw-${k}-model`).value==='__custom'?'':'none';if($(`#nsfw-${k}-model`).value==='__custom'){c.focus();return}nsfwSave(nsfwCollect(k))};

@@ -1193,7 +1193,7 @@ def public_job(job: dict | None) -> dict | None:
     if not job:
         return None
     keep = ('id', 'op', 'status', 'mode', 'preview', 'parent', 'created_at', 'updated_at', 'error', 'error_en', 'version', 'run_id', 'prompt',
-            'template_prompt', 'provider', 'model', 'target', 'upscaler', 'lock', 'text', 'nsfw')
+            'template_prompt', 'provider', 'model', 'target', 'upscaler', 'lock', 'text', 'nsfw', 'refused')
     return {k: job.get(k) for k in keep if job.get(k) not in (None, '')}
 
 

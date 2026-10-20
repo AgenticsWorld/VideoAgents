@@ -258,6 +258,17 @@ button:disabled{opacity:.5;cursor:default}
     </div>
     <div id="panel-text-openrouter"></div>
   </div>
+  <div class="card" id="card-moderation">
+    <h2>🛡 审核模型 <span class="cur">NSFW 模式「拒绝判定用审核模型」打开时使用;生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
+    <div class="tabs" id="mod-tabs">
+      <div class="tab active" id="tab-mod-agentics">Agentics</div>
+      <div class="tab" id="tab-mod-openrouter">OpenRouter</div>
+    </div>
+    <!-- 两个面板由 buildModeration() 生成:Agentics = 账号行 + 模型 + 测试;OpenRouter = API Key + 模型 + 测试 -->
+    <div id="panel-mod-agentics"></div>
+    <div id="panel-mod-openrouter"></div>
+    <div class="hint">Agent 正常结束却没交产物、回复又不是拒绝套话时,把它最后的回复交审核模型判断是不是内容拒绝(只发回复正文,不发原始请求与图片);判为拒绝后,同 task_id 重派改用 NSFW 备用语言模型,画板任务提示你打开 🔞 再发送。每判一次都计费,开关在「设置→高级→NSFW 模式」,默认关。</div>
+  </div>
   <div id="savebar">
     <span id="save-status">✓ 已保存</span>
     <button class="primary" id="save">保存设置</button>
@@ -1330,6 +1341,73 @@ function buildDeepagents(){
   Object.keys(TEXT_TABS).forEach(p=>{$(`#tab-text-${p}`).onclick=()=>showTextPanel(p)});
 }
 
+/* ---------- 审核模型(2026-10-20,NSFW 模式的拒绝判定):两渠道都走 OpenAI 兼容 chat/completions;
+   模型清单与 modules/refusal_judge.MODELS 一致,只能选清单里的 ---------- */
+let MOD_PROVIDER='agentics';
+const MOD_TABS={agentics:'Agentics',openrouter:'OpenRouter'};
+const MOD_MODELS=[['typesafe/jev-router','Jev Router(TypeSafe)· 按请求挑选底层模型与推理强度']];
+function buildModeration(){
+  const modelSel=id=>{
+    const r=el('div',{className:'row'});
+    r.appendChild(el('label',{},'模型'));
+    const sel=el('select',{id});
+    MOD_MODELS.forEach(([v,l])=>sel.appendChild(el('option',{value:v,textContent:t(l)})));
+    r.appendChild(sel);
+    return r;
+  };
+  const testRow=p=>{
+    const r=el('div',{className:'row'});
+    r.appendChild(el('label',{},''));
+    const b=el('button',{title:t('用一段拒绝样例真实调用一次(计费,约 $0.002)')},'测试');
+    b.onclick=()=>testModeration(p);
+    r.appendChild(b);
+    return [r,el('div',{className:'status',id:`mod-${p}-status`})];
+  };
+  const a=el('div',{className:'panel show',id:'panel-mod-agentics'});
+  const account=el('div',{className:'row'});
+  account.appendChild(el('label',{},'账号'));
+  account.appendChild(el('span',{className:'agentics-account'},t('检查登录状态…')));
+  const auth=el('button',{className:'agentics-auth'},t('登录'));
+  auth.onclick=()=>agenticsAuth(auth);
+  account.appendChild(auth);a.appendChild(account);
+  a.appendChild(modelSel('mod-agentics-model'));
+  testRow('agentics').forEach(n=>a.appendChild(n));
+  a.appendChild(el('div',{className:'hint'},t('AgenticsLLM 使用已登录的桌面端账号请求 Agentics 服务')));
+  $('#panel-mod-agentics').replaceWith(a);
+  const o=el('div',{className:'panel',id:'panel-mod-openrouter'});
+  o.appendChild(keyRow('mod-or-key','sk-or-v1-…'));
+  o.appendChild(modelSel('mod-or-model'));
+  testRow('openrouter').forEach(n=>o.appendChild(n));
+  $('#panel-mod-openrouter').replaceWith(o);
+  Object.keys(MOD_TABS).forEach(p=>{$(`#tab-mod-${p}`).onclick=()=>showModPanel(p)});
+}
+function showModPanel(p){
+  MOD_PROVIDER=p;
+  Object.keys(MOD_TABS).forEach(x=>{
+    const tb=$(`#tab-mod-${x}`);
+    tb.classList.toggle('active',x===p);
+    tb.textContent=(x===p?'✅ ':'')+window.t(MOD_TABS[x]);
+    $(`#panel-mod-${x}`).classList.toggle('show',x===p);
+  });
+}
+function loadModerationForm(){
+  const m=CFG.moderation||{},pick=(sel,v)=>{if(v&&[...sel.options].some(o=>o.value===v))sel.value=v};
+  pick($('#mod-agentics-model'),(m.agentics||{}).model);
+  pick($('#mod-or-model'),(m.openrouter||{}).model);
+  $('#mod-or-key').value=(m.openrouter||{}).api_key||'';
+  showModPanel(MOD_TABS[m.provider]?m.provider:'agentics');
+}
+async function testModeration(p){
+  const st=$(`#mod-${p}-status`);st.className='status';st.textContent=t('测试中…');
+  const body={provider:p,model:$(`#mod-${p==='openrouter'?'or':p}-model`).value,
+              api_key:p==='openrouter'?$('#mod-or-key').value.trim():''};
+  const r=await api('/api/v1/providers/moderation/test',body).catch(e=>({ok:false,error:e.message}));
+  if(!r.ok){st.className='status err';st.textContent='✗ '+(r.error||t('测试失败'));return}
+  const extra=[r.routed_model&&I18N.f('实际由 {m} 判断',{m:r.routed_model}),r.cost!=null&&('$'+Number(r.cost).toFixed(4)),r.ms+' ms'].filter(Boolean).join(' · ');
+  st.className='status '+(r.refusal?'ok':'err');
+  st.textContent=(r.refusal?t('✓ 可用:拒绝样例判为 policy'):I18N.f('⚠ 能调用,但拒绝样例被判成 {kind}(应为 policy)',{kind:r.kind}))+' · '+extra;
+}
+
 function showTextPanel(p){
   TEXT_PROVIDER=p;
   Object.keys(TEXT_TABS).forEach(x=>{
@@ -1898,6 +1976,7 @@ function loadIntoForm(){
   $('#world-marble-key').value=wm.api_key||'';
   fillSelect($('#world-marble-model'),WORLD_MODELS,wm.model||WORLD_MODELS[0][0],wm.custom_model);
   loadDeepagentsForm();
+  loadModerationForm();
 }
 
 /* deepagents 段单独装载:控制台顶栏(引擎选 deepagents 时的渠道/模型两层下拉)也会即选即写这段配置,
@@ -2045,6 +2124,10 @@ function collect(){
       ...pickModel('#dc-model','#dc-custom')},
     openrouter:{api_key:$('#text-or-key').value.trim(),
       ...pickModel('#text-or-model','#text-or-custom')}};
+  // 审核模型:生效渠道 = 当前选中的标签页;不进下面「Agentics 须登录」的保存校验(只在 NSFW 拒绝判定打开时才用)
+  out.moderation={provider:MOD_PROVIDER,
+    agentics:{model:$('#mod-agentics-model').value},
+    openrouter:{api_key:$('#mod-or-key').value.trim(),model:$('#mod-or-model').value}};
   return out;
 }
 
@@ -2087,7 +2170,7 @@ $('#save').onclick=async()=>{
 
 /* ---------- 初始化 ---------- */
 (async()=>{
-  buildSection('image');buildSection('video');buildSection('music');buildSection('tts');buildDeepagents();
+  buildSection('image');buildSection('video');buildSection('music');buildSection('tts');buildDeepagents();buildModeration();
   // 数字人 ComfyUI 面板与图像/视频等段同构(运行方式 本地/Comfy Cloud/RunningHub),复用 buildPanel
   const dhPanel=buildPanel('digitalhuman','comfyui');dhPanel.id='panel-dh-comfyui';
   $('#panel-dh-comfyui').replaceWith(dhPanel);

@@ -44,6 +44,7 @@ from modules.entity_ids import extract_actor_id
 from modules.volc_openapi import signed_call as _volc_signed_call
 from modules import voice_library as _voice_library
 from modules import openverse as _openverse
+from modules import refusal_judge as _refusal_judge
 from services.runtime import rhythm as narrative_rhythm
 from services.runtime import project_types
 from services.runtime import engine_setup
@@ -1008,6 +1009,13 @@ DEFAULT_GENCONFIG = {
                   "custom_model": ""},
         "openrouter": {"api_key": "", "model": "anthropic/claude-sonnet-5",
                        "custom_model": ""},
+    },
+    # 审核模型(2026-10-20,NSFW 模式「拒绝判定用审核模型」打开时用):Agent 没交产物就结束时判断回复是不是
+    # 内容拒绝。两渠道都走 OpenAI 兼容 chat/completions;模型清单见 modules/refusal_judge.MODELS
+    "moderation": {
+        "provider": "agentics",   # agentics | openrouter
+        "agentics": {"model": "typesafe/jev-router"},
+        "openrouter": {"api_key": "", "model": "typesafe/jev-router"},
     },
     # 文件管理(设置页「文件管理」):对象存储托管,V2V 参考视频经预签名 URL 传给
     # 方舟(reference_video 硬性要求公网 URL,base64 内联被拒);生效渠道=选中标签页
@@ -2135,6 +2143,42 @@ def resolve_deepagents(cfg: dict | None = None) -> dict:
             "base_url": lo.get("base_url") or "http://127.0.0.1:1234/v1",
             "api_key": lo.get("api_key") or "lm-studio",
             "model": lo.get("model") or ""}
+
+
+def resolve_moderation(cfg: dict | None = None) -> dict:
+    """审核模型配置 -> 生效渠道的 {provider, base_url, api_key, model};
+    没配好(Agentics 未登录桌面端账号 / OpenRouter 没填 Key)时 ServiceError(400),文案随界面语言。"""
+    m = (cfg or load_genconfig()).get("moderation") or {}
+    provider = m.get("provider") if m.get("provider") in ("agentics", "openrouter") else "agentics"
+    sub = m.get(provider) or {}
+    model = str(sub.get("model") or "").strip() or _refusal_judge.MODELS[0]
+    zh = (ui_lang_code() or "zh") == "zh"
+    if model not in _refusal_judge.MODELS:
+        raise ServiceError(400, f"审核模型不支持 {model}" if zh else f"Unsupported moderation model: {model}")
+    if provider == "agentics":
+        try:
+            conn = resolve_agentics_connection()
+        except ServiceError:
+            raise ServiceError(400, "审核模型选的是 Agentics,但桌面端账号没有登录" if zh
+                               else "The moderation model uses Agentics, but no desktop account is signed in") from None
+    else:
+        conn = resolve_openrouter_connection(sub.get("api_key") or "")
+        if not conn["api_key"]:
+            raise ServiceError(400, "审核模型选的是 OpenRouter,但没有填 API Key" if zh
+                               else "The moderation model uses OpenRouter, but no API key is set")
+    return {"provider": provider, "base_url": conn["base_url"], "api_key": conn["api_key"], "model": model}
+
+
+def moderation_status(cfg: dict | None = None) -> dict:
+    """审核模型能不能用:{ready, provider, model[, error]}(不发请求,只看配置与登录态)。"""
+    m = (cfg or load_genconfig()).get("moderation") or {}
+    provider = m.get("provider") if m.get("provider") in ("agentics", "openrouter") else "agentics"
+    try:
+        r = resolve_moderation(cfg)
+    except ServiceError as e:
+        return {"ready": False, "provider": provider,
+                "model": str((m.get(provider) or {}).get("model") or _refusal_judge.MODELS[0]), "error": e.detail}
+    return {"ready": True, "provider": r["provider"], "model": r["model"]}
 
 
 # ---------------- 项目级设置(输出设置/时长设置/审核设置:每个项目独立) ----------------
@@ -4173,7 +4217,7 @@ def run_public(run: dict) -> dict:
         "id", "agent", "agent_name", "source", "parent", "project", "status",
         "created", "started", "ended", "cost", "turns", "error", "stopped",
         "net_error", "orphaned_children", "orphan_wait", "engine", "model", "tokens",
-        "nsfw_route", "nsfw_suspect",
+        "nsfw_route", "nsfw_suspect", "refusal_judge",
         "progress", "skill", "skill_read",
         "skill_retry_of", "skill_retry_run") if k in run} | {
         "activity": run.get("activity", [])[-8:],
@@ -4269,20 +4313,68 @@ def _keypoints_postcheck(run: dict):
         run["error"] = f"关键点保留检查失败：{error}"
 
 
-def _nsfw_refusal_postcheck(run: dict) -> None:
-    """NSFW 模式开启时:run 末尾正文像审核拒绝 → 打 nsfw_suspect 标记并把 task_id 记入项目
+async def _nsfw_refusal_postcheck(run: dict) -> None:
+    """NSFW 模式开启时:run 像被主模型内容拒绝 → 打 nsfw_suspect 标记并把 task_id 记入项目
     runs/nsfw_suspect.json,供同 task_id 重派时改用备用语言模型(「第二次尝试才换」,不做进程内切换)。
+    两级判定(2026-10-20):① 末尾正文命中拒绝套话(llm_refusal_suspect)直接算;② 没命中、开了「拒绝判定用
+    审核模型」且运行形态像「没交产物就结束」(_refusal_judge_gate,零成本预筛)时,把回复交审核模型判一次,
+    kind=policy 才算;审核模型调用失败只记录,退回只认套话。画板修图 Agent 的运行判为拒绝时,任务直接标失败
+    并提示打开 🔞 再发送(只提示,不自动重发)。
     已按 NSFW 路由跑在备用模型上的 run 不再标记(备用模型也拒 = 交用户裁决)。"""
     if run.get("nsfw_route") and run["nsfw_route"].get("engine"):
         return
     if not nsfw_enabled() or run.get("stopped") or run.get("net_error"):
         return
     text = run.get("result") or run.get("text") or ""
-    if not llm_refusal_suspect(text):
+    canvas = _canvas_drafting_job(run)
+    by = "regex" if llm_refusal_suspect(text) else ""
+    if not by and _refusal_judge_gate(run, text, canvas is not None):
+        run["_refusal_checking"] = True       # 判定期间画板页轮询别先把任务按「没交提示词」判失败(_canvas_run_ended)
+        try:
+            verdict = await asyncio.to_thread(_run_refusal_judge, text)
+        finally:
+            run.pop("_refusal_checking", None)
+        if verdict:
+            run["refusal_judge"] = verdict
+            by = "judge" if verdict.get("refusal") else ""
+    if not by:
         return
     tid = _wo_task_id(run.get("message") or "")
-    run["nsfw_suspect"] = {"task_id": tid, "at": time.time()}
+    run["nsfw_suspect"] = {"task_id": tid, "at": time.time(), "by": by}
     nsfw_mark_suspect(run["project"], tid, run["id"], run["agent"], text.strip()[-300:])
+    if canvas:
+        _canvas_mark_refused(run, canvas, by)
+
+
+def _refusal_judge_gate(run: dict, text: str, canvas_drafting: bool) -> bool:
+    """审核模型只看「没交产物就结束」的运行(零成本预筛,筛中才花钱):开了 judge、正常结束、回复非空且不长;
+    画板修图 Agent = 任务还停在整理提示词;其余 = 工单带 task_id(判出拒绝才有同 task_id 重派可换)且没写任何文件。"""
+    if not nsfw_settings().get("judge") or run.get("status") != "done":
+        return False
+    body = (text or "").strip()
+    if not body or len(body) >= 4000:
+        return False
+    if canvas_drafting:
+        return True
+    if run.get("agent") == CANVAS_AGENT:       # 画板任务已经交了提示词(或找不到任务):不是拒绝
+        return False
+    return bool(_wo_task_id(run.get("message") or "")) and not run.get("files")
+
+
+def _run_refusal_judge(text: str) -> dict | None:
+    """把回复交审核模型判一次 → {kind, refusal, provider, model, routed_model, cost, ms};
+    审核模型没配好返回 None,调用失败返回 {error, provider, model}(都只按套话判)。"""
+    try:
+        conn = resolve_moderation()
+    except ServiceError as e:
+        print(f"[nsfw] 审核模型不可用,跳过拒绝判定:{e.detail}", file=sys.stderr)
+        return None
+    try:
+        v = _refusal_judge.classify(text, base_url=conn["base_url"], api_key=conn["api_key"], model=conn["model"])
+    except Exception as e:  # noqa: BLE001
+        print(f"[nsfw] 审核模型调用失败,只按拒绝套话判:{e}", file=sys.stderr)
+        return {"error": str(e)[:200], "provider": conn["provider"], "model": conn["model"]}
+    return {**v, "provider": conn["provider"]}
 
 
 def _prompt_skill_postcheck(run: dict):
@@ -4792,7 +4884,7 @@ async def execute_run(run: dict, message: str, model: str | None):
             run.pop("progress", None)
             _prompt_skill_postcheck(run)
             _keypoints_postcheck(run)
-            _nsfw_refusal_postcheck(run)
+            await _nsfw_refusal_postcheck(run)
             # 会话续用:记录本次会话 id(无状态服务型 agent 不留会话)。
             # 无任何 assistant 产出的运行不记:部分引擎(如 pi)惰性落盘会话文件,
             # 刚启动就被停止/报错的运行留下的是从未写盘的幽灵会话 id,续用必报
@@ -4842,10 +4934,14 @@ async def execute_run(run: dict, message: str, model: str | None):
                 # 语言模型疑似审核拒绝(NSFW 模式开):只标记不切换,同 task_id 重派时改用备用引擎
                 tid = run["nsfw_suspect"].get("task_id") or ""
                 fb = nsfw_text_fallback()
-                reply = ("🔞 疑似被主语言模型审核拒绝(NSFW 模式开启):本次未自动切换;"
+                reply = ("🔞 疑似被主语言模型审核拒绝(NSFW 模式开启"
+                         + (",由审核模型识别" if run["nsfw_suspect"].get("by") == "judge" else "")
+                         + "):本次未自动切换;"
                          + (f"task_id `{tid}` 已记为 nsfw_suspect,同 task_id 重派时宿主自动改用备用语言模型"
                             f"{' ' + fb['engine'] + '/' + (fb['model'] or '(引擎默认)') if fb else '(尚未配置备用语言模型,请到「设置→高级→NSFW 模式」配置)'}"
-                            if tid else "工单未写 task_id,无法记入重派名单;重派时请带 `nsfw: true` / --nsfw")
+                            if tid else "画板任务已标失败,下一步怎么做见画板任务框里的提示"
+                            if agent_id == CANVAS_AGENT else
+                            "工单未写 task_id,无法记入重派名单;重派时请带 `nsfw: true` / --nsfw")
                          + "。\n\n" + reply)
                 chat_entry.update(text=reply, nsfw_suspect=True)
             elif run.get("orphaned_children"):
@@ -8145,9 +8241,58 @@ def _canvas_error(e) -> ServiceError:
 def _canvas_run_ended(run_id: str) -> str | None:
     """Agent 整理提示词的那次运行是否已结束:None = 还在跑(或查不到,交给超时判),否则返回结束状态。"""
     r = RUNS.get(run_id)
-    if not r or r.get("status") in ("queued", "running"):
+    if not r or r.get("status") in ("queued", "running") or r.get("_refusal_checking"):
         return None
     return str(r.get("status") or "ended") + (f":{str(r.get('error'))[:200]}" if r.get("error") else "")
+
+
+_CANVAS_WO_JOB_RE = re.compile(r"--doc ([\w\-.]{4,160}) --job ([\w\-]+)")
+
+
+def _canvas_drafting_job(run: dict) -> dict | None:
+    """画板修图 Agent 的运行结束时,它的任务若还停在整理提示词(没交提示词)→ {doc, job};其余 None。
+    画板目录与任务号取自工单里的 canvas_edit.py 命令行(_canvas_work_order)。"""
+    if run.get("agent") != CANVAS_AGENT:
+        return None
+    m = _CANVAS_WO_JOB_RE.search(run.get("message") or "")
+    if not m or ".." in m.group(1):
+        return None
+    from modules import image_canvas as ic
+    try:
+        doc = _proj_base(run.get("project") or "") / ic.ROOT_REL / m.group(1)
+        job = ic.load_job(doc, m.group(2))
+    except Exception:  # noqa: BLE001
+        return None
+    if job.get("status") != "drafting" or (job.get("run_id") or run["id"]) != run["id"]:
+        return None
+    return {"doc": doc, "job": job["id"]}
+
+
+def _canvas_mark_refused(run: dict, canvas: dict, by: str) -> None:
+    """画板任务被画板修图 Agent 拒绝:标失败并提示打开 🔞 再发送(只提示,不自动重发;用户决定)。"""
+    from modules import image_canvas as ic
+    fb = nsfw_text_fallback()
+    how_zh, how_en = ("审核模型", "the moderation model") if by == "judge" else ("拒绝套话", "a refusal phrase")
+    if fb:
+        m = f"{fb['engine']} / {fb['model'] or '引擎默认'}"
+        zh = (f"画板修图 Agent 拒绝了这次编辑(由{how_zh}识别)。NSFW 模式开着:打开工具栏的 🔞 再发送,"
+              f"会改用备用语言模型 {m} 整理提示词。")
+        en = (f"The image-retouch agent refused this edit (detected by {how_en}). NSFW mode is on: turn on 🔞 in the "
+              f"toolbar and send again to have the fallback language model {fb['engine']} / "
+              f"{fb['model'] or 'engine default'} write the prompt.")
+    else:
+        zh = (f"画板修图 Agent 拒绝了这次编辑(由{how_zh}识别)。NSFW 模式没有配置备用语言模型,打开 🔞 也仍由当前引擎"
+              "整理提示词;可先到「设置→高级→NSFW 模式」配置备用语言模型。")
+        en = (f"The image-retouch agent refused this edit (detected by {how_en}). NSFW mode has no fallback language "
+              "model, so even with 🔞 on the current engine writes the prompt; set one under Settings → Advanced → "
+              "NSFW mode first.")
+    try:
+        job = ic.set_job(canvas["doc"], canvas["job"], status="failed", error=zh, error_en=en, refused=by)
+    except Exception as e:  # noqa: BLE001
+        print(f"[nsfw] 画板任务 {canvas['job']} 标记拒绝失败:{e}", file=sys.stderr)
+        return
+    HUB.publish({"type": "canvas", "project": run.get("project") or "", "file": job.get("source") or "",
+                 "job": canvas["job"], "status": "failed"})
 
 
 def _canvas_url(base: Path, rel: str) -> str:
@@ -13644,10 +13789,16 @@ async def api_genconfig_set(body: dict):
     body.pop("project", None)
     old = load_genconfig()
     cfg = _merge(load_genconfig(), body)
-    for kind in ("image", "video", "music", "tts", "sfx", "digital_human", "upscale", "world", "deepagents"):
+    for kind in ("image", "video", "music", "tts", "sfx", "digital_human", "upscale", "world", "deepagents",
+                 "moderation"):
         allowed = set(DEFAULT_GENCONFIG[kind]) - {"provider"}
         if cfg.get(kind, {}).get("provider") not in allowed:
             raise ServiceError(400, f"{kind}.provider must be one of {sorted(allowed)}")
+    for prov, pc in (cfg.get("moderation") or {}).items():
+        if isinstance(pc, dict):
+            pc["model"] = str(pc.get("model") or "").strip() or _refusal_judge.MODELS[0]
+            if pc["model"] not in _refusal_judge.MODELS:
+                raise ServiceError(400, f"moderation.{prov}.model must be one of {list(_refusal_judge.MODELS)}")
     sfx_ov = (cfg.get("sfx") or {}).get("openverse") or {}
     if sfx_ov.get("license") not in _openverse.LICENSE_SETS:
         raise ServiceError(400, f"sfx.openverse.license must be one of {list(_openverse.LICENSE_SETS)}")
@@ -15032,6 +15183,27 @@ async def api_test_deepagents(body: dict):
         return {"ok": False, "error": str(e)[:200]}
     return {"ok": True,
             "models": sorted(m.get("id") for m in data.get("data", []) if m.get("id"))}
+
+
+async def api_test_moderation(body: dict):
+    """「🎨 生成模型 → 审核模型」测试:按表单里的渠道 / Key / 模型,对一段自然措辞的拒绝样例真实判一次(计费)。
+    返回 {ok, kind, refusal, routed_model, cost, ms};样例应判 policy。"""
+    provider = str(body.get("provider") or "").strip()
+    if provider not in ("agentics", "openrouter"):
+        raise ServiceError(400, "provider must be agentics or openrouter")
+    cfg = {"moderation": {"provider": provider,
+                          provider: {"api_key": str(body.get("api_key") or "").strip(),
+                                     "model": str(body.get("model") or "").strip()}}}
+    try:
+        conn = resolve_moderation(cfg)
+    except ServiceError as e:
+        return {"ok": False, "error": e.detail}
+    try:
+        v = await asyncio.to_thread(_refusal_judge.classify, _refusal_judge.SAMPLE, base_url=conn["base_url"],
+                                    api_key=conn["api_key"], model=conn["model"])
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)[:300]}
+    return {"ok": True, **v}
 
 
 COMFY_CLOUD_API = "https://cloud.comfy.org/api"
@@ -18205,7 +18377,9 @@ async def api_voice_input_transcribe(data: bytes, content_type: str, lang: str =
 # 不做进程内切换,run 结束时末尾正文命中拒绝句式只打 nsfw_suspect 标记,同 task_id 重派时改用备用
 # engine(「第二次尝试才换」);③ 粘性——兜底切换成功即回写组 `nsfw: true`,后续不再先撞主模型。
 # 备用模型不可用(未配 Key)时不偷跑主模型,stderr 提示并按用户裁决;所有切换在回执/运行记录留痕。
-NSFW_DEFAULT = {"enabled": False, "failover": True,
+# judge(2026-10-20,默认关,成本开关由用户打开):拒绝套话没认出时,把「没交产物就结束」的运行回复交
+# 「🎨 生成模型 → 审核模型」判一次(_nsfw_refusal_postcheck);审核模型没配好时不能打开。
+NSFW_DEFAULT = {"enabled": False, "failover": True, "judge": False,
                 "text": {"engine": "", "model": ""},
                 "image": {"provider": "", "model": ""},
                 "video": {"provider": "", "model": ""}}
@@ -18237,6 +18411,7 @@ def nsfw_settings() -> dict:
     if isinstance(saved, dict):
         cfg["enabled"] = bool(saved.get("enabled", False))
         cfg["failover"] = bool(saved.get("failover", True))
+        cfg["judge"] = bool(saved.get("judge", False))
         for k, fields in (("text", ("engine", "model")), ("image", ("provider", "model")),
                           ("video", ("provider", "model"))):
             sub = saved.get(k) if isinstance(saved.get(k), dict) else {}
@@ -18375,18 +18550,26 @@ async def api_nsfw_get():
     gc = load_genconfig()
     return {**cfg, "engines": list(ENGINES),
             "video_providers": video_provider_options(gc),
-            "image_channels": _image_channels()}
+            "image_channels": _image_channels(),
+            "judge_model": moderation_status(gc)}
 
 
 async def api_nsfw_set(body: dict):
     cfg = nsfw_settings()
     touched = False
-    for key in ("enabled", "failover"):
+    for key in ("enabled", "failover", "judge"):
         if key in body:
             if not isinstance(body[key], bool):
                 raise ServiceError(400, f"{key} must be a boolean")
             cfg[key] = body[key]
             touched = True
+    if body.get("judge") is True:
+        ms = moderation_status()
+        if not ms["ready"]:
+            zh = (ui_lang_code() or "zh") == "zh"
+            raise ServiceError(400, (f"审核模型还不能用:{ms['error']}。先到「🎨 生成模型」页「🛡 审核模型」配置" if zh
+                                     else f"The moderation model is not ready: {ms['error']}. "
+                                          "Set it up under 🛡 Moderation model on the 🎨 Generation Models page first"))
     if isinstance(body.get("text"), dict):
         eng = str(body["text"].get("engine") or "").strip().lower()
         if eng and eng not in ENGINES:
@@ -18420,7 +18603,7 @@ async def api_nsfw_set(body: dict):
         cfg["video"] = {"provider": provider, "model": model if provider else ""}
         touched = True
     if not touched:
-        raise ServiceError(400, "nothing to update: pass enabled / failover / text{engine,model} / "
+        raise ServiceError(400, "nothing to update: pass enabled / failover / judge / text{engine,model} / "
                                 "image{provider,model} / video{provider,model}")
     STATE["nsfw"] = cfg
     save_state(STATE)
