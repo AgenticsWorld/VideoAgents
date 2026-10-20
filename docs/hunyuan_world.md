@@ -12,7 +12,7 @@
 
 控制台「🎨 生成模型」→「🌍 世界模型」:渠道 = 当前选中标签页(保存生效),`genconfig.json#world.provider` ∈
 `marble`(默认)/ `hunyuan`。HunyuanWorld(远程)标签页:`hunyuan.base_url`(worker 地址)、
-`hunyuan.token`(X-Worker-Token)、高级参数 `hunyuan.{views, gs_steps, fp8}`(留空走 worker 缺省);
+`hunyuan.token`(X-Worker-Token)、高级参数 `hunyuan.{views, gs_steps, fp8}`(留空按缺省:32 视图、8000 步、FP8 关);
 「验证」打 `GET /health` 回 GPU/env/磁盘自检。环境变量 `HUNYUAN_WORKER_URL` / `HUNYUAN_WORKER_TOKEN` 可覆盖。
 
 ## 链路(四阶段,全在 worker 侧)
@@ -20,7 +20,7 @@
 | 阶段 | 内容 |
 |---|---|
 | A 重建 | `demo_scenegen.py`(bf16 + 逐层顺序卸载,不打 FP8;Windows 补丁见部署文档)对场景锚点全景出分层 textured mesh(`mesh_layer*.ply`) |
-| B 渲染 | Open3D 离屏渲染有界轨迹多视图(中心 1 + 环上内外交替,默认 24 张 1024×576,半径 0.35 m 按标定换算) |
+| B 渲染 | Open3D 离屏渲染有界轨迹多视图(中心 1 + 环上内外交替,默认 32 张 1600×900,半径 0.35 m 按标定换算) |
 | C 训练 | gsplat(MCMC,上限 1M 高斯)RGB+深度监督,默认 8000 步 → `splats_{full_res,500k,150k,100k}.spz` |
 | D 打包 | 合并减面出 `collider.glb`(≤65536 三角形)、`thumbnail.jpg`、`world_pano.jpg`、产物清单 |
 

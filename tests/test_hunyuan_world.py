@@ -33,6 +33,7 @@ def test_genconfig_save_accepts_hunyuan_provider():
     assert {'marble', 'hunyuan'} <= allowed
     section = DEFAULT_GENCONFIG['world']['hunyuan']
     assert {'base_url', 'token', 'fp8'} <= set(section)
+    assert section['fp8'] is False                     # 与 gen_params 缺省一致(bf16;Windows 不推荐 FP8)
 
 
 def test_env_overrides_config(tmp_path, monkeypatch):

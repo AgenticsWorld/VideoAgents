@@ -228,7 +228,7 @@ button:disabled{opacity:.5;cursor:default}
     <div class="panel" id="panel-world-hunyuan">
       <div class="row"><label>worker 地址</label><input type="text" id="world-hunyuan-url" placeholder="http://192.168.x.x:8310"><input type="password" id="world-hunyuan-token" placeholder="X-Worker-Token"><button onclick="testHunyuan()">验证</button></div>
       <div class="status" id="world-hunyuan-status"></div>
-      <div class="row"><label>高级参数</label><input type="number" id="world-hunyuan-views" min="4" max="64" step="1" placeholder="24" title="轨迹渲染视图数"><input type="number" id="world-hunyuan-steps" min="200" max="30000" step="100" placeholder="8000" title="3DGS 训练步数"><label class="chk"><input type="checkbox" id="world-hunyuan-fp8"> FP8 量化(Windows 暂不推荐,见部署文档)</label></div>
+      <div class="row"><label>高级参数</label><input type="number" id="world-hunyuan-views" min="4" max="64" step="1" placeholder="32" title="轨迹渲染视图数"><input type="number" id="world-hunyuan-steps" min="200" max="30000" step="100" placeholder="8000" title="3DGS 训练步数"><label class="chk"><input type="checkbox" id="world-hunyuan-fp8"> FP8 量化(Windows 暂不推荐,见部署文档)</label></div>
       <div class="hint">本地算力生成(不耗 credits):场景全景 → GPU 主机 worker(HunyuanWorld-1.0 分层重建 + 3DGS 训练),约 20–40 分钟;worker 部署参考 <a href="https://github.com/AgenticsWorld/VideoAgents-hunyuan-rpc" target="_blank">github.com/AgenticsWorld/VideoAgents-hunyuan-rpc</a>(默认 Windows + 3090 24G)。</div>
     </div>
   </div>
@@ -1469,7 +1469,9 @@ async function testHunyuan(){
   const st=$('#world-hunyuan-status');st.className='status';st.textContent='验证中…';
   const r=await api('/api/v1/providers/hunyuan/test',{base_url:$('#world-hunyuan-url').value.trim(),token:$('#world-hunyuan-token').value.trim()}).catch(e=>({ok:false,error:e.message}));
   st.className='status '+(r.ok?'ok':'err');
-  st.textContent=r.ok?('✓ worker 在线 · '+(r.gpu||'GPU ?')+(r.busy?' · 忙':' · 空闲')+(r.disk_free_gb!=null?` · 磁盘余 ${r.disk_free_gb} GB`:''))
+  // 先译再拼(词典按整段文本精确匹配)
+  const disk=r.disk_free_gb!=null?' · '+I18N.f('磁盘余 {n} GB',{n:r.disk_free_gb}):'';
+  st.textContent=r.ok?I18N.f('✓ worker 在线 · {gpu} · {busy}',{gpu:r.gpu||'GPU ?',busy:t(r.busy?'忙碌':'空闲')})+disk
     :'✗ '+(r.error||t('验证失败'));
 }
 

@@ -992,11 +992,11 @@ DEFAULT_GENCONFIG = {
     # 世界模型(2026-09-12):按场景全景生成可漫游 3D world(高斯泼溅);
     # 场景预览页「🌍 世界模型」板块用(仅项目「白模」选项开启时显示)。渠道(2026-10-10):
     # marble=World Labs 云端(Key 在 https://platform.worldlabs.ai/api-keys,API 文档 https://docs.worldlabs.ai/api);
-    # hunyuan=本地算力(远程 GPU worker,部署见独立仓库 https://github.com/AgenticsWorld/VideoAgents-hunyuan-rpc ;views/gs_steps 为 null 时走 worker 缺省)
+    # hunyuan=本地算力(远程 GPU worker,部署见独立仓库 https://github.com/AgenticsWorld/VideoAgents-hunyuan-rpc ;views/gs_steps 为 null 时按 modules/hunyuan_world.gen_params 缺省 32 视图 / 8000 步;fp8 缺省关,同 gen_params,Windows 不推荐)
     "world": {
         "provider": "marble",   # marble | hunyuan
         "marble": {"api_key": "", "model": "marble-1.1", "custom_model": ""},
-        "hunyuan": {"base_url": "", "token": "", "views": None, "gs_steps": None, "fp8": True},
+        "hunyuan": {"base_url": "", "token": "", "views": None, "gs_steps": None, "fp8": False},
     },
     # deepagents 文字模型:local=OpenAI 兼容本地端点(LM Studio/Ollama/vLLM…);
     # cloud=OpenAI 兼容云端端点(默认 DeepSeek 官方 API,可换任意兼容服务商);
@@ -9106,7 +9106,10 @@ async def api_scene_world_start(project: str, sid: str, body: dict):
     if provider == "hunyuan":
         from modules import hunyuan_world as hw
         if not hw.base_url():
-            raise ServiceError(400, "HunyuanWorld worker 地址未配置:请到控制台「🎨 生成模型」→「🌍 世界模型」→ HunyuanWorld(远程)填写")
+            zh = (ui_lang_code() or "zh") == "zh"   # 文案随界面语言,非中文一律英文
+            raise ServiceError(400, "HunyuanWorld worker 地址未配置:请到控制台「🎨 生成模型」→「🌍 世界模型」→ HunyuanWorld(远程)填写"
+                               if zh else "HunyuanWorld worker address is not configured: fill it in under Console "
+                               "「🎨 Generation Models」→「🌍 World model」→ HunyuanWorld (remote)")
         script = "hunyuan_world.py"
     else:
         if not worldlabs.marble_config().get("api_key"):
@@ -9190,10 +9193,11 @@ async def api_test_worldlabs(body: dict):
 async def api_test_hunyuan(body: dict):
     """验证 HunyuanWorld worker 连接(GET /health,回 GPU/env 自检)。"""
     from modules import hunyuan_world as hw
+    zh = (ui_lang_code() or "zh") == "zh"   # 文案随界面语言,非中文一律英文
     base = (body.get("base_url") or "").strip().rstrip("/")
     token = (body.get("token") or "").strip()
     if not base:
-        return {"ok": False, "error": "worker 地址(base_url)未填写"}
+        return {"ok": False, "error": "worker 地址(base_url)未填写" if zh else "Worker address (base_url) is empty"}
     try:
         health = await asyncio.to_thread(hw.check_health, base=base, token=token, timeout=10)
     except Exception as e:  # noqa: BLE001
@@ -9206,8 +9210,9 @@ async def api_test_hunyuan(body: dict):
                       if k in ("python", "hyworld_repo")}}
     if not out["ok"]:
         hints = [v["hint"] for v in health.values() if isinstance(v, dict) and v.get("hint")]
-        out["error"] = "worker 自检未过:" + "; ".join(hints) if hints else \
-            "worker 自检未过:" + ", ".join(f"{k}={v}" for k, v in health.items() if k in ("python", "hyworld_repo", "gpu"))
+        head = "worker 自检未过:" if zh else "Worker self-check failed: "
+        out["error"] = head + "; ".join(hints) if hints else \
+            head + ", ".join(f"{k}={v}" for k, v in health.items() if k in ("python", "hyworld_repo", "gpu"))
     return out
 
 
