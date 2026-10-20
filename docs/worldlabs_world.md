@@ -3,6 +3,10 @@
 按场景白模/全景生成可漫游的 3D world(高斯泼溅),在场景预览页里用 Spark 渲染、按白模坐标对齐、WASD 漫游。支持「生成 + 场景预览 + 导演台对象运动预览」;
 在 world 里按分镜机位截图、全景重投影作背景图参考等试验流程(`dev-eric-worldlabs` 分支)**不并入**。
 
+> 渠道(2026-10-10 起):本条为云端 Marble(耗 credits);本地算力渠道 **HunyuanWorld** 见
+> [docs/hunyuan_world.md](hunyuan_world.md)——同一份 world.json 契约,本条下游各节(预览/视窗/对齐/背景图/导演台)对两个渠道同样适用。
+> 渠道在控制台「🎨 生成模型」→「🌍 世界模型」按标签页选择(`genconfig.json#world.provider`)。
+
 ## 配置
 
 控制台「🎨 生成模型」→「🌍 世界模型」板块(`genconfig.json#world`):渠道固定 Marble(World Labs);`marble.api_key`(「验证 Key」查余额),

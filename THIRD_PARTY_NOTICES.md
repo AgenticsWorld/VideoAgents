@@ -36,3 +36,13 @@ https://github.com/FFmpeg/FFmpeg/commit/946fcce07b) are installed next to the
 binaries; `ffplay.exe` is removed after extraction. FFmpeg runs as a separate program
 and is not linked into VideoAgents. Upstream: https://www.gyan.dev/ffmpeg/builds/ and
 https://github.com/GyanD/codexffmpeg/releases/tag/9.0.2.
+
+The optional HunyuanWorld world-generation channel (`gpu_worker/`, deployed by the
+user on their own GPU host) drives Tencent HunyuanWorld-1.0
+(https://github.com/Tencent-Hunyuan/HunyuanWorld-1.0), which is subject to the
+TENCENT HUNYUANWORLD-1.0 COMMUNITY LICENSE AGREEMENT: the license does not apply in
+the EU, UK and South Korea, and products or services with more than 1 million MAU
+must obtain a separate commercial license from Tencent. This repository neither
+bundles nor redistributes the model weights; the user deploys and operates them.
+SPZ export uses a clean-room encoder written against the public format
+(nianticlabs/spz, MIT).

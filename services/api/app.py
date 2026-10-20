@@ -970,6 +970,11 @@ async def test_worldlabs(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_test_worldlabs(body.model_dump())
 
 
+@api.post("/providers/hunyuan/test", tags=["providers"])
+async def test_hunyuan(body: ProviderProbe) -> dict[str, Any]:
+    return await core.api_test_hunyuan(body.model_dump())
+
+
 @api.post("/providers/runninghub/workflow", tags=["providers"])
 async def rh_workflow_verify(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_rh_workflow_verify(body.model_dump())
