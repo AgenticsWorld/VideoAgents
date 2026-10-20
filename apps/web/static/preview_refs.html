@@ -103,6 +103,7 @@ const CAT_META={
   creatures:['🐎','生物','生物/坐骑/异兽参考;填子目录(生物名或 id)可定向到该生物'],
   props:['🗡','道具','道具/法宝参考;服装可填 costumes 子目录'],
   audio:['🎙','讲述音频','音频配画 / 数字人 / 混剪项目的讲述音频(母带):原字节入册作成片声轨,不转码不剪裁'],
+  voices:['🗣','克隆声音','数字人项目「克隆声音」的声音样本:每个说话人一段 5–30 秒、只有这一个人说话的干净录音,按它的音色合成台词;只上传本人或已获授权的声音'],
   music:['🎵','音频','希望使用的音频文件(背景音轨,BGM 候选,配乐 Agent 优先选用)'],
   video:['🎞','视频','参考视频:动作/运镜/节奏/转场范例,视频生成 Agent 优先参考(支持的模型经 --ref-video 注入)'],
   fonts:['🔤','字体','字体文件(ttf/otf/ttc):花字、封面、片头片尾、字幕等后续流程统一优先使用;花字引擎自动识别为 proj:<字体名>'],
@@ -111,7 +112,7 @@ const CAT_META={
   '':['📂','根目录散图','散放在 refs/ 根目录的文件,一律视为整体风格参考'],
 };
 const SUBDIR_CATS=new Set(['characters','creatures','props']);
-const CAT_ACCEPT={fonts:'.ttf,.otf,.ttc',audio:'.mp3,.wav,.flac,.m4a,.aac,.ogg'};   // 分类专属的文件选择过滤(服务端同样校验)
+const CAT_ACCEPT={fonts:'.ttf,.otf,.ttc',audio:'.mp3,.wav,.flac,.m4a,.aac,.ogg',voices:'.mp3,.wav,.flac,.m4a,.aac,.ogg'};   // 分类专属的文件选择过滤(服务端同样校验)
 const fmtSize=n=>n>=1048576?(n/1048576).toFixed(1)+' MB':n>=1024?Math.round(n/1024)+' KB':n+' B';
 
 function noteBoxHtml(f){

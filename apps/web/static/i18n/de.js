@@ -4603,4 +4603,16 @@ window.I18N_DICT = {
 "agent·音画同步审核": "AV-Sync-Prüfung",
 "agent·混剪终审官": "Mashup-Endprüfung",
 "agent·数字人同步审核": "Digital-Human-Sync-Prüfung",
+// 数字人克隆声音(2026-10-20):新建向导「声音来源」、参考文件「克隆声音」分类
+"声音来源": "Tonquelle",
+"原始录音": "Originalaufnahme",
+"克隆声音": "Geklonte Stimmen",
+"台词稿": "Skript",
+"原始录音:上传一条已经录好的对话音频作母带,成片声音就是它。克隆声音:没有录音时,给每个说话人上传一段声音样本、写好台词稿,按样本的音色逐句合成对白再做数字人(需要「🎨 生成模型」页 TTS 选 Agentics 的 Voice Clone 模型、ComfyUI 的 Voice Clone 工作流或火山 Doubao-音频生成 1.0)。只上传本人或已获授权的声音": "Originalaufnahme: Laden Sie ein bereits aufgenommenes Gespräch als Master hoch; es wird zum Ton des fertigen Videos. Geklonte Stimmen: Ohne Aufnahme laden Sie pro Person eine Stimmprobe hoch und schreiben das Skript; jede Zeile wird mit der Stimme aus der Probe synthetisiert, danach entstehen die digitalen Menschen (TTS auf der Seite „🎨 Modelle“ muss ein Agentics-Voice-Clone-Modell, ein ComfyUI-Voice-Clone-Workflow oder Volcengine Doubao Audio Generation 1.0 sein). Laden Sie nur Ihre eigene Stimme oder Stimmen hoch, für die Sie eine Erlaubnis haben",
+"每行一句「说话人:台词」,如\n主持人:欢迎收听本期节目\n嘉宾:谢谢邀请\n只有一个说话人可以不写人名": "Eine Zeile pro Satz als „Sprecher: Text“, z. B.\nModeration: Willkommen zu dieser Folge\nGast: Danke für die Einladung\nBei nur einer Person kann der Name entfallen",
+"说明每个说话人用哪张照片、哪段声音,如:主持人用 host.png 的照片和 host.mp3 的声音;嘉宾用 guest.png 和 guest.mp3": "Geben Sie an, welches Foto und welche Stimmprobe zu welcher Person gehört, z. B.: die Moderation nutzt das Foto host.png und die Stimme host.mp3; der Gast guest.png und guest.mp3",
+"当前 TTS 渠道不能按样本克隆声音:到「🎨 生成模型」页 TTS 换成 Agentics(Voice Clone 模型)、ComfyUI(Voice Clone 工作流)或火山 Doubao-音频生成 1.0;也可以先建项目,开工前再换": "Der aktuelle TTS-Kanal kann keine Stimme aus einer Probe klonen: Stellen Sie TTS auf der Seite „🎨 Modelle“ auf Agentics (Voice-Clone-Modell), ComfyUI (Voice-Clone-Workflow) oder Volcengine Doubao Audio Generation 1.0 um. Sie können das Projekt auch jetzt anlegen und vor dem Start umstellen",
+"未选择(每个说话人一段 5–30 秒、只有这一个人说话的干净录音;也可创建后在参考文件页上传)": "Nichts gewählt (pro Person eine saubere Aufnahme von 5–30 s, in der nur sie spricht; Sie können sie auch später auf der Seite „Referenzdateien“ hochladen)",
+"克隆声音需要台词稿:每行一句「说话人:台词」": "Geklonte Stimmen brauchen ein Skript: eine Zeile pro Satz als „Sprecher: Text“",
+"数字人项目「克隆声音」的声音样本:每个说话人一段 5–30 秒、只有这一个人说话的干净录音,按它的音色合成台词;只上传本人或已获授权的声音": "Stimmproben für Digital-Human-Projekte mit geklonten Stimmen: pro Person eine saubere Aufnahme von 5–30 s, in der nur sie spricht; die Zeilen werden mit dieser Stimme synthetisiert. Laden Sie nur Ihre eigene Stimme oder Stimmen hoch, für die Sie eine Erlaubnis haben",
 };

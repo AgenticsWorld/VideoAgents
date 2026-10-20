@@ -4605,4 +4605,16 @@ window.I18N_DICT = {
 "agent·音画同步审核": "Contrôle de synchro audio-vidéo",
 "agent·混剪终审官": "Contrôle final du mashup",
 "agent·数字人同步审核": "Contrôle de synchro humain numérique",
+// 数字人克隆声音(2026-10-20):新建向导「声音来源」、参考文件「克隆声音」分类
+"声音来源": "Source de la voix",
+"原始录音": "Enregistrement original",
+"克隆声音": "Voix clonées",
+"台词稿": "Texte des répliques",
+"原始录音:上传一条已经录好的对话音频作母带,成片声音就是它。克隆声音:没有录音时,给每个说话人上传一段声音样本、写好台词稿,按样本的音色逐句合成对白再做数字人(需要「🎨 生成模型」页 TTS 选 Agentics 的 Voice Clone 模型、ComfyUI 的 Voice Clone 工作流或火山 Doubao-音频生成 1.0)。只上传本人或已获授权的声音": "Enregistrement original : importez une conversation déjà enregistrée ; elle devient le master et la bande-son de la vidéo finale. Voix clonées : sans enregistrement, importez un échantillon de voix par orateur et rédigez le texte ; chaque réplique est synthétisée avec la voix de l'échantillon avant de créer les humains numériques (le TTS de la page « 🎨 Modèles » doit être un modèle Voice Clone d'Agentics, un workflow Voice Clone ComfyUI ou Volcengine Doubao Audio Generation 1.0). N'importez que votre propre voix ou des voix que vous êtes autorisé à utiliser",
+"每行一句「说话人:台词」,如\n主持人:欢迎收听本期节目\n嘉宾:谢谢邀请\n只有一个说话人可以不写人名": "Une phrase par ligne, sous la forme « Orateur : réplique », p. ex.\nAnimateur : Bienvenue dans cet épisode\nInvité : Merci de l'invitation\nAvec un seul orateur, le nom peut être omis",
+"说明每个说话人用哪张照片、哪段声音,如:主持人用 host.png 的照片和 host.mp3 的声音;嘉宾用 guest.png 和 guest.mp3": "Indiquez la photo et l'échantillon de voix de chaque orateur, p. ex. : l'animateur utilise la photo host.png et la voix host.mp3 ; l'invité guest.png et guest.mp3",
+"当前 TTS 渠道不能按样本克隆声音:到「🎨 生成模型」页 TTS 换成 Agentics(Voice Clone 模型)、ComfyUI(Voice Clone 工作流)或火山 Doubao-音频生成 1.0;也可以先建项目,开工前再换": "Le canal TTS actuel ne peut pas cloner une voix à partir d'un échantillon : sur la page « 🎨 Modèles », passez le TTS à Agentics (modèle Voice Clone), ComfyUI (workflow Voice Clone) ou Volcengine Doubao Audio Generation 1.0. Vous pouvez aussi créer le projet maintenant et changer avant de lancer",
+"未选择(每个说话人一段 5–30 秒、只有这一个人说话的干净录音;也可创建后在参考文件页上传)": "Aucun fichier (un enregistrement propre de 5 à 30 s par orateur, où lui seul parle ; vous pouvez aussi les ajouter plus tard dans la page Fichiers de référence)",
+"克隆声音需要台词稿:每行一句「说话人:台词」": "Les voix clonées nécessitent un texte : une phrase par ligne, sous la forme « Orateur : réplique »",
+"数字人项目「克隆声音」的声音样本:每个说话人一段 5–30 秒、只有这一个人说话的干净录音,按它的音色合成台词;只上传本人或已获授权的声音": "Échantillons de voix des projets d'humain numérique en voix clonées : un enregistrement propre de 5 à 30 s par orateur, où lui seul parle ; les répliques sont synthétisées avec cette voix. N'importez que votre propre voix ou des voix que vous êtes autorisé à utiliser",
 };

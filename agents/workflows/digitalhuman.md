@@ -49,6 +49,38 @@ RunningHub 云端数字人工作流须先在网页工作区跑通。普通网页
 `{{AUDIO}}`/`{{REF_AUDIO}}` 占位符。另支持 `{{PROMPT}}`、`{{SEED}}`、
 `{{DURATION}}`、`{{FRAMES}}`。
 
+## 克隆声音（没有原始录音时）
+
+新建项目时「声音来源」选 **克隆声音**：不需要原始录音，给一份台词稿和每个说话人的一段声音样本，系统逐句用样本的
+音色合成对白，拼成母带和逐段带时间戳的人物稿，之后的数字人流程与「已有录音 + 文稿」完全一样。
+
+- **声音样本**：参考文件「克隆声音」分类（`refs/voices/`），每个说话人一段 5–30 秒、只有这一个人说话的干净录音，
+  格式 mp3 / wav / flac / m4a / aac / ogg。只上传本人或已获授权的声音。
+- **台词稿**：每行一句「说话人：台词」（中英文冒号都行），只有一个说话人时可以不写人名；空行和 `#` 开头的行忽略：
+
+```text
+主持人：欢迎收听本期节目。
+嘉宾：谢谢邀请，今天我们聊聊人工智能电影。
+主持人：先从数字人的制作说起。
+```
+
+- **对应关系**：在「人物对应说明」里写清每个说话人用哪张照片、哪段声音，例如「主持人用 host.png 的照片和 host.mp3 的声音」；
+  只有一个说话人且只有一段样本，或样本文件名与说话人同名时会自动对上。
+- **TTS 渠道**：按任意样本克隆只有三种渠道能做——「生成模型」页 TTS 选 Agentics（Voice Clone 模型须收参考音频，如
+  qwen3tts-clone）、ComfyUI（Voice Clone 工作流，如 IndexTTS2 / Qwen3-TTS Clone）或火山引擎的 Doubao-音频生成 1.0。
+  其余渠道会在第一步直接报错，不会拿音色库里的近似音色冒充。
+- **流程**：`dh0-voice`（09-audio/voice-generation）只跑宿主 CLI：
+
+```bash
+python3 code/dialogue_clone.py plan  --project <slug> --ep ep01 [--voice 主持人=refs/voices/host.mp3 ...]
+python3 code/dialogue_clone.py synth --project <slug> --ep ep01 [--gap 0.4] [--force]
+python3 code/dialogue_clone.py check --project <slug> --ep ep01
+```
+
+  产物：逐句音频 `assets/audio/voice/clone/ep01/`、母带 `assets/audio/master/ep01.mp3`、人物稿
+  `digital-human/transcript_cloned.txt`、台账 `digital-human/voice_clone.json`（渠道、样本指纹、逐句时间）。
+  只有新句或改过的句子会重新合成；台词稿或样本改了，`check` 会判过期，重跑 `synth` 后下游重新出片。
+
 ## 文稿输入（可选）
 
 启动流程时可以完全不提供文稿。`dh0-ingest` 固化母带和人物映射后，总制片自动派

@@ -1420,7 +1420,7 @@ plugins/<plugin-name>/
 |---|---|---|---|---|
 | 🎬 影视剧(默认) | `film` | `agents/workflow.yaml`(本文 §3–§9) | — | 小说原文 → `novel/original.txt` |
 | 🎙️ 音频配画 | `audio-to-video` | `agents/workflows/audiovideo.yaml` | `15-audio-video/*` + `11-qa/av-sync-qa` | 讲述音频 → `refs/audio/`,文稿 → `refs/text/transcript.txt` |
-| 🧑‍💼 数字人 | `digital-human` | `agents/workflows/digitalhuman.yaml` | `17-digital-human/*` + `11-qa/digital-human-sync-qa` | 音频母带 → `refs/audio/`,人物照片 → `refs/characters/`,文稿可选,人物对应说明 → `brief.md` |
+| 🧑‍💼 数字人 | `digital-human` | `agents/workflows/digitalhuman.yaml` | `17-digital-human/*` + `11-qa/digital-human-sync-qa` | 人物照片 → `refs/characters/`,人物对应说明 → `brief.md`;声音来源(`project.voice_source`)= 原始录音:音频母带 → `refs/audio/`,文稿可选;= 克隆声音:每个说话人的声音样本 → `refs/voices/`,台词稿(必填)→ `refs/text/transcript.txt`,由 `dh0-voice` 逐句克隆合成母带(`code/dialogue_clone.py`) |
 | ✂️ 混剪 | `mashup` | `agents/workflows/mashup.yaml` | `16-mashup/*` + `11-qa/mashup-qa` | 文稿 → `refs/text/transcript.txt` + `novel/original.txt`,讲述音频(可选)→ `refs/audio/`,素材库 → `settings.json#project.footage_libraries` |
 
 1. **来历**:后三种原是 VideoAgents-Plugins 仓库的同名插件,2026-10-20 并入主程序——成员 SOUL 进 `agents/<类别>/`,
@@ -1440,4 +1440,5 @@ plugins/<plugin-name>/
 6. **存量项目**:没有 `settings.json#project` 段的项目按插件时期留下的产物推断类型(`av/audio_map.json` → 音频配画;
    `mashup/audio_map.json`、`footage_source.json` 或 `beat_track.json` → 混剪;`digital-human/input_manifest.json` → 数字人),
    都没有 = 影视剧;下次保存项目设置时推断结果写回。
-7. **控制台**:左侧 Agent 列表只列共用成员与当前项目类型的专属团队;「参考文件」页在非影视剧项目里把「讲述音频」分类排第一。
+7. **控制台**:左侧 Agent 列表只列共用成员与当前项目类型的专属团队;「参考文件」页在非影视剧项目里把「讲述音频」分类排第一,数字人项目另有「克隆声音」分类。
+8. **数字人克隆声音**:按任意样本零样本克隆只有 Agentics(Voice Clone 模型须收参考音频)、ComfyUI(Voice Clone 工作流)、火山 Doubao-音频生成 1.0 能做(`modules/genmedia.py tts --clone-from`),其余渠道直接报错,不退回音色库或声纹卡描述。

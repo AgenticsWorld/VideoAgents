@@ -7125,6 +7125,16 @@ def _tts_volc_seedaudio(cfg, text, output, voice, speed, instructions,
         else:
             text_prompt = ("生成一段纯人声语音:无背景音乐、无环境音、无混响、无附加音效。"
                            f"说话人({desc})用{tone}的语气说道:“{text}”")
+    resp = _seedaudio_create(api_key, text_prompt, references, output, speed)
+    print(f"[genmedia] seed-audio {'导演式' if direction else '描述定制嗓音'}:desc={desc!r} tone={tone!r}"
+          f" ref={ref.name if ref is not None else '无(纯描述)'}"
+          + (f" target={float(target_s):g}s" if direction and target_s else "")
+          + f" dur={resp.get('original_duration')}s", file=sys.stderr)
+    return _save(base64.b64decode(resp["audio"]), output)
+
+
+def _seedaudio_create(api_key: str, text_prompt: str, references: list, output: str, speed) -> dict:
+    """火山 Doubao-音频生成 1.0 一次合成请求;返回响应(audio 为 base64,已校验非空)。"""
     if len(text_prompt) > 3000:
         raise RuntimeError(f"seed-audio text_prompt 超 3000 字符上限"
                            f"({len(text_prompt)}):文本过长,分段合成后拼接")
@@ -7142,15 +7152,10 @@ def _tts_volc_seedaudio(cfg, text, output, voice, speed, instructions,
         {"Content-Type": "application/json", "X-Api-Key": api_key,
          "X-Api-Request-Id": str(uuid.uuid4())},
         timeout=TTS_TIMEOUT))
-    audio_b64 = resp.get("audio") or ""
-    if not audio_b64:
+    if not resp.get("audio"):
         raise RuntimeError(f"火山音频生成(seed-audio)返回空音频"
                            f"(code={resp.get('code')}):{resp.get('message') or json.dumps(resp, ensure_ascii=False)[:300]}")
-    print(f"[genmedia] seed-audio {'导演式' if direction else '描述定制嗓音'}:desc={desc!r} tone={tone!r}"
-          f" ref={ref.name if ref is not None else '无(纯描述)'}"
-          + (f" target={float(target_s):g}s" if direction and target_s else "")
-          + f" dur={resp.get('original_duration')}s", file=sys.stderr)
-    return _save(base64.b64decode(audio_b64), output)
+    return resp
 
 
 def _tts_volcengine(cfg, text, output, voice, speed, instructions,
@@ -7301,6 +7306,82 @@ def _resolve_tts_reference(cfg, text, output, voice="", character="", variant=""
 
 # Agentics Voice Design profile 的嗓音描述参数名:首选与 RunningHub 节点输入位一致的 instruct
 _AGENTICS_TTS_DESC_KEYS = ("instruct", "voice_instruction", "voice_description", "instructions")
+
+
+# ---------------- TTS:按用户上传的音频样本克隆声音(2026-10-20,数字人项目「克隆声音」,code/dialogue_clone.py) ----------------
+# 零样本克隆 = 每次合成都把同一段样本当参考音频传给 Voice Clone 模型,不在平台注册音色。能做的渠道:
+# Agentics(Voice Clone profile 须收参考音频)、ComfyUI(Voice Clone 工作流,与音色库模式同一套)、
+# 火山 Doubao-音频生成 1.0(references);火山 Seed-TTS 2.0 的声音复刻要先在平台注册音色,OpenRouter / MiniMax /
+# ElevenLabs 未接零样本克隆——这些渠道直接报错,不得退回音色库或声纹卡描述冒充克隆。
+CLONE_SAMPLE_EXTS = (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg")
+
+
+def clone_support(cfg: dict) -> tuple[bool, str]:
+    """当前 TTS 配置能否按任意音频样本克隆声音:(能否, 一句说明)。不联网(Agentics profile 是否收参考音频提交时再核)。"""
+    prov = cfg.get("provider") or ""
+    if prov == "agentics":
+        code = str(cfg.get("model") or cfg.get("profile_code") or cfg.get("clone") or "").strip()
+        return (True, f"Agentics Voice Clone 模型 {code}") if code else \
+            (False, "Agentics 没选 Voice Clone 模型(「🎨 生成模型」页 TTS › Agentics)")
+    if prov == "comfyui":
+        wf = str((cfg.get("rh_workflow_id") if _comfy_is_rh(cfg) else cfg.get("workflow")) or "").strip()
+        return (True, f"ComfyUI Voice Clone 工作流 {wf}") if wf else \
+            (False, "ComfyUI 没选 Voice Clone 工作流(「🎨 生成模型」页 TTS › ComfyUI)")
+    if prov == "volcengine":
+        if (cfg.get("model") or "") == SEEDAUDIO_MODEL:
+            return True, "火山 Doubao-音频生成 1.0(参考音频)"
+        return False, ("火山 Seed-TTS 2.0 不能按上传样本直接克隆(声音复刻要先在平台注册音色);"
+                       "把 TTS › 火山引擎的模型换成 Doubao-音频生成 1.0")
+    return False, (f"TTS 渠道 {prov or '(未配置)'} 不支持按上传样本克隆声音;"
+                   "到「🎨 生成模型」页 TTS 换成 Agentics(Voice Clone 模型)、ComfyUI(Voice Clone 工作流)"
+                   "或火山 Doubao-音频生成 1.0")
+
+
+def _clone_sample_path(sample: str) -> Path:
+    raw = Path(sample)
+    for cand in ([raw] if raw.is_absolute() else [Path.cwd() / raw, ROOT / raw]):
+        if cand.is_file():
+            if cand.suffix.lower() not in CLONE_SAMPLE_EXTS:
+                raise RuntimeError(f"克隆样本须是音频文件({' / '.join(CLONE_SAMPLE_EXTS)}):{sample}")
+            return cand.resolve()
+    raise RuntimeError(f"克隆样本不存在:{sample}")
+
+
+def _tts_clone_from(cfg, text, output, sample, speed, instructions, direction, scene, target_s):
+    """用 sample 这段录音的音色合成 text(零样本克隆);不读声纹卡、音色库与项目冻结样本。"""
+    ref = _clone_sample_path(sample)
+    ok, why = clone_support(cfg)
+    if not ok:
+        raise RuntimeError(why)
+    prov = cfg["provider"]
+    print(f"[genmedia] 克隆声音:{prov} · {why} · 样本 {ref.name}", file=sys.stderr, flush=True)
+    if prov == "agentics":
+        code = str(cfg.get("model") or cfg.get("profile_code") or cfg.get("clone") or "").strip()
+        cfg = {**cfg, "model": code, "profile_code": code}
+        profile = _agentics_profile("tts", code)
+        files = (profile.get("token_schema") or {}).get("files") or {}
+        if not isinstance(files, dict) or not isinstance(files.get("reference_audios"), dict):
+            raise RuntimeError(f"Agentics TTS 模型 {code} 不收参考音频,不能按上传样本克隆声音;"
+                               "到「🎨 生成模型」页 TTS › Agentics 换一个收参考音频的 Voice Clone 模型(如 qwen3tts-clone)")
+        data = _agentics_generate("tts", cfg, {
+            "text": text, "voice_id": "", "speed": speed, "output_format": _output_format(output),
+        }, {"reference_audios": [str(ref)]}, profile=profile)
+        return _save(data, output)
+    if prov == "comfyui":
+        # 音色库模式的 Voice Clone 路径:--voice 是本地文件即作参考音频(不走 Voice Design、不自动选音色)
+        return _tts_comfyui({**cfg, "voice_mode": "library"}, text, output, str(ref), speed, instructions)
+    direction = (direction or "").strip()
+    if direction:
+        text_prompt = _seedaudio_direct_prompt(text, direction, (scene or "").strip(), target_s, "说话人", "", True)
+        speed = None
+    else:
+        tone = (instructions or "").strip() or "自然"
+        text_prompt = ("@音频1 是说话人的嗓音参考(仅音色,非本段台词的朗读)。"
+                       "生成一段纯人声语音:无背景音乐、无环境音、无混响、无附加音效。"
+                       f"说话人(与@音频1 同一副嗓子)用{tone}的语气说道:“{text}”")
+    resp = _seedaudio_create(str(cfg.get("api_key") or "").strip(), text_prompt,
+                             [{"audio_data": base64.b64encode(ref.read_bytes()).decode()}], output, speed)
+    return _save(base64.b64decode(resp["audio"]), output)
 
 
 def _is_voiceprint_sample(output: str) -> bool:
@@ -7775,8 +7856,11 @@ def generate_upscale(input_video: str = "", output: str = "", prompt: str = "",
 def generate_tts(text: str, output: str, voice: str = "", speed: float | None = None,
                  instructions: str = "", character: str = "", variant: str = "",
                  project: str = "", direction: str = "", scene: str = "",
-                 target_s: float | None = None) -> str:
+                 target_s: float | None = None, clone_from: str = "") -> str:
     """TTS 旁白/语音合成,返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json 的 tts 段。
+
+    clone_from(2026-10-20):给一段音频样本 = 按它的音色零样本克隆(数字人项目「克隆声音」),忽略 voice / character /
+    声纹卡 / 冻结样本;只有 clone_support() 认可的渠道能做,其余直接报错。
 
     direction / scene / target_s(2026-10-02,台词演法 modules/dialogue_direction.py):演法(状态 + 怎么演 + 语速 /
     音量 / 停顿)、场景与对象、目标时长。火山 Doubao-音频生成 1.0 按「导演式提示词」整套用上(时长也按目标出);
@@ -7803,6 +7887,8 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
     _forbid_dispatch_layer("TTS 语音")
     cfg = get_config("tts")
     direction = (direction or "").strip()
+    if (clone_from or "").strip():
+        return _tts_clone_from(cfg, text, output, clone_from.strip(), speed, instructions, direction, scene, target_s)
     seedaudio = cfg["provider"] == "volcengine" and cfg.get("model") == SEEDAUDIO_MODEL
     if direction and not seedaudio:
         # 不支持导演式提示词的渠道:演法降级成语气指令(火山 Seed-TTS 2.0、OpenAI 系生效;其余渠道照旧忽略)
@@ -8370,6 +8456,14 @@ def _cmd_voices(args):
 
 
 def _cmd_tts(args):
+    if args.dry_run and args.clone_from:
+        cfg = get_config("tts")
+        ok, why = clone_support(cfg)
+        print(f"[dry-run] tts clone via {cfg['provider']}:{why}"
+              f" sample={_clone_sample_path(args.clone_from).name} → {args.output}" + ("" if ok else " (不支持)"))
+        if not ok:
+            raise SystemExit(2)
+        return
     if args.dry_run:
         cfg = get_config("tts")
         voice = args.voice
@@ -8412,7 +8506,7 @@ def _cmd_tts(args):
         return
     out = generate_tts(args.text, args.output, args.voice, args.speed, args.instructions,
                        args.character, args.variant, args.project,
-                       args.direction, args.scene, args.target_duration)
+                       args.direction, args.scene, args.target_duration, args.clone_from)
     print(f"已生成: {out}")
 
 
@@ -8517,6 +8611,9 @@ def main():
     pt.add_argument("--scene", default="", help="配合 --direction:场景与对象(在哪、对谁说、刚发生了什么)")
     pt.add_argument("--target-duration", type=float, default=None,
                     help="配合 --direction:目标时长(秒),写进提示词让模型按它出声(仅火山 Doubao-音频生成 1.0)")
+    pt.add_argument("--clone-from", default="",
+                    help="克隆声音:按这段音频样本的音色出声(零样本克隆,忽略 --voice / --character);"
+                         "仅 Agentics Voice Clone / ComfyUI Voice Clone / 火山 Doubao-音频生成 1.0 支持")
     pt.add_argument("--dry-run", action="store_true")
 
     pvo = sub.add_parser("voices", help="音色库候选(音色库模式):按人物声纹卡自动打分排序,输出 JSON;"

@@ -4603,4 +4603,16 @@ window.I18N_DICT = {
 "agent·音画同步审核": "QA sinkron AV",
 "agent·混剪终审官": "QA akhir mashup",
 "agent·数字人同步审核": "QA sinkron manusia digital",
+// 数字人克隆声音(2026-10-20):新建向导「声音来源」、参考文件「克隆声音」分类
+"声音来源": "Sumber suara",
+"原始录音": "Rekaman asli",
+"克隆声音": "Suara kloning",
+"台词稿": "Naskah dialog",
+"原始录音:上传一条已经录好的对话音频作母带,成片声音就是它。克隆声音:没有录音时,给每个说话人上传一段声音样本、写好台词稿,按样本的音色逐句合成对白再做数字人(需要「🎨 生成模型」页 TTS 选 Agentics 的 Voice Clone 模型、ComfyUI 的 Voice Clone 工作流或火山 Doubao-音频生成 1.0)。只上传本人或已获授权的声音": "Rekaman asli: unggah percakapan yang sudah direkam; itu menjadi master dan suara video akhir. Suara kloning: tanpa rekaman, unggah satu sampel suara per pembicara dan tulis naskah dialog; setiap kalimat disintesis dengan suara sampel sebelum manusia digital dibuat (TTS di halaman «🎨 Model» harus berupa model Voice Clone Agentics, workflow Voice Clone ComfyUI, atau Volcengine Doubao Audio Generation 1.0). Unggah hanya suara Anda sendiri atau suara yang Anda punya izin untuk menggunakannya",
+"每行一句「说话人:台词」,如\n主持人:欢迎收听本期节目\n嘉宾:谢谢邀请\n只有一个说话人可以不写人名": "Satu kalimat per baris dengan format «Pembicara: kalimat», mis.\nPembawa acara: Selamat datang di episode ini\nTamu: Terima kasih atas undangannya\nJika hanya ada satu pembicara, nama boleh dihilangkan",
+"说明每个说话人用哪张照片、哪段声音,如:主持人用 host.png 的照片和 host.mp3 的声音;嘉宾用 guest.png 和 guest.mp3": "Sebutkan foto dan sampel suara untuk tiap pembicara, mis.: pembawa acara memakai foto host.png dan suara host.mp3; tamu memakai guest.png dan guest.mp3",
+"当前 TTS 渠道不能按样本克隆声音:到「🎨 生成模型」页 TTS 换成 Agentics(Voice Clone 模型)、ComfyUI(Voice Clone 工作流)或火山 Doubao-音频生成 1.0;也可以先建项目,开工前再换": "Kanal TTS saat ini tidak bisa mengkloning suara dari sampel: di halaman «🎨 Model», ganti TTS ke Agentics (model Voice Clone), ComfyUI (workflow Voice Clone), atau Volcengine Doubao Audio Generation 1.0. Anda juga bisa membuat proyek sekarang dan menggantinya sebelum mulai",
+"未选择(每个说话人一段 5–30 秒、只有这一个人说话的干净录音;也可创建后在参考文件页上传)": "Belum dipilih (satu rekaman bersih 5–30 detik per pembicara, hanya orang itu yang bicara; bisa juga diunggah nanti di halaman File referensi)",
+"克隆声音需要台词稿:每行一句「说话人:台词」": "Suara kloning memerlukan naskah dialog: satu kalimat per baris dengan format «Pembicara: kalimat»",
+"数字人项目「克隆声音」的声音样本:每个说话人一段 5–30 秒、只有这一个人说话的干净录音,按它的音色合成台词;只上传本人或已获授权的声音": "Sampel suara untuk proyek manusia digital dengan suara kloning: satu rekaman bersih 5–30 detik per pembicara, hanya orang itu yang bicara; kalimat disintesis dengan suara ini. Unggah hanya suara Anda sendiri atau suara yang Anda punya izin untuk menggunakannya",
 };

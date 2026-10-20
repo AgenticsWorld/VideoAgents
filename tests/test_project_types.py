@@ -140,6 +140,29 @@ def test_deferred_init_dispatches_once_after_uploads(env):
     assert e.value.status_code == 409 and len(env) == 1
 
 
+def test_digital_human_voice_source(env):
+    _create({"name": "rec", "project_type": "digital-human"})
+    assert core.load_project_settings("rec")["project"] == {"type": "digital-human", "voice_source": "recording"}
+    assert "dh0-voice`(克隆配音)不适用" in core.build_role_prompt("00-orchestration/workflow-orchestrator", "rec")
+    with pytest.raises(core.ServiceError):
+        _create({"name": "bad", "project_type": "digital-human", "voice_source": "tts"})
+    _create({"name": "cl", "project_type": "digital-human", "voice_source": "clone",
+             "novel": "主持人:你好\n嘉宾:你好", "defer_init": True})
+    asyncio.run(core.api_refs_upload(b"ID3fake", "cl", "voices", "", "host.mp3"))
+    with pytest.raises(core.ServiceError):
+        asyncio.run(core.api_refs_upload(b"x", "cl", "voices", "", "host.png"))
+    asyncio.run(core.api_projects_init("cl"))
+    msg = env[-1]["message"]
+    assert "声音来源:克隆声音" in msg and "refs/voices/host.mp3" in msg and "台词稿:refs/text/transcript.txt" in msg
+    assert "音频母带" not in msg
+    orch = core.build_role_prompt("00-orchestration/workflow-orchestrator", "cl")
+    assert "声音来源 = 克隆声音" in orch and "code/dialogue_clone.py" in orch and "refs/voices/" in orch
+    keys = [c["key"] for c in asyncio.run(core.api_refs_list("cl"))["categories"]]
+    assert keys[:2] == ["audio", "voices"]
+    _create({"name": "novel"})
+    assert "voices" not in [c["key"] for c in asyncio.run(core.api_refs_list("novel"))["categories"]]
+
+
 def test_type_is_locked_and_legacy_projects_inferred(env):
     _create({"name": "av", "project_type": "audio-to-video"})
     # 设置接口里 project 是项目名;project 段锁定,保存其它段时原样保留

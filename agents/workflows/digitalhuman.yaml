@@ -7,6 +7,10 @@
 # 或把工具的“仍在运行”误报为后台任务。每个 utterance 是独立工单，渠道 task_id 持久化到
 # jobs/{utterance}.json；宿主/Agent 中断后重跑同一工单即恢复轮询，不重复付费提交。
 # 本文件中的所有 outputs 路径均相对当前项目根目录 VIDEOAGENTS_PROJECT_ROOT，严禁写到工作区根。
+# 声音来源（2026-10-20，settings.json#project.voice_source，新建项目时选）：recording = 用户上传的原始录音作母带（默认，
+# dh0-voice 置 skipped）；clone = 没有录音，dh0-voice 按台词稿逐句用 refs/voices/ 里每个说话人的样本零样本克隆合成母带
+# 与带时间戳的人物稿（宿主 code/dialogue_clone.py plan → synth → check），此后与「已有录音 + 用户文稿」完全同路：
+# dh0-ingest 只核对母带指纹不复制，dh0-transcribe 跳过。母带一经合成即权威，下游零重编码纪律不变。
 version: 1
 project_type: digital-human
 
@@ -57,8 +61,22 @@ phases:
   - id: dh0
     name: 输入与时间轴
     tasks:
+      - id: dh0-voice
+        agent: 09-audio/voice-generation
+        condition: voice_source_clone      # settings.json#project.voice_source == clone；原始录音项目置 skipped
+        outputs: ["assets/audio/master/{ep}.mp3", "digital-human/transcript_cloned.txt",
+                  "digital-human/voice_clone.json", "digital-human/voice_cast.json"]
+        # 只跑宿主 CLI code/dialogue_clone.py：plan（台词稿解析、说话人↔样本对应、TTS 渠道能否克隆）→ synth（逐句
+        # genmedia tts --clone-from，修首尾静音，句间留静音拼母带，人物稿边界取句间静音正中）→ check（voice_clone_ok）。
+        # 说话人与样本的对应按 brief.md 人物对应说明写 digital-human/voice_cast.json（或 --voice）；台词一字不改；
+        # 渠道不能克隆（只有 Agentics Voice Clone / ComfyUI Voice Clone / 火山 Doubao-音频生成 1.0 能）、缺样本、缺台词稿
+        # 即停下上报，不得退回音色库或声纹卡描述冒充克隆。台词稿或样本改了 = 重跑本节点，下游全部标脏。
+        validation:
+          auto: [clone_provider_supported, every_speaker_has_sample, voice_clone_ok, ascii_filename]
+          rubric: extraction_v1
       - id: dh0-ingest
         agent: 17-digital-human/dialogue-ingest
+        depends_on: [dh0-voice]            # 原始录音项目 dh0-voice 为 skipped，依赖视为已满足
         outputs: ["assets/audio/master/{ep}.mp3", "digital-human/input_manifest.json",
                   "digital-human/cast.json"]
         validation:

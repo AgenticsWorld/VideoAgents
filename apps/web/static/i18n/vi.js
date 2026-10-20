@@ -4603,4 +4603,16 @@ window.I18N_DICT = {
 "agent·音画同步审核": "Kiểm tra đồng bộ âm hình",
 "agent·混剪终审官": "Duyệt cuối bản cắt ghép",
 "agent·数字人同步审核": "Kiểm tra đồng bộ người số",
+// 数字人克隆声音(2026-10-20):新建向导「声音来源」、参考文件「克隆声音」分类
+"声音来源": "Nguồn giọng nói",
+"原始录音": "Bản ghi gốc",
+"克隆声音": "Giọng nhân bản",
+"台词稿": "Kịch bản lời thoại",
+"原始录音:上传一条已经录好的对话音频作母带,成片声音就是它。克隆声音:没有录音时,给每个说话人上传一段声音样本、写好台词稿,按样本的音色逐句合成对白再做数字人(需要「🎨 生成模型」页 TTS 选 Agentics 的 Voice Clone 模型、ComfyUI 的 Voice Clone 工作流或火山 Doubao-音频生成 1.0)。只上传本人或已获授权的声音": "Bản ghi gốc: tải lên một đoạn hội thoại đã thu sẵn; nó là bản gốc và là âm thanh của video thành phẩm. Giọng nhân bản: khi không có bản ghi, mỗi người nói tải lên một mẫu giọng và viết kịch bản lời thoại; từng câu được tổng hợp bằng giọng của mẫu rồi mới tạo người số (TTS ở trang «🎨 Mô hình» phải là mô hình Voice Clone của Agentics, workflow Voice Clone của ComfyUI hoặc Volcengine Doubao Audio Generation 1.0). Chỉ tải lên giọng của chính bạn hoặc giọng bạn được phép sử dụng",
+"每行一句「说话人:台词」,如\n主持人:欢迎收听本期节目\n嘉宾:谢谢邀请\n只有一个说话人可以不写人名": "Mỗi dòng một câu theo dạng «Người nói: lời thoại», ví dụ\nNgười dẫn: Chào mừng đến với số này\nKhách mời: Cảm ơn đã mời tôi\nNếu chỉ có một người nói thì có thể bỏ tên",
+"说明每个说话人用哪张照片、哪段声音,如:主持人用 host.png 的照片和 host.mp3 的声音;嘉宾用 guest.png 和 guest.mp3": "Ghi rõ mỗi người nói dùng ảnh nào và mẫu giọng nào, ví dụ: người dẫn dùng ảnh host.png và giọng host.mp3; khách mời dùng guest.png và guest.mp3",
+"当前 TTS 渠道不能按样本克隆声音:到「🎨 生成模型」页 TTS 换成 Agentics(Voice Clone 模型)、ComfyUI(Voice Clone 工作流)或火山 Doubao-音频生成 1.0;也可以先建项目,开工前再换": "Kênh TTS hiện tại không nhân bản giọng từ mẫu được: ở trang «🎨 Mô hình», chuyển TTS sang Agentics (mô hình Voice Clone), ComfyUI (workflow Voice Clone) hoặc Volcengine Doubao Audio Generation 1.0. Bạn cũng có thể tạo dự án trước rồi đổi trước khi bắt đầu",
+"未选择(每个说话人一段 5–30 秒、只有这一个人说话的干净录音;也可创建后在参考文件页上传)": "Chưa chọn (mỗi người nói một bản ghi sạch 5–30 giây, chỉ có người đó nói; cũng có thể tải lên sau ở trang Tệp tham chiếu)",
+"克隆声音需要台词稿:每行一句「说话人:台词」": "Giọng nhân bản cần kịch bản lời thoại: mỗi dòng một câu theo dạng «Người nói: lời thoại»",
+"数字人项目「克隆声音」的声音样本:每个说话人一段 5–30 秒、只有这一个人说话的干净录音,按它的音色合成台词;只上传本人或已获授权的声音": "Mẫu giọng cho dự án người số dùng giọng nhân bản: mỗi người nói một bản ghi sạch 5–30 giây, chỉ có người đó nói; lời thoại được tổng hợp bằng giọng này. Chỉ tải lên giọng của chính bạn hoặc giọng bạn được phép sử dụng",
 };

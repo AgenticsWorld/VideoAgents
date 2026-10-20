@@ -4605,4 +4605,16 @@ window.I18N_DICT = {
 "agent·音画同步审核": "Revisão de sincronia AV",
 "agent·混剪终审官": "Revisão final do mashup",
 "agent·数字人同步审核": "Revisão de sincronia do humano digital",
+// 数字人克隆声音(2026-10-20):新建向导「声音来源」、参考文件「克隆声音」分类
+"声音来源": "Origem da voz",
+"原始录音": "Gravação original",
+"克隆声音": "Vozes clonadas",
+"台词稿": "Roteiro",
+"原始录音:上传一条已经录好的对话音频作母带,成片声音就是它。克隆声音:没有录音时,给每个说话人上传一段声音样本、写好台词稿,按样本的音色逐句合成对白再做数字人(需要「🎨 生成模型」页 TTS 选 Agentics 的 Voice Clone 模型、ComfyUI 的 Voice Clone 工作流或火山 Doubao-音频生成 1.0)。只上传本人或已获授权的声音": "Gravação original: envie uma conversa já gravada; ela vira o master e o som do vídeo final. Vozes clonadas: sem gravação, envie uma amostra de voz por pessoa e escreva o roteiro; cada fala é sintetizada com a voz da amostra antes de criar os humanos digitais (o TTS da página «🎨 Modelos» precisa ser um modelo Voice Clone da Agentics, um fluxo Voice Clone do ComfyUI ou Volcengine Doubao Audio Generation 1.0). Envie apenas a sua própria voz ou vozes que você tem autorização para usar",
+"每行一句「说话人:台词」,如\n主持人:欢迎收听本期节目\n嘉宾:谢谢邀请\n只有一个说话人可以不写人名": "Uma frase por linha no formato «Falante: fala», ex.:\nApresentador: Bem-vindos a este episódio\nConvidado: Obrigado pelo convite\nCom só uma pessoa falando, o nome pode ficar de fora",
+"说明每个说话人用哪张照片、哪段声音,如:主持人用 host.png 的照片和 host.mp3 的声音;嘉宾用 guest.png 和 guest.mp3": "Diga qual foto e qual amostra de voz cada pessoa usa, ex.: o apresentador usa a foto host.png e a voz host.mp3; o convidado guest.png e guest.mp3",
+"当前 TTS 渠道不能按样本克隆声音:到「🎨 生成模型」页 TTS 换成 Agentics(Voice Clone 模型)、ComfyUI(Voice Clone 工作流)或火山 Doubao-音频生成 1.0;也可以先建项目,开工前再换": "O canal TTS atual não consegue clonar uma voz a partir de uma amostra: na página «🎨 Modelos», troque o TTS para Agentics (modelo Voice Clone), ComfyUI (fluxo Voice Clone) ou Volcengine Doubao Audio Generation 1.0. Você também pode criar o projeto agora e trocar antes de começar",
+"未选择(每个说话人一段 5–30 秒、只有这一个人说话的干净录音;也可创建后在参考文件页上传)": "Nada selecionado (uma gravação limpa de 5–30 s por pessoa, só com ela falando; você também pode enviá-las depois na página Arquivos de referência)",
+"克隆声音需要台词稿:每行一句「说话人:台词」": "Vozes clonadas precisam de um roteiro: uma frase por linha no formato «Falante: fala»",
+"数字人项目「克隆声音」的声音样本:每个说话人一段 5–30 秒、只有这一个人说话的干净录音,按它的音色合成台词;只上传本人或已获授权的声音": "Amostras de voz para projetos de humano digital com vozes clonadas: uma gravação limpa de 5–30 s por pessoa, só com ela falando; as falas são sintetizadas com essa voz. Envie apenas a sua própria voz ou vozes que você tem autorização para usar",
 };

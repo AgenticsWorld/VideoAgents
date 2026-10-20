@@ -453,13 +453,21 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="np-step" data-step="basic" style="display:none">
       <div class="row"><label>项目名称</label>
         <input type="text" id="np-name" placeholder="仅英文字母和数字,如 MyNovel01"></div>
-      <div class="row" data-np-types="audio-to-video digital-human mashup"><label><span data-np-types="audio-to-video mashup">讲述音频</span><span data-np-types="digital-human">音频母带</span></label>
+      <div class="row" data-np-types="digital-human"><label>声音来源</label>
+        <select id="np-voice-src" style="flex:1"><option value="recording">原始录音</option><option value="clone">克隆声音</option></select>
+        <button type="button" class="info-btn" data-info="np-voice-src-info" title="说明">i</button></div>
+      <div class="note info-note" id="np-voice-src-info" data-np-types="digital-human">原始录音:上传一条已经录好的对话音频作母带,成片声音就是它。克隆声音:没有录音时,给每个说话人上传一段声音样本、写好台词稿,按样本的音色逐句合成对白再做数字人(需要「🎨 生成模型」页 TTS 选 Agentics 的 Voice Clone 模型、ComfyUI 的 Voice Clone 工作流或火山 Doubao-音频生成 1.0)。只上传本人或已获授权的声音</div>
+      <div class="note" id="np-clone-hint" data-np-types="digital-human" data-np-voice="clone" style="display:none;color:#e8a33d"></div>
+      <div class="row" data-np-types="audio-to-video digital-human mashup" data-np-voice="recording"><label><span data-np-types="audio-to-video mashup">讲述音频</span><span data-np-types="digital-human">音频母带</span></label>
         <div class="np-files"><button type="button" class="np-pick" data-pick="np-audio">选择文件</button><span class="np-picked" id="np-audio-picked"></span>
           <input type="file" id="np-audio" accept=".mp3,.wav,.flac,.m4a,.aac,.ogg" hidden></div></div>
+      <div class="row" data-np-types="digital-human" data-np-voice="clone"><label>克隆声音</label>
+        <div class="np-files"><button type="button" class="np-pick" data-pick="np-voices">选择文件</button><span class="np-picked" id="np-voices-picked"></span>
+          <input type="file" id="np-voices" accept=".mp3,.wav,.flac,.m4a,.aac,.ogg" multiple hidden></div></div>
       <div class="row" data-np-types="digital-human"><label>人物照片</label>
         <div class="np-files"><button type="button" class="np-pick" data-pick="np-images">选择文件</button><span class="np-picked" id="np-images-picked"></span>
           <input type="file" id="np-images" accept=".png,.jpg,.jpeg,.webp" multiple hidden></div></div>
-      <div class="row" style="align-items:flex-start"><label style="padding-top:6px"><span data-np-types="film">故事文本</span><span data-np-types="audio-to-video mashup">文稿</span><span data-np-types="digital-human">文稿(可选)</span></label>
+      <div class="row" style="align-items:flex-start"><label style="padding-top:6px"><span data-np-types="film">故事文本</span><span data-np-types="audio-to-video mashup">文稿</span><span data-np-types="digital-human" data-np-voice="recording">文稿(可选)</span><span data-np-types="digital-human" data-np-voice="clone">台词稿</span></label>
         <textarea id="np-novel" style="height:150px" placeholder="粘贴小说原文(可留空,之后手动放入 novel/ 目录)"></textarea></div>
       <div class="row" style="align-items:flex-start" data-np-types="mashup"><label style="padding-top:6px">素材库</label>
         <div class="np-libs" id="np-libs"></div></div>
@@ -1452,18 +1460,41 @@ const NP_BRIEF_PH={film:'如:剧情片还是纪录片、题材类型与基调、
   'audio-to-video':'如:题材与时代背景、基调、目标受众、画面取舍……',
   'digital-human':'说明每个说话人用哪张照片,如:第一个出现的说话人是主持人,用 host.png;第二个是嘉宾,用 guest.png',
   mashup:'如:题材与基调、画面偏好;没有讲述音频时可写配音的声线与语气……'};
+// 数字人「声音来源」= 克隆声音时(2026-10-20,code/dialogue_clone.py):台词稿必填、母带换成每人一段声音样本
+const NP_CLONE_TEXT_PH='每行一句「说话人:台词」,如\n主持人:欢迎收听本期节目\n嘉宾:谢谢邀请\n只有一个说话人可以不写人名';
+const NP_CLONE_BRIEF_PH='说明每个说话人用哪张照片、哪段声音,如:主持人用 host.png 的照片和 host.mp3 的声音;嘉宾用 guest.png 和 guest.mp3';
 const NP_MAX_FILE=100*1024*1024;   // 与服务端参考文件上传上限 MAX_REF_UPLOAD 一致
 let NP_TYPE='film',NP_STEP=1;
 const npSteps=()=>NP_TYPE_STEPS[NP_TYPE]||NP_TYPE_STEPS.film;
 function npApplyType(type){
   NP_TYPE=NP_TYPE_STEPS[type]?type:'film';
   document.querySelectorAll('#np-modal .np-type').forEach(b=>b.classList.toggle('active',b.dataset.type===NP_TYPE));
+  const clone=npCloneVoice();
   document.querySelectorAll('#np-modal [data-np-types]').forEach(el=>
-    el.classList.toggle('np-hide',!el.dataset.npTypes.split(' ').includes(NP_TYPE)));
-  $('#np-novel').placeholder=t(NP_TEXT_PH[NP_TYPE]);
-  $('#np-brief').placeholder=t(NP_BRIEF_PH[NP_TYPE]);
-  ['np-audio','np-images'].forEach(id=>{$('#'+id+'-picked').textContent=npPickedText(id)});
+    el.classList.toggle('np-hide',!el.dataset.npTypes.split(' ').includes(NP_TYPE)
+      ||(NP_TYPE==='digital-human'&&!!el.dataset.npVoice&&el.dataset.npVoice!==(clone?'clone':'recording'))));
+  $('#np-novel').placeholder=t(clone?NP_CLONE_TEXT_PH:NP_TEXT_PH[NP_TYPE]);
+  $('#np-brief').placeholder=t(clone?NP_CLONE_BRIEF_PH:NP_BRIEF_PH[NP_TYPE]);
+  ['np-audio','np-images','np-voices'].forEach(id=>{$('#'+id+'-picked').textContent=npPickedText(id)});
   if(NP_TYPE==='mashup')npLoadLibs();
+  if(clone)npCloneHint();
+}
+const npCloneVoice=()=>NP_TYPE==='digital-human'&&$('#np-voice-src').value==='clone';
+$('#np-voice-src').onchange=()=>npApplyType(NP_TYPE);
+// 当前 TTS 渠道能不能按样本克隆(与 genmedia.clone_support 同口径;Agentics 模型是否收参考音频要提交时才知道)
+let NP_CLONE_REQ=0;
+async function npCloneHint(){
+  const box=$('#np-clone-hint'),req=++NP_CLONE_REQ;
+  let ok=true;
+  try{
+    const tts=((await api('/api/v1/config/generation')).tts)||{},pc=tts[tts.provider]||{};
+    ok=tts.provider==='agentics'?!!pc.clone
+      :tts.provider==='comfyui'?!!(['rh_cn','rh_ai'].includes(pc.mode)?pc.rh_workflow_id:pc.workflow)
+      :tts.provider==='volcengine'?(pc.model==='seed-audio-1.0'):false;
+  }catch(e){}
+  if(req!==NP_CLONE_REQ)return;
+  box.textContent=ok?'':t('当前 TTS 渠道不能按样本克隆声音:到「🎨 生成模型」页 TTS 换成 Agentics(Voice Clone 模型)、ComfyUI(Voice Clone 工作流)或火山 Doubao-音频生成 1.0;也可以先建项目,开工前再换');
+  box.style.display=ok?'none':'';
 }
 document.querySelectorAll('#np-modal .np-type').forEach(b=>b.onclick=()=>{npApplyType(b.dataset.type);npShowStep(NP_STEP)});   // 总步数随类型变
 // 讲述音频 / 人物照片:先只在本地选好,创建项目后逐个传进 refs/(defer_init → references → init)
@@ -1471,6 +1502,7 @@ function npPickedText(id){
   const fs=[...$('#'+id).files];
   if(fs.length)return fs.map(f=>f.name+' · '+(f.size/1048576).toFixed(1)+' MB').join('、');
   if(id==='np-images')return t('未选择(每个说话人一张,也可创建后在参考文件页上传)');
+  if(id==='np-voices')return t('未选择(每个说话人一段 5–30 秒、只有这一个人说话的干净录音;也可创建后在参考文件页上传)');
   return t(NP_TYPE==='mashup'?'未选择(可选:没有讲述音频时按文稿合成配音)':'未选择(也可创建后在参考文件页上传)');
 }
 document.querySelectorAll('#np-modal .np-pick').forEach(b=>{
@@ -1480,7 +1512,8 @@ document.querySelectorAll('#np-modal .np-pick').forEach(b=>{
 });
 function npFiles(){   // [{file,category}]:只收当前类型用得上的
   if(NP_TYPE==='film')return [];
-  const out=[...$('#np-audio').files].map(file=>({file,category:'audio'}));
+  const out=npCloneVoice()?[...$('#np-voices').files].map(file=>({file,category:'voices'}))
+    :[...$('#np-audio').files].map(file=>({file,category:'audio'}));
   if(NP_TYPE==='digital-human')out.push(...[...$('#np-images').files].map(file=>({file,category:'characters'})));
   return out;
 }
@@ -1634,7 +1667,8 @@ function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置�
 function openNpModal(){
   npInitOnce();
   $('#np-name').value='';$('#np-novel').value='';$('#np-brief').value='';$('#np-style').value='';
-  $('#np-audio').value='';$('#np-images').value='';$('#np-libs').innerHTML='';
+  $('#np-audio').value='';$('#np-images').value='';$('#np-voices').value='';$('#np-libs').innerHTML='';
+  $('#np-voice-src').value='recording';
   npApplyType('film');   // 默认影视剧
   npResetDefaults();
   NP_VIDEO_MODEL=null;NP_SG_TOUCHED=false;npsgModelHint();
@@ -1652,6 +1686,7 @@ function npValidateStep(n){   // 返回错误文案,''=通过(规则与各设置
     if(!/^[A-Za-z0-9]+$/.test($('#np-name').value.trim()))return '项目名称只能使用英文字母和数字';
     const big=npFiles().find(x=>x.file.size>NP_MAX_FILE);
     if(big)return I18N.f('文件超过 100 MB:{name}',{name:big.file.name});
+    if(npCloneVoice()&&!$('#np-novel').value.trim())return '克隆声音需要台词稿:每行一句「说话人:台词」';
   }else if(key==='model'){   // 模型限制
     return sgValidate(parseFloat($('#npsg-maxs').value),parseInt($('#npsg-imgs').value),
       parseInt($('#npsg-vids').value),parseInt($('#npsg-auds').value));
@@ -1707,6 +1742,7 @@ async function npCreate(){
   if(type==='film'||type==='audio-to-video')body.style=$('#np-style').value;
   if(type==='film')body.rhythm=rhythmCollect('np');
   if(type==='mashup')body.footage_libraries=npCheckedLibs();
+  if(type==='digital-human')body.voice_source=$('#np-voice-src').value;
   if(files.length)body.defer_init=true;   // 先把音频/照片传进 refs/ 再派初始化,总制片一次看全
   let created=false;
   try{

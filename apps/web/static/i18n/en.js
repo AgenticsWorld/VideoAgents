@@ -4595,4 +4595,16 @@ window.I18N_DICT = {
 "cat·音频配画": "Audio to video",
 "cat·混剪": "Mashup",
 "cat·数字人": "Digital human",
+// 数字人克隆声音(2026-10-20):新建向导「声音来源」、参考文件「克隆声音」分类
+"声音来源": "Voice source",
+"原始录音": "Original recording",
+"克隆声音": "Cloned voices",
+"台词稿": "Script",
+"原始录音:上传一条已经录好的对话音频作母带,成片声音就是它。克隆声音:没有录音时,给每个说话人上传一段声音样本、写好台词稿,按样本的音色逐句合成对白再做数字人(需要「🎨 生成模型」页 TTS 选 Agentics 的 Voice Clone 模型、ComfyUI 的 Voice Clone 工作流或火山 Doubao-音频生成 1.0)。只上传本人或已获授权的声音": "Original recording: upload a conversation that is already recorded; it becomes the master and the soundtrack of the finished video. Cloned voices: with no recording, upload one voice sample per speaker and write the script; each line is synthesized in that speaker's sampled voice before the digital humans are made (needs TTS on the 🎨 Models page set to an Agentics Voice Clone model, a ComfyUI Voice Clone workflow or Volcengine Doubao Audio Generation 1.0). Only upload your own voice or voices you are authorized to use",
+"每行一句「说话人:台词」,如\n主持人:欢迎收听本期节目\n嘉宾:谢谢邀请\n只有一个说话人可以不写人名": "One line per sentence as \"Speaker: line\", e.g.\nHost: Welcome to this episode\nGuest: Thanks for having me\nWith only one speaker you can leave the name out",
+"说明每个说话人用哪张照片、哪段声音,如:主持人用 host.png 的照片和 host.mp3 的声音;嘉宾用 guest.png 和 guest.mp3": "Say which photo and which voice sample each speaker uses, e.g. the host uses the host.png photo and the host.mp3 voice; the guest uses guest.png and guest.mp3",
+"当前 TTS 渠道不能按样本克隆声音:到「🎨 生成模型」页 TTS 换成 Agentics(Voice Clone 模型)、ComfyUI(Voice Clone 工作流)或火山 Doubao-音频生成 1.0;也可以先建项目,开工前再换": "The current TTS channel can't clone a voice from a sample: on the 🎨 Models page switch TTS to Agentics (Voice Clone model), ComfyUI (Voice Clone workflow) or Volcengine Doubao Audio Generation 1.0. You can also create the project now and switch before starting",
+"未选择(每个说话人一段 5–30 秒、只有这一个人说话的干净录音;也可创建后在参考文件页上传)": "None selected (one clean 5–30 s recording per speaker with only that person talking; you can also upload them on the Reference Files page later)",
+"克隆声音需要台词稿:每行一句「说话人:台词」": "Cloned voices need a script: one line per sentence as \"Speaker: line\"",
+"数字人项目「克隆声音」的声音样本:每个说话人一段 5–30 秒、只有这一个人说话的干净录音,按它的音色合成台词;只上传本人或已获授权的声音": "Voice samples for digital-human projects using cloned voices: one clean 5–30 s recording per speaker with only that person talking; lines are synthesized in that voice. Only upload your own voice or voices you are authorized to use",
 };

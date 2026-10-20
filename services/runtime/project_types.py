@@ -41,6 +41,9 @@ TYPES: dict[str, dict] = {
         "outputs_ns": "digital-human", "first_node": "dh0-ingest", "gates": "无人工签字点",
         "inputs": "音频母带在 refs/audio/,人物图片在 refs/characters/,文稿可选(在 refs/text/;没有就按 DAG 派 dh0-transcribe);"
                   "人物与声音的对应说明见 brief.md「主要构想」",
+        # 声音来源 = 克隆声音(project.voice_source=clone)时的输入约定,替换上一条
+        "inputs_clone": "没有原始录音:台词稿在 refs/text/transcript.txt(每行「说话人:台词」),每个说话人的克隆声音样本在 "
+                        "refs/voices/,人物图片在 refs/characters/;说话人与照片、样本的对应说明见 brief.md「主要构想」",
     },
     "mashup": {
         "label": "混剪", "icon": "✂️", "workflow": "agents/workflows/mashup.yaml",
@@ -60,6 +63,10 @@ STATELESS_AGENTS = frozenset({
 
 # 已并入主程序的插件包名 → 项目类型(插件名与类型 id 相同)
 INTEGRATED_PLUGINS = frozenset(t for t in TYPES if t != DEFAULT)
+
+# 数字人的声音来源(2026-10-20):recording = 用户上传的原始录音作母带(默认);clone = 没有录音,
+# 按台词稿逐句用 refs/voices/ 里的样本克隆合成母带(dh0-voice,code/dialogue_clone.py)
+VOICE_SOURCES = ("recording", "clone")
 
 _LIB_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.\-]{0,79}")
 
@@ -87,6 +94,8 @@ def resolve(saved, project_dir: Path) -> dict:
     out = {"type": normalize(block["type"]) if block.get("type") else infer(project_dir)}
     if out["type"] == "mashup":
         out["footage_libraries"] = clean_libraries(block.get("footage_libraries"))
+    if out["type"] == "digital-human":
+        out["voice_source"] = block.get("voice_source") if block.get("voice_source") in VOICE_SOURCES else "recording"
     return out
 
 
@@ -137,12 +146,24 @@ def orchestrator_section(block: dict, proj_rel: str, agent_ids) -> str:
     if tid == DEFAULT:
         return ""
     t = TYPES[tid]
+    clone = tid == "digital-human" and (block or {}).get("voice_source") == "clone"
     lines = [
         f"\n\n## 项目类型:{t['label']}({tid};新建项目时选定,settings.json#project.type,不可更改)",
         f"- 本项目不走「小说→视频」主流程。流程权威 DAG = `{t['workflow']}`(与 agents/workflow.yaml 同构的机器可读 DAG,"
         f"头部注释写明本流程的特殊授权、输入约定与宿主工具链,派单前通读);说明文档 `{t['doc']}`",
-        f"- 输入约定:{t['inputs']}",
+        f"- 输入约定:{t['inputs_clone'] if clone else t['inputs']}",
     ]
+    if clone:
+        lines.append(
+            "- 声音来源 = 克隆声音(settings.json#project.voice_source=clone):用户没有原始录音,`dh0-voice` 节点生效——"
+            "派给 09-audio/voice-generation,instruction 写明「只跑宿主 CLI `python3 code/dialogue_clone.py plan → synth → check`;"
+            "说话人与样本的对应按 brief.md 人物对应说明写进 digital-human/voice_cast.json(或 --voice 说话人=refs/voices/<文件>);"
+            "台词一字不改,不自写 TTS / 拼接脚本;plan 报渠道不能克隆、缺样本或缺台词稿就停下上报」。"
+            "dh0-ingest 依赖它:母带就是 dh0-voice 产出的 assets/audio/master/{ep}.mp3(不从 refs/audio 复制,只核对与 "
+            "digital-human/voice_clone.json 指纹一致),文稿取 digital-human/transcript_cloned.txt(逐段带时间戳与人物),"
+            "dh0-transcribe 跳过。台词稿或样本改了 = 重跑 dh0-voice,其下游全部标脏")
+    elif tid == "digital-human":
+        lines.append("- 声音来源 = 原始录音:`dh0-voice`(克隆配音)不适用,立项时置 skipped")
     libs = (block or {}).get("footage_libraries") or []
     if tid == "mashup":
         lines.append(

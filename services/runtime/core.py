@@ -13570,7 +13570,8 @@ async def api_brief_set(body: dict):
 # ---------------- 参考文件页(refs/ 分类预览、上传、逐文件注释) ----------------
 REF_CATEGORIES = ("style", "thumbnail", "characters", "scenes", "creatures", "props", "music",
                   "video", "fonts", "text", "other",
-                  "audio")   # 讲述音频 / 音频母带(音频配画、数字人、混剪项目的主输入,2026-10-20)
+                  "audio",    # 讲述音频 / 音频母带(音频配画、数字人、混剪项目的主输入,2026-10-20)
+                  "voices")   # 克隆声音样本(数字人「克隆声音」:每个说话人一段,code/dialogue_clone.py,2026-10-20)
 REF_FONT_EXTS = (".ttf", ".otf", ".ttc")      # 与花字引擎 modules/captions.py 扫描口径一致
 REF_SKIP_FILES = {"README.md", "NOTES.md", "annotations.json"}
 AUDIO_EXTS = (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg")
@@ -13636,11 +13637,11 @@ async def api_refs_list(project: str = "demo"):
         return [entry(f) for f in sorted(files, key=lambda f: str(f).lower())]
 
     cats = [{"key": c, "files": listing(refs / c, True)} for c in REF_CATEGORIES]
-    if project_type_of(base.name) == project_types.DEFAULT:
-        # 「讲述音频」是非影视剧项目的输入口:那些项目排第一,影视剧项目没放过文件就不列这一类
-        cats = [c for c in cats if c["key"] != "audio" or c["files"]]
-    else:
-        cats.sort(key=lambda c: c["key"] != "audio")
+    ptype = project_type_of(base.name)
+    # 「讲述音频」是非影视剧项目的输入口、「克隆声音」只有数字人用:用得上的类型排最前,用不上且没放过文件就不列
+    inputs = {"audio": ptype != project_types.DEFAULT, "voices": ptype == "digital-human"}
+    cats = [c for c in cats if c["key"] not in inputs or inputs[c["key"]] or c["files"]]
+    cats.sort(key=lambda c: not inputs.get(c["key"]))
     root = listing(refs, False)          # 散放在 refs/ 根的文件 = 整体风格参考
     if root:
         cats.append({"key": "", "files": root})
@@ -13663,8 +13664,9 @@ async def api_refs_upload(data: bytes, project: str = "demo",
     ext = re.sub(r"[^a-z0-9.]", "", ext.lower())[:10]
     if category == "fonts" and ext not in REF_FONT_EXTS:
         raise ServiceError(400, "字体分类只接受 " + " / ".join(REF_FONT_EXTS) + " 字体文件")
-    if category == "audio" and ext not in AUDIO_EXTS:
-        raise ServiceError(400, "讲述音频分类只接受 " + " / ".join(AUDIO_EXTS) + " 音频文件")
+    if category in ("audio", "voices") and ext not in AUDIO_EXTS:
+        raise ServiceError(400, ("讲述音频" if category == "audio" else "克隆声音") + "分类只接受 "
+                           + " / ".join(AUDIO_EXTS) + " 音频文件")
     stem = re.sub(r"[^A-Za-z0-9._-]", "_", stem).strip("._-")
     stem = re.sub(r"_{2,}", "_", stem)[:80] or "ref"
     sub = re.sub(r"[^A-Za-z0-9._-]", "_", subdir).strip("._-")[:60]
@@ -15628,6 +15630,11 @@ async def api_projects_create(body: dict):
         if missing:
             raise ServiceError(400, "Footage library not found: " + ", ".join(missing))
         cfg["project"]["footage_libraries"] = libs
+    if ptype == "digital-human":
+        vs = str(body.get("voice_source") or "recording").strip()
+        if vs not in project_types.VOICE_SOURCES:
+            raise ServiceError(400, f"voice_source must be one of {project_types.VOICE_SOURCES}")
+        cfg["project"]["voice_source"] = vs
     _validate_duration(cfg["duration"])
     _validate_shot_group(cfg["shot_group"])
     _validate_output(cfg["output"])
@@ -15741,13 +15748,21 @@ def _typed_project_init_message(name: str, cfg: dict) -> str:
     audios = _files("audio", AUDIO_EXTS)
     transcript = refs / "text" / PROJECT_TRANSCRIPT
     t_len = len(transcript.read_text().strip()) if transcript.is_file() else 0
-    rows = [("讲述音频" if ptype != "digital-human" else "音频母带",
-             "、".join(audios) if audios else
-             ("未上传(可选:没有音频时按 DAG「音频可选」条款先派 narrator 按文稿 TTS 合成母带)"
-              if ptype == "mashup" else "**未上传(必需)**")),
-            ("文稿", f"refs/text/{PROJECT_TRANSCRIPT}(约 {t_len} 字)" if t_len else
-             ("未提供(可选:按 DAG 派 dh0-transcribe 自动转写)" if ptype == "digital-human"
-              else "**未提供(必需)**"))]
+    clone = ptype == "digital-human" and block.get("voice_source") == "clone"
+    if clone:
+        voices = _files("voices", AUDIO_EXTS)
+        rows = [("声音来源", "克隆声音(没有原始录音:按台词稿逐句用样本克隆合成母带,dh0-voice)"),
+                ("克隆声音样本", "、".join(voices) if voices else "**未上传(必需,每个说话人一段 5–30 秒的干净人声)**"),
+                ("台词稿", f"refs/text/{PROJECT_TRANSCRIPT}(约 {t_len} 字,每行「说话人:台词」)" if t_len
+                 else "**未提供(必需)**")]
+    else:
+        rows = [("讲述音频" if ptype != "digital-human" else "音频母带",
+                 "、".join(audios) if audios else
+                 ("未上传(可选:没有音频时按 DAG「音频可选」条款先派 narrator 按文稿 TTS 合成母带)"
+                  if ptype == "mashup" else "**未上传(必需)**")),
+                ("文稿", f"refs/text/{PROJECT_TRANSCRIPT}(约 {t_len} 字)" if t_len else
+                 ("未提供(可选:按 DAG 派 dh0-transcribe 自动转写)" if ptype == "digital-human"
+                  else "**未提供(必需)**"))]
     if ptype == "mashup":
         rows[1] = (rows[1][0], rows[1][1] + ("(同一份已写入 novel/original.txt 作 p0 的文本输入)" if t_len else ""))
         libs = block.get("footage_libraries") or []
@@ -15770,7 +15785,7 @@ def _typed_project_init_message(name: str, cfg: dict) -> str:
         "旁白、对白语音、白模、片头片尾、过场设计等主流程开关已按项目类型关闭,无需再向用户逐项确认。")
     msg.append(
         "完成以上工作后只做汇报,并【提醒用户】:缺项可在控制台顶栏「预览设定产物」菜单的【参考文件】页补传"
-        "(讲述音频放「讲述音频」分类,人物图片放「角色」分类,文稿放「文本」分类);"
+        "(讲述音频放「讲述音频」分类,克隆声音样本放「克隆声音」分类,人物图片放「角色」分类,文稿放「文本」分类);"
         f"素材齐了由用户回复开工,你再按 `{t['workflow']}` 立项生成 runs/dag.json 并按依赖派单"
         f"({t['first_node']} 先做宿主工具链自检)——现在不要派单。")
     return "\n".join(msg)

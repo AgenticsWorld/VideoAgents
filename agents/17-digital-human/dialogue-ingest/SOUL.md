@@ -25,6 +25,13 @@
 不得按字数估算人物时间。时戳必须覆盖整条母带、
 相邻段落连续无重叠无空洞。核对每个映射图片存在，登记输入事实和产物路径。
 
+**仅当声音来源 = 克隆声音**(`settings.json#project.voice_source` 为 `clone`,运行提示词「项目类型」段会写明)时:
+没有原始录音,母带是 `dh0-voice` 已合成好的 `assets/audio/master/{ep}.mp3`——**不从 refs/audio 复制、不改**,只核对它的 SHA256
+与 `digital-human/voice_clone.json` 的 `master_sha256` 一致(不一致或缺台账就停下上报,让总制片重派 dh0-voice);
+manifest 记 `master_origin: "tts_cloned"`。文稿取 `digital-human/transcript_cloned.txt`(宿主生成,逐段带时间戳与人物),
+按「用户已提供文稿」登记,`dh0-transcribe` 不派;人物名以 `digital-human/voice_cast.json` 的说话人为准,照片映射照旧
+从人物对应说明里取,cast.json 的人物名必须与它一致。声音来源为原始录音(或未设置)时本段不适用。
+
 用户没有提供文稿时**不是输入错误**：在 `input_manifest.json` 记录
 `transcript: {"provided": false, "status": "pending_asr"}`，由总制片按工作流自动派
 `dh0-transcribe` 给宿主 `09-audio/audio-transcription`。只有一个人物时工单带上其准确名称；多人时
