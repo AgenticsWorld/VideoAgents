@@ -200,7 +200,7 @@ button:disabled{opacity:.5;cursor:default}
       <div class="row"><label>worker 地址</label><input type="text" id="world-hunyuan-url" placeholder="http://192.168.x.x:8310"><input type="password" id="world-hunyuan-token" placeholder="X-Worker-Token"><button onclick="testHunyuan()">验证</button></div>
       <div class="status" id="world-hunyuan-status"></div>
       <div class="row"><label>高级参数</label><input type="number" id="world-hunyuan-views" min="4" max="64" step="1" placeholder="24" title="轨迹渲染视图数"><input type="number" id="world-hunyuan-steps" min="200" max="30000" step="100" placeholder="8000" title="3DGS 训练步数"><label class="chk"><input type="checkbox" id="world-hunyuan-fp8"> FP8 量化(Windows 暂不推荐,见部署文档)</label></div>
-      <div class="hint">本地算力生成(不耗 credits):场景全景 → GPU 主机 worker(HunyuanWorld-1.0 分层重建 + 3DGS 训练),约 20–40 分钟;worker 部署参考 <a href="https://github.com/AgenticsWorld/hunyuan-rpc" target="_blank">github.com/AgenticsWorld/hunyuan-rpc</a>(默认 Windows + 3090 24G)。</div>
+      <div class="hint">本地算力生成(不耗 credits):场景全景 → GPU 主机 worker(HunyuanWorld-1.0 分层重建 + 3DGS 训练),约 20–40 分钟;worker 部署参考 <a href="https://github.com/AgenticsWorld/VideoAgents-hunyuan-rpc" target="_blank">github.com/AgenticsWorld/VideoAgents-hunyuan-rpc</a>(默认 Windows + 3090 24G)。</div>
     </div>
   </div>
   <div class="card" id="card-text">
