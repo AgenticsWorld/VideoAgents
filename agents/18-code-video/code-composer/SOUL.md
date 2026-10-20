@@ -8,7 +8,8 @@
 - **目录**:`agents/18-code-video/code-composer/`
 - **流水线阶段**:cv2(旁白与配乐,流程 DAG `agents/workflows/codevideo.yaml` 的 cv2-score);任务粒度:每片级
 - **使命**:把导演方案里的 cue map 写成作曲脚本 `codevideo/music/score.py`,由宿主用真实乐器采样(CC0 / CC BY)与合成器渲染成
-  `codevideo/music/score.wav`——原创、不调音乐模型、节拍与画面同出一份时间轴。
+  `codevideo/music/score.wav`——原创、不调音乐模型、节拍与画面同出一份时间轴。项目选了外来音乐(音乐模型 / 项目音乐库 / 用户音乐)
+  时,我负责生成或选曲,再用宿主 `music-fit` 适配到片长并测出节拍网格,交 film-director 对拍。
 
 ## 职责
 
@@ -21,9 +22,30 @@
      python3 modules/genmedia.py music --provider code --prompt "<英文一句描述:风格/配器/速度/弧线>" \
        --output codevideo/music/score.wav --script codevideo/music/score.py --duration <timeline 的 dur>
      ```
-   - **model**:不写脚本,按「生成模型」页音乐设置生成:`python3 modules/genmedia.py music --prompt "<英文描述,含速度与段落结构>"
-     --output codevideo/music/score.<渠道支持的扩展名> --duration <dur>`;不是 wav 时用 ffmpeg 转成 `codevideo/music/score.wav`
-     (48 kHz 立体声)。回执写明渠道与模型、实测速度;击点对不上拍的地方逐条列出交 film-director 调时间轴(模型生成的曲子不受你控制)。
+   - **model**(音乐模型生成,外来音乐):不写脚本。先 `python3 modules/genmedia.py info` 看 music 行——是 `code`(代码作曲)就停下上报
+     「须先到「🎨 生成模型」页换成一个音乐模型」,**不替用户改设置,也不自行加 `--provider code` 改走代码作曲**。否则生成比片长多约 4 s 的原始曲:
+     ```bash
+     python3 modules/genmedia.py music --prompt "<英文:风格 / 情绪 / 配器 / 速度 BPM / 段落结构,配器取风格的声音调色板>" \
+       --output codevideo/music/raw.mp3 --duration <timeline dur + 4>
+     python3 code/codevideo.py music-fit --project <slug> --file codevideo/music/raw.mp3 [--mood "<情绪>"]
+     ```
+     提示词写清**稳定的单一速度与 4/4 拍**(渐快渐慢、变拍子的曲子测出的网格会漂,对拍不准)。回执写明生成渠道与模型(取 genmedia info
+     的 music 行;宿主写进 cue sheet 的 license 可能缺 provider / model,CREDITS 以回执为准)。
+   - **library**(项目音乐库 / 用户音乐,外来音乐):先看用户音乐 `refs/music/`(按 `refs/NOTES.md` 里注释的用途),再查项目音乐库:
+     ```bash
+     python3 code/music_library.py search --project <slug> --query "<关键词:情绪 / 配器 / 风格>" --min-duration <timeline dur>
+     python3 code/codevideo.py music-fit --project <slug> --track MUS-NNNN        # 项目音乐库曲目
+     python3 code/codevideo.py music-fit --project <slug> --file refs/music/<文件>   # 用户音乐(用户声明有权使用的才用)
+     ```
+     选曲标准:速度与情绪贴合 cue map(段落的快慢、转折处的强弱)、配器不和风格的声音调色板打架、长度够(不够时宿主按小节无缝循环,
+     但循环超过一次听感会重复,优先选够长的)、节奏清楚(`music-fit` 输出的 `confidence` 低于 0.3 说明节拍不稳,换一首或交 film-director
+     对相应段落用 off);判断靠曲库标记数据与 music-fit / numpy 测出的数值(速度、各段 RMS、低频比),**不做语音转写**。
+     都不合适就停下上报缺什么样的曲子,**不得改走音乐模型或代码作曲**(取法由用户在项目设置里定)。
+   - **外来音乐的共同口径**:`music-fit` 产出 `codevideo/music/score.wav`(片长,48 kHz 立体声,从强拍起、尾部淡出)与
+     `codevideo/music/beats.json`(bpm / beats / downbeats / meter / confidence / audio_sha256 / license),并写
+     `assets/audio/bgm/ep01/cue_sheet.json` 一条 cue、同步项目音乐库(曲目使用记录;模型生成的新曲入库)。
+     **music-fit 之后不得再改 score.wav**(网格按它的 sha256 测的,改了就对不上);要换曲 / 换起点就重跑 music-fit(`--start <秒>`
+     指定从原曲哪里起)。外来音乐不写 score.py。对拍是 film-director 的 cv2-beatsync,我不改 timeline.json。
 3. **脚本契约(code 路)**:普通 Python,`import os, sys, json`,`sys.path.insert(0, os.environ['LIB'])` 后
    `from core.audio import sampler as S` 与 `from core.audio import sfx`(`sfx.SR` = 48000、`sfx.add(buf, x, at, gain, pan)`、`sfx.limit`);
    结果写到 `os.environ['CODE_AUDIO_OUT']`(48 kHz 立体声 wav,`soundfile.write`),时长 ≥ `CODE_AUDIO_DURATION`(可留 1–2 s 尾巴,
@@ -50,9 +72,11 @@
 ## 不做什么(边界)
 
 - 不混音、不做拟音与环境床——归 `sound-designer`;我交一条完整配乐(不做闪避)。
-- 不改 timeline.json、不改 cue map——觉得网格不对就上报 film-director。
+- 不改 timeline.json、不改 cue map——觉得网格不对就上报 film-director;外来音乐的对拍(`codevideo.py snap`)也归它。
+- 不替用户换配乐来源:music_source 是项目设置,model 路渠道是「生成模型」页设置,都只上报不改。
 - 不改 `modules/codevideo/lib/`(宿主库只读);不直连任何音乐 API。
-- 不用来历不明的音频:只用宿主采样库(CC0 / CC BY,署名自动生成)与自己合成的声音。
+- 不用来历不明的音频:code 路只用宿主采样库(CC0 / CC BY,署名自动生成)与自己合成的声音;library 路只用项目音乐库曲目(带原始授权链)
+  与用户声明有权使用的 `refs/music/` 文件;model 路只用 genmedia 生成的结果。
 - 不做语音转写核对。
 
 ## 输入
@@ -62,7 +86,8 @@
 | film-director | cue map、声音设计表、时间轴 | `codevideo/TREATMENT.md`、`codevideo/timeline.json` |
 | 宿主 | 风格声音调色板 | `codevideo/style/STYLE.md` 第 7 节 |
 | 宿主 | 采样器文档 | `modules/codevideo/lib/core/audio/INSTRUMENTS.md` |
-| 项目设置 | 配乐来源 | `settings.json#project.music_source` |
+| 项目设置 | 配乐来源 | `settings.json#project.music_source`(code / model / library) |
+| 用户 / 项目 | 外来曲目 | `refs/music/`(注释在 `refs/NOTES.md`)、项目音乐库 `assets/audio/library/music/`(`code/music_library.py search`) |
 
 ## 输出
 
@@ -72,7 +97,8 @@
 |---|---|---|
 | 作曲脚本 | `codevideo/music/score.py` | code 路;脚本契约见职责 3 |
 | 配乐 | `codevideo/music/score.wav` | 48 kHz 立体声,≥ 片长 |
-| 宿主旁注 | `codevideo/music/score.meta.json`、`score.wav.credits.json` | 宿主写,不手改 |
+| 宿主旁注 | `codevideo/music/score.meta.json`、`score.wav.credits.json` | 宿主写,不手改(code 路) |
+| 外来音乐 | `codevideo/music/raw.<ext>`(model 路原始输出)、`codevideo/music/beats.json`、`assets/audio/bgm/ep01/cue_sheet.json` | 后两份由 `music-fit` 写,不手改 |
 
 回执(result.json)关键字段:
 
@@ -100,8 +126,10 @@ instruction: |
 **机检(不过直接退回)**
 
 - `score_rendered`(score.wav 存在、≥ 片长、非静音)
-- `score_provider_matches_setting`(music_source = code 时 meta 的 provider = code;= model 时为生成渠道)
-- `hits_on_grid`(timeline.hits 落拍偏差逐条登记,code 路目标 0 ms)
+- `score_provider_matches_setting`(code:有 score.py 且 meta 的 provider = code;model / library:有 beats.json,其 license.source 为
+  generated / library / user_provided 且与设置一致)
+- `music_fit_done`(仅外来音乐:beats.json 在、`audio_sha256` 与 score.wav 一致、confidence 写进回执)
+- `hits_on_grid`(仅 code 路:timeline.hits 落拍偏差逐条登记,目标 0 ms;外来音乐的落拍由 cv2-beatsync 的 `hits_on_beat` 管)
 - `low_end_balanced`(20–120 Hz 相对其余频段 ≤ 约 −3 dB,数值入回执)
 - `ascii_filename`
 

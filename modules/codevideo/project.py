@@ -10,8 +10,8 @@ import sys
 import time
 from pathlib import Path
 
-from . import (EP, INSTRUMENTS_DIR, LIB_DIR, MIRROR, NS, STYLES_DIR, VENDOR_THREE, CodeVideoError, ffmpeg,
-               project_block, project_settings, render_size, style_row, style_slugs, upstream)
+from . import (EP, INSTRUMENTS_DIR, LIB_DIR, MIRROR, NS, STYLES_DIR, VENDOR_THREE, CodeVideoError, ffmpeg, is_light,
+               light_styles, project_block, project_settings, render_size, style_ids, style_row, style_slugs, upstream)
 
 STYLE_FILES = ("STYLE.md", "DEMO.md", "style.json")
 LOCK_COPY = ("STYLE.md", "style.json")      # 锁定时只放这两份;DEMO.md 由 demo 在 TREATMENT.md 写成后放出(先方案后样片)
@@ -85,46 +85,112 @@ def doctor(gl: bool = True) -> dict:
 
 
 def lock_style(base: Path, slug: str | None = None) -> dict:
-    """把风格文件复制进 codevideo/style/ 并记 sha256;已锁定且未指定新风格时只核对。"""
+    """把风格文件复制进 codevideo/style/ 并记 sha256;已锁定且未指定新风格时只核对。
+    轻量风格(OPUSCAR 98,o98-NN)没有现成的 STYLE.md:按那条风格提示生成一份(见 light_style_md)。"""
     blk = project_block(base)
     slug = slug or blk.get("code_style")
-    if not slug or slug not in style_slugs():
-        raise CodeVideoError(f"风格未选或不在风格库:{slug!r}(settings.json#project.code_style;可选 {len(style_slugs())} 个,见 "
-                             "agents/workflows/codevideo/styles/README.md)")
+    if not slug or slug not in style_ids():
+        raise CodeVideoError(f"风格未选或不在风格库:{slug!r}(settings.json#project.code_style;完整风格 {len(style_slugs())} 个见 "
+                             "agents/workflows/codevideo/styles/README.md,轻量风格 o98-01…o98-98 见 styles/opuscar98/styles.json)")
     dst = base / NS / "style"
     dst.mkdir(parents=True, exist_ok=True)
     lock_p = dst / "lock.json"
+    light = is_light(slug)
+    if light:
+        entry = next(x for x in light_styles()["styles"] if x["id"] == slug)
+        files = {"STYLE.md": light_style_md(entry).encode("utf-8"),
+                 "style.json": (json.dumps({"slug": slug, "light": True, "source": "opuscar98", **entry}, ensure_ascii=False,
+                                           indent=1) + "\n").encode("utf-8")}
+    else:
+        files = {name: (STYLES_DIR / slug / name).read_bytes() for name in LOCK_COPY}
     h = hashlib.sha256()
-    for name in STYLE_FILES:
-        src = STYLES_DIR / slug / name
-        h.update(src.read_bytes())
+    for name in sorted(files):
+        h.update(files[name])
+    if not light:
+        h.update((STYLES_DIR / slug / "DEMO.md").read_bytes())
     digest = h.hexdigest()
     if lock_p.is_file():
         old = json.loads(lock_p.read_text())
-        if old.get("slug") == slug and all((dst / n).is_file() for n in LOCK_COPY):
+        if old.get("slug") == slug and all((dst / n).is_file() for n in files):
             return {**old, "changed": False, "upstream_changed": old.get("sha256") != digest}
-    for name in LOCK_COPY:
-        shutil.copyfile(STYLES_DIR / slug / name, dst / name)
+    for name, data in files.items():
+        (dst / name).write_bytes(data)
     (dst / "DEMO.md").unlink(missing_ok=True)       # 换风格:旧风格的样片说明不留
     row = style_row(slug) or {}
-    lock = {"slug": slug, "en": row.get("en"), "cn": row.get("cn"), "sha256": digest,
+    lock = {"slug": slug, "en": row.get("en"), "cn": row.get("cn"), "light": light, "sha256": digest,
             "lemo_rev": upstream().get("rev"), "locked_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+    if light:
+        lock["related"] = row.get("related") or []
     lock_p.write_text(json.dumps(lock, ensure_ascii=False, indent=1), encoding="utf-8")
     return {**lock, "changed": True}
 
 
-def demo(base: Path, progress=None) -> dict:
-    """按需下载本项目风格的样片源码与海报。须先有 codevideo/TREATMENT.md(先写方案、后看样片)。"""
+def light_style_md(x: dict) -> str:
+    """轻量风格的 STYLE.md:风格提示原文 + 构成 + 参考(只学语法)+ 补全须知。分镜与导演说明不带(那是 OPUSCAR 98 的主角 Clawd)。"""
+    rel = ", ".join(f"`{s}`" for s in x.get("related") or [])
+    refs = "\n".join(f"- {r}" for r in x.get("refs") or []) or "- (无)"
+    return f"""# {x['style_zh']} / {x['style_en']} — 轻量风格(OPUSCAR 98 · No.{x['no']:02d})
+
+> 来源:lemo-opuscar《OPUSCAR 98》第 {x['no']} 部({x['year']}《{x['zh']}》/ *{x['title']}*)用的风格。轻量风格只有下面这段**风格提示**,
+> 没有完整风格那样的十一节规范(材质、色彩、字体、运动、镜头语法、声音调色板、原生手法、陷阱),也没有样片源码。
+
+## 1. 风格提示(原文,固定不改)
+
+**中文**
+
+{x['prompt_zh']}
+
+**English**
+
+{x['prompt_en']}
+
+## 2. 构成
+
+- 渲染:{x['render']}(色调 {x['dim']})
+- 混合手法:{'、'.join(x.get('blend_zh') or [])}({'; '.join(x.get('blend_en') or [])})
+
+## 3. 参考(只学语法,不得照搬)
+
+{refs}
+
+## 4. 这段提示原来怎么用的(只作说明)
+
+{x['desc_zh']}
+
+## 5. 轻量风格须知
+
+- **提示是不变量**:上面提示写到的画面、色彩、镜头、转场与「避免」条款全片照做。
+- **其余由导演补全**:提示没写到的材质、字体与字幕设计、运动质感、镜头语法、声音调色板与媒介原生手法,film-director 在
+  TREATMENT.md「风格补全」一节逐项定下并写明依据(从提示与参考作品推出来,不是从别的片子抄),之后全片按补全口径执行。
+- **技法参考**:相近的完整风格 {rel or '(无)'}——方案写成后 `python3 code/codevideo.py demo --project <项目> --slug <其中之一>`
+  拉它的样片源码学渲染技法(引擎、笔刷、着色器、后期),只学技法,不拿它的故事、镜头与配乐;完整风格的 STYLE.md 在
+  agents/workflows/codevideo/styles/<slug>/STYLE.md,可读它的材质 / 运动 / 镜头语法作补全参考。
+- **版权红线**:提示与参考里点名的电影、导演、作品只作语法参考,片中不得出现它们的角色、情节、镜头复刻、片名、logo 或配乐;
+  不得使用 OPUSCAR 98 的角色(包括 Clawd);片中不带 LemoLab / OPUSCAR 署名。
+"""
+
+
+def demo(base: Path, progress=None, slug: str = "") -> dict:
+    """按需下载样片源码与海报。须先有 codevideo/TREATMENT.md(先写方案、后看样片)。
+    完整风格默认拉本风格的;轻量风格没有样片,须用 slug 指定一个完整风格(锁定时记的相近风格优先)。"""
     from .fetch import fetch_files
     if not (base / NS / "TREATMENT.md").is_file():
         raise DemoBeforeTreatment("codevideo/TREATMENT.md 还没写:先写导演方案(三个候选结构与选择),再看样片——"
                                   "样片只用来学技法,不能拿它的故事、结构、镜头与配乐")
     lock = lock_style(base)
-    shutil.copyfile(STYLES_DIR / lock["slug"] / "DEMO.md", base / NS / "style" / "DEMO.md")
-    res = fetch_files(f"demo:{lock['slug']}", progress)
-    root = MIRROR / "styles" / lock["slug"]
-    return {**res, "slug": lock["slug"], "demo_dir": str(root / "demo"), "poster": str(root / "poster.jpg"),
-            "demo_md": str(base / NS / "style" / "DEMO.md")}
+    target = slug or ("" if lock.get("light") else lock["slug"])
+    if not target:
+        raise CodeVideoError("轻量风格没有自己的样片:用 --slug 指定一个完整风格拉它的样片学技法,相近的有 "
+                             + ("、".join(lock.get("related") or []) or "(无)"))
+    if target not in style_slugs():
+        raise CodeVideoError(f"--slug 须是完整风格(43 个之一),收到 {target!r}")
+    if target == lock["slug"]:
+        shutil.copyfile(STYLES_DIR / target / "DEMO.md", base / NS / "style" / "DEMO.md")
+    res = fetch_files(f"demo:{target}", progress)
+    root = MIRROR / "styles" / target
+    return {**res, "slug": target, "demo_dir": str(root / "demo"), "poster": str(root / "poster.jpg"),
+            "demo_md": str(base / NS / "style" / "DEMO.md") if target == lock["slug"] else
+            str(STYLES_DIR / target / "DEMO.md")}
 
 
 class DemoBeforeTreatment(CodeVideoError):

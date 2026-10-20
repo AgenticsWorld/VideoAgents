@@ -1,0 +1,2424 @@
+{
+ "rev": "fdc46d7f0e20cc953a71d56241a92d1b4cb7298e",
+ "gallery": "https://lemomo-ai.github.io/lemo-opuscar/opuscar98/#styles",
+ "chapters": [
+  {
+   "id": "C1",
+   "en": "Silents & Talkies",
+   "zh": "默片与有声",
+   "years": "1927–1938"
+  },
+  {
+   "id": "C2",
+   "en": "Colour & War",
+   "zh": "彩色与战争",
+   "years": "1939–1949"
+  },
+  {
+   "id": "C3",
+   "en": "Widescreen",
+   "zh": "宽银幕",
+   "years": "1950–1959"
+  },
+  {
+   "id": "C4",
+   "en": "The Swinging Sixties",
+   "zh": "摇摆年代",
+   "years": "1960–1969"
+  },
+  {
+   "id": "C5",
+   "en": "New Hollywood",
+   "zh": "新好莱坞",
+   "years": "1970–1979"
+  },
+  {
+   "id": "C6",
+   "en": "The Blockbuster Era",
+   "zh": "大片年代",
+   "years": "1980–1989"
+  },
+  {
+   "id": "C7",
+   "en": "End of the Century",
+   "zh": "世纪末",
+   "years": "1990–1999"
+  },
+  {
+   "id": "C8",
+   "en": "The New Millennium",
+   "zh": "新千年",
+   "years": "2000–2009"
+  },
+  {
+   "id": "C9",
+   "en": "The Indie Decade",
+   "zh": "独立年代",
+   "years": "2010–2019"
+  },
+  {
+   "id": "C10",
+   "en": "Here & Now",
+   "zh": "此时此刻",
+   "years": "2020–2025"
+  }
+ ],
+ "styles": [
+  {
+   "id": "o98-01",
+   "no": 1,
+   "year": "1927/28",
+   "title": "Wings",
+   "zh": "翼",
+   "chapter": "C1",
+   "style_en": "Silent-era 3D Dogfight, Tinted Ortho B&W",
+   "style_zh": "默片 3D 空战 · 正色片黑白 + 琥珀染色",
+   "blend_en": [
+    "three.js 3D",
+    "Orthochromatic black and white",
+    "Silent-film tinting",
+    "Projector wear and iris"
+   ],
+   "blend_zh": [
+    "three.js 三维",
+    "正色片黑白",
+    "默片染色",
+    "放映磨损和圆形光圈"
+   ],
+   "render": "3D",
+   "dim": "3D·B&W",
+   "frame": "frames98/01.webp"
+  },
+  {
+   "id": "o98-02",
+   "no": 2,
+   "year": "1928/29",
+   "title": "The Broadway Melody",
+   "zh": "百老汇旋律",
+   "chapter": "C1",
+   "style_en": "Black-Gold Art Deco Revue Poster",
+   "style_zh": "黑金银装饰艺术歌舞海报",
+   "blend_en": [
+    "Art Deco poster",
+    "Airbrush metallic gradients",
+    "A. M. Cassandre",
+    "Erté costume"
+   ],
+   "blend_zh": [
+    "装饰艺术海报",
+    "喷枪金属渐变",
+    "A. M. Cassandre",
+    "Erté 服装"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/02.webp"
+  },
+  {
+   "id": "o98-03",
+   "no": 3,
+   "year": "1929/30",
+   "title": "All Quiet on the Western Front",
+   "zh": "西线无战事",
+   "chapter": "C1",
+   "style_en": "Kollwitz Anti-war Woodcut",
+   "style_zh": "珂勒惠支式反战木刻",
+   "blend_en": [
+    "Woodcut",
+    "Käthe Kollwitz",
+    "German Expressionism",
+    "Two-block colour print"
+   ],
+   "blend_zh": [
+    "木刻版画",
+    "凯绥·珂勒惠支",
+    "德国表现主义",
+    "双版套印"
+   ],
+   "render": "2D",
+   "dim": "2D·B&W",
+   "frame": "frames98/03.webp"
+  },
+  {
+   "id": "o98-04",
+   "no": 4,
+   "year": "1930/31",
+   "title": "Cimarron",
+   "zh": "壮志千秋",
+   "chapter": "C1",
+   "style_en": "1889 Sepia Albumen Panorama",
+   "style_zh": "1889 棕褐蛋白印相全景",
+   "blend_en": [
+    "Gold-toned albumen print",
+    "Frontier panorama photograph",
+    "Hand-tinted figure"
+   ],
+   "blend_zh": [
+    "金调色蛋白印相",
+    "西部全景老照片",
+    "人物手工上色"
+   ],
+   "render": "2D",
+   "dim": "2D·Sepia",
+   "frame": "frames98/04.webp"
+  },
+  {
+   "id": "o98-05",
+   "no": 5,
+   "year": "1931/32",
+   "title": "Grand Hotel",
+   "zh": "大饭店",
+   "chapter": "C1",
+   "style_en": "MGM Silver B&W 3D Lobby",
+   "style_zh": "米高梅银色黑白 3D 大堂",
+   "blend_en": [
+    "three.js 3D",
+    "MGM silver-screen black and white",
+    "Art Deco interiors",
+    "Overhead symmetry"
+   ],
+   "blend_zh": [
+    "three.js 三维",
+    "米高梅银色黑白",
+    "装饰艺术室内",
+    "俯拍同心构图"
+   ],
+   "render": "3D",
+   "dim": "3D·B&W",
+   "frame": "frames98/05.webp"
+  },
+  {
+   "id": "o98-06",
+   "no": 6,
+   "year": "1932/33",
+   "title": "Cavalcade",
+   "zh": "乱世春秋",
+   "chapter": "C1",
+   "style_en": "Mucha Art Nouveau Panel",
+   "style_zh": "慕夏新艺术装饰画",
+   "blend_en": [
+    "Alphonse Mucha",
+    "Colour lithograph",
+    "Art Nouveau ornament"
+   ],
+   "blend_zh": [
+    "阿尔丰斯·慕夏",
+    "彩色石印",
+    "新艺术装饰纹样"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/06.webp"
+  },
+  {
+   "id": "o98-07",
+   "no": 7,
+   "year": "1934",
+   "title": "It Happened One Night",
+   "zh": "一夜风流",
+   "chapter": "C1",
+   "style_en": "1930s B&W Rubber-hose Cartoon",
+   "style_zh": "30 年代黑白橡皮管卡通",
+   "blend_en": [
+    "Fleischer rubber hose",
+    "Cel painting",
+    "Silly Symphonies watercolour backgrounds",
+    "Projected film wear"
+   ],
+   "blend_zh": [
+    "弗莱舍橡皮管",
+    "赛璐璐上色",
+    "糊涂交响曲水彩背景",
+    "放映胶片磨损"
+   ],
+   "render": "2D",
+   "dim": "2D·B&W",
+   "frame": "frames98/07.webp"
+  },
+  {
+   "id": "o98-08",
+   "no": 8,
+   "year": "1935",
+   "title": "Mutiny on the Bounty",
+   "zh": "叛舰喋血记",
+   "chapter": "C1",
+   "style_en": "Admiralty Sea Chart Copperplate",
+   "style_zh": "海军部海图铜版画",
+   "blend_en": [
+    "18th-century Admiralty chart",
+    "Copperplate engraving",
+    "Thin hand colouring",
+    "Robert Dodd's aquatint"
+   ],
+   "blend_zh": [
+    "18 世纪海军部海图",
+    "铜版线刻",
+    "手工淡彩",
+    "Robert Dodd 的版画"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/08.webp"
+  },
+  {
+   "id": "o98-09",
+   "no": 9,
+   "year": "1936",
+   "title": "The Great Ziegfeld",
+   "zh": "歌舞大王齐格飞",
+   "chapter": "C1",
+   "style_en": "Silver B&W 3D Wedding-cake Stage",
+   "style_zh": "银色黑白 3D 螺旋婚礼蛋糕舞台",
+   "blend_en": [
+    "three.js 3D",
+    "MGM silver black and white",
+    "1936 revue spectacle",
+    "Ostrich feathers and chiffon"
+   ],
+   "blend_zh": [
+    "three.js 三维",
+    "米高梅银色黑白",
+    "1936 年歌舞大场面",
+    "鸵鸟羽毛与雪纺"
+   ],
+   "render": "3D",
+   "dim": "3D·B&W",
+   "frame": "frames98/09.webp"
+  },
+  {
+   "id": "o98-10",
+   "no": 10,
+   "year": "1937",
+   "title": "The Life of Emile Zola",
+   "zh": "左拉传",
+   "chapter": "C1",
+   "style_en": "Newsprint Letterpress and Line Engraving",
+   "style_zh": "报纸活字印刷 + 线刻插图",
+   "blend_en": [
+    "Wood-type headline",
+    "Letterpress on newsprint",
+    "1890s line engraving"
+   ],
+   "blend_zh": [
+    "木活字大标题",
+    "新闻纸活字印刷",
+    "1890 年代线刻"
+   ],
+   "render": "2D",
+   "dim": "2D·B&W",
+   "frame": "frames98/10.webp"
+  },
+  {
+   "id": "o98-11",
+   "no": 11,
+   "year": "1938",
+   "title": "You Can't Take It with You",
+   "zh": "浮生若梦",
+   "chapter": "C1",
+   "style_en": "WPA Silkscreen Poster",
+   "style_zh": "WPA 丝网海报",
+   "blend_en": [
+    "1930s WPA silkscreen",
+    "Split-fountain inks",
+    "Six flat opaque inks"
+   ],
+   "blend_zh": [
+    "30 年代 WPA 丝网印",
+    "分色渐变",
+    "六色不透明平涂油墨"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/11.webp"
+  },
+  {
+   "id": "o98-12",
+   "no": 12,
+   "year": "1939",
+   "title": "Gone with the Wind",
+   "zh": "乱世佳人",
+   "chapter": "C2",
+   "style_en": "Technicolor Impasto Oil",
+   "style_zh": "Technicolor 厚涂油画",
+   "blend_en": [
+    "Impasto oil",
+    "Palette knife",
+    "1939 Technicolor palette",
+    "Epic poster painting"
+   ],
+   "blend_zh": [
+    "厚涂油画",
+    "刮刀",
+    "1939 年 Technicolor 配色",
+    "史诗海报画"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/12.webp"
+  },
+  {
+   "id": "o98-13",
+   "no": 13,
+   "year": "1940",
+   "title": "Rebecca",
+   "zh": "蝴蝶梦",
+   "chapter": "C2",
+   "style_en": "Gothic Charcoal Drawing",
+   "style_zh": "哥特炭笔画",
+   "blend_en": [
+    "Vine charcoal",
+    "Eraser lifts and smudging",
+    "William Kentridge",
+    "Gothic suspense"
+   ],
+   "blend_zh": [
+    "藤炭笔",
+    "橡皮擦白与手指抹开",
+    "William Kentridge",
+    "哥特悬疑"
+   ],
+   "render": "2D",
+   "dim": "2D·B&W",
+   "frame": "frames98/13.webp"
+  },
+  {
+   "id": "o98-14",
+   "no": 14,
+   "year": "1941",
+   "title": "How Green Was My Valley",
+   "zh": "青山翠谷",
+   "chapter": "C2",
+   "style_en": "Welsh Valley Gouache",
+   "style_zh": "威尔士山谷水粉",
+   "blend_en": [
+    "Opaque gouache",
+    "Kyffin Williams palette-knife landscape",
+    "1941 poster colours"
+   ],
+   "blend_zh": [
+    "不透明水粉",
+    "Kyffin Williams 刮刀风景",
+    "1941 原海报配色"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/14.webp"
+  },
+  {
+   "id": "o98-15",
+   "no": 15,
+   "year": "1942",
+   "title": "Mrs. Miniver",
+   "zh": "忠勇之家",
+   "chapter": "C2",
+   "style_en": "Home Front Stone Lithograph",
+   "style_zh": "英国战时石印海报",
+   "blend_en": [
+    "Stone lithograph with crayon shadow plate",
+    "Frank Newbould and Abram Games WWII posters",
+    "Ministry of Information palette"
+   ],
+   "blend_zh": [
+    "石印 + 蜡笔阴影版",
+    "Frank Newbould、Abram Games 二战海报",
+    "英国信息部海报配色"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/15.webp"
+  },
+  {
+   "id": "o98-16",
+   "no": 16,
+   "year": "1943",
+   "title": "Casablanca",
+   "zh": "卡萨布兰卡",
+   "chapter": "C2",
+   "style_en": "Studio Glamour Black-and-White",
+   "style_zh": "好莱坞片厂柔光黑白",
+   "blend_en": [
+    "Airbrushed glamour-still portraits",
+    "Arthur Edeson studio lighting",
+    "Diffusion filter and silver grain"
+   ],
+   "blend_zh": [
+    "喷枪精修剧照人像",
+    "Arthur Edeson 片厂布光",
+    "柔光镜与银盐颗粒"
+   ],
+   "render": "2D",
+   "dim": "2D·B&W",
+   "frame": "frames98/16.webp"
+  },
+  {
+   "id": "o98-17",
+   "no": 17,
+   "year": "1944",
+   "title": "Going My Way",
+   "zh": "与我同行",
+   "chapter": "C2",
+   "style_en": "Backlit Gothic Stained Glass",
+   "style_zh": "逆光哥特彩色玻璃窗",
+   "blend_en": [
+    "Leaded pot-metal glass with grisaille",
+    "Chartres blue quarries",
+    "Harry Clarke jewel colour"
+   ],
+   "blend_zh": [
+    "铅条拼色玻璃 + 灰调描绘",
+    "沙特尔蓝菱形格",
+    "Harry Clarke 宝石色"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/17.webp"
+  },
+  {
+   "id": "o98-18",
+   "no": 18,
+   "year": "1945",
+   "title": "The Lost Weekend",
+   "zh": "失去的周末",
+   "chapter": "C2",
+   "style_en": "Typewriter Character Art",
+   "style_zh": "打字机字符画",
+   "blend_en": [
+    "Typewriter art with overstrikes",
+    "Paul Smith and Flora Stacey",
+    "John F. Seitz hard-light noir"
+   ],
+   "blend_zh": [
+    "叠打的打字机字符画",
+    "Paul Smith、Flora Stacey",
+    "John F. Seitz 硬光黑白"
+   ],
+   "render": "2D",
+   "dim": "2D·B&W",
+   "frame": "frames98/18.webp"
+  },
+  {
+   "id": "o98-19",
+   "no": 19,
+   "year": "1946",
+   "title": "The Best Years of Our Lives",
+   "zh": "黄金时代",
+   "chapter": "C2",
+   "style_en": "Picture-Magazine Halftone Spread",
+   "style_zh": "画报新闻摄影半调跨页",
+   "blend_en": [
+    "Coarse 45° halftone",
+    "Gregg Toland deep focus",
+    "1946 picture-magazine layout",
+    "Spot-orange plate"
+   ],
+   "blend_zh": [
+    "45° 粗网点半调",
+    "Gregg Toland 深焦",
+    "1946 年画报跨页版式",
+    "专色橙版"
+   ],
+   "render": "2.5D",
+   "dim": "2.5D·B&W",
+   "frame": "frames98/19.webp"
+  },
+  {
+   "id": "o98-20",
+   "no": 20,
+   "year": "1947",
+   "title": "Gentleman's Agreement",
+   "zh": "君子协定",
+   "chapter": "C2",
+   "style_en": "1940s Graphite Magazine Illustration",
+   "style_zh": "40 年代杂志铅笔插画",
+   "blend_en": [
+    "Graphite hatching and rubbed tone",
+    "Al Parker and Robert Fawcett",
+    "Coloured-pencil subject"
+   ],
+   "blend_zh": [
+    "石墨排线与擦抹",
+    "Al Parker、Robert Fawcett",
+    "彩色铅笔主体"
+   ],
+   "render": "2D",
+   "dim": "2D·B&W",
+   "frame": "frames98/20.webp"
+  },
+  {
+   "id": "o98-21",
+   "no": 21,
+   "year": "1948",
+   "title": "Hamlet",
+   "zh": "王子复仇记",
+   "chapter": "C2",
+   "style_en": "Deep-Focus Fog Castle, 3D B&W",
+   "style_zh": "黑白 3D 雾中城堡",
+   "blend_en": [
+    "three.js 3D with volumetric fog",
+    "Desmond Dickinson deep-focus black-and-white",
+    "Roger Furse bare Romanesque sets"
+   ],
+   "blend_zh": [
+    "three.js 3D + 体积雾",
+    "Desmond Dickinson 深焦黑白",
+    "Roger Furse 光秃的罗马式布景"
+   ],
+   "render": "3D",
+   "dim": "3D·B&W",
+   "frame": "frames98/21.webp"
+  },
+  {
+   "id": "o98-22",
+   "no": 22,
+   "year": "1949",
+   "title": "All the King's Men",
+   "zh": "国王班底",
+   "chapter": "C2",
+   "style_en": "Wood-Type Campaign Poster",
+   "style_zh": "南方竞选木活字海报",
+   "blend_en": [
+    "Wood-type letterpress",
+    "Hatch Show Print",
+    "Linocut figures",
+    "Halftone portraits"
+   ],
+   "blend_zh": [
+    "木活字凸版印刷",
+    "Hatch Show Print",
+    "麻胶版画人物",
+    "半调网点肖像"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/22.webp"
+  },
+  {
+   "id": "o98-23",
+   "no": 23,
+   "year": "1950",
+   "title": "All About Eve",
+   "zh": "彗星美人",
+   "chapter": "C3",
+   "style_en": "Hirschfeld One-Line Caricature",
+   "style_zh": "赫希菲尔德一笔画漫画",
+   "blend_en": [
+    "Single-line ink caricature",
+    "Al Hirschfeld theatre drawings",
+    "Hand-lettered dialogue"
+   ],
+   "blend_zh": [
+    "一笔墨线漫画",
+    "Al Hirschfeld 剧场漫画",
+    "手写台词"
+   ],
+   "render": "2D",
+   "dim": "2D·B&W",
+   "frame": "frames98/23.webp"
+  },
+  {
+   "id": "o98-24",
+   "no": 24,
+   "year": "1951",
+   "title": "An American in Paris",
+   "zh": "一个美国人在巴黎",
+   "chapter": "C3",
+   "style_en": "Dufy Watercolour Ballet",
+   "style_zh": "杜飞水彩芭蕾",
+   "blend_en": [
+    "Loose ink line over offset colour",
+    "Raoul Dufy",
+    "Minnelli's ballet sets",
+    "Cold-press watercolour paper"
+   ],
+   "blend_zh": [
+    "松动墨线 + 错开的色块",
+    "拉乌尔·杜飞",
+    "明奈利的芭蕾布景",
+    "冷压水彩纸"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/24.webp"
+  },
+  {
+   "id": "o98-25",
+   "no": 25,
+   "year": "1952",
+   "title": "The Greatest Show on Earth",
+   "zh": "戏王之王",
+   "chapter": "C3",
+   "style_en": "Strobridge Circus Lithograph",
+   "style_zh": "Strobridge 马戏团彩色石印",
+   "blend_en": [
+    "Four-ink chromolithograph",
+    "Strobridge Litho circus posters",
+    "Flat ink with heavy black outline"
+   ],
+   "blend_zh": [
+    "四色彩色石印",
+    "Strobridge 马戏团海报",
+    "平涂油墨 + 粗黑轮廓"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/25.webp"
+  },
+  {
+   "id": "o98-26",
+   "no": 26,
+   "year": "1953",
+   "title": "From Here to Eternity",
+   "zh": "乱世忠魂",
+   "chapter": "C3",
+   "style_en": "High-Key Beach Black-and-White",
+   "style_zh": "高调海滩黑白银幕",
+   "blend_en": [
+    "1953 high-key black-and-white photography",
+    "Burnett Guffey",
+    "Silver grain and halation"
+   ],
+   "blend_zh": [
+    "1953 年高调黑白摄影",
+    "Burnett Guffey",
+    "银盐颗粒与光晕"
+   ],
+   "render": "2D",
+   "dim": "2D·B&W",
+   "frame": "frames98/26.webp"
+  },
+  {
+   "id": "o98-27",
+   "no": 27,
+   "year": "1954",
+   "title": "On the Waterfront",
+   "zh": "码头风云",
+   "chapter": "C3",
+   "style_en": "Ben Shahn Social Realism",
+   "style_zh": "本·沙恩社会现实主义",
+   "blend_en": [
+    "Trembling blotted ink line",
+    "Flat tempera colour blocks",
+    "Ben Shahn",
+    "1950s American social realism"
+   ],
+   "blend_zh": [
+    "颤抖的转印墨线",
+    "平涂蛋彩色块",
+    "本·沙恩",
+    "50 年代美国社会现实主义"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/27.webp"
+  },
+  {
+   "id": "o98-28",
+   "no": 28,
+   "year": "1955",
+   "title": "Marty",
+   "zh": "君子好逑",
+   "chapter": "C3",
+   "style_en": "1955 Kinescope on a Living-Room TV",
+   "style_zh": "50 年代电视显像管录像",
+   "blend_en": [
+    "Kinescope black-and-white",
+    "Curved CRT screen and scanlines",
+    "Warm 1950s living-room illustration"
+   ],
+   "blend_zh": [
+    "kinescope 黑白录像",
+    "圆角显像管与扫描线",
+    "暖色 50 年代客厅插画"
+   ],
+   "render": "2D",
+   "dim": "2D (B&W screen)",
+   "frame": "frames98/28.webp"
+  },
+  {
+   "id": "o98-29",
+   "no": 29,
+   "year": "1956",
+   "title": "Around the World in 80 Days",
+   "zh": "环游地球八十天",
+   "chapter": "C3",
+   "style_en": "1950s UPA Modernist Cartoon",
+   "style_zh": "50 年代 UPA 现代主义卡通",
+   "blend_en": [
+    "UPA limited animation",
+    "Saul Bass end-title animation",
+    "1956 poster colours",
+    "Crayon-grain print"
+   ],
+   "blend_zh": [
+    "UPA 有限动画",
+    "Saul Bass 片尾动画",
+    "1956 原海报配色",
+    "蜡笔颗粒印刷"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/29.webp"
+  },
+  {
+   "id": "o98-30",
+   "no": 30,
+   "year": "1957",
+   "title": "The Bridge on the River Kwai",
+   "zh": "桂河大桥",
+   "chapter": "C3",
+   "style_en": "Cyanotype Engineering Blueprint",
+   "style_zh": "氰版工程蓝图",
+   "blend_en": [
+    "Cyanotype blueprint",
+    "Timber trestle G.A. drawing",
+    "Red-pencil revisions",
+    "Gouache-tinted hero"
+   ],
+   "blend_zh": [
+    "氰版晒图",
+    "木栈桥总布置图",
+    "红铅笔修改",
+    "水粉上色的主角"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/30.webp"
+  },
+  {
+   "id": "o98-31",
+   "no": 31,
+   "year": "1958",
+   "title": "Gigi",
+   "zh": "金粉世界",
+   "chapter": "C3",
+   "style_en": "Lautrec Belle Époque Lithograph",
+   "style_zh": "罗特列克美好年代石印",
+   "blend_en": [
+    "Colour lithograph poster",
+    "Henri de Toulouse-Lautrec",
+    "Crachis ink spatter",
+    "Cecil Beaton costumes"
+   ],
+   "blend_zh": [
+    "彩色石印海报",
+    "图卢兹-罗特列克",
+    "牙刷喷墨点（crachis）",
+    "Cecil Beaton 服装"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/31.webp"
+  },
+  {
+   "id": "o98-32",
+   "no": 32,
+   "year": "1959",
+   "title": "Ben-Hur",
+   "zh": "宾虚",
+   "chapter": "C3",
+   "style_en": "3D Circus Chariot Race, 65mm Epic",
+   "style_zh": "3D 大竞技场战车赛 · 65mm 史诗",
+   "blend_en": [
+    "Procedural 3D (three.js)",
+    "MGM Camera 65 widescreen",
+    "Technicolor print grade",
+    "Second-unit action staging"
+   ],
+   "blend_zh": [
+    "程序生成 3D（three.js）",
+    "MGM Camera 65 宽银幕",
+    "特艺七彩印片调色",
+    "第二摄制组动作调度"
+   ],
+   "render": "3D",
+   "dim": "3D",
+   "frame": "frames98/32.webp"
+  },
+  {
+   "id": "o98-33",
+   "no": 33,
+   "year": "1960",
+   "title": "The Apartment",
+   "zh": "桃色公寓",
+   "chapter": "C4",
+   "style_en": "Saul Bass Line Titles in Black & White",
+   "style_zh": "Saul Bass 线条片头 · 黑白",
+   "blend_en": [
+    "Saul Bass title design",
+    "One-point perspective office",
+    "Black-and-white film grain",
+    "One warm accent"
+   ],
+   "blend_zh": [
+    "Saul Bass 片头设计",
+    "一点透视办公大厅",
+    "黑白胶片颗粒",
+    "唯一的暖色"
+   ],
+   "render": "2D",
+   "dim": "2D·B&W",
+   "frame": "frames98/33.webp"
+  },
+  {
+   "id": "o98-34",
+   "no": 34,
+   "year": "1961",
+   "title": "West Side Story",
+   "zh": "西区故事",
+   "chapter": "C4",
+   "style_en": "Technicolor 3D Stage Set",
+   "style_zh": "特艺七彩 3D 舞台",
+   "blend_en": [
+    "Procedural 3D (three.js)",
+    "Technicolor sunset grade",
+    "Boris Leven set design",
+    "1961 poster: red sky, black fire escape"
+   ],
+   "blend_zh": [
+    "程序生成 3D（three.js）",
+    "特艺七彩晚霞调色",
+    "Boris Leven 布景",
+    "1961 海报：红天、黑消防梯"
+   ],
+   "render": "3D",
+   "dim": "3D",
+   "frame": "frames98/34.webp"
+  },
+  {
+   "id": "o98-35",
+   "no": 35,
+   "year": "1962",
+   "title": "Lawrence of Arabia",
+   "zh": "阿拉伯的劳伦斯",
+   "chapter": "C4",
+   "style_en": "Terpning Epic Poster Gouache",
+   "style_zh": "Terpning 史诗海报水粉",
+   "blend_en": [
+    "Gouache and oil poster painting",
+    "Howard Terpning's 1962 poster",
+    "Freddie Young's 70mm desert light"
+   ],
+   "blend_zh": [
+    "水粉加油彩海报画",
+    "Howard Terpning 1962 海报",
+    "Freddie Young 70mm 沙漠光"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/35.webp"
+  },
+  {
+   "id": "o98-36",
+   "no": 36,
+   "year": "1963",
+   "title": "Tom Jones",
+   "zh": "汤姆·琼斯",
+   "chapter": "C4",
+   "style_en": "Hand-Coloured Georgian Satirical Print",
+   "style_zh": "手工上色讽刺铜版画",
+   "blend_en": [
+    "Hogarth copperplate engraving",
+    "Rowlandson/Gillray hand colouring",
+    "Satirical speech balloon"
+   ],
+   "blend_zh": [
+    "霍加斯铜版线刻",
+    "罗兰森/吉尔雷式手工上色",
+    "讽刺画对白气泡"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/36.webp"
+  },
+  {
+   "id": "o98-37",
+   "no": 37,
+   "year": "1964",
+   "title": "My Fair Lady",
+   "zh": "窈窕淑女",
+   "chapter": "C4",
+   "style_en": "Bob Peak Fashion Illustration",
+   "style_zh": "Bob Peak 时装插画",
+   "blend_en": [
+    "Fast ink line",
+    "Pink and magenta watercolour",
+    "Bob Peak's 1964 poster",
+    "Cecil Beaton's Ascot costumes"
+   ],
+   "blend_zh": [
+    "快速墨线",
+    "粉色与品红水彩",
+    "Bob Peak 1964 海报",
+    "Cecil Beaton 阿斯科特服装"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/37.webp"
+  },
+  {
+   "id": "o98-38",
+   "no": 38,
+   "year": "1965",
+   "title": "The Sound of Music",
+   "zh": "音乐之声",
+   "chapter": "C4",
+   "style_en": "Storybook 3D Alpine Aerial",
+   "style_zh": "绘本感 3D 阿尔卑斯航拍",
+   "blend_en": [
+    "Procedural 3D terrain (three.js)",
+    "Todd-AO widescreen colour",
+    "Ted McCord's helicopter opening",
+    "Miyazaki meadows"
+   ],
+   "blend_zh": [
+    "程序生成 3D 地形（three.js）",
+    "托德宽银幕色彩",
+    "Ted McCord 直升机开场",
+    "宫崎骏的草原"
+   ],
+   "render": "3D",
+   "dim": "3D",
+   "frame": "frames98/38.webp"
+  },
+  {
+   "id": "o98-39",
+   "no": 39,
+   "year": "1966",
+   "title": "A Man for All Seasons",
+   "zh": "日月精忠",
+   "chapter": "C4",
+   "style_en": "Holbein Tudor Portrait in Oils",
+   "style_zh": "霍尔拜因都铎肖像油画",
+   "blend_en": [
+    "Old Master oil glazing",
+    "Hans Holbein, Sir Thomas More (1527)",
+    "Candlelit Tudor interior"
+   ],
+   "blend_zh": [
+    "古典油画罩染",
+    "霍尔拜因《托马斯·莫尔爵士像》（1527）",
+    "烛光都铎室内"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/39.webp"
+  },
+  {
+   "id": "o98-40",
+   "no": 40,
+   "year": "1967",
+   "title": "In the Heat of the Night",
+   "zh": "炎热的夜晚",
+   "chapter": "C4",
+   "style_en": "Three-Ink Risograph Night",
+   "style_zh": "三色 Risograph 夜景",
+   "blend_en": [
+    "Risograph overprint",
+    "1967 poster orange-red",
+    "Haskell Wexler night exteriors",
+    "Silhouette staging"
+   ],
+   "blend_zh": [
+    "Risograph 叠印",
+    "1967 海报橙红",
+    "Haskell Wexler 夜景",
+    "剪影式调度"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/40.webp"
+  },
+  {
+   "id": "o98-41",
+   "no": 41,
+   "year": "1968",
+   "title": "Oliver!",
+   "zh": "雾都孤儿",
+   "chapter": "C4",
+   "style_en": "Victorian Toy Theatre",
+   "style_zh": "维多利亚玩具纸剧场",
+   "blend_en": [
+    "Pollock's toy theatre",
+    "Hand-coloured lithograph sheets",
+    "Cut card with footlight shadows",
+    "Cruikshank caricature"
+   ],
+   "blend_zh": [
+    "Pollock's 玩具剧场",
+    "手工上色石印纸偶",
+    "剪卡与脚灯投影",
+    "Cruikshank 漫画人物"
+   ],
+   "render": "2.5D",
+   "dim": "2.5D",
+   "frame": "frames98/41.webp"
+  },
+  {
+   "id": "o98-42",
+   "no": 42,
+   "year": "1969",
+   "title": "Midnight Cowboy",
+   "zh": "午夜牛郎",
+   "chapter": "C4",
+   "style_en": "Warhol Photo-Silkscreen, Double Elvis",
+   "style_zh": "沃霍尔照片丝网 · Double Elvis",
+   "blend_en": [
+    "Photo silkscreen",
+    "Andy Warhol, Double Elvis (1963)",
+    "Silver paint ground",
+    "Off-register colour blocks"
+   ],
+   "blend_zh": [
+    "照片丝网印",
+    "沃霍尔《Double Elvis》（1963）",
+    "银漆底",
+    "错位色块"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/42.webp"
+  },
+  {
+   "id": "o98-43",
+   "no": 43,
+   "year": "1970",
+   "title": "Patton",
+   "zh": "巴顿将军",
+   "chapter": "C5",
+   "style_en": "WWII War-Bond Lithograph",
+   "style_zh": "二战战争债券石印海报",
+   "blend_en": [
+    "Stone lithograph poster",
+    "1942–45 US war-bond and recruiting posters",
+    "45° halftone, off-register colour stones"
+   ],
+   "blend_zh": [
+    "石印海报",
+    "1942–45 美军征兵与战争债券海报",
+    "45° 网点、套色错位"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/43.webp"
+  },
+  {
+   "id": "o98-44",
+   "no": 44,
+   "year": "1971",
+   "title": "The French Connection",
+   "zh": "法国贩毒网",
+   "chapter": "C5",
+   "style_en": "16mm Chase Under the El",
+   "style_zh": "高架铁下追车 · 16mm 颗粒 3D",
+   "blend_en": [
+    "three.js 3D street set",
+    "16mm documentary grain",
+    "cold cyan-shadow print grade"
+   ],
+   "blend_zh": [
+    "three.js 3D 街景",
+    "16mm 纪录片颗粒",
+    "暗部偏青的冷灰印片调色"
+   ],
+   "render": "3D",
+   "dim": "3D",
+   "frame": "frames98/44.webp"
+  },
+  {
+   "id": "o98-45",
+   "no": 45,
+   "year": "1972",
+   "title": "The Godfather",
+   "zh": "教父",
+   "chapter": "C5",
+   "style_en": "Rembrandt Top-Light Oil Painting",
+   "style_zh": "伦勃朗顶光明暗油画",
+   "blend_en": [
+    "Chiaroscuro oil painting",
+    "Gordon Willis's top light",
+    "Rembrandt and Caravaggio glazing"
+   ],
+   "blend_zh": [
+    "明暗油画",
+    "戈登·威利斯的顶光",
+    "伦勃朗、卡拉瓦乔式罩染"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/45.webp"
+  },
+  {
+   "id": "o98-46",
+   "no": 46,
+   "year": "1973",
+   "title": "The Sting",
+   "zh": "骗中骗",
+   "chapter": "C5",
+   "style_en": "Saturday Evening Post Illustration",
+   "style_zh": "《星期六晚邮报》插画",
+   "blend_en": [
+    "Saturday Evening Post cover illustration",
+    "Leyendecker block modelling",
+    "Jaroslav Gebr's chapter cards"
+   ],
+   "blend_zh": [
+    "《星期六晚邮报》封面插画",
+    "Leyendecker 式块面塑形",
+    "Jaroslav Gebr 的章节卡"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/46.webp"
+  },
+  {
+   "id": "o98-47",
+   "no": 47,
+   "year": "1974",
+   "title": "The Godfather Part II",
+   "zh": "教父2",
+   "chapter": "C5",
+   "style_en": "Hand-Tinted Sepia Photograph",
+   "style_zh": "手工上色棕褐老照片",
+   "blend_en": [
+    "Toned silver print",
+    "Lewis Hine's Ellis Island photographs",
+    "hand-brushed dyes",
+    "raymarched 3D figures"
+   ],
+   "blend_zh": [
+    "调色银盐照片",
+    "Lewis Hine 的埃利斯岛照片",
+    "手工刷色",
+    "光线步进的 3D 人物"
+   ],
+   "render": "2.5D",
+   "dim": "2.5D",
+   "frame": "frames98/47.webp"
+  },
+  {
+   "id": "o98-48",
+   "no": 48,
+   "year": "1975",
+   "title": "One Flew Over the Cuckoo's Nest",
+   "zh": "飞越疯人院",
+   "chapter": "C5",
+   "style_en": "Hopper-Style American Realism",
+   "style_zh": "霍珀式美国写实油画",
+   "blend_en": [
+    "Edward Hopper realism",
+    "hard-edged slanting window light",
+    "flat oil planes with dragged strokes"
+   ],
+   "blend_zh": [
+    "爱德华·霍珀式写实",
+    "硬边斜射窗光",
+    "平整油彩块面加拖笔"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/48.webp"
+  },
+  {
+   "id": "o98-49",
+   "no": 49,
+   "year": "1976",
+   "title": "Rocky",
+   "zh": "洛奇",
+   "chapter": "C5",
+   "style_en": "Philadelphia Sunrise, 3D on 35mm",
+   "style_zh": "费城台阶日出 3D · 35mm 调色",
+   "blend_en": [
+    "three.js 3D city",
+    "1970s 35mm film grade",
+    "Steadicam chase and rising orbit"
+   ],
+   "blend_zh": [
+    "three.js 3D 城市",
+    "70 年代 35mm 胶片调色",
+    "斯坦尼康跟拍与环绕升镜"
+   ],
+   "render": "3D",
+   "dim": "3D",
+   "frame": "frames98/49.webp"
+  },
+  {
+   "id": "o98-50",
+   "no": 50,
+   "year": "1977",
+   "title": "Annie Hall",
+   "zh": "安妮·霍尔",
+   "chapter": "C5",
+   "style_en": "New Yorker Cartoon, Ink and Wash",
+   "style_zh": "《纽约客》单格漫画 · 墨线淡彩",
+   "blend_en": [
+    "New Yorker single-panel cartoon",
+    "nib-pen ink line",
+    "light watercolour wash",
+    "hand-lettered caption"
+   ],
+   "blend_zh": [
+    "《纽约客》单格漫画",
+    "钢笔墨线",
+    "淡水彩",
+    "手写图说"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/50.webp"
+  },
+  {
+   "id": "o98-51",
+   "no": 51,
+   "year": "1978",
+   "title": "The Deer Hunter",
+   "zh": "猎鹿人",
+   "chapter": "C5",
+   "style_en": "Andrew Wyeth Egg Tempera",
+   "style_zh": "安德鲁·怀斯蛋彩",
+   "blend_en": [
+    "Egg tempera on gesso",
+    "Andrew Wyeth",
+    "fine cross-hatched strokes"
+   ],
+   "blend_zh": [
+    "石膏底蛋彩",
+    "安德鲁·怀斯",
+    "细密交叉短笔"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/51.webp"
+  },
+  {
+   "id": "o98-52",
+   "no": 52,
+   "year": "1979",
+   "title": "Kramer vs. Kramer",
+   "zh": "克莱默夫妇",
+   "chapter": "C5",
+   "style_en": "Child's Wax-Crayon Drawing",
+   "style_zh": "儿童蜡笔画",
+   "blend_en": [
+    "Wax crayon on textured paper",
+    "6–8-year-old's drawing conventions",
+    "hand-lettered labels"
+   ],
+   "blend_zh": [
+    "纹理纸上的蜡笔",
+    "6–8 岁儿童画的画法",
+    "手写标签"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/52.webp"
+  },
+  {
+   "id": "o98-53",
+   "no": 53,
+   "year": "1980",
+   "title": "Ordinary People",
+   "zh": "普通人",
+   "chapter": "C6",
+   "style_en": "Autumn Transparent Watercolour",
+   "style_zh": "秋日透明水彩",
+   "blend_en": [
+    "Transparent watercolour glazes",
+    "Winslow Homer and John Singer Sargent",
+    "HB pencil underdrawing"
+   ],
+   "blend_zh": [
+    "透明水彩叠色",
+    "Winslow Homer 与 John Singer Sargent",
+    "HB 铅笔底稿"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/53.webp"
+  },
+  {
+   "id": "o98-54",
+   "no": 54,
+   "year": "1981",
+   "title": "Chariots of Fire",
+   "zh": "烈火战车",
+   "chapter": "C6",
+   "style_en": "1924 Paris Olympics Stone Lithograph",
+   "style_zh": "1924 巴黎奥运石印海报",
+   "blend_en": [
+    "Four-stone lithograph",
+    "Jean Droit's 1924 Olympic poster",
+    "classical anatomical figures"
+   ],
+   "blend_zh": [
+    "四版石印",
+    "Jean Droit 的 1924 奥运海报",
+    "古典解剖人体"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/54.webp"
+  },
+  {
+   "id": "o98-55",
+   "no": 55,
+   "year": "1982",
+   "title": "Gandhi",
+   "zh": "甘地传",
+   "chapter": "C6",
+   "style_en": "Rajasthani Hand Block Print",
+   "style_zh": "拉贾斯坦手工木刻印花布",
+   "blend_en": [
+    "Bagru dabu indigo resist",
+    "Sanganer block-printed borders",
+    "Rajasthani miniature profiles"
+   ],
+   "blend_zh": [
+    "Bagru 泥防染靛蓝",
+    "Sanganer 木版印花边",
+    "拉贾斯坦细密画侧脸"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/55.webp"
+  },
+  {
+   "id": "o98-56",
+   "no": 56,
+   "year": "1983",
+   "title": "Terms of Endearment",
+   "zh": "母女情深",
+   "chapter": "C6",
+   "style_en": "Family Album Polaroids",
+   "style_zh": "家庭相册宝丽来",
+   "blend_en": [
+    "SX-70 and Polaroid 600 prints",
+    "Kodacolor snapshots",
+    "1970s–80s magnetic-page album",
+    "panning-shot motion smear"
+   ],
+   "blend_zh": [
+    "SX-70 与宝丽来 600 相片",
+    "柯达彩色快照",
+    "70–80 年代磁性相册",
+    "追拍拖影"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/56.webp"
+  },
+  {
+   "id": "o98-57",
+   "no": 57,
+   "year": "1984",
+   "title": "Amadeus",
+   "zh": "莫扎特传",
+   "chapter": "C6",
+   "style_en": "Rococo Silhouettes in Gilt Candlelight",
+   "style_zh": "洛可可剪影 · 烛光金色歌剧院",
+   "blend_en": [
+    "18th-century cut silhouettes",
+    "Rococo gilt relief",
+    "Candlelight bloom",
+    "Schinkel's star vault"
+   ],
+   "blend_zh": [
+    "18 世纪剪影肖像",
+    "洛可可金色浮雕",
+    "烛光泛光",
+    "申克尔的星空布景"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/57.webp"
+  },
+  {
+   "id": "o98-58",
+   "no": 58,
+   "year": "1985",
+   "title": "Out of Africa",
+   "zh": "走出非洲",
+   "chapter": "C6",
+   "style_en": "3D Biplane over the Rift Valley",
+   "style_zh": "3D 双翼机飞越东非裂谷",
+   "blend_en": [
+    "three.js real-time 3D",
+    "David Watkin aerial photography",
+    "Warm filmic grade",
+    "Instanced flamingo flocks"
+   ],
+   "blend_zh": [
+    "three.js 实时 3D",
+    "David Watkin 的航拍",
+    "暖调胶片调色",
+    "实例化的火烈鸟群"
+   ],
+   "render": "3D",
+   "dim": "3D",
+   "frame": "frames98/58.webp"
+  },
+  {
+   "id": "o98-59",
+   "no": 59,
+   "year": "1986",
+   "title": "Platoon",
+   "zh": "野战排",
+   "chapter": "C6",
+   "style_en": "Combat Artist Field Sketch · Pen & Wash",
+   "style_zh": "越战随军速写 · 钢笔淡彩",
+   "blend_en": [
+    "Fast pen line",
+    "Transparent wash",
+    "Sketchbook paper",
+    "Vietnam Combat Artists Program"
+   ],
+   "blend_zh": [
+    "快速钢笔线",
+    "透明淡彩",
+    "速写本纸",
+    "美国陆军越战战地艺术计划"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/59.webp"
+  },
+  {
+   "id": "o98-60",
+   "no": 60,
+   "year": "1987",
+   "title": "The Last Emperor",
+   "zh": "末代皇帝",
+   "chapter": "C6",
+   "style_en": "Gongbi Court Painting on Silk",
+   "style_zh": "工笔重彩 · 绢本宫廷画",
+   "blend_en": [
+    "Gongbi zhongcai",
+    "Ruled-line architecture (jiehua)",
+    "Qing court scrolls",
+    "Storaro's colour"
+   ],
+   "blend_zh": [
+    "工笔重彩",
+    "界画",
+    "清代宫廷画卷",
+    "Storaro 的色彩"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/60.webp"
+  },
+  {
+   "id": "o98-61",
+   "no": 61,
+   "year": "1988",
+   "title": "Rain Man",
+   "zh": "雨人",
+   "chapter": "C6",
+   "style_en": "80s Airbrush + Raymond's Count",
+   "style_zh": "80 年代喷枪插画 + 雷蒙的计数",
+   "blend_en": [
+    "80s airbrush illustration",
+    "Patrick Nagel figures",
+    "Hajime Sorayama chrome",
+    "Technical-drawing callouts"
+   ],
+   "blend_zh": [
+    "80 年代喷枪插画",
+    "Patrick Nagel 式人物",
+    "空山基式镀铬",
+    "工程图标注"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/61.webp"
+  },
+  {
+   "id": "o98-62",
+   "no": 62,
+   "year": "1989",
+   "title": "Driving Miss Daisy",
+   "zh": "为黛西小姐开车",
+   "chapter": "C6",
+   "style_en": "Rockwell-style Oil Illustration",
+   "style_zh": "洛克威尔式油画插画",
+   "blend_en": [
+    "Norman Rockwell oil illustration",
+    "Saturday Evening Post covers",
+    "3D-modelled car repainted in oil strokes"
+   ],
+   "blend_zh": [
+    "诺曼·洛克威尔油画插画",
+    "《星期六晚邮报》封面",
+    "3D 建模的车再铺油画笔触"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/62.webp"
+  },
+  {
+   "id": "o98-63",
+   "no": 63,
+   "year": "1990",
+   "title": "Dances with Wolves",
+   "zh": "与狼共舞",
+   "chapter": "C7",
+   "style_en": "Field Journal · Pencil & Watercolour",
+   "style_zh": "邓巴日记 · 铅笔 + 透明水彩",
+   "blend_en": [
+    "Graphite under-drawing",
+    "Transparent watercolour",
+    "Iron-gall ink handwriting",
+    "Bodmer and Catlin field sketches"
+   ],
+   "blend_zh": [
+    "铅笔底稿",
+    "透明水彩",
+    "铁胆墨水手写",
+    "Bodmer、Catlin 的野外水彩"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/63.webp"
+  },
+  {
+   "id": "o98-64",
+   "no": 64,
+   "year": "1991",
+   "title": "The Silence of the Lambs",
+   "zh": "沉默的羔羊",
+   "chapter": "C7",
+   "style_en": "Hand-coloured Natural-history Copperplate",
+   "style_zh": "手工上色的博物学铜版画",
+   "blend_en": [
+    "Copperplate engraving",
+    "Hand-colouring",
+    "Victorian entomology plates",
+    "Moses Harris, The Aurelian"
+   ],
+   "blend_zh": [
+    "铜版雕刻排线",
+    "手工上色",
+    "维多利亚昆虫学图版",
+    "Moses Harris《The Aurelian》"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/64.webp"
+  },
+  {
+   "id": "o98-65",
+   "no": 65,
+   "year": "1992",
+   "title": "Unforgiven",
+   "zh": "不可饶恕",
+   "chapter": "C7",
+   "style_en": "Remington Western Oil · Sunset & Nocturne",
+   "style_zh": "雷明顿西部油画 · 晚霞与雨夜",
+   "blend_en": [
+    "Remington's warm plains",
+    "Remington's late nocturnes",
+    "Thick oil impasto",
+    "Opening-title silhouette"
+   ],
+   "blend_zh": [
+    "雷明顿的暖色平原",
+    "雷明顿晚年的夜景",
+    "厚涂油彩",
+    "开场字幕的剪影"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/65.webp"
+  },
+  {
+   "id": "o98-66",
+   "no": 66,
+   "year": "1993",
+   "title": "Schindler's List",
+   "zh": "辛德勒的名单",
+   "chapter": "C7",
+   "style_en": "Black-and-white Film, One Red Coat",
+   "style_zh": "黑白胶片 · 唯一的红大衣",
+   "blend_en": [
+    "High-contrast B&W film",
+    "Coarse silver grain",
+    "Selective colour",
+    "Janusz Kamiński"
+   ],
+   "blend_zh": [
+    "高反差黑白胶片",
+    "粗颗粒银盐",
+    "局部留色",
+    "Janusz Kamiński"
+   ],
+   "render": "2D",
+   "dim": "2D·B&W",
+   "frame": "frames98/66.webp"
+  },
+  {
+   "id": "o98-67",
+   "no": 67,
+   "year": "1994",
+   "title": "Forrest Gump",
+   "zh": "阿甘正传",
+   "chapter": "C7",
+   "style_en": "Sabuda Pop-up Book on a Real Desk",
+   "style_zh": "立体书 · 真实书桌上的纸艺",
+   "blend_en": [
+    "Robert Sabuda pop-up engineering",
+    "Watercolour and coloured-pencil print",
+    "three.js paper cards",
+    "Physical depth of field"
+   ],
+   "blend_zh": [
+    "Robert Sabuda 立体书结构",
+    "水彩、彩铅印刷质感",
+    "three.js 纸卡",
+    "物理景深"
+   ],
+   "render": "2.5D",
+   "dim": "2.5D",
+   "frame": "frames98/67.webp"
+  },
+  {
+   "id": "o98-68",
+   "no": 68,
+   "year": "1995",
+   "title": "Braveheart",
+   "zh": "勇敢的心",
+   "chapter": "C7",
+   "style_en": "Illuminated Manuscript with Gold Leaf",
+   "style_zh": "泥金手抄本 · 贴金细密画",
+   "blend_en": [
+    "Book of Kells interlace",
+    "Gothic miniature (Morgan Bible)",
+    "Luttrell Psalter marginalia",
+    "Burnished gold leaf"
+   ],
+   "blend_zh": [
+    "《凯尔经》编结纹",
+    "哥特细密画（摩根圣经）",
+    "《鲁特雷尔诗篇》页边画",
+    "磨光金箔"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/68.webp"
+  },
+  {
+   "id": "o98-69",
+   "no": 69,
+   "year": "1996",
+   "title": "The English Patient",
+   "zh": "英国病人",
+   "chapter": "C7",
+   "style_en": "Explorer's Scrapbook Watercolour",
+   "style_zh": "探险家剪贴本水彩",
+   "blend_en": [
+    "Transparent watercolour",
+    "Pen notes and handwriting",
+    "Scrapbook collage: tape, photos, maps",
+    "Amber-sepia grade"
+   ],
+   "blend_zh": [
+    "透明水彩",
+    "钢笔笔记和手写",
+    "剪贴拼贴：胶带、照片、地图",
+    "琥珀褐调色"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/69.webp"
+  },
+  {
+   "id": "o98-70",
+   "no": 70,
+   "year": "1997",
+   "title": "Titanic",
+   "zh": "泰坦尼克号",
+   "chapter": "C7",
+   "style_en": "Blueprint Developing into 3D Sunset",
+   "style_zh": "蓝图显影成 3D 实景",
+   "blend_en": [
+    "Shipyard general-arrangement blueprint",
+    "three.js ship at true scale",
+    "Russell Carpenter's colour",
+    "One continuous camera move"
+   ],
+   "blend_zh": [
+    "船厂总布置蓝图",
+    "按真实尺寸建模的 three.js 船",
+    "Russell Carpenter 的色彩",
+    "一镜到底"
+   ],
+   "render": "3D",
+   "dim": "3D",
+   "frame": "frames98/70.webp"
+  },
+  {
+   "id": "o98-71",
+   "no": 71,
+   "year": "1998",
+   "title": "Shakespeare in Love",
+   "zh": "莎翁情史",
+   "chapter": "C7",
+   "style_en": "Hilliard Elizabethan Miniature",
+   "style_zh": "希利亚德伊丽莎白细密画",
+   "blend_en": [
+    "Portrait miniature (limning)",
+    "Body colour on vellum",
+    "Shell gold",
+    "Crimson damask still life"
+   ],
+   "blend_zh": [
+    "宫廷细密肖像（limning）",
+    "羊皮纸上的不透明水彩",
+    "贝壳金",
+    "深红锦缎静物"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/71.webp"
+  },
+  {
+   "id": "o98-72",
+   "no": 72,
+   "year": "1999",
+   "title": "American Beauty",
+   "zh": "美国丽人",
+   "chapter": "C7",
+   "style_en": "Suburban Symmetry + DV Camcorder",
+   "style_zh": "郊区对称电影画面 + DV 录像",
+   "blend_en": [
+    "Conrad Hall frontal symmetry",
+    "Rose-petal fantasy",
+    "1990s DV camcorder video"
+   ],
+   "blend_zh": [
+    "Conrad Hall 式正面对称构图",
+    "玫瑰花瓣幻想",
+    "90 年代 DV 摄像机录像"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/72.webp"
+  },
+  {
+   "id": "o98-73",
+   "no": 73,
+   "year": "2000",
+   "title": "Gladiator",
+   "zh": "角斗士",
+   "chapter": "C8",
+   "style_en": "Roman Floor Mosaic",
+   "style_zh": "罗马地面马赛克",
+   "blend_en": [
+    "Opus vermiculatum tesserae",
+    "Gold-leaf glass smalti",
+    "Zliten gladiator mosaic"
+   ],
+   "blend_zh": [
+    "顺形排列的石子（opus vermiculatum）",
+    "金箔玻璃嵌片",
+    "Zliten 角斗士马赛克"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/73.webp"
+  },
+  {
+   "id": "o98-74",
+   "no": 74,
+   "year": "2001",
+   "title": "A Beautiful Mind",
+   "zh": "美丽心灵",
+   "chapter": "C8",
+   "style_en": "Window Marker & Chalk, Gold Pattern",
+   "style_zh": "窗上公式与黑板粉笔 + 金色连线",
+   "blend_en": [
+    "White china marker on glass",
+    "Blackboard chalk",
+    "Glowing gold pattern lines",
+    "Deakins window light"
+   ],
+   "blend_zh": [
+    "玻璃上的白色油性笔",
+    "黑板粉笔",
+    "发光的金色连线",
+    "迪金斯式窗光"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/74.webp"
+  },
+  {
+   "id": "o98-75",
+   "no": 75,
+   "year": "2002",
+   "title": "Chicago",
+   "zh": "芝加哥",
+   "chapter": "C8",
+   "style_en": "Fosse Stage in Red and Black",
+   "style_zh": "福斯舞台：红黑聚光剪影",
+   "blend_en": [
+    "Bob Fosse staging",
+    "Red-rimmed backlit silhouettes",
+    "Neon and sequins",
+    "Chicago 2002 poster colours"
+   ],
+   "blend_zh": [
+    "鲍勃·福斯的舞台调度",
+    "勾红边的逆光剪影",
+    "霓虹与亮片",
+    "2002 年海报的红黑"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/75.webp"
+  },
+  {
+   "id": "o98-76",
+   "no": 76,
+   "year": "2003",
+   "title": "The Lord of the Rings: The Return of the King",
+   "zh": "指环王：王者无敌",
+   "chapter": "C8",
+   "style_en": "Alan Lee Watercolour & Tolkien Map",
+   "style_zh": "艾伦·李式水彩 + 托尔金地图",
+   "blend_en": [
+    "Watercolour and pencil concept art",
+    "Tolkien-style parchment map",
+    "Alan Lee and John Howe"
+   ],
+   "blend_zh": [
+    "水彩加铅笔的概念插画",
+    "托尔金式羊皮纸地图",
+    "艾伦·李与约翰·豪"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/76.webp"
+  },
+  {
+   "id": "o98-77",
+   "no": 77,
+   "year": "2004",
+   "title": "Million Dollar Baby",
+   "zh": "百万美元宝贝",
+   "chapter": "C8",
+   "style_en": "16-bit Arcade Fighting Game",
+   "style_zh": "16-bit 像素格斗游戏",
+   "blend_en": [
+    "16-bit pixel art",
+    "Arcade fighting-game HUD",
+    "CRT scanlines"
+   ],
+   "blend_zh": [
+    "16-bit 像素画",
+    "街机格斗游戏界面",
+    "CRT 扫描线"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/77.webp"
+  },
+  {
+   "id": "o98-78",
+   "no": 78,
+   "year": "2005",
+   "title": "Crash",
+   "zh": "撞车",
+   "chapter": "C8",
+   "style_en": "LA Night Light Trails & Snow",
+   "style_zh": "洛杉矶夜景光轨 + 飘雪",
+   "blend_en": [
+    "Long-exposure night photography",
+    "Sodium orange and neon cyan",
+    "Anamorphic bloom and film grain"
+   ],
+   "blend_zh": [
+    "长曝光夜景摄影",
+    "钠灯橙配霓虹青",
+    "变形宽银幕光条与胶片颗粒"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/78.webp"
+  },
+  {
+   "id": "o98-79",
+   "no": 79,
+   "year": "2006",
+   "title": "The Departed",
+   "zh": "无间行者",
+   "chapter": "C8",
+   "style_en": "Street Stencil on Boston Brick",
+   "style_zh": "波士顿红砖墙模板涂鸦",
+   "blend_en": [
+    "Multi-layer spray stencil",
+    "Banksy's rats",
+    "Red-brick wall texture",
+    "Halftone paste-up poster"
+   ],
+   "blend_zh": [
+    "多层喷漆模板",
+    "班克斯的老鼠",
+    "红砖墙肌理",
+    "半调糊贴海报"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/79.webp"
+  },
+  {
+   "id": "o98-80",
+   "no": 80,
+   "year": "2007",
+   "title": "No Country for Old Men",
+   "zh": "老无所依",
+   "chapter": "C8",
+   "style_en": "3D West Texas Dusk, Deakins Light",
+   "style_zh": "3D 西德州荒原黄昏（迪金斯光）",
+   "blend_en": [
+    "Real-time 3D (three.js)",
+    "Roger Deakins dusk light",
+    "Desaturated film grade"
+   ],
+   "blend_zh": [
+    "实时 3D（three.js）",
+    "罗杰·迪金斯的黄昏光",
+    "低饱和胶片调色"
+   ],
+   "render": "3D",
+   "dim": "3D",
+   "frame": "frames98/80.webp"
+  },
+  {
+   "id": "o98-81",
+   "no": 81,
+   "year": "2008",
+   "title": "Slumdog Millionaire",
+   "zh": "贫民窟的百万富翁",
+   "chapter": "C8",
+   "style_en": "Quiz-Show Studio & Mumbai Orange-Teal",
+   "style_zh": "答题节目演播室 + 孟买橙青",
+   "blend_en": [
+    "TV game-show lighting",
+    "Blue-violet beams and lens flares",
+    "Anthony Dod Mantle orange and teal"
+   ],
+   "blend_zh": [
+    "电视答题节目的灯光",
+    "蓝紫光束与镜头光斑",
+    "Anthony Dod Mantle 的橙青色调"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/81.webp"
+  },
+  {
+   "id": "o98-82",
+   "no": 82,
+   "year": "2009",
+   "title": "The Hurt Locker",
+   "zh": "拆弹部队",
+   "chapter": "C8",
+   "style_en": "EOD Technical Manual Line Art",
+   "style_zh": "拆弹教范线图",
+   "blend_en": [
+    "Military technical-manual line drawing",
+    "Exploded-view diagram",
+    "Typewriter callouts",
+    "Olive and sand flat tints"
+   ],
+   "blend_zh": [
+    "军用技术手册线图",
+    "爆炸分解图",
+    "打字机字标注",
+    "橄榄绿与沙色平涂"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/82.webp"
+  },
+  {
+   "id": "o98-83",
+   "no": 83,
+   "year": "2010",
+   "title": "The King's Speech",
+   "zh": "国王的演讲",
+   "chapter": "C9",
+   "style_en": "Peeling Wall & Gold Broadcast Booth",
+   "style_zh": "斑驳墙 + 金色广播间",
+   "blend_en": [
+    "Painterly digital oil texture",
+    "Peeling layered-paint wall",
+    "1930s broadcast booth",
+    "Gold sound-wave lines"
+   ],
+   "blend_zh": [
+    "数字油画笔触",
+    "层层剥落的漆墙",
+    "30 年代广播间",
+    "金色声波细线"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/83.webp"
+  },
+  {
+   "id": "o98-84",
+   "no": 84,
+   "year": "2011",
+   "title": "The Artist",
+   "zh": "艺术家",
+   "chapter": "C9",
+   "style_en": "Polished Silent-Film Black & White",
+   "style_zh": "2011 精致默片黑白",
+   "blend_en": [
+    "Late-1920s silent-film black and white",
+    "Art Deco intertitle cards",
+    "Hollywood studio glamour light"
+   ],
+   "blend_zh": [
+    "20 年代末默片黑白",
+    "装饰艺术边框字幕卡",
+    "好莱坞片厂的魅力布光"
+   ],
+   "render": "2D",
+   "dim": "2D·B&W",
+   "frame": "frames98/84.webp"
+  },
+  {
+   "id": "o98-85",
+   "no": 85,
+   "year": "2012",
+   "title": "Argo",
+   "zh": "逃离德黑兰",
+   "chapter": "C9",
+   "style_en": "Jack Kirby 70s Comic Page",
+   "style_zh": "杰克·柯比 70 年代漫画页",
+   "blend_en": [
+    "Jack Kirby cosmic comics",
+    "Ben-Day four-colour print",
+    "Aged newsprint",
+    "Lord of Light concept art"
+   ],
+   "blend_zh": [
+    "杰克·柯比宇宙漫画",
+    "Ben-Day 四色网点印刷",
+    "泛黄新闻纸",
+    "《光之王》概念图"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/85.webp"
+  },
+  {
+   "id": "o98-86",
+   "no": 86,
+   "year": "2013",
+   "title": "12 Years a Slave",
+   "zh": "为奴十二年",
+   "chapter": "C9",
+   "style_en": "Cased Daguerreotype, Developing",
+   "style_zh": "显影中的银版老照片",
+   "blend_en": [
+    "1850s cased daguerreotype",
+    "Hand-tinted tintype",
+    "Studio still life"
+   ],
+   "blend_zh": [
+    "1850 年代带盒银版照片",
+    "手工上色锡版照片",
+    "影楼静物"
+   ],
+   "render": "2D",
+   "dim": "2D·B&W",
+   "frame": "frames98/86.webp"
+  },
+  {
+   "id": "o98-87",
+   "no": 87,
+   "year": "2014",
+   "title": "Birdman",
+   "zh": "鸟人",
+   "chapter": "C9",
+   "style_en": "3D Backstage Long Take",
+   "style_zh": "3D 后台走廊长镜头",
+   "blend_en": [
+    "Real-time 3D (three.js)",
+    "Lubezki handheld long take",
+    "Tungsten and fluorescent light",
+    "Digital-cinema grain"
+   ],
+   "blend_zh": [
+    "实时 3D（three.js）",
+    "卢贝兹基手持长镜头",
+    "钨丝灯与日光灯",
+    "数字电影细颗粒"
+   ],
+   "render": "3D",
+   "dim": "3D",
+   "frame": "frames98/87.webp"
+  },
+  {
+   "id": "o98-88",
+   "no": 88,
+   "year": "2015",
+   "title": "Spotlight",
+   "zh": "聚焦",
+   "chapter": "C9",
+   "style_en": "Microfiche Reader, Newsprint Halftone",
+   "style_zh": "缩微胶片阅读机 · 报纸网点",
+   "blend_en": [
+    "Library microfiche reader",
+    "2001 newspaper CMYK halftone",
+    "Phosphor-green monochrome"
+   ],
+   "blend_zh": [
+    "图书馆缩微胶片阅读机",
+    "2001 年报纸 CMYK 网点",
+    "磷光绿单色"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/88.webp"
+  },
+  {
+   "id": "o98-89",
+   "no": 89,
+   "year": "2016",
+   "title": "Moonlight",
+   "zh": "月光男孩",
+   "chapter": "C9",
+   "style_en": "Moonlight-Blue Oil Portraiture",
+   "style_zh": "月光蓝调油画肖像",
+   "blend_en": [
+    "Oil portrait brushwork",
+    "Teal / magenta / violet duotones",
+    "Split-level waterline camera"
+   ],
+   "blend_zh": [
+    "油画肖像笔触",
+    "青绿 / 品红 / 蓝紫双色调",
+    "半水上半水下的机位"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/89.webp"
+  },
+  {
+   "id": "o98-90",
+   "no": 90,
+   "year": "2017",
+   "title": "The Shape of Water",
+   "zh": "水形物语",
+   "chapter": "C9",
+   "style_en": "3D Underwater Teal Caustics",
+   "style_zh": "3D 水下青绿焦散",
+   "blend_en": [
+    "Real-time 3D (three.js)",
+    "Projected caustics and volumetric light shafts",
+    "Dan Laustsen teal-and-gold grade"
+   ],
+   "blend_zh": [
+    "实时 3D（three.js）",
+    "投射焦散与体积光束",
+    "Dan Laustsen 的青绿配暖金调色"
+   ],
+   "render": "3D",
+   "dim": "3D",
+   "frame": "frames98/90.webp"
+  },
+  {
+   "id": "o98-91",
+   "no": 91,
+   "year": "2018",
+   "title": "Green Book",
+   "zh": "绿皮书",
+   "chapter": "C9",
+   "style_en": "1960s Linen Postcard",
+   "style_zh": "60 年代亚麻纹明信片",
+   "blend_en": [
+    "Curt Teich linen postcard",
+    "\"Greetings from\" large-letter type",
+    "Airbrushed hand colouring",
+    "Offset-litho misregistration"
+   ],
+   "blend_zh": [
+    "Curt Teich 亚麻纹明信片",
+    "「Greetings from」大字母",
+    "喷枪手工上色",
+    "胶印套色错位"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/91.webp"
+  },
+  {
+   "id": "o98-92",
+   "no": 92,
+   "year": "2019",
+   "title": "Parasite",
+   "zh": "寄生虫",
+   "chapter": "C9",
+   "style_en": "Architectural Section Axonometric",
+   "style_zh": "建筑剖面轴测图",
+   "blend_en": [
+    "Dimetric section drawing",
+    "Architectural poché and scale figures",
+    "Rainy-night colour grade"
+   ],
+   "blend_zh": [
+    "二等角剖面轴测",
+    "建筑剖切填充与比例人",
+    "雨夜调色"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/92.webp"
+  },
+  {
+   "id": "o98-93",
+   "no": 93,
+   "year": "2020",
+   "title": "Nomadland",
+   "zh": "无依之地",
+   "chapter": "C10",
+   "style_en": "Magic-Hour Soft Pastel",
+   "style_zh": "魔幻时刻色粉画",
+   "blend_en": [
+    "Soft pastel on toned paper",
+    "Magic-hour dusk palette",
+    "Paper-tooth texture"
+   ],
+   "blend_zh": [
+    "有色纸上的软色粉",
+    "魔幻时刻的黄昏配色",
+    "纸面颗粒肌理"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/93.webp"
+  },
+  {
+   "id": "o98-94",
+   "no": 94,
+   "year": "2021",
+   "title": "CODA",
+   "zh": "健听女孩",
+   "chapter": "C10",
+   "style_en": "Scrimshaw on a Whale Tooth",
+   "style_zh": "鲸牙骨雕（Scrimshaw）",
+   "blend_en": [
+    "19th-century whaler's scrimshaw",
+    "Burin hatching and stipple",
+    "Tabletop product lighting"
+   ],
+   "blend_zh": [
+    "19 世纪捕鲸水手鲸骨雕",
+    "刻刀排线与点刻",
+    "桌面静物产品布光"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/94.webp"
+  },
+  {
+   "id": "o98-95",
+   "no": 95,
+   "year": "2022",
+   "title": "Everything Everywhere All at Once",
+   "zh": "瞬息全宇宙",
+   "chapter": "C10",
+   "style_en": "Ray-Marched Multiverse Jump-Cuts",
+   "style_zh": "光线步进多元宇宙跳切",
+   "blend_en": [
+    "GLSL ray-marched universes",
+    "One look per universe (office realism, cosmic surreal, landscape, commercial)",
+    "Googly-eye rainbow mandala"
+   ],
+   "blend_zh": [
+    "GLSL 光线步进的多个宇宙",
+    "一个宇宙一种画法（写实办公室、超现实宇宙、风景、广告）",
+    "大眼睛彩虹曼陀罗"
+   ],
+   "render": "3D",
+   "dim": "3D",
+   "frame": "frames98/95.webp"
+  },
+  {
+   "id": "o98-96",
+   "no": 96,
+   "year": "2023",
+   "title": "Oppenheimer",
+   "zh": "奥本海默",
+   "chapter": "C10",
+   "style_en": "3D Particle Fireball, IMAX Grain",
+   "style_zh": "3D 粒子火球 · IMAX 颗粒",
+   "blend_en": [
+    "Real-time 3D (three.js)",
+    "GPU particle simulation",
+    "IMAX 65 mm print grade",
+    "Trinity test high-speed photographs"
+   ],
+   "blend_zh": [
+    "实时 3D（three.js）",
+    "GPU 粒子模拟",
+    "IMAX 65mm 印片调色",
+    "三位一体试验高速照片"
+   ],
+   "render": "3D",
+   "dim": "3D",
+   "frame": "frames98/96.webp"
+  },
+  {
+   "id": "o98-97",
+   "no": 97,
+   "year": "2024",
+   "title": "Anora",
+   "zh": "阿诺拉",
+   "chapter": "C10",
+   "style_en": "Snowy Neon Night",
+   "style_zh": "雪夜霓虹",
+   "blend_en": [
+    "Neon tube signage",
+    "Wet-ground reflections and snow",
+    "35 mm night photography"
+   ],
+   "blend_zh": [
+    "霓虹灯管招牌",
+    "湿地面倒影与积雪",
+    "35mm 夜景摄影"
+   ],
+   "render": "2D",
+   "dim": "2D",
+   "frame": "frames98/97.webp"
+  },
+  {
+   "id": "o98-98",
+   "no": 98,
+   "year": "2025",
+   "title": "One Battle After Another",
+   "zh": "一战再战",
+   "chapter": "C10",
+   "style_en": "3D Dip-Road Chase, Long Lens",
+   "style_zh": "3D 起伏公路追车 · 长焦压缩",
+   "blend_en": [
+    "Real-time 3D (three.js)",
+    "Extreme telephoto compression",
+    "Heat haze and road mirage",
+    "VistaVision fine grain"
+   ],
+   "blend_zh": [
+    "实时 3D（three.js）",
+    "超长焦压缩",
+    "热浪与路面蜃景",
+    "VistaVision 细颗粒"
+   ],
+   "render": "3D",
+   "dim": "3D",
+   "frame": "frames98/98.webp"
+  }
+ ]
+}

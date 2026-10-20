@@ -18,7 +18,7 @@ REQUIRED = {
     "vendor/three/three.core.js", "vendor/three/OrbitControls.js", "vendor/three/LICENSE",
     "vendor/three/addons/postprocessing/Pass.js", "vendor/spark/spark.module.js", "vendor/spark/LICENSE",
     "world-viewer.js", "director-world.js", "preview_director.html", "world-view-export.html",
-    "preview_canvas.html", "canvas-entry.js", "preview_code.html", "styles/code/code_styles.json",
+    "preview_canvas.html", "canvas-entry.js", "preview_code.html", "styles/code/code_styles.json", "styles/code/opuscar98.json",
 }
 
 
@@ -54,6 +54,9 @@ def main() -> None:
     slugs = {s["slug"] for s in code["styles"]}
     if len(slugs) != 43 or any(not (STATIC / "styles" / "code" / s["frame"]).is_file() for s in code["styles"]):
         raise SystemExit("The code-video style gallery is incomplete")
+    light = json.loads((STATIC / "styles" / "code" / "opuscar98.json").read_text(encoding="utf-8"))
+    if len(light["styles"]) != 98 or any(not (STATIC / "styles" / "code" / s["frame"]).is_file() for s in light["styles"]):
+        raise SystemExit("The OPUSCAR 98 light style gallery is incomplete")
     for lang in [*(x for x in langs if x != "en"), "zh"]:
         f = STATIC / "styles" / "code" / "i18n" / f"{lang}.json"
         if not f.is_file():
@@ -62,6 +65,12 @@ def main() -> None:
         bad = [k for k in slugs if not (tr.get(k, {}).get("name") and tr.get(k, {}).get("uses"))]
         if bad or len(tr.get("_categories") or {}) != len(code["categories"]):
             raise SystemExit(f"Code-video style translation styles/code/i18n/{lang}.json does not cover all styles")
+        # OPUSCAR 98 轻量风格(三期):中文用原文,其余语言须有风格名、混合手法与章节名
+        if lang != "zh":
+            bad = [x["id"] for x in light["styles"] if not (tr.get(x["id"], {}).get("name")
+                                                              and len(tr.get(x["id"], {}).get("blend") or []) == len(x["blend_en"]))]
+            if bad or len(tr.get("_chapters98") or {}) != len(light["chapters"]):
+                raise SystemExit(f"Code-video style translation styles/code/i18n/{lang}.json does not cover the OPUSCAR 98 light styles")
     print("WebUI static package is complete; all application requests use /api/v1.")
 
 

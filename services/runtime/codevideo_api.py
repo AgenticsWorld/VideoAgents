@@ -147,6 +147,11 @@ def preview_info(project: str) -> dict:
                 out["render_error"] = str(e)
     except CV.CodeVideoError as e:
         out["timeline_error"] = str(e)
+    from modules.codevideo import beats as BT
+    grid = BT.load_beats(base)
+    if grid:                                    # 外来配乐的节拍网格(三期):时间轴下方画拍点 / 强拍
+        out["beats"] = {"bpm": grid.get("bpm"), "meter": grid.get("meter"), "beats": (grid.get("beats") or [])[:4000],
+                        "downbeats": (grid.get("downbeats") or [])[:1000], "confidence": grid.get("confidence")}
     mix = film / "out" / "mix.wav"
     out["mix"] = f"/@film/{base.name}/out/mix.wav?v={int(mix.stat().st_mtime)}" if mix.is_file() else None
     fin = base / "edit" / CV.EP / "final.mp4"

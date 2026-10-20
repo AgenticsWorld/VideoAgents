@@ -80,11 +80,12 @@ VOICE_SOURCES = ("recording", "clone")
 
 # 演示视频的项目设置(2026-10-20,建项目时写定):code_style = 风格 slug(lemo-opuscar 风格库);storyboard_review = 先审故事板
 # (默认开,CVH1);narration / subtitles = 旁白 / 字幕;length_s = 目标片长;fps;music_source = code(代码作曲,默认)
-# | model(按「生成模型」页音乐设置)。画幅 / 语言 / 成片分辨率沿用 output 段
+# | model(按「生成模型」页音乐设置生成)| library(从项目音乐库 / 用户音乐选曲;三期 2026-10-20)。后两种是外来音乐:
+# 宿主 codevideo.py music-fit 适配到片长并测节拍网格,cv2-beatsync 把时间轴对到拍上。画幅 / 语言 / 成片分辨率沿用 output 段
 CODE_VIDEO_DEFAULTS = {"code_style": "", "storyboard_review": True, "narration": True, "subtitles": True,
                        "length_s": 45, "fps": 24, "music_source": "code"}
 CODE_VIDEO_FPS = (24, 25, 30)
-CODE_VIDEO_MUSIC = ("code", "model")
+CODE_VIDEO_MUSIC = ("code", "model", "library")
 CODE_VIDEO_LENGTH = (5, 600)
 
 _LIB_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.\-]{0,79}")
@@ -131,8 +132,8 @@ def code_video_settings(block, strict: bool = True) -> dict:
 
     style = str(block.get("code_style") or "").strip()
     if style:
-        from modules.codevideo import style_slugs
-        if style in style_slugs():
+        from modules.codevideo import style_ids
+        if style in style_ids():                  # 完整风格 43 个 + OPUSCAR 98 轻量风格 o98-01…98
             out["code_style"] = style
         else:
             bad(f"code_style 不在风格库:{style}")
@@ -238,13 +239,19 @@ def orchestrator_section(block: dict, proj_rel: str, agent_ids) -> str:
         cv = code_video_settings(block, strict=False)
         lines.append(
             f"- 演示视频设置(settings.json#project,建项目时写定):风格 `{cv['code_style'] or '(未选)'}`"
-            f"(agents/workflows/codevideo/styles/{cv['code_style'] or '<slug>'}/STYLE.md)、目标片长约 {cv['length_s']} 秒、"
+            + ("(轻量风格:OPUSCAR 98 的一段风格提示,没有完整 STYLE.md 与样片;cv0 锁定时宿主生成 codevideo/style/STYLE.md,"
+               "导演须在 TREATMENT.md「风格补全」一节补齐提示没写到的部分)" if str(cv["code_style"]).startswith("o98-")
+               else f"(agents/workflows/codevideo/styles/{cv['code_style'] or '<slug>'}/STYLE.md)")
+            + f"、目标片长约 {cv['length_s']} 秒、"
             f"{cv['fps']} fps、旁白{'开' if cv['narration'] else '关'}、字幕{'开' if cv['subtitles'] else '关'}、"
             f"先审故事板{'开' if cv['storyboard_review'] else '关'}、配乐 "
-            + ("代码作曲(code-composer 写作曲脚本)" if cv["music_source"] == "code" else "按「生成模型」页音乐设置生成")
+            + {"code": "代码作曲(code-composer 写作曲脚本)", "model": "按「生成模型」页音乐设置生成(外来音乐,须对拍)",
+               "library": "从项目音乐库 / 用户音乐选曲(外来音乐,须对拍)"}[cv["music_source"]]
             + "。按这些设置裁定 DAG 条件节点:"
             + ("cv1-board 与 gc1(CVH1)照常派" if cv["storyboard_review"] else "cv1-board 与 gc1(CVH1)置 skipped")
             + ";" + ("cv2-voice 照常派" if cv["narration"] else "cv2-voice 置 skipped(全片无旁白)")
+            + ";" + ("cv2-beatsync 置 skipped(代码作曲按时间轴写谱,天然对齐)" if cv["music_source"] == "code"
+                     else "cv2-beatsync 照常派(music-fit 测出节拍网格后把时间轴对到拍上,cv3 画面在它之后才开工)")
             + ("" if cv["code_style"] else ";风格未选时 cv0-ingest 停下向用户要风格,不得替用户选"))
         lines.append(
             "- 本类型不用任何视频生成模型:画面由 scene-coder 写的网页(window.render(t))经宿主 CLI "

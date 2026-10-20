@@ -396,5 +396,852 @@
    "Tecnologia de consumo",
    "Beleza"
   ]
+ },
+ "_chapters98": {
+  "C1": "Cinema mudo e falado",
+  "C2": "Cor e guerra",
+  "C3": "Tela panorâmica",
+  "C4": "Os agitados anos 60",
+  "C5": "Nova Hollywood",
+  "C6": "A era dos blockbusters",
+  "C7": "Fim do século",
+  "C8": "O novo milênio",
+  "C9": "A década indie",
+  "C10": "Aqui e agora"
+ },
+ "o98-01": {
+  "name": "Combate aéreo 3D da era muda, P&B ortocromático tingido",
+  "blend": [
+   "three.js 3D",
+   "Preto e branco ortocromático",
+   "Tingimento de cinema mudo",
+   "Desgaste de projeção e íris"
+  ]
+ },
+ "o98-02": {
+  "name": "Pôster de revista musical art déco em preto e dourado",
+  "blend": [
+   "Pôster art déco",
+   "Degradês metálicos a aerógrafo",
+   "A. M. Cassandre",
+   "Figurinos de Erté"
+  ]
+ },
+ "o98-03": {
+  "name": "Xilogravura antiguerra ao estilo Kollwitz",
+  "blend": [
+   "Xilogravura",
+   "Käthe Kollwitz",
+   "Expressionismo alemão",
+   "Impressão a cores em duas matrizes"
+  ]
+ },
+ "o98-04": {
+  "name": "Panorama em albumina sépia de 1889",
+  "blend": [
+   "Cópia em albumina virada a ouro",
+   "Foto panorâmica da fronteira",
+   "Figura colorida à mão"
+  ]
+ },
+ "o98-05": {
+  "name": "Saguão 3D em P&B prateado da MGM",
+  "blend": [
+   "three.js 3D",
+   "Preto e branco prateado da MGM",
+   "Interiores art déco",
+   "Simetria vista de cima"
+  ]
+ },
+ "o98-06": {
+  "name": "Painel art nouveau à Mucha",
+  "blend": [
+   "Alphonse Mucha",
+   "Litografia colorida",
+   "Ornamento art nouveau"
+  ]
+ },
+ "o98-07": {
+  "name": "Desenho rubber hose em P&B dos anos 1930",
+  "blend": [
+   "Rubber hose da Fleischer",
+   "Pintura em acetato",
+   "Fundos em aquarela das Silly Symphonies",
+   "Desgaste de película projetada"
+  ]
+ },
+ "o98-08": {
+  "name": "Carta náutica do Almirantado em gravura em cobre",
+  "blend": [
+   "Carta do Almirantado do século XVIII",
+   "Gravura em cobre",
+   "Colorização leve à mão",
+   "Água-tinta de Robert Dodd"
+  ]
+ },
+ "o98-09": {
+  "name": "Palco 3D em bolo de noiva, P&B prateado",
+  "blend": [
+   "three.js 3D",
+   "Preto e branco prateado da MGM",
+   "Espetáculo de revista de 1936",
+   "Plumas de avestruz e chiffon"
+  ]
+ },
+ "o98-10": {
+  "name": "Tipografia em papel-jornal e gravura a traço",
+  "blend": [
+   "Manchete em tipos de madeira",
+   "Tipografia em papel-jornal",
+   "Gravura a traço dos anos 1890"
+  ]
+ },
+ "o98-11": {
+  "name": "Pôster em serigrafia da WPA",
+  "blend": [
+   "Serigrafia da WPA dos anos 1930",
+   "Degradê split fountain",
+   "Seis tintas chapadas opacas"
+  ]
+ },
+ "o98-12": {
+  "name": "Óleo em empaste Technicolor",
+  "blend": [
+   "Óleo em empaste",
+   "Espátula",
+   "Paleta Technicolor de 1939",
+   "Pintura de pôster épico"
+  ]
+ },
+ "o98-13": {
+  "name": "Desenho gótico a carvão",
+  "blend": [
+   "Carvão vegetal",
+   "Realces com borracha e esfumado",
+   "William Kentridge",
+   "Suspense gótico"
+  ]
+ },
+ "o98-14": {
+  "name": "Guache do vale galês",
+  "blend": [
+   "Guache opaco",
+   "Paisagem a espátula de Kyffin Williams",
+   "Cores do pôster de 1941"
+  ]
+ },
+ "o98-15": {
+  "name": "Litografia em pedra do front doméstico",
+  "blend": [
+   "Litografia em pedra com matriz de sombra a lápis litográfico",
+   "Pôsteres da Segunda Guerra de Frank Newbould e Abram Games",
+   "Paleta do Ministério da Informação"
+  ]
+ },
+ "o98-16": {
+  "name": "Preto e branco glamour de estúdio",
+  "blend": [
+   "Retratos glamour retocados a aerógrafo",
+   "Iluminação de estúdio de Arthur Edeson",
+   "Filtro difusor e grão de prata"
+  ]
+ },
+ "o98-17": {
+  "name": "Vitral gótico em contraluz",
+  "blend": [
+   "Vidro colorido com chumbo e grisalha",
+   "Losangos azuis de Chartres",
+   "Cores de joia de Harry Clarke"
+  ]
+ },
+ "o98-18": {
+  "name": "Arte com máquina de escrever",
+  "blend": [
+   "Arte datilográfica com sobreposições",
+   "Paul Smith e Flora Stacey",
+   "Noir de luz dura de John F. Seitz"
+  ]
+ },
+ "o98-19": {
+  "name": "Página dupla de revista ilustrada em meio-tom",
+  "blend": [
+   "Meio-tom grosso a 45°",
+   "Foco profundo de Gregg Toland",
+   "Diagramação de revista ilustrada de 1946",
+   "Chapa de cor especial laranja"
+  ]
+ },
+ "o98-20": {
+  "name": "Ilustração de revista a grafite dos anos 1940",
+  "blend": [
+   "Hachuras a grafite e tons esfumados",
+   "Al Parker e Robert Fawcett",
+   "Figura principal em lápis de cor"
+  ]
+ },
+ "o98-21": {
+  "name": "Castelo na névoa em foco profundo, 3D P&B",
+  "blend": [
+   "three.js 3D com névoa volumétrica",
+   "Preto e branco em foco profundo de Desmond Dickinson",
+   "Cenários românicos despojados de Roger Furse"
+  ]
+ },
+ "o98-22": {
+  "name": "Pôster de campanha em tipos de madeira",
+  "blend": [
+   "Tipografia com tipos de madeira",
+   "Hatch Show Print",
+   "Figuras em linoleogravura",
+   "Retratos em meio-tom"
+  ]
+ },
+ "o98-23": {
+  "name": "Caricatura de linha única à Hirschfeld",
+  "blend": [
+   "Caricatura a nanquim em linha única",
+   "Desenhos teatrais de Al Hirschfeld",
+   "Diálogos letreirados à mão"
+  ]
+ },
+ "o98-24": {
+  "name": "Balé em aquarela à Dufy",
+  "blend": [
+   "Traço solto de nanquim sobre cor deslocada",
+   "Raoul Dufy",
+   "Cenários de balé de Minnelli",
+   "Papel de aquarela prensado a frio"
+  ]
+ },
+ "o98-25": {
+  "name": "Litografia de circo Strobridge",
+  "blend": [
+   "Cromolitografia em quatro cores",
+   "Pôsteres de circo da Strobridge Litho",
+   "Tinta chapada com contorno preto grosso"
+  ]
+ },
+ "o98-26": {
+  "name": "Praia em preto e branco high-key",
+  "blend": [
+   "Fotografia P&B high-key de 1953",
+   "Burnett Guffey",
+   "Grão de prata e halação"
+  ]
+ },
+ "o98-27": {
+  "name": "Realismo social à Ben Shahn",
+  "blend": [
+   "Linha de nanquim trêmula transferida",
+   "Blocos chapados de têmpera",
+   "Ben Shahn",
+   "Realismo social americano dos anos 1950"
+  ]
+ },
+ "o98-28": {
+  "name": "Cinescópio de 1955 na TV da sala",
+  "blend": [
+   "Gravação em cinescópio P&B",
+   "Tela CRT curva e linhas de varredura",
+   "Ilustração calorosa de sala dos anos 1950"
+  ]
+ },
+ "o98-29": {
+  "name": "Desenho modernista da UPA dos anos 1950",
+  "blend": [
+   "Animação limitada da UPA",
+   "Animação dos créditos finais de Saul Bass",
+   "Cores do pôster de 1956",
+   "Impressão com grão de giz de cera"
+  ]
+ },
+ "o98-30": {
+  "name": "Planta técnica em cianotipia",
+  "blend": [
+   "Cópia heliográfica em cianotipia",
+   "Arranjo geral de ponte de cavaletes de madeira",
+   "Revisões a lápis vermelho",
+   "Protagonista colorido a guache"
+  ]
+ },
+ "o98-31": {
+  "name": "Litografia Belle Époque à Lautrec",
+  "blend": [
+   "Pôster em litografia colorida",
+   "Henri de Toulouse-Lautrec",
+   "Respingos de tinta (crachis)",
+   "Figurinos de Cecil Beaton"
+  ]
+ },
+ "o98-32": {
+  "name": "Corrida de bigas 3D no circo, épico em 65 mm",
+  "blend": [
+   "3D procedural (three.js)",
+   "Widescreen MGM Camera 65",
+   "Gradação de cópia Technicolor",
+   "Encenação de ação da segunda unidade"
+  ]
+ },
+ "o98-33": {
+  "name": "Créditos em linhas de Saul Bass em P&B",
+  "blend": [
+   "Design de créditos de Saul Bass",
+   "Escritório em perspectiva de um ponto",
+   "Grão de filme P&B",
+   "Um único acento quente"
+  ]
+ },
+ "o98-34": {
+  "name": "Cenário de palco 3D Technicolor",
+  "blend": [
+   "3D procedural (three.js)",
+   "Gradação de pôr do sol Technicolor",
+   "Cenografia de Boris Leven",
+   "Pôster de 1961: céu vermelho, escada de incêndio preta"
+  ]
+ },
+ "o98-35": {
+  "name": "Guache de pôster épico à Terpning",
+  "blend": [
+   "Pintura de pôster a guache e óleo",
+   "Pôster de 1962 de Howard Terpning",
+   "Luz do deserto em 70 mm de Freddie Young"
+  ]
+ },
+ "o98-36": {
+  "name": "Gravura satírica georgiana colorida à mão",
+  "blend": [
+   "Gravura em cobre de Hogarth",
+   "Colorização à mão à Rowlandson/Gillray",
+   "Balão de fala satírico"
+  ]
+ },
+ "o98-37": {
+  "name": "Ilustração de moda à Bob Peak",
+  "blend": [
+   "Traço rápido a nanquim",
+   "Aquarela rosa e magenta",
+   "Pôster de 1964 de Bob Peak",
+   "Figurinos de Ascot de Cecil Beaton"
+  ]
+ },
+ "o98-38": {
+  "name": "Vista aérea 3D dos Alpes em estilo livro ilustrado",
+  "blend": [
+   "Terreno 3D procedural (three.js)",
+   "Cor widescreen Todd-AO",
+   "Abertura de helicóptero de Ted McCord",
+   "Prados de Miyazaki"
+  ]
+ },
+ "o98-39": {
+  "name": "Retrato Tudor a óleo à Holbein",
+  "blend": [
+   "Veladura a óleo dos grandes mestres",
+   "Hans Holbein, Sir Thomas More (1527)",
+   "Interior Tudor à luz de velas"
+  ]
+ },
+ "o98-40": {
+  "name": "Noite em Risograph de três cores",
+  "blend": [
+   "Sobreimpressão Risograph",
+   "Laranja-avermelhado do pôster de 1967",
+   "Externas noturnas de Haskell Wexler",
+   "Encenação em silhueta"
+  ]
+ },
+ "o98-41": {
+  "name": "Teatro de brinquedo vitoriano",
+  "blend": [
+   "Teatro de brinquedo Pollock's",
+   "Folhas litografadas coloridas à mão",
+   "Cartão recortado com sombras da ribalta",
+   "Caricatura de Cruikshank"
+  ]
+ },
+ "o98-42": {
+  "name": "Serigrafia fotográfica de Warhol, Double Elvis",
+  "blend": [
+   "Serigrafia fotográfica",
+   "Andy Warhol, Double Elvis (1963)",
+   "Fundo de tinta prateada",
+   "Blocos de cor fora de registro"
+  ]
+ },
+ "o98-43": {
+  "name": "Litografia de bônus de guerra da Segunda Guerra",
+  "blend": [
+   "Pôster em litografia em pedra",
+   "Pôsteres americanos de bônus de guerra e alistamento, 1942–45",
+   "Meio-tom a 45°, pedras de cor fora de registro"
+  ]
+ },
+ "o98-44": {
+  "name": "Perseguição sob o trem elevado em 16 mm",
+  "blend": [
+   "Cenário de rua 3D em three.js",
+   "Grão documental de 16 mm",
+   "Gradação fria de cópia com sombras cianas"
+  ]
+ },
+ "o98-45": {
+  "name": "Pintura a óleo com luz zenital à Rembrandt",
+  "blend": [
+   "Pintura a óleo em claro-escuro",
+   "Luz zenital de Gordon Willis",
+   "Veladura à Rembrandt e Caravaggio"
+  ]
+ },
+ "o98-46": {
+  "name": "Ilustração do Saturday Evening Post",
+  "blend": [
+   "Ilustração de capa do Saturday Evening Post",
+   "Modelado em blocos à Leyendecker",
+   "Cartelas de capítulo de Jaroslav Gebr"
+  ]
+ },
+ "o98-47": {
+  "name": "Fotografia sépia colorida à mão",
+  "blend": [
+   "Cópia em prata virada",
+   "Fotos de Ellis Island de Lewis Hine",
+   "Corantes aplicados a pincel",
+   "Figuras 3D em ray marching"
+  ]
+ },
+ "o98-48": {
+  "name": "Realismo americano à Hopper",
+  "blend": [
+   "Realismo de Edward Hopper",
+   "Luz oblíqua de janela com bordas duras",
+   "Planos chapados a óleo com pinceladas arrastadas"
+  ]
+ },
+ "o98-49": {
+  "name": "Nascer do sol na Filadélfia, 3D em 35 mm",
+  "blend": [
+   "Cidade 3D em three.js",
+   "Gradação de filme 35 mm dos anos 1970",
+   "Perseguição em Steadicam e órbita ascendente"
+  ]
+ },
+ "o98-50": {
+  "name": "Cartum da New Yorker, nanquim e aguada",
+  "blend": [
+   "Cartum de painel único da New Yorker",
+   "Traço de nanquim a bico de pena",
+   "Aguada leve de aquarela",
+   "Legenda letreirada à mão"
+  ]
+ },
+ "o98-51": {
+  "name": "Têmpera a ovo à Andrew Wyeth",
+  "blend": [
+   "Têmpera a ovo sobre gesso",
+   "Andrew Wyeth",
+   "Pinceladas finas em hachura cruzada"
+  ]
+ },
+ "o98-52": {
+  "name": "Desenho infantil em giz de cera",
+  "blend": [
+   "Giz de cera em papel texturizado",
+   "Convenções de desenho de crianças de 6 a 8 anos",
+   "Rótulos escritos à mão"
+  ]
+ },
+ "o98-53": {
+  "name": "Aquarela transparente de outono",
+  "blend": [
+   "Veladuras de aquarela transparente",
+   "Winslow Homer e John Singer Sargent",
+   "Esboço a lápis HB"
+  ]
+ },
+ "o98-54": {
+  "name": "Litografia em pedra das Olimpíadas de Paris 1924",
+  "blend": [
+   "Litografia em quatro pedras",
+   "Pôster olímpico de 1924 de Jean Droit",
+   "Figuras anatômicas clássicas"
+  ]
+ },
+ "o98-55": {
+  "name": "Estampa em bloco artesanal do Rajastão",
+  "blend": [
+   "Índigo com reserva de barro dabu de Bagru",
+   "Bordas estampadas em bloco de Sanganer",
+   "Perfis de miniatura rajastani"
+  ]
+ },
+ "o98-56": {
+  "name": "Polaroids do álbum de família",
+  "blend": [
+   "Fotos SX-70 e Polaroid 600",
+   "Instantâneos Kodacolor",
+   "Álbum de folhas magnéticas dos anos 1970–80",
+   "Rastro de movimento em panning"
+  ]
+ },
+ "o98-57": {
+  "name": "Silhuetas rococó à luz dourada de velas",
+  "blend": [
+   "Silhuetas recortadas do século XVIII",
+   "Relevo dourado rococó",
+   "Brilho difuso de velas",
+   "Abóbada estrelada de Schinkel"
+  ]
+ },
+ "o98-58": {
+  "name": "Biplano 3D sobre o Vale do Rift",
+  "blend": [
+   "3D em tempo real com three.js",
+   "Fotografia aérea de David Watkin",
+   "Gradação cinematográfica quente",
+   "Bandos de flamingos instanciados"
+  ]
+ },
+ "o98-59": {
+  "name": "Esboço de campo de artista de guerra · pena e aguada",
+  "blend": [
+   "Traço rápido a pena",
+   "Aguada transparente",
+   "Papel de caderno de esboços",
+   "Programa de Artistas de Combate do Vietnã"
+  ]
+ },
+ "o98-60": {
+  "name": "Pintura de corte gongbi sobre seda",
+  "blend": [
+   "Gongbi zhongcai",
+   "Arquitetura a régua (jiehua)",
+   "Rolos da corte Qing",
+   "As cores de Storaro"
+  ]
+ },
+ "o98-61": {
+  "name": "Aerógrafo anos 80 + a contagem de Raymond",
+  "blend": [
+   "Ilustração a aerógrafo dos anos 80",
+   "Figuras à Patrick Nagel",
+   "Cromado à Hajime Sorayama",
+   "Anotações de desenho técnico"
+  ]
+ },
+ "o98-62": {
+  "name": "Ilustração a óleo à Rockwell",
+  "blend": [
+   "Ilustração a óleo de Norman Rockwell",
+   "Capas do Saturday Evening Post",
+   "Carro modelado em 3D repintado com pinceladas a óleo"
+  ]
+ },
+ "o98-63": {
+  "name": "Diário de campo · lápis e aquarela",
+  "blend": [
+   "Esboço a grafite",
+   "Aquarela transparente",
+   "Manuscrito em tinta ferrogálica",
+   "Esboços de campo de Bodmer e Catlin"
+  ]
+ },
+ "o98-64": {
+  "name": "Gravura em cobre de história natural colorida à mão",
+  "blend": [
+   "Gravura em cobre",
+   "Colorização à mão",
+   "Pranchas entomológicas vitorianas",
+   "Moses Harris, The Aurelian"
+  ]
+ },
+ "o98-65": {
+  "name": "Óleo de faroeste à Remington · pôr do sol e noturno",
+  "blend": [
+   "Planícies quentes de Remington",
+   "Noturnos tardios de Remington",
+   "Empaste espesso a óleo",
+   "Silhueta dos créditos de abertura"
+  ]
+ },
+ "o98-66": {
+  "name": "Filme P&B, um único casaco vermelho",
+  "blend": [
+   "Filme P&B de alto contraste",
+   "Grão de prata grosso",
+   "Cor seletiva",
+   "Janusz Kamiński"
+  ]
+ },
+ "o98-67": {
+  "name": "Livro pop-up à Sabuda sobre uma mesa real",
+  "blend": [
+   "Engenharia pop-up de Robert Sabuda",
+   "Impressão em aquarela e lápis de cor",
+   "Cartões de papel em three.js",
+   "Profundidade de campo física"
+  ]
+ },
+ "o98-68": {
+  "name": "Manuscrito iluminado com folha de ouro",
+  "blend": [
+   "Entrelaçados do Livro de Kells",
+   "Miniatura gótica (Bíblia Morgan)",
+   "Marginália do Saltério de Luttrell",
+   "Folha de ouro brunida"
+  ]
+ },
+ "o98-69": {
+  "name": "Aquarela de álbum de recortes de explorador",
+  "blend": [
+   "Aquarela transparente",
+   "Notas a caneta e escrita à mão",
+   "Colagem de recortes: fita, fotos, mapas",
+   "Gradação âmbar-sépia"
+  ]
+ },
+ "o98-70": {
+  "name": "Planta técnica que se revela em um pôr do sol 3D",
+  "blend": [
+   "Planta de arranjo geral do estaleiro",
+   "Navio em escala real em three.js",
+   "As cores de Russell Carpenter",
+   "Um único movimento de câmera contínuo"
+  ]
+ },
+ "o98-71": {
+  "name": "Miniatura elisabetana à Hilliard",
+  "blend": [
+   "Retrato em miniatura (limning)",
+   "Guache sobre velino",
+   "Ouro em concha",
+   "Natureza-morta com damasco carmim"
+  ]
+ },
+ "o98-72": {
+  "name": "Simetria suburbana + filmadora DV",
+  "blend": [
+   "Simetria frontal de Conrad Hall",
+   "Fantasia de pétalas de rosa",
+   "Vídeo de filmadora DV dos anos 1990"
+  ]
+ },
+ "o98-73": {
+  "name": "Mosaico de piso romano",
+  "blend": [
+   "Tesselas em opus vermiculatum",
+   "Esmaltes de vidro com folha de ouro",
+   "Mosaico dos gladiadores de Zliten"
+  ]
+ },
+ "o98-74": {
+  "name": "Marcador na janela e giz, padrão dourado",
+  "blend": [
+   "Lápis dermatográfico branco no vidro",
+   "Giz de lousa",
+   "Linhas de padrão douradas e luminosas",
+   "Luz de janela à Deakins"
+  ]
+ },
+ "o98-75": {
+  "name": "Palco de Fosse em vermelho e preto",
+  "blend": [
+   "Encenação de Bob Fosse",
+   "Silhuetas em contraluz com contorno vermelho",
+   "Neon e lantejoulas",
+   "Cores do pôster de Chicago (2002)"
+  ]
+ },
+ "o98-76": {
+  "name": "Aquarela à Alan Lee e mapa de Tolkien",
+  "blend": [
+   "Arte conceitual em aquarela e lápis",
+   "Mapa em pergaminho à Tolkien",
+   "Alan Lee e John Howe"
+  ]
+ },
+ "o98-77": {
+  "name": "Jogo de luta de fliperama 16 bits",
+  "blend": [
+   "Pixel art de 16 bits",
+   "HUD de jogo de luta de fliperama",
+   "Linhas de varredura de CRT"
+  ]
+ },
+ "o98-78": {
+  "name": "Rastros de luz noturnos em Los Angeles e neve",
+  "blend": [
+   "Fotografia noturna de longa exposição",
+   "Laranja de sódio e ciano neon",
+   "Brilho anamórfico e grão de filme"
+  ]
+ },
+ "o98-79": {
+  "name": "Estêncil de rua em tijolo de Boston",
+  "blend": [
+   "Estêncil de spray em várias camadas",
+   "Os ratos de Banksy",
+   "Textura de parede de tijolo vermelho",
+   "Lambe-lambe em meio-tom"
+  ]
+ },
+ "o98-80": {
+  "name": "Crepúsculo 3D no oeste do Texas, luz de Deakins",
+  "blend": [
+   "3D em tempo real (three.js)",
+   "Luz crepuscular de Roger Deakins",
+   "Gradação de filme dessaturada"
+  ]
+ },
+ "o98-81": {
+  "name": "Estúdio de quiz e laranja-azul-petróleo de Mumbai",
+  "blend": [
+   "Iluminação de game show de TV",
+   "Feixes azul-violeta e reflexos de lente",
+   "Laranja e azul-petróleo de Anthony Dod Mantle"
+  ]
+ },
+ "o98-82": {
+  "name": "Desenho técnico de manual EOD",
+  "blend": [
+   "Desenho a traço de manual técnico militar",
+   "Vista explodida",
+   "Anotações datilografadas",
+   "Tons chapados oliva e areia"
+  ]
+ },
+ "o98-83": {
+  "name": "Parede descascada e cabine de transmissão dourada",
+  "blend": [
+   "Textura pictórica de óleo digital",
+   "Parede com camadas de tinta descascando",
+   "Cabine de rádio dos anos 1930",
+   "Linhas douradas de onda sonora"
+  ]
+ },
+ "o98-84": {
+  "name": "Preto e branco polido de cinema mudo",
+  "blend": [
+   "Preto e branco de cinema mudo do fim dos anos 1920",
+   "Cartelas art déco",
+   "Luz glamour de estúdio de Hollywood"
+  ]
+ },
+ "o98-85": {
+  "name": "Página de quadrinhos dos anos 70 à Jack Kirby",
+  "blend": [
+   "Quadrinhos cósmicos de Jack Kirby",
+   "Impressão em quatro cores com pontos Ben-Day",
+   "Papel-jornal envelhecido",
+   "Arte conceitual de Lord of Light"
+  ]
+ },
+ "o98-86": {
+  "name": "Daguerreótipo em estojo, revelando",
+  "blend": [
+   "Daguerreótipo em estojo dos anos 1850",
+   "Ferrótipo colorido à mão",
+   "Natureza-morta de estúdio"
+  ]
+ },
+ "o98-87": {
+  "name": "Plano-sequência 3D nos bastidores",
+  "blend": [
+   "3D em tempo real (three.js)",
+   "Plano-sequência com câmera na mão de Lubezki",
+   "Luz de tungstênio e fluorescente",
+   "Grão de cinema digital"
+  ]
+ },
+ "o98-88": {
+  "name": "Leitor de microfichas, meio-tom de jornal",
+  "blend": [
+   "Leitor de microfichas de biblioteca",
+   "Meio-tom CMYK de jornal de 2001",
+   "Monocromático verde-fósforo"
+  ]
+ },
+ "o98-89": {
+  "name": "Retrato a óleo em azul luar",
+  "blend": [
+   "Pinceladas de retrato a óleo",
+   "Duotons azul-petróleo / magenta / violeta",
+   "Câmera meio dentro, meio fora d'água"
+  ]
+ },
+ "o98-90": {
+  "name": "Cáusticas subaquáticas 3D em azul-petróleo",
+  "blend": [
+   "3D em tempo real (three.js)",
+   "Cáusticas projetadas e feixes de luz volumétricos",
+   "Gradação azul-petróleo e dourada de Dan Laustsen"
+  ]
+ },
+ "o98-91": {
+  "name": "Cartão-postal de linho dos anos 1960",
+  "blend": [
+   "Cartão-postal de linho Curt Teich",
+   "Letras grandes “Greetings from”",
+   "Colorização à mão a aerógrafo",
+   "Fora de registro do offset"
+  ]
+ },
+ "o98-92": {
+  "name": "Axonometria de corte arquitetônico",
+  "blend": [
+   "Corte em projeção dimétrica",
+   "Poché arquitetônico e figuras de escala",
+   "Gradação de noite chuvosa"
+  ]
+ },
+ "o98-93": {
+  "name": "Pastel seco na hora mágica",
+  "blend": [
+   "Pastel seco sobre papel colorido",
+   "Paleta crepuscular da hora mágica",
+   "Textura do grão do papel"
+  ]
+ },
+ "o98-94": {
+  "name": "Scrimshaw em dente de baleia",
+  "blend": [
+   "Scrimshaw de baleeiro do século XIX",
+   "Hachuras a buril e pontilhado",
+   "Iluminação de still de produto"
+  ]
+ },
+ "o98-95": {
+  "name": "Jump cuts do multiverso em ray marching",
+  "blend": [
+   "Universos em ray marching GLSL",
+   "Um visual por universo (escritório realista, surreal cósmico, paisagem, comercial)",
+   "Mandala arco-íris de olhos esbugalhados"
+  ]
+ },
+ "o98-96": {
+  "name": "Bola de fogo 3D de partículas, grão IMAX",
+  "blend": [
+   "3D em tempo real (three.js)",
+   "Simulação de partículas na GPU",
+   "Gradação de cópia IMAX 65 mm",
+   "Fotos em alta velocidade do teste Trinity"
+  ]
+ },
+ "o98-97": {
+  "name": "Noite de neon com neve",
+  "blend": [
+   "Letreiros de tubo de neon",
+   "Reflexos no chão molhado e neve",
+   "Fotografia noturna em 35 mm"
+  ]
+ },
+ "o98-98": {
+  "name": "Perseguição 3D em estrada ondulada, teleobjetiva",
+  "blend": [
+   "3D em tempo real (three.js)",
+   "Compressão de teleobjetiva extrema",
+   "Calor ondulante e miragem na estrada",
+   "Grão fino VistaVision"
+  ]
  }
 }

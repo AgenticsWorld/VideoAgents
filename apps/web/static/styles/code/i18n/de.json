@@ -396,5 +396,852 @@
    "Unterhaltungselektronik",
    "Beauty"
   ]
+ },
+ "_chapters98": {
+  "C1": "Stummfilm & Tonfilm",
+  "C2": "Farbe & Krieg",
+  "C3": "Breitwand",
+  "C4": "Die Swinging Sixties",
+  "C5": "New Hollywood",
+  "C6": "Die Blockbuster-Ära",
+  "C7": "Ende des Jahrhunderts",
+  "C8": "Das neue Jahrtausend",
+  "C9": "Das Indie-Jahrzehnt",
+  "C10": "Hier & Jetzt"
+ },
+ "o98-01": {
+  "name": "Stummfilm-Luftkampf in 3D, viragiertes Ortho-Schwarzweiß",
+  "blend": [
+   "three.js 3D",
+   "Orthochromatisches Schwarzweiß",
+   "Stummfilm-Viragierung",
+   "Projektorabnutzung und Irisblende"
+  ]
+ },
+ "o98-02": {
+  "name": "Schwarz-goldenes Art-déco-Revueplakat",
+  "blend": [
+   "Art-déco-Plakat",
+   "Metallische Airbrush-Verläufe",
+   "A. M. Cassandre",
+   "Erté-Kostüme"
+  ]
+ },
+ "o98-03": {
+  "name": "Kollwitz-Antikriegs-Holzschnitt",
+  "blend": [
+   "Holzschnitt",
+   "Käthe Kollwitz",
+   "Deutscher Expressionismus",
+   "Zweiplatten-Farbdruck"
+  ]
+ },
+ "o98-04": {
+  "name": "Sepia-Albuminpanorama von 1889",
+  "blend": [
+   "Goldgetonter Albuminabzug",
+   "Panoramafoto aus dem Wilden Westen",
+   "Handkolorierte Figur"
+  ]
+ },
+ "o98-05": {
+  "name": "MGM-Silber-Schwarzweiß-Hotelhalle in 3D",
+  "blend": [
+   "three.js 3D",
+   "MGM-Silberleinwand-Schwarzweiß",
+   "Art-déco-Interieurs",
+   "Symmetrie von oben"
+  ]
+ },
+ "o98-06": {
+  "name": "Mucha-Jugendstil-Tafel",
+  "blend": [
+   "Alphonse Mucha",
+   "Farblithografie",
+   "Jugendstil-Ornamentik"
+  ]
+ },
+ "o98-07": {
+  "name": "Schwarzweiß-Rubber-Hose-Cartoon der 1930er",
+  "blend": [
+   "Fleischer-Rubber-Hose",
+   "Cel-Malerei",
+   "Silly-Symphonies-Aquarellhintergründe",
+   "Abnutzung der Filmprojektion"
+  ]
+ },
+ "o98-08": {
+  "name": "Admiralitäts-Seekarte als Kupferstich",
+  "blend": [
+   "Admiralitätskarte des 18. Jahrhunderts",
+   "Kupferstich",
+   "Zarte Handkolorierung",
+   "Robert Dodds Aquatinta"
+  ]
+ },
+ "o98-09": {
+  "name": "Silberne Schwarzweiß-Hochzeitstortenbühne in 3D",
+  "blend": [
+   "three.js 3D",
+   "MGM-Silber-Schwarzweiß",
+   "Revue-Spektakel von 1936",
+   "Straußenfedern und Chiffon"
+  ]
+ },
+ "o98-10": {
+  "name": "Zeitungs-Buchdruck und Linienstich",
+  "blend": [
+   "Holzlettern-Schlagzeile",
+   "Buchdruck auf Zeitungspapier",
+   "Linienstich der 1890er"
+  ]
+ },
+ "o98-11": {
+  "name": "WPA-Siebdruckplakat",
+  "blend": [
+   "WPA-Siebdruck der 1930er",
+   "Irisdruck",
+   "Sechs deckende Flächenfarben"
+  ]
+ },
+ "o98-12": {
+  "name": "Technicolor-Impasto-Ölmalerei",
+  "blend": [
+   "Impasto-Ölmalerei",
+   "Spachtel",
+   "Technicolor-Palette von 1939",
+   "Epische Plakatmalerei"
+  ]
+ },
+ "o98-13": {
+  "name": "Gotische Kohlezeichnung",
+  "blend": [
+   "Weidenkohle",
+   "Radiergummi-Aufhellungen und Verwischen",
+   "William Kentridge",
+   "Gotische Spannung"
+  ]
+ },
+ "o98-14": {
+  "name": "Walisisches Tal in Gouache",
+  "blend": [
+   "Deckende Gouache",
+   "Kyffin Williams' Spachtellandschaft",
+   "Plakatfarben von 1941"
+  ]
+ },
+ "o98-15": {
+  "name": "Heimatfront-Steinlithografie",
+  "blend": [
+   "Steinlithografie mit Kreide-Schattenplatte",
+   "Weltkriegsplakate von Frank Newbould und Abram Games",
+   "Palette des britischen Informationsministeriums"
+  ]
+ },
+ "o98-16": {
+  "name": "Studio-Glamour in Schwarzweiß",
+  "blend": [
+   "Airbrush-retuschierte Glamour-Porträts",
+   "Studiolicht von Arthur Edeson",
+   "Weichzeichner und Silberkorn"
+  ]
+ },
+ "o98-17": {
+  "name": "Gotisches Buntglas im Gegenlicht",
+  "blend": [
+   "Bleiverglasung aus Hüttenglas mit Grisaille",
+   "Chartres-blaue Rauten",
+   "Juwelenfarben à la Harry Clarke"
+  ]
+ },
+ "o98-18": {
+  "name": "Schreibmaschinenkunst",
+  "blend": [
+   "Schreibmaschinenkunst mit Überschlägen",
+   "Paul Smith und Flora Stacey",
+   "Hartes Noir-Licht von John F. Seitz"
+  ]
+ },
+ "o98-19": {
+  "name": "Halbton-Doppelseite einer Illustrierten",
+  "blend": [
+   "Grobes 45°-Raster",
+   "Gregg Tolands Tiefenschärfe",
+   "Illustrierten-Layout von 1946",
+   "Orange Schmuckfarbenplatte"
+  ]
+ },
+ "o98-20": {
+  "name": "Grafit-Magazinillustration der 1940er",
+  "blend": [
+   "Grafitschraffur und verriebene Töne",
+   "Al Parker und Robert Fawcett",
+   "Motiv in Buntstift"
+  ]
+ },
+ "o98-21": {
+  "name": "Nebelburg mit Tiefenschärfe, 3D in Schwarzweiß",
+  "blend": [
+   "three.js 3D mit Volumennebel",
+   "Desmond Dickinsons Schwarzweiß mit Tiefenschärfe",
+   "Roger Furses karge romanische Kulissen"
+  ]
+ },
+ "o98-22": {
+  "name": "Holzlettern-Wahlkampfplakat",
+  "blend": [
+   "Holzlettern-Buchdruck",
+   "Hatch Show Print",
+   "Linolschnitt-Figuren",
+   "Halbton-Porträts"
+  ]
+ },
+ "o98-23": {
+  "name": "Hirschfeld-Karikatur in einer Linie",
+  "blend": [
+   "Tuschekarikatur in einer Linie",
+   "Al Hirschfelds Theaterzeichnungen",
+   "Handgeschriebene Dialoge"
+  ]
+ },
+ "o98-24": {
+  "name": "Dufy-Aquarellballett",
+  "blend": [
+   "Lockere Tuschelinie über versetzter Farbe",
+   "Raoul Dufy",
+   "Minnellis Ballettkulissen",
+   "Kaltgepresstes Aquarellpapier"
+  ]
+ },
+ "o98-25": {
+  "name": "Strobridge-Zirkuslithografie",
+  "blend": [
+   "Vierfarbige Chromolithografie",
+   "Zirkusplakate von Strobridge Litho",
+   "Flächige Farbe mit dicker schwarzer Kontur"
+  ]
+ },
+ "o98-26": {
+  "name": "High-Key-Strand in Schwarzweiß",
+  "blend": [
+   "High-Key-Schwarzweißfotografie von 1953",
+   "Burnett Guffey",
+   "Silberkorn und Halation"
+  ]
+ },
+ "o98-27": {
+  "name": "Ben-Shahn-Sozialrealismus",
+  "blend": [
+   "Zittrige Abklatsch-Tuschelinie",
+   "Flächige Tempera-Farbblöcke",
+   "Ben Shahn",
+   "Amerikanischer Sozialrealismus der 1950er"
+  ]
+ },
+ "o98-28": {
+  "name": "Kinescope von 1955 auf dem Wohnzimmerfernseher",
+  "blend": [
+   "Kinescope-Schwarzweiß",
+   "Gewölbter CRT-Bildschirm und Scanlines",
+   "Warme Wohnzimmer-Illustration der 1950er"
+  ]
+ },
+ "o98-29": {
+  "name": "Modernistischer UPA-Cartoon der 1950er",
+  "blend": [
+   "UPA-Limited-Animation",
+   "Saul Bass' Abspannanimation",
+   "Plakatfarben von 1956",
+   "Druck mit Wachskreidekorn"
+  ]
+ },
+ "o98-30": {
+  "name": "Konstruktionsblaupause als Cyanotypie",
+  "blend": [
+   "Cyanotypie-Blaupause",
+   "Übersichtszeichnung einer Holzbockbrücke",
+   "Rotstiftkorrekturen",
+   "Gouache-kolorierte Hauptfigur"
+  ]
+ },
+ "o98-31": {
+  "name": "Lautrec-Lithografie der Belle Époque",
+  "blend": [
+   "Farblithografie-Plakat",
+   "Henri de Toulouse-Lautrec",
+   "Crachis-Spritztechnik",
+   "Kostüme von Cecil Beaton"
+  ]
+ },
+ "o98-32": {
+  "name": "3D-Wagenrennen im Circus, 65-mm-Epos",
+  "blend": [
+   "Prozedurales 3D (three.js)",
+   "MGM-Camera-65-Breitwand",
+   "Technicolor-Kopiergrading",
+   "Actionregie der Second Unit"
+  ]
+ },
+ "o98-33": {
+  "name": "Saul-Bass-Linientitel in Schwarzweiß",
+  "blend": [
+   "Saul-Bass-Titeldesign",
+   "Großraumbüro in Zentralperspektive",
+   "Schwarzweiß-Filmkorn",
+   "Ein einziger warmer Akzent"
+  ]
+ },
+ "o98-34": {
+  "name": "Technicolor-Bühnenbild in 3D",
+  "blend": [
+   "Prozedurales 3D (three.js)",
+   "Technicolor-Sonnenuntergangsgrading",
+   "Bühnenbild von Boris Leven",
+   "Plakat von 1961: roter Himmel, schwarze Feuertreppe"
+  ]
+ },
+ "o98-35": {
+  "name": "Terpning-Epos-Plakat in Gouache",
+  "blend": [
+   "Plakatmalerei in Gouache und Öl",
+   "Howard Terpnings Plakat von 1962",
+   "Freddie Youngs 70-mm-Wüstenlicht"
+  ]
+ },
+ "o98-36": {
+  "name": "Handkolorierter georgianischer Satiredruck",
+  "blend": [
+   "Hogarth-Kupferstich",
+   "Handkolorierung à la Rowlandson/Gillray",
+   "Satirische Sprechblase"
+  ]
+ },
+ "o98-37": {
+  "name": "Bob-Peak-Modeillustration",
+  "blend": [
+   "Schnelle Tuschelinie",
+   "Aquarell in Rosa und Magenta",
+   "Bob Peaks Plakat von 1964",
+   "Cecil Beatons Ascot-Kostüme"
+  ]
+ },
+ "o98-38": {
+  "name": "Bilderbuch-Alpenflug in 3D",
+  "blend": [
+   "Prozedurales 3D-Gelände (three.js)",
+   "Todd-AO-Breitwandfarben",
+   "Ted McCords Hubschrauber-Eröffnung",
+   "Miyazaki-Wiesen"
+  ]
+ },
+ "o98-39": {
+  "name": "Holbein-Tudorporträt in Öl",
+  "blend": [
+   "Lasurtechnik Alter Meister",
+   "Hans Holbein, Sir Thomas More (1527)",
+   "Tudor-Interieur bei Kerzenlicht"
+  ]
+ },
+ "o98-40": {
+  "name": "Risograph-Nacht in drei Farben",
+  "blend": [
+   "Risograph-Überdruck",
+   "Orangerot des Plakats von 1967",
+   "Haskell Wexlers Nachtaußenaufnahmen",
+   "Silhouetten-Inszenierung"
+  ]
+ },
+ "o98-41": {
+  "name": "Viktorianisches Papiertheater",
+  "blend": [
+   "Pollock's Papiertheater",
+   "Handkolorierte Lithografiebögen",
+   "Ausgeschnittener Karton mit Rampenlichtschatten",
+   "Cruikshank-Karikatur"
+  ]
+ },
+ "o98-42": {
+  "name": "Warhol-Fotosiebdruck, Double Elvis",
+  "blend": [
+   "Fotosiebdruck",
+   "Andy Warhol, Double Elvis (1963)",
+   "Silberner Farbgrund",
+   "Versetzte Farbflächen"
+  ]
+ },
+ "o98-43": {
+  "name": "Kriegsanleihen-Lithografie des Zweiten Weltkriegs",
+  "blend": [
+   "Steinlithografie-Plakat",
+   "US-Kriegsanleihe- und Rekrutierungsplakate 1942–45",
+   "45°-Raster, versetzte Farbsteine"
+  ]
+ },
+ "o98-44": {
+  "name": "16-mm-Verfolgungsjagd unter der Hochbahn",
+  "blend": [
+   "three.js-3D-Straßenkulisse",
+   "16-mm-Dokumentarfilmkorn",
+   "Kaltes Grading mit cyanfarbenen Schatten"
+  ]
+ },
+ "o98-45": {
+  "name": "Rembrandt-Ölgemälde mit Oberlicht",
+  "blend": [
+   "Helldunkel-Ölmalerei",
+   "Gordon Willis' Oberlicht",
+   "Lasuren à la Rembrandt und Caravaggio"
+  ]
+ },
+ "o98-46": {
+  "name": "Saturday-Evening-Post-Illustration",
+  "blend": [
+   "Titelillustration der Saturday Evening Post",
+   "Leyendeckers kantige Modellierung",
+   "Jaroslav Gebrs Kapitelkarten"
+  ]
+ },
+ "o98-47": {
+  "name": "Handkoloriertes Sepiafoto",
+  "blend": [
+   "Getonter Silberabzug",
+   "Lewis Hines Fotos von Ellis Island",
+   "Von Hand aufgetragene Farbstoffe",
+   "3D-Figuren per Raymarching"
+  ]
+ },
+ "o98-48": {
+  "name": "Amerikanischer Realismus à la Hopper",
+  "blend": [
+   "Realismus à la Edward Hopper",
+   "Hartes, schräges Fensterlicht",
+   "Flächige Ölfelder mit gezogenen Strichen"
+  ]
+ },
+ "o98-49": {
+  "name": "Sonnenaufgang in Philadelphia, 3D auf 35 mm",
+  "blend": [
+   "three.js-3D-Stadt",
+   "35-mm-Filmlook der 1970er",
+   "Steadicam-Verfolgung und aufsteigende Kreisfahrt"
+  ]
+ },
+ "o98-50": {
+  "name": "New-Yorker-Cartoon, Tusche und Lavierung",
+  "blend": [
+   "Einzelbild-Cartoon im New Yorker",
+   "Tuschelinie mit Stahlfeder",
+   "Leichte Aquarell-Lavierung",
+   "Handgeschriebene Bildunterschrift"
+  ]
+ },
+ "o98-51": {
+  "name": "Andrew-Wyeth-Eitempera",
+  "blend": [
+   "Eitempera auf Kreidegrund",
+   "Andrew Wyeth",
+   "Feine Kreuzschraffur"
+  ]
+ },
+ "o98-52": {
+  "name": "Wachsmalstift-Kinderzeichnung",
+  "blend": [
+   "Wachsmalstift auf strukturiertem Papier",
+   "Zeichenweise von 6- bis 8-Jährigen",
+   "Handgeschriebene Beschriftungen"
+  ]
+ },
+ "o98-53": {
+  "name": "Transparentes Herbstaquarell",
+  "blend": [
+   "Transparente Aquarell-Lasuren",
+   "Winslow Homer und John Singer Sargent",
+   "HB-Bleistift-Vorzeichnung"
+  ]
+ },
+ "o98-54": {
+  "name": "Steinlithografie der Olympischen Spiele Paris 1924",
+  "blend": [
+   "Lithografie von vier Steinen",
+   "Jean Droits Olympiaplakat von 1924",
+   "Klassische anatomische Figuren"
+  ]
+ },
+ "o98-55": {
+  "name": "Rajasthanischer Handmodeldruck",
+  "blend": [
+   "Bagru-Dabu-Indigo-Reservedruck",
+   "Sanganer-Modeldruck-Bordüren",
+   "Profile der Rajasthani-Miniaturmalerei"
+  ]
+ },
+ "o98-56": {
+  "name": "Polaroids im Familienalbum",
+  "blend": [
+   "SX-70- und Polaroid-600-Abzüge",
+   "Kodacolor-Schnappschüsse",
+   "Magnetalbum der 1970er–80er",
+   "Bewegungsunschärfe beim Mitziehen"
+  ]
+ },
+ "o98-57": {
+  "name": "Rokoko-Schattenrisse im goldenen Kerzenlicht",
+  "blend": [
+   "Schattenrisse des 18. Jahrhunderts",
+   "Vergoldetes Rokoko-Relief",
+   "Kerzenlicht-Bloom",
+   "Schinkels Sternengewölbe"
+  ]
+ },
+ "o98-58": {
+  "name": "3D-Doppeldecker über dem Ostafrikanischen Graben",
+  "blend": [
+   "three.js-Echtzeit-3D",
+   "David Watkins Luftaufnahmen",
+   "Warmes Film-Grading",
+   "Instanzierte Flamingoschwärme"
+  ]
+ },
+ "o98-59": {
+  "name": "Feldskizze eines Kriegsmalers · Feder & Lavierung",
+  "blend": [
+   "Schnelle Federlinie",
+   "Transparente Lavierung",
+   "Skizzenbuchpapier",
+   "Vietnam Combat Artists Program"
+  ]
+ },
+ "o98-60": {
+  "name": "Gongbi-Hofmalerei auf Seide",
+  "blend": [
+   "Gongbi zhongcai",
+   "Architekturmalerei mit Lineal (Jiehua)",
+   "Qing-Hofrollen",
+   "Storaros Farben"
+  ]
+ },
+ "o98-61": {
+  "name": "80er-Airbrush + Raymonds Zählung",
+  "blend": [
+   "Airbrush-Illustration der 80er",
+   "Figuren à la Patrick Nagel",
+   "Chrom à la Hajime Sorayama",
+   "Beschriftungen wie in technischen Zeichnungen"
+  ]
+ },
+ "o98-62": {
+  "name": "Ölillustration im Rockwell-Stil",
+  "blend": [
+   "Ölillustration à la Norman Rockwell",
+   "Titelbilder der Saturday Evening Post",
+   "3D-modelliertes Auto, mit Ölstrichen übermalt"
+  ]
+ },
+ "o98-63": {
+  "name": "Feldtagebuch · Bleistift & Aquarell",
+  "blend": [
+   "Grafit-Vorzeichnung",
+   "Transparentes Aquarell",
+   "Handschrift in Eisengallustinte",
+   "Feldskizzen von Bodmer und Catlin"
+  ]
+ },
+ "o98-64": {
+  "name": "Handkolorierter naturkundlicher Kupferstich",
+  "blend": [
+   "Kupferstich",
+   "Handkolorierung",
+   "Viktorianische Insektentafeln",
+   "Moses Harris, The Aurelian"
+  ]
+ },
+ "o98-65": {
+  "name": "Remington-Western in Öl · Abendrot & Nocturne",
+  "blend": [
+   "Remingtons warme Prärien",
+   "Remingtons späte Nocturnes",
+   "Dickes Öl-Impasto",
+   "Silhouette im Vorspann"
+  ]
+ },
+ "o98-66": {
+  "name": "Schwarzweißfilm, ein roter Mantel",
+  "blend": [
+   "Kontrastreicher Schwarzweißfilm",
+   "Grobes Silberkorn",
+   "Selektive Farbe",
+   "Janusz Kamiński"
+  ]
+ },
+ "o98-67": {
+  "name": "Sabuda-Pop-up-Buch auf einem echten Schreibtisch",
+  "blend": [
+   "Robert Sabudas Pop-up-Technik",
+   "Druck in Aquarell und Buntstift",
+   "three.js-Papierkarten",
+   "Physikalische Schärfentiefe"
+  ]
+ },
+ "o98-68": {
+  "name": "Buchmalerei mit Blattgold",
+  "blend": [
+   "Flechtwerk aus dem Book of Kells",
+   "Gotische Miniatur (Morgan-Bibel)",
+   "Randzeichnungen des Luttrell-Psalters",
+   "Poliertes Blattgold"
+  ]
+ },
+ "o98-69": {
+  "name": "Forscher-Scrapbook in Aquarell",
+  "blend": [
+   "Transparentes Aquarell",
+   "Federnotizen und Handschrift",
+   "Scrapbook-Collage: Klebeband, Fotos, Karten",
+   "Bernstein-Sepia-Grading"
+  ]
+ },
+ "o98-70": {
+  "name": "Blaupause entwickelt sich zum 3D-Sonnenuntergang",
+  "blend": [
+   "Generalplan-Blaupause der Werft",
+   "three.js-Schiff im Originalmaßstab",
+   "Russell Carpenters Farben",
+   "Eine durchgehende Kamerafahrt"
+  ]
+ },
+ "o98-71": {
+  "name": "Elisabethanische Miniatur à la Hilliard",
+  "blend": [
+   "Porträtminiatur (Limning)",
+   "Deckfarbe auf Pergament",
+   "Muschelgold",
+   "Stillleben mit karmesinrotem Damast"
+  ]
+ },
+ "o98-72": {
+  "name": "Vorstadt-Symmetrie + DV-Camcorder",
+  "blend": [
+   "Frontale Symmetrie à la Conrad Hall",
+   "Rosenblätter-Fantasie",
+   "DV-Camcorder-Video der 1990er"
+  ]
+ },
+ "o98-73": {
+  "name": "Römisches Bodenmosaik",
+  "blend": [
+   "Opus-vermiculatum-Tesserae",
+   "Smalten aus Blattgoldglas",
+   "Gladiatorenmosaik von Zliten"
+  ]
+ },
+ "o98-74": {
+  "name": "Fenstermarker & Kreide, goldenes Muster",
+  "blend": [
+   "Weißer Fettstift auf Glas",
+   "Tafelkreide",
+   "Leuchtende goldene Musterlinien",
+   "Fensterlicht à la Deakins"
+  ]
+ },
+ "o98-75": {
+  "name": "Fosse-Bühne in Rot und Schwarz",
+  "blend": [
+   "Bob Fosses Inszenierung",
+   "Gegenlicht-Silhouetten mit roten Rändern",
+   "Neon und Pailletten",
+   "Plakatfarben von Chicago (2002)"
+  ]
+ },
+ "o98-76": {
+  "name": "Alan-Lee-Aquarell & Tolkien-Karte",
+  "blend": [
+   "Konzeptkunst in Aquarell und Bleistift",
+   "Pergamentkarte im Tolkien-Stil",
+   "Alan Lee und John Howe"
+  ]
+ },
+ "o98-77": {
+  "name": "16-Bit-Arcade-Prügelspiel",
+  "blend": [
+   "16-Bit-Pixelkunst",
+   "HUD eines Arcade-Prügelspiels",
+   "CRT-Scanlines"
+  ]
+ },
+ "o98-78": {
+  "name": "Lichtspuren in L.A. bei Nacht & Schnee",
+  "blend": [
+   "Nachtfotografie mit Langzeitbelichtung",
+   "Natriumorange und Neoncyan",
+   "Anamorphotischer Bloom und Filmkorn"
+  ]
+ },
+ "o98-79": {
+  "name": "Stencil-Graffiti auf Bostoner Backstein",
+  "blend": [
+   "Mehrlagige Sprühschablone",
+   "Banksys Ratten",
+   "Rote Backsteinwand-Textur",
+   "Halbton-Paste-up-Plakat"
+  ]
+ },
+ "o98-80": {
+  "name": "3D-Abenddämmerung in West-Texas, Deakins-Licht",
+  "blend": [
+   "Echtzeit-3D (three.js)",
+   "Roger Deakins' Dämmerlicht",
+   "Entsättigtes Film-Grading"
+  ]
+ },
+ "o98-81": {
+  "name": "Quizshow-Studio & Mumbai in Orange-Teal",
+  "blend": [
+   "Gameshow-Beleuchtung",
+   "Blauviolette Strahlen und Lens Flares",
+   "Orange-Teal von Anthony Dod Mantle"
+  ]
+ },
+ "o98-82": {
+  "name": "Strichzeichnung aus dem EOD-Technikhandbuch",
+  "blend": [
+   "Strichzeichnung aus militärischem Technikhandbuch",
+   "Explosionszeichnung",
+   "Schreibmaschinen-Beschriftungen",
+   "Flächige Oliv- und Sandtöne"
+  ]
+ },
+ "o98-83": {
+  "name": "Bröckelnde Wand & goldene Sprecherkabine",
+  "blend": [
+   "Malerische digitale Öltextur",
+   "Wand mit abblätternden Farbschichten",
+   "Rundfunkkabine der 1930er",
+   "Goldene Schallwellenlinien"
+  ]
+ },
+ "o98-84": {
+  "name": "Edles Stummfilm-Schwarzweiß",
+  "blend": [
+   "Stummfilm-Schwarzweiß der späten 1920er",
+   "Art-déco-Zwischentitel",
+   "Glamour-Licht der Hollywood-Studios"
+  ]
+ },
+ "o98-85": {
+  "name": "Jack-Kirby-Comicseite der 70er",
+  "blend": [
+   "Jack Kirbys kosmische Comics",
+   "Ben-Day-Vierfarbdruck",
+   "Vergilbtes Zeitungspapier",
+   "Konzeptkunst zu Lord of Light"
+  ]
+ },
+ "o98-86": {
+  "name": "Daguerreotypie im Etui, beim Entwickeln",
+  "blend": [
+   "Daguerreotypie im Etui, 1850er",
+   "Handkolorierte Ferrotypie",
+   "Atelier-Stillleben"
+  ]
+ },
+ "o98-87": {
+  "name": "3D-Plansequenz hinter der Bühne",
+  "blend": [
+   "Echtzeit-3D (three.js)",
+   "Lubezkis Handkamera-Plansequenz",
+   "Glühlampen- und Leuchtstofflicht",
+   "Digitales Kinokorn"
+  ]
+ },
+ "o98-88": {
+  "name": "Mikrofiche-Lesegerät, Zeitungsraster",
+  "blend": [
+   "Mikrofiche-Lesegerät der Bibliothek",
+   "CMYK-Zeitungsraster von 2001",
+   "Phosphorgrünes Monochrom"
+  ]
+ },
+ "o98-89": {
+  "name": "Mondlichtblaue Porträtmalerei in Öl",
+  "blend": [
+   "Pinselführung der Porträtmalerei in Öl",
+   "Duotöne in Teal / Magenta / Violett",
+   "Kamera halb über, halb unter Wasser"
+  ]
+ },
+ "o98-90": {
+  "name": "3D-Unterwasser-Kaustiken in Teal",
+  "blend": [
+   "Echtzeit-3D (three.js)",
+   "Projizierte Kaustiken und volumetrische Lichtstrahlen",
+   "Dan Laustsens Teal-Gold-Grading"
+  ]
+ },
+ "o98-91": {
+  "name": "Leinen-Postkarte der 1960er",
+  "blend": [
+   "Curt-Teich-Leinenpostkarte",
+   "„Greetings from“-Großbuchstaben",
+   "Airbrush-Handkolorierung",
+   "Passerversatz im Offsetdruck"
+  ]
+ },
+ "o98-92": {
+  "name": "Axonometrischer Architekturschnitt",
+  "blend": [
+   "Dimetrische Schnittzeichnung",
+   "Architektonisches Poché und Maßstabsfiguren",
+   "Grading einer Regennacht"
+  ]
+ },
+ "o98-93": {
+  "name": "Softpastell zur Magic Hour",
+  "blend": [
+   "Softpastell auf getöntem Papier",
+   "Abendpalette der Magic Hour",
+   "Papierkorn-Textur"
+  ]
+ },
+ "o98-94": {
+  "name": "Scrimshaw auf einem Walzahn",
+  "blend": [
+   "Scrimshaw eines Walfängers aus dem 19. Jh.",
+   "Stichelschraffur und Punktierung",
+   "Produktlicht auf dem Tisch"
+  ]
+ },
+ "o98-95": {
+  "name": "Raymarching-Multiversum mit Jump-Cuts",
+  "blend": [
+   "GLSL-Raymarching-Universen",
+   "Ein Look pro Universum (realistisches Büro, kosmisch-surreal, Landschaft, Werbung)",
+   "Regenbogen-Mandala mit Wackelaugen"
+  ]
+ },
+ "o98-96": {
+  "name": "3D-Partikel-Feuerball, IMAX-Korn",
+  "blend": [
+   "Echtzeit-3D (three.js)",
+   "GPU-Partikelsimulation",
+   "IMAX-65-mm-Kopiergrading",
+   "Hochgeschwindigkeitsfotos des Trinity-Tests"
+  ]
+ },
+ "o98-97": {
+  "name": "Verschneite Neonnacht",
+  "blend": [
+   "Neonröhren-Leuchtschrift",
+   "Spiegelungen auf nassem Boden und Schnee",
+   "35-mm-Nachtfotografie"
+  ]
+ },
+ "o98-98": {
+  "name": "3D-Verfolgungsjagd auf welliger Straße, Teleobjektiv",
+  "blend": [
+   "Echtzeit-3D (three.js)",
+   "Extreme Televerdichtung",
+   "Hitzeflimmern und Luftspiegelung auf der Straße",
+   "Feines VistaVision-Korn"
+  ]
  }
 }

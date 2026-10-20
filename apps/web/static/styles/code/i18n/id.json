@@ -396,5 +396,852 @@
    "Teknologi konsumen",
    "Kecantikan"
   ]
+ },
+ "_chapters98": {
+  "C1": "Film bisu & film bersuara",
+  "C2": "Warna & perang",
+  "C3": "Layar lebar",
+  "C4": "Gemerlap 60-an",
+  "C5": "New Hollywood",
+  "C6": "Era blockbuster",
+  "C7": "Akhir abad",
+  "C8": "Milenium baru",
+  "C9": "Dekade indie",
+  "C10": "Kini & di sini"
+ },
+ "o98-01": {
+  "name": "Duel udara 3D era film bisu, hitam-putih ortokromatik bernuansa amber",
+  "blend": [
+   "3D three.js",
+   "Hitam-putih ortokromatik",
+   "Pewarnaan film bisu",
+   "Goresan proyektor dan bukaan iris"
+  ]
+ },
+ "o98-02": {
+  "name": "Poster revue Art Deco hitam-emas",
+  "blend": [
+   "Poster Art Deco",
+   "Gradasi metalik airbrush",
+   "A. M. Cassandre",
+   "Kostum Erté"
+  ]
+ },
+ "o98-03": {
+  "name": "Cukil kayu antiperang ala Kollwitz",
+  "blend": [
+   "Cukil kayu",
+   "Käthe Kollwitz",
+   "Ekspresionisme Jerman",
+   "Cetak warna dua blok"
+  ]
+ },
+ "o98-04": {
+  "name": "Panorama albumen sepia 1889",
+  "blend": [
+   "Cetak albumen bernada emas",
+   "Foto panorama perbatasan Barat",
+   "Figur diwarnai tangan"
+  ]
+ },
+ "o98-05": {
+  "name": "Lobi 3D hitam-putih perak MGM",
+  "blend": [
+   "3D three.js",
+   "Hitam-putih layar perak MGM",
+   "Interior Art Deco",
+   "Simetri dari atas"
+  ]
+ },
+ "o98-06": {
+  "name": "Panel Art Nouveau ala Mucha",
+  "blend": [
+   "Alphonse Mucha",
+   "Litografi berwarna",
+   "Ornamen Art Nouveau"
+  ]
+ },
+ "o98-07": {
+  "name": "Kartun rubber hose hitam-putih 1930-an",
+  "blend": [
+   "Rubber hose Fleischer",
+   "Pewarnaan cel",
+   "Latar cat air Silly Symphonies",
+   "Keausan film proyeksi"
+  ]
+ },
+ "o98-08": {
+  "name": "Peta laut Admiralty gravir tembaga",
+  "blend": [
+   "Peta Admiralty abad ke-18",
+   "Gravir pelat tembaga",
+   "Pewarnaan tangan tipis",
+   "Aquatint Robert Dodd"
+  ]
+ },
+ "o98-09": {
+  "name": "Panggung kue pengantin 3D hitam-putih perak",
+  "blend": [
+   "3D three.js",
+   "Hitam-putih perak MGM",
+   "Tontonan revue 1936",
+   "Bulu burung unta dan sifon"
+  ]
+ },
+ "o98-10": {
+  "name": "Letterpress koran dan gravir garis",
+  "blend": [
+   "Judul huruf kayu",
+   "Letterpress di kertas koran",
+   "Gravir garis 1890-an"
+  ]
+ },
+ "o98-11": {
+  "name": "Poster sablon WPA",
+  "blend": [
+   "Sablon WPA 1930-an",
+   "Tinta split-fountain",
+   "Enam tinta datar opak"
+  ]
+ },
+ "o98-12": {
+  "name": "Lukisan minyak impasto Technicolor",
+  "blend": [
+   "Minyak impasto",
+   "Pisau palet",
+   "Palet Technicolor 1939",
+   "Lukisan poster epik"
+  ]
+ },
+ "o98-13": {
+  "name": "Gambar arang gotik",
+  "blend": [
+   "Arang vine",
+   "Sorotan penghapus dan usapan jari",
+   "William Kentridge",
+   "Ketegangan gotik"
+  ]
+ },
+ "o98-14": {
+  "name": "Guas lembah Wales",
+  "blend": [
+   "Guas opak",
+   "Lanskap pisau palet Kyffin Williams",
+   "Warna poster 1941"
+  ]
+ },
+ "o98-15": {
+  "name": "Poster litografi batu masa perang Inggris",
+  "blend": [
+   "Litografi batu dengan pelat bayangan krayon",
+   "Poster PD II Frank Newbould dan Abram Games",
+   "Palet Ministry of Information"
+  ]
+ },
+ "o98-16": {
+  "name": "Hitam-putih glamor studio",
+  "blend": [
+   "Potret still glamor airbrush",
+   "Pencahayaan studio Arthur Edeson",
+   "Filter difusi dan butiran perak"
+  ]
+ },
+ "o98-17": {
+  "name": "Kaca patri gotik bercahaya belakang",
+  "blend": [
+   "Kaca pot-metal berbingkai timah dengan grisaille",
+   "Kotak-kotak biru Chartres",
+   "Warna permata Harry Clarke"
+  ]
+ },
+ "o98-18": {
+  "name": "Seni karakter mesin ketik",
+  "blend": [
+   "Seni mesin ketik dengan ketikan bertumpuk",
+   "Paul Smith dan Flora Stacey",
+   "Noir cahaya keras John F. Seitz"
+  ]
+ },
+ "o98-19": {
+  "name": "Halaman ganda halftone majalah foto",
+  "blend": [
+   "Halftone kasar 45°",
+   "Fokus dalam Gregg Toland",
+   "Tata letak majalah foto 1946",
+   "Pelat oranye spot"
+  ]
+ },
+ "o98-20": {
+  "name": "Ilustrasi majalah grafit 1940-an",
+  "blend": [
+   "Arsiran grafit dan nada usap",
+   "Al Parker dan Robert Fawcett",
+   "Subjek pensil warna"
+  ]
+ },
+ "o98-21": {
+  "name": "Kastil berkabut fokus dalam, 3D hitam-putih",
+  "blend": [
+   "3D three.js dengan kabut volumetrik",
+   "Hitam-putih fokus dalam Desmond Dickinson",
+   "Set Romanesque polos Roger Furse"
+  ]
+ },
+ "o98-22": {
+  "name": "Poster kampanye huruf kayu",
+  "blend": [
+   "Letterpress huruf kayu",
+   "Hatch Show Print",
+   "Figur cukil lino",
+   "Potret halftone"
+  ]
+ },
+ "o98-23": {
+  "name": "Karikatur satu garis ala Hirschfeld",
+  "blend": [
+   "Karikatur tinta satu garis",
+   "Gambar teater Al Hirschfeld",
+   "Dialog tulisan tangan"
+  ]
+ },
+ "o98-24": {
+  "name": "Balet cat air ala Dufy",
+  "blend": [
+   "Garis tinta lepas di atas warna bergeser",
+   "Raoul Dufy",
+   "Set balet Minnelli",
+   "Kertas cat air cold-press"
+  ]
+ },
+ "o98-25": {
+  "name": "Litografi sirkus Strobridge",
+  "blend": [
+   "Kromolitografi empat tinta",
+   "Poster sirkus Strobridge Litho",
+   "Tinta datar dengan kontur hitam tebal"
+  ]
+ },
+ "o98-26": {
+  "name": "Hitam-putih pantai high-key",
+  "blend": [
+   "Fotografi hitam-putih high-key 1953",
+   "Burnett Guffey",
+   "Butiran perak dan halasi"
+  ]
+ },
+ "o98-27": {
+  "name": "Realisme sosial Ben Shahn",
+  "blend": [
+   "Garis tinta blot yang bergetar",
+   "Blok warna tempera datar",
+   "Ben Shahn",
+   "Realisme sosial Amerika 1950-an"
+  ]
+ },
+ "o98-28": {
+  "name": "Kinescope 1955 di TV ruang keluarga",
+  "blend": [
+   "Kinescope hitam-putih",
+   "Layar CRT melengkung dan garis pindai",
+   "Ilustrasi ruang keluarga 1950-an yang hangat"
+  ]
+ },
+ "o98-29": {
+  "name": "Kartun modernis UPA 1950-an",
+  "blend": [
+   "Animasi terbatas UPA",
+   "Animasi kredit akhir Saul Bass",
+   "Warna poster 1956",
+   "Cetak berbutir krayon"
+  ]
+ },
+ "o98-30": {
+  "name": "Cetak biru teknik sianotipe",
+  "blend": [
+   "Cetak biru sianotipe",
+   "Gambar tata letak umum jembatan kayu",
+   "Revisi pensil merah",
+   "Tokoh utama berwarna guas"
+  ]
+ },
+ "o98-31": {
+  "name": "Litografi Belle Époque ala Lautrec",
+  "blend": [
+   "Poster litografi berwarna",
+   "Henri de Toulouse-Lautrec",
+   "Percikan tinta crachis",
+   "Kostum Cecil Beaton"
+  ]
+ },
+ "o98-32": {
+  "name": "Balap kereta perang 3D di Circus, epik 65mm",
+  "blend": [
+   "3D prosedural (three.js)",
+   "Layar lebar MGM Camera 65",
+   "Grading cetak Technicolor",
+   "Adegan aksi unit kedua"
+  ]
+ },
+ "o98-33": {
+  "name": "Judul garis Saul Bass hitam-putih",
+  "blend": [
+   "Desain judul Saul Bass",
+   "Kantor perspektif satu titik",
+   "Butiran film hitam-putih",
+   "Satu aksen hangat"
+  ]
+ },
+ "o98-34": {
+  "name": "Set panggung 3D Technicolor",
+  "blend": [
+   "3D prosedural (three.js)",
+   "Grading senja Technicolor",
+   "Desain set Boris Leven",
+   "Poster 1961: langit merah, tangga darurat hitam"
+  ]
+ },
+ "o98-35": {
+  "name": "Guas poster epik Terpning",
+  "blend": [
+   "Lukisan poster guas dan minyak",
+   "Poster 1962 Howard Terpning",
+   "Cahaya gurun 70mm Freddie Young"
+  ]
+ },
+ "o98-36": {
+  "name": "Cetakan satire era Georgian diwarnai tangan",
+  "blend": [
+   "Gravir tembaga Hogarth",
+   "Pewarnaan tangan ala Rowlandson/Gillray",
+   "Balon dialog satire"
+  ]
+ },
+ "o98-37": {
+  "name": "Ilustrasi mode Bob Peak",
+  "blend": [
+   "Garis tinta cepat",
+   "Cat air merah muda dan magenta",
+   "Poster 1964 Bob Peak",
+   "Kostum Ascot Cecil Beaton"
+  ]
+ },
+ "o98-38": {
+  "name": "Pemandangan udara Alpen 3D ala buku cerita",
+  "blend": [
+   "Medan 3D prosedural (three.js)",
+   "Warna layar lebar Todd-AO",
+   "Pembuka helikopter Ted McCord",
+   "Padang rumput Miyazaki"
+  ]
+ },
+ "o98-39": {
+  "name": "Potret Tudor cat minyak ala Holbein",
+  "blend": [
+   "Glasir minyak maestro klasik",
+   "Hans Holbein, Sir Thomas More (1527)",
+   "Interior Tudor diterangi lilin"
+  ]
+ },
+ "o98-40": {
+  "name": "Malam Risograph tiga tinta",
+  "blend": [
+   "Cetak tumpuk Risograph",
+   "Oranye-merah poster 1967",
+   "Eksterior malam Haskell Wexler",
+   "Penataan siluet"
+  ]
+ },
+ "o98-41": {
+  "name": "Teater mainan era Victoria",
+  "blend": [
+   "Teater mainan Pollock's",
+   "Lembar litografi diwarnai tangan",
+   "Karton potong dengan bayangan lampu kaki panggung",
+   "Karikatur Cruikshank"
+  ]
+ },
+ "o98-42": {
+  "name": "Sablon foto Warhol, Double Elvis",
+  "blend": [
+   "Sablon foto",
+   "Andy Warhol, Double Elvis (1963)",
+   "Dasar cat perak",
+   "Blok warna meleset register"
+  ]
+ },
+ "o98-43": {
+  "name": "Litografi obligasi perang PD II",
+  "blend": [
+   "Poster litografi batu",
+   "Poster obligasi perang dan rekrutmen AS 1942–45",
+   "Halftone 45°, batu warna meleset register"
+  ]
+ },
+ "o98-44": {
+  "name": "Kejar-kejaran di bawah rel layang, 16mm",
+  "blend": [
+   "Set jalan 3D three.js",
+   "Butiran dokumenter 16mm",
+   "Grading cetak dingin dengan bayangan sian"
+  ]
+ },
+ "o98-45": {
+  "name": "Lukisan minyak cahaya atas ala Rembrandt",
+  "blend": [
+   "Lukisan minyak chiaroscuro",
+   "Cahaya atas Gordon Willis",
+   "Glasir ala Rembrandt dan Caravaggio"
+  ]
+ },
+ "o98-46": {
+  "name": "Ilustrasi Saturday Evening Post",
+  "blend": [
+   "Ilustrasi sampul Saturday Evening Post",
+   "Pemodelan blok ala Leyendecker",
+   "Kartu bab Jaroslav Gebr"
+  ]
+ },
+ "o98-47": {
+  "name": "Foto sepia diwarnai tangan",
+  "blend": [
+   "Cetak perak bernada",
+   "Foto Ellis Island Lewis Hine",
+   "Pewarna disapu tangan",
+   "Figur 3D ray-marching"
+  ]
+ },
+ "o98-48": {
+  "name": "Realisme Amerika ala Hopper",
+  "blend": [
+   "Realisme Edward Hopper",
+   "Cahaya jendela miring bertepi tajam",
+   "Bidang minyak datar dengan sapuan seret"
+  ]
+ },
+ "o98-49": {
+  "name": "Matahari terbit Philadelphia, 3D di 35mm",
+  "blend": [
+   "Kota 3D three.js",
+   "Grading film 35mm 1970-an",
+   "Kejaran Steadicam dan orbit naik"
+  ]
+ },
+ "o98-50": {
+  "name": "Kartun New Yorker, tinta & cat air tipis",
+  "blend": [
+   "Kartun satu panel New Yorker",
+   "Garis tinta pena celup",
+   "Sapuan cat air tipis",
+   "Keterangan tulisan tangan"
+  ]
+ },
+ "o98-51": {
+  "name": "Tempera telur Andrew Wyeth",
+  "blend": [
+   "Tempera telur di atas gesso",
+   "Andrew Wyeth",
+   "Sapuan arsir silang halus"
+  ]
+ },
+ "o98-52": {
+  "name": "Gambar krayon lilin anak",
+  "blend": [
+   "Krayon lilin di kertas bertekstur",
+   "Gaya gambar anak 6–8 tahun",
+   "Label tulisan tangan"
+  ]
+ },
+ "o98-53": {
+  "name": "Cat air transparan musim gugur",
+  "blend": [
+   "Lapisan cat air transparan",
+   "Winslow Homer dan John Singer Sargent",
+   "Sketsa dasar pensil HB"
+  ]
+ },
+ "o98-54": {
+  "name": "Litografi batu Olimpiade Paris 1924",
+  "blend": [
+   "Litografi empat batu",
+   "Poster Olimpiade 1924 Jean Droit",
+   "Figur anatomi klasik"
+  ]
+ },
+ "o98-55": {
+  "name": "Cetak blok tangan Rajasthan",
+  "blend": [
+   "Perintang indigo dabu Bagru",
+   "Pinggiran cetak blok Sanganer",
+   "Profil miniatur Rajasthan"
+  ]
+ },
+ "o98-56": {
+  "name": "Polaroid album keluarga",
+  "blend": [
+   "Cetakan SX-70 dan Polaroid 600",
+   "Jepretan Kodacolor",
+   "Album halaman magnetik 1970–80-an",
+   "Coreng gerak dari panning"
+  ]
+ },
+ "o98-57": {
+  "name": "Siluet Rokoko dalam cahaya lilin keemasan",
+  "blend": [
+   "Siluet potong abad ke-18",
+   "Relief emas Rokoko",
+   "Pendar cahaya lilin",
+   "Kubah bintang Schinkel"
+  ]
+ },
+ "o98-58": {
+  "name": "Pesawat biplan 3D di atas Lembah Rift",
+  "blend": [
+   "3D real-time three.js",
+   "Fotografi udara David Watkin",
+   "Grading film hangat",
+   "Kawanan flamingo instanced"
+  ]
+ },
+ "o98-59": {
+  "name": "Sketsa lapangan seniman perang · pena & cat air tipis",
+  "blend": [
+   "Garis pena cepat",
+   "Sapuan transparan",
+   "Kertas buku sketsa",
+   "Vietnam Combat Artists Program"
+  ]
+ },
+ "o98-60": {
+  "name": "Lukisan istana gongbi di atas sutra",
+  "blend": [
+   "Gongbi zhongcai",
+   "Arsitektur garis penggaris (jiehua)",
+   "Gulungan istana Qing",
+   "Warna Storaro"
+  ]
+ },
+ "o98-61": {
+  "name": "Airbrush 80-an + hitungan Raymond",
+  "blend": [
+   "Ilustrasi airbrush 80-an",
+   "Figur Patrick Nagel",
+   "Krom Hajime Sorayama",
+   "Anotasi gambar teknik"
+  ]
+ },
+ "o98-62": {
+  "name": "Ilustrasi cat minyak ala Rockwell",
+  "blend": [
+   "Ilustrasi cat minyak Norman Rockwell",
+   "Sampul Saturday Evening Post",
+   "Mobil model 3D dilukis ulang dengan sapuan minyak"
+  ]
+ },
+ "o98-63": {
+  "name": "Jurnal lapangan · pensil & cat air",
+  "blend": [
+   "Sketsa dasar grafit",
+   "Cat air transparan",
+   "Tulisan tangan tinta besi galat",
+   "Sketsa lapangan Bodmer dan Catlin"
+  ]
+ },
+ "o98-64": {
+  "name": "Gravir tembaga sejarah alam diwarnai tangan",
+  "blend": [
+   "Gravir pelat tembaga",
+   "Pewarnaan tangan",
+   "Pelat entomologi era Victoria",
+   "Moses Harris, The Aurelian"
+  ]
+ },
+ "o98-65": {
+  "name": "Lukisan minyak Western Remington · senja & nokturno",
+  "blend": [
+   "Padang rumput hangat Remington",
+   "Nokturno akhir Remington",
+   "Impasto minyak tebal",
+   "Siluet judul pembuka"
+  ]
+ },
+ "o98-66": {
+  "name": "Film hitam-putih, satu mantel merah",
+  "blend": [
+   "Film hitam-putih kontras tinggi",
+   "Butiran perak kasar",
+   "Warna selektif",
+   "Janusz Kamiński"
+  ]
+ },
+ "o98-67": {
+  "name": "Buku pop-up Sabuda di meja sungguhan",
+  "blend": [
+   "Rekayasa pop-up Robert Sabuda",
+   "Cetak cat air dan pensil warna",
+   "Kartu kertas three.js",
+   "Kedalaman bidang fisik"
+  ]
+ },
+ "o98-68": {
+  "name": "Manuskrip iluminasi berdaun emas",
+  "blend": [
+   "Jalinan Book of Kells",
+   "Miniatur gotik (Alkitab Morgan)",
+   "Marginalia Luttrell Psalter",
+   "Daun emas dipoles"
+  ]
+ },
+ "o98-69": {
+  "name": "Cat air buku tempel penjelajah",
+  "blend": [
+   "Cat air transparan",
+   "Catatan pena dan tulisan tangan",
+   "Kolase buku tempel: selotip, foto, peta",
+   "Grading amber-sepia"
+  ]
+ },
+ "o98-70": {
+  "name": "Cetak biru menjelma senja 3D",
+  "blend": [
+   "Cetak biru tata letak umum galangan kapal",
+   "Kapal three.js berskala nyata",
+   "Warna Russell Carpenter",
+   "Satu gerakan kamera tanpa putus"
+  ]
+ },
+ "o98-71": {
+  "name": "Miniatur Elizabethan ala Hilliard",
+  "blend": [
+   "Miniatur potret (limning)",
+   "Cat opak di atas vellum",
+   "Emas kerang",
+   "Still life damask merah tua"
+  ]
+ },
+ "o98-72": {
+  "name": "Simetri pinggiran kota + camcorder DV",
+  "blend": [
+   "Simetri frontal Conrad Hall",
+   "Fantasi kelopak mawar",
+   "Video camcorder DV 1990-an"
+  ]
+ },
+ "o98-73": {
+  "name": "Mosaik lantai Romawi",
+  "blend": [
+   "Tessera opus vermiculatum",
+   "Smalti kaca daun emas",
+   "Mosaik gladiator Zliten"
+  ]
+ },
+ "o98-74": {
+  "name": "Spidol di jendela & kapur, pola emas",
+  "blend": [
+   "Spidol lilin putih di kaca",
+   "Kapur papan tulis",
+   "Garis pola emas berpendar",
+   "Cahaya jendela Deakins"
+  ]
+ },
+ "o98-75": {
+  "name": "Panggung Fosse merah dan hitam",
+  "blend": [
+   "Penataan panggung Bob Fosse",
+   "Siluet cahaya belakang bertepi merah",
+   "Neon dan payet",
+   "Warna poster Chicago 2002"
+  ]
+ },
+ "o98-76": {
+  "name": "Cat air Alan Lee & peta Tolkien",
+  "blend": [
+   "Seni konsep cat air dan pensil",
+   "Peta perkamen ala Tolkien",
+   "Alan Lee dan John Howe"
+  ]
+ },
+ "o98-77": {
+  "name": "Gim pertarungan arkade 16-bit",
+  "blend": [
+   "Seni piksel 16-bit",
+   "HUD gim pertarungan arkade",
+   "Garis pindai CRT"
+  ]
+ },
+ "o98-78": {
+  "name": "Jejak cahaya malam LA & salju",
+  "blend": [
+   "Fotografi malam eksposur panjang",
+   "Oranye lampu sodium dan sian neon",
+   "Pendar anamorfik dan butiran film"
+  ]
+ },
+ "o98-79": {
+  "name": "Stensil jalanan di bata Boston",
+  "blend": [
+   "Stensil semprot berlapis",
+   "Tikus Banksy",
+   "Tekstur dinding bata merah",
+   "Poster tempel halftone"
+  ]
+ },
+ "o98-80": {
+  "name": "Senja Texas Barat 3D, cahaya Deakins",
+  "blend": [
+   "3D real-time (three.js)",
+   "Cahaya senja Roger Deakins",
+   "Grading film desaturasi"
+  ]
+ },
+ "o98-81": {
+  "name": "Studio kuis & oranye-teal Mumbai",
+  "blend": [
+   "Pencahayaan acara kuis TV",
+   "Sinar biru-violet dan lens flare",
+   "Oranye dan teal Anthony Dod Mantle"
+  ]
+ },
+ "o98-82": {
+  "name": "Gambar garis manual teknis penjinak bom (EOD)",
+  "blend": [
+   "Gambar garis manual teknis militer",
+   "Diagram gambar urai",
+   "Anotasi huruf mesin ketik",
+   "Warna datar zaitun dan pasir"
+  ]
+ },
+ "o98-83": {
+  "name": "Dinding mengelupas & bilik siaran emas",
+  "blend": [
+   "Tekstur cat minyak digital yang painterly",
+   "Dinding cat berlapis yang mengelupas",
+   "Bilik siaran 1930-an",
+   "Garis gelombang suara emas"
+  ]
+ },
+ "o98-84": {
+  "name": "Hitam-putih film bisu yang apik",
+  "blend": [
+   "Hitam-putih film bisu akhir 1920-an",
+   "Kartu intertitle Art Deco",
+   "Cahaya glamor studio Hollywood"
+  ]
+ },
+ "o98-85": {
+  "name": "Halaman komik 70-an Jack Kirby",
+  "blend": [
+   "Komik kosmik Jack Kirby",
+   "Cetak empat warna Ben-Day",
+   "Kertas koran menguning",
+   "Seni konsep Lord of Light"
+  ]
+ },
+ "o98-86": {
+  "name": "Dagerotipe berkotak yang sedang muncul",
+  "blend": [
+   "Dagerotipe berkotak 1850-an",
+   "Tintype diwarnai tangan",
+   "Still life studio foto"
+  ]
+ },
+ "o98-87": {
+  "name": "Long take belakang panggung 3D",
+  "blend": [
+   "3D real-time (three.js)",
+   "Long take genggam Lubezki",
+   "Lampu tungsten dan fluoresen",
+   "Butiran sinema digital"
+  ]
+ },
+ "o98-88": {
+  "name": "Pembaca mikrofis, halftone koran",
+  "blend": [
+   "Pembaca mikrofis perpustakaan",
+   "Halftone CMYK koran 2001",
+   "Monokrom hijau fosfor"
+  ]
+ },
+ "o98-89": {
+  "name": "Potret cat minyak biru cahaya bulan",
+  "blend": [
+   "Sapuan kuas potret cat minyak",
+   "Duoton teal / magenta / violet",
+   "Kamera terbelah garis air"
+  ]
+ },
+ "o98-90": {
+  "name": "Kaustik teal bawah air 3D",
+  "blend": [
+   "3D real-time (three.js)",
+   "Kaustik terproyeksi dan berkas cahaya volumetrik",
+   "Grading teal-emas Dan Laustsen"
+  ]
+ },
+ "o98-91": {
+  "name": "Kartu pos linen 1960-an",
+  "blend": [
+   "Kartu pos linen Curt Teich",
+   "Huruf besar \"Greetings from\"",
+   "Pewarnaan tangan airbrush",
+   "Register meleset cetak offset"
+  ]
+ },
+ "o98-92": {
+  "name": "Aksonometri potongan arsitektur",
+  "blend": [
+   "Gambar potongan dimetrik",
+   "Poché arsitektur dan figur skala",
+   "Grading warna malam hujan"
+  ]
+ },
+ "o98-93": {
+  "name": "Pastel lunak magic hour",
+  "blend": [
+   "Pastel lunak di kertas berwarna",
+   "Palet senja magic hour",
+   "Tekstur butir kertas"
+  ]
+ },
+ "o98-94": {
+  "name": "Scrimshaw pada gigi paus",
+  "blend": [
+   "Scrimshaw pemburu paus abad ke-19",
+   "Arsiran dan titik burin",
+   "Pencahayaan produk di atas meja"
+  ]
+ },
+ "o98-95": {
+  "name": "Jump cut multiverse ray-marching",
+  "blend": [
+   "Semesta ray-marching GLSL",
+   "Satu gaya per semesta (realisme kantor, surealis kosmik, lanskap, iklan)",
+   "Mandala pelangi mata boneka"
+  ]
+ },
+ "o98-96": {
+  "name": "Bola api partikel 3D, butiran IMAX",
+  "blend": [
+   "3D real-time (three.js)",
+   "Simulasi partikel GPU",
+   "Grading cetak IMAX 65 mm",
+   "Foto kecepatan tinggi uji Trinity"
+  ]
+ },
+ "o98-97": {
+  "name": "Malam neon bersalju",
+  "blend": [
+   "Papan nama tabung neon",
+   "Pantulan jalan basah dan salju",
+   "Fotografi malam 35 mm"
+  ]
+ },
+ "o98-98": {
+  "name": "Kejar-kejaran jalan naik-turun 3D, lensa panjang",
+  "blend": [
+   "3D real-time (three.js)",
+   "Kompresi telefoto ekstrem",
+   "Udara panas bergelombang dan fatamorgana jalan",
+   "Butiran halus VistaVision"
+  ]
  }
 }

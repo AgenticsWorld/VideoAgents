@@ -15757,6 +15757,11 @@ def _code_video_style_text(slug: str) -> str:
     """演示视频项目 brief.md「设计风格」小节:风格名 + 风格规范文件路径(全文太长不贴,成员按路径读)。"""
     from modules.codevideo import style_row
     row = style_row(slug) or {}
+    if row.get("light"):
+        return (f"{row.get('cn') or slug} / {row.get('en') or slug}(演示视频轻量风格 `{slug}`:OPUSCAR 98 第 {row.get('no')} 部"
+                f"「{row.get('film_zh') or row.get('film')}」用的风格提示)。提示原文在 agents/workflows/codevideo/styles/opuscar98/"
+                "styles.json,立项锁定时生成 codevideo/style/STYLE.md;轻量风格只有一段提示,材质、字体、运动、镜头语法与声音调色板中"
+                "提示没写到的部分由导演在方案里补全;故事、结构、镜头与时长由本片自己导演")
     return (f"{row.get('cn') or slug} / {row.get('en') or slug}(演示视频风格库 `{slug}`)。风格规范见 "
             f"agents/workflows/codevideo/styles/{slug}/STYLE.md(立项后锁定副本在 codevideo/style/STYLE.md):"
             "全片的画面材质、色彩、字体、运动、镜头语法、声音调色板与媒介原生手法以它为准;故事、结构、镜头与时长由本片自己导演")
@@ -15867,13 +15872,17 @@ def _typed_project_init_message(name: str, cfg: dict) -> str:
         has_brief = (pdir / "brief.md").is_file()
         rows = [("主题 / 文稿", f"refs/text/{PROJECT_TRANSCRIPT}(约 {t_len} 字)" if t_len else
                  ("未单独提供(主题写在 brief.md 内容定位里)" if has_brief else "**未提供(必需:主题或文稿至少一项)**")),
-                ("风格", f"{row.get('cn') or cv['code_style']} / {row.get('en') or ''}(`{cv['code_style']}`,"
-                 f"agents/workflows/codevideo/styles/{cv['code_style']}/STYLE.md)" if cv["code_style"] else "**未选(必需)**"),
+                ("风格", (f"{row.get('cn') or cv['code_style']} / {row.get('en') or ''}(`{cv['code_style']}`,"
+                          + ("轻量风格,cv0 锁定时生成 codevideo/style/STYLE.md)" if row.get("light") else
+                             f"agents/workflows/codevideo/styles/{cv['code_style']}/STYLE.md)"))
+                 if cv["code_style"] else "**未选(必需)**"),
                 ("片长 / 帧率", f"约 {cv['length_s']} 秒 / {cv['fps']} fps"),
                 ("旁白 / 字幕", f"{'开' if cv['narration'] else '关'} / {'开' if cv['subtitles'] else '关'}"),
                 ("先审故事板", "开(cv1-board 渲关键镜,CVH1 签字后再做声音与画面)" if cv["storyboard_review"] else "关(不停顿)"),
-                ("配乐", "代码作曲(code-composer 写作曲脚本,宿主采样乐器渲染)" if cv["music_source"] == "code"
-                 else "按「生成模型」页音乐设置生成"),
+                ("配乐", {"code": "代码作曲(code-composer 写作曲脚本,宿主采样乐器渲染)",
+                          "model": "按「生成模型」页音乐设置生成,再适配片长、测节拍并把时间轴对到拍上",
+                          "library": "从项目音乐库(或参考文件「音乐」分类里的用户音乐)选曲,再适配片长、测节拍并把时间轴对到拍上"}
+                 [cv["music_source"]]),
                 ("用户素材", "、".join(mats) if mats else "无(logo、产品照、字体、录音、音乐都可在「参考文件」页补传)")]
     if ptype == "mashup":
         rows[1] = (rows[1][0], rows[1][1] + ("(同一份已写入 novel/original.txt 作 p0 的文本输入)" if t_len else ""))

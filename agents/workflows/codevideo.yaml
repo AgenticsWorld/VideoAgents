@@ -11,8 +11,12 @@
 # ① 不用任何视频生成模型、不用图像模型出画面。画面 = scene-coder 写的网页 codevideo/index.html
 #    (window.render(t) 按时间画出任意一帧),由宿主 CLI `python3 code/codevideo.py` 用无头浏览器逐帧截图、
 #    ffmpeg 编码;声音 = 旁白 TTS(旁白声线卡)+ 代码作曲(采样乐器 / 合成)+ 程序化拟音,混音脚本出成片声轨。
-#    导演与制作方法沿用 lemo-opuscar(MIT,github.com/lemomo-ai/lemo-opuscar),43 个风格的规范在
+#    导演与制作方法沿用 lemo-opuscar(MIT,github.com/lemomo-ai/lemo-opuscar),43 个完整风格的规范在
 #    agents/workflows/codevideo/styles/<slug>/STYLE.md,立项时锁定副本到 codevideo/style/。
+#    另有 98 个**轻量风格**(三期 2026-10-20,id o98-01…o98-98,OPUSCAR 98 每部片子用的一段风格提示,
+#    agents/workflows/codevideo/styles/opuscar98/styles.json):没有完整 STYLE.md 与样片源码,`codevideo.py style`
+#    锁定时按那段提示生成 codevideo/style/STYLE.md(提示原文 + 构成 + 参考 + 3 个相近完整风格),
+#    提示没写到的部分由 film-director 在 TREATMENT.md「风格补全」一节补齐。
 # ② 一个项目 = 一部片 = ep01。codevideo/timeline.json 是唯一事实源:段(sections)= 现有页面里的「场次」与
 #    「生成组」(第 i 段 → 场次号 S{i*10:03d}、组号 grp{i*10:04d}),由 `codevideo.py sync` 写成
 #    directing/ep01/shot_list.json + storyboard.json,故事板 / 分镜预览 / 后期 / 成片发布页零改动显示。
@@ -24,22 +28,30 @@
 #    check_generation_groups 等)一律不跑,由 `codevideo.py check` 的五段机检替换(见各节点 validation)。
 # ⑤ 无片头片尾 / 过场设计 / 花字 / 超分节点:渲染即按成片分辨率出(settings.json output.final_resolution
 #    × 画幅,宿主算尺寸);字幕与标题是风格的一部分,由页面自己画。
+# ⑥ 外来配乐与节拍对齐(三期 2026-10-20):music_source = model(音乐模型生成)/ library(项目音乐库或用户音乐)时,
+#    音乐是现成的,画面反过来贴它——`codevideo.py music-fit` 把曲子适配到片长(从强拍起、不够长按小节无缝循环、
+#    尾部淡出)并测出节拍网格 codevideo/music/beats.json,登记 assets/audio/bgm/ep01/cue_sheet.json 并同步项目音乐库;
+#    cv2-beatsync 用 `codevideo.py snap` 把 timeline.json 的段边界对到强拍、镜头切点与击点对到拍点(片长不变),
+#    cv3 画面在它之后才开工。代码作曲(code,默认)按时间轴写谱,天然对齐,cv2-beatsync 置 skipped。
 #
 # 输入(新建向导收,总制片在初始化工单里核对):
 #   - 主题 / 文稿:refs/text/transcript.txt(可空,主题写在 brief.md「内容定位」也可;两者至少一项)
-#   - 风格:settings.json#project.code_style(lemo-opuscar 风格 slug,必选)
+#   - 风格:settings.json#project.code_style(必选:完整风格 slug 43 个之一,或轻量风格 o98-01…o98-98)
 #   - 设置:settings.json#project = {storyboard_review(默认 true), narration(默认 true), subtitles(默认 true),
-#           length_s(默认 45), fps(24/25/30), music_source(code 默认 | model)};画幅 / 语言 / 成片分辨率沿用 output 段
+#           length_s(默认 45), fps(24/25/30), music_source(code 默认 | model | library)};画幅 / 语言 / 成片分辨率沿用 output 段
 #   - 用户素材(可选):refs/ 各分类里的 logo、产品照、字体、录音、音乐;用户声明有权使用才进片,否则画替身
 #
 # 条件节点(orchestrator 按 settings.json#project 裁定,未派发的依赖视同满足,不 HOLD):
 #   storyboard_review = false → cv1-board 与 gc1 置 skipped(不停顿,直接进声音与画面)
 #   narration_on      = project.narration == true;false → cv2-voice 置 skipped(全片无旁白)
+#   music_external    = project.music_source ∈ {model, library};code → cv2-beatsync 置 skipped(cv3-engine 依赖视同满足)
 #
 # ★宿主工具链(随 VideoAgents 本体发布):
 #   code/codevideo.py           CLI:doctor / style / demo / sync / still / board / events / readcheck / voice /
-#                               render / mix / master / check / build / info / packs(用法见文件头注释)
-#   modules/codevideo/          静态服务、Playwright 逐帧渲染、按段指纹、混音与两遍 loudnorm、机检
+#                               render / mix / master / music-fit / beats / snap / check / build / info / packs
+#                               (用法见文件头注释)
+#   modules/codevideo/          静态服务、Playwright 逐帧渲染、按段指纹、混音与两遍 loudnorm、机检、
+#                               节拍网格与时间轴对齐(beats.py,只用 numpy / scipy)
 #   modules/codevideo/lib/      页面库 /core/lib.js、/core/three/post.js、/core/post/crt.js、/core/fonts/、
 #                               three.js r170(页面写 /node_modules/three/…)、音频 core.audio.{sampler,sfx}
 #   modules/genmedia.py music|sfx --provider code --script …   代码作曲 / 代码音效(脚本在宿主库环境下运行)
@@ -109,11 +121,16 @@ phases:
         # host_toolchain_verified:doctor 退出 0(Chromium / ffmpeg / Python 依赖 / 宿主库 / 风格库);
         #   webgl 软件渲染(「!」项)不拦,但 3D / 着色器风格须在 brief.json 记风险并告知用户渲染会慢;
         # style_locked:codevideo/style/lock.json 的 slug == settings.json#project.code_style;风格未选 → 停下向用户要,不得替用户选;
+        #   轻量风格(code_style = o98-NN,lock.json light=true):style 命令按 OPUSCAR 98 那段风格提示生成 STYLE.md 与 style.json,
+        #   lock.json 带 related(3 个相近完整风格);brief.json 记「轻量风格,方案须补全」;
+        # music_provider_ready(仅当 music_source = model):`python3 modules/genmedia.py info` 的 music 行不是 code(代码作曲)——
+        #   是 code 就停在本节点上报用户「须先到「🎨 生成模型」页把音乐渠道换成一个音乐模型」,不得替用户改设置、不得改走代码作曲;
+        #   music_source = code / library 时本项不适用;
         # brief_complete:brief.json 写齐 主题(取 refs/text/transcript.txt 与 brief.md)、风格、目标片长、画幅与渲染尺寸
         #   (`codevideo.py info` 的 size)、fps、语言、旁白 / 字幕 / 先审故事板 / 配乐来源、用户素材清单
         #   (refs/ 逐件:用途 + 用户是否声明有权使用;未声明的一律画替身,不进片)。
         validation:
-          auto: [schema, host_toolchain_verified, style_locked, brief_complete, ascii_filename]
+          auto: [schema, host_toolchain_verified, style_locked, music_provider_ready, brief_complete, ascii_filename]
           rubric: extraction_v1
 
   - id: cv1
@@ -131,13 +148,17 @@ phases:
         # treatment_sections_complete:TREATMENT.md 八项齐(三个候选结构与选择理由 / logline 与弧线 / 对标参考
         #   学什么不学什么 / 镜头表(景别·角度·运动·时长·为什么)/ 逐秒节拍 / cue map(速度·小节网格·每段配器·
         #   每个切点与击点落在第几拍)/ 声音设计表(每段 环境床·主要拟音·音乐状态)/ 字幕与标题设计);
+        # style_supplement_written(仅当风格是轻量风格 o98-NN):TREATMENT.md 有「风格补全」一节,逐项写 材质 / 色彩补充 / 字体与字幕 /
+        #   运动质感 / 镜头语法 / 声音调色板 / 原生手法 的取舍与依据(从风格提示与参考作品推出,不是抄别的片子);完整风格时不适用;
+        # cue_map_for_external_music(仅当 music_source ∈ model / library):cue map 先按预期速度写,写明「外来音乐,cv2-beatsync
+        #   会按实测网格改」;不要为外来音乐设计「必须落在某个精确秒数」的击点;
         # timeline_valid + directing_synced:写完 timeline.json 跑 `python3 code/codevideo.py sync --project <slug>` 退出 0;
         #   dur 贴近 settings.json#project.length_s(偏差 > 20% 在方案里写明理由);size 取 `codevideo.py info` 的 size;
         # lines_match_timeline:旁白开时 lines.json 每条 id 在 timeline.lines 里有时点,无旁白时不写 lines.json;
         #   数字在 text 里写成阿拉伯数字、在 say 里写成读法(TTS 读法与字幕写法分开)。
         validation:
-          auto: [treatment_sections_complete, timeline_valid, directing_synced, lines_match_timeline,
-                 demo_opened_after_treatment, ascii_filename]
+          auto: [treatment_sections_complete, style_supplement_written, cue_map_for_external_music, timeline_valid,
+                 directing_synced, lines_match_timeline, demo_opened_after_treatment, ascii_filename]
           rubric: creative_v1
       - id: cv1-look
         agent: 18-code-video/scene-coder
@@ -145,7 +166,9 @@ phases:
         outputs: [codevideo/index.html, "codevideo/stills/look_*.jpg", codevideo/sheets/look_sheet.jpg]
         # 用**正式的绘制代码**证明风格(不是示意图):有角色 = model sheet(转面 / 3–4 表情 / 2–3 关键姿势 / 色板)
         #   + 2 张风格帧;无角色 = 片中 3 张风格帧(其一为招牌镜头)。逐张对照 codevideo/style/STYLE.md 自检。
-        # 写完方案后可 `python3 code/codevideo.py demo --project <slug>` 拉样片源码学技法(只读,禁止整段照搬故事与镜头)。
+        # 写完方案后可 `python3 code/codevideo.py demo --project <slug>` 拉样片源码学技法(只读,禁止整段照搬故事与镜头);
+        #   轻量风格没有自己的样片,用 `--slug <完整风格>` 拉相近风格的(lock.json related 里那 3 个优先),只学渲染技法。
+        #   轻量风格的风格帧对照的是生成的 STYLE.md(提示原文)+ TREATMENT.md「风格补全」。
         # 命令:python3 code/codevideo.py still --project <slug> <t…> --prefix look_ --sheet
         #       python3 code/codevideo.py check --project <slug> --stage contract
         # look_frames_reviewed:result.json 逐张写 对照 STYLE.md 哪几条、发现的偏差与处置。
@@ -162,6 +185,8 @@ phases:
         # 关键镜画面须已是成片质量的构图与风格(其余镜可以还没写);故事板页「📋 故事板」直接显示这些帧(provider=code)。
         # board_rendered:index.json 里本次 provider=code 的条目数 ∈ [6, 9](镜头总数不足 6 时 = 全部);
         # board_brief_written:result.json 写 logline、每镜一句画面说明、最没把握的一两点(给 CVH1 签字用)。
+        # 外来配乐(music_source ∈ model / library):CVH1 签的是构图与风格;cv2-beatsync 之后若有关键镜移动 > 0.5 s,
+        #   由 scene-coder 在 cv3-engine 开工前重跑一次 `codevideo.py board` 并在回执里说明(不重新发签字单)。
         validation:
           auto: [board_rendered, board_sheet_present, timeline_valid, board_brief_written]
           rubric: visual_plan_v1
@@ -193,17 +218,55 @@ phases:
       - id: cv2-score
         agent: 18-code-video/code-composer
         depends_on: [gc1, cv1-treatment]
-        outputs: [codevideo/music/score.py, codevideo/music/score.wav]
-        # music_source = code(默认):照 TREATMENT.md 的 cue map 写作曲脚本 codevideo/music/score.py,宿主渲染:
+        outputs: [codevideo/music/score.wav]
+        # 按 settings.json#project.music_source 三选一(只做命中的那一支):
+        # ── code(默认,代码作曲):照 TREATMENT.md 的 cue map 写作曲脚本 codevideo/music/score.py,宿主渲染:
         #   python3 modules/genmedia.py music --provider code --prompt "<英文一句描述>" \
         #     --output codevideo/music/score.wav --script codevideo/music/score.py --duration <timeline dur>
         #   (同时写出 score.meta.json 与 score.wav.credits.json——用到的采样乐器署名,CREDITS 必收)
-        # music_source = model:按「生成模型」页音乐设置生成(去掉 --provider code 与 --script,只写 --prompt),
-        #   画面击点改由 film-director 按实测成品对齐;回执写明生成渠道与模型。
-        # score_rendered:score.wav 存在、≥ 片长、非静音;hits_on_grid:timeline.hits 每个击点落在 cue map 写的拍上
-        #   (脚本里用同一份 timeline.json 计算时间,不手抄秒数);low_end_balanced:20–120 Hz 能量不高出其余频段约 3 dB。
+        #   hits_on_grid:timeline.hits 每个击点落在 cue map 写的拍上(脚本里用同一份 timeline.json 计算时间,不手抄秒数);
+        #   low_end_balanced:20–120 Hz 能量不高出其余频段约 3 dB。
+        # ── model(音乐模型生成,外来音乐):先 `python3 modules/genmedia.py info` 确认 music 行不是 code(是 code 就停下上报,
+        #   不得替用户改设置、不得自行加 --provider code 改走代码作曲),再生成比片长多约 4 s 的原始曲:
+        #   python3 modules/genmedia.py music --prompt "<英文:风格 / 情绪 / 配器 / 速度 BPM / 结构>" \
+        #     --output codevideo/music/raw.mp3 --duration <timeline dur + 4>
+        #   python3 code/codevideo.py music-fit --project <slug> --file codevideo/music/raw.mp3 [--mood "<情绪>"]
+        #   回执写明生成渠道与模型(genmedia info 的 music 行;宿主写进 cue sheet 的 license 可能缺 provider / model,CREDITS 以回执为准)。
+        # ── library(项目音乐库 / 用户音乐,外来音乐):先查用户音乐 refs/music/(按 refs/NOTES.md 注释的用途),再查项目音乐库:
+        #   python3 code/music_library.py search --project <slug> --query "<关键词>" --min-duration <timeline dur>
+        #   选定后:python3 code/codevideo.py music-fit --project <slug> --track MUS-NNNN    # 或 --file refs/music/<文件>
+        #   不够长的曲子宿主按小节无缝循环;都不合适就停下上报(写清缺什么样的曲子),不得改走音乐模型或代码作曲。
+        # 外来音乐的 music-fit 产出 codevideo/music/score.wav(片长,48 kHz)+ beats.json(bpm / beats / downbeats / meter /
+        #   confidence / audio_sha256 / license),并写 assets/audio/bgm/{ep}/cue_sheet.json 一条 cue、同步项目音乐库
+        #   (曲目使用记录;模型生成的新曲入库)。music-fit 之后不得再改 score.wav(改了网格就对不上,要换曲就重跑 music-fit)。
+        # score_rendered:score.wav 存在、≥ 片长、非静音;score_provider_matches_setting:取法与 music_source 一致(code 有 score.py;
+        #   model / library 有 beats.json 且 license.source 对得上:generated / library / user_provided);
+        # music_fit_done(仅外来音乐):beats.json 在、audio_sha256 == score.wav、confidence 写进回执(< 0.3 时说明节奏不清楚、
+        #   对拍会不准,交 film-director 决定 cv2-beatsync 用 --sections beat 还是 off)。
         validation:
-          auto: [score_rendered, score_provider_matches_setting, hits_on_grid, low_end_balanced, ascii_filename]
+          auto: [score_rendered, score_provider_matches_setting, music_fit_done, hits_on_grid, low_end_balanced,
+                 ascii_filename]
+          rubric: creative_v1
+      - id: cv2-beatsync
+        agent: 18-code-video/film-director
+        depends_on: [cv2-score, cv1-treatment]
+        condition: music_external        # settings.json#project.music_source ∈ {model, library};code = 不派发(按时间轴写谱,天然对齐)
+        outputs: [codevideo/timeline.json, codevideo/TREATMENT.md, "directing/{ep}/shot_list.json",
+                  "directing/{ep}/storyboard.json"]
+        # 把画面时间轴对到外来音乐的节拍网格(codevideo/music/beats.json):
+        #   python3 code/codevideo.py snap --project <slug> --dry-run      # 先看报告:每个段边界 / 切点 / 击点从哪移到哪、最大移动
+        #   python3 code/codevideo.py snap --project <slug> [--sections downbeat|beat|off] [--shots beat|off] [--hits beat|off]
+        # 默认 段边界 → 强拍(容差半小节,找不到再就近拍点、容差半拍)、镜头切点 → 拍点(容差半拍,最短镜 0.25 s)、击点 → 拍点;
+        #   段边界的移动用分段线性映射带动段内一切时刻(镜头、台词、击点、海报帧),片长不变;改前宿主备份
+        #   codevideo/timeline.before-snap-<时间>.json,改后自动 sync。
+        # 某一类刻意不对拍(如整段自由节奏)才用 off,result.json 写明哪类、为什么;off 那一类在 check 里的对应项(sections_on_beat /
+        #   hits_on_beat)会 FAIL,由 orchestrator 按回执理由登记 waiver,不得为了过机检改回去。
+        # 最大移动 > 1 s 或台词因此挤压(voices_fit_timeline 口径)时,手调 timeline.json 后重跑 snap 与 sync,不硬塞。
+        # treatment_cue_map_updated:TREATMENT.md cue map 改成实测 bpm、小节网格与每个切点 / 击点所在的小节与拍(注明「外来音乐实测」);
+        # 最后:python3 code/codevideo.py check --project <slug> --stage timeline,beats
+        validation:
+          auto: [beats_match_score, hits_on_beat, sections_on_beat, timeline_valid, directing_synced,
+                 treatment_cue_map_updated]
           rubric: creative_v1
 
   - id: cv3
@@ -212,14 +275,16 @@ phases:
     tasks:
       - id: cv3-engine
         agent: 18-code-video/scene-coder
-        depends_on: [gc1, cv1-look]
+        depends_on: [gc1, cv1-look, cv2-beatsync]     # cv2-beatsync skipped(代码作曲)视同满足
         outputs: [codevideo/index.html, codevideo/main.js, "codevideo/js/", "codevideo/fonts/"]
         # 片子引擎:按 timeline.json 驱动的时间轴、镜头 / 投影、world→screen 换算、风格绘制、字幕层、window.EV、
         #   window.TEXTS;每段的画面写在 codevideo/sections/<段 id>.js(cv3-sec),引擎只 import 它们。
+        # timings_from_timeline:段 / 镜 / 击点 / 台词的时刻一律运行时从 codevideo/timeline.json 读(fetch,或由它生成的文件),
+        #   页面代码里不手抄秒数——这样 cv2-beatsync 或日后改时间轴不用改代码;段内动作写成相对本段 / 本镜起点的比例或拍数。
         # 命令:python3 code/codevideo.py check --project <slug> --stage contract,timeline
         validation:
           auto: [page_globals, deterministic, no_external_requests, no_page_errors, page_dur_matches,
-                 timeline_valid]
+                 timeline_valid, timings_from_timeline]
           rubric: visual_plan_v1
       - id: cv3-sec
         agent: 18-code-video/scene-coder
@@ -274,7 +339,8 @@ phases:
         depends_on: [cv4-mix]
         outputs: ["edit/{ep}/final.mp4", "edit/{ep}/subtitles.srt", "edit/{ep}/poster.jpg",
                   codevideo/CREDITS, codevideo/build.sh]
-        # 先写 codevideo/CREDITS(字体、采样乐器署名 music/*.credits.json、用户素材及其权利声明、TTS 渠道;
+        # 先写 codevideo/CREDITS(字体、采样乐器署名 music/*.credits.json、外来配乐的出处与授权(beats.json / cue sheet 的 license:
+        #   项目音乐库曲目号与原始授权链、用户音乐与权利声明、音乐模型的渠道与模型)、用户素材及其权利声明、TTS 渠道;
         #   不写 LemoLab / Opus 署名),再出成片:
         #   python3 code/codevideo.py master --project <slug> [--grain N]   # 拼段 + 两遍 loudnorm −14 LUFS + srt + 海报 + build.sh
         #   python3 code/codevideo.py check --project <slug> --stage final,delivery
@@ -293,13 +359,16 @@ phases:
         depends_on: [cv4-master]
         outputs: ["qa/reports/{ep}/codevideo.json", "codevideo/sheets/qa_*.jpg"]
         pass: blocker_eq_0
-        # check_all_pass:python3 code/codevideo.py check --project <slug> --stage all 退出 0;
+        # check_all_pass:python3 code/codevideo.py check --project <slug> --stage all 退出 0(含 beats 阶段:外来配乐时
+        #   beats_match_score / hits_on_beat / sections_on_beat;代码作曲时该阶段为空;cv2-beatsync 回执登记了 off 的那类按 waiver 计);
         # 人工级抽检(lemo DIRECTOR §11):全片联系表两遍、关键动作 0.2 s 抽帧条、整片带声音看一遍;
         # not_the_demo_again:与样片对比 结构 / 开场 / 招牌镜头 / 机位路线 / 配乐形状 / 结尾 六项至少四项不同;
-        # sound_table_verified、subtitles_clear_of_subject、user_assets_rights_checked(用户素材都有权利声明)。
+        # sound_table_verified、subtitles_clear_of_subject、user_assets_rights_checked(用户素材都有权利声明);
+        # light_style_followed(仅轻量风格):成片守住风格提示里的不变量(色彩值、镜头 / 转场规律、「避免」条款)与 TREATMENT
+        #   「风格补全」的取舍,全片一致;not_the_demo_again 对轻量风格不适用(没有样片),改为不与 lemo 的 OPUSCAR 98 原片同构。
         validation:
           auto: [check_all_pass, contact_sheets_reviewed, not_the_demo_again, sound_table_verified,
-                 subtitles_clear_of_subject, user_assets_rights_checked]
+                 subtitles_clear_of_subject, user_assets_rights_checked, light_style_followed]
           rubric: analysis_v1
       - { id: gc2, gate: true, human: true, checkpoint: CVH2-成片签字, depends_on: [cv5-qa] }
         # 放行前必须:codevideo.py check --stage all 全 PASS、cv5-qa 报告 blocker = 0;

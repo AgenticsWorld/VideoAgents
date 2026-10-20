@@ -241,6 +241,10 @@ function drawTrack(){
     s.shots.forEach(sh=>{if(sh.t0>s.t0)g.fillRect(X(sh.t0),8,1,18)});
   });
   g.fillStyle='#c084fc';(tl.hits||[]).forEach(h=>{const x=X(h.t);g.beginPath();g.moveTo(x-4,36);g.lineTo(x+4,36);g.lineTo(x,42);g.fill()});
+  if(D.beats){   // 外来配乐的节拍网格(三期):细线 = 拍点,粗线 = 强拍
+    g.fillStyle='rgba(255,255,255,.28)';(D.beats.beats||[]).forEach(b=>g.fillRect(X(b),46,1,6));
+    g.fillStyle='rgba(74,222,128,.85)';(D.beats.downbeats||[]).forEach(b=>g.fillRect(X(b)-0.5,44,2,10));
+  }
   g.fillStyle='#fb923c';(D.notes||[]).forEach(n=>{g.beginPath();g.arc(X(n.t),52,3.5,0,7);g.fill()});
   g.fillStyle='#fff';g.fillRect(X(T)-1,0,2,r.height);
 }
@@ -266,7 +270,8 @@ function renderSide(){
     [t('风格'),esc((I18N.lang==='zh'?st.cn:st.en)||st.slug||'—')],
     [t('尺寸'),d.size?d.size.join(' × '):'—'],
     [t('旁白 / 字幕'),`${s.narration?t('开'):t('关')} / ${s.subtitles?t('开'):t('关')}`],
-    [t('配乐'),s.music_source==='model'?t('按生成模型页音乐设置'):t('代码作曲')],
+    [t('配乐'),(s.music_source==='model'?t('按生成模型页音乐设置'):s.music_source==='library'?t('项目音乐库选曲'):t('代码作曲'))
+      +(d.beats?' · '+I18N.f('{bpm} BPM,已测节拍',{bpm:Math.round(d.beats.bpm)}):'')],
   ].map(([k,v])=>`<div><b>${esc(k)}</b> ${v}</div>`).join('')
     +(d.timeline_error?`<div class="err">${esc(d.timeline_error)}</div>`:'')
     +(d.render_error?`<div class="err">${esc(d.render_error)}</div>`:'');

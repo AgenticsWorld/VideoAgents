@@ -8481,6 +8481,15 @@ def _cmd_music(args):
         return
     out = generate_music(args.prompt, args.output, args.duration, args.lyrics,
                          not bool(args.lyrics.strip()), provider=args.provider, script=args.script)
+    if _music_provider(args.provider) != "code":
+        # 模型生成的曲子补一份来源记录(2026-10-20,演示视频 music-fit 据此写 cue sheet 的 license 与 CREDITS)
+        try:
+            cfg = get_config("music", provider_override=args.provider) if args.provider else get_config("music")
+            _merge_meta(out, "music", {"provider": cfg.get("provider"), "model": cfg.get("model") or cfg.get("profile_code") or "",
+                                       "prompt": args.prompt, "requested_duration_s": args.duration,
+                                       "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S")})
+        except Exception:  # noqa: BLE001 — 记录失败不影响已生成的音乐
+            pass
     print(f"已生成: {out}")
 
 

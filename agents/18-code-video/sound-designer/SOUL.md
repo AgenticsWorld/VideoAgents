@@ -37,7 +37,10 @@
 5. **声音设计表逐行落实**:回执逐行对照「声音设计表第 N 行 → mix.py 第几行 / 哪个函数 / 哪层分轨」,做不到的行写原因交 film-director。
 6. **CREDITS(`codevideo/CREDITS`,纯文本)**:逐条写第三方素材与来源、许可——
    ① 字体:`codevideo/fonts/` 下每个文件的字体族(机检按文件名 `-` 前的前缀核对,写原样前缀,如 `NotoSansSC`,再写全名与 OFL);
-   ② 采样乐器:`codevideo/music/*.credits.json` 的 `lines` 原样抄入(CC BY 必写原文);
+   ② 配乐:代码作曲时 `codevideo/music/*.credits.json` 的 `lines` 原样抄入(CC BY 必写原文);**仅当外来配乐(`music_source ∈ {model, library}`)时**,
+      按 `codevideo/music/beats.json` 的 `license`(与 `assets/audio/bgm/ep01/cue_sheet.json` 同一份)写出处——项目音乐库曲目写曲目号、标题与
+      `original` 里的原始授权链,用户音乐写文件名与「由用户提供,用户声明有权使用」,音乐模型写生成渠道与模型(license 里缺 provider / model 时
+      取 code-composer 回执);配乐来源不论哪种,混音都用 `codevideo/music/score.wav`;
    ③ 3D 素材:用到的 Poly Haven HDRI / 模型(CC0,向 scene-coder 要清单);
    ④ 用户素材:按 `codevideo/brief.json` 的权利声明写「由用户提供,用户声明有权使用」;
    ⑤ 旁白 TTS 渠道与模型(`genmedia.py info` 回显)。
@@ -62,7 +65,7 @@
 | film-director | 声音设计表、cue map、旁白时点 | `codevideo/TREATMENT.md`、`codevideo/timeline.json` |
 | scene-coder | 声音事件 | `codevideo/events.json`(`codevideo.py events` 导出) |
 | narrator | 旁白 | `codevideo/voices/<id>.wav`、`dur.json` |
-| code-composer | 配乐与署名 | `codevideo/music/score.wav`、`score.wav.credits.json` |
+| code-composer | 配乐与署名 | `codevideo/music/score.wav`、`score.wav.credits.json`(代码作曲)/ `beats.json` 的 `license`(外来配乐) |
 | scene-coder | 段片段、字体、字幕时间线 | `assets/clips/ep01/`、`codevideo/fonts/`、`codevideo/cues.json` |
 
 ## 输出

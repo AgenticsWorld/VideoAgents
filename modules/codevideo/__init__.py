@@ -29,6 +29,7 @@ LIB_DIR = PKG / "lib"
 VENDOR_THREE = LIB_DIR / "vendor" / "three"
 STYLES_DIR = ROOT / "agents" / "workflows" / "codevideo" / "styles"
 GALLERY_JSON = ROOT / "apps" / "web" / "static" / "styles" / "code" / "code_styles.json"
+LIGHT_JSON = STYLES_DIR / "opuscar98" / "styles.json"        # OPUSCAR 98 轻量风格(三期):只有一段风格提示
 CLI = ROOT / "code" / "codevideo.py"
 DATA_DIR = Path(os.environ.get("VIDEOAGENTS_DATA_DIR", ROOT / "data")).expanduser().resolve()
 PROJECTS_DIR = DATA_DIR / "projects"
@@ -59,10 +60,37 @@ def gallery() -> dict:
 
 
 def style_slugs() -> list[str]:
+    """完整风格(43 个,有 STYLE.md 与样片)。"""
     return [s["slug"] for s in gallery()["styles"]]
 
 
+@lru_cache(maxsize=1)
+def light_styles() -> dict:
+    return json.loads(LIGHT_JSON.read_text(encoding="utf-8"))
+
+
+def light_ids() -> list[str]:
+    """轻量风格 id:o98-01 … o98-98(OPUSCAR 98 第 NN 部的风格提示)。"""
+    return [s["id"] for s in light_styles()["styles"]]
+
+
+def style_ids() -> list[str]:
+    return style_slugs() + light_ids()
+
+
+def is_light(slug: str) -> bool:
+    return str(slug or "").startswith("o98-")
+
+
 def style_row(slug: str) -> dict | None:
+    """风格元数据;轻量风格换算成与完整风格同样的 cn / en 键,另带 light=True 与原始条目。"""
+    if is_light(slug):
+        x = next((s for s in light_styles()["styles"] if s["id"] == slug), None)
+        if x is None:
+            return None
+        return {"slug": slug, "cn": x["style_zh"], "en": x["style_en"], "light": True, "no": x["no"], "year": x["year"],
+                "film": x["title"], "film_zh": x["zh"], "render": x["render"], "related": x.get("related") or [],
+                "gallery": "https://lemomo-ai.github.io/lemo-opuscar/opuscar98/#styles"}
     return next((s for s in gallery()["styles"] if s["slug"] == slug), None)
 
 

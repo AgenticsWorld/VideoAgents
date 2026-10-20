@@ -18,12 +18,22 @@
    TREATMENT.md 已经写成后才可以 `python3 code/codevideo.py demo --project <slug>` 拉样片源码与海报学技法(笔刷引擎、角色骨骼、
    着色器、合成器……);**只学技法,不照搬样片的故事、弧线、镜头、道具、时间线**。复制进项目的样片代码里如有 `../..` 相对引用库文件,
    改成 `/core/…` 绝对路径。
+   **仅当风格是轻量风格(`o98-NN`,`codevideo/style/lock.json` 的 `light: true`)时**:`codevideo/style/STYLE.md` 是宿主按 OPUSCAR 98
+   那段风格提示生成的——提示原文是不变量(色值、镜头 / 转场规律、「避免」条款照做),提示没写到的材质、字体与字幕、运动质感、
+   镜头语法、原生手法按 TREATMENT.md「风格补全」一节执行,两者冲突以提示原文为准并上报 film-director。轻量风格没有自己的样片:
+   `python3 code/codevideo.py demo --project <slug> --slug <完整风格>` 拉相近风格的样片学渲染技法(`lock.json` 的 `related` 优先),
+   也可读那个完整风格的 `agents/workflows/codevideo/styles/<slug>/STYLE.md` 借渲染口径;提示里点名的电影只作语法参考,
+   画面里不得出现其角色、情节、镜头复刻、片名、logo,也不画 OPUSCAR 98 的角色(包括 Clawd)。
 2. **页面契约(机检 contract 段硬卡)**:
    - `window.READY = true`:字体(`document.fonts.ready`)与图片都加载完才置 true;
    - `window.render(t)`:画第 t 秒;**确定性**——不用 `Date.now()` / `performance.now()`、不用无种子随机(用 `/core/lib.js` 的
      `mulberry(seed)` / `hash(n)` / `vnoise(x)`)、不依赖上一帧留下的状态(粒子、物理一律写成 t 的解析式或从 0 按固定步长重算);
      可以缓存与 t 无关的静态层;
    - `window.DUR` = timeline.json 的 dur(页面 fetch `./timeline.json` 取,不另抄数字);
+   - **时刻一律从 timeline.json 读**(机检 `timings_from_timeline`):段 / 镜起止、击点、台词时点在运行时从 `./timeline.json` 取
+     (或由它生成的文件),页面代码里**不手抄秒数**;段内动作写成相对本段 / 本镜起点的比例(0–1)或拍数(`60 / bpm`)。
+     这样 film-director 改时间轴、或外来配乐时 `codevideo.py snap` 把切点挪到拍上,画面跟着走,不用改代码
+     (timeline.json 属于共用输入,它一改全部段过期重渲,这是预期的);
    - `window.EV = [{t, type, …}]`:每个看得见的动作都登记声音事件(落地、翻页、切、滴、点击、布料……),`type` 用 sound-designer 认得的
      短词(在 `codevideo/js/` 里或 TREATMENT 附表里写清每个 type 的含义与参数 d / v / pan),拟音靠它卡帧;
    - `window.TEXTS(t)` = 画面上每段文字 `{id, text, x0, y0, x1, y1}`(像素框);打字机效果也从第一帧就报**全文**;字幕条不报(srt 管)。
@@ -63,6 +73,8 @@
 9. **cv1-board**(先审故事板开时):把 timeline 里 `key: true` 的 6–9 个关键镜画到成片质量(其余镜可以还没写),
    `python3 code/codevideo.py board --project <slug>`(或 `--keys s1,s4,…`),产出进「📋 故事板」页与
    `assets/storyboard/ep01/board_sheet.jpg`;回执写 logline、每镜一句说明、**最没把握的一两点**(给 CVH1)。
+   **仅当外来配乐(`music_source ∈ {model, library}`)且故事板已签字时**:cv2-beatsync 对拍之后若有关键镜移动 > 0.5 s
+   (看它的回执),cv3-engine 开工前重跑一次 `codevideo.py board`,回执说明;不重新发签字单。
 10. **cv3-engine**:按 timeline.json 驱动全片的引擎,`check --stage contract,timeline` 要过(window.DUR 与 dur 差 ≤ 1 帧)。
 11. **cv3-sec(每段一单)**:只写 `sections/<本段 id>.js`(及本段新增素材);要动引擎或共用代码,先在回执写明原因交 orchestrator 协调,
     不顺手改(会让所有段过期)。自检:
@@ -128,7 +140,8 @@ instruction: |
 
 **机检(不过直接退回)**
 
-- cv1-look / cv3-engine:`page_globals`、`deterministic`、`no_external_requests`、`no_page_errors`、`page_dur_matches`、`timeline_valid`
+- cv1-look / cv3-engine:`page_globals`、`deterministic`、`no_external_requests`、`no_page_errors`、`page_dur_matches`、`timeline_valid`;
+  cv3-engine 另有 `timings_from_timeline`(页面里没有手抄的段 / 镜 / 击点秒数)
 - cv1-board:`board_rendered`(6–9 镜,镜头总数不足 6 时 = 全部)、`board_sheet_present`、`board_brief_written`
 - cv3-sec:`section_module_only`、`deterministic`、`no_page_errors`、`section_stills_reviewed`
 - cv3-render:`clips_fresh_frames_silent`(`check --stage clips` 每段帧数准、无音轨、尺寸一致、指纹新鲜)、`readcheck_pass`、
@@ -137,7 +150,7 @@ instruction: |
 
 **评分(evaluation Agent,rubric visual_gen_v1 / visual_plan_v1,阈值 80)**
 
-- 风格忠实(35):材质、色彩、字体、运动与 STYLE.md 一致,易犯错误一条没踩
+- 风格忠实(35):材质、色彩、字体、运动与 STYLE.md 一致,易犯错误一条没踩(轻量风格:守住提示原文与 TREATMENT「风格补全」)
 - 导演执行(35):镜头运动、景别、击点、转场与方案一致,主体清楚可读
 - 工程质量(30):确定性、按段隔离、渲染快(不在页面里画颗粒)、无外网依赖
 

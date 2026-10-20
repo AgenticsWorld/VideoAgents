@@ -410,3 +410,181 @@ def test_demo_requires_treatment(tmp_path):
     assert not (base / CV.NS / "style" / "DEMO.md").exists()           # 先方案后样片:锁定时不放 DEMO.md
     with pytest.raises(P.DemoBeforeTreatment):
         P.demo(base)
+
+
+# ---------------------------------------------------------------- 三期:外来配乐 + 节拍对齐
+
+def _drums(path, bpm=120.0, off=0.5, dur=30.0, sr=48000):
+    """合成鼓点:每拍一声踩镲,每小节第一拍加底鼓(强拍)。"""
+    import numpy as np
+    import soundfile as sf
+    rng = np.random.default_rng(3)
+    y = np.zeros(int(sr * dur))
+    period = 60.0 / bpm
+    k = 0
+    while off + k * period < dur - 0.2:
+        s = int((off + k * period) * sr)
+        n = min(int(0.15 * sr), len(y) - s)
+        tt = np.arange(n) / sr
+        if k % 4 == 0:
+            y[s:s + n] += 0.9 * np.sin(2 * np.pi * 55 * tt) * np.exp(-tt * 25)
+        y[s:s + n] += 0.3 * rng.standard_normal(n) * np.exp(-tt * 60)
+        k += 1
+    y += 0.003 * rng.standard_normal(len(y))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    sf.write(str(path), np.stack([y, y], 1).astype(np.float32), sr)
+    return [off + i * period for i in range(k)]
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="需要 ffmpeg")
+def test_beat_analysis_tempo_beats_and_downbeats(tmp_path):
+    from modules.codevideo import beats as BT
+    truth = _drums(tmp_path / "d.wav", bpm=100, off=0.37, dur=20)
+    a = BT.analyze(tmp_path / "d.wav")
+    assert abs(a["bpm"] - 100) < 0.5
+    err = [min(abs(b - t) for t in truth) for b in a["beats"]]
+    assert len(a["beats"]) >= len(truth) - 2 and max(err) < 0.03          # 24 fps 一帧 42 ms
+    assert min(abs(a["downbeats"][0] - t) for t in truth[::4]) < 0.03      # 强拍相位对
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="需要 ffmpeg")
+def test_music_fit_snap_and_beats_check(tmp_path):
+    from modules import music_library as ML
+    from modules.codevideo import beats as BT
+    from modules.codevideo import checks as C
+    base = tmp_path / "proj"
+    (base / CV.NS).mkdir(parents=True)
+    (base / "settings.json").write_text(json.dumps({"project": {"type": "code-video", "code_style": "blueprint",
+                                                                "music_source": "library"}}))
+    tl = {"schema": "codevideo_timeline/1", "fps": 24, "size": [96, 54], "dur": 10.0, "meter": 4,
+          "sections": [{"id": "a", "t0": 0, "t1": 3.1}, {"id": "b", "t0": 3.1, "t1": 6.3}, {"id": "c", "t0": 6.3, "t1": 10.0}],
+          "shots": [{"id": "a1", "section": "a", "t0": 0, "t1": 3.1}, {"id": "b1", "section": "b", "t0": 3.1, "t1": 4.4},
+                    {"id": "b2", "section": "b", "t0": 4.4, "t1": 6.3}, {"id": "c1", "section": "c", "t0": 6.3, "t1": 10.0}],
+          "hits": [{"id": "stamp", "t": 7.95}], "lines": [{"id": "l1", "t": 4.0}]}
+    (base / CV.NS / "timeline.json").write_text(json.dumps(tl))
+    TL.sync(base)
+    _drums(base / "refs" / "music" / "song.wav", bpm=120, off=0.5, dur=30)
+    res = BT.fit_project(base, file="refs/music/song.wav", mood="明快")
+    assert res["bpm"] and abs(res["bpm"] - 120) < 0.5 and not res["looped"]
+    assert abs(res["start_s"] - 0.5) < 0.03                                   # 从开头静音后的第一个强拍起
+    grid = BT.load_beats(base)
+    assert grid["license"]["source"] == "user_provided" and grid["audio_sha256"]
+    sheet = json.loads((base / "assets/audio/bgm/ep01/cue_sheet.json").read_text())
+    assert sheet["cues"][0]["out_s"] == 10.0 and sheet["cues"][0]["license"]["file"] == "refs/music/song.wav"
+    assert ML.load_index(base)["tracks"]                                       # 用户音乐经 cue sheet 对账入库
+    before = {i["id"]: i["ok"] for i in BT.check(base)}
+    assert before["beats_match_score"] and not before["sections_on_beat"]      # 段边界 3.1 / 6.3 还没对拍
+    rep = BT.snap_project(base)
+    assert rep["sections"] and rep["backup"] and (base / rep["backup"]).is_file()
+    after = {i["id"]: i for i in BT.check(base)}
+    assert after["sections_on_beat"]["ok"] and after["hits_on_beat"]["ok"], after
+    new = json.loads((base / CV.NS / "timeline.json").read_text())
+    assert new["dur"] == 10.0 and new["beat_sync"]["bpm"] == grid["bpm"]
+    downs = grid["downbeats"]
+    assert min(abs(new["sections"][1]["t0"] - d) for d in downs) < 1 / 24    # 段边界落在强拍
+    assert new["lines"][0]["t"] != 4.0                                         # 段内台词时刻随段边界平移
+    sl = json.loads((base / "directing/ep01/shot_list.json").read_text())
+    assert abs(sl["total_duration_s"] - 10.0) < 1e-6                           # 片长不变,已自动 sync
+    stages = C.run(base, ["beats"])
+    assert stages["ok"]
+    # 曲库曲目:按曲目号适配,cue sheet 记 library 来源
+    idx = ML.load_index(base)
+    tid = idx["tracks"][0]["track_id"]
+    res2 = BT.fit_project(base, track=tid)
+    sheet2 = json.loads((base / "assets/audio/bgm/ep01/cue_sheet.json").read_text())
+    assert sheet2["cues"][0]["license"]["source"] == "library" and sheet2["cues"][0]["license"]["track_id"] == tid
+    assert res2["bpm"]
+    with pytest.raises(CV.CodeVideoError):
+        BT.fit_project(base, track="MUS-9999")
+    with pytest.raises(CV.CodeVideoError):
+        BT.fit_project(base)
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="需要 ffmpeg")
+def test_music_fit_loops_short_track(tmp_path):
+    from modules.codevideo import beats as BT
+    _drums(tmp_path / "short.wav", bpm=120, off=0.2, dur=8)
+    g = BT.fit(tmp_path / "short.wav", tmp_path / "out.wav", 20.0)
+    import soundfile as sf
+    assert g["source"]["looped"] and abs(sf.info(str(tmp_path / "out.wav")).duration - 20.0) < 0.01
+    assert abs(g["bpm"] - 120) < 1.0
+
+
+def test_music_source_library_and_beatsync_condition(env):
+    _create({"name": "cvm", "project_type": "code-video", "code_video": {"code_style": "dataviz", "music_source": "library"}})
+    cfg = core.load_project_settings("cvm")
+    assert cfg["project"]["music_source"] == "library"
+    sec = project_types.orchestrator_section(cfg["project"], "data/projects/cvm", [])
+    assert "cv2-beatsync 照常派" in sec
+    assert "从项目音乐库" in env[0]["message"]
+    code_sec = project_types.orchestrator_section({"type": "code-video", "code_style": "dataviz"}, "x", [])
+    assert "cv2-beatsync 置 skipped" in code_sec
+    with pytest.raises(core.ServiceError):
+        _create({"name": "cvx", "project_type": "code-video", "code_video": {"code_style": "dataviz", "music_source": "radio"}})
+
+
+# ---------------------------------------------------------------- 三期:OPUSCAR 98 轻量风格
+
+def test_light_styles_catalog_and_gallery():
+    ids = CV.light_ids()
+    assert len(ids) == 98 and ids[0] == "o98-01" and ids[-1] == "o98-98"
+    data = CV.light_styles()
+    assert len(data["chapters"]) == 10
+    for x in data["styles"]:
+        assert x["prompt_zh"] and x["prompt_en"] and len(x["related"]) == 3
+        assert all(r in CV.style_slugs() for r in x["related"])
+        assert "shots" not in x and "direction_en" not in x                     # 不带 OPUSCAR 98 的分镜 / 主角
+    gal = json.loads((CV.GALLERY_JSON.parent / "opuscar98.json").read_text(encoding="utf-8"))
+    assert len(gal["styles"]) == 98
+    assert all((CV.GALLERY_JSON.parent / s["frame"]).is_file() for s in gal["styles"])
+    row = CV.style_row("o98-12")
+    assert row["light"] and row["en"] == "Technicolor Impasto Oil" and row["film"] == "Gone with the Wind"
+
+
+def test_light_style_project_lock_and_demo(env, tmp_path):
+    from modules.codevideo import project as P
+    _create({"name": "cvl", "project_type": "code-video", "code_video": {"code_style": "o98-12"}})
+    cfg = core.load_project_settings("cvl")
+    assert cfg["project"]["code_style"] == "o98-12"
+    base = core.PROJECTS_DIR / "cvl"
+    assert "轻量风格" in (base / "brief.md").read_text() and "风格补全" in project_types.orchestrator_section(cfg["project"], "x", [])
+    assert "轻量风格" in env[0]["message"]
+    lock = P.lock_style(base)
+    md = (base / CV.NS / "style" / "STYLE.md").read_text(encoding="utf-8")
+    entry = next(x for x in CV.light_styles()["styles"] if x["id"] == "o98-12")
+    assert entry["prompt_zh"] in md and entry["prompt_en"] in md and "风格补全" in md
+    assert lock["light"] and lock["related"] == entry["related"]
+    assert json.loads((base / CV.NS / "style" / "style.json").read_text())["light"] is True
+    assert not (base / CV.NS / "style" / "DEMO.md").exists()
+    assert P.lock_style(base)["changed"] is False                              # 重锁幂等
+    with pytest.raises(P.DemoBeforeTreatment):
+        P.demo(base)
+    (base / CV.NS / "TREATMENT.md").write_text("# t")
+    with pytest.raises(CV.CodeVideoError) as e:
+        P.demo(base)
+    assert entry["related"][0] in str(e.value)                                  # 提示可用的相近完整风格
+    with pytest.raises(CV.CodeVideoError):
+        P.demo(base, slug="o98-01")                                             # --slug 只收完整风格
+
+
+def test_beats_check_honours_off_and_kept(tmp_path):
+    """snap 时设成 off 的类别、附近没拍而原地保留的段 / 击点,机检豁免;其余照判。"""
+    import soundfile as sf
+    import numpy as np
+    from modules.codevideo import beats as BT
+    base = tmp_path / "p"
+    (base / CV.NS / "music").mkdir(parents=True)
+    sf.write(str(base / CV.NS / "music" / "score.wav"), np.zeros((48000, 2), np.float32), 48000)
+    grid = {"bpm": 120, "meter": 4, "beats": [i * 0.5 for i in range(20)], "downbeats": [i * 2.0 for i in range(5)],
+            "audio_sha256": BT.sha256(base / CV.NS / "music" / "score.wav")}
+    BT.write_beats(base, grid)
+    tl = {"fps": 24, "size": [96, 54], "dur": 9.0,
+          "sections": [{"id": "a", "t0": 0, "t1": 4.23}, {"id": "b", "t0": 4.23, "t1": 9.0}], "shots": [],
+          "hits": [{"id": "h1", "t": 6.21}]}
+    (base / CV.NS / "timeline.json").write_text(json.dumps(tl))
+    res = {i["id"]: i["ok"] for i in BT.check(base)}
+    assert res == {"beats_match_score": True, "hits_on_beat": False, "sections_on_beat": False}
+    tl["beat_sync"] = {"sections": "off", "hits": "beat", "kept": {"sections": [], "hits": ["h1"]}}
+    (base / CV.NS / "timeline.json").write_text(json.dumps(tl))
+    res = {i["id"]: i["ok"] for i in BT.check(base)}
+    assert res == {"beats_match_score": True, "hits_on_beat": True, "sections_on_beat": True}

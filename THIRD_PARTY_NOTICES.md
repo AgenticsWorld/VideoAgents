@@ -34,7 +34,11 @@ commit recorded in `modules/codevideo/lib/upstream.json` and synced by
 (`sampler.py` carries two marked VideoAgents patches: a configurable sample-library folder with
 optional automatic download, and a SciPy fallback when `soxr` is missing), the 43 style
 specifications under `agents/workflows/codevideo/styles/`, and gallery frames re-encoded as WebP in
-`apps/web/static/styles/code/frames/`. The license is retained in
+`apps/web/static/styles/code/frames/`, plus the 98 style prompts of Lemo-Opuscar's OPUSCAR 98 film
+(`agents/workflows/codevideo/styles/opuscar98/styles.json`, offered as "light" styles; the per-film shot lists and
+direction notes are not copied) with one frame per film re-encoded as WebP in
+`apps/web/static/styles/code/frames98/`, shown only as style previews (the character in those frames belongs to
+OPUSCAR 98 and is never carried into users' films). The license is retained in
 `modules/codevideo/lib/LICENSE.lemo-opuscar` and `agents/workflows/codevideo/styles/LICENSE.lemo-opuscar`.
 The four display fonts in `modules/codevideo/lib/core/fonts/` are OFL 1.1 subsets (details and the
 full license text in `modules/codevideo/lib/core/fonts/OFL.md`). The same project type bundles

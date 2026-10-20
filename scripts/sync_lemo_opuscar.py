@@ -11,6 +11,9 @@
                                      静态服务映射到 vendor/three/three.module.js 与 vendor/three/jsm/(仓库 .gitignore 忽略 node_modules/、build/)
 - agents/workflows/codevideo/styles/<slug>/   43 个风格的 STYLE.md / DEMO.md / style.json(随包,Agent 必读)
 - apps/web/static/styles/code/       新建向导风格画廊:code_styles.json + frames/<slug>.webp
+- OPUSCAR 98 的 98 条风格提示(轻量风格,三期 2026-10-20):agents/workflows/codevideo/styles/opuscar98/styles.json
+                                     (提示词 / 混合手法 / 渲染类型 / 参考作品 / 原片说明 + 宿主算的 3 个相近完整风格;不带 shots 与
+                                     direction——那里写的是 OPUSCAR 98 的主角 Clawd)+ 画廊 opuscar98.json + frames98/<NN>.webp
 - upstream.json 的 packs / files     按需下载清单:采样库与 HDRI 包(release assets,sha256)、各风格样片源码与海报、
                                      polyhaven 模型贴图(raw 文件,sha256)
 
@@ -218,6 +221,36 @@ def main() -> int:
         {"source": f"https://github.com/{REPO}", "rev": rev, "categories": cats, "styles": rows},
         ensure_ascii=False, indent=1) + "\n")
 
+    # 4b. OPUSCAR 98 轻量风格
+    o98 = json.loads((src / "styleboard" / "opuscar98_styles.json").read_text(encoding="utf-8"))
+    related = _related_full_styles(src, catalog, o98["films"])
+    keep = ("no", "year", "title", "zh", "chapter", "style_en", "style_zh", "blend_en", "blend_zh", "dim", "render",
+            "desc_en", "desc_zh", "prompt_en", "prompt_zh", "refs")
+    light = [{"id": f"o98-{f['no']:02d}", **{k: f.get(k) for k in keep}, "related": related[f["no"]]} for f in o98["films"]]
+    w.text(STYLES_DST / "opuscar98" / "styles.json", json.dumps(
+        {"source": f"https://github.com/{REPO}/blob/{rev}/styleboard/opuscar98_styles.json", "rev": rev,
+         "title": o98["title"], "note": o98["note"], "chapters": o98["chapters"], "styles": light},
+        ensure_ascii=False, indent=1) + "\n")
+    gal = [{"id": x["id"], "no": x["no"], "year": x["year"], "title": x["title"], "zh": x["zh"], "chapter": x["chapter"],
+            "style_en": x["style_en"], "style_zh": x["style_zh"], "blend_en": x["blend_en"], "blend_zh": x["blend_zh"],
+            "render": x["render"], "dim": x["dim"], "frame": f"frames98/{x['no']:02d}.webp"} for x in light]
+    w.text(GALLERY / "opuscar98.json", json.dumps(
+        {"rev": rev, "gallery": "https://lemomo-ai.github.io/lemo-opuscar/opuscar98/#styles", "chapters": o98["chapters"],
+         "styles": gal}, ensure_ascii=False, indent=1) + "\n")
+    for x in light:
+        jpg = src / "styleboard" / "img" / "opuscar98" / f"{x['no']:02d}.jpg"
+        key = f"o98-{x['no']:02d}"
+        h = sha256(jpg)
+        webp = GALLERY / "frames98" / f"{x['no']:02d}.webp"
+        if stamps.get(key) != h or not webp.is_file():
+            im = Image.open(jpg).convert("RGB")
+            im = im.resize((FRAME_WIDTH, round(im.height * FRAME_WIDTH / im.width)), Image.LANCZOS)
+            buf = io.BytesIO()
+            im.save(buf, "WEBP", quality=82, method=6)
+            w.bytes(webp, buf.getvalue())
+            stamps[key] = h
+    w.text(stamp_p, json.dumps(stamps, indent=1, sort_keys=True) + "\n")
+
     # 5. 按需下载清单
     assets = json.loads((src / "tools" / "assets.json").read_text())
     files = {}
@@ -237,6 +270,48 @@ def main() -> int:
     if len(w.changed) > 40:
         print(f"   … 另 {len(w.changed) - 40} 个")
     return 1 if (a.check and w.changed) else 0
+
+
+_STOP = set("a an the and or of in on at to for with from by into over under as is are be it its this that these those "
+             "one two three each every per not no only so than then very more most less few all any some own same other "
+             "style styles film films frame frames shot shots like keep never always use used using made make".split())
+
+
+def _words(text: str) -> list[str]:
+    return [t for t in re.findall(r"[a-z][a-z0-9\-]+", text.lower()) if t not in _STOP and len(t) > 2]
+
+
+def _related_full_styles(src: Path, catalog: list[dict], films: list[dict], k: int = 3) -> dict[int, list[str]]:
+    """每条轻量风格配 k 个相近的完整风格(学技法用):完整风格取 style.json 名称 / 分类 / 用途 + STYLE.md 前 4000 字的词,
+    轻量风格取风格名 / 混合手法 / 提示词的词,按 idf 加权的共有词打分;3D 风格与 3D 完整风格互相加分。"""
+    import math
+    docs = {}
+    for c in catalog:
+        sj = json.loads((src / "styles" / c["slug"] / "style.json").read_text(encoding="utf-8"))
+        text = " ".join([sj.get("en", ""), sj.get("category_en", ""), " ".join(sj.get("uses") or []),
+                         (src / "styles" / c["slug"] / "STYLE.md").read_text(encoding="utf-8")[:4000]])
+        docs[c["slug"]] = set(_words(text))
+    n = len(docs)
+    df: dict[str, int] = {}
+    for ws in docs.values():
+        for t in ws:
+            df[t] = df.get(t, 0) + 1
+    idf = {t: math.log((n + 1) / (d + 0.5)) for t, d in df.items()}
+    is3d = {slug: bool(re.search(r"\b3d\b|three\.js", " ".join(ws))) for slug, ws in docs.items()}
+    out = {}
+    for f in films:
+        q = _words(" ".join([f.get("style_en") or "", " ".join(f.get("blend_en") or []), f.get("prompt_en") or ""]))
+        qs = set(q)
+        f3d = "3D" in str(f.get("render") or "")
+        scores = []
+        for slug, ws in docs.items():
+            sc = sum(idf.get(t, 0) for t in qs & ws)
+            if f3d and is3d[slug]:
+                sc *= 1.25
+            scores.append((sc, slug))
+        scores.sort(key=lambda x: (-x[0], x[1]))
+        out[f["no"]] = [slug for _, slug in scores[:k]]
+    return out
 
 
 if __name__ == "__main__":

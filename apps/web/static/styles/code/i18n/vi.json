@@ -396,5 +396,852 @@
    "Công nghệ tiêu dùng",
    "Làm đẹp"
   ]
+ },
+ "_chapters98": {
+  "C1": "Phim câm & phim nói",
+  "C2": "Màu sắc & chiến tranh",
+  "C3": "Màn ảnh rộng",
+  "C4": "Thập niên 60 sôi động",
+  "C5": "Tân Hollywood",
+  "C6": "Kỷ nguyên bom tấn",
+  "C7": "Cuối thế kỷ",
+  "C8": "Thiên niên kỷ mới",
+  "C9": "Thập niên phim độc lập",
+  "C10": "Ngay lúc này"
+ },
+ "o98-01": {
+  "name": "Không chiến 3D thời phim câm, đen trắng orthochromatic nhuộm màu",
+  "blend": [
+   "three.js 3D",
+   "Đen trắng orthochromatic",
+   "Nhuộm màu phim câm",
+   "Vết mòn máy chiếu và khung iris tròn"
+  ]
+ },
+ "o98-02": {
+  "name": "Áp phích revue Art Deco đen vàng",
+  "blend": [
+   "Áp phích Art Deco",
+   "Chuyển sắc kim loại bằng airbrush",
+   "A. M. Cassandre",
+   "Trang phục Erté"
+  ]
+ },
+ "o98-03": {
+  "name": "Tranh khắc gỗ phản chiến kiểu Kollwitz",
+  "blend": [
+   "Tranh khắc gỗ",
+   "Käthe Kollwitz",
+   "Chủ nghĩa biểu hiện Đức",
+   "In màu hai bản khắc"
+  ]
+ },
+ "o98-04": {
+  "name": "Ảnh toàn cảnh in albumen tông sepia 1889",
+  "blend": [
+   "Bản in albumen chỉnh tông vàng",
+   "Ảnh toàn cảnh miền Tây hoang dã",
+   "Nhân vật tô màu bằng tay"
+  ]
+ },
+ "o98-05": {
+  "name": "Sảnh 3D đen trắng ánh bạc MGM",
+  "blend": [
+   "three.js 3D",
+   "Đen trắng ánh bạc MGM",
+   "Nội thất Art Deco",
+   "Bố cục đối xứng từ trên cao"
+  ]
+ },
+ "o98-06": {
+  "name": "Tranh trang trí Art Nouveau kiểu Mucha",
+  "blend": [
+   "Alphonse Mucha",
+   "In thạch bản màu",
+   "Hoa văn Art Nouveau"
+  ]
+ },
+ "o98-07": {
+  "name": "Hoạt hình ống cao su đen trắng thập niên 1930",
+  "blend": [
+   "Phong cách ống cao su Fleischer",
+   "Tô màu cel",
+   "Nền màu nước Silly Symphonies",
+   "Vết mòn phim chiếu"
+  ]
+ },
+ "o98-08": {
+  "name": "Hải đồ Bộ Hải quân Anh khắc đồng",
+  "blend": [
+   "Hải đồ Bộ Hải quân thế kỷ 18",
+   "Tranh khắc đồng",
+   "Tô màu nhạt bằng tay",
+   "Tranh aquatint của Robert Dodd"
+  ]
+ },
+ "o98-09": {
+  "name": "Sân khấu bánh cưới 3D đen trắng ánh bạc",
+  "blend": [
+   "three.js 3D",
+   "Đen trắng ánh bạc MGM",
+   "Đại cảnh revue năm 1936",
+   "Lông đà điểu và voan chiffon"
+  ]
+ },
+ "o98-10": {
+  "name": "In typo trên giấy báo và tranh khắc nét",
+  "blend": [
+   "Tít báo chữ gỗ",
+   "In typo trên giấy báo",
+   "Tranh khắc nét thập niên 1890"
+  ]
+ },
+ "o98-11": {
+  "name": "Áp phích in lụa WPA",
+  "blend": [
+   "In lụa WPA thập niên 1930",
+   "Mực chuyển sắc split-fountain",
+   "Sáu màu mực phủ đục phẳng"
+  ]
+ },
+ "o98-12": {
+  "name": "Sơn dầu đắp dày Technicolor",
+  "blend": [
+   "Sơn dầu đắp dày",
+   "Dao vẽ",
+   "Bảng màu Technicolor 1939",
+   "Tranh áp phích sử thi"
+  ]
+ },
+ "o98-13": {
+  "name": "Tranh chì than Gothic",
+  "blend": [
+   "Than vẽ cành nho",
+   "Tẩy lấy sáng và miết nhòe",
+   "William Kentridge",
+   "Hồi hộp Gothic"
+  ]
+ },
+ "o98-14": {
+  "name": "Màu bột thung lũng xứ Wales",
+  "blend": [
+   "Màu bột phủ đục",
+   "Phong cảnh dao vẽ của Kyffin Williams",
+   "Màu áp phích năm 1941"
+  ]
+ },
+ "o98-15": {
+  "name": "Áp phích in đá hậu phương Anh thời chiến",
+  "blend": [
+   "In đá với bản bóng vẽ sáp",
+   "Áp phích Thế chiến II của Frank Newbould và Abram Games",
+   "Bảng màu Bộ Thông tin Anh"
+  ]
+ },
+ "o98-16": {
+  "name": "Đen trắng glamour xưởng phim Hollywood",
+  "blend": [
+   "Chân dung ảnh tĩnh glamour chỉnh bằng airbrush",
+   "Ánh sáng xưởng phim của Arthur Edeson",
+   "Kính khuếch tán và hạt bạc"
+  ]
+ },
+ "o98-17": {
+  "name": "Kính màu Gothic ngược sáng",
+  "blend": [
+   "Kính màu ghép chì với vẽ grisaille",
+   "Ô kính hình thoi xanh Chartres",
+   "Màu ngọc của Harry Clarke"
+  ]
+ },
+ "o98-18": {
+  "name": "Tranh ký tự máy đánh chữ",
+  "blend": [
+   "Tranh máy đánh chữ gõ chồng",
+   "Paul Smith và Flora Stacey",
+   "Ánh sáng gắt noir của John F. Seitz"
+  ]
+ },
+ "o98-19": {
+  "name": "Trang đôi tạp chí ảnh bán sắc",
+  "blend": [
+   "Bán sắc hạt thô 45°",
+   "Lấy nét sâu của Gregg Toland",
+   "Dàn trang tạp chí ảnh năm 1946",
+   "Bản màu pha cam"
+  ]
+ },
+ "o98-20": {
+  "name": "Minh họa tạp chí bằng bút chì thập niên 1940",
+  "blend": [
+   "Gạch nét và miết tông bằng chì graphite",
+   "Al Parker và Robert Fawcett",
+   "Chủ thể vẽ bút chì màu"
+  ]
+ },
+ "o98-21": {
+  "name": "Lâu đài trong sương lấy nét sâu, 3D đen trắng",
+  "blend": [
+   "three.js 3D với sương thể tích",
+   "Đen trắng lấy nét sâu của Desmond Dickinson",
+   "Bối cảnh Romanesque trơ trụi của Roger Furse"
+  ]
+ },
+ "o98-22": {
+  "name": "Áp phích tranh cử chữ gỗ",
+  "blend": [
+   "In typo chữ gỗ",
+   "Hatch Show Print",
+   "Nhân vật khắc linoleum",
+   "Chân dung bán sắc"
+  ]
+ },
+ "o98-23": {
+  "name": "Biếm họa một nét kiểu Hirschfeld",
+  "blend": [
+   "Biếm họa mực một nét",
+   "Tranh sân khấu của Al Hirschfeld",
+   "Lời thoại viết tay"
+  ]
+ },
+ "o98-24": {
+  "name": "Ba lê màu nước kiểu Dufy",
+  "blend": [
+   "Nét mực phóng khoáng trên mảng màu lệch",
+   "Raoul Dufy",
+   "Bối cảnh ba lê của Minnelli",
+   "Giấy màu nước ép nguội"
+  ]
+ },
+ "o98-25": {
+  "name": "In thạch bản rạp xiếc Strobridge",
+  "blend": [
+   "In thạch bản màu bốn mực",
+   "Áp phích xiếc Strobridge Litho",
+   "Mực phẳng viền đen đậm"
+  ]
+ },
+ "o98-26": {
+  "name": "Bãi biển đen trắng tông sáng",
+  "blend": [
+   "Nhiếp ảnh đen trắng tông sáng năm 1953",
+   "Burnett Guffey",
+   "Hạt bạc và quầng sáng"
+  ]
+ },
+ "o98-27": {
+  "name": "Hiện thực xã hội kiểu Ben Shahn",
+  "blend": [
+   "Nét mực thấm run rẩy",
+   "Mảng màu tempera phẳng",
+   "Ben Shahn",
+   "Hiện thực xã hội Mỹ thập niên 1950"
+  ]
+ },
+ "o98-28": {
+  "name": "Kinescope 1955 trên TV phòng khách",
+  "blend": [
+   "Ghi hình kinescope đen trắng",
+   "Màn hình CRT cong và đường quét",
+   "Minh họa phòng khách ấm áp thập niên 1950"
+  ]
+ },
+ "o98-29": {
+  "name": "Hoạt hình hiện đại UPA thập niên 1950",
+  "blend": [
+   "Hoạt hình giới hạn UPA",
+   "Hoạt hình đoạn kết của Saul Bass",
+   "Màu áp phích năm 1956",
+   "In hạt sáp màu"
+  ]
+ },
+ "o98-30": {
+  "name": "Bản vẽ kỹ thuật cyanotype",
+  "blend": [
+   "Bản in xanh cyanotype",
+   "Bản vẽ bố trí chung cầu giàn gỗ",
+   "Sửa bằng bút chì đỏ",
+   "Nhân vật chính tô màu bột"
+  ]
+ },
+ "o98-31": {
+  "name": "In thạch bản Belle Époque kiểu Lautrec",
+  "blend": [
+   "Áp phích in thạch bản màu",
+   "Henri de Toulouse-Lautrec",
+   "Vẩy mực crachis",
+   "Trang phục Cecil Beaton"
+  ]
+ },
+ "o98-32": {
+  "name": "Đua xe ngựa 3D ở đấu trường, sử thi 65mm",
+  "blend": [
+   "3D sinh thủ tục (three.js)",
+   "Màn ảnh rộng MGM Camera 65",
+   "Chỉnh màu bản in Technicolor",
+   "Dàn dựng hành động của tổ quay thứ hai"
+  ]
+ },
+ "o98-33": {
+  "name": "Tiêu đề nét của Saul Bass, đen trắng",
+  "blend": [
+   "Thiết kế tiêu đề Saul Bass",
+   "Văn phòng phối cảnh một điểm tụ",
+   "Hạt phim đen trắng",
+   "Một điểm nhấn màu ấm duy nhất"
+  ]
+ },
+ "o98-34": {
+  "name": "Sân khấu 3D Technicolor",
+  "blend": [
+   "3D sinh thủ tục (three.js)",
+   "Chỉnh màu hoàng hôn Technicolor",
+   "Thiết kế bối cảnh của Boris Leven",
+   "Áp phích 1961: trời đỏ, thang thoát hiểm đen"
+  ]
+ },
+ "o98-35": {
+  "name": "Áp phích sử thi màu bột kiểu Terpning",
+  "blend": [
+   "Tranh áp phích màu bột và sơn dầu",
+   "Áp phích năm 1962 của Howard Terpning",
+   "Ánh sáng sa mạc 70mm của Freddie Young"
+  ]
+ },
+ "o98-36": {
+  "name": "Tranh khắc châm biếm thời Georgian tô màu tay",
+  "blend": [
+   "Tranh khắc đồng Hogarth",
+   "Tô màu tay kiểu Rowlandson/Gillray",
+   "Bong bóng thoại châm biếm"
+  ]
+ },
+ "o98-37": {
+  "name": "Minh họa thời trang Bob Peak",
+  "blend": [
+   "Nét mực nhanh",
+   "Màu nước hồng và magenta",
+   "Áp phích năm 1964 của Bob Peak",
+   "Trang phục Ascot của Cecil Beaton"
+  ]
+ },
+ "o98-38": {
+  "name": "Cảnh bay 3D dãy Alps kiểu sách truyện",
+  "blend": [
+   "Địa hình 3D sinh thủ tục (three.js)",
+   "Màu màn ảnh rộng Todd-AO",
+   "Cảnh mở đầu quay từ trực thăng của Ted McCord",
+   "Đồng cỏ kiểu Miyazaki"
+  ]
+ },
+ "o98-39": {
+  "name": "Chân dung Tudor sơn dầu kiểu Holbein",
+  "blend": [
+   "Phủ màu mỏng sơn dầu kiểu bậc thầy cổ điển",
+   "Hans Holbein, Sir Thomas More (1527)",
+   "Nội thất Tudor dưới ánh nến"
+  ]
+ },
+ "o98-40": {
+  "name": "Cảnh đêm Risograph ba màu mực",
+  "blend": [
+   "In chồng Risograph",
+   "Đỏ cam áp phích năm 1967",
+   "Cảnh đêm ngoại cảnh của Haskell Wexler",
+   "Dàn cảnh dạng bóng đen"
+  ]
+ },
+ "o98-41": {
+  "name": "Nhà hát đồ chơi thời Victoria",
+  "blend": [
+   "Nhà hát đồ chơi Pollock's",
+   "Tờ in thạch bản tô màu tay",
+   "Bìa cắt và bóng đèn chân sân khấu",
+   "Biếm họa Cruikshank"
+  ]
+ },
+ "o98-42": {
+  "name": "In lụa ảnh của Warhol, Double Elvis",
+  "blend": [
+   "In lụa ảnh",
+   "Andy Warhol, Double Elvis (1963)",
+   "Nền sơn bạc",
+   "Mảng màu lệch khớp"
+  ]
+ },
+ "o98-43": {
+  "name": "In thạch bản trái phiếu chiến tranh Thế chiến II",
+  "blend": [
+   "Áp phích in đá",
+   "Áp phích trái phiếu chiến tranh và tuyển quân Mỹ 1942–45",
+   "Bán sắc 45°, bản đá màu lệch khớp"
+  ]
+ },
+ "o98-44": {
+  "name": "Rượt đuổi 16mm dưới đường sắt trên cao",
+  "blend": [
+   "Phố 3D bằng three.js",
+   "Hạt phim tài liệu 16mm",
+   "Chỉnh màu lạnh, vùng tối ngả lục lam"
+  ]
+ },
+ "o98-45": {
+  "name": "Sơn dầu ánh sáng đỉnh kiểu Rembrandt",
+  "blend": [
+   "Sơn dầu sáng tối tương phản",
+   "Ánh sáng đỉnh của Gordon Willis",
+   "Phủ màu mỏng kiểu Rembrandt và Caravaggio"
+  ]
+ },
+ "o98-46": {
+  "name": "Minh họa Saturday Evening Post",
+  "blend": [
+   "Minh họa bìa Saturday Evening Post",
+   "Tạo khối mảng kiểu Leyendecker",
+   "Thẻ chương của Jaroslav Gebr"
+  ]
+ },
+ "o98-47": {
+  "name": "Ảnh sepia tô màu tay",
+  "blend": [
+   "Bản in bạc chỉnh tông",
+   "Ảnh đảo Ellis của Lewis Hine",
+   "Thuốc nhuộm quét bằng cọ",
+   "Nhân vật 3D ray marching"
+  ]
+ },
+ "o98-48": {
+  "name": "Hiện thực Mỹ kiểu Hopper",
+  "blend": [
+   "Hiện thực kiểu Edward Hopper",
+   "Ánh sáng cửa sổ xiên sắc cạnh",
+   "Mảng sơn dầu phẳng với nét cọ kéo"
+  ]
+ },
+ "o98-49": {
+  "name": "Bình minh Philadelphia, 3D trên phim 35mm",
+  "blend": [
+   "Thành phố 3D bằng three.js",
+   "Chỉnh màu phim 35mm thập niên 1970",
+   "Steadicam bám theo và quay vòng đi lên"
+  ]
+ },
+ "o98-50": {
+  "name": "Tranh biếm New Yorker, mực và màu loãng",
+  "blend": [
+   "Tranh biếm một khung New Yorker",
+   "Nét mực ngòi bút",
+   "Lớp màu nước nhạt",
+   "Chú thích viết tay"
+  ]
+ },
+ "o98-51": {
+  "name": "Tempera trứng kiểu Andrew Wyeth",
+  "blend": [
+   "Tempera trứng trên nền gesso",
+   "Andrew Wyeth",
+   "Nét gạch đan chéo mảnh"
+  ]
+ },
+ "o98-52": {
+  "name": "Tranh sáp màu của trẻ em",
+  "blend": [
+   "Sáp màu trên giấy có vân",
+   "Cách vẽ của trẻ 6–8 tuổi",
+   "Nhãn viết tay"
+  ]
+ },
+ "o98-53": {
+  "name": "Màu nước trong suốt mùa thu",
+  "blend": [
+   "Lớp màu nước trong suốt chồng lên nhau",
+   "Winslow Homer và John Singer Sargent",
+   "Phác thảo bút chì HB"
+  ]
+ },
+ "o98-54": {
+  "name": "In thạch bản Olympic Paris 1924",
+  "blend": [
+   "In thạch bản bốn bản đá",
+   "Áp phích Olympic 1924 của Jean Droit",
+   "Hình thể giải phẫu cổ điển"
+  ]
+ },
+ "o98-55": {
+  "name": "In khuôn gỗ thủ công Rajasthan",
+  "blend": [
+   "Nhuộm chàm chống bằng bùn dabu Bagru",
+   "Viền in khuôn gỗ Sanganer",
+   "Gương mặt nghiêng tiểu họa Rajasthan"
+  ]
+ },
+ "o98-56": {
+  "name": "Ảnh Polaroid album gia đình",
+  "blend": [
+   "Ảnh SX-70 và Polaroid 600",
+   "Ảnh chụp nhanh Kodacolor",
+   "Album trang từ tính thập niên 1970–80",
+   "Vệt nhòe khi lia máy theo chuyển động"
+  ]
+ },
+ "o98-57": {
+  "name": "Bóng cắt Rococo trong ánh nến mạ vàng",
+  "blend": [
+   "Chân dung bóng cắt thế kỷ 18",
+   "Phù điêu mạ vàng Rococo",
+   "Quầng sáng ánh nến",
+   "Vòm sao của Schinkel"
+  ]
+ },
+ "o98-58": {
+  "name": "Máy bay hai tầng cánh 3D trên Thung lũng Rift",
+  "blend": [
+   "3D thời gian thực bằng three.js",
+   "Không ảnh của David Watkin",
+   "Chỉnh màu phim tông ấm",
+   "Đàn hồng hạc dựng bằng instancing"
+  ]
+ },
+ "o98-59": {
+  "name": "Ký họa chiến trường · bút mực & màu loãng",
+  "blend": [
+   "Nét bút nhanh",
+   "Màu loãng trong suốt",
+   "Giấy sổ ký họa",
+   "Chương trình họa sĩ chiến trường của Lục quân Mỹ tại Việt Nam"
+  ]
+ },
+ "o98-60": {
+  "name": "Tranh cung đình công bút trên lụa",
+  "blend": [
+   "Công bút trọng thái",
+   "Giới họa (kiến trúc kẻ thước)",
+   "Cuộn tranh cung đình nhà Thanh",
+   "Màu sắc của Storaro"
+  ]
+ },
+ "o98-61": {
+  "name": "Airbrush thập niên 80 + phép đếm của Raymond",
+  "blend": [
+   "Minh họa airbrush thập niên 80",
+   "Nhân vật kiểu Patrick Nagel",
+   "Chrome kiểu Hajime Sorayama",
+   "Chú thích bản vẽ kỹ thuật"
+  ]
+ },
+ "o98-62": {
+  "name": "Minh họa sơn dầu kiểu Rockwell",
+  "blend": [
+   "Minh họa sơn dầu Norman Rockwell",
+   "Bìa Saturday Evening Post",
+   "Xe dựng 3D vẽ lại bằng nét sơn dầu"
+  ]
+ },
+ "o98-63": {
+  "name": "Nhật ký thực địa · bút chì & màu nước",
+  "blend": [
+   "Phác thảo nền bằng graphite",
+   "Màu nước trong suốt",
+   "Chữ viết tay bằng mực sắt-gall",
+   "Ký họa thực địa của Bodmer và Catlin"
+  ]
+ },
+ "o98-64": {
+  "name": "Tranh khắc đồng vạn vật học tô màu tay",
+  "blend": [
+   "Tranh khắc đồng",
+   "Tô màu bằng tay",
+   "Bản tranh côn trùng học thời Victoria",
+   "Moses Harris, The Aurelian"
+  ]
+ },
+ "o98-65": {
+  "name": "Sơn dầu miền Tây kiểu Remington · hoàng hôn & dạ khúc",
+  "blend": [
+   "Đồng bằng tông ấm của Remington",
+   "Những dạ khúc cuối đời của Remington",
+   "Sơn dầu đắp dày",
+   "Bóng đen ở tiêu đề mở đầu"
+  ]
+ },
+ "o98-66": {
+  "name": "Phim đen trắng, một chiếc áo khoác đỏ",
+  "blend": [
+   "Phim đen trắng tương phản cao",
+   "Hạt bạc thô",
+   "Giữ màu cục bộ",
+   "Janusz Kamiński"
+  ]
+ },
+ "o98-67": {
+  "name": "Sách pop-up kiểu Sabuda trên bàn thật",
+  "blend": [
+   "Kết cấu pop-up của Robert Sabuda",
+   "Chất in màu nước và chì màu",
+   "Thẻ giấy three.js",
+   "Độ sâu trường ảnh vật lý"
+  ]
+ },
+ "o98-68": {
+  "name": "Thủ bản minh họa dát vàng lá",
+  "blend": [
+   "Hoa văn đan bện Sách Kells",
+   "Tiểu họa Gothic (Kinh Thánh Morgan)",
+   "Tranh lề Thánh vịnh Luttrell",
+   "Vàng lá đánh bóng"
+  ]
+ },
+ "o98-69": {
+  "name": "Màu nước sổ lưu niệm của nhà thám hiểm",
+  "blend": [
+   "Màu nước trong suốt",
+   "Ghi chú bút mực và chữ viết tay",
+   "Cắt dán sổ lưu niệm: băng dính, ảnh, bản đồ",
+   "Chỉnh màu hổ phách-sepia"
+  ]
+ },
+ "o98-70": {
+  "name": "Bản vẽ kỹ thuật hiện dần thành hoàng hôn 3D",
+  "blend": [
+   "Bản vẽ bố trí chung của xưởng đóng tàu",
+   "Con tàu three.js đúng tỷ lệ thật",
+   "Màu sắc của Russell Carpenter",
+   "Một chuyển động máy liền mạch"
+  ]
+ },
+ "o98-71": {
+  "name": "Tiểu họa thời Elizabeth kiểu Hilliard",
+  "blend": [
+   "Tiểu họa chân dung (limning)",
+   "Màu phủ đục trên giấy da",
+   "Vàng vỏ sò",
+   "Tĩnh vật gấm damask đỏ thẫm"
+  ]
+ },
+ "o98-72": {
+  "name": "Đối xứng ngoại ô + máy quay DV",
+  "blend": [
+   "Đối xứng chính diện kiểu Conrad Hall",
+   "Ảo tưởng cánh hoa hồng",
+   "Video máy quay DV thập niên 1990"
+  ]
+ },
+ "o98-73": {
+  "name": "Khảm sàn La Mã",
+  "blend": [
+   "Tessera opus vermiculatum",
+   "Smalti thủy tinh dát vàng lá",
+   "Tranh khảm đấu sĩ Zliten"
+  ]
+ },
+ "o98-74": {
+  "name": "Bút sáp trên kính & phấn, đường nối vàng",
+  "blend": [
+   "Bút sáp trắng trên kính",
+   "Phấn bảng đen",
+   "Đường nối vàng phát sáng",
+   "Ánh sáng cửa sổ kiểu Deakins"
+  ]
+ },
+ "o98-75": {
+  "name": "Sân khấu Fosse đỏ và đen",
+  "blend": [
+   "Dàn dựng sân khấu của Bob Fosse",
+   "Bóng ngược sáng viền đỏ",
+   "Neon và kim sa",
+   "Màu áp phích Chicago 2002"
+  ]
+ },
+ "o98-76": {
+  "name": "Màu nước Alan Lee & bản đồ Tolkien",
+  "blend": [
+   "Concept art màu nước và bút chì",
+   "Bản đồ giấy da kiểu Tolkien",
+   "Alan Lee và John Howe"
+  ]
+ },
+ "o98-77": {
+  "name": "Game đối kháng arcade 16-bit",
+  "blend": [
+   "Pixel art 16-bit",
+   "HUD game đối kháng arcade",
+   "Đường quét CRT"
+  ]
+ },
+ "o98-78": {
+  "name": "Vệt đèn đêm Los Angeles & tuyết rơi",
+  "blend": [
+   "Chụp đêm phơi sáng dài",
+   "Cam đèn natri và lục lam neon",
+   "Lóa anamorphic và hạt phim"
+  ]
+ },
+ "o98-79": {
+  "name": "Stencil đường phố trên tường gạch Boston",
+  "blend": [
+   "Stencil phun sơn nhiều lớp",
+   "Những con chuột của Banksy",
+   "Vân tường gạch đỏ",
+   "Áp phích dán bán sắc"
+  ]
+ },
+ "o98-80": {
+  "name": "Hoàng hôn Tây Texas 3D, ánh sáng Deakins",
+  "blend": [
+   "3D thời gian thực (three.js)",
+   "Ánh hoàng hôn của Roger Deakins",
+   "Chỉnh màu phim giảm bão hòa"
+  ]
+ },
+ "o98-81": {
+  "name": "Trường quay gameshow & cam-xanh mòng két Mumbai",
+  "blend": [
+   "Ánh sáng gameshow truyền hình",
+   "Chùm sáng xanh tím và lóa ống kính",
+   "Cam và xanh mòng két của Anthony Dod Mantle"
+  ]
+ },
+ "o98-82": {
+  "name": "Hình nét sổ tay kỹ thuật gỡ bom",
+  "blend": [
+   "Bản vẽ nét sổ tay kỹ thuật quân sự",
+   "Sơ đồ tháo rời",
+   "Chú thích chữ máy đánh chữ",
+   "Mảng màu phẳng xanh ô liu và màu cát"
+  ]
+ },
+ "o98-83": {
+  "name": "Tường bong tróc & phòng phát thanh vàng",
+  "blend": [
+   "Vân sơn dầu kỹ thuật số",
+   "Tường nhiều lớp sơn bong tróc",
+   "Phòng phát thanh thập niên 1930",
+   "Đường sóng âm màu vàng"
+  ]
+ },
+ "o98-84": {
+  "name": "Đen trắng phim câm tinh xảo",
+  "blend": [
+   "Đen trắng phim câm cuối thập niên 1920",
+   "Thẻ phụ đề khung Art Deco",
+   "Ánh sáng glamour xưởng phim Hollywood"
+  ]
+ },
+ "o98-85": {
+  "name": "Trang truyện tranh thập niên 70 của Jack Kirby",
+  "blend": [
+   "Truyện tranh vũ trụ của Jack Kirby",
+   "In bốn màu Ben-Day",
+   "Giấy báo ố vàng",
+   "Concept art Lord of Light"
+  ]
+ },
+ "o98-86": {
+  "name": "Daguerreotype trong hộp, đang hiện ảnh",
+  "blend": [
+   "Daguerreotype trong hộp thập niên 1850",
+   "Ảnh tintype tô màu tay",
+   "Tĩnh vật studio ảnh"
+  ]
+ },
+ "o98-87": {
+  "name": "Cảnh quay dài 3D hậu trường",
+  "blend": [
+   "3D thời gian thực (three.js)",
+   "Cảnh quay dài cầm tay của Lubezki",
+   "Đèn sợi đốt và đèn huỳnh quang",
+   "Hạt mịn điện ảnh kỹ thuật số"
+  ]
+ },
+ "o98-88": {
+  "name": "Máy đọc vi phiếu, bán sắc giấy báo",
+  "blend": [
+   "Máy đọc vi phiếu thư viện",
+   "Bán sắc CMYK báo năm 2001",
+   "Đơn sắc xanh lân quang"
+  ]
+ },
+ "o98-89": {
+  "name": "Chân dung sơn dầu xanh ánh trăng",
+  "blend": [
+   "Nét cọ chân dung sơn dầu",
+   "Song sắc xanh mòng két / hồng tía / tím xanh",
+   "Máy quay ngang mặt nước (nửa trên, nửa dưới)"
+  ]
+ },
+ "o98-90": {
+  "name": "Tụ quang dưới nước xanh mòng két 3D",
+  "blend": [
+   "3D thời gian thực (three.js)",
+   "Tụ quang chiếu và cột sáng thể tích",
+   "Chỉnh màu xanh mòng két - vàng ấm của Dan Laustsen"
+  ]
+ },
+ "o98-91": {
+  "name": "Bưu thiếp vân vải lanh thập niên 1960",
+  "blend": [
+   "Bưu thiếp vân lanh Curt Teich",
+   "Chữ lớn “Greetings from”",
+   "Tô màu tay bằng airbrush",
+   "Lệch khớp in offset"
+  ]
+ },
+ "o98-92": {
+  "name": "Hình chiếu trục đo mặt cắt kiến trúc",
+  "blend": [
+   "Mặt cắt trục đo dimetric",
+   "Tô đặc mặt cắt (poché) và người tỷ lệ",
+   "Chỉnh màu đêm mưa"
+  ]
+ },
+ "o98-93": {
+  "name": "Phấn tiên mềm giờ khắc kỳ diệu",
+  "blend": [
+   "Phấn tiên mềm trên giấy màu",
+   "Bảng màu chạng vạng giờ khắc kỳ diệu",
+   "Vân hạt giấy"
+  ]
+ },
+ "o98-94": {
+  "name": "Khắc scrimshaw trên răng cá voi",
+  "blend": [
+   "Scrimshaw của thủy thủ săn cá voi thế kỷ 19",
+   "Gạch nét và chấm bằng dao khắc",
+   "Ánh sáng chụp sản phẩm trên bàn"
+  ]
+ },
+ "o98-95": {
+  "name": "Nhảy cắt đa vũ trụ ray marching",
+  "blend": [
+   "Các vũ trụ ray marching bằng GLSL",
+   "Mỗi vũ trụ một phong cách (văn phòng hiện thực, vũ trụ siêu thực, phong cảnh, quảng cáo)",
+   "Mandala cầu vồng mắt googly"
+  ]
+ },
+ "o98-96": {
+  "name": "Quả cầu lửa hạt 3D, hạt phim IMAX",
+  "blend": [
+   "3D thời gian thực (three.js)",
+   "Mô phỏng hạt trên GPU",
+   "Chỉnh màu bản in IMAX 65 mm",
+   "Ảnh tốc độ cao vụ thử Trinity"
+  ]
+ },
+ "o98-97": {
+  "name": "Đêm neon tuyết rơi",
+  "blend": [
+   "Biển hiệu đèn neon",
+   "Phản chiếu mặt đất ướt và tuyết",
+   "Chụp đêm trên phim 35 mm"
+  ]
+ },
+ "o98-98": {
+  "name": "Rượt đuổi 3D trên đường đồi nhấp nhô, ống kính tele",
+  "blend": [
+   "3D thời gian thực (three.js)",
+   "Nén hình tele cực mạnh",
+   "Hơi nóng bốc và ảo ảnh mặt đường",
+   "Hạt mịn VistaVision"
+  ]
  }
 }

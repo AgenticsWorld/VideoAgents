@@ -12,7 +12,10 @@
 
 ## 职责
 
-1. **机检全量**:`python3 code/codevideo.py check --project <slug> --stage all`(contract / timeline / clips / final / delivery 五段)必须全 PASS;
+1. **机检全量**:`python3 code/codevideo.py check --project <slug> --stage all`(contract / timeline / beats / clips / final / delivery 六段)必须全 PASS;
+   beats 段只在外来配乐(`music_source ∈ {model, library}`,有 `codevideo/music/beats.json`)时有项:`beats_match_score`、`hits_on_beat`、
+   `sections_on_beat`;代码作曲时该段为空,不算缺项。cv2-beatsync 回执登记了 `off` 的那一类(及理由)按 waiver 记入 PASS_WITH_WAIVER,
+   没登记理由的 FAIL 照常开缺陷单指回 film-director;
    另跑 `python3 code/codevideo.py readcheck --project <slug>`(退出 0;2 = 页面没有 TEXTS,不算通过)。任何 FAIL 按 detail 开缺陷单指回责任工位。
 2. **联系表两遍**:`python3 code/codevideo.py still --project <slug> --range 0:<dur>:1.5 --prefix qa_ --sheet`(输出到 `codevideo/sheets/`),
    逐格看下列常见失败:主体太小 / 太远 / 贴边;太暗、同色叠同色;字幕压主体;转场里的空帧;跟随特效(光圈、放大、聚光、标注)在镜头运动后脱离主体;
@@ -24,9 +27,14 @@
    **整片带声音完整看一遍由用户在 CVH2 做**——报告里写清哪些项是测量结论、哪些需要用户耳听确认,不冒充「已听过」。
 5. **不是样片的翻拍**:`python3 code/codevideo.py demo --project <slug>` 拿到样片海报与 `codevideo/style/DEMO.md`,按 结构 / 开场 / 招牌镜头 /
    机位路线 / 配乐形状 / 结尾 六项逐项对比,**至少四项不同**;把本片联系表与样片海报并排看一眼。少于四项开 major 指回 film-director。
+   **仅当风格是轻量风格(`o98-NN`)时**,本项改为两条:① `not_the_demo_again` 记「不适用(轻量风格无样片)」,只确认不与 OPUSCAR 98 原片同构、
+   没有出现提示里点名电影的角色 / 情节 / 镜头复刻 / 片名 / logo,也没有 OPUSCAR 98 的角色(包括 Clawd);
+   ② `light_style_followed`:对照 `codevideo/style/STYLE.md` 第 1 节提示原文(色值、镜头与转场规律、「避免」条款)与 TREATMENT.md
+   「风格补全」逐项看联系表,全片一致;偏离开缺陷单(提示原文偏离 → scene-coder;补全口径前后不一 → film-director)。
 6. **字幕**:每条字幕在 cue 中点取帧,确认不压主体、不出画、与 `edit/ep01/subtitles.srt` 文字一致;停留 ≥ 1.8 s 且 ≥ 念完 + 0.6 s。
 7. **版权与署名**:`codevideo/brief.json` 里每件用户素材都有权利声明,没声明的不得出现在画面里;CREDITS 覆盖字体、采样署名、3D 素材、
-   用户素材、TTS 渠道;**全片没有 LemoLab / Claude / Opus 署名**——机检 grep 不到画进图里的字,所以**片尾最后 5 秒逐帧看一遍**(`still --range <dur-5>:<dur>:0.5`);
+   用户素材、TTS 渠道,外来配乐另须写清出处(`codevideo/music/beats.json` 与 `assets/audio/bgm/ep01/cue_sheet.json` 的 license:
+   项目音乐库曲目号与原始授权链 / 用户音乐与权利声明 / 音乐模型的渠道与模型);**全片没有 LemoLab / Claude / Opus 署名**——机检 grep 不到画进图里的字,所以**片尾最后 5 秒逐帧看一遍**(`still --range <dur-5>:<dur>:0.5`);
    没有出现未授权的真实品牌、商标、上游样片里的真实事件名称或角色。
 8. **出报告**:`qa/reports/ep01/codevideo.json`,verdict 三态 PASS / PASS_WITH_WAIVER / FAIL;缺陷单按 WORKFLOW.md §7 格式写 `qa/defects/`,
    路由:页面画面 / 事件 / 字幕 → `18-code-video/scene-coder`;结构 / 时间轴 / 台词 → `film-director`;配乐 → `code-composer`;
@@ -89,8 +97,9 @@ instruction: |
 
 - `check_all_pass`(`codevideo.py check --stage all` 退出 0,报告逐项映射)
 - `contact_sheets_reviewed`(两遍联系表与击点抽帧条都已出并逐条写结论)
-- `not_the_demo_again`(六项对比逐项登记,不同 ≥ 4)
+- `not_the_demo_again`(完整风格:六项对比逐项登记,不同 ≥ 4;轻量风格:登记不适用,只核不与 OPUSCAR 98 原片同构)
 - `sound_table_verified`、`subtitles_clear_of_subject`、`user_assets_rights_checked`
+- `light_style_followed`(仅轻量风格:提示原文的不变量与 TREATMENT「风格补全」在全片一致)
 - `defects_routed`(每个 FAIL 有缺陷单且指明责任工位);`ascii_filename`;`schema` 通过
 
 **评分(evaluation Agent,rubric analysis_v1,阈值 80)**

@@ -172,6 +172,9 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .np-types{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
 /* 演示视频风格画廊(2026-10-20,apps/web/static/styles/code/code_styles.json,lemo-opuscar 43 风格) */
 #np-cs-cats{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+#np-cs-sets{display:flex;gap:6px}
+#np-cs-sets .style-chip{font-weight:600}
+.cs-card .light{position:absolute;top:5px;left:5px;font-size:10px;background:rgba(108,158,248,.85);color:#0b1020;border-radius:4px;padding:0 5px}
 #np-cs-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-height:46vh;overflow-y:auto;padding:2px}
 .cs-card{position:relative;border:2px solid transparent;border-radius:9px;overflow:hidden;cursor:pointer;background:var(--panel);display:flex;flex-direction:column}
 .cs-card:hover{border-color:var(--accent)}
@@ -504,9 +507,11 @@ a.hdr-icon:hover{border-color:var(--accent)}
     </div>
     <div class="np-step" data-step="codestyle" style="display:none">
       <div id="np-cs-picked"></div>
+      <div id="np-cs-sets"></div>
       <div id="np-cs-cats"></div>
       <div id="np-cs-grid"></div>
-      <div class="note">每种风格都有一部用代码做出来的样片,选中后点上方的「在线看样片」观看。风格只决定画面材质、色彩、字体、运动和声音调色板;故事、结构与镜头由团队按你的主题来导演。风格库来自开源项目 lemo-opuscar(MIT)</div>
+      <div class="note" id="np-cs-note-light" style="display:none">轻量风格来自 lemo-opuscar 的《OPUSCAR 98》:98 部奥斯卡最佳影片,每部用一种风格重画。封面是那部短片里的一帧,画面里的主角 Clawd 只属于原片,不会出现在你的片子里;选中后团队只拿它的那段风格提示,故事、结构与镜头按你的主题来导演</div>
+      <div class="note" id="np-cs-note-full">每种风格都有一部用代码做出来的样片,选中后点上方的「在线看样片」观看。风格只决定画面材质、色彩、字体、运动和声音调色板;故事、结构与镜头由团队按你的主题来导演。风格库来自开源项目 lemo-opuscar(MIT)</div>
     </div>
     <div class="np-step" data-step="pace" style="display:none">
       <div class="row" style="align-items:flex-start"><label style="padding-top:6px">叙事节奏</label>
@@ -611,7 +616,8 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <div class="row" data-np-types="code-video"><label>先审故事板</label><input type="checkbox" id="npcv-board" style="flex:none" checked>
         <span style="color:var(--dim);font-size:12px">先用真实绘制代码渲 6–9 个关键镜头给你签字(CVH1),再做声音与全片画面</span></div>
       <div class="row" data-np-types="code-video"><label>配乐</label>
-        <select id="npcv-music" style="flex:1;min-width:0;width:100%"><option value="code">代码作曲(默认:按节拍网格写谱,用采样乐器 / 合成器渲染)</option><option value="model">按「🎨 生成模型」页音乐设置生成</option></select></div>
+        <select id="npcv-music" style="flex:1;min-width:0;width:100%"><option value="code">代码作曲(默认:按节拍网格写谱,用采样乐器 / 合成器渲染)</option><option value="model">按「🎨 生成模型」页音乐设置生成(自动对拍)</option><option value="library">从项目音乐库 / 用户音乐选曲(自动对拍)</option></select></div>
+      <div class="note" id="npcv-music-hint" data-np-types="code-video" style="display:none;color:#e8a33d"></div>
       <div class="row" data-np-types="film"><label>白模</label>
         <input type="checkbox" id="npo-spatial" style="flex:none" checked>
         <span id="npo-spatial-hint" style="color:var(--dim);font-size:12px">建场景白模，并导出白模摄影机视角视频作为视频的参考定位人物</span></div>
@@ -1581,11 +1587,27 @@ async function npLoadLibs(){
       +`<span class="np-lib-meta">${esc(I18N.f('{n} 个分镜 · 已分析 {a}',{n:x.clip_count,a:x.analyzed_count||0}))}${nm!==x.name?' · '+esc(x.name):''}</span></label>`;
   }).join(''):`<div class="np-libs-empty">${esc(t('还没有可用的素材库:先在 设置 → 高级 → 素材库 导入源视频并完成分割'))}</div>`;
 }
+/* 演示视频配乐来源提示(三期):外来音乐会被适配到片长、测节拍、把画面时间轴对到拍上 */
+let NPCV_MUSIC_REQ=0;
+async function npcvMusicHint(){
+  const v=$('#npcv-music').value,box=$('#npcv-music-hint'),req=++NPCV_MUSIC_REQ;
+  let msg='';
+  if(v==='library')msg=t('新项目的音乐库是空的:在第 2 步「素材」里带上音乐文件(会放进参考文件「音乐」分类),或建好后到 项目设置 → 音乐库 入库;选好的曲子会被截到片长、测出节拍,画面切点对到拍上');
+  else if(v==='model'){
+    try{const g=await api('/api/v1/config/generation');if(((g.music||{}).provider||'code')==='code')
+      msg=t('「🎨 生成模型」页音乐现在选的是「代码作曲」:选这一项须先到那里换成一个音乐模型(Agentics / OpenRouter / ElevenLabs / ComfyUI),否则开工时会停在配乐这一步')}catch(e){}
+  }
+  if(req!==NPCV_MUSIC_REQ)return;
+  box.textContent=msg;box.style.display=msg?'':'none';
+}
+$('#npcv-music').onchange=npcvMusicHint;
 /* 演示视频风格画廊(2026-10-20):/static/styles/code/code_styles.json(scripts/sync_lemo_opuscar.py 生成)+ i18n/<lang>.json 译文 */
-let NP_CS='',NP_CS_CAT='',CODE_STYLES=null;
+let NP_CS='',NP_CS_CAT='',NP_CS_SET='full',CODE_STYLES=null;
 async function codeStylesLoad(){
   if(CODE_STYLES)return CODE_STYLES;
   const lib=await (await fetch('/static/styles/code/code_styles.json')).json();
+  // OPUSCAR 98 轻量风格(三期):只有一段风格提示,没有完整规范与样片源码
+  lib.light=await (await fetch('/static/styles/code/opuscar98.json')).json();
   const lang=(window.I18N&&I18N.lang)||'zh';
   let tr={};
   if(lang!=='en'){try{const r=await fetch('/static/styles/code/i18n/'+lang+'.json');if(r.ok)tr=await r.json()}catch(e){}}   // zh.json 只用其中文用途标签
@@ -1594,26 +1616,48 @@ async function codeStylesLoad(){
     s.tname=lang==='zh'?s.cn:(x.name||s.en);s.tline=lang==='zh'?s.line_cn:(x.line||s.line);
     s.tcat=lang==='zh'?s.cat_cn:(cats[s.cat_en]||s.cat_en);s.tuses=lang==='en'?s.uses:(x.uses||s.uses)});
   lib.categories.forEach(c=>{c.t=lang==='zh'?c.cn:(cats[c.en]||c.en)});
+  const ch98=tr._chapters98||{};
+  lib.light.chapters.forEach(c=>{c.t=(lang==='zh'?c.zh:(ch98[c.id]||c.en))+' · '+c.years});
+  lib.light.styles.forEach(s=>{const x=tr[s.id]||{};
+    s.slug=s.id;s.tname=lang==='zh'?s.style_zh:(x.name||s.style_en);
+    s.tuses=lang==='zh'?s.blend_zh:(lang==='en'?s.blend_en:(x.blend||s.blend_en));
+    s.tfilm=`No.${String(s.no).padStart(2,'0')} · ${s.year}`+(lang==='zh'?`《${s.zh}》`:` ${s.title}`);
+    s.dim=s.render});
   CODE_STYLES=lib;return lib;
 }
 async function npCsLoad(){
   let lib;
   try{lib=await codeStylesLoad()}catch(e){$('#np-cs-grid').textContent=t('风格库读取失败:')+e.message;return}
+  const light=NP_CS_SET==='o98';
+  $('#np-cs-note-light').style.display=light?'':'none';$('#np-cs-note-full').style.display=light?'none':'';
+  const sets=$('#np-cs-sets');sets.innerHTML='';
+  [['full',I18N.f('完整风格({n})',{n:lib.styles.length})],['o98',I18N.f('轻量风格 · OPUSCAR 98({n})',{n:lib.light.styles.length})]].forEach(([k,label])=>{
+    const b=document.createElement('span');b.className='style-chip'+(NP_CS_SET===k?' on':'');b.textContent=label;
+    b.title=k==='o98'?t('OPUSCAR 98 里每部片子用的一段风格提示:没有完整规范与样片源码,导演会在方案里补全其余部分'):t('有完整风格规范与样片的 43 种风格');
+    b.onclick=()=>{if(NP_CS_SET!==k){NP_CS_SET=k;NP_CS_CAT='';npCsLoad()}};sets.appendChild(b);
+  });
   const bar=$('#np-cs-cats');bar.innerHTML='';
-  [{en:'',t:t('全部')},...lib.categories].forEach(c=>{
+  const cats=light?lib.light.chapters.map(c=>({en:c.id,t:c.t})):lib.categories;
+  [{en:'',t:t('全部')},...cats].forEach(c=>{
     const b=document.createElement('span');b.className='style-chip'+(NP_CS_CAT===c.en?' on':'');b.textContent=c.t;
     b.onclick=()=>{NP_CS_CAT=c.en;npCsLoad()};bar.appendChild(b);
   });
   const grid=$('#np-cs-grid');grid.innerHTML='';
-  lib.styles.filter(s=>!NP_CS_CAT||s.cat_en===NP_CS_CAT).forEach(s=>{
-    const d=document.createElement('div');d.className='cs-card'+(s.slug===NP_CS?' on':'');d.title=s.tname+' — '+s.tline;
-    d.innerHTML=`<img loading="lazy" src="/static/styles/code/${esc(s.frame)}" alt=""><span class="dim">${s.dim==='3d'?'3D':'2D'}</span>`
-      +`<div class="nm">${esc(s.tname)}</div><div class="uses">${esc((s.tuses||[]).join(' · '))}</div>`;
+  const rows=light?lib.light.styles.filter(s=>!NP_CS_CAT||s.chapter===NP_CS_CAT):lib.styles.filter(s=>!NP_CS_CAT||s.cat_en===NP_CS_CAT);
+  rows.forEach(s=>{
+    const d=document.createElement('div');d.className='cs-card'+(s.slug===NP_CS?' on':'');
+    d.title=light?s.tname+' — '+s.tfilm:s.tname+' — '+s.tline;
+    d.innerHTML=`<img loading="lazy" src="/static/styles/code/${esc(s.frame)}" alt=""><span class="dim">${esc(light?s.render:(s.dim==='3d'?'3D':'2D'))}</span>`
+      +(light?`<span class="light">${esc(t('轻量'))}</span>`:'')
+      +`<div class="nm">${esc(s.tname)}</div><div class="uses">${esc(light?s.tfilm:(s.tuses||[]).join(' · '))}</div>`;
     d.onclick=()=>{NP_CS=s.slug;$('#np-err').textContent='';npCsLoad()};grid.appendChild(d);
   });
-  const cur=lib.styles.find(s=>s.slug===NP_CS);
+  const cur=lib.styles.find(s=>s.slug===NP_CS),curL=lib.light.styles.find(s=>s.slug===NP_CS);
   $('#np-cs-picked').innerHTML=cur?`${esc(t('已选:'))}<b>${esc(cur.tname)}</b>(${esc(cur.tcat)})`
     +` · <a href="${esc(cur.gallery)}" target="_blank" rel="noopener">${esc(t('在线看样片 ↗'))}</a><div class="film">${esc(cur.tline)}</div>`
+    :curL?`${esc(t('已选:'))}<b>${esc(curL.tname)}</b>(${esc(t('轻量风格'))} · ${esc(curL.tfilm)})`
+    +` · <a href="${esc(lib.light.gallery)}" target="_blank" rel="noopener">${esc(t('在线看 OPUSCAR 98 ↗'))}</a>`
+    +`<div class="film">${esc((curL.tuses||[]).join(' · '))}</div><div class="film">${esc(t('轻量风格只有一段风格提示,没有完整规范与样片源码:材质、字体、镜头语法、声音等提示没写到的部分,导演会在方案里补全'))}</div>`
     :esc(t('从下面选一种风格(必选)'));
 }
 function npShowStep(n){
@@ -1750,8 +1794,8 @@ function openNpModal(){
   npInitOnce();
   $('#np-name').value='';$('#np-novel').value='';$('#np-brief').value='';$('#np-style').value='';
   $('#np-audio').value='';$('#np-images').value='';$('#np-voices').value='';$('#np-libs').innerHTML='';$('#np-cvfiles').value='';
-  NP_CS='';NP_CS_CAT='';$('#npcv-len').value=45;$('#npcv-fps').value='24';$('#npcv-narr').checked=true;$('#npcv-subs').checked=true;
-  $('#npcv-board').checked=true;$('#npcv-music').value='code';   // 演示视频:先审故事板默认开、配乐默认代码作曲(2026-10-20 用户拍板)
+  NP_CS='';NP_CS_CAT='';NP_CS_SET='full';$('#npcv-len').value=45;$('#npcv-fps').value='24';$('#npcv-narr').checked=true;$('#npcv-subs').checked=true;
+  $('#npcv-board').checked=true;$('#npcv-music').value='code';npcvMusicHint();   // 演示视频:先审故事板默认开、配乐默认代码作曲(2026-10-20 用户拍板)
   $('#np-voice-src').value='recording';
   npApplyType('film');   // 默认影视剧
   npResetDefaults();

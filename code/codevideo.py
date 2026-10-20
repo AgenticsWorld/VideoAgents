@@ -6,8 +6,10 @@
 
 子命令(退出码:0 成功;1 失败,原因打印在 stderr;2 用法错误;demo 未写 TREATMENT.md 时 3)
   doctor               宿主工具链自检(Chromium / WebGL / ffmpeg / Python 依赖 / 宿主库 / 风格库)
-  style [--slug S]     锁定风格:STYLE.md / DEMO.md / style.json 复制进 codevideo/style/ 并记指纹
-  demo                 写完 TREATMENT.md 后按需下载本风格样片源码与海报(只读参考,打印路径)
+  style [--slug S]     锁定风格:完整风格复制 STYLE.md / style.json 进 codevideo/style/(DEMO.md 由 demo 在方案写成后放出);
+                       轻量风格(o98-NN)按风格提示生成 STYLE.md / style.json;都记指纹
+  demo [--slug S]      写完 TREATMENT.md 后按需下载本风格样片源码与海报(只读参考,打印路径);轻量风格没有样片,
+                       须 --slug 指定一个完整风格(锁定时记了 3 个相近的)
   sync                 校验 codevideo/timeline.json → 写 directing/ep01/shot_list.json + storyboard.json
   still T [T…] [--range a:b:step] [--sheet] [--prefix p] [--out DIR]
                        渲静帧到 codevideo/stills/(--sheet 另拼联系表到 codevideo/sheets/)
@@ -19,8 +21,16 @@
                        按段渲染到 assets/clips/ep01/<组号>.mp4;画面指纹没变的段跳过
   mix                  跑 codevideo/mix.py → codevideo/out/mix.wav + out/stems/*.wav
   master [--grain N]   拼段 + 两遍 loudnorm(−14 LUFS)→ edit/ep01/final.mp4 + subtitles.srt + poster.jpg + build.sh
-  check [--stage contract|timeline|clips|final|delivery|all]
-  build [--workers N]  sync → events → voice → score → render → mix → master
+  music-fit (--track MUS-NNNN | --file <音频>) [--start auto|秒] [--fade 1.5] [--mood 文本]
+                       外来配乐(项目音乐库 / 用户音乐 / 音乐模型生成的原始文件)适配到片长 → codevideo/music/score.wav
+                       + beats.json(节拍网格),登记 cue sheet 并同步项目音乐库
+  beats [--audio <文件>] 只测节拍(默认 codevideo/music/score.wav)→ codevideo/music/beats.json
+  snap [--sections downbeat|beat|off] [--shots beat|off] [--hits beat|off] [--dry-run]
+                       把 timeline.json 对到节拍网格(段边界 → 强拍、切点与击点 → 拍点;段内时刻随段边界线性平移,
+                       片长不变;改前备份 timeline.before-snap-*.json,改后自动 sync)
+  check [--stage contract|timeline|beats|clips|final|delivery|all]
+  build [--workers N]  sync → events → voice → score(有 music/score.py 才跑)→ render → mix → master;
+                       外来配乐不重跑 music-fit / snap(换了曲子先手动跑这两步)
   info                 状态总览(JSON)
   packs [--fetch NAME | --remove NAME]   采样库 / HDRI 包状态与下载
 """
@@ -85,7 +95,7 @@ def main(argv=None) -> int:
     d.add_argument("--no-gl", action="store_true", help="不启动浏览器测 WebGL")
     d.add_argument("--json", action="store_true")
     p("style").add_argument("--slug", default="")
-    p("demo")
+    p("demo").add_argument("--slug", default="", help="轻量风格须指定一个完整风格拉它的样片学技法")
     p("sync")
     s = p("still")
     s.add_argument("times", nargs="*")
@@ -106,6 +116,19 @@ def main(argv=None) -> int:
     p("mix")
     m = p("master")
     m.add_argument("--grain", type=float, default=0)
+    mf = p("music-fit")
+    mf.add_argument("--track", default="")
+    mf.add_argument("--file", default="")
+    mf.add_argument("--start", default="auto")
+    mf.add_argument("--fade", type=float, default=1.5)
+    mf.add_argument("--mood", default="")
+    bt = p("beats")
+    bt.add_argument("--audio", default="")
+    sn = p("snap")
+    sn.add_argument("--sections", default="downbeat", choices=("downbeat", "beat", "off"))
+    sn.add_argument("--shots", default="beat", choices=("beat", "off"))
+    sn.add_argument("--hits", default="beat", choices=("beat", "off"))
+    sn.add_argument("--dry-run", action="store_true")
     c = p("check")
     c.add_argument("--stage", default="all")
     bd = p("build")
@@ -116,7 +139,7 @@ def main(argv=None) -> int:
     pk.add_argument("--remove", default="")
     pk.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
-    if a.cmd not in ("packs", "sync", "info", "style"):
+    if a.cmd not in ("packs", "sync", "info", "style", "music-fit", "beats", "snap"):
         reexec_with_host_python()        # 当前解释器缺 Playwright 时换宿主解释器重跑
 
     from modules.codevideo import audio as A
@@ -159,7 +182,7 @@ def main(argv=None) -> int:
             _emit(P.lock_style(base, a.slug or None), a.json)
         elif a.cmd == "demo":
             try:
-                _emit(P.demo(base, lambda n, total: _log(f"  {n}/{total}")), a.json)
+                _emit(P.demo(base, lambda n, total: _log(f"  {n}/{total}"), slug=a.slug), a.json)
             except P.DemoBeforeTreatment as e:
                 _log(f"✗ {e}")
                 return 3
@@ -199,6 +222,33 @@ def main(argv=None) -> int:
             _emit(A.mix(base, log=_log), a.json)
         elif a.cmd == "master":
             _emit(A.master(base, grain=a.grain, log=_log), a.json)
+        elif a.cmd == "music-fit":
+            from modules.codevideo import beats as BT
+            start = a.start if a.start == "auto" else float(a.start)
+            _emit(BT.fit_project(base, a.track, a.file, start, a.fade, a.mood, log=_log), a.json)
+        elif a.cmd == "beats":
+            from modules.codevideo import beats as BT
+            audio = Path(a.audio) if a.audio else base / NS / "music" / "score.wav"
+            audio = audio if audio.is_absolute() else base / audio
+            if not audio.is_file():
+                raise CodeVideoError(f"音频不存在:{audio}")
+            meter = int((TL.load(base).get("meter") if (base / NS / "timeline.json").is_file() else 4) or 4)
+            grid = BT.analyze(audio, meter)
+            grid["audio_sha256"] = BT.sha256(audio)
+            BT.write_beats(base, grid)
+            _emit({k: grid[k] for k in ("bpm", "meter", "confidence")} | {"beats": len(grid["beats"]),
+                   "downbeats": len(grid["downbeats"])}, a.json)
+        elif a.cmd == "snap":
+            from modules.codevideo import beats as BT
+            res = BT.snap_project(base, a.sections, a.shots, a.hits, a.dry_run)
+            if a.json:
+                _emit(res, True)
+            else:
+                for k in ("sections", "shots", "hits"):
+                    for r in res[k]:
+                        print(f"{k[:-1]:8} {r['id']:<16} {r['from']:>8.3f} → {r['to']:>8.3f}  ({r['to'] - r['from']:+.3f} s)")
+                print(f"bpm {res['bpm']} · 最大移动 {res['max_shift_s']} s" + (" · 预演,未写盘" if a.dry_run
+                      else f" · 已写 timeline.json(备份 {res['backup']})"))
         elif a.cmd == "check":
             stages = list(C.STAGES) if a.stage == "all" else [x.strip() for x in a.stage.split(",") if x.strip()]
             bad = [x for x in stages if x not in C.STAGES]

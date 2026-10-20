@@ -1450,8 +1450,14 @@ plugins/<plugin-name>/
    (旁白声线卡),配乐默认代码作曲(`genmedia.py music --provider code --script`),拟音由混音脚本按页面事件程序化合成。导演方法与 43 个风格
    来自 lemo-opuscar(MIT,`scripts/sync_lemo_opuscar.py` 按固定 commit 同步:风格规范 `agents/workflows/codevideo/styles/`,页面库与音频工具
    `modules/codevideo/lib/`)。项目设置 `settings.json#project` = `code_style`(必选)、`storyboard_review`(默认开:cv1-board + CVH1)、
-   `narration`、`subtitles`、`length_s`、`fps`(24/25/30)、`music_source`(code 默认 / model);画幅、语言、成片分辨率沿用 output 段,
+   `narration`、`subtitles`、`length_s`、`fps`(24/25/30)、`music_source`(code 默认 / model / library);画幅、语言、成片分辨率沿用 output 段,
    渲染尺寸由宿主按画幅 × 成片分辨率计算。一个项目 = 一部片 = ep01;`codevideo/timeline.json` 是唯一事实源,`codevideo.py sync` 写成
    `directing/ep01/` 的镜头表与故事板(段 = 场次 = 组),段片段进 `assets/clips/ep01/`,成片 `edit/ep01/final.mp4`,现有预览页照常显示。
    「代码预览」页(`/preview/code`)实时拖动 / 播放页面、按时刻写注释整批发修改师(kind=codevideo),改完只重渲改动段。
+   外来配乐(三期:`music_source` = model 音乐模型生成 / library 项目音乐库或用户音乐)由 `codevideo.py music-fit` 适配到片长并测出节拍网格
+   `codevideo/music/beats.json`(同时写 cue sheet、同步项目音乐库),再由 film-director 在 cv2-beatsync 用 `codevideo.py snap` 把段边界对到强拍、
+   切点与击点对到拍点(片长不变,机检 `check --stage beats`),cv3 画面在对拍之后开工;代码作曲时 cv2-beatsync 置 skipped。
+   风格除 43 个完整风格外还有 98 个**轻量风格**(`o98-01`…`o98-98`,OPUSCAR 98 每部片子的一段风格提示,`agents/workflows/codevideo/styles/opuscar98/`):
+   立项锁定时宿主按提示生成 `codevideo/style/STYLE.md`,提示没写到的部分由 film-director 在 TREATMENT.md「风格补全」一节补齐,
+   没有自己的样片(`codevideo.py demo --slug <完整风格>` 拉相近风格的学技法)。
    不做语音转写核对;详见 `agents/workflows/codevideo.md`。
