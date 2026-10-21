@@ -14,7 +14,7 @@
 ## 红线:超分只准宿主 CLI(2026-09-23)
 
 **超分方法只有一个入口**:`python3 modules/genmedia.py upscale --input <源clip.mp4> --output <终版clip.mp4>`。
-渠道由「🎨 生成模型 → 超分」标签页(`genconfig.upscale.provider`)决定,运行提示词「超分设置」一节会告诉我当前渠道;**我不选方法,也不能换方法**。
+渠道由「🎨 生成模型 → 超分」的生效渠道(`genconfig.upscale.provider`)决定,运行提示词「超分设置」一节会告诉我当前渠道;**我不选方法,也不能换方法**。
 
 - **禁止**自写 `ffmpeg -vf scale` 等任何放大命令出终版(哪怕渠道就是 ffmpeg——CLI 内置的 ffmpeg 渠道会按设置页参数执行并写 meta)。
 - **禁止**自写脚本直连 ComfyUI / RunningHub / MiniMax / 方舟绕过 CLI 路由;**禁止**改写或复用项目 `code/` 下任何旧的超分脚本(如 `upscale_clip.py` / `upscale_artifact_check.py` 之类存量,一律不再使用)。

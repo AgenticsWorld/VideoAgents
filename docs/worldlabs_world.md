@@ -5,7 +5,7 @@
 
 > 渠道(2026-10-10 起):本条为云端 Marble(耗 credits);本地算力渠道 **HunyuanWorld** 见
 > [docs/hunyuan_world.md](hunyuan_world.md)——同一份 world.json 契约,本条下游各节(预览/视窗/对齐/背景图/导演台)对两个渠道同样适用。
-> 渠道在控制台「🎨 生成模型」→「🌍 世界模型」按标签页选择(`genconfig.json#world.provider`)。
+> 渠道在控制台「🎨 生成模型」→「🌍 世界模型」按标题栏右侧「生效渠道」下拉选择(`genconfig.json#world.provider`)。
 
 ## 配置
 

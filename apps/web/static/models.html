@@ -33,8 +33,12 @@ a.back{color:var(--dim);text-decoration:none;font-size:13px;border:1px solid var
 a.back:hover{color:var(--accent);border-color:var(--accent)}
 main{max-width:860px;margin:0 auto;padding:22px 18px 60px;display:flex;flex-direction:column;gap:22px}
 .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
-.card>h2{font-size:14px;padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
-.card>h2 .cur{margin-left:auto;font-size:12px;color:var(--dim);font-weight:400}
+.card>h2{font-size:14px;padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;white-space:nowrap}
+.card>h2 .cur{margin-left:auto;font-size:12px;color:var(--dim);font-weight:400;white-space:normal;min-width:0}
+/* 生效渠道下拉(标题栏右侧):标签页只管查看 / 编辑,生效渠道在这里选 */
+.card>h2 .eff{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:400;color:var(--dim);flex:none}
+.card>h2 .cur~.eff{margin-left:12px}
+.card>h2 .eff select{flex:none;min-width:0;padding:3px 8px;font-size:12px}
 .tabs{display:flex;border-bottom:1px solid var(--border);background:var(--panel2)}
 .tab{flex:1;padding:9px 10px;text-align:center;cursor:pointer;font-size:13px;color:var(--dim);border-bottom:2px solid transparent;user-select:none;display:flex;align-items:center;justify-content:center;gap:6px}
 .tab:hover{color:var(--text)}
@@ -112,27 +116,27 @@ button:disabled{opacity:.5;cursor:default}
 </header>
 <main>
   <div class="card" id="card-image">
-    <h2>🖼 图像模型 <span class="cur">生效渠道=当前选中的标签页(✅),保存后生效;各渠道配置可同时保存</span></h2>
+    <h2>🖼 图像模型 <span class="cur">标签页只用来查看 / 编辑,各渠道配置可同时保存</span></h2>
     <div class="tabs" id="image-tabs"></div>
     <div id="image-panels"></div>
   </div>
   <div class="card" id="card-video">
-    <h2>🎬 视频模型 <span class="cur">生效渠道=当前选中的标签页(✅),保存后生效;各渠道配置可同时保存</span></h2>
+    <h2>🎬 视频模型 <span class="cur">标签页只用来查看 / 编辑,各渠道配置可同时保存</span></h2>
     <div class="tabs" id="video-tabs"></div>
     <div id="video-panels"></div>
   </div>
   <div class="card" id="card-music">
-    <h2>🎵 音乐模型 <span class="cur">BGM 走音乐生成;生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
+    <h2>🎵 音乐模型 <span class="cur">BGM 走音乐生成</span></h2>
     <div class="tabs" id="music-tabs"></div>
     <div id="music-panels"></div>
   </div>
   <div class="card" id="card-tts">
-    <h2>🎙 TTS语音模型 <span class="cur">旁白/角色音色样本/兜底配音由 TTS 生成;生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
+    <h2>🎙 TTS语音模型 <span class="cur">旁白/角色音色样本/兜底配音由 TTS 生成</span></h2>
     <div class="tabs" id="tts-tabs"></div>
     <div id="tts-panels"></div>
   </div>
   <div class="card" id="card-sfx">
-    <h2>🔊 音效模型 <span class="cur">音效 / 环境床音兜底贴片用(仅缺陷单要求补做时);生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
+    <h2>🔊 音效模型 <span class="cur">音效 / 环境床音兜底贴片用(仅缺陷单要求补做时)</span></h2>
     <div class="tabs" id="sfx-tabs">
       <div class="tab" id="tab-sfx-code">代码音效</div>
       <div class="tab" id="tab-sfx-openverse">Openverse</div>
@@ -146,7 +150,7 @@ button:disabled{opacity:.5;cursor:default}
     <div class="panel" id="panel-sfx-fal"></div>
   </div>
   <div class="card" id="card-digital-human">
-    <h2>🧑 数字人 <span class="cur">人物图片 + 对白音频生成说话片段；插件使用当前选中的渠道</span></h2>
+    <h2>🧑 数字人 <span class="cur">人物图片 + 对白音频生成说话片段</span></h2>
     <div class="tabs" id="digital-human-tabs">
       <div class="tab" id="tab-dh-agentics">Agentics</div>
       <div class="tab" id="tab-dh-heygen">HeyGen</div>
@@ -173,7 +177,7 @@ button:disabled{opacity:.5;cursor:default}
     <div class="panel" id="panel-dh-comfyui"></div>
   </div>
   <div class="card" id="card-upscale">
-    <h2>🔍 超分 <span class="cur">生效渠道=当前选中的标签页(✅),不再跟随视频渠道,保存后生效</span></h2>
+    <h2>🔍 超分 <span class="cur">不跟随视频渠道</span></h2>
     <div class="tabs" id="upscale-tabs">
       <div class="tab" id="tab-up-ffmpeg">ffmpeg</div>
       <div class="tab" id="tab-up-agentics">Agentics</div>
@@ -214,9 +218,9 @@ button:disabled{opacity:.5;cursor:default}
     <div class="panel" id="panel-up-comfyui"></div>
   </div>
   <div class="card" id="card-world">
-    <h2>🌍 世界模型 <span class="cur">场景预览页「生成世界模型」按钮使用(仅项目「白模」开启时);生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
+    <h2>🌍 世界模型 <span class="cur">场景预览页「生成世界模型」按钮使用(仅项目「白模」开启时)</span></h2>
     <div class="tabs" id="world-tabs">
-      <div class="tab active" id="tab-world-marble">✅ World Labs</div>
+      <div class="tab" id="tab-world-marble">World Labs</div>
       <div class="tab" id="tab-world-hunyuan">HunyuanWorld(远程)</div>
     </div>
     <div class="panel show" id="panel-world-marble">
@@ -233,9 +237,9 @@ button:disabled{opacity:.5;cursor:default}
     </div>
   </div>
   <div class="card" id="card-text">
-    <h2>🧩 语言模型/DeepAgents <span class="cur">顶栏引擎选「deepagents」时生效;生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
+    <h2>🧩 语言模型/DeepAgents <span class="cur">顶栏引擎选「deepagents」时生效</span></h2>
     <div class="tabs" id="text-tabs">
-      <div class="tab active" id="tab-text-agentics">Agentics</div>
+      <div class="tab" id="tab-text-agentics">Agentics</div>
       <div class="tab" id="tab-text-local">本地模型</div>
       <div class="tab" id="tab-text-cloud">云端模型</div>
       <div class="tab" id="tab-text-openrouter">OpenRouter</div>
@@ -266,9 +270,9 @@ button:disabled{opacity:.5;cursor:default}
     <div id="panel-text-openrouter"></div>
   </div>
   <div class="card" id="card-moderation">
-    <h2>🛡 审核模型 <span class="cur">生效渠道=当前选中的标签页(✅),保存后生效</span></h2>
+    <h2>🛡 审核模型</h2>
     <div class="tabs" id="mod-tabs">
-      <div class="tab active" id="tab-mod-openrouter">✅ OpenRouter</div>
+      <div class="tab" id="tab-mod-openrouter">OpenRouter</div>
     </div>
     <!-- 面板由 buildModeration() 生成:API Key + 模型 + 测试(Jev 决策模型只走 OpenRouter Decisions API,Agentics 不支持) -->
     <div id="panel-mod-openrouter"></div>
@@ -435,7 +439,7 @@ const SECTIONS={
   music:{providers:['code','agentics','openrouter','elevenlabs','comfyui']},   // code=代码作曲(2026-10-20 首位,新装默认)
   tts:{providers:['agentics','openrouter','volcengine','elevenlabs','minimax','comfyui']},
 };
-/* 界面隐藏的渠道标签(面板仍构建、配置照常读写;已生效的渠道仍显示,免得选中项看不见) */
+/* 界面隐藏的渠道标签(面板仍构建、配置照常读写;已生效的渠道仍显示,免得选中项看不见;生效渠道下拉同理) */
 const HIDDEN_TABS={image:['minimax'],video:['minimax']};
 /* Eleven Music(POST /v1/music):BGM 配乐渠道,时长可指定(3–600s)或模型自定 */
 const EL_MUSIC_MODELS=[
@@ -460,19 +464,49 @@ const EL_TTS_MODELS=[
 /* ---------- 构建 UI ---------- */
 function el(tag,attrs={},html){const d=document.createElement(tag);Object.assign(d,attrs);if(html!==undefined)d.innerHTML=html;return d}
 
-/* 生效渠道=当前选中的标签页(✅ 标记,保存后生效),与文件托管存储渠道一致 */
-const SEL_PROVIDER={image:'agentics',video:'agentics',music:'code',tts:'agentics'};
-
-let DH_PROVIDER='agentics';
+/* 渠道标签与生效渠道分开(2026-10-21):标签页只切换正在查看 / 编辑的渠道面板,不改生效渠道——改某个渠道的配置
+   (如换 ComfyUI 工作流)不必先切过去再切回原渠道;生效渠道由各板块标题栏右侧「生效渠道」下拉选,✅ 标在生效渠道的
+   标签上,保存后生效;改下拉时顺带切到该渠道的标签页。sec = 板块(image/video/music/tts/dh/up/sfx/world/text/mod),
+   o:card 板块卡片选择器、list 渠道清单、label 渠道名(中文原文)、tab/panel 渠道 → 元素(面板会被整块替换,每次现查)、
+   hidden 界面隐藏的渠道(不是生效渠道时标签与下拉选项都不显示)、onView 切到某个标签时 */
+const CHAN={};
+function chanInit(sec,o){
+  const sel=el('select',{title:t('生成时实际使用的渠道(标签上的 ✅),保存后生效;标签页只用来查看 / 编辑各渠道配置,不改变生效渠道')});
+  o.list.forEach(p=>sel.appendChild(el('option',{value:p,textContent:t(o.label(p))})));
+  sel.onchange=()=>chanSet(sec,sel.value);
+  const box=el('label',{className:'eff'});
+  box.appendChild(el('span',{},t('生效渠道')));
+  box.appendChild(sel);
+  $(`${o.card}>h2`).appendChild(box);
+  o.list.forEach(p=>{o.tab(p).onclick=()=>chanView(sec,p)});
+  CHAN[sec]={...o,sel,eff:o.list[0]};
+  chanView(sec,o.list[0]);
+}
+/* 设生效渠道(装载配置 / 改下拉),并切到该渠道的标签页 */
+function chanSet(sec,p){CHAN[sec].eff=p;chanView(sec,p)}
+function chanView(sec,p){
+  const c=CHAN[sec],hidden=c.hidden||[];
+  if(c.onView)c.onView(p);
+  c.list.forEach(x=>{
+    const tb=c.tab(x);
+    tb.classList.toggle('active',x===p);
+    tb.textContent=(x===c.eff?'✅ ':'')+t(c.label(x));   // 先译再拼(词典按整段文本精确匹配)
+    tb.style.display=hidden.includes(x)&&x!==c.eff?'none':'';
+    c.panel(x).classList.toggle('show',x===p);
+  });
+  [...c.sel.options].forEach(op=>{op.hidden=hidden.includes(op.value)&&op.value!==c.eff});
+  c.sel.value=c.eff;
+}
 
 function buildSection(kind){
   const tabs=$(`#${kind}-tabs`), panels=$(`#${kind}-panels`);
   SECTIONS[kind].providers.forEach(p=>{
-    const tb=el('div',{className:'tab',id:`tab-${kind}-${p}`},PROVIDER_META[p].label);
-    tb.onclick=()=>showPanel(kind,p);
-    tabs.appendChild(tb);
+    tabs.appendChild(el('div',{className:'tab',id:`tab-${kind}-${p}`},PROVIDER_META[p].label));
     panels.appendChild(buildPanel(kind,p));
   });
+  chanInit(kind,{card:`#card-${kind}`,list:SECTIONS[kind].providers,label:p=>PROVIDER_META[p].label,
+    tab:p=>$(`#tab-${kind}-${p}`),panel:p=>$(`#panel-${kind}-${p}`),hidden:HIDDEN_TABS[kind],
+    onView:p=>{if(p==='rhapi')rhLoadModels(kind,false)}});
 }
 
 function keyRow(id,placeholder){
@@ -1314,7 +1348,6 @@ async function showWfDoc(sel,custom){
 }
 
 /* ---------- deepagents 语言模型(AgenticsLLM / 本地/云端 OpenAI 兼容端点 / OpenRouter) ---------- */
-let TEXT_PROVIDER='agentics';
 const TEXT_TABS={agentics:'Agentics',local:'本地模型',cloud:'云端模型',openrouter:'OpenRouter'};
 /* 云端渠道默认模型(DeepSeek 官方端点;测试连接后替换为端点实际列表) */
 const CLOUD_MODELS=TEXT_MODEL_LISTS.cloud;   // 见 text-models.js
@@ -1342,7 +1375,8 @@ function buildDeepagents(){
   wireDaTest('dc',()=>CFG.deepagents?.cloud?.model);
   // OpenRouter 面板复用图像/视频的 openrouter 构建逻辑(ids: text-or-*)
   $('#panel-text-openrouter').replaceWith(buildPanel('text','openrouter'));
-  Object.keys(TEXT_TABS).forEach(p=>{$(`#tab-text-${p}`).onclick=()=>showTextPanel(p)});
+  chanInit('text',{card:'#card-text',list:Object.keys(TEXT_TABS),label:p=>TEXT_TABS[p],
+    tab:p=>$(`#tab-text-${p}`),panel:p=>$(`#panel-text-${p}`)});
 }
 
 /* ---------- 审核模型(2026-10-20,NSFW 模式的拒绝判定):TypeSafe 决策模型 Jev,走 OpenRouter Decisions API
@@ -1380,30 +1414,6 @@ async function testModeration(){
   st.textContent=(r.refusal?t('✓ 可用:拒绝样例判为 policy'):I18N.f('⚠ 能调用,但拒绝样例被判成 {kind}(应为 policy)',{kind:r.kind}))+' · '+extra;
 }
 
-function showTextPanel(p){
-  TEXT_PROVIDER=p;
-  Object.keys(TEXT_TABS).forEach(x=>{
-    const tb=$(`#tab-text-${x}`);
-    tb.classList.toggle('active',x===p);
-    // ✅ = 生效渠道(保存后),与图像/视频等板块的渠道标签一致
-    tb.textContent=(x===p?'✅ ':'')+window.t(TEXT_TABS[x]);
-    $(`#panel-text-${x}`).classList.toggle('show',x===p);
-  });
-}
-
-function showPanel(kind,p){
-  SEL_PROVIDER[kind]=p;
-  if(p==='rhapi')rhLoadModels(kind,false);
-  SECTIONS[kind].providers.forEach(x=>{
-    const tb=$(`#tab-${kind}-${x}`);
-    tb.classList.toggle('active',x===p);
-    // ✅ = 生效渠道(保存后),与文件托管存储渠道一致
-    tb.textContent=(x===p?'✅ ':'')+window.t(PROVIDER_META[x].label);
-    tb.style.display=(HIDDEN_TABS[kind]||[]).includes(x)&&x!==p?'none':'';
-    $(`#panel-${kind}-${x}`).classList.toggle('show',x===p);
-  });
-}
-
 /* 世界模型(World Labs Marble,2026-09-12):模型 ID 与 https://docs.worldlabs.ai/api/models 一致(modules/worldlabs.py MODELS 同步) */
 const WORLD_MODELS=[
   ['marble-1.1','Marble 1.1 · 当前稳定版'],
@@ -1418,18 +1428,8 @@ async function testWorldLabs(){
   st.textContent=r.ok?I18N.f('✓ Key 有效 · 余额 {c} credits',{c:r.remaining_credits}):'✗ '+(r.error||t('验证失败'));
 }
 
-/* 世界模型渠道(2026-10-10):marble(云端,耗 credits)/ hunyuan(本地算力,远程 GPU worker);生效 = 当前选中标签页 */
+/* 世界模型渠道(2026-10-10):marble(云端,耗 credits)/ hunyuan(本地算力,远程 GPU worker);生效 = 标题栏「生效渠道」下拉 */
 const WORLD_PROVIDERS={marble:'World Labs',hunyuan:'HunyuanWorld(远程)'};
-let WORLD_PROVIDER='marble';
-function showWorldPanel(p){
-  WORLD_PROVIDER=p;
-  Object.keys(WORLD_PROVIDERS).forEach(x=>{
-    const tb=$(`#tab-world-${x}`);
-    tb.classList.toggle('active',x===p);
-    tb.textContent=(x===p?'✅ ':'')+t(WORLD_PROVIDERS[x]);
-    $(`#panel-world-${x}`).classList.toggle('show',x===p);
-  });
-}
 async function testHunyuan(){
   const st=$('#world-hunyuan-status');st.className='status';st.textContent='验证中…';
   const r=await api('/api/v1/providers/hunyuan/test',{base_url:$('#world-hunyuan-url').value.trim(),token:$('#world-hunyuan-token').value.trim()}).catch(e=>({ok:false,error:e.message}));
@@ -1441,19 +1441,9 @@ async function testHunyuan(){
 }
 
 const DH_PROVIDERS=['agentics','heygen','klingai','comfyui'];
-function showDigitalHumanPanel(provider){
-  DH_PROVIDER=provider;
-  const labels={agentics:'Agentics',heygen:'HeyGen',klingai:'Kling AI',comfyui:'ComfyUI'};
-  Object.keys(labels).forEach(p=>{
-    const tab=$(`#tab-dh-${p}`);
-    tab.classList.toggle('active',p===provider);
-    tab.textContent=(p===provider?'✅ ':'')+labels[p];
-    $(`#panel-dh-${p}`).classList.toggle('show',p===provider);
-  });
-}
-DH_PROVIDERS.forEach(p=>{
-  $(`#tab-dh-${p}`).onclick=()=>showDigitalHumanPanel(p);
-});
+const DH_LABELS={agentics:'Agentics',heygen:'HeyGen',klingai:'Kling AI',comfyui:'ComfyUI'};
+chanInit('dh',{card:'#card-digital-human',list:DH_PROVIDERS,label:p=>DH_LABELS[p],
+  tab:p=>$(`#tab-dh-${p}`),panel:p=>$(`#panel-dh-${p}`)});
 
 /* 页面 kind → genconfig 配置段(数字人 digitalhuman→digital_human,超分 scale→upscale,其余同名) */
 function cfgSection(kind){
@@ -1464,20 +1454,9 @@ function cfgSection(kind){
 /* 超分板块(2026-09-23,配置段 upscale):渠道 ffmpeg(默认,首位)/ Agentics 超分 profile(2026-09-25,media_type=Scale,
    第二位)/ 火山引擎样片模式 / MiniMax Regenerate-2K / ComfyUI SeedVR2;唯一路由源,不再跟随视频渠道;无降级开关(渠道失败即报错) */
 const UP_PROVIDERS=['ffmpeg','agentics','volcengine','minimax','comfyui'];
-let UP_PROVIDER='ffmpeg';
-function showUpscalePanel(provider){
-  UP_PROVIDER=provider;
-  const labels={agentics:'Agentics',ffmpeg:'ffmpeg',volcengine:'火山引擎',minimax:'MiniMax',comfyui:'ComfyUI'};
-  UP_PROVIDERS.forEach(p=>{
-    const tab=$(`#tab-up-${p}`);
-    tab.classList.toggle('active',p===provider);
-    tab.textContent=(p===provider?'✅ ':'')+window.t(labels[p]);
-    $(`#panel-up-${p}`).classList.toggle('show',p===provider);
-  });
-}
-UP_PROVIDERS.forEach(p=>{
-  $(`#tab-up-${p}`).onclick=()=>showUpscalePanel(p);
-});
+const UP_LABELS={agentics:'Agentics',ffmpeg:'ffmpeg',volcengine:'火山引擎',minimax:'MiniMax',comfyui:'ComfyUI'};
+chanInit('up',{card:'#card-upscale',list:UP_PROVIDERS,label:p=>UP_LABELS[p],
+  tab:p=>$(`#tab-up-${p}`),panel:p=>$(`#panel-up-${p}`)});
 /* 超分 MiniMax 面板(kind='scale',配置段 upscale.minimax,自有凭证):接口区域 + 两区域 Key + 模型(仅 Regenerate-2K,
    请求 model 固定 MiniMax-H3、endpoint /v2/video_regeneration)+ 适用条件 */
 const UP_MINIMAX_MODELS=[['MiniMax-H3','MiniMax Regenerate-2K']];
@@ -1498,24 +1477,13 @@ function buildUpscaleMinimaxPanel(){
    代码音效(2026-10-20 起首位、新装默认)= Agent 写音效脚本,宿主程序合成;Openverse = 不生成,按关键词检索现成的 CC0 / 公有领域音效(modules/openverse.py,匿名可用);
    ElevenLabs / Fal = ElevenLabs Sound Effects v2 生成,Key 留空沿用音乐 / TTS 段、图像 / 视频段已填的 Key */
 const SFX_PROVIDERS=['code','openverse','elevenlabs','fal'];   // code=代码音效(2026-10-20 首位、新装默认)
-let SFX_PROVIDER='code';
+const SFX_LABELS={openverse:'Openverse',elevenlabs:'ElevenLabs',fal:'Fal',code:'代码音效'};
 const SFX_OV_LICENSES=[['cc0,pdm','CC0 / 公有领域(免署名,默认)'],['cc0,pdm,by','CC0 / 公有领域 + CC BY(须署名)']];
 const SFX_OV_SOURCES=[['freesound','Freesound(默认)'],['freesound,wikimedia_audio','Freesound + Wikimedia Commons']];
 const SFX_EL_MODELS=[['eleven_text_to_sound_v2','Sound Effects v2(eleven_text_to_sound_v2)']];
 const SFX_FAL_MODELS=[['fal-ai/elevenlabs/sound-effects/v2','ElevenLabs Sound Effects v2(Fal 托管)']];
-function showSfxPanel(provider){
-  SFX_PROVIDER=provider;
-  const labels={openverse:'Openverse',elevenlabs:'ElevenLabs',fal:'Fal',code:'代码音效'};
-  SFX_PROVIDERS.forEach(p=>{
-    const tab=$(`#tab-sfx-${p}`);
-    tab.classList.toggle('active',p===provider);
-    tab.textContent=(p===provider?'✅ ':'')+t(labels[p]);
-    $(`#panel-sfx-${p}`).classList.toggle('show',p===provider);
-  });
-}
-SFX_PROVIDERS.forEach(p=>{
-  $(`#tab-sfx-${p}`).onclick=()=>showSfxPanel(p);
-});
+chanInit('sfx',{card:'#card-sfx',list:SFX_PROVIDERS,label:p=>SFX_LABELS[p],
+  tab:p=>$(`#tab-sfx-${p}`),panel:p=>$(`#panel-sfx-${p}`)});
 function sfxSelectRow(label,id,options){
   const r=el('div',{className:'row'});
   r.appendChild(el('label',{},label));
@@ -1915,7 +1883,7 @@ function loadIntoForm(){
     }
     if(kind==='music'){$('#music-code-autofetch').checked=(c.code||{}).auto_fetch!==false;codePacksLoad()}
     const eff=c.provider&&SECTIONS[kind].providers.includes(c.provider)?c.provider:SECTIONS[kind].providers[0];
-    showPanel(kind,eff);
+    chanSet(kind,eff);
     loadAgenticsModels(kind);
     loadOpenRouterModels(kind);
   }
@@ -1934,7 +1902,7 @@ function loadIntoForm(){
   loadComfyForm('digitalhuman',{...co,url:co.url||'http://127.0.0.1:8188',
     workflow:co.workflow||'comfy/digitalhuman-infinitetalk-api.json'});
   // 兜底与图像/视频等段一致:落到渠道清单首位 Agentics(DEFAULT_GENCONFIG 也是 agentics)
-  showDigitalHumanPanel(DH_PROVIDERS.includes(dh.provider)?dh.provider
+  chanSet('dh',DH_PROVIDERS.includes(dh.provider)?dh.provider
     :dh.provider==='runninghub'?'comfyui':DH_PROVIDERS[0]);
   loadAgenticsModels('digitalhuman');
   const up=CFG.upscale||{},uff=up.ffmpeg||{},uco=up.comfyui||{};
@@ -1953,7 +1921,7 @@ function loadIntoForm(){
   $('#scale-mm-key-cn').value=umm.api_key_cn||'';
   mmRegionUI('scale');
   $('#scale-mm-model').value=UP_MINIMAX_MODELS[0][0];
-  showUpscalePanel(UP_PROVIDERS.includes(up.provider)?up.provider:'ffmpeg');
+  chanSet('up',UP_PROVIDERS.includes(up.provider)?up.provider:'ffmpeg');
   loadAgenticsModels('scale');
   const sx=CFG.sfx||{},sov=sx.openverse||{},sxEl=sx.elevenlabs||{},sfa=sx.fal||{};   // 旧版实例无 sfx 段时按默认填
   const pickOpt=(opts,v)=>opts.some(([x])=>x===v)?v:opts[0][0];
@@ -1965,7 +1933,7 @@ function loadIntoForm(){
   $('#sfx-el-model').value=pickOpt(SFX_EL_MODELS,sxEl.model);
   $('#sfx-fal-key').value=sfa.api_key||'';
   $('#sfx-fal-model').value=pickOpt(SFX_FAL_MODELS,sfa.model);
-  showSfxPanel(SFX_PROVIDERS.includes(sx.provider)?sx.provider:'code');
+  chanSet('sfx',SFX_PROVIDERS.includes(sx.provider)?sx.provider:'code');
   const wm=(CFG.world||{}).marble||{},wh=(CFG.world||{}).hunyuan||{};
   $('#world-marble-key').value=wm.api_key||'';
   fillSelect($('#world-marble-model'),WORLD_MODELS,wm.model||WORLD_MODELS[0][0],wm.custom_model);
@@ -1974,7 +1942,7 @@ function loadIntoForm(){
   $('#world-hunyuan-views').value=wh.views||'';
   $('#world-hunyuan-steps').value=wh.gs_steps||'';
   $('#world-hunyuan-fp8').checked=wh.fp8===true;
-  showWorldPanel(WORLD_PROVIDERS[(CFG.world||{}).provider]?(CFG.world||{}).provider:'marble');
+  chanSet('world',WORLD_PROVIDERS[(CFG.world||{}).provider]?(CFG.world||{}).provider:'marble');
   loadDeepagentsForm();
   loadModerationForm();
 }
@@ -1994,7 +1962,7 @@ function loadDeepagentsForm(){
   $('#text-or-key').value=or.api_key||'';
   fillSelect($('#text-or-model'),
     or.model&&!or.custom_model?[[or.model,or.model]]:[],or.model,or.custom_model);
-  showTextPanel(['agentics','local','cloud','openrouter'].includes(da.provider)?da.provider:'agentics');
+  chanSet('text',['agentics','local','cloud','openrouter'].includes(da.provider)?da.provider:'agentics');
   loadAgenticsModels('text');
   loadOpenRouterModels('text');
 }
@@ -2085,11 +2053,11 @@ function collect(){
       c.elevenlabs={api_key:$('#tts-el-key').value.trim(),
         ...pickModel('#tts-el-model','#tts-el-custom')};
     }
-    // 生效渠道 = 当前选中的标签页(✅)
-    c.provider=SEL_PROVIDER[kind];
+    // 生效渠道 = 标题栏「生效渠道」下拉(✅),与正在查看的标签页无关
+    c.provider=CHAN[kind].eff;
     out[kind]=c;
   }
-  out.digital_human={provider:DH_PROVIDER,
+  out.digital_human={provider:CHAN.dh.eff,
     agentics:{profile_code:$('#digitalhuman-agentics-model').value||''},
     heygen:{api_key:$('#dh-heygen-key').value.trim(),
       resolution:$('#dh-heygen-resolution').value,
@@ -2097,7 +2065,7 @@ function collect(){
     klingai:{api_key:$('#dh-kling-key').value.trim(),mode:$('#dh-kling-mode').value},
     comfyui:collectComfy('digitalhuman')};
   const crf=parseInt($('#up-ff-crf').value,10);
-  out.upscale={provider:UP_PROVIDER,
+  out.upscale={provider:CHAN.up.eff,
     agentics:{profile_code:$('#scale-agentics-model').value||''},
     ffmpeg:{filter:$('#up-ff-filter').value,crf:Number.isInteger(crf)?Math.min(51,Math.max(0,crf)):18,
             preset:$('#up-ff-preset').value},
@@ -2105,19 +2073,19 @@ function collect(){
     minimax:{api_key_io:$('#scale-mm-key-io').value.trim(),api_key_cn:$('#scale-mm-key-cn').value.trim(),
              api_base:$('#scale-mm-base').value,model:$('#scale-mm-model').value||'MiniMax-H3'},
     comfyui:collectComfy('scale')};
-  out.sfx={provider:SFX_PROVIDER,
+  out.sfx={provider:CHAN.sfx.eff,
     openverse:{license:$('#sfx-ov-license').value,source:$('#sfx-ov-source').value,
                client_id:$('#sfx-ov-client-id').value.trim(),client_secret:$('#sfx-ov-client-secret').value.trim()},
     elevenlabs:{api_key:$('#sfx-el-key').value.trim(),model:$('#sfx-el-model').value},
     fal:{api_key:$('#sfx-fal-key').value.trim(),model:$('#sfx-fal-model').value},
     code:{}};
-  out.world={provider:WORLD_PROVIDER,
+  out.world={provider:CHAN.world.eff,
     marble:{api_key:$('#world-marble-key').value.trim(),...pickModel('#world-marble-model','#world-marble-custom')},
     hunyuan:{base_url:$('#world-hunyuan-url').value.trim(),token:$('#world-hunyuan-token').value.trim(),
              views:parseInt($('#world-hunyuan-views').value)||null,gs_steps:parseInt($('#world-hunyuan-steps').value)||null,
              fp8:$('#world-hunyuan-fp8').checked}};
-  // 生效渠道 = 当前选中的标签页(AgenticsLLM/本地模型/云端模型/OpenRouter)
-  out.deepagents={provider:TEXT_PROVIDER,
+  // 生效渠道 = 标题栏「生效渠道」下拉(AgenticsLLM/本地模型/云端模型/OpenRouter)
+  out.deepagents={provider:CHAN.text.eff,
     agentics:{model:$('#text-agentics-model').value||'',custom_model:''},
     local:{base_url:$('#da-url').value.trim(),
       api_key:$('#da-key').value.trim(),
@@ -2188,7 +2156,10 @@ $('#save').onclick=async()=>{
   $('#panel-up-agentics').replaceWith(upAgenticsPanel);
   $('#world-marble-model-row').replaceWith(modelRow('world-marble-model','world-marble-custom'));
   buildSfxPanels();
-  Object.keys(WORLD_PROVIDERS).forEach(p=>{$(`#tab-world-${p}`).onclick=()=>showWorldPanel(p)});
+  chanInit('world',{card:'#card-world',list:Object.keys(WORLD_PROVIDERS),label:p=>WORLD_PROVIDERS[p],
+    tab:p=>$(`#tab-world-${p}`),panel:p=>$(`#panel-world-${p}`)});
+  chanInit('mod',{card:'#card-moderation',list:['openrouter'],label:()=>'OpenRouter',
+    tab:p=>$(`#tab-mod-${p}`),panel:p=>$(`#panel-mod-${p}`)});
   const [cfg,wfs]=await Promise.all([
     api('/api/v1/config/generation'),
     api('/api/v1/comfy/workflows').catch(()=>({workflows:{}})),
