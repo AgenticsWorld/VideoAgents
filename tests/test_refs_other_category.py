@@ -22,7 +22,7 @@ def test_other_follows_text_and_is_in_project_skeleton(runtime):
     assert (runtime.PROJECTS_DIR / "p" / "refs" / "other").is_dir()
     keys = [c["key"] for c in asyncio.run(runtime.api_refs_list("p"))["categories"]]
     assert keys[keys.index("text") + 1] == "other"
-    assert "`other/`" in (runtime.PROJECTS_DIR / "p" / "refs" / "README.md").read_text()
+    assert "`other/`" in (runtime.PROJECTS_DIR / "p" / "refs" / "README.md").read_text(encoding="utf-8")
 
 
 def test_other_accepts_any_file_type(runtime):
@@ -43,9 +43,9 @@ def test_other_existing_project_without_dir_and_note_roundtrip(runtime):
     assert [c for c in asyncio.run(runtime.api_refs_list("p"))["categories"] if c["key"] == "other"][0]["files"] == []
     rel = _upload(runtime, "relations.csv")["path"]
     asyncio.run(runtime.api_refs_note({"project": "p", "path": rel, "note": "角色关系表,编剧参考"}))
-    assert "- `other/relations.csv`:角色关系表,编剧参考" in (refs / "NOTES.md").read_text()
+    assert "- `other/relations.csv`:角色关系表,编剧参考" in (refs / "NOTES.md").read_text(encoding="utf-8")
     asyncio.run(runtime.api_refs_delete({"project": "p", "path": rel}))
-    assert not (refs / rel).exists() and "relations.csv" not in (refs / "NOTES.md").read_text()
+    assert not (refs / rel).exists() and "relations.csv" not in (refs / "NOTES.md").read_text(encoding="utf-8")
     assert (refs / "other").is_dir()                          # 分类目录本身保留
 
 

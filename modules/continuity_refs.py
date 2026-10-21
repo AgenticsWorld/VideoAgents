@@ -233,7 +233,7 @@ def plan(base, ep, gid, prepare=False, budget=None):
                     if not 2. <= measured <= 3.05:
                         raise ValueError(f'尾段实际时长不合规: {measured}')
                     os.replace(tmp, dest)
-                    cache.write_text(json.dumps(result, ensure_ascii=False, indent=2)+'\n')
+                    cache.write_text(json.dumps(result, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
                 finally:
                     tmp.unlink(missing_ok=True)
         else:
@@ -357,7 +357,7 @@ def sync_group(base, ep, gid, write=False, prepare=False):
             if not backup.exists():
                 backup.write_bytes(path.read_bytes())
             tmp = path.with_suffix('.json.tmp')
-            tmp.write_text(json.dumps(updated, ensure_ascii=False, indent=2)+'\n')
+            tmp.write_text(json.dumps(updated, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
             os.replace(tmp, path)
     elif changed and not layout_only(prompt, updated):
         raise ValueError(f'{gid}: 续接配置需同步，运行 sync_continuity_refs.py --write / --prepare')

@@ -38,7 +38,7 @@ def project(tmp_path, monkeypatch):
 
 
 def edit(path, fn):
-    d = json.loads(path.read_text()); fn(d); write(path, d)
+    d = json.loads(path.read_text(encoding="utf-8")); fn(d); write(path, d)
 
 
 def media(base):
@@ -95,7 +95,7 @@ def test_real_tail_prepare_guard_and_invalidation(project):
     assert row['ready'] and row['mode'] == 'tail_video'
     assert cr.probe(project/row['video']) == pytest.approx(3, abs=.04)
     path = project/'assets/prompts/ep01/grp002.json'
-    pj = json.loads(path.read_text())
+    pj = json.loads(path.read_text(encoding="utf-8"))
     cfg = {'provider': 'fal', 'model': 'bytedance/seedance-2.0'}
     output = project/'assets/clips/ep01/grp002.mp4'
     cr.validate_request(output, pj['video_prompt'], pj['refs'], pj['video_refs'], cfg)
@@ -115,7 +115,7 @@ def test_short_last_shot_falls_back_and_stays_valid(project):
     assert row['mode'] == 'last_frame' and row['ready']
     assert (project/row['image']).is_file()
     assert cr.plan(project, 'ep01', 'grp002')['mode'] == 'last_frame'
-    pj = json.loads((project/'assets/prompts/ep01/grp002.json').read_text())
+    pj = json.loads((project/'assets/prompts/ep01/grp002.json').read_text(encoding="utf-8"))
     cr.validate_request(project/'assets/clips/ep01/grp002.mp4', pj['video_prompt'], pj['refs'],
                         pj['video_refs'], {'provider': 'fal', 'model': 'bytedance/seedance-2.0'})
 
@@ -134,7 +134,7 @@ def test_shared_budget_and_video_indices(project):
     assert cr.plan(project, 'ep01', 'grp002')['mode'] == 'tail_video'
     assert len(plan_refs(project, 'ep01', 'grp002')['videos']) == 1  # 7+7+3 > 15
     cr.sync_group(project, 'ep01', 'grp002', write=True)
-    pj = json.loads((project/'assets/prompts/ep01/grp002.json').read_text())
+    pj = json.loads((project/'assets/prompts/ep01/grp002.json').read_text(encoding="utf-8"))
     assert pj['video_refs'][0].endswith('camera.mp4')
     assert 'Extend [Video 2]' in pj['video_prompt']
     assert '向后延长 [Video 2]' in pj['video_prompt']
@@ -142,7 +142,7 @@ def test_shared_budget_and_video_indices(project):
     whitebox(project, 15)
     assert cr.plan(project, 'ep01', 'grp002')['mode'] == 'last_frame'
     cr.sync_group(project, 'ep01', 'grp002', write=True)
-    pj = json.loads((project/'assets/prompts/ep01/grp002.json').read_text())
+    pj = json.loads((project/'assets/prompts/ep01/grp002.json').read_text(encoding="utf-8"))
     assert len(pj['video_refs']) == 1 and pj['refs'][-1].endswith(cr.TAIL_IMAGE)
 
 
@@ -202,7 +202,7 @@ def test_disable_removes_only_continuation(project):
     cr.sync_group(project, 'ep01', 'grp002', write=True)
     edit(project/'settings.json', lambda d: d['duration'].update(long_take=False))
     cr.sync_group(project, 'ep01', 'grp002', write=True)
-    pj = json.loads((project/'assets/prompts/ep01/grp002.json').read_text())
+    pj = json.loads((project/'assets/prompts/ep01/grp002.json').read_text(encoding="utf-8"))
     assert pj['video_refs'] == [] and pj['refs'] == ['assets/hero.png']
     assert cr.START not in pj['video_prompt']
 
@@ -243,7 +243,7 @@ def test_genmedia_cli_dry_run_uses_prepared_inputs(project, tmp_path):
     import sys
     media(project)
     cr.sync_group(project, 'ep01', 'grp002', prepare=True)
-    pj = json.loads((project/'assets/prompts/ep01/grp002.json').read_text())
+    pj = json.loads((project/'assets/prompts/ep01/grp002.json').read_text(encoding="utf-8"))
     config = tmp_path/'genconfig.json'
     write(config, {'video': {'provider': 'fal', 'fal': {'model': 'bytedance/seedance-2.0', 'api_key': 'offline-test'}}})
     script = Path(__file__).resolve().parents[1]/'modules/genmedia.py'
@@ -326,7 +326,7 @@ def test_legacy_two_view_manifest_still_attaches_camera_only(project):
     plan = plan_refs(project, 'ep01', 'grp002')
     assert plan['videos'] == ['assets/whitebox/ep01/grp002/camera.mp4'] and 'top' not in plan
     cr.sync_group(project, 'ep01', 'grp002', write=True)
-    pj = json.loads((project/'assets/prompts/ep01/grp002.json').read_text())
+    pj = json.loads((project/'assets/prompts/ep01/grp002.json').read_text(encoding="utf-8"))
     assert 'top-down' not in pj['video_prompt'] and 'shooting direction' not in pj['video_prompt']
     assert {k: v for k, v in pj['whitebox_refs'].items() if k != 'cast'} == {
         'camera': 'assets/whitebox/ep01/grp002/camera.mp4', 'skipped_reason': '',

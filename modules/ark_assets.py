@@ -70,7 +70,7 @@ def _read_json(path) -> dict:
 
 def _write_json(path: Path, obj: dict):
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(obj, ensure_ascii=False, indent=2))
+    tmp.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
     os.replace(tmp, path)
 
 

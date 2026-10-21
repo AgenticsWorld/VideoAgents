@@ -18,7 +18,7 @@ def project(tmp_path, monkeypatch):
     (base / "directing" / "ep01" / "storyboard.json").write_text(json.dumps({"scenes": [
         {"scene_no": "S01", "shots_draft": [{"order": 1, "content": "开场"}, {"order": 2, "content": "第二镜"}]},
         {"scene_no": "S02", "shots_draft": [{"order": 1, "content": "换场"}]},
-    ]}, ensure_ascii=False))
+    ]}, ensure_ascii=False), encoding="utf-8")
     (base / "directing" / "ep01" / "shot_list.json").write_text(json.dumps({"shots": [
         {"shot_id": "sh001", "storyboard_ref": "S01/order:1"},
         {"shot_id": "sh002", "storyboard_ref": "S01/order:2"},
@@ -57,7 +57,7 @@ def test_grpref_add_accepts_storyboard_sketch(project):
     r = asyncio.run(core.api_grpref_add({"project": "demo", "ep": "ep01", "grp": "G01",
                                          "ref": "assets/storyboard/ep01/S01-01.png"}))
     assert r == {"ref": "assets/storyboard/ep01/S01-01.png", "refs": 1}
-    d = json.loads((project / "assets" / "prompts" / "ep01" / "G01.json").read_text())
+    d = json.loads((project / "assets" / "prompts" / "ep01" / "G01.json").read_text(encoding="utf-8"))
     assert d["refs"] == ["assets/storyboard/ep01/S01-01.png"]
     assert core._grpref_user_added(d, "assets/storyboard/ep01/S01-01.png")   # 用户手动加的,组卡可删
     assert "从分镜草图" in d["notes"][0]

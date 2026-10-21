@@ -1,12 +1,46 @@
 """Persistent user-owned screenplay constraints and explicit shot coverage."""
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import re
 import uuid
 from pathlib import Path
+
+
+def _lock(fh) -> None:
+    """POSIX 用 fcntl 独占锁,Windows 用 msvcrt 字节锁(等效跨进程互斥);都没有才退化为无锁。"""
+    try:
+        import fcntl
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        return
+    except ImportError:
+        pass
+    except OSError:
+        return
+    try:
+        import msvcrt
+        fh.seek(0)
+        msvcrt.locking(fh.fileno(), msvcrt.LK_LOCK, 1)
+    except (ImportError, OSError):
+        pass
+
+
+def _unlock(fh) -> None:
+    try:
+        import fcntl
+        fcntl.flock(fh, fcntl.LOCK_UN)
+        return
+    except ImportError:
+        pass
+    except OSError:
+        return
+    try:
+        import msvcrt
+        fh.seek(0)
+        msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+    except (ImportError, OSError):
+        pass
 
 
 def path(base: Path, ep: str) -> Path:
@@ -28,44 +62,48 @@ def mutate(base: Path, ep: str, body: dict) -> list[dict]:
     if not p.parent.is_dir():
         raise ValueError("该集不存在")
     with p.with_suffix(".lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        items = load(base, ep)
-        if body.get("action") == "remove":
-            if body.get("confirmed") is not True:
-                raise ValueError("取消关键点必须由用户确认")
-            found = next((x for x in items if x["id"] == body.get("id")), None)
-            if not found:
-                raise ValueError("关键点不存在")
-            found["removed"] = True
-        elif body.get("action") == "add":
-            parts = body.get("parts")
-            if body.get("kind") not in {"plot", "detail"} or not isinstance(parts, list) or not 1 <= len(parts) <= 100:
-                raise ValueError("无效标记")
-            validated = []
-            for part in parts:
-                if not isinstance(part, dict):
-                    raise ValueError("无效选区")
-                context, quote, scene = (part.get(k) for k in ("context", "quote", "scene"))
-                start, end = part.get("start"), part.get("end")
-                if (not all(isinstance(s, str) for s in (context, quote, scene))
-                        or not quote.strip() or len(context) > 50000 or len(scene) > 100
-                        or type(start) is not int or type(end) is not int):
-                    raise ValueError("无效选区")
-                # Browser ranges use UTF-16 code units, including emoji surrogate pairs.
-                raw = context.encode("utf-16-le")
-                if not 0 <= start < end <= len(raw) // 2 or raw[start*2:end*2].decode("utf-16-le", "replace") != quote:
-                    raise ValueError("选区已变化，请重新选择")
-                occurrence = part.get("occurrence", 0)
-                if type(occurrence) is not int or occurrence < 0:
-                    raise ValueError("无效选区位置")
-                validated.append(dict(scene=scene, context=context, quote=quote, start=start, end=end, occurrence=occurrence))
-            items.append(dict(id="KP-" + uuid.uuid4().hex[:12], kind=body["kind"], parts=validated))
-        else:
-            raise ValueError("无效操作")
-        temp = p.with_suffix(".tmp")
-        temp.write_text(json.dumps({"schema": "script_keypoints/1.0", "items": items}, ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(temp, p)
-        return items
+        _lock(lock)
+        try:
+            items = load(base, ep)
+            if body.get("action") == "remove":
+                if body.get("confirmed") is not True:
+                    raise ValueError("取消关键点必须由用户确认")
+                found = next((x for x in items if x["id"] == body.get("id")), None)
+                if not found:
+                    raise ValueError("关键点不存在")
+                found["removed"] = True
+            elif body.get("action") == "add":
+                parts = body.get("parts")
+                if body.get("kind") not in {"plot", "detail"} or not isinstance(parts, list) or not 1 <= len(parts) <= 100:
+                    raise ValueError("无效标记")
+                validated = []
+                for part in parts:
+                    if not isinstance(part, dict):
+                        raise ValueError("无效选区")
+                    context, quote, scene = (part.get(k) for k in ("context", "quote", "scene"))
+                    start, end = part.get("start"), part.get("end")
+                    if (not all(isinstance(s, str) for s in (context, quote, scene))
+                            or not quote.strip() or len(context) > 50000 or len(scene) > 100
+                            or type(start) is not int or type(end) is not int):
+                        raise ValueError("无效选区")
+                    # Browser ranges use UTF-16 code units, including emoji surrogate pairs.
+                    raw = context.encode("utf-16-le")
+                    if not 0 <= start < end <= len(raw) // 2 or raw[start*2:end*2].decode("utf-16-le", "replace") != quote:
+                        raise ValueError("选区已变化，请重新选择")
+                    occurrence = part.get("occurrence", 0)
+                    if type(occurrence) is not int or occurrence < 0:
+                        raise ValueError("无效选区位置")
+                    validated.append(dict(scene=scene, context=context, quote=quote, start=start, end=end, occurrence=occurrence))
+                items.append(dict(id="KP-" + uuid.uuid4().hex[:12], kind=body["kind"], parts=validated))
+            else:
+                raise ValueError("无效操作")
+            # 锁降级为无锁时(非 POSIX 兜底)并发写仍可能撞同名临时文件,按线程唯一命名
+            temp = p.with_suffix("." + uuid.uuid4().hex + ".tmp")
+            temp.write_text(json.dumps({"schema": "script_keypoints/1.0", "items": items}, ensure_ascii=False, indent=2), encoding="utf-8")
+            os.replace(temp, p)
+            return items
+        finally:
+            _unlock(lock)
 
 
 def coverage(base: Path, ep: str, filename: str = "shot_list.json") -> list[str]:

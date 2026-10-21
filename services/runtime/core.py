@@ -417,7 +417,7 @@ def safe_agent(agent: str) -> str:
 def atomic_write_json(path: Path, obj):
     """临时文件 + os.replace,防写中崩溃损坏 JSON。"""
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(obj, ensure_ascii=False, indent=2))
+    tmp.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
     os.replace(tmp, path)
 
 
@@ -429,7 +429,7 @@ def ensure_project(project: str):
         (refs / sub).mkdir(parents=True, exist_ok=True)
     readme = refs / "README.md"
     if not readme.exists():
-        readme.write_text(REFS_README)
+        readme.write_text(REFS_README, encoding="utf-8")
 
 # ---------------- 状态 ----------------
 RUNS: dict[str, dict] = {}                       # run_id -> run 记录
@@ -2197,7 +2197,7 @@ def project_settings_path(project: str) -> Path:
 def load_project_settings(project: str) -> dict:
     base = {k: DEFAULT_GENCONFIG[k] for k in PROJECT_SETTINGS_KEYS}
     try:
-        saved = json.loads(project_settings_path(project).read_text())
+        saved = json.loads(project_settings_path(project).read_text(encoding="utf-8"))
     except Exception:
         saved = {}
     cfg = _merge(base, {k: v for k, v in saved.items()
@@ -7536,7 +7536,7 @@ def _shot_dialogue_lines(s: dict, draft: dict, idx: dict[str, dict]) -> list[dic
 
 def _read_json_safe(p: Path):
     try:
-        return json.loads(p.read_text())
+        return json.loads(p.read_text(encoding="utf-8"))
     except Exception:
         return None
 
@@ -14204,10 +14204,10 @@ async def api_brief_set(body: dict):
     if layout["rhythm_tail"] and parse_brief_layout(text)[3]["rhythm_tail"] != layout["rhythm_tail"]:
         raise ServiceError(500, "brief.md 保存中止:叙事节奏之后的自定义小节回写不一致,已拒绝写入以免丢失内容")
     if text:
-        p.write_text(text)
+        p.write_text(text, encoding="utf-8")
     elif p.is_file():
         p.unlink()
-    new = p.read_text().strip() if p.is_file() else ""
+    new = p.read_text(encoding="utf-8").strip() if p.is_file() else ""
     if new != old:
         await _notify_settings_change(project, "创作定调", [
             f"brief.md 已更新,最新全文:\n{new[:1500]}" if new
@@ -14245,7 +14245,7 @@ def _write_ref_notes_md(refs: Path, notes: dict):
     block = REF_NOTES_BEGIN + "\n" + ("\n".join(lines) or "(暂无注释)") + "\n" + REF_NOTES_END
     p = refs / "NOTES.md"
     if p.is_file():
-        txt = p.read_text()
+        txt = p.read_text(encoding="utf-8")
         if REF_NOTES_BEGIN in txt and REF_NOTES_END in txt:
             head, rest = txt.split(REF_NOTES_BEGIN, 1)
             _, tail = rest.split(REF_NOTES_END, 1)
@@ -14254,7 +14254,7 @@ def _write_ref_notes_md(refs: Path, notes: dict):
             txt = txt.rstrip() + "\n\n" + block + "\n"
     else:
         txt = "# refs/ 逐图注释(哪张图管什么、哪首曲子想用在哪)\n\n" + block + "\n"
-    p.write_text(txt)
+    p.write_text(txt, encoding="utf-8")
 
 
 async def api_refs_list(project: str = "demo"):
@@ -14414,7 +14414,7 @@ async def api_projconfig_set(body: dict):
         cfg["transitions"] = _validate_transitions(cfg.get("transitions") or {})
     ensure_project(project)
     project_settings_path(project).write_text(
-        json.dumps(cfg, ensure_ascii=False, indent=2))
+        json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
     # 提示词技能快照随设置一起刷新(模式/指定技能/视频模型任一变化都会体现在 effective 里);
     # 快照本身的变化不计入「设置变更」通知(那是派生值,不是用户改的)
     cfg = sync_prompt_skill_effective(project)
@@ -16492,7 +16492,7 @@ async def api_projects_create(body: dict):
     _validate_packaging(cfg["packaging"])
     ensure_project(name)
     project_settings_path(name).write_text(
-        json.dumps(cfg, ensure_ascii=False, indent=2))
+        json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
     pdir = PROJECTS_DIR / name
     novel = (body.get("novel") or "").strip()
     brief = (body.get("brief") or "").strip()
@@ -16504,17 +16504,17 @@ async def api_projects_create(body: dict):
         # 影视剧:小说原文;其余类型:文稿进 refs/text/(对齐/转写工位的输入),混剪另存一份作 p0 的文本输入
         if ptype in (project_types.DEFAULT, "mashup"):
             (pdir / "novel").mkdir(parents=True, exist_ok=True)
-            (pdir / "novel" / "original.txt").write_text(novel)
+            (pdir / "novel" / "original.txt").write_text(novel, encoding="utf-8")
         if ptype != project_types.DEFAULT:
             (pdir / "refs" / "text").mkdir(parents=True, exist_ok=True)
-            (pdir / "refs" / "text" / PROJECT_TRANSCRIPT).write_text(novel + "\n")
+            (pdir / "refs" / "text" / PROJECT_TRANSCRIPT).write_text(novel + "\n", encoding="utf-8")
     if ptype == "code-video":
         style = _code_video_style_text(cfg["project"]["code_style"])
     brief_text = format_brief(brief, style, rhythm)
     if brief_text:
-        (pdir / "brief.md").write_text(brief_text)
+        (pdir / "brief.md").write_text(brief_text, encoding="utf-8")
     if body.get("defer_init"):
-        (pdir / PROJECT_INIT_PENDING).write_text(datetime.now().isoformat(timespec="seconds"))
+        (pdir / PROJECT_INIT_PENDING).write_text(datetime.now().isoformat(timespec="seconds"), encoding="utf-8")
         return {"ok": True, "name": name, "init": "pending"}
     await _dispatch_project_init(name)
     return {"ok": True, "name": name}
@@ -16564,7 +16564,7 @@ def _project_init_message(name: str) -> str:
     if cfg["project"]["type"] != project_types.DEFAULT:
         return _typed_project_init_message(name, cfg)
     novel_p = pdir / "novel" / "original.txt"
-    novel_len = len(novel_p.read_text()) if novel_p.is_file() else 0
+    novel_len = len(novel_p.read_text(encoding="utf-8")) if novel_p.is_file() else 0
     has_brief = (pdir / "brief.md").is_file()
     msg = [f"【项目初始化】新项目 {name} 刚创建,请完成初始化:",
            f"1) 检查并补全项目目录结构(data/projects/{name}/,布局见 WORKFLOW.md §2)"]
@@ -16613,7 +16613,7 @@ def _typed_project_init_message(name: str, cfg: dict) -> str:
 
     audios = _files("audio", AUDIO_EXTS)
     transcript = refs / "text" / PROJECT_TRANSCRIPT
-    t_len = len(transcript.read_text().strip()) if transcript.is_file() else 0
+    t_len = len(transcript.read_text(encoding="utf-8").strip()) if transcript.is_file() else 0
     clone = ptype == "digital-human" and block.get("voice_source") == "clone"
     if clone:
         voices = _files("voices", AUDIO_EXTS)
@@ -17527,7 +17527,7 @@ def _dag_load_nodes(dag_path) -> list[dict]:
     nodes 列表 [{id,...}](demo)、nodes 字典 {task_id: {...}}(sample)、
     tasks 列表 [{task_id,...}](orchestrator 实际产出,见 tothemoon)。"""
     try:
-        doc = json.loads(dag_path.read_text())
+        doc = json.loads(dag_path.read_text(encoding="utf-8"))
         nodes = doc.get("nodes") or doc.get("tasks") or []
     except Exception:
         return []
@@ -18829,7 +18829,7 @@ def _nsfw_suspect_path(project: str) -> Path:
 
 def nsfw_suspect_tasks(project: str) -> dict:
     try:
-        d = json.loads(_nsfw_suspect_path(project).read_text())
+        d = json.loads(_nsfw_suspect_path(project).read_text(encoding="utf-8"))
         return d if isinstance(d, dict) else {}
     except Exception:
         return {}

@@ -18,7 +18,7 @@ from services.runtime import core  # noqa: E402
 
 def _write(path: Path, obj):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(obj, ensure_ascii=False))
+    path.write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
 
 
 def _project(tmp_path: Path, gate_state: str | None = "pending", prompts=("grp001", "grp002")) -> Path:

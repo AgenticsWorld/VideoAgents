@@ -77,7 +77,7 @@ def test_set_override_roundtrip_and_validation(tmp_path):
     base = _project(tmp_path)
     p = npc.override_path(base, "ep01")
     npc.set_override(base, "ep01", "S03(续)", "off", "dense")       # 关闭不记密度;场次号允许括号
-    d = json.loads(p.read_text())
+    d = json.loads(p.read_text(encoding="utf-8"))
     assert d["scenes"]["S03(续)"]["mode"] == "off" and d["scenes"]["S03(续)"]["density"] is None
     npc.set_override(base, "ep01", "S03(续)", "auto")                # 回到自动 = 删除;全空删文件
     assert not p.exists()
@@ -141,7 +141,7 @@ def test_check_storyboard(tmp_path):
     _storyboard(base, s02_npc=True)
     e, _, _ = npc.check_storyboard(base, "ep01")
     assert any("S02" in x and "写了 npc[]" in x for x in e)
-    sb = json.loads((base / "directing/ep01/storyboard.json").read_text())
+    sb = json.loads((base / "directing/ep01/storyboard.json").read_text(encoding="utf-8"))
     sb["scenes"][1]["shots_draft"][0]["npc"] = [{"layer": "sky", "what": ""}]
     _w(base / "directing/ep01/storyboard.json", sb)
     e, _, _ = npc.check_storyboard(base, "ep01")
@@ -203,11 +203,11 @@ def test_sync_prompts_writes_group_file(tmp_path):
     assert r["errors"] and not r["updated"]                                           # 只检不写
     r = npc.sync_prompts(base, "ep01", write=True)
     assert r["updated"] == ["grp001"] and r["errors"] == []
-    t = json.loads((base / "assets/prompts/ep01/grp001.json").read_text())["video_prompt"]
+    t = json.loads((base / "assets/prompts/ep01/grp001.json").read_text(encoding="utf-8"))["video_prompt"]
     assert "Shot 1 — foreground: 虚焦灯笼穗; background: 挑担路人从画右走过." in t and "Shot 2 — background: 背景虚化人影." in t
     npc.set_override(base, "ep01", "S01", "off")                                     # 关掉 → 重写删段
     r = npc.sync_prompts(base, "ep01", write=True)
-    assert r["errors"] == [] and npc.SEG_BEGIN not in json.loads((base / "assets/prompts/ep01/grp001.json").read_text())["video_prompt"]
+    assert r["errors"] == [] and npc.SEG_BEGIN not in json.loads((base / "assets/prompts/ep01/grp001.json").read_text(encoding="utf-8"))["video_prompt"]
 
 
 # ---------------------------------------------------------------- 草图 / 白模图例 / 看板

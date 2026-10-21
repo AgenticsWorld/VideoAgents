@@ -26,7 +26,6 @@
 """
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import os
@@ -35,6 +34,23 @@ import time
 from pathlib import Path
 
 from modules.entity_ids import CHAR_ID_PAT, is_creature_id
+
+
+def _lock(lf) -> None:
+    """fcntl 独占锁;非 POSIX(如 Windows)无 fcntl,退化为无锁(同 ark_assets._Ledger)。"""
+    try:
+        import fcntl as _fc
+        _fc.flock(lf, _fc.LOCK_EX)
+    except (ImportError, OSError):
+        pass
+
+
+def _unlock(lf) -> None:
+    try:
+        import fcntl as _fc
+        _fc.flock(lf, _fc.LOCK_UN)
+    except (ImportError, OSError):
+        pass
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -371,7 +387,7 @@ _DLG_RE = re.compile(r"^\s*(?:S\d+[A-Za-z]?\s*[/·:\-]\s*)?(" + CHAR_ID_PAT + r"
 
 def _read_json(p: Path):
     try:
-        return json.loads(p.read_text())
+        return json.loads(p.read_text(encoding="utf-8"))
     except Exception:
         return None
 
@@ -409,7 +425,7 @@ def update_index(base: Path, ep: str, key: str, patch: dict | None, remove: bool
     p.parent.mkdir(parents=True, exist_ok=True)
     lock = p.with_suffix(".lock")
     with open(lock, "w") as lf:
-        fcntl.flock(lf, fcntl.LOCK_EX)
+        _lock(lf)
         try:
             d = load_index(base, ep)
             if remove:
@@ -421,10 +437,10 @@ def update_index(base: Path, ep: str, key: str, patch: dict | None, remove: bool
                 d["shots"][key] = rec
             d["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
             tmp = p.with_suffix(".json.tmp")
-            tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1))
+            tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
             os.replace(tmp, p)
         finally:
-            fcntl.flock(lf, fcntl.LOCK_UN)
+            _unlock(lf)
     return d
 
 
@@ -473,7 +489,7 @@ def update_note(base: Path, ep: str, key: str, text: str, meta: dict | None = No
     p.parent.mkdir(parents=True, exist_ok=True)
     lock = p.with_suffix(".lock")
     with open(lock, "w") as lf:
-        fcntl.flock(lf, fcntl.LOCK_EX)
+        _lock(lf)
         try:
             d = load_notes(base, ep)
             now = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -494,10 +510,10 @@ def update_note(base: Path, ep: str, key: str, text: str, meta: dict | None = No
                 d["notes"] = {}
             else:
                 tmp = p.with_suffix(".json.tmp")
-                tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1))
+                tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
                 os.replace(tmp, p)
         finally:
-            fcntl.flock(lf, fcntl.LOCK_UN)
+            _unlock(lf)
     return d
 
 
@@ -507,12 +523,12 @@ def clear_notes(base: Path, ep: str) -> int:
     p = notes_path(base, ep)
     lock = p.with_suffix(".lock")
     with open(lock, "w") as lf:
-        fcntl.flock(lf, fcntl.LOCK_EX)
+        _lock(lf)
         try:
             n = len(load_notes(base, ep)["notes"])
             p.unlink(missing_ok=True)
         finally:
-            fcntl.flock(lf, fcntl.LOCK_UN)
+            _unlock(lf)
     return n
 
 

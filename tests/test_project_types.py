@@ -97,7 +97,7 @@ def test_film_project_unchanged(env):
     assert cfg["project"] == {"type": "film"}
     assert cfg["output"]["narration_enabled"] is True
     pdir = core.PROJECTS_DIR / "novel"
-    assert (pdir / "novel" / "original.txt").read_text() == "第一章"
+    assert (pdir / "novel" / "original.txt").read_text(encoding="utf-8") == "第一章"
     assert not (pdir / "refs" / "text" / "transcript.txt").exists()
     msg = env[0]["message"]
     assert "小说原文已导入 novel/original.txt(约 3 字)" in msg and "项目类型" not in msg
@@ -117,9 +117,9 @@ def test_mashup_project_forces_settings_and_writes_inputs(env):
     assert cfg["duration"]["episode_minutes"] == "auto"
     assert not any(cfg["packaging"][k] for k in ("intro_enabled", "outro_enabled", "teaser_enabled"))
     pdir = core.PROJECTS_DIR / "mx"
-    assert (pdir / "refs" / "text" / "transcript.txt").read_text().strip() == "说曹操曹操到"
-    assert (pdir / "novel" / "original.txt").read_text() == "说曹操曹操到"
-    assert "叙事节奏" not in (pdir / "brief.md").read_text()
+    assert (pdir / "refs" / "text" / "transcript.txt").read_text(encoding="utf-8").strip() == "说曹操曹操到"
+    assert (pdir / "novel" / "original.txt").read_text(encoding="utf-8") == "说曹操曹操到"
+    assert "叙事节奏" not in (pdir / "brief.md").read_text(encoding="utf-8")
     msg = env[0]["message"]
     assert "agents/workflows/mashup.yaml" in msg and "data/footage/fabuhui" in msg
     assert "讲述音频:未上传(可选" in msg and "现在不要派单" in msg
@@ -190,7 +190,7 @@ def test_type_is_locked_and_legacy_projects_inferred(env):
     (legacy / "mashup" / "beat_track.json").write_text("{}")
     assert core.project_type_of("old") == "mashup"
     asyncio.run(core.api_projconfig_set({"project": "old", "review": {"evaluation": 0}}))
-    saved = json.loads((legacy / "settings.json").read_text())
+    saved = json.loads((legacy / "settings.json").read_text(encoding="utf-8"))
     assert saved["project"]["type"] == "mashup"
 
 

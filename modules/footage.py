@@ -634,7 +634,6 @@ def ledger_update(sources: str, provider: str, source_id: str,
     条目必须已存在(登记归 curator/merge,本原语只补录);sha256 传 "auto" 时
     对 --file 现算。返回更新后的条目。
     """
-    import fcntl
     p = Path(sources)
     if not p.exists():
         raise FootageError(f"台账不存在:{p}(条目登记归 curator;merge 单是否已跑?)")
@@ -644,8 +643,12 @@ def ledger_update(sources: str, provider: str, source_id: str,
         sha256 = _file_sha256(file)
     lock_fd = os.open(str(p) + ".lock", os.O_CREAT | os.O_RDWR)
     try:
-        fcntl.flock(lock_fd, fcntl.LOCK_EX)
-        data = json.loads(p.read_text())
+        try:
+            import fcntl
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        except (ImportError, OSError):      # 非 POSIX(如 Windows)无 fcntl,退化为无锁(同 ark_assets._Ledger)
+            pass
+        data = json.loads(p.read_text(encoding="utf-8"))
         hit = next((s for s in (data.get("sources") or [])
                     if s.get("provider") == provider
                     and str(s.get("id")) == str(source_id)), None)
@@ -661,11 +664,15 @@ def ledger_update(sources: str, provider: str, source_id: str,
         if mark is not None:
             hit["status"] = mark
         tmp = Path(str(p) + ".tmp")
-        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         os.replace(tmp, p)
         return hit
     finally:
-        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        try:
+            import fcntl
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        except (ImportError, OSError):
+            pass
         os.close(lock_fd)
 
 

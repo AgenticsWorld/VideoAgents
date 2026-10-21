@@ -469,7 +469,7 @@ def test_ensure_grid9_requests_model_max_and_splits_by_new_geometry(tmp_path, mo
     assert sp.GRID_MAX_PIXELS < w * h <= 4096 * 4096
     want = sp.grid_geometry(9, FMT, 4096 * 4096)
     assert (w, h) == (want['width'], want['height']) and geom['tile_w'] == want['tile_w'] and geom['gutter'] == want['gutter']
-    meta = json.loads((sdir / 'plates/L1_grid9.json').read_text())
+    meta = json.loads((sdir / 'plates/L1_grid9.json').read_text(encoding='utf-8'))
     assert meta['max_pixels'] == 4096 * 4096 and meta['geometry'] == want and meta['channel']['model'] == 'doubao-seedream-5-0-lite-260128'
     for i, t in enumerate(tiles):
         x0, y0, x1, y1 = t['pano_ref']['box']; bx0, by0, bx1, by1 = sp.grid_tile_box(want, i)
@@ -876,7 +876,7 @@ def test_copy_and_flip_plate(tmp_path):
     assert orig.name == 'L1_grid9_fb1_copy1.orig.png' and left_is_white(orig)
     with Image.open(base/new['file']) as i:
         assert i.format == 'PNG' and i.size == (192, 108)
-    assert json.loads((base/new['file']).with_suffix('.json').read_text())['mirrored'] is True
+    assert json.loads((base/new['file']).with_suffix('.json').read_text(encoding='utf-8'))['mirrored'] is True
     assert next(x for x in sp.load_library(base, sid)['plates'] if x['key'] == e['key'])['mirrored'] is True
     e2 = sp.flip_plate(base, sid, 'L1_grid9_fb1_copy1')
     assert not e2['mirrored'] and left_is_white(base/new['file']) and left_is_white(orig)               # 翻回;备份仍是最初那张
@@ -1086,7 +1086,7 @@ def test_composition_layer_naming_hidden_cast_is_dropped_with_warning(tmp_path, 
     (base/'directing/ep01/shot_list.json').write_text(json.dumps(
         {'generation_groups': [{'group_id': 'grp001', 'shots': ['sh001']}]}, ensure_ascii=False))
     (base/'directing/ep01/shots/sh001/composition.json').write_text(json.dumps(
-        {'layers': {'fg': '案上的香炉', 'mg': '供桌,其上李靖的脸', 'bg': '西壁神龛'}}, ensure_ascii=False))
+        {'layers': {'fg': '案上的香炉', 'mg': '供桌,其上李靖的脸', 'bg': '西壁神龛'}}, ensure_ascii=False), encoding='utf-8')
     (base/'plate.png').write_bytes(b'x')
     idx = {'shots': {'sh001': {'plates': [{'role': 'start', 'key': 'k1', 'file': 'plate.png'}]}}}
     wb_group = {'group_id': 'grp001', 'scene_id': 'SCN-0001', 'cameras': [],

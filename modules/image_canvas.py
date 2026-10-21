@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import contextlib
 import datetime as dt
-import fcntl
 import hashlib
 import io
 import json
@@ -37,6 +36,23 @@ import re
 import shutil
 import time
 from pathlib import Path
+
+
+def _lock(lk) -> None:
+    """fcntl 独占锁;非 POSIX(如 Windows)无 fcntl,退化为无锁(同 ark_assets._Ledger)。"""
+    try:
+        import fcntl as _fc
+        _fc.flock(lk, _fc.LOCK_EX)
+    except (ImportError, OSError):
+        pass
+
+
+def _unlock(lk) -> None:
+    try:
+        import fcntl as _fc
+        _fc.flock(lk, _fc.LOCK_UN)
+    except (ImportError, OSError):
+        pass
 
 SCHEMA = 'image_canvas/1.0'
 ROOT_REL = 'assets/canvas'
@@ -227,7 +243,7 @@ def _set_alias(base: Path, rel: str, root_rel: str) -> None:
     root = canvas_root(base)
     root.mkdir(parents=True, exist_ok=True)
     with open(root / 'index.lock', 'w') as lk:
-        fcntl.flock(lk, fcntl.LOCK_EX)
+        _lock(lk)
         al = _aliases(base)
         al[rel] = root_rel
         tmp = root / 'index.json.tmp'
@@ -244,11 +260,11 @@ def doc_dir_of(base: Path, rel: str) -> Path:
 def _locked(doc: Path):
     doc.mkdir(parents=True, exist_ok=True)
     with open(doc / 'history.lock', 'w') as lk:
-        fcntl.flock(lk, fcntl.LOCK_EX)
+        _lock(lk)
         try:
             yield
         finally:
-            fcntl.flock(lk, fcntl.LOCK_UN)
+            _unlock(lk)
 
 
 def load_history(doc: Path) -> dict:

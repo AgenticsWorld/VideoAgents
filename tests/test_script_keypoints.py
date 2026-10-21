@@ -51,16 +51,16 @@ class KeypointTests(unittest.TestCase):
         folder.mkdir(parents=True)
         path = folder / 'shot_list.json'
         path.write_text(json.dumps({'keypoint_refs': [{'id': item['id'], 'evidence': '动作'}],
-                                    'shots': [{'keypoint_refs': [{'id': item['id'], 'evidence': ''}]}]}))
+                                    'shots': [{'keypoint_refs': [{'id': item['id'], 'evidence': ''}]}]}), encoding='utf-8')
         self.assertEqual(kp.coverage(self.base, 'ep01'), [item['id']])
         path.write_text(json.dumps({'shots': [{'id': 'sh001', 'keypoint_refs': [
-            {'id': item['id'], 'evidence': '特写：手中的钥匙插入门锁。'}]}]}))
+            {'id': item['id'], 'evidence': '特写：手中的钥匙插入门锁。'}]}]}), encoding='utf-8')
         self.assertEqual(kp.coverage(self.base, 'ep01'), [])
         self.assertEqual(kp.coverage(self.base, 'ep01', 'storyboard.json'), [item['id']])
 
     def test_runtime_postcheck(self):
         # Isolate this hook from the runtime's optional SDK imports and global state.
-        source = Path('services/runtime/core.py').read_text()
+        source = Path('services/runtime/core.py').read_text(encoding='utf-8')
         fn = next(n for n in ast.parse(source).body if isinstance(n, ast.FunctionDef) and n.name == '_keypoints_postcheck')
         scope = {'_proj_base': lambda _: self.base, 're': re}
         exec(compile(ast.Module(body=[fn], type_ignores=[]), '<runtime hook>', 'exec'), scope)

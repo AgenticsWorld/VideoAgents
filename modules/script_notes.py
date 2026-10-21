@@ -11,12 +11,28 @@
 """
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import re
 import time
 from pathlib import Path
+
+
+def _lock(lf) -> None:
+    """fcntl 独占锁;非 POSIX(如 Windows)无 fcntl,退化为无锁(同 ark_assets._Ledger)。"""
+    try:
+        import fcntl
+        fcntl.flock(lf, fcntl.LOCK_EX)
+    except (ImportError, OSError):
+        pass
+
+
+def _unlock(lf) -> None:
+    try:
+        import fcntl
+        fcntl.flock(lf, fcntl.LOCK_UN)
+    except (ImportError, OSError):
+        pass
 
 NOTES_REL = "story/episodes/{ep}/script_notes.json"
 NOTES_SCHEMA = "script_notes/1.0"
@@ -73,7 +89,7 @@ def update_note(base: Path, ep: str, key: str, text: str, label: str = "") -> di
     p.parent.mkdir(parents=True, exist_ok=True)
     lock = p.with_suffix(".lock")
     with open(lock, "w") as lf:
-        fcntl.flock(lf, fcntl.LOCK_EX)
+        _lock(lf)
         try:
             d = load_notes(base, ep)
             now = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -95,10 +111,10 @@ def update_note(base: Path, ep: str, key: str, text: str, label: str = "") -> di
                 d["notes"] = {}
             else:
                 tmp = p.with_suffix(".json.tmp")
-                tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1))
+                tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
                 os.replace(tmp, p)
         finally:
-            fcntl.flock(lf, fcntl.LOCK_UN)
+            _unlock(lf)
     return d
 
 
@@ -107,10 +123,10 @@ def clear_notes(base: Path, ep: str) -> int:
     p = notes_path(base, ep)
     lock = p.with_suffix(".lock")
     with open(lock, "w") as lf:
-        fcntl.flock(lf, fcntl.LOCK_EX)
+        _lock(lf)
         try:
             n = len(load_notes(base, ep)["notes"])
             p.unlink(missing_ok=True)
         finally:
-            fcntl.flock(lf, fcntl.LOCK_UN)
+            _unlock(lf)
     return n

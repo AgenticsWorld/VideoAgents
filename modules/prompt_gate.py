@@ -29,7 +29,7 @@ _CLIP_RE = re.compile(r"^grp\d+")
 
 def _read_json(path: Path):
     try:
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
 

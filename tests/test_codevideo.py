@@ -107,7 +107,7 @@ def test_sync_writes_directing_and_refuses_foreign_files(tmp_path):
     (base / CV.NS / "timeline.json").write_text(json.dumps(_tl()), encoding="utf-8")
     res = TL.sync(base)
     assert res == {"sections": 2, "shots": 3, "frames": 24, "dur": 1.0, "fps": 24, "size": [96, 54]}
-    sl = json.loads((base / "directing" / "ep01" / "shot_list.json").read_text())
+    sl = json.loads((base / "directing" / "ep01" / "shot_list.json").read_text(encoding="utf-8"))
     assert [g["group_id"] for g in sl["generation_groups"]] == ["grp0010", "grp0020"]
     assert sl["shots"][1]["storyboard_ref"] == "S020/order:1" and sl["total_duration_s"] == 1.0
     from modules import storyboard_board as sbb
@@ -192,9 +192,9 @@ def test_code_video_project_create_settings_brief_and_init(env):
                               "narration": False, "subtitles": True, "length_s": 50, "fps": 24, "music_source": "code"}
     assert cfg["output"]["narration_enabled"] is False          # 主流程旁白开关照常强制关,本类型用自己的 narration
     pdir = core.PROJECTS_DIR / "cv1"
-    brief = (pdir / "brief.md").read_text()
+    brief = (pdir / "brief.md").read_text(encoding="utf-8")
     assert "agents/workflows/codevideo/styles/iso-infographic/STYLE.md" in brief and "给新员工看" in brief
-    assert (pdir / "refs" / "text" / "transcript.txt").read_text().strip() == "咖啡从种子到杯子"
+    assert (pdir / "refs" / "text" / "transcript.txt").read_text(encoding="utf-8").strip() == "咖啡从种子到杯子"
     msg = env[0]["message"]
     assert "agents/workflows/codevideo.yaml" in msg and "iso-infographic" in msg and "先审故事板:开" in msg
     assert "cv0-ingest" in msg and "现在不要派单" in msg
@@ -286,13 +286,13 @@ def test_genmedia_code_music_and_sfx(tmp_path, gencfg):
     script = tmp_path / "score.py"
     script.write_text(SCORE)
     out = genmedia.generate_music("test", str(tmp_path / "m.mp3"), duration_s=1.2, script=str(script))
-    meta = json.loads((tmp_path / "m.meta.json").read_text())
+    meta = json.loads((tmp_path / "m.meta.json").read_text(encoding="utf-8"))
     assert Path(out).is_file() and meta["music"]["provider"] == "code" and meta["music"]["audio"]["duration_s"] == 1.2
     with pytest.raises(RuntimeError) as e:
         genmedia.generate_music("test", str(tmp_path / "x.wav"))
     assert "--script" in str(e.value)
     outs = genmedia.generate_sfx("click", str(tmp_path / "fx.wav"), script=str(script))
-    assert Path(outs[0]).is_file() and json.loads((tmp_path / "fx.meta.json").read_text())["sfx"]["provider"] == "code"
+    assert Path(outs[0]).is_file() and json.loads((tmp_path / "fx.meta.json").read_text(encoding="utf-8"))["sfx"]["provider"] == "code"
     with pytest.raises(RuntimeError):
         genmedia.generate_sfx("click", str(tmp_path / "fx2.wav"), provider="openverse", script=str(script))
 
@@ -360,7 +360,7 @@ def test_render_sections_fingerprints_board_mix_master_and_checks(tmp_path, genc
     r1 = R.render(base, workers=2, log=log.append)
     assert r1["rendered"] == ["a", "b"]
     assert {r["state"] for r in R.status(base)} == {"fresh"}
-    meta = json.loads((base / "assets/clips/ep01/grp0020.meta.json").read_text())
+    meta = json.loads((base / "assets/clips/ep01/grp0020.meta.json").read_text(encoding="utf-8"))
     assert meta["frames"] == 12 and meta["boundary_map"][1] == {"shot_id": "sh0030", "start_s": 0.291667, "end_s": 0.5}  # 0.8 s 量化到第 19 帧
     assert R.render(base, log=log.append)["rendered"] == []           # 指纹没变:跳过
     (film / "sections" / "b.js").write_text(SEC_B.replace("#28a", "#2a8"))
@@ -469,7 +469,7 @@ def test_music_fit_snap_and_beats_check(tmp_path):
     assert abs(res["start_s"] - 0.5) < 0.03                                   # 从开头静音后的第一个强拍起
     grid = BT.load_beats(base)
     assert grid["license"]["source"] == "user_provided" and grid["audio_sha256"]
-    sheet = json.loads((base / "assets/audio/bgm/ep01/cue_sheet.json").read_text())
+    sheet = json.loads((base / "assets/audio/bgm/ep01/cue_sheet.json").read_text(encoding="utf-8"))
     assert sheet["cues"][0]["out_s"] == 10.0 and sheet["cues"][0]["license"]["file"] == "refs/music/song.wav"
     assert ML.load_index(base)["tracks"]                                       # 用户音乐经 cue sheet 对账入库
     before = {i["id"]: i["ok"] for i in BT.check(base)}
@@ -478,12 +478,12 @@ def test_music_fit_snap_and_beats_check(tmp_path):
     assert rep["sections"] and rep["backup"] and (base / rep["backup"]).is_file()
     after = {i["id"]: i for i in BT.check(base)}
     assert after["sections_on_beat"]["ok"] and after["hits_on_beat"]["ok"], after
-    new = json.loads((base / CV.NS / "timeline.json").read_text())
+    new = json.loads((base / CV.NS / "timeline.json").read_text(encoding="utf-8"))
     assert new["dur"] == 10.0 and new["beat_sync"]["bpm"] == grid["bpm"]
     downs = grid["downbeats"]
     assert min(abs(new["sections"][1]["t0"] - d) for d in downs) < 1 / 24    # 段边界落在强拍
     assert new["lines"][0]["t"] != 4.0                                         # 段内台词时刻随段边界平移
-    sl = json.loads((base / "directing/ep01/shot_list.json").read_text())
+    sl = json.loads((base / "directing/ep01/shot_list.json").read_text(encoding="utf-8"))
     assert abs(sl["total_duration_s"] - 10.0) < 1e-6                           # 片长不变,已自动 sync
     stages = C.run(base, ["beats"])
     assert stages["ok"]
@@ -491,7 +491,7 @@ def test_music_fit_snap_and_beats_check(tmp_path):
     idx = ML.load_index(base)
     tid = idx["tracks"][0]["track_id"]
     res2 = BT.fit_project(base, track=tid)
-    sheet2 = json.loads((base / "assets/audio/bgm/ep01/cue_sheet.json").read_text())
+    sheet2 = json.loads((base / "assets/audio/bgm/ep01/cue_sheet.json").read_text(encoding="utf-8"))
     assert sheet2["cues"][0]["license"]["source"] == "library" and sheet2["cues"][0]["license"]["track_id"] == tid
     assert res2["bpm"]
     with pytest.raises(CV.CodeVideoError):
@@ -547,14 +547,14 @@ def test_light_style_project_lock_and_demo(env, tmp_path):
     cfg = core.load_project_settings("cvl")
     assert cfg["project"]["code_style"] == "o98-12"
     base = core.PROJECTS_DIR / "cvl"
-    assert "轻量风格" in (base / "brief.md").read_text() and "风格补全" in project_types.orchestrator_section(cfg["project"], "x", [])
+    assert "轻量风格" in (base / "brief.md").read_text(encoding="utf-8") and "风格补全" in project_types.orchestrator_section(cfg["project"], "x", [])
     assert "轻量风格" in env[0]["message"]
     lock = P.lock_style(base)
     md = (base / CV.NS / "style" / "STYLE.md").read_text(encoding="utf-8")
     entry = next(x for x in CV.light_styles()["styles"] if x["id"] == "o98-12")
     assert entry["prompt_zh"] in md and entry["prompt_en"] in md and "风格补全" in md
     assert lock["light"] and lock["related"] == entry["related"]
-    assert json.loads((base / CV.NS / "style" / "style.json").read_text())["light"] is True
+    assert json.loads((base / CV.NS / "style" / "style.json").read_text(encoding="utf-8"))["light"] is True
     assert not (base / CV.NS / "style" / "DEMO.md").exists()
     assert P.lock_style(base)["changed"] is False                              # 重锁幂等
     with pytest.raises(P.DemoBeforeTreatment):

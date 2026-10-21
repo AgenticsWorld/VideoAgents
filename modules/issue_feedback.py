@@ -135,7 +135,7 @@ def _save(rec: dict) -> None:
     ISSUES_DIR.mkdir(parents=True, exist_ok=True)
     p = ISSUES_DIR / f"{rec['id']}.json"
     tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(rec, ensure_ascii=False, indent=2))
+    tmp.write_text(json.dumps(rec, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(p)
 
 

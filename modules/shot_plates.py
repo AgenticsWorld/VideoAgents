@@ -469,10 +469,13 @@ def upsert_library_entry(base: Path, sid: str, entry: dict, lib: dict | None = N
     """出图后入库:保存前重读磁盘上的库,只替换/追加这一条再写回。出图要几十秒到几分钟,期间别的进程(九宫格/补图/修改)
     可能已写过库;拿出图前读的旧库整份写回会把它们覆盖掉(2026-10-08 jidi 九宫格 9 格两次丢失)。
     传 lib 时同步更新这份内存副本,供本次运行后续查库。"""
-    import fcntl
     d = library_dir(base, sid); d.mkdir(parents=True, exist_ok=True)
     with open(d/'index.json.lock', 'w') as lk:
-        fcntl.flock(lk, fcntl.LOCK_EX)
+        try:
+            import fcntl
+            fcntl.flock(lk, fcntl.LOCK_EX)
+        except (ImportError, OSError):      # 非 POSIX(如 Windows)无 fcntl,退化为无锁(同 ark_assets._Ledger)
+            pass
         fresh = load_library(base, sid)
         fresh['plates'] = [e for e in fresh['plates'] if e.get('key') != entry['key']] + [entry]
         save_library(base, sid, fresh)
@@ -1335,9 +1338,12 @@ def ensure_grid9(base: Path, sid: str, scheme_key: str, scheme_id: str, *, scene
          **({'station': center['station'], 'station_basis': center['basis'], 'tilt_tile': center['tilt'], 'plan_edges': center['edges']} if center else {}),
          'tiles': [{'tile': t['tile'], 'key': e['key'], **e['pano_ref']['view']} for t, e in zip(tiles, entries)],
          'written_at': now}, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    import fcntl
     with open(library_dir(base, sid)/'index.json.lock', 'w') as lk:
-        fcntl.flock(lk, fcntl.LOCK_EX)
+        try:
+            import fcntl
+            fcntl.flock(lk, fcntl.LOCK_EX)
+        except (ImportError, OSError):      # 非 POSIX(如 Windows)无 fcntl,退化为无锁(同 ark_assets._Ledger)
+            pass
         lib = load_library(base, sid)
         lib['plates'] = [e for e in lib['plates'] if not (e.get('grid9') and (e.get('pano_ref') or {}).get('scheme') == scheme_key)] + entries
         save_library(base, sid, lib)
@@ -3208,7 +3214,7 @@ def store_revision_refs(base: Path, sid: str, key: str, paths: list[Path]) -> li
                 shutil.copyfile(p, dst)
             else:
                 im.convert('RGBA' if im.mode in ('RGBA', 'LA', 'P') else 'RGB').save(dst, format='PNG')
-        out.append(str(dst.relative_to(base)))
+        out.append(dst.relative_to(base).as_posix())
     return out
 
 

@@ -69,7 +69,7 @@ def test_load_board_normalizes_poses(tmp_path):
     (base / "directing" / "ep01" / "storyboard.json").write_text(json.dumps({"scenes": [{
         "scene_no": "S01", "shots_draft": [
             {"order": 1, "content": "a", "cast": ["CHAR-1"], "poses": {"CHAR-1": {"pose": "Kneel", "action": "磕头"}}},
-            {"order": 2, "content": "b", "cast": ["CHAR-1"]}]}]}, ensure_ascii=False))
+            {"order": 2, "content": "b", "cast": ["CHAR-1"]}]}]}, ensure_ascii=False), encoding="utf-8")
     board = sbb.load_board(base, "ep01")
     shots = board["scenes"][0]["shots"]
     assert shots[0]["poses"] == {"CHAR-1": {"pose": "kneel", "action": "磕头"}}
@@ -160,9 +160,9 @@ def test_load_board_attaches_narration_from_md(tmp_path):
     (base / "directing" / "ep01" / "storyboard.json").write_text(json.dumps({"scenes": [{
         "scene_no": "S01", "shots_draft": [
             {"order": 1, "content": "老妇拨火", "narration_ref": ["N-01"]},
-            {"order": 2, "content": "她把灯捻小到只剩豆大"}]}]}, ensure_ascii=False))
+            {"order": 2, "content": "她把灯捻小到只剩豆大"}]}]}, ensure_ascii=False), encoding="utf-8")
     (base / "story" / "episodes" / "ep01" / "narration.md").write_text(
-        "# 旁白\n\n[N-01 | anchor: S01 | 场首 | est_duration_s: 3.0]\n夜深了。\n\n[N-02 | anchor: S01 | 「灯捻小到只剩豆大」一镜 | est_duration_s: 4.0]\n灯灭之前,她想起一件事。\n")
+        "# 旁白\n\n[N-01 | anchor: S01 | 场首 | est_duration_s: 3.0]\n夜深了。\n\n[N-02 | anchor: S01 | 「灯捻小到只剩豆大」一镜 | est_duration_s: 4.0]\n灯灭之前,她想起一件事。\n", encoding="utf-8")
     board = sbb.load_board(base, "ep01")
     shots = board["scenes"][0]["shots"]
     assert [(n["id"], n["source"], n["text"]) for n in shots[0]["narration"]] == [("N-01", "storyboard", "夜深了。")]
@@ -180,7 +180,7 @@ def test_notes_roundtrip(tmp_path):
     assert rec["created_at"] and rec["updated_at"]
     sbb.update_note(base, "ep01", "*", "整集节奏放慢")
     sbb.update_note(base, "ep01", "S01", "本场多用中景")
-    saved = json.loads(sbb.notes_path(base, "ep01").read_text())
+    saved = json.loads(sbb.notes_path(base, "ep01").read_text(encoding="utf-8"))
     assert saved["schema"] == sbb.NOTES_SCHEMA and set(saved["notes"]) == {"S01-03", "*", "S01"} and "_readme" in saved
     assert saved["notes"]["*"]["level"] == "episode" and saved["notes"]["S01"]["level"] == "scene"
     # 改文本保留 created_at,清空删条目,全清删文件
@@ -396,7 +396,7 @@ def test_explicit_empty_characters_means_no_people(tmp_path):
         "groups_draft": [{"characters": ["CHAR-1", "CHAR-2"], "shot_orders": [1, 2]}],
         "shots_draft": [
             {"order": 1, "content": "空庭,落叶", "characters": []},
-            {"order": 2, "content": "两人对坐"}]}]}, ensure_ascii=False))
+            {"order": 2, "content": "两人对坐"}]}]}, ensure_ascii=False), encoding="utf-8")
     shots = sbb.load_board(base, "ep01")["scenes"][0]["shots"]
     assert shots[0]["cast"] == []
     assert shots[1]["cast"] == ["CHAR-1", "CHAR-2"]

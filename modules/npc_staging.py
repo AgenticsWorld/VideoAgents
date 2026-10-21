@@ -21,7 +21,6 @@
 """
 from __future__ import annotations
 
-import fcntl
 import json
 import math
 import os
@@ -104,7 +103,11 @@ def set_override(base: Path, ep: str, scene_no: str, mode: str, density: str | N
     p = override_path(base, ep)
     p.parent.mkdir(parents=True, exist_ok=True)
     with open(p.with_suffix(".lock"), "w") as lf:
-        fcntl.flock(lf, fcntl.LOCK_EX)
+        try:
+            import fcntl
+            fcntl.flock(lf, fcntl.LOCK_EX)
+        except (ImportError, OSError):      # 非 POSIX(如 Windows)无 fcntl,退化为无锁(同 ark_assets._Ledger)
+            pass
         d = load_overrides(base, ep)
         if mode == "auto" and not density:
             d["scenes"].pop(scene_no, None)
