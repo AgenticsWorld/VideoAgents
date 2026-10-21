@@ -46,7 +46,7 @@ ffmpeg 编码;旁白走 TTS(旁白声线卡),配乐由 Agent 写作曲脚本用�
 | **ffmpeg / ffprobe** | 要 libx264、aac、loudnorm、ebur128、blackdetect;桌面端设置里装,开发环境 `brew install ffmpeg` |
 | **Python 依赖** | numpy、scipy、soundfile、Pillow(soxr 可选,没有时采样器退回 scipy 重采样)。`pluck.py`(物理建模拨弦)要 numba,桌面端没有——不要用 |
 | **TTS 渠道** | 只有开了旁白才需要;旁白声线由项目旁白声线卡固定(同主流程) |
-| **引擎** | 画面与配乐都是写代码:引擎能力直接决定成片质量。cv1 / cv3 节点建议用智能分配高档;上游风格按 Claude Opus 调过,换别的模型不一定做得出来 |
+| **引擎** | 画面与配乐都是写代码:引擎能力直接决定成片质量。本类型 5 个专属成员(18-code-video/* 与 11-qa/code-video-qa)智能分配默认一律高档(services/runtime/core.py AM_CATEGORY_TIERS / AM_AGENT_TIERS);上游风格按 Claude Opus 调过,换别的模型不一定做得出来 |
 
 ## 流程
 

@@ -2399,6 +2399,9 @@ AM_CATEGORY_TIERS = {
     "02-worldbuilding": "low", "04-creatures": "low",
     "08-video-gen": "low", "09-audio": "low", "10-editing": "low",
     "12-publishing": "low",
+    # 项目类型专属团队:新增成员一律默认高档(2026-10-21 用户要求;QA 成员见 AM_AGENT_TIERS)
+    "15-audio-video": "high", "16-mashup": "high", "17-digital-human": "high",
+    "18-code-video": "high",          # 演示视频(2026-10-20):导演方案 / 写画面代码 / 代码作曲 / 混音全是创作型,用户要求默认高档
 }
 AM_AGENT_TIERS = {                                      # 分类内的例外
     "00-orchestration/evaluation": "low",               # 评分
@@ -2411,10 +2414,10 @@ AM_AGENT_TIERS = {                                      # 分类内的例外
     "06-art/image-retouch": "low",                      # 画板修图:看图把用户圈的位置和说明整理成一条编辑提示词,求快
     "08-video-gen/prompt": "high",                      # 生成 prompt 质量决定画面上限
     "08-video-gen/video-generation": "high",            # 视频生成主力
-    # 音频配画(原 audio-to-video 插件):类别 15-audio-video 不在 AM_CATEGORY_TIERS,默认落 low;
-    # 其中两个创作型工位需高档(其余三个是测量/算术活,low 即可)
-    "15-audio-video/era-researcher": "high",            # 时代考据 = 创作+史料判断
-    "15-audio-video/visual-scripter": "high",           # 逐段画面设计 = 创作核心
+    "11-qa/av-sync-qa": "high",                         # 音频配画终审:项目类型专属成员一律高档(2026-10-21 用户要求)
+    "11-qa/mashup-qa": "high",                          # 混剪终审:同上
+    "11-qa/digital-human-sync-qa": "high",              # 数字人同步审核:同上
+    "11-qa/code-video-qa": "high",                      # 演示视频终审(含看片 rubric):随该类型新增成员一律高档(2026-10-21 用户要求)
 }
 AM_MODE_MODELS = {
     # opus 不锁版本号:CLI 侧别名始终指向最新 opus
