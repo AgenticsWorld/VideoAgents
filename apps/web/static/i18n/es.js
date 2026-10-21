@@ -4238,7 +4238,7 @@ window.I18N_DICT = {
 "已内置适配": "Compatibilidad integrada",
 "按参数表自动适配": "Adaptado automáticamente a los parámetros",
 "搜索 Fal 模型目录失败": "Error al buscar en el catálogo de modelos de Fal",
-"已填入 {id},点「保存设置」后生效": "Se rellenó {id}; pulsa «Guardar ajustes» para aplicarlo",
+"已填入 {id}": "Se rellenó {id}",
 "搜到的模型不在上面清单里时,系统按该端点的参数表组请求:时长、分辨率、画幅取它支持的最接近值,不支持的输入(如尾帧、参考图)会直接报错;这些模型尚未逐个实测。": "Si un modelo encontrado no está en la lista de arriba, la solicitud se arma según la lista de parámetros de ese endpoint: duración, resolución y relación de aspecto usan el valor admitido más cercano, y las entradas que no admite (fotograma final, imágenes de referencia…) dan error. Estos modelos no se han probado uno por uno.",
 "📡 发布渠道": "📡 Canales de publicación",
 "已选 {n} 个渠道": "{n} canal(es) seleccionado(s)",
@@ -4796,7 +4796,7 @@ window.I18N_DICT = {
 "风格测试:按风格库里的这种画风试改,项目的画面风格不变": "Prueba de estilo: esta versión prueba este estilo de la biblioteca; el estilo visual del proyecto no cambia",
 // 生成模型设置·生效渠道下拉(2026-10-21,models.html):标签页只管查看 / 编辑,生效渠道在板块标题栏右侧选
 "生效渠道": "Proveedor activo",
-"生成时实际使用的渠道(标签上的 ✅),保存后生效;标签页只用来查看 / 编辑各渠道配置,不改变生效渠道": "El proveedor que se usa realmente al generar (✅ en su pestaña), se aplica al guardar; las pestañas solo sirven para ver / editar la configuración de cada proveedor y no cambian el proveedor activo",
+"生成时实际使用的渠道(标签上的 ✅),选中即保存;标签页只用来查看 / 编辑各渠道配置,不改变生效渠道": "El proveedor que se usa realmente al generar (✅ en su pestaña); se guarda en cuanto lo eliges. Las pestañas solo sirven para ver / editar la configuración de cada proveedor y no cambian el proveedor activo",
 // 画板「动图」页(2026-10-21,preview_canvas.html):以正在查看的版本生成视频(参考图 / 首尾帧);画板动图 Agent(08-video-gen/canvas-motion)
 "动图": "Animar",
 "视频渠道": "Proveedor de vídeo",
@@ -4870,4 +4870,7 @@ window.I18N_DICT = {
 "提示词原样发给视频模型": "El prompt va tal cual al modelo de vídeo",
 "先由画板动图 Agent 看首尾帧整理提示词": "El Agente de vídeo del lienzo mira primero el primer y el último fotograma y redacta el prompt",
 "首尾帧模式要选一个版本作尾帧": "El modo primer/último fotograma necesita una versión elegida como último fotograma",
+// 生成模型设置·自动保存(2026-10-21,models.html):去掉「保存设置」按钮,改动即存,状态显示在顶栏
+"修改即自动保存": "Los cambios se guardan automáticamente",
+"✓ 已自动保存": "✓ Guardado automáticamente",
 };

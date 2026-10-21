@@ -4236,7 +4236,7 @@ window.I18N_DICT = {
 "已内置适配": "Integrierte Zuordnung",
 "按参数表自动适配": "Automatisch an die Parameter angepasst",
 "搜索 Fal 模型目录失败": "Suche im Fal-Modellkatalog fehlgeschlagen",
-"已填入 {id},点「保存设置」后生效": "{id} eingetragen; mit „Einstellungen speichern“ übernehmen",
+"已填入 {id}": "{id} eingetragen",
 "搜到的模型不在上面清单里时,系统按该端点的参数表组请求:时长、分辨率、画幅取它支持的最接近值,不支持的输入(如尾帧、参考图)会直接报错;这些模型尚未逐个实测。": "Steht ein gefundenes Modell nicht in der Liste oben, wird die Anfrage aus der Parameterliste des Endpunkts aufgebaut: Dauer, Auflösung und Seitenverhältnis nehmen den nächstliegenden unterstützten Wert, nicht unterstützte Eingaben (z. B. Endbild, Referenzbilder) führen zu einem Fehler. Diese Modelle wurden nicht einzeln getestet.",
 "📡 发布渠道": "📡 Veröffentlichungskanäle",
 "已选 {n} 个渠道": "{n} Kanal/Kanäle ausgewählt",
@@ -4794,7 +4794,7 @@ window.I18N_DICT = {
 "风格测试:按风格库里的这种画风试改,项目的画面风格不变": "Stiltest: Diese Version probiert diesen Stil aus der Stilbibliothek aus; der visuelle Stil des Projekts bleibt unverändert",
 // 生成模型设置·生效渠道下拉(2026-10-21,models.html):标签页只管查看 / 编辑,生效渠道在板块标题栏右侧选
 "生效渠道": "Aktiver Anbieter",
-"生成时实际使用的渠道(标签上的 ✅),保存后生效;标签页只用来查看 / 编辑各渠道配置,不改变生效渠道": "Der bei der Generierung tatsächlich genutzte Anbieter (✅ auf seinem Tab), gilt nach dem Speichern; Tabs dienen nur zum Ansehen / Bearbeiten der Einstellungen jedes Anbieters und ändern den aktiven Anbieter nicht",
+"生成时实际使用的渠道(标签上的 ✅),选中即保存;标签页只用来查看 / 编辑各渠道配置,不改变生效渠道": "Der bei der Generierung tatsächlich genutzte Anbieter (✅ auf seinem Tab), wird sofort beim Auswählen gespeichert; Tabs dienen nur zum Ansehen / Bearbeiten der Einstellungen jedes Anbieters und ändern den aktiven Anbieter nicht",
 // 画板「动图」页(2026-10-21,preview_canvas.html):以正在查看的版本生成视频(参考图 / 首尾帧);画板动图 Agent(08-video-gen/canvas-motion)
 "动图": "Animieren",
 "视频渠道": "Videoanbieter",
@@ -4868,4 +4868,7 @@ window.I18N_DICT = {
 "提示词原样发给视频模型": "Der Prompt geht unverändert ans Videomodell",
 "先由画板动图 Agent 看首尾帧整理提示词": "Der Leinwand-Video-Agent sieht sich zuerst erstes und letztes Bild an und schreibt den Prompt",
 "首尾帧模式要选一个版本作尾帧": "Für erstes/letztes Bild muss eine Version als letztes Bild gewählt sein",
+// 生成模型设置·自动保存(2026-10-21,models.html):去掉「保存设置」按钮,改动即存,状态显示在顶栏
+"修改即自动保存": "Änderungen werden automatisch gespeichert",
+"✓ 已自动保存": "✓ Automatisch gespeichert",
 };

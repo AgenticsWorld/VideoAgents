@@ -4238,7 +4238,7 @@ window.I18N_DICT = {
 "已内置适配": "Prise en charge intégrée",
 "按参数表自动适配": "Adapté automatiquement aux paramètres",
 "搜索 Fal 模型目录失败": "Échec de la recherche dans le catalogue Fal",
-"已填入 {id},点「保存设置」后生效": "{id} renseigné ; cliquez sur « Enregistrer les paramètres » pour appliquer",
+"已填入 {id}": "{id} renseigné",
 "搜到的模型不在上面清单里时,系统按该端点的参数表组请求:时长、分辨率、画幅取它支持的最接近值,不支持的输入(如尾帧、参考图)会直接报错;这些模型尚未逐个实测。": "Si un modèle trouvé n'est pas dans la liste ci-dessus, la requête est construite d'après la liste de paramètres de ce point d'accès : durée, résolution et format prennent la valeur prise en charge la plus proche, et les entrées non prises en charge (image de fin, images de référence…) provoquent une erreur. Ces modèles n'ont pas été testés un par un.",
 "📡 发布渠道": "📡 Canaux de publication",
 "已选 {n} 个渠道": "{n} canal(aux) sélectionné(s)",
@@ -4796,7 +4796,7 @@ window.I18N_DICT = {
 "风格测试:按风格库里的这种画风试改,项目的画面风格不变": "Test de style : cette version essaie ce style de la bibliothèque ; le style visuel du projet reste inchangé",
 // 生成模型设置·生效渠道下拉(2026-10-21,models.html):标签页只管查看 / 编辑,生效渠道在板块标题栏右侧选
 "生效渠道": "Fournisseur actif",
-"生成时实际使用的渠道(标签上的 ✅),保存后生效;标签页只用来查看 / 编辑各渠道配置,不改变生效渠道": "Le fournisseur réellement utilisé pour la génération (✅ sur son onglet), appliqué après enregistrement ; les onglets servent seulement à consulter / modifier les réglages de chaque fournisseur et ne changent pas le fournisseur actif",
+"生成时实际使用的渠道(标签上的 ✅),选中即保存;标签页只用来查看 / 编辑各渠道配置,不改变生效渠道": "Le fournisseur réellement utilisé pour la génération (✅ sur son onglet), enregistré dès que vous le choisissez ; les onglets servent seulement à consulter / modifier les réglages de chaque fournisseur et ne changent pas le fournisseur actif",
 // 画板「动图」页(2026-10-21,preview_canvas.html):以正在查看的版本生成视频(参考图 / 首尾帧);画板动图 Agent(08-video-gen/canvas-motion)
 "动图": "Animer",
 "视频渠道": "Fournisseur vidéo",
@@ -4870,4 +4870,7 @@ window.I18N_DICT = {
 "提示词原样发给视频模型": "Le prompt est envoyé tel quel au modèle vidéo",
 "先由画板动图 Agent 看首尾帧整理提示词": "L'Agent vidéo de canevas examine d'abord la première et la dernière image et rédige le prompt",
 "首尾帧模式要选一个版本作尾帧": "Le mode première/dernière image demande de choisir une version comme dernière image",
+// 生成模型设置·自动保存(2026-10-21,models.html):去掉「保存设置」按钮,改动即存,状态显示在顶栏
+"修改即自动保存": "Les modifications sont enregistrées automatiquement",
+"✓ 已自动保存": "✓ Enregistré automatiquement",
 };

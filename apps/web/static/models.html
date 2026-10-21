@@ -50,7 +50,6 @@ input[type=text],input[type=password],select{background:var(--panel2);color:var(
 input:focus,select:focus{outline:none;border-color:var(--accent)}
 button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px;flex:none}
 button:hover{border-color:var(--accent)}
-button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600;padding:8px 26px}
 button:disabled{opacity:.5;cursor:default}
 .hint{font-size:12px;color:var(--dim);margin-left:120px}
 .hint a{color:var(--link)}
@@ -79,9 +78,10 @@ button:disabled{opacity:.5;cursor:default}
 .cpack .st.ok{color:var(--green)}
 .cpack button{padding:2px 10px;font-size:12px}
 .status.err{color:var(--red)}
-#savebar{display:flex;align-items:center;gap:14px;justify-content:flex-end}
-#save-status{font-size:13px;color:var(--green);opacity:0;transition:opacity .3s}
-#save-status.show{opacity:1}
+/* 自动保存状态(顶栏右侧) */
+#save-status{font-size:12px;color:var(--dim)}
+#save-status.ok{color:var(--green)}
+#save-status.err{color:var(--red)}
 .pill{font-size:11px;border:1px solid var(--border);border-radius:10px;padding:0 8px;color:var(--dim)}
 /* ComfyUI 工作流 .md 说明弹窗 */
 #wfdoc-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;align-items:center;justify-content:center;padding:24px}
@@ -111,6 +111,7 @@ button:disabled{opacity:.5;cursor:default}
   <h1>🎨 生成模型设置</h1>
   <span class="pill">图像 / 视频 / 数字人 / 超分 / 音乐 / 音效 / TTS旁白 / 世界模型 生成渠道与模型</span>
   <div class="spacer"></div>
+  <span id="save-status">修改即自动保存</span>
 </header>
 <main>
   <div class="card" id="card-image">
@@ -274,10 +275,6 @@ button:disabled{opacity:.5;cursor:default}
     </div>
     <!-- 面板由 buildModeration() 生成:API Key + 模型 + 测试(Jev 决策模型只走 OpenRouter Decisions API,Agentics 不支持) -->
     <div id="panel-mod-openrouter"></div>
-  </div>
-  <div id="savebar">
-    <span id="save-status">✓ 已保存</span>
-    <button class="primary" id="save">保存设置</button>
   </div>
 </main>
 <script>
@@ -464,12 +461,12 @@ function el(tag,attrs={},html){const d=document.createElement(tag);Object.assign
 
 /* 渠道标签与生效渠道分开(2026-10-21):标签页只切换正在查看 / 编辑的渠道面板,不改生效渠道——改某个渠道的配置
    (如换 ComfyUI 工作流)不必先切过去再切回原渠道;生效渠道由各板块标题栏右侧「生效渠道」下拉选,✅ 标在生效渠道的
-   标签上,保存后生效;改下拉时顺带切到该渠道的标签页。sec = 板块(image/video/music/tts/dh/up/sfx/world/text/mod),
+   标签上,选中即保存;改下拉时顺带切到该渠道的标签页。sec = 板块(image/video/music/tts/dh/up/sfx/world/text/mod),
    o:card 板块卡片选择器、list 渠道清单、label 渠道名(中文原文)、tab/panel 渠道 → 元素(面板会被整块替换,每次现查)、
    hidden 界面隐藏的渠道(不是生效渠道时标签与下拉选项都不显示)、onView 切到某个标签时 */
 const CHAN={};
 function chanInit(sec,o){
-  const sel=el('select',{title:t('生成时实际使用的渠道(标签上的 ✅),保存后生效;标签页只用来查看 / 编辑各渠道配置,不改变生效渠道')});
+  const sel=el('select',{title:t('生成时实际使用的渠道(标签上的 ✅),选中即保存;标签页只用来查看 / 编辑各渠道配置,不改变生效渠道')});
   o.list.forEach(p=>sel.appendChild(el('option',{value:p,textContent:t(o.label(p))})));
   sel.onchange=()=>chanSet(sec,sel.value);
   const box=el('label',{className:'eff'});
@@ -611,10 +608,10 @@ function buildRhApiPanel(d,kind){
   d.appendChild(h);
 }
 /* Fal 模型发现(2026-10-06):搜 Fal 平台模型目录(GET /providers/fal/models,modules/fal_models.py),
-   点「选用」把模型 ID 填进上面的模型栏(内置清单里有的直接选中,没有的填进「自定义…」),保存后生效。
+   点「选用」把模型 ID 填进上面的模型栏(内置清单里有的直接选中,没有的填进「自定义…」)并自动保存。
    内置清单以外的模型由 genmedia 按该端点的参数表自动适配请求体。 */
 function buildFalSearch(d,kind){
-  const r=el('div',{className:'row'});
+  const r=el('div',{className:'row'});r.dataset.nosave='';   // 检索框不是配置,不触发自动保存
   r.appendChild(el('label',{},'搜索 Fal 模型'));
   const q=el('input',{type:'text',id:`${kind}-fal-q`,placeholder:'关键词,如 veo / kling / flux;留空列出热门模型'});
   const b=el('button',{id:`${kind}-fal-search`},'搜索');
@@ -658,7 +655,8 @@ function falPick(kind,m){
   if(!listed)custom.value=m.id;
   const status=$(`#${kind}-fal-status`);
   status.className='status ok';
-  status.textContent=I18N.f('已填入 {id},点「保存设置」后生效',{id:m.id});
+  status.textContent=I18N.f('已填入 {id}',{id:m.id});
+  autoSave();
 }
 function rhSite(kind){return $(`#${kind}-rh-site`).value==='cn'?'cn':'ai'}
 function rhSiteUI(kind){
@@ -1059,6 +1057,7 @@ function buildPanel(kind,p){
       if(kind==='tts')d.insertBefore(rw2,rw);else d.appendChild(rw2);
     }
     const ar=el('div',{className:'row',id:`${kind}-comfy-rhadd-row`,style:'display:none'});
+    ar.dataset.nosave='';   // 待添加的 ID / 备注不是配置,「验证并添加」成功后才存
     ar.appendChild(el('label',{},'添加工作流'));
     ar.appendChild(el('input',{type:'text',id:`${kind}-comfy-rhadd`,
       placeholder:t('工作流 ID 或页面链接')}));
@@ -1216,6 +1215,7 @@ async function rhAddWf(kind){
     +dhBinding+(kind==='digitalhuman'?'':(r.tokens?.length
       ?' · '+t('占位符:')+r.tokens.join(', ')
       :' · '+t('未检测到占位符,将按工作流结构自动绑定可识别输入')));
+  autoSave();
 }
 
 function rhRemoveWf(kind){
@@ -1224,6 +1224,7 @@ function rhRemoveWf(kind){
   RH_WFS[kind]=(RH_WFS[kind]||[]).filter(w=>!(String(w.id)===v&&(!w.site||w.site===mode)));
   fillRhWfSelect(kind,`${kind}-comfy-rhwf`,'');
   if(SECOND_WF[kind])fillRhWfSelect(kind,`${kind}-comfy-rhrefwf`,$(`#${kind}-comfy-rhrefwf`).value);
+  autoSave();
 }
 
 /* ---------- ComfyUI 工作流下拉 + .md 说明弹窗 ---------- */
@@ -1358,6 +1359,7 @@ function wireDaTest(prefix,savedModel){
       st.className='status ok';st.textContent=I18N.f('✓ 已连接 · {n} 个模型',{n:r.models.length});
       fillSelect($(`#${prefix}-model`),r.models.map(m=>[m,m]),
                  savedModel()||$(`#${prefix}-model`).value,'');
+      autoSave();
     }else{st.className='status err';st.textContent='✗ '+(r.error||t('连接失败'))}
   };
 }
@@ -1502,7 +1504,7 @@ function buildSfxPanels(){
   const sr=keyRow('sfx-ov-client-secret','可选,与 Client ID 一起填');
   sr.querySelector('label').textContent='Client Secret';
   ov.appendChild(sr);
-  const qr=el('div',{className:'row'});
+  const qr=el('div',{className:'row'});qr.dataset.nosave='';   // 搜索测试不是配置
   qr.appendChild(el('label',{},'搜索测试'));
   const q=el('input',{type:'text',id:'sfx-ov-q',placeholder:'英文关键词,如 door slam / rain window'});
   const b=el('button',{id:'sfx-ov-search'},'搜索');
@@ -2100,42 +2102,87 @@ function collect(){
   return out;
 }
 
-$('#save').onclick=async()=>{
-  const btn=$('#save');btn.disabled=true;btn.textContent='保存中…';
+/* ---------- 自动保存(2026-10-21,去掉「保存设置」按钮) ----------
+   本页任何设置改动即整份保存(与原按钮同一请求):文本 / 密码 / 数字框失焦(或回车)时存,下拉、勾选框选中即存;
+   按钮改出来的值(Fal「选用」、RunningHub 工作流增删、deepagents 测试连接后刷新的模型下拉)由各自调 autoSave()。
+   与上次保存的内容相同不发请求;保存串行,进行中又有改动则结束后再存一次最新值。请求带 keepalive:失焦后紧接着
+   点链接离开本页也能存进去;页面隐藏 / 关闭时把正在输入的框一并存下。检索框等非配置输入所在行带 data-nosave */
+let SAVED_BODY='',SAVING=false,SAVE_AGAIN=false,SAVE_TIMER=null;
+const DRAFT_KIND={image:'image',video:'video',music:'music',tts:'tts',digital_human:'digitalhuman',upscale:'scale',deepagents:'text'};
+const DRAFT_CHAN={image:'image',video:'video',music:'music',tts:'tts',digital_human:'dh',upscale:'up',deepagents:'text'};
+function saveStatus(cls,msg,ms){
+  const st=$('#save-status');clearTimeout(SAVE_TIMER);
+  st.className=cls;st.textContent=msg;
+  if(ms)SAVE_TIMER=setTimeout(()=>{st.className='';st.textContent=t('修改即自动保存')},ms);
+}
+/* Agentics 渠道须在桌面端登录且有可用模型。与服务端同口径,只校验本次新切到 agentics 的类别(浏览器版默认渠道就是
+   agentics,按整份配置校验会让任何改动都存不进去);不满足时把这些类别的生效渠道退回已保存的那个,其余改动照常保存 */
+function agenticsBlocked(draft){
+  const kinds=Object.keys(DRAFT_KIND).filter(k=>draft[k].provider==='agentics'&&(CFG[k]||{}).provider!=='agentics');
+  if(!kinds.length)return '';
+  const err=!agenticsBridge()?t('AgenticsLLM 仅支持桌面客户端')
+    :!AGENTICS_ACCOUNT?t('请先登录 AgenticsLLM 账号')
+    :kinds.some(k=>agenticsModelSelects(DRAFT_KIND[k]).some(([,sel])=>!sel||!sel.value))?t('AgenticsLLM 暂无可用模型'):'';
+  if(err)kinds.forEach(k=>{
+    const sec=DRAFT_CHAN[k],old=(CFG[k]||{}).provider;
+    if(CHAN[sec].list.includes(old))chanSet(sec,old);
+  });
+  return err;
+}
+function saveBody(draft){
+  const proj=(new URLSearchParams(location.search).get('project'))
+    ||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';
+  return JSON.stringify(Object.assign(draft,{project:proj}));
+}
+async function autoSave(){
+  if(!CFG)return;
+  if(SAVING){SAVE_AGAIN=true;return}
+  SAVING=true;
   try{
-    const draft=collect();
-    const agenticsKinds=Object.keys(SECTIONS).filter(kind=>draft[kind].provider==='agentics');
-    if(draft.digital_human.provider==='agentics')agenticsKinds.push('digitalhuman');
-    if(draft.upscale.provider==='agentics')agenticsKinds.push('scale');
-    if(draft.deepagents.provider==='agentics')agenticsKinds.push('text');
-    if(agenticsKinds.length&&!agenticsBridge())throw new Error(t('AgenticsLLM 仅支持桌面客户端'));
-    if(agenticsKinds.length&&!AGENTICS_ACCOUNT)throw new Error(t('请先登录 AgenticsLLM 账号'));
-    const empty=agenticsKinds.filter(kind=>agenticsModelSelects(kind).some(([,sel])=>!sel||!sel.value));
-    if(empty.length)throw new Error(t('AgenticsLLM 暂无可用模型'));
-    const proj=(new URLSearchParams(location.search).get('project'))
-      ||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';
-    const r=await api('/api/v1/config/generation',Object.assign(draft,{project:proj}));
-    CFG=r.config;
-    const st=$('#save-status');st.style.color='';
+    let draft=collect();
+    const blocked=agenticsBlocked(draft);
+    if(blocked)draft=collect();
+    const body=saveBody(draft);
+    if(body===SAVED_BODY){if(blocked)saveStatus('err','✗ '+blocked);return}
+    saveStatus('',t('保存中…'));
+    const resp=await fetch('/api/v1/config/generation',{method:'POST',headers:{'Content-Type':'application/json'},
+      body,keepalive:body.length<60000});   // keepalive 请求体上限 64 KB
+    const r=await resp.json().catch(()=>({}));
+    if(!resp.ok)throw new Error(r.detail||resp.status);
+    CFG=r.config;SAVED_BODY=body;
+    if(blocked){saveStatus('err','✗ '+blocked);return}   // 其余改动已存;生效渠道为何被退回要留着给人看
     // RunningHub 工作流缓存已随保存同步云端最新版(genmedia 提交走本地缓存整包);
     // 同步失败=提交仍沿用旧缓存,须醒目提示
     const rf=r.rh_cache_refresh||[];
     const errs=rf.filter(x=>x.status==='error');
     const upd=rf.filter(x=>x.status==='updated'||x.status==='created').length;
-    if(errs.length){
-      st.textContent='⚠ '+I18N.f('已保存,但 {n} 个 RunningHub 工作流缓存同步失败(提交将沿用旧缓存):{ids}',
-        {n:errs.length,ids:errs.map(x=>x.id+' '+(x.detail||'')).join('; ')});
-      st.style.color='var(--red)';
-    }else{
-      st.textContent='✓ 已保存'+(upd?' · '+I18N.f('已同步 {n} 个 RunningHub 云端工作流缓存',{n:upd}):'');
-    }
-    st.classList.add('show');
-    setTimeout(()=>st.classList.remove('show'),errs.length?8000:2500);
+    if(errs.length)saveStatus('err','⚠ '+I18N.f('已保存,但 {n} 个 RunningHub 工作流缓存同步失败(提交将沿用旧缓存):{ids}',
+      {n:errs.length,ids:errs.map(x=>x.id+' '+(x.detail||'')).join('; ')}),8000);
+    else saveStatus('ok',t('✓ 已自动保存')+(upd?' · '+I18N.f('已同步 {n} 个 RunningHub 云端工作流缓存',{n:upd}):''),2500);
   }catch(e){
-    const st=$('#save-status');st.textContent='✗ 保存失败:'+e.message;
-    st.style.color='var(--red)';st.classList.add('show');
-  }finally{btn.disabled=false;btn.textContent='保存设置'}
-};
+    saveStatus('err','✗ 保存失败:'+(e.message||e));
+  }finally{
+    SAVING=false;
+    if(SAVE_AGAIN){SAVE_AGAIN=false;autoSave()}
+  }
+}
+document.addEventListener('change',e=>{
+  const x=e.target;
+  if(!x.closest('main')||x.closest('[data-nosave]'))return;
+  // 选「自定义…」时等自定义框填好(它失焦时再存),免得先存一个空的模型 ID / 工作流路径
+  if(x.tagName==='SELECT'&&x.value===CUSTOM){
+    const c=x.parentElement.querySelector('input[type=text]');
+    if(c&&!c.value.trim())return;
+  }
+  autoSave();
+});
+/* 页面隐藏 / 关闭时正在输入的框不一定会失焦,主动存一次 */
+function saveEditing(){
+  const a=document.activeElement;
+  if(a&&a.matches('main input')&&!a.closest('[data-nosave]'))autoSave();
+}
+window.addEventListener('pagehide',saveEditing);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')saveEditing()});
 
 /* ---------- 初始化 ---------- */
 (async()=>{
@@ -2167,6 +2214,7 @@ $('#save').onclick=async()=>{
   COMFY_WFS=Object.assign({image:[],video:[],music:[],tts:[],digitalhuman:[],scale:[]},wfs.workflows||{});
   await refreshAgenticsAccount();
   loadIntoForm();
+  try{SAVED_BODY=saveBody(collect())}catch(e){}   // 基线 = 刚装载的配置,没改动不发保存
 })();
 </script>
 </body>

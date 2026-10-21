@@ -4238,7 +4238,7 @@ window.I18N_DICT = {
 "已内置适配": "Suporte integrado",
 "按参数表自动适配": "Adaptado automaticamente aos parâmetros",
 "搜索 Fal 模型目录失败": "Falha ao buscar no catálogo de modelos do Fal",
-"已填入 {id},点「保存设置」后生效": "{id} preenchido; clique em “Salvar configurações” para aplicar",
+"已填入 {id}": "{id} preenchido",
 "搜到的模型不在上面清单里时,系统按该端点的参数表组请求:时长、分辨率、画幅取它支持的最接近值,不支持的输入(如尾帧、参考图)会直接报错;这些模型尚未逐个实测。": "Quando um modelo encontrado não está na lista acima, a requisição é montada a partir da lista de parâmetros desse endpoint: duração, resolução e proporção usam o valor suportado mais próximo, e entradas não suportadas (quadro final, imagens de referência…) geram erro. Esses modelos não foram testados um a um.",
 "📡 发布渠道": "📡 Canais de publicação",
 "已选 {n} 个渠道": "{n} canal(is) selecionado(s)",
@@ -4796,7 +4796,7 @@ window.I18N_DICT = {
 "风格测试:按风格库里的这种画风试改,项目的画面风格不变": "Teste de estilo: esta versão experimenta este estilo da biblioteca; o estilo visual do projeto não muda",
 // 生成模型设置·生效渠道下拉(2026-10-21,models.html):标签页只管查看 / 编辑,生效渠道在板块标题栏右侧选
 "生效渠道": "Provedor ativo",
-"生成时实际使用的渠道(标签上的 ✅),保存后生效;标签页只用来查看 / 编辑各渠道配置,不改变生效渠道": "O provedor realmente usado na geração (✅ na aba dele), vale após salvar; as abas servem só para ver / editar a configuração de cada provedor e não mudam o provedor ativo",
+"生成时实际使用的渠道(标签上的 ✅),选中即保存;标签页只用来查看 / 编辑各渠道配置,不改变生效渠道": "O provedor realmente usado na geração (✅ na aba dele), salvo assim que você o escolhe; as abas servem só para ver / editar a configuração de cada provedor e não mudam o provedor ativo",
 // 画板「动图」页(2026-10-21,preview_canvas.html):以正在查看的版本生成视频(参考图 / 首尾帧);画板动图 Agent(08-video-gen/canvas-motion)
 "动图": "Animar",
 "视频渠道": "Provedor de vídeo",
@@ -4870,4 +4870,7 @@ window.I18N_DICT = {
 "提示词原样发给视频模型": "O prompt vai como está para o modelo de vídeo",
 "先由画板动图 Agent 看首尾帧整理提示词": "O Agente de vídeo do Canvas olha primeiro o primeiro e o último quadro e escreve o prompt",
 "首尾帧模式要选一个版本作尾帧": "O modo primeiro/último quadro precisa de uma versão escolhida como último quadro",
+// 生成模型设置·自动保存(2026-10-21,models.html):去掉「保存设置」按钮,改动即存,状态显示在顶栏
+"修改即自动保存": "As alterações são salvas automaticamente",
+"✓ 已自动保存": "✓ Salvo automaticamente",
 };

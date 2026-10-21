@@ -39,7 +39,7 @@ python3 modules/genmedia.py video --prompt "<video_prompt 逐字>" \
 
 ## 参数如何进入云端工作流(机制)
 
-1. **模板来源**:所选 `rh_workflow_id` 的 JSON(API 格式)经 `/api/openapi/getJsonApiFormat` 拉取,缓存在 `data/.videoagents/rh_workflows/{mode}-{id}.json`(设置页「验证并添加」时写入,运行时缓存优先)。设置页每次「保存设置」会自动把当前选中工作流的缓存同步为云端最新版;用户在 RunningHub 网页端改了模板后,重新保存设置(或重新验证)即可刷新,未保存前提交的仍是旧结构。
+1. **模板来源**:所选 `rh_workflow_id` 的 JSON(API 格式)经 `/api/openapi/getJsonApiFormat` 拉取,缓存在 `data/.videoagents/rh_workflows/{mode}-{id}.json`(设置页「验证并添加」时写入,运行时缓存优先)。设置页每次自动保存(改动任一设置即保存)都会把当前选中工作流的缓存同步为云端最新版;用户在 RunningHub 网页端改了模板后,在设置页对该工作流重新「验证并添加」(或改动任一设置触发保存)即可刷新,刷新前提交的仍是旧结构。
 2. **占位符替换**:模板中的 `{{TOKEN}}` 占位符(PROMPT/SEED/WIDTH/HEIGHT/H3_FRAMES 等,与本地 `comfy/*.json` 同一套约定)先做整树替换。工作区导出件通常**没有占位符**、全是作者演示字面值——此时替换空转,靠下面两步兜住。
 3. **H3 Ref2VA 直绑**(模板含 `MiniMaxH3ReferenceToVideo` 节点时):
    - `--prompt` 顺 H3 节点 `prompt` 连线改写其上游文本 primitive(或字面值位),作者的演示提示词不会漏进生产请求;

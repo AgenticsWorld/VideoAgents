@@ -4236,7 +4236,7 @@ window.I18N_DICT = {
 "已内置适配": "Dukungan bawaan",
 "按参数表自动适配": "Disesuaikan otomatis dengan parameter",
 "搜索 Fal 模型目录失败": "Pencarian katalog model Fal gagal",
-"已填入 {id},点「保存设置」后生效": "{id} sudah diisi; klik “Simpan pengaturan” untuk menerapkan",
+"已填入 {id}": "{id} sudah diisi",
 "搜到的模型不在上面清单里时,系统按该端点的参数表组请求:时长、分辨率、画幅取它支持的最接近值,不支持的输入(如尾帧、参考图)会直接报错;这些模型尚未逐个实测。": "Jika model yang ditemukan tidak ada di daftar di atas, permintaan disusun dari daftar parameter endpoint tersebut: durasi, resolusi, dan rasio aspek memakai nilai terdekat yang didukung, dan masukan yang tidak didukung (frame akhir, gambar referensi, dsb.) akan gagal dengan pesan galat. Model-model ini belum diuji satu per satu.",
 "📡 发布渠道": "📡 Saluran publikasi",
 "已选 {n} 个渠道": "{n} saluran dipilih",
@@ -4794,7 +4794,7 @@ window.I18N_DICT = {
 "风格测试:按风格库里的这种画风试改,项目的画面风格不变": "Uji gaya: versi ini mencoba gaya ini dari pustaka gaya; gaya visual proyek tidak berubah",
 // 生成模型设置·生效渠道下拉(2026-10-21,models.html):标签页只管查看 / 编辑,生效渠道在板块标题栏右侧选
 "生效渠道": "Penyedia aktif",
-"生成时实际使用的渠道(标签上的 ✅),保存后生效;标签页只用来查看 / 编辑各渠道配置,不改变生效渠道": "Penyedia yang benar-benar dipakai saat generasi (✅ pada tabnya), berlaku setelah disimpan; tab hanya untuk melihat / mengedit konfigurasi tiap penyedia dan tidak mengubah penyedia aktif",
+"生成时实际使用的渠道(标签上的 ✅),选中即保存;标签页只用来查看 / 编辑各渠道配置,不改变生效渠道": "Penyedia yang benar-benar dipakai saat generasi (✅ pada tabnya), langsung tersimpan saat dipilih; tab hanya untuk melihat / mengedit konfigurasi tiap penyedia dan tidak mengubah penyedia aktif",
 // 画板「动图」页(2026-10-21,preview_canvas.html):以正在查看的版本生成视频(参考图 / 首尾帧);画板动图 Agent(08-video-gen/canvas-motion)
 "动图": "Animasi",
 "视频渠道": "Penyedia video",
@@ -4868,4 +4868,7 @@ window.I18N_DICT = {
 "提示词原样发给视频模型": "Prompt dikirim apa adanya ke model video",
 "先由画板动图 Agent 看首尾帧整理提示词": "Agen Video Kanvas melihat bingkai pertama dan terakhir lalu menyusun prompt lebih dulu",
 "首尾帧模式要选一个版本作尾帧": "Mode bingkai pertama/terakhir perlu versi yang dipilih sebagai bingkai terakhir",
+// 生成模型设置·自动保存(2026-10-21,models.html):去掉「保存设置」按钮,改动即存,状态显示在顶栏
+"修改即自动保存": "Perubahan tersimpan otomatis",
+"✓ 已自动保存": "✓ Tersimpan otomatis",
 };
