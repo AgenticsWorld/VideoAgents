@@ -1,6 +1,7 @@
 # 画板(/preview/canvas)
 
 对一张已有图片做精确修改的独立页面:圈出位置写修改内容、附参考图、选图像模型出图;放大;裁剪 / 翻转 / 旋转 / 缩放;所有结果保留为历史版本,选一张设为最终版。
+「动图」标签以正在查看的版本为参考图(或首帧)生成一段视频,只进这张图自己的动图列表。
 
 核心规则:**编辑、放大、调整的结果只进这张图自己的历史;点「设为最终版」才动生产链路。**
 
@@ -27,13 +28,15 @@
 
 ```
 assets/canvas/<原图相对路径压平>.<sha8>/
-    history.json        台账:versions[] / final / disk / refs[](参考图托盘)/ jobs[](最近任务号)/ final_log[] / ui{label, oid}
+    history.json        台账:versions[] / final / disk / refs[](参考图托盘)/ jobs[] · motion_jobs[] · prompt_jobs[](三条任务通道的最近任务号)/
+                        motions[] / final_log[] / ui{label, oid}
     v000.png …          各版本(扩展名随原图;内容按文件头——本库 .png 多为 JPEG 字节)
     v003.raw.png        圈外锁定前模型返回的整图
     v003.thumb.jpg      缩略图
     refs/NN_<名>        用户上传的参考图(从项目库选的只记路径,不复制)
     jobs/<任务号>/      job.json、source.png(底图)、marked.jpg(带圈标注图)、mask.png、region_N.jpg、result.png、prompt.txt
-    trash/              被「删除」的版本文件(不真删)
+    motion/mNNN.mp4     「动图」生成的视频 + mNNN.poster.jpg 封面帧(台账 motions[])
+    trash/              被「删除」的版本与动图文件(不真删)
 assets/canvas/index.json    aliases:分镜背景图登记出去的 <key>_revN 文件 → 原图的画板(从 _revN 打开看到同一份历史)
 ```
 
@@ -69,7 +72,8 @@ assets/canvas/index.json    aliases:分镜背景图登记出去的 <key>_revN �
   同时算圈外平均差 `drift`;超过 `DRIFT_WARN`(0.06,启发式)标「圈外漂移」——模型把整张图挪了位置时圈内外接缝会对不上,页面提供「改用整图」另存一版(`unlock_version`)。
   模型返回图与底图画幅差超过 3% 时无法对位,不合成,版本标「画幅变了」。
 - 用量:接口返回了 usage 的渠道(目前只有火山 / BytePlus)记在版本的 `usage` 上,历史里显示;其余渠道不显示。任务目录里的 `usage_ledger.jsonl` 与别处同一格式。
-- 同一张图同时只跑一个任务(`active_job`);Agent 结束却没交提示词、或任务长时间没进展,下次读状态时记为失败。
+- 同一张图在同一条通道上同时只跑一个任务(`active_job`):编辑 / 放大共用一条,动图一条,「🎲 写一段」视频提示词一条,通道之间互不阻塞(出视频期间照样能编辑)。
+  Agent 结束却没交提示词、或任务长时间没进展,下次读状态时记为失败。
 - **🔞 NSFW 开关**(工具栏最右;控制台「设置→高级→NSFW 模式」开着才显示,开关状态按图记在本机浏览器 `localStorage`):打开后本图的编辑与重绘放大按 NSFW 路由,同工单 `nsfw: true`——
   配了备用图像渠道时服务端把任务的渠道 / 模型换成它(页面的模型下拉变灰并注明);经 Agent 时派单带 `nsfw`,修图 Agent 跑在备用语言模型上(`nsfw_route_for_run`,未配备用语言模型时沿用当前引擎),工单多一行 `nsfw: true`;
   出图子进程(Agent 的、宿主直接发送 / 确认 / 放大起的)都带 `VIDEOAGENTS_NSFW=1`,genmedia 记 `nsfw_route`。任务与版本记 `nsfw: true`,历史里标 🔞。
@@ -111,6 +115,43 @@ assets/canvas/index.json    aliases:分镜背景图登记出去的 <key>_revN �
 
 `POST …/canvas/transform`:`crop {x,y,w,h}`(页面用最后一个矩形区域)/ `flip_h` / `flip_v` / `rotate {deg: 90|180|270}` / `resize {width,height}`,各记为一个 `transform` 版本,按原编码写。
 
+## 动图(2026-10-21)
+
+侧栏「信息」右侧的「动图」标签:以**正在查看的版本**(编辑后的版本也行)生成一段视频。`POST …/canvas/motion`:
+`{file, image_mode, parent, ref2, last, text, provider, model, duration, resolution, audio, mode: agent|direct, preview, nsfw, draft_only}`。结果只进这张图的动图列表,与「设为最终版」、生产链路都无关。
+
+- **生成方式**(`image_mode`,页面「生成方式」单选):
+  - **参考图**(`ref`,默认):genmedia 按多参考图模式提交(`refs`,不传首尾帧)。正在查看的版本 = `@Image 1`,「参考图 2」可再选一个版本 = `@Image 2`;
+    提示词用 `@Image N` 点名(ComfyUI H3 边界转成 `<Picture N>`)。ComfyUI MiniMax-H3 Ref2VA 等参考生视频工作流只收这种。
+  - **首尾帧**(`frames`):正在查看的版本作首帧、「尾帧」必选另一个版本(genmedia `first_frame / last_frame`),须配支持首尾帧的视频模型
+    (如火山 / BytePlus 的 Seedance、Fal 的 Kling、ComfyUI 的 H3 FL2VA 工作流);提示词原样发送,不补参考图说明。
+  - **发送前预检**(`motion_channel_problem`):生效的视频渠道是 ComfyUI 时按工作流类型判——H3 Ref2VA / Seedance 云端参考生视频模板只收参考图,
+    LTX-2.5 两种都收,其余(基础图生视频模板)只收首尾帧;对不上直接 400 说清该换方式还是换模型,不用排队几分钟才失败。其它渠道由 genmedia 出视频时按模型报错。
+
+- **视频模型**:渠道 / 模型两级下拉,清单同分镜预览顶部的集级渠道下拉(`video_provider_options`,未配 Key 的置灰,MiniMax 隐藏);默认「跟随全局」=「🎨 生成模型」页的视频设置。
+  选择只在本页用,记在本机浏览器(所有图共用),不改全局设置。服务端只收已配置的渠道,模型须在该渠道清单里或就是「生成模型」页保存的那个(`_canvas_video_channel`)。
+- **参数**:时长默认 15 秒(2–30)、分辨率默认 480p(480p / 720p / 1080p)、声音默认开(取消勾选 = 无声动图)。
+  画幅不给选:按正在查看的版本取最近的常用比例(`motion_aspect`;参考图模式下渠道不会自动跟随图的比例,Seedance 2.5 首帧任务由 genmedia 改 adaptive)。各渠道能出的时长 / 分辨率不同,超出范围由渠道就近取或报错。
+  分辨率是用户在页面上明确选的,出视频时 `generate_video(resolution_gate=False)` 不走派单链路的分辨率闸门(Agent 工单仍走闸门)。
+  参考图 / 首尾帧送模型前另存一份到任务目录(`_motion_ref_image`:长边 ≤ 2048、≤ 2 MB、无透明的原样复制,否则压成 JPEG、透明处垫白),版本文件不动。
+  声音关时传 `generate_audio=False`;ComfyUI 工作流(H3 Ref2VA 固定出原生音频、基础工作流不收这个参数)关着时不传。
+- **提示词**:输入框写画面怎么动;「🎲 让语言模型看图写一段」= 建一个 `motion_prompt` 任务派**画板动图 Agent**(`08-video-gen/canvas-motion`,智能分配固定低档)看参考图写一段,
+  框里已有的文字作为想法交给它,写好后由页面填回输入框,用户改过再决定发不发。提示词语言按界面语言(中文界面写中文,其余英文)。
+- **发送方式**(「直接发给视频模型」默认勾选,2026-10-21 用户要求;取消勾选才经 Agent)
+  - 经 Agent:派画板动图 Agent 看参考图写提示词(开头用 `@Image N` 点名;用户没写描述也行),它跑 `code/canvas_edit.py motion --prompt-file …` **只交提示词、几秒返回**;
+    几分钟的视频由宿主在它本轮结束后起进程出(`_canvas_motion_after_run`),不让 Agent 的工具调用干等。
+  - 直接发送(默认):用户写的提示词发给视频模型(必须先写),宿主后台跑 `canvas_edit.py motion --template`;提示词里没用 `@Image N` 点名时,
+    开头补一句「Use @Image 1 as the reference image: keep its subjects, their appearance, the setting and the visual style.」(`motion_template`)。
+  - 发送前先看提示词:任务停在待确认,页面显示提示词可改,确认后宿主跑 `motion --confirmed`。
+- **🔞**:工具栏 🔞 生效时动图同样按 NSFW 路由——配了 NSFW 备用视频渠道时服务端改用它(下拉变灰并注明),经 Agent 时派单带 `nsfw`(备用语言模型),
+  出视频子进程带 `VIDEOAGENTS_NSFW=1`;🔞 生效时若「直接发给视频模型」被取消了,同样自动勾上,失效时只撤回自动勾的那一下。画板动图 Agent 被判拒绝时任务标失败并提示(`_canvas_mark_refused`)。
+- **出视频**(`run_motion`,宿主子进程,超时 90 分钟):`genmedia.generate_video(refs 或 first_frame / last_frame, duration, resolution, aspect, provider, model)` → 视频存
+  `motion/mNNN.mp4`,ffmpeg 取中间一帧作封面(ffmpeg 不可用时用参考图缩略图),ffprobe 记实际时长 / 宽高 / 音轨;记录 `motions[]`:
+  `id / file / poster / job / parent / image_mode / ref2 / last / mode / prompt / text / provider / model / duration / resolution / aspect / audio / actual / bytes / created_at / nsfw / usage`。
+- **列表**:「本图的动图」按新到旧列出,点封面在页面里播放;可「用这段提示词」填回输入框、下载、删除(`POST …/canvas/motion/delete`,挪进 trash,不真删)。
+  每段显示**实际发给视频模型的提示词**(直接发送补的参考图说明、Agent 写的都在内):超过 110 字先截断,「展开全文」在只读框里看全、可选中,「收起」折回;
+  「复制提示词」复制到剪贴板(http 局域网下 clipboard API 不可用时退回 execCommand,失败提示手动选中)。播放窗口里提示词下方同样有「复制提示词」,点提示词文字不会关窗口。
+
 ## 设为最终版
 
 `POST …/canvas/adopt`:`{file, version, repoint, sync_setting}`。页面先用 `GET …/canvas/impact` 给出影响清单。
@@ -134,12 +175,15 @@ assets/canvas/index.json    aliases:分镜背景图登记出去的 <key>_revN �
 | GET | `…/canvas/library` | 从项目库选参考图的候选 |
 | GET | `…/canvas/impact` | 设为最终版的影响清单 |
 | POST | `…/canvas/edit` `…/confirm` `…/upscale` `…/transform` `…/version` `…/adopt` | 见上 |
+| POST | `…/canvas/motion`、`…/canvas/motion/delete` | 动图:生成 / 「🎲 写一段」/ 删除一段 |
 | POST | `…/canvas/refs`、`…/canvas/refs/upload` | 参考图托盘:选库图 / 改注释 / 移出;上传(请求体即图片字节) |
 
-页面在有任务时每 2.5 秒轮询一次 GET。用户可见的错误文案中文界面出中文、其余出英文(`CanvasError.text`)。
+页面在有任务时每 2.5 秒轮询一次 GET(只剩视频在生成时 5 秒)。用户可见的错误文案中文界面出中文、其余出英文(`CanvasError.text`)。
 
 ## 没做 / 没验证
 
+- 动图没有真实生成过视频:各视频模型对参考图的遵从度、480p 下的画质、画板动图 Agent 写的提示词质量都没实测;
+  参考图是没入虚拟人像库的真人感图时,方舟可能以 PrivacyInformation 拒收(同分镜视频的尾帧问题)。
 - 没有任何真实出图:各图像模型对带圈标注图的遵从程度、圈外漂移阈值 0.06 是否合适、Fal 各超分端点的实际返回,都没有实测。
 - 真蒙版重绘(把 mask 发给支持的模型)、局部裁切重绘再贴回、扩图、多候选、套用到同场景其它背景图——未做。
 - 分镜预览页的背景图 / 参考图、全景图没有接入口。

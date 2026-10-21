@@ -66,6 +66,7 @@ main{flex:1;display:flex;min-height:0}
 .hint.warn{color:var(--yellow)}
 .err{color:var(--red);font-size:12px;white-space:pre-wrap;word-break:break-word}
 .row{display:flex;align-items:center;gap:6px;margin:4px 0}
+.row[hidden]{display:none}
 .row>input[type=text]{flex:1;min-width:0}
 .chip{flex:none;min-width:20px;height:20px;border-radius:10px;color:#fff;font-size:11.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;padding:0 6px}
 .opt{display:flex;align-items:flex-start;gap:6px;margin:5px 0;cursor:pointer;user-select:none;font-size:12.5px}
@@ -140,6 +141,28 @@ dl.kv dd{min-width:0;word-break:break-all}
 .sty-card .cat{position:absolute;top:5px;right:5px;font-size:10px;background:rgba(0,0,0,.55);color:#fff;border-radius:4px;padding:0 5px}
 .sty-card .zoom{position:absolute;top:5px;left:5px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px;background:rgba(0,0,0,.55);border-radius:4px;cursor:zoom-in;opacity:.75}
 .sty-card .zoom:hover{opacity:1}
+/* 动图页:参考图、视频模型、参数、提示词、本图的动图列表;点封面在 #vbox 里播放 */
+.mo-first{display:flex;gap:10px;align-items:center}
+.mo-first img{width:96px;height:64px;flex:none;object-fit:contain;background:#0b0d12;border-radius:4px;border:1px solid var(--border)}
+#mo-pick select{max-width:none}
+#mo-dur{width:64px}
+.mov{display:grid;grid-template-columns:120px 1fr;gap:10px;padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:var(--panel2)}
+.mov .pv{position:relative;width:120px;height:80px;border-radius:4px;overflow:hidden;background:#0b0d12;cursor:pointer}
+.mov .pv img{width:100%;height:100%;object-fit:contain;display:block}
+.mov .pv .play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:22px;color:#fff;text-shadow:0 0 8px #000;opacity:.8;pointer-events:none}
+.mov .pv:hover .play{opacity:1}
+.mov .pv .dur{position:absolute;right:4px;bottom:3px;font-size:10.5px;line-height:15px;background:rgba(0,0,0,.65);color:#fff;border-radius:3px;padding:0 4px;pointer-events:none}
+.mov .t1{display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-weight:600}
+.mov .t2{color:var(--dim);font-size:11.5px;line-height:1.45;word-break:break-word}
+.mov .ops{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px}
+.mov textarea.mo-prompt{margin-top:4px;font-size:11.5px;line-height:1.45;background:var(--bg)}
+.lnk{color:var(--accent);cursor:pointer;white-space:nowrap}
+.lnk:hover{text-decoration:underline}
+#mo-gen-st:not([hidden]){display:flex;align-items:center;gap:8px;margin-top:6px}
+#vbox{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;z-index:90}
+#vbox video{max-width:94vw;max-height:84vh;border-radius:6px;background:#000}
+#vbox .cap-row{display:flex;align-items:flex-start;gap:10px;max-width:min(900px,90vw)}
+#vbox .cap{color:#c9cfdb;font-size:12px;max-height:12vh;overflow-y:auto;white-space:pre-wrap;word-break:break-word;user-select:text;cursor:text}
 </style>
 </head>
 <body>
@@ -193,6 +216,7 @@ dl.kv dd{min-width:0;word-break:break-all}
       <button data-tab="up">放大</button>
       <button data-tab="hist">历史</button>
       <button data-tab="info">信息</button>
+      <button data-tab="motion">动图</button>
     </div>
     <div class="pane on" id="p-edit">
       <div class="sec"><h3>图像模型</h3><span id="imp-edit"></span><div class="hint warn" id="imp-edit-nsfw" hidden></div></div>
@@ -245,12 +269,46 @@ dl.kv dd{min-width:0;word-break:break-all}
     </div>
     <div class="pane" id="p-hist"><div id="vers"></div></div>
     <div class="pane" id="p-info"><div id="info"></div></div>
+    <div class="pane" id="p-motion">
+      <div class="sec"><h3>生成方式</h3>
+        <label class="opt"><input type="radio" name="momode" value="ref" checked><span>参考图:用正在查看的图作参考图,按提示词生成</span></label>
+        <label class="opt"><input type="radio" name="momode" value="frames"><span>首尾帧:正在查看的图作首帧,再选一个版本作尾帧</span></label>
+        <div class="mo-first" style="margin-top:6px"><img id="mo-first" alt=""><div class="hint" id="mo-first-t"></div></div>
+        <div class="row" id="mo-ref2-row"><span class="hint">参考图 2</span><select id="mo-ref2" style="flex:1;min-width:0" title="可选:再选一个版本一起作为参考图(@Image 2),提示词里用 @Image 2 指它"></select></div>
+        <div class="row" id="mo-last-row" hidden><span class="hint">尾帧</span><select id="mo-last" style="flex:1;min-width:0" title="视频结束在这个版本的画面,从首帧过渡过去"></select></div>
+        <div class="hint warn" id="mo-frames-hint" hidden>需要支持首尾帧的视频模型:如火山 / BytePlus 的 Seedance、Fal 的 Kling、ComfyUI 的 H3 FL2VA 工作流;MiniMax-H3 Ref2VA 这类参考图工作流不收首尾帧</div>
+      </div>
+      <div class="sec"><h3>视频模型</h3>
+        <div class="imp" id="mo-pick"><select id="mo-prov" title="视频渠道"></select><select id="mo-model" title="视频模型" hidden></select></div>
+        <div class="hint" id="mo-ch-hint" style="margin-top:4px"></div>
+        <div class="hint warn" id="mo-nsfw" hidden></div>
+      </div>
+      <div class="sec"><h3>视频参数</h3>
+        <div class="row"><span class="hint">视频时长</span><input type="number" id="mo-dur" value="15" min="2" max="30" step="1"><span class="hint">秒</span>
+          <span class="hint" style="margin-inline-start:12px">分辨率</span><select id="mo-res"><option value="480p" selected>480p</option><option value="720p">720p</option><option value="1080p">1080p</option></select></div>
+        <label class="opt"><input type="checkbox" id="mo-audio" checked><span>同时生成声音(模型支持时;不勾是无声动图)</span></label>
+        <div class="hint">各模型能出的时长与分辨率不同:超出范围时由渠道就近取或报错</div>
+      </div>
+      <div class="sec"><h3>视频提示词<button class="sm" id="mo-gen" style="margin-inline-start:auto" title="让画板动图 Agent 看图写一段视频提示词填进下面(框里已经写的会作为想法交给它);写好后可以再改">🎲 让语言模型看图写一段</button></h3>
+        <textarea id="mo-txt" rows="5" placeholder="画面怎么动:谁做什么动作、镜头怎么运动(可用 @Image 1 指参考图);不勾「直接发送」时可以留空,交给 Agent 看图写"></textarea>
+        <div id="mo-gen-st" hidden></div>
+      </div>
+      <div class="sec">
+        <label class="opt"><input type="checkbox" id="mo-direct" checked><span>直接发给视频模型,不经 Agent 整理</span></label>
+        <label class="opt"><input type="checkbox" id="mo-preview"><span>发送前先看提示词:确认或修改后再生成</span></label>
+        <div class="row" style="margin-top:8px"><button class="pri" id="mo-send">生成动图</button><span class="hint" id="mo-hint"></span></div>
+        <div class="err" id="mo-err"></div>
+      </div>
+      <div id="job3" class="jobbox"></div>
+      <div class="sec" style="margin-top:14px"><h3>本图的动图<span class="n" id="mo-n"></span></h3><div id="motions"></div></div>
+    </div>
   </aside>
 </main>
 <div id="mention"></div>
 <div id="modal"><div class="box"><h3 id="m-title"></h3><div class="body" id="m-body"></div><div class="btns" id="m-btns"></div></div></div>
 <div id="toast"></div>
 <div id="lightbox"><img alt=""></div>
+<div id="vbox"><video controls autoplay loop playsinline></video><div class="cap-row"><div class="cap" data-no-i18n></div><button class="sm" id="vb-copy">复制提示词</button></div></div>
 <script>
 'use strict';
 const $=s=>document.querySelector(s);
@@ -435,6 +493,7 @@ function tab(name){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===name));
   document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==='p-'+name));
   if(name==='up')loadLimits();
+  if(name==='motion')renderMotion();
 }
 document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>tab(b.dataset.tab));
 
@@ -586,39 +645,47 @@ document.addEventListener('click',e=>{if(!e.target.closest('#mention'))mbox.styl
 const nsfwMode=()=>(S&&S.nsfw_mode)||{enabled:false};
 const nsfwActive=()=>NSFW_ON&&nsfwMode().enabled;
 const nsfwImage=()=>nsfwActive()?nsfwMode().image||null:null;
+const nsfwVideo=()=>nsfwActive()?nsfwMode().video||null:null;
 const chDesc=c=>[c.provider,c.model].filter(Boolean).join(' ');
-// 🔞 生效时自动勾上「直接发给图像模型」(不经修图 Agent,免得语言模型拒单),用户可再取消;🔞 失效时只撤回自动勾的那一下,用户自己动过就不管
-let NSFW_WAS=false, DIRECT_AUTO=false;
+// 🔞 生效时自动勾上编辑页「直接发给图像模型」与动图页「直接发给视频模型」(不经画板 Agent,免得语言模型拒单),用户可再取消;
+// 🔞 失效时只撤回自动勾的那一下,用户自己动过就不管
+let NSFW_WAS=false, DIRECT_AUTO=false, MO_DIRECT_AUTO=false;
 function syncNsfw(){
-  const m=nsfwMode(), on=nsfwActive(), img=nsfwImage(), b=$('#nsfw'), d=$('#o-direct');
+  const m=nsfwMode(), on=nsfwActive(), img=nsfwImage(), vid=nsfwVideo(), b=$('#nsfw'), d=$('#o-direct'), md=$('#mo-direct');
   if(on!==NSFW_WAS){
     if(on&&!d.checked){d.checked=true;DIRECT_AUTO=true}
     else if(!on&&DIRECT_AUTO){d.checked=false;DIRECT_AUTO=false}
+    if(on&&!md.checked){md.checked=true;MO_DIRECT_AUTO=true}
+    else if(!on&&MO_DIRECT_AUTO){md.checked=false;MO_DIRECT_AUTO=false}
     NSFW_WAS=on;
   }
   b.hidden=$('#nsfw-sep').hidden=!m.enabled;
   b.classList.toggle('warn',on);
-  b.title=on?t('已打开:本图的编辑与重绘放大走 NSFW 模式的备用模型;点击关闭')
-    :t('打开后,本图的编辑与重绘放大改走「设置→高级→NSFW 模式」的备用模型:图像用备用渠道;编辑自动勾选「直接发给图像模型」,不经画板修图 Agent(取消勾选则修图 Agent 用备用语言模型)');
+  b.title=on?t('已打开:本图的编辑、重绘放大与动图走 NSFW 模式的备用模型;点击关闭')
+    :t('打开后,本图的编辑、重绘放大与动图改走「设置→高级→NSFW 模式」的备用模型:图像 / 视频用备用渠道;编辑与动图自动勾选「直接发给…模型」,不经画板 Agent(取消勾选则 Agent 用备用语言模型)');
   [['#imp-edit','#imp-edit-nsfw'],['#imp-up','#imp-up-nsfw']].forEach(([host,note])=>{
     $(host).style.opacity=img?'.45':'';$(host).style.pointerEvents=img?'none':'';
     $(note).hidden=!on;
     $(note).textContent=!on?'':img?F('🔞 图像改用 NSFW 备用渠道:{ch}',{ch:chDesc(img)}):t('🔞 没有配置 NSFW 备用图像渠道,按这里选的模型出图');
   });
+  $('#mo-pick').style.opacity=vid?'.45':'';$('#mo-pick').style.pointerEvents=vid?'none':'';
+  $('#mo-nsfw').hidden=!on;
+  $('#mo-nsfw').textContent=!on?'':vid?F('🔞 视频改用 NSFW 备用渠道:{ch}',{ch:chDesc(vid)}):t('🔞 没有配置 NSFW 备用视频渠道,按这里选的模型生成');
 }
 // 🔞 相关的按钮 / 提示 / 标记只在 NSFW 模式开着时显示;控制台里开关(或换备用模型)后切回本页即重读状态,不用手动刷新
-const nsfwSig=m=>m.enabled?JSON.stringify([m.text||null,m.image||null]):'off';
+const nsfwSig=m=>m.enabled?JSON.stringify([m.text||null,m.image||null,m.video||null]):'off';
 document.addEventListener('visibilitychange',async()=>{
   if(document.visibilityState!=='visible'||!S)return;
   try{
     const d=await (await fetch('/api/v1/config/nsfw')).json();
-    const now={enabled:!!d.enabled,text:d.text&&d.text.engine?d.text:null,image:d.image&&d.image.provider?d.image:null};
+    const now={enabled:!!d.enabled,text:d.text&&d.text.engine?d.text:null,image:d.image&&d.image.provider?d.image:null,
+      video:d.video&&d.video.provider?d.video:null};
     if(nsfwSig(now)!==nsfwSig(nsfwMode()))apply(await api('?file='+encodeURIComponent(FILE)),true);
   }catch(_){}
 });
 $('#nsfw').onclick=()=>{
   NSFW_ON=!NSFW_ON;try{localStorage.setItem(NSFW_KEY,NSFW_ON?'1':'')}catch(_){}
-  syncNsfw();syncSendHint();if(upMode()==='redraw')loadLimits();
+  syncNsfw();syncSendHint();syncMoHint();if(upMode()==='redraw')loadLimits();
 };
 function syncSendHint(){
   const direct=$('#o-direct').checked, txt=nsfwMode().text;
@@ -639,43 +706,54 @@ $('#send').onclick=async()=>{
   finally{syncBusy()}
 };
 
-/* ---------------- 任务状态 ---------------- */
+/* ---------------- 任务状态(三条通道各一个任务框:编辑 / 放大共用一条,动图一条,「🎲 写一段」一条)---------------- */
 const JOB_TEXT={queued:'排队中',drafting:'画板修图 Agent 正在整理提示词',awaiting_confirm:'提示词待确认',running:'出图中',done:'完成',failed:'失败',cancelled:'已取消'};
+const MO_JOB_TEXT={drafting:'画板动图 Agent 正在写视频提示词',running:'视频生成中'};
 function jobHtml(j,failed){
   if(j){
-    let h=`<div class="st">${j.status==='awaiting_confirm'?'📝':'<span class="spin">⏳</span>'} ${esc(t(JOB_TEXT[j.status]||j.status))}<span class="badge" data-no-i18n>${esc(j.id)}</span>${j.nsfw&&nsfwMode().enabled?'<span class="badge warn" data-no-i18n>🔞 NSFW</span>':''}</div>`;
-    if(j.status==='awaiting_confirm')h+=`<div class="hint" style="margin:6px 0 4px">${esc(t('将要发给图像模型的提示词,可以直接改:'))}</div><textarea id="j-prompt" rows="9" data-no-i18n>${esc(j.prompt||'')}</textarea>`
-      +`<div class="row" style="margin-top:6px"><button class="pri" id="j-ok">${esc(t('确认出图'))}</button><button id="j-cancel">${esc(t('取消'))}</button></div>`;
-    else if(j.status==='drafting')h+=`<div class="hint">${esc(t('可以到控制台看 Agent 的进展'))}</div><div class="row"><button id="j-cancel">${esc(t('取消'))}</button></div>`;
+    const mo=j.op==='motion';
+    let h=`<div class="st">${j.status==='awaiting_confirm'?'📝':'<span class="spin">⏳</span>'} ${esc(t((mo&&MO_JOB_TEXT[j.status])||JOB_TEXT[j.status]||j.status))}<span class="badge" data-no-i18n>${esc(j.id)}</span>${j.nsfw&&nsfwMode().enabled?'<span class="badge warn" data-no-i18n>🔞 NSFW</span>':''}</div>`;
+    if(j.status==='awaiting_confirm')h+=`<div class="hint" style="margin:6px 0 4px">${esc(t(mo?'将要发给视频模型的提示词,可以直接改:':'将要发给图像模型的提示词,可以直接改:'))}</div><textarea class="j-prompt" rows="9" data-no-i18n>${esc(j.prompt||'')}</textarea>`
+      +`<div class="row" style="margin-top:6px"><button class="pri" data-jok>${esc(t(mo?'确认并生成视频':'确认出图'))}</button><button data-jcancel>${esc(t('取消'))}</button></div>`;
+    else if(j.status==='drafting')h+=`<div class="hint">${esc(t('可以到控制台看 Agent 的进展'))}</div><div class="row"><button data-jcancel>${esc(t('取消'))}</button></div>`;
+    else if(mo)h+=`<div class="hint">${esc(F('{d} 秒 · {r} · 通常要几分钟,可以先做别的;生成好会出现在下面的列表里',{d:j.duration,r:j.resolution}))}</div>`;
     else h+=`<div class="hint">${esc(j.op==='upscale'?F('目标 {w}×{h}',{w:j.target[0],h:j.target[1]}):t('通常一分钟左右'))}</div>`;
     return h;
   }
+  const refused=failed&&failed.op==='motion'?'上一次动图被画板动图 Agent 拒绝':'上一次编辑被画板修图 Agent 拒绝';
   if(failed&&failed.refused)return nsfwMode().enabled   // NSFW 模式下识别出的拒绝:只提示,发不发由用户定;模式已关时提示里的 🔞 建议不适用,只报被拒
-    ?`<div class="st" style="color:var(--yellow)">🔞 ${esc(t('上一次编辑被画板修图 Agent 拒绝'))}</div><div class="hint warn">${esc(failed.error||'')}</div>`
-    :`<div class="st" style="color:var(--red)">✗ ${esc(t('上一次编辑被画板修图 Agent 拒绝'))}</div>`;
-  if(failed)return `<div class="st" style="color:var(--red)">✗ ${esc(t(failed.op==='upscale'?'上一次放大失败':'上一次编辑失败'))}</div><div class="err">${esc(failed.error||'')}</div>`;
+    ?`<div class="st" style="color:var(--yellow)">🔞 ${esc(t(refused))}</div><div class="hint warn">${esc(failed.error||'')}</div>`
+    :`<div class="st" style="color:var(--red)">✗ ${esc(t(refused))}</div>`;
+  if(failed)return `<div class="st" style="color:var(--red)">✗ ${esc(t(failed.op==='upscale'?'上一次放大失败':failed.op==='motion'?'上一次动图失败':'上一次编辑失败'))}</div><div class="err">${esc(failed.error||'')}</div>`;
   return '';
 }
 function renderJob(){
   const j=S.job, last=S.last_job&&S.last_job.status==='failed'?S.last_job:null;
-  [['#job','edit'],['#job2','upscale']].forEach(([sel,op])=>{
-    const el=$(sel), mine=j&&j.op===op?j:null, bad=!j&&last&&last.op===op?last:null;
-    const keep=mine&&mine.status==='awaiting_confirm'&&el.dataset.jid===mine.id+mine.status&&el.querySelector('#j-prompt');   // 用户正在改提示词:不重绘
+  const mlast=S.last_motion_job&&S.last_motion_job.status==='failed'?S.last_motion_job:null;
+  [['#job',j&&j.op==='edit'?j:null,!j&&last&&last.op==='edit'?last:null],
+   ['#job2',j&&j.op==='upscale'?j:null,!j&&last&&last.op==='upscale'?last:null],
+   ['#job3',S.motion_job,!S.motion_job&&mlast]].forEach(([sel,mine,bad])=>{
+    const el=$(sel);
+    const keep=mine&&mine.status==='awaiting_confirm'&&el.dataset.jid===mine.id+mine.status&&el.querySelector('.j-prompt');   // 用户正在改提示词:不重绘
     if(!keep){el.innerHTML=jobHtml(mine,bad);el.dataset.jid=mine?mine.id+mine.status:''}
     el.className='jobbox'+(mine||bad?' on':'');
+    const ok=el.querySelector('[data-jok]'), cancel=el.querySelector('[data-jcancel]');
+    if(ok)ok.onclick=async()=>{try{apply(await api('/confirm',withFile({job:mine.id,prompt:el.querySelector('.j-prompt').value})))}catch(err){toast(err.message,true)}};
+    if(cancel)cancel.onclick=async()=>{try{apply(await api('/confirm',withFile({job:mine.id,cancel:true})))}catch(err){toast(err.message,true)}};
   });
-  const ok=$('#j-ok'), cancel=$('#j-cancel');
-  if(ok)ok.onclick=async()=>{try{apply(await api('/confirm',withFile({job:j.id,prompt:$('#j-prompt').value})))}catch(err){toast(err.message,true)}};
-  if(cancel)cancel.onclick=async()=>{try{apply(await api('/confirm',withFile({job:j.id,cancel:true})))}catch(err){toast(err.message,true)}};
+  renderPromptJob();
 }
 function syncBusy(){
   const busy=!!(S&&S.job);
   $('#send').disabled=busy;$('#up-go').disabled=busy;
+  $('#mo-send').disabled=!!(S&&S.motion_job);
+  $('#mo-gen').disabled=!S||!!S.prompt_job||!S.motion_agent;
   ['#t-crop','#t-fliph','#t-flipv','#t-rot','#t-size'].forEach(s=>$(s).disabled=!S);
 }
 function poll(){
   clearTimeout(pollTimer);
-  if(S&&S.job)pollTimer=setTimeout(async()=>{try{apply(await api('?file='+encodeURIComponent(FILE)),true)}catch(_){poll()}},2500);
+  if(S&&(S.job||S.motion_job||S.prompt_job))   // 只剩视频在生成(一跑几分钟)时放慢一点
+    pollTimer=setTimeout(async()=>{try{apply(await api('?file='+encodeURIComponent(FILE)),true)}catch(_){poll()}},S.job||S.prompt_job?2500:5000);
 }
 
 /* ---------------- 放大页 ---------------- */
@@ -782,6 +860,189 @@ $('#t-size').onclick=()=>{
   $('#rs-h').oninput=()=>{if($('#rs-lock').checked)$('#rs-w').value=Math.round(+$('#rs-h').value*v.width/v.height)};
 };
 
+/* ---------------- 动图页:以正在查看的版本为参考图生成一段视频 ---------------- */
+/* 视频渠道 / 模型的选择只在本页用、记在本机浏览器(所有图共用),不改「生成模型」页的全局视频设置;空渠道 = 跟随全局。
+   生成方式两种:参考图(默认,多参考图模式,@Image 1,可再加一张 @Image 2)/ 首尾帧(正在查看的作首帧,另选一个版本作尾帧,须配支持首尾帧的模型)。
+   直接发送 = 提示词发给视频模型(参考图方式没写 @Image 1 时服务端开头补一句参考图说明);否则画板动图 Agent 看图写提示词(框里留空也行)。
+   视频只进这张图的动图列表 */
+const VPROV_NAMES={agentics:'Agentics',openrouter:'OpenRouter',volcengine:'火山引擎',byteplus:'BytePlus',fal:'Fal',minimax:'MiniMax',rhapi:'RH',comfyui:'ComfyUI'};
+const MO_KEY='canvas_motion_model';
+let MO_PICK=null, MO_SIG='';
+const MO_OPEN=new Set();   // 动图列表里展开了完整提示词的那几段
+const clip=(s,n)=>{s=String(s||'').replace(/\s+/g,' ');return s.length>n?s.slice(0,n)+'…':s};
+const vprov=id=>t(VPROV_NAMES[id]||id);
+const moMode=()=>document.querySelector('input[name=momode]:checked').value;
+function renderMoPicker(){
+  const vm=(S&&S.video_models)||{channels:[],global:{}}, chs=vm.channels||[], g=vm.global||{};
+  if(!MO_PICK){
+    let saved=null;try{saved=JSON.parse(localStorage.getItem(MO_KEY)||'null')}catch(_){}
+    MO_PICK=saved&&chs.some(c=>c.id===saved.provider&&c.configured)?saved:{provider:'',model:''};
+  }
+  const sig=JSON.stringify([chs,g,MO_PICK,I18N.lang]);
+  if(sig===MO_SIG)return;   // 每次轮询都会走到这里:没变就不重建下拉(重建会把用户正展开的下拉收起)
+  MO_SIG=sig;
+  const prov=$('#mo-prov'), mod=$('#mo-model');
+  const gdesc=g.provider?vprov(g.provider)+(g.label?' '+t(g.label):''):'';
+  prov.innerHTML=`<option value="">${esc(gdesc?F('跟随全局({ch})',{ch:gdesc}):t('跟随全局'))}</option>`
+    +chs.filter(c=>c.id!=='minimax'||MO_PICK.provider==='minimax')   // MiniMax 界面隐藏(同「生成模型」页):已选中的仍显示
+      .map(c=>`<option value="${esc(c.id)}"${c.configured?'':' disabled'}>${esc(vprov(c.id))}${c.configured?'':' '+esc(t(c.id==='agentics'?'(未登录)':'(未配 Key)'))}</option>`).join('');
+  prov.value=MO_PICK.provider;
+  const ch=chs.find(c=>c.id===MO_PICK.provider);
+  mod.hidden=!ch;
+  if(ch){
+    const ms=[...(ch.models||[])];
+    if(ch.default_model&&!ms.some(m=>m.id===ch.default_model))ms.unshift({id:ch.default_model,label:ch.default_model});
+    mod.innerHTML=ms.map(m=>`<option value="${esc(m.id)}"${m.configured===false?' disabled':''}>${esc(t(m.label||m.id))}${m.id===ch.default_model?' ★':''}</option>`).join('');
+    mod.value=MO_PICK.model&&ms.some(m=>m.id===MO_PICK.model&&m.configured!==false)?MO_PICK.model:ch.default_model;
+    MO_PICK.model=mod.value;
+  }
+  $('#mo-ch-hint').textContent=ch?t('★ = 该渠道在「生成模型」页保存的模型;这里的选择只用于本页,不改全局设置')
+    :t('按「🎨 生成模型」页当前的视频渠道与模型生成');
+}
+function saveMoPick(){try{localStorage.setItem(MO_KEY,JSON.stringify(MO_PICK))}catch(_){}}
+$('#mo-prov').onchange=()=>{MO_PICK={provider:$('#mo-prov').value,model:''};saveMoPick();renderMoPicker()};
+$('#mo-model').onchange=()=>{MO_PICK=Object.assign({},MO_PICK,{model:$('#mo-model').value});saveMoPick();renderMoPicker()};
+function renderMotion(){
+  if(!S)return;
+  const v=ver(VIEW)||{};
+  if($('#mo-first').getAttribute('src')!==(v.thumb_url||''))$('#mo-first').src=v.thumb_url||'';
+  const frames=moMode()==='frames';
+  $('#mo-first-t').innerHTML=`<b data-no-i18n>${esc(frames?t('首帧'):'@Image 1')} · ${esc(v.id||'')}</b> · <span data-no-i18n>${v.width}×${v.height}</span><br>${esc(t('正在查看的版本;到「历史」里点「查看」可以换一张'))}`;
+  $('#mo-ref2-row').hidden=frames;$('#mo-last-row').hidden=!frames;$('#mo-frames-hint').hidden=!frames;
+  $('#mo-txt').placeholder=frames?t('画面怎么从首帧变到尾帧:动作、镜头运动、节奏;不勾「直接发送」时可以留空,交给 Agent 看图写')
+    :t('画面怎么动:谁做什么动作、镜头怎么运动(可用 @Image 1 指参考图);不勾「直接发送」时可以留空,交给 Agent 看图写');
+  const opts=[...S.versions].reverse().filter(x=>x.id!==VIEW);
+  [['#mo-ref2','不加(只用正在查看的版本)'],['#mo-last',opts.length?'选一个版本作尾帧…':'没有别的版本:先在「编辑」里做出一个']].forEach(([id,none])=>{
+    const sel=$(id), cur=sel.value, sig=JSON.stringify([VIEW,opts.map(x=>x.id),I18N.lang]);
+    if(sel.dataset.sig===sig)return;
+    sel.innerHTML=`<option value="">${esc(t(none))}</option>`
+      +opts.map(x=>`<option value="${esc(x.id)}" data-no-i18n>${esc(x.id+' · '+t(OP_NAMES[x.op]||x.op)+' · '+x.width+'×'+x.height)}</option>`).join('');
+    sel.value=opts.some(x=>x.id===cur)?cur:'';sel.dataset.sig=sig;
+  });
+  const lim=S.motion_limits;if(lim){$('#mo-dur').min=lim.min_s;$('#mo-dur').max=lim.max_s}
+  renderMoPicker();renderMotions();syncMoHint();
+}
+function renderMotions(){
+  const ms=[...(S.motions||[])].reverse();
+  const sig=JSON.stringify([ms.map(m=>[m.id,m.poster_url]),[...MO_OPEN],nsfwMode().enabled,I18N.lang]);
+  if($('#motions').dataset.sig===sig)return;   // 轮询时列表没变就不重建(免得封面闪、点到一半的按钮被换掉)
+  $('#motions').dataset.sig=sig;
+  $('#mo-n').textContent=ms.length?F('{n} 段视频',{n:ms.length}):'';
+  $('#motions').innerHTML=ms.length?ms.map(m=>{
+    const a=m.actual||{}, dur=a.duration||m.duration;
+    const b=[];
+    if(m.image_mode==='frames')b.push(`<span class="badge">${esc(t('首尾帧'))}</span>`);
+    if(m.audio)b.push(`<span class="badge">${esc(t('有声音'))}</span>`);
+    if(m.mode==='agent')b.push(`<span class="badge" title="${esc(t('提示词由画板动图 Agent 写'))}">Agent</span>`);
+    if(m.nsfw&&nsfwMode().enabled)b.push(`<span class="badge warn" title="${esc(t('按 NSFW 模式的备用模型生成'))}">🔞</span>`);
+    const meta=[[m.provider,m.model].filter(Boolean).join(' '),a.width?a.width+'×'+a.height:m.resolution,fmtSize(m.bytes||0),fmtTime(m.created_at),
+      m.image_mode==='frames'?m.parent+' → '+(m.last||'?'):'← '+[m.parent,m.ref2].filter(Boolean).join(' + ')].filter(Boolean).join(' · ');
+    return `<div class="mov"><div class="pv" data-play="${esc(m.id)}" title="${esc(t('点击播放'))}"><img src="${esc(m.poster_url||'')}" loading="lazy" alt="">`
+      +`<span class="play">▶</span>${dur?`<span class="dur" data-no-i18n>${esc(String(Math.round(dur*10)/10))}s</span>`:''}</div>`
+      +`<div><div class="t1"><span data-no-i18n>${esc(m.id)}</span>${b.join('')}</div><div class="t2" data-no-i18n>${esc(meta)}</div>`
+      +motionPromptHtml(m)
+      +`<div class="ops"><button class="sm" data-play="${esc(m.id)}">${esc(t('播放'))}</button>`
+      +(m.prompt?`<button class="sm" data-pcopy="${esc(m.id)}" title="${esc(t('把发给视频模型的提示词复制到剪贴板'))}">${esc(t('复制提示词'))}</button>`:'')
+      +`<button class="sm" data-reuse="${esc(m.id)}" title="${esc(t('把这段的提示词填回上面的输入框,改一改再生成'))}">${esc(t('用这段提示词'))}</button>`
+      +`<a class="btn" href="${esc(m.url)}" download="${esc((S.file.split('/').pop()||'image').replace(/\.[^.]+$/,'')+'_'+m.id+'.mp4')}">${esc(t('下载'))}</a>`
+      +`<button class="sm" data-mdel="${esc(m.id)}">${esc(t('删除'))}</button></div></div></div>`;
+  }).join(''):`<div class="hint">${esc(t('还没有动图:选好参数、写好(或让语言模型写)提示词后点「生成动图」'))}</div>`;
+}
+// 提示词 = 实际发给视频模型的那段(直接发送补的参考图说明、Agent 写的都在内);长的先截断,「展开全文」在只读框里看全、可选中
+function motionPromptHtml(m){
+  if(!m.prompt)return '';
+  const id=esc(m.id);
+  if(MO_OPEN.has(m.id))return `<textarea class="mo-prompt" rows="${Math.min(12,Math.max(3,Math.ceil(m.prompt.length/34)))}" readonly data-no-i18n>${esc(m.prompt)}</textarea>`
+    +`<div class="t2"><span class="lnk" data-ptoggle="${id}">${esc(t('收起'))}</span></div>`;
+  const cut=clip(m.prompt,110);
+  return `<div class="t2"><span data-no-i18n>${esc(cut)}</span>`
+    +(cut!==String(m.prompt).replace(/\s+/g,' ')?` <span class="lnk" data-ptoggle="${id}">${esc(t('展开全文'))}</span>`:'')+'</div>';
+}
+async function copyPrompt(id){
+  const m=(S.motions||[]).find(x=>x.id===id);if(!m||!m.prompt)return;
+  let ok=false;
+  try{await navigator.clipboard.writeText(m.prompt);ok=true}
+  catch(_){                                   // http(局域网)下 clipboard API 不可用的兜底
+    try{
+      const ta=document.createElement('textarea');
+      ta.value=m.prompt;ta.style.cssText='position:fixed;opacity:0';
+      document.body.appendChild(ta);ta.select();
+      ok=document.execCommand('copy');ta.remove();
+    }catch(_e){ok=false}
+  }
+  toast(ok?F('已复制 {id} 的提示词',{id}):t('复制失败:请手动选中提示词复制'),!ok);
+}
+function playMotion(id){
+  const m=(S.motions||[]).find(x=>x.id===id);if(!m)return;
+  const v=$('#vbox video');v.src=m.url;
+  $('#vbox .cap').textContent=m.id+(m.prompt?'  ·  '+m.prompt:'');
+  $('#vb-copy').hidden=!m.prompt;$('#vb-copy').dataset.id=m.id;
+  $('#vbox').style.display='flex';
+  const p=v.play&&v.play();if(p&&p.catch)p.catch(()=>{});
+}
+function closeVbox(){
+  if($('#vbox').style.display!=='flex')return;
+  const v=$('#vbox video');v.pause();v.removeAttribute('src');v.load();$('#vbox').style.display='none';
+}
+$('#vbox').onclick=e=>{if(e.target.tagName!=='VIDEO'&&!e.target.closest('.cap-row'))closeVbox()};   // 点提示词(要选中复制)和复制按钮不关
+$('#vb-copy').onclick=()=>copyPrompt($('#vb-copy').dataset.id);
+$('#motions').addEventListener('click',e=>{
+  const d=e.target.closest('[data-play],[data-reuse],[data-mdel],[data-ptoggle],[data-pcopy]');if(!d)return;
+  if(d.dataset.play)playMotion(d.dataset.play);
+  else if(d.dataset.ptoggle){const id=d.dataset.ptoggle;MO_OPEN.has(id)?MO_OPEN.delete(id):MO_OPEN.add(id);renderMotions()}
+  else if(d.dataset.pcopy)copyPrompt(d.dataset.pcopy);
+  else if(d.dataset.reuse){const m=(S.motions||[]).find(x=>x.id===d.dataset.reuse);if(m){$('#mo-txt').value=m.prompt||'';$('#mo-txt').focus()}}
+  else if(d.dataset.mdel)modal(t('删除这段动图?'),`<div>${esc(F('{id} 会从列表里移除(文件挪进回收目录,不会真的删掉)',{id:d.dataset.mdel}))}</div>`,
+    [{label:t('取消')},{label:t('删除'),warn:true,fn:async()=>{closeModal();try{apply(await api('/motion/delete',withFile({motion:d.dataset.mdel})))}catch(err){toast(err.message,true)}}}]);
+});
+function syncMoHint(){
+  const direct=$('#mo-direct').checked, txt=nsfwMode().text, agent=S&&S.motion_agent;
+  const frames=moMode()==='frames';
+  $('#mo-hint').textContent=(!direct&&S&&!agent?t('没有找到画板动图 Agent,只能直接发送')
+      :direct?t(frames?'提示词原样发给视频模型':'提示词直接发给视频模型(没写 @Image 1 时开头补一句参考图说明)')
+      :t(frames?'先由画板动图 Agent 看首尾帧整理提示词':'先由画板动图 Agent 看参考图整理提示词'))
+    +(nsfwActive()&&!direct&&agent?' · '+(txt?F('🔞 语言模型改用 {m}',{m:txt.engine+' / '+(txt.model||t('引擎默认'))}):t('🔞 没有配置 NSFW 备用语言模型,沿用当前引擎')):'')
+    +(nsfwActive()&&direct&&MO_DIRECT_AUTO&&agent?' · '+t('🔞 已自动勾选,取消勾选则改经画板动图 Agent'):'');
+}
+$('#mo-direct').onchange=()=>{MO_DIRECT_AUTO=false;syncMoHint()};
+document.querySelectorAll('input[name=momode]').forEach(r=>r.onchange=()=>{$('#mo-err').textContent='';renderMotion()});
+const moBody=extra=>withFile(Object.assign({image_mode:moMode(),parent:VIEW,
+  ref2:moMode()==='ref'?$('#mo-ref2').value:'',last:moMode()==='frames'?$('#mo-last').value:'',text:$('#mo-txt').value.trim(),
+  provider:MO_PICK&&MO_PICK.provider||'',model:MO_PICK&&MO_PICK.provider?MO_PICK.model||'':'',
+  duration:+$('#mo-dur').value||0,resolution:$('#mo-res').value,audio:$('#mo-audio').checked,nsfw:nsfwActive()},extra));
+$('#mo-send').onclick=async()=>{
+  $('#mo-err').textContent='';
+  const direct=$('#mo-direct').checked||!S.motion_agent;
+  if(moMode()==='frames'&&!$('#mo-last').value){$('#mo-err').textContent=t('首尾帧模式要选一个版本作尾帧');return}
+  if(direct&&!$('#mo-txt').value.trim()){$('#mo-err').textContent=t('直接发送要先写视频提示词(或取消勾选「直接发送」,交给 Agent 看图写)');return}
+  $('#mo-send').disabled=true;
+  try{apply(await api('/motion',moBody({mode:direct?'direct':'agent',preview:$('#mo-preview').checked})));toast(t('已发送'))}
+  catch(err){$('#mo-err').textContent=err.message}
+  finally{syncBusy()}
+};
+$('#mo-gen').onclick=async()=>{
+  $('#mo-err').textContent='';
+  if(moMode()==='frames'&&!$('#mo-last').value){$('#mo-err').textContent=t('首尾帧模式要选一个版本作尾帧');return}
+  $('#mo-gen').disabled=true;
+  try{apply(await api('/motion',moBody({draft_only:true})))}
+  catch(err){$('#mo-err').textContent=err.message}
+  finally{syncBusy()}
+};
+function renderPromptJob(){
+  const j=S.prompt_job, last=S.last_prompt_job, el=$('#mo-gen-st');
+  if(j){
+    el.hidden=false;
+    if(el.dataset.jid!==j.id){
+      el.dataset.jid=j.id;
+      el.innerHTML=`<span class="hint"><span class="spin">⏳</span> ${esc(t('画板动图 Agent 正在看图写提示词…'))}</span><button class="sm" data-pcancel>${esc(t('取消'))}</button>`;
+      el.querySelector('[data-pcancel]').onclick=async()=>{try{apply(await api('/confirm',withFile({job:j.id,cancel:true})))}catch(err){toast(err.message,true)}};
+    }
+  }else if(last&&last.status==='failed'){
+    el.hidden=false;el.dataset.jid='';
+    el.innerHTML=`<div class="${last.refused&&nsfwMode().enabled?'hint warn':'err'}">${esc(t('上一次写提示词没成:'))}${esc(last.error||'')}</div>`;
+  }else{el.hidden=true;el.dataset.jid=''}
+}
+
 /* ---------------- 历史 / 信息 ---------------- */
 function verDesc(v){
   if(v.op==='edit'){
@@ -881,7 +1142,7 @@ function modal(title,html,btns,wide){
 }
 function closeModal(){$('#modal').classList.remove('on')}
 $('#modal').addEventListener('mousedown',e=>{if(e.target.id==='modal')closeModal()});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();mbox.style.display='none';$('#lightbox').style.display='none'}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();mbox.style.display='none';$('#lightbox').style.display='none';closeVbox()}});
 
 /* ---------------- 数据 ---------------- */
 function view(id){
@@ -891,11 +1152,11 @@ function view(id){
   VIEW=id;if(CMP===VIEW){CMP=null;$('#cmpmode').value='off';syncCmp()}
   $('#up-w').value='';
   $('#f-ver').innerHTML=`<b data-no-i18n>${esc(id)}</b> · <span data-no-i18n>${next.width}×${next.height}</span> · ${esc(t('之后的编辑、放大、调整都以它为底图'))}`;
-  fit();renderVers();renderInfo();
+  fit();renderVers();renderInfo();renderMotion();
   if($('#p-up').classList.contains('on'))loadLimits();else renderUp();
 }
 function apply(st,fromPoll){
-  const prevJob=S&&S.job;
+  const prevJob=S&&S.job, prevMo=S&&S.motion_job, prevPj=S&&S.prompt_job;
   S=st;
   if(!VIEW||!ver(VIEW))VIEW=(ver(st.final)||st.versions[st.versions.length-1]).id;
   const done=st.last_job;
@@ -903,8 +1164,17 @@ function apply(st,fromPoll){
     if(done.status==='done'&&done.version&&ver(done.version)){REGIONS=[];renderRegions();view(done.version);toast(F('已存为 {id}',{id:done.version}));tab('hist')}
     else if(done.status==='failed')toast(t(done.op==='upscale'?'放大失败':'编辑失败'),true);
   }
+  const md=st.last_motion_job;
+  if(prevMo&&!st.motion_job&&md&&md.id===prevMo.id){      // 动图刚生成好 / 失败
+    if(md.status==='done'&&md.motion)toast(F('动图已生成:{id}(在「动图」页的列表里)',{id:md.motion}));
+    else if(md.status==='failed')toast(t('动图生成失败'),true);
+  }
+  const pd=st.last_prompt_job;
+  if(prevPj&&!st.prompt_job&&pd&&pd.id===prevPj.id&&pd.status==='done'&&pd.prompt){   // 「🎲 写一段」写好了:填回输入框
+    $('#mo-txt').value=pd.prompt;toast(t('提示词写好了,可以改一改再生成'));
+  }
   $('#obj').textContent=((st.ui||{}).label||st.file)+'  ·  '+t(KIND_NAMES[st.kind]||st.kind);
-  renderRefs();renderJob();renderVers();renderInfo();renderUp();syncBusy();syncNsfw();syncSendHint();draw();poll();
+  renderRefs();renderJob();renderVers();renderInfo();renderUp();renderMotion();syncBusy();syncNsfw();syncSendHint();syncMoHint();draw();poll();
 }
 function mountPickers(){
   const m=S.models||{channels:[],global:{},pref:{}};

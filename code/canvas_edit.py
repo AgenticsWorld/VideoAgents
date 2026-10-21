@@ -9,6 +9,11 @@
   python3 code/canvas_edit.py submit … --template      宿主用(直接发送):按任务里宿主拼好的模板提示词出图
   python3 code/canvas_edit.py submit … --confirmed     宿主用(用户确认了提示词):按任务里存的提示词出图
   python3 code/canvas_edit.py upscale --project <slug> --doc <画板目录名> --job <任务号>     宿主用:跑放大任务
+  python3 code/canvas_edit.py motion --project <slug> --doc <画板目录名> --job <任务号> --prompt-file <提示词文件>
+      画板动图 Agent(08-video-gen/canvas-motion)用:交视频提示词,只存不出视频(几秒返回)。「🎲 写一段」的任务把提示词填回画板输入框;
+      勾了「发送前先看提示词」的存为待确认;其余由宿主在 Agent 本轮结束后起进程出视频
+  python3 code/canvas_edit.py motion … --template / --confirmed     宿主用:按任务里的提示词出视频(直接发送 / 用户确认过或 Agent 交的),
+      视频渠道 / 模型、参考图(@Image 1 / @Image 2,多参考图模式,不当首帧)、时长、分辨率、声音都在任务里定好
   python3 code/canvas_edit.py show --project <slug> --file <项目内相对路径>                 看一张图的画板状态(JSON,只读;没有画板记录时退出码 1)
   python3 code/canvas_edit.py adopt --project <slug> --file <相对路径> --version v003 [--library-only]
       设为最终版(同页面按钮):固定路径的图写回原路径;分镜背景图登记为 <key>_revN 并把引用它的分镜改指过去(--library-only 只登记不替换)
@@ -43,11 +48,11 @@ def _out(payload: dict) -> None:
 
 def main() -> int:
     def configure(ap):
-        ap.add_argument('action', choices=['submit', 'upscale', 'show', 'adopt'])
+        ap.add_argument('action', choices=['submit', 'upscale', 'motion', 'show', 'adopt'])
         ap.add_argument('--doc', default='', help='画板目录名(assets/canvas/ 下)')
         ap.add_argument('--job', default='', help='任务号')
-        ap.add_argument('--prompt', default='', help='编辑提示词(英文;与 --prompt-file 二选一)')
-        ap.add_argument('--prompt-file', default='', help='编辑提示词文件')
+        ap.add_argument('--prompt', default='', help='编辑 / 视频提示词(与 --prompt-file 二选一)')
+        ap.add_argument('--prompt-file', default='', help='编辑 / 视频提示词文件')
         ap.add_argument('--template', action='store_true', help='宿主用:按任务里的模板提示词出图')
         ap.add_argument('--confirmed', action='store_true', help='宿主用:按任务里用户确认过的提示词出图')
         ap.add_argument('--file', default='', help='show / adopt:图片的项目内相对路径')
@@ -74,6 +79,21 @@ def main() -> int:
                 raise ic.CanvasError(f"任务状态是 {job.get('status')},不能出图")
             v = ic.run_upscale(base, doc, args.job, log=log)
             _out({'job': args.job, 'status': 'done', 'version': v['id'], 'size': f"{v['width']}x{v['height']}"})
+            return 0
+        if args.action == 'motion':
+            if args.template or args.confirmed:
+                if job.get('status') != 'queued':
+                    raise ic.CanvasError(f"任务状态是 {job.get('status')},不能出视频")
+                m = ic.run_motion(base, doc, args.job, job.get('template_prompt') if args.template else job.get('prompt'), log=log)
+                _out({'job': args.job, 'status': 'done', 'motion': m['id'], 'provider': m.get('provider'), 'model': m.get('model'),
+                      'actual': m.get('actual')})
+                return 0
+            prompt = Path(args.prompt_file).read_text(encoding='utf-8') if args.prompt_file else args.prompt
+            job = ic.submit_motion_prompt(doc, args.job, prompt)
+            log({'done': '[canvas] 提示词已填回画板输入框(用户点的是「让语言模型写一段」),本单到此结束,不出视频。',
+                 'awaiting_confirm': '[canvas] 用户勾了「发送前先看提示词」:提示词已存为待确认,用户在画板确认后由宿主出视频。本单到此结束。',
+                 'queued': '[canvas] 提示词已收下:宿主会在本单结束后出视频(要几分钟,不用等)。本单到此结束,不要再跑别的命令。'}[job['status']])
+            _out({'job': args.job, 'status': 'drafted' if job['status'] == 'done' else job['status']})
             return 0
         if job.get('op') != 'edit':
             raise ic.CanvasError(f'{args.job} 不是编辑任务')

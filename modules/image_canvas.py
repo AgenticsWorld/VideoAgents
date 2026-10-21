@@ -10,6 +10,7 @@
     v003.thumb.jpg          历史列表缩略图
     refs/                   用户上传的参考图
     jobs/<任务号>/          job.json + source / marked.jpg(带圈标注图)/ mask.png / region_N.jpg(各区域裁切,给 Agent 看)
+    motion/mNNN.mp4         「动图」页以某个版本为参考图生成的视频(+ mNNN.poster.jpg 封面帧),台账 motions[]
 不放在资产目录里:预览页递归列出 assets/concepts/<类>/<id>/ 下所有图片,历史版本放进去会混进页面与参考图检查。
 
 要点:
@@ -19,6 +20,9 @@
 - 圈选区域由页面传几何(归一化坐标),蒙版与带圈标注图在这里用 PIL 画,不信任页面像素。
 - 圈外锁定:出图后只取圈内(边缘羽化)贴回原图,圈外像素保持不变;圈外漂移过大(模型把整张图挪了位置)时记 drift,页面提示可改用整图。
 - 同一张图同时只跑一个任务(active_job);写盘统一按原图编码(JPEG 字节配 .png 名),不落 4 MB 的真 PNG。
+  任务分三条通道各管各的(LANES):编辑 / 放大一条,动图(生成视频,一跑几分钟)一条,「让语言模型写一段」视频提示词一条——
+  出视频期间照样能编辑、能先写下一段提示词。
+- 动图只进这张图自己的台账(motions[]),不碰生产链路;「设为最终版」与它无关。
 """
 from __future__ import annotations
 
@@ -40,6 +44,8 @@ IMG_EXTS = ('.png', '.jpg', '.jpeg', '.webp')
 KINDS = ('scene', 'plate', 'character', 'costume', 'creature', 'prop', 'sketch', 'cover', 'ref', 'image')
 ACTIVE = ('queued', 'drafting', 'awaiting_confirm', 'running')
 STALE_S = {'queued': 15 * 60, 'drafting': 45 * 60, 'running': 30 * 60, 'awaiting_confirm': 24 * 3600}
+# 任务通道:op → 台账里记任务号的列表。每条通道同时只跑一个任务,通道之间互不阻塞
+LANES = {'edit': 'jobs', 'upscale': 'jobs', 'motion': 'motion_jobs', 'motion_prompt': 'prompt_jobs'}
 MAX_REGIONS = 12
 MAX_REFS = 8                      # 一次编辑带的用户参考图上限(原图与标注图另算)
 MAX_TEXT = 2000
@@ -52,6 +58,19 @@ MARKED_EDGE = 2048
 DRIFT_WARN = 0.06                 # 圈外平均差(0..1)超过它提示「模型改动了圈外」;启发式,见 docs
 REGION_COLORS = ('#ff3b30', '#34c759', '#0a84ff', '#ffd60a', '#bf5af2', '#ff9f0a', '#64d2ff', '#ff375f')
 MENTION_RE = re.compile(r'@\s*(?:图|ref|img|image)\s*(\d+)', re.I)
+# 动图(2026-10-21):两种生成方式(image_mode)——
+#   ref(默认)  正在查看的版本作参考图 @Image 1(可再加一个版本作 @Image 2),走多参考图模式(genmedia refs);
+#               ComfyUI MiniMax-H3 Ref2VA 等参考生视频工作流只收这种。提示词里用 @Image N 指参考图(ComfyUI H3 边界转成 <Picture N>)
+#   frames      正在查看的版本作首帧、另选一个版本作尾帧(genmedia first_frame / last_frame),须配支持首尾帧的视频模型
+# 时长 / 分辨率由用户在页面上选,各渠道就近取或报错
+MOTION_IMAGE_MODES = ('ref', 'frames')
+MOTION_DIR = 'motion'
+MOTION_RESOLUTIONS = ('480p', '720p', '1080p')
+MOTION_MIN_S, MOTION_MAX_S = 2, 30
+MOTION_REF_EDGE = 2048            # 参考图送视频模型前的长边上限(任务目录里另存一份,版本文件不动)
+MOTION_POSTER_EDGE = 480
+MOTION_STALE_S = {'queued': 15 * 60, 'drafting': 45 * 60, 'running': 100 * 60, 'awaiting_confirm': 24 * 3600}
+MOTION_ASPECTS = ('16:9', '9:16', '1:1', '4:3', '3:4', '21:9')
 UPSCALE_PROMPT = ('Reproduce [Image 1] exactly at a higher resolution: the same composition, framing, subjects, faces, text, '
                   'colours and lighting. Add only fine detail and sharpness that is consistent with the original; do not add, '
                   'remove, move or restyle anything.')
@@ -239,7 +258,7 @@ def load_history(doc: Path) -> dict:
         h = {}
     if not isinstance(h, dict) or h.get('schema') != SCHEMA:
         h = {'schema': SCHEMA, 'versions': [], 'refs': [], 'jobs': [], 'ref_seq': 0, 'final_log': []}
-    for k, v in (('versions', []), ('refs', []), ('jobs', []), ('final_log', [])):
+    for k, v in (('versions', []), ('refs', []), ('jobs', []), ('final_log', []), ('motions', []), ('motion_jobs', []), ('prompt_jobs', [])):
         if not isinstance(h.get(k), list):
             h[k] = v
     return h
@@ -601,9 +620,9 @@ def set_job(doc: Path, jid: str, **patch) -> dict:
     return save_job(doc, job)
 
 
-def recent_jobs(doc: Path, h: dict, n: int = 6) -> list[dict]:
+def recent_jobs(doc: Path, h: dict, n: int = 6, lane: str = 'jobs') -> list[dict]:
     out = []
-    for jid in list(h.get('jobs') or [])[-n:]:
+    for jid in list(h.get(lane) or [])[-n:]:
         try:
             out.append(load_job(doc, jid))
         except CanvasError:
@@ -611,10 +630,11 @@ def recent_jobs(doc: Path, h: dict, n: int = 6) -> list[dict]:
     return out
 
 
-def active_job(doc: Path, h: dict, run_ended=None) -> dict | None:
-    """这张图上还在跑的任务(同一张图同时只跑一个)。顺手收拾已经死掉的:长时间没更新的,以及 Agent 已结束却没交提示词的
+def active_job(doc: Path, h: dict, run_ended=None, lane: str = 'jobs') -> dict | None:
+    """这张图在某条通道(LANES)上还在跑的任务(每条通道同时只跑一个)。顺手收拾已经死掉的:长时间没更新的,以及 Agent 已结束却没交提示词的
     (run_ended(run_id) → None 未结束 / 结束原因文本,由宿主按运行记录判断)。"""
-    for job in reversed(recent_jobs(doc, h, 4)):
+    stale = MOTION_STALE_S if lane == 'motion_jobs' else STALE_S
+    for job in reversed(recent_jobs(doc, h, 4, lane)):
         st = job.get('status')
         if st not in ACTIVE:
             continue
@@ -625,7 +645,7 @@ def active_job(doc: Path, h: dict, run_ended=None) -> dict | None:
                 set_job(doc, job['id'], status='failed', error=f'Agent 已结束但没有提交提示词:{why}'[:500],
                         error_en=f'The agent finished without submitting a prompt: {why}'[:500])
                 continue
-        if age > STALE_S.get(st, 1800):
+        if age > stale.get(st, 1800):
             waiting = st == 'awaiting_confirm'
             set_job(doc, job['id'], status='cancelled' if waiting else 'failed',
                     error='待确认的提示词超过一天未确认,已取消' if waiting else '任务长时间没有进展,已按失败处理',
@@ -639,7 +659,8 @@ def _new_job(doc: Path, h: dict, payload: dict) -> dict:
     jid = f"j{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}-{os.urandom(2).hex()}"
     job = {'id': jid, 'created_at': now_iso(), 'source': h['source'], 'doc': doc.name, **payload}
     save_job(doc, job)
-    h['jobs'] = (h.get('jobs') or [])[-40:] + [jid]
+    lane = LANES[job['op']]
+    h[lane] = (h.get(lane) or [])[-40:] + [jid]
     return job
 
 
@@ -1061,6 +1082,293 @@ def delete_version(base: Path, doc: Path, vid: str) -> dict:
     return mutate(doc, _do)
 
 
+# ---------------------------------------------------------------- 动图:以某个版本为参考图生成视频(code/canvas_edit.py motion 在子进程里跑)
+MOTION_TAG_RE = re.compile(r'@\s*(?:image|picture)\s*\d|\[image\s*\d|<picture\s*\d', re.I)
+
+
+def motion_aspect(w: int, h: int) -> str:
+    """参考图画幅 → 最接近的常用视频画幅(按长宽比的对数距离取)。参考图模式下渠道不会自动跟随图的比例,所以由宿主定好传过去。"""
+    import math
+    r = math.log(w / h)
+    return min(MOTION_ASPECTS, key=lambda a: abs(math.log(int(a.split(':')[0]) / int(a.split(':')[1])) - r))
+
+
+def motion_template(text: str, n_refs: int) -> str:
+    """直接发送的提示词:用户写的原话;没用 @Image N 点名参考图时,开头补一句参考图说明(多参考图模式下模型靠它把图和文字对上)。"""
+    text = (text or '').strip()
+    if MOTION_TAG_RE.search(text):
+        return text
+    head = 'Use @Image 1 as the reference image: keep its subjects, their appearance, the setting and the visual style.'
+    if n_refs > 1:
+        head += ' @Image 2 is a second reference image.'
+    return f'{head}\n{text}'
+
+
+def _motion_ref_image(src: Path, stem: Path) -> Path:
+    """参考图 / 首尾帧送视频模型前的那份:不大(长边 ≤ MOTION_REF_EDGE、≤ 2 MB)、无透明的 JPEG / PNG 原样复制;
+    其余(4K 放大版、带透明的 PNG、WebP)压成长边 ≤ MOTION_REF_EDGE 的 JPEG(透明处垫白)。返回写出的路径。"""
+    Image = _pil()
+    data = src.read_bytes()
+    im = load_image(data)
+    enc = encoding_of(data)
+    if enc in ('JPEG', 'PNG') and not has_alpha(im) and max(im.size) <= MOTION_REF_EDGE and len(data) <= PNG_MAX_BYTES:
+        out = stem.with_suffix('.jpg' if enc == 'JPEG' else '.png')
+        out.write_bytes(data)
+        return out
+    rgb = im.convert('RGBA') if has_alpha(im) else im.convert('RGB')
+    if rgb.mode == 'RGBA':
+        bg = Image.new('RGB', rgb.size, (255, 255, 255))
+        bg.paste(rgb, mask=rgb.split()[-1])
+        rgb = bg
+    if max(rgb.size) > MOTION_REF_EDGE:
+        rgb.thumbnail((MOTION_REF_EDGE, MOTION_REF_EDGE), Image.LANCZOS)
+    out = stem.with_suffix('.jpg')
+    rgb.save(out, 'JPEG', quality=92)
+    return out
+
+
+def create_motion_job(base: Path, doc: Path, payload: dict, *, run_ended=None) -> dict:
+    """建一个动图任务。payload: {image_mode, parent, ref2, last, text, provider, model, duration, resolution, audio,
+    mode: agent|direct, preview, nsfw, draft_only}。parent = 页面上正在查看的版本:
+    image_mode=ref(默认)时作参考图 @Image 1,ref2 = 第二张参考图 @Image 2(可选);image_mode=frames 时作首帧,last = 尾帧(必选,另一个版本)。
+    provider / model 空 = 跟随全局视频设置(宿主已校验 / 换成 NSFW 备用渠道)。
+    直接发送:用户写的提示词发给视频模型(参考图模式没点名 @Image 1 时开头补一句参考图说明,motion_template;首尾帧模式原样);
+    经 Agent:画板动图 Agent 看图(和用户的描述)写提示词,用户没写描述也行。
+    draft_only(「🎲 让语言模型写一段」)= 只让 Agent 看图写一段提示词填回页面,不出视频(走单独的提示词通道)。"""
+    text = str(payload.get('text') or '').strip()[:MAX_TEXT]
+    draft = bool(payload.get('draft_only'))
+    mode = 'direct' if payload.get('mode') == 'direct' and not draft else 'agent'
+    if mode == 'direct' and not text:
+        raise CanvasError('直接发送要先写视频提示词(或取消勾选「直接发送」,交给 Agent 看图写)',
+                          en='Write a video prompt before sending directly (or untick "send directly" and let the agent write one from the image)')
+    try:
+        duration = int(round(float(payload.get('duration') or 0)))
+    except (TypeError, ValueError):
+        duration = 0
+    if not MOTION_MIN_S <= duration <= MOTION_MAX_S:
+        raise CanvasError(f'视频时长须在 {MOTION_MIN_S}–{MOTION_MAX_S} 秒之间', en=f'The video length must be {MOTION_MIN_S}–{MOTION_MAX_S} seconds')
+    resolution = str(payload.get('resolution') or '').strip().lower()
+    if resolution not in MOTION_RESOLUTIONS:
+        raise CanvasError('分辨率只能是 ' + ' / '.join(MOTION_RESOLUTIONS), en='Resolution must be ' + ' / '.join(MOTION_RESOLUTIONS))
+    image_mode = str(payload.get('image_mode') or 'ref')
+    if image_mode not in MOTION_IMAGE_MODES:
+        raise CanvasError(f'生成方式只能是参考图或首尾帧,收到 {image_mode}', en=f'The mode must be reference image or first/last frames, got {image_mode}')
+    lane = 'prompt_jobs' if draft else 'motion_jobs'
+
+    def _do(h: dict):
+        busy = active_job(doc, h, run_ended, lane)
+        if busy:
+            if draft:
+                raise CanvasError(f"Agent 还在写上一段提示词({busy['id']}),等它写完再点", 409,
+                                  en=f"The agent is still writing the previous prompt ({busy['id']}); wait for it to finish")
+            raise CanvasError(f"这张图有动图任务还在进行({busy['id']}),等它结束再发", 409,
+                              en=f"A video job is still running on this image ({busy['id']}); wait for it to finish")
+        parent = version_of(h, str(payload.get('parent') or h.get('final') or ''))
+        ref2 = version_of(h, str(payload['ref2'])) if payload.get('ref2') and image_mode == 'ref' else None
+        last = version_of(h, str(payload['last'])) if payload.get('last') and image_mode == 'frames' else None
+        if image_mode == 'frames' and not last:
+            raise CanvasError('首尾帧模式要选一个版本作尾帧', en='First/last-frame mode needs a version picked as the last frame')
+        if (ref2 or last) and (ref2 or last)['id'] == parent['id']:
+            raise CanvasError('第二张图和正在查看的是同一个版本', en='The second image is the same version as the one being viewed')
+        preview = bool(payload.get('preview')) and not draft
+        status = 'drafting' if mode == 'agent' else ('awaiting_confirm' if preview else 'queued')
+        job = _new_job(doc, h, {'op': 'motion_prompt' if draft else 'motion', 'status': status, 'parent': parent['id'], 'mode': mode,
+                                'preview': preview, 'text': text, 'provider': str(payload.get('provider') or ''), 'model': str(payload.get('model') or ''),
+                                'duration': duration, 'resolution': resolution, 'aspect': motion_aspect(parent['width'], parent['height']),
+                                'audio': bool(payload.get('audio')), 'image_mode': image_mode,
+                                **({'ref2': ref2['id']} if ref2 else {}), **({'last': last['id']} if last else {}),
+                                **({'nsfw': True} if payload.get('nsfw') else {})})
+        jd = _job_dir(doc, job['id'])
+        rel = lambda p: p.relative_to(base).as_posix()   # noqa: E731
+        pick = [(parent, 'ref', 'ref1'), (ref2, 'ref', 'ref2')] if image_mode == 'ref' else [(parent, 'first', 'first'), (last, 'last', 'last')]
+        job['images'] = [{'n': n, 'role': role, 'version': v['id'], 'file': rel(_motion_ref_image(doc / v['file'], jd / stem))}
+                         for n, (v, role, stem) in enumerate([x for x in pick if x[0]], 1)]
+        job['parent_size'] = [parent['width'], parent['height']]
+        if mode == 'direct':
+            job['template_prompt'] = motion_template(text, len(job['images'])) if image_mode == 'ref' else text
+            if preview:
+                job['prompt'] = job['template_prompt']
+        return save_job(doc, job)
+    return mutate(doc, _do)
+
+
+def submit_motion_prompt(doc: Path, jid: str, prompt: str) -> dict:
+    """画板动图 Agent 交提示词(code/canvas_edit.py motion --prompt-file)。只存提示词、不出视频——几分钟的视频由宿主在 Agent 本轮结束后起进程出:
+    「🎲 写一段」的任务 → done(页面把提示词填回输入框);勾了「发送前先看提示词」→ awaiting_confirm;其余 → queued(宿主接手出视频)。"""
+    job = load_job(doc, jid)
+    if job.get('op') not in ('motion', 'motion_prompt'):
+        raise CanvasError(f'{jid} 不是动图任务', en=f'{jid} is not a video job')
+    if job.get('status') != 'drafting':
+        raise CanvasError(f"任务状态是 {job.get('status')},不再接收提示词(用户可能已取消,或已提交过)。不要重试,原样报告",
+                          en=f"The job is {job.get('status')} and no longer accepts a prompt (cancelled or already submitted). Do not retry; report as is")
+    prompt = (prompt or '').strip()[:8000]
+    if not prompt:
+        raise CanvasError('提示词为空', en='The prompt is empty')
+    status = 'done' if job['op'] == 'motion_prompt' else 'awaiting_confirm' if job.get('preview') else 'queued'
+    return set_job(doc, jid, status=status, prompt=prompt, by_agent=True)
+
+
+def motion_channel_problem(provider: str, model: str, image_mode: str) -> tuple[str, str] | None:
+    """发送前的渠道预检:ComfyUI 视频工作流的类型决定它收参考图还是首尾帧,对不上时返回 (中文, 英文) 提示,免得排队几分钟才报错。
+    MiniMax-H3 Ref2VA / Seedance 云端参考生视频模板只收参考图;LTX-2.5 两种都收;其余(基础图生视频模板)只收首尾帧。
+    其它渠道交给 genmedia 出视频时按模型报错;配置读不到也返回 None(同样留给出视频时报)。"""
+    from modules import genmedia
+    try:
+        cfg = genmedia.get_config('video', provider, model) if provider else genmedia.get_config('video')
+        if cfg.get('provider') != 'comfyui' or genmedia._comfy_configured_workflow(cfg) is None:   # 工作流读不到:不猜类型
+            return None
+        ref_only = genmedia._is_h3_ref2va_workflow(cfg) or bool(genmedia._seedance_cloud_workflow_gen(cfg))
+        both = genmedia._is_ltx25_workflow(cfg)
+        wf = Path(str(cfg.get('workflow') or cfg.get('rh_workflow_id') or '')).name
+    except Exception:  # noqa: BLE001
+        return None
+    if image_mode == 'frames' and ref_only:
+        return (f'当前 ComfyUI 视频工作流({wf})是参考图生视频模板,不收首尾帧:换成「参考图」方式,或换一个支持首尾帧的视频模型'
+                '(如 H3 FL2VA 工作流、火山 / BytePlus 的 Seedance、Fal 的 Kling)',
+                f'The current ComfyUI video workflow ({wf}) is a reference-to-video template and does not take first/last frames: switch to '
+                '"Reference image", or pick a video model that supports first/last frames (e.g. an H3 FL2VA workflow, Seedance on Volcano Engine / BytePlus, Kling on Fal)')
+    if image_mode == 'ref' and not ref_only and not both:
+        return (f'当前 ComfyUI 视频工作流({wf})是首尾帧 / 图生视频模板,不收参考图:换成「首尾帧」方式,或换一个支持参考图的视频模型(如 H3 Ref2VA 工作流、Seedance)',
+                f'The current ComfyUI video workflow ({wf}) is a first/last-frame (image-to-video) template and does not take reference images: '
+                'switch to "First/last frames", or pick a video model that supports reference images (e.g. an H3 Ref2VA workflow, Seedance)')
+    return None
+
+
+def _default_generate_video(prompt: str, output: str, refs: list[str], first: str, last: str, duration: int, resolution: str,
+                            aspect: str, audio: bool, provider: str, model: str) -> dict:
+    """调 genmedia 出视频:参考图方式传 refs,首尾帧方式传 first / last(两者互斥);返回实际用的 {provider, model}
+    (NSFW 路由换了渠道时取 meta.json 的记录)。
+    声音关时传 generate_audio=False;ComfyUI 工作流(H3 Ref2VA 固定出原生音频、基础工作流不收这个参数)关着时不传,按工作流本身。"""
+    from modules import genmedia
+    cfg = genmedia.get_config('video', provider, model) if provider else genmedia.get_config('video')
+    eff = cfg.get('provider') or ''
+    genmedia.generate_video(prompt, output, first_frame=first, last_frame=last, refs=refs or None, duration=duration, resolution=resolution, aspect=aspect,
+                            generate_audio=audio if (audio or eff != 'comfyui') else None, provider=provider, model=model,
+                            resolution_gate=False)
+    used = {'provider': eff, 'model': str(cfg.get('mode') if eff == 'comfyui' else cfg.get('model') or '')}
+    try:
+        route = json.loads(Path(output).with_suffix('.meta.json').read_text(encoding='utf-8')).get('nsfw_route') or {}
+        if route.get('provider'):
+            used = {'provider': route['provider'], 'model': str(route.get('model') or '')}
+    except Exception:  # noqa: BLE001
+        pass
+    return used
+
+
+def probe_video(path: Path) -> dict:
+    """ffprobe 实测时长 / 宽高 / 有无音轨;ffprobe 不可用返回 {}。"""
+    import subprocess
+    try:
+        r = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'stream=codec_type,width,height', '-show_entries', 'format=duration',
+                            '-of', 'json', str(path)], capture_output=True, text=True, timeout=30)
+        info = json.loads(r.stdout or '{}')
+    except Exception:  # noqa: BLE001
+        return {}
+    out = {'has_audio': False}
+    for st in info.get('streams') or []:
+        if st.get('codec_type') == 'audio':
+            out['has_audio'] = True
+        elif st.get('codec_type') == 'video' and st.get('width'):
+            out.update(width=int(st['width']), height=int(st.get('height') or 0))
+    try:
+        out['duration'] = round(float((info.get('format') or {}).get('duration')), 2)
+    except (TypeError, ValueError):
+        pass
+    return out if out.get('width') else {}
+
+
+def _motion_poster(video: Path, out: Path, fallback: Path, at: float) -> None:
+    """封面帧:ffmpeg 取第 at 秒那一帧缩到长边 MOTION_POSTER_EDGE;ffmpeg 不可用 / 失败时用参考图的缩略图。"""
+    import subprocess
+    try:
+        r = subprocess.run(['ffmpeg', '-y', '-v', 'error', '-ss', f'{at:.2f}', '-i', str(video), '-frames:v', '1',
+                            '-vf', f"scale='min({MOTION_POSTER_EDGE},iw)':-2", '-q:v', '4', str(out)], capture_output=True, timeout=60)
+        if r.returncode == 0 and out.is_file() and out.stat().st_size:
+            return
+    except Exception:  # noqa: BLE001
+        pass
+    Image = _pil()
+    im = load_image(fallback.read_bytes()).convert('RGB')
+    im.thumbnail((MOTION_POSTER_EDGE, MOTION_POSTER_EDGE), Image.LANCZOS)
+    im.save(out, 'JPEG', quality=82)
+
+
+def run_motion(base: Path, doc: Path, jid: str, prompt: str, *, generate=None, probe=None, log=print) -> dict:
+    """按提示词出一段视频并记进这张图的动图台账(motions[])。返回动图记录;失败把任务记 failed 后原样抛出。
+    generate(prompt, output, refs, first, last, duration, resolution, aspect, audio, provider, model) → {provider, model} 可注入(测试不联网)。"""
+    job = load_job(doc, jid)
+    if job.get('op') != 'motion':
+        raise CanvasError(f'{jid} 不是动图任务', en=f'{jid} is not a video job')
+    prompt = (prompt or '').strip()
+    if not prompt:
+        raise CanvasError('提示词为空', en='The prompt is empty')
+    job = set_job(doc, jid, status='running', prompt=prompt, error='', error_en='')
+    try:
+        jd = _job_dir(doc, jid)
+        images = sorted(job['images'], key=lambda i: i['n'])
+        by_role = {i['role']: str(base / i['file']) for i in images}
+        refs = [str(base / i['file']) for i in images if i['role'] == 'ref']
+        out = jd / 'result.mp4'
+        channel = ' '.join(x for x in (job.get('provider'), job.get('model')) if x) or '全局视频渠道'
+        what = (f"首帧 {job['parent']} → 尾帧 {job.get('last')}" if job.get('image_mode') == 'frames'
+                else f"参考图 {job['parent']}" + (f" + {job['ref2']}" if job.get('ref2') else ''))
+        log(f"[canvas] 动图 {job['source']} {what}:{channel},{job['duration']}s {job['resolution']} {job['aspect']}"
+            + (',带声音' if job.get('audio') else ''))
+        used = (generate or _default_generate_video)(prompt, str(out), refs, by_role.get('first', ''), by_role.get('last', ''),
+                                                     job['duration'], job['resolution'], job['aspect'], bool(job.get('audio')),
+                                                     job.get('provider') or '', job.get('model') or '') or {}
+        if not out.is_file() or not out.stat().st_size:
+            raise CanvasError('视频模型没有返回视频文件', en='The video model returned no video file')
+        actual = (probe or probe_video)(out)
+        poster = jd / 'poster.jpg'
+        _motion_poster(out, poster, base / images[0]['file'], min(1.0, (actual.get('duration') or 2) / 2))
+        try:
+            usage = json.loads(out.with_suffix('.meta.json').read_text(encoding='utf-8')).get('usage') or {}
+        except Exception:  # noqa: BLE001
+            usage = {}
+
+        def _do(h: dict):
+            n = int(h.get('motion_seq') or 0) + 1
+            h['motion_seq'] = n
+            mid = f'm{n:03d}'
+            (doc / MOTION_DIR).mkdir(exist_ok=True)
+            os.replace(out, doc / MOTION_DIR / f'{mid}.mp4')
+            os.replace(poster, doc / MOTION_DIR / f'{mid}.poster.jpg')
+            rec = {'id': mid, 'file': f'{MOTION_DIR}/{mid}.mp4', 'poster': f'{MOTION_DIR}/{mid}.poster.jpg', 'job': jid, 'parent': job['parent'],
+                   'image_mode': job.get('image_mode') or 'ref', 'ref2': job.get('ref2'), 'last': job.get('last'),
+                   'mode': job.get('mode'), 'prompt': prompt, 'text': job.get('text'),
+                   'provider': used.get('provider') or job.get('provider'), 'model': used.get('model') or job.get('model'),
+                   'duration': job['duration'], 'resolution': job['resolution'], 'aspect': job['aspect'], 'audio': bool(job.get('audio')),
+                   'actual': actual, 'bytes': (doc / MOTION_DIR / f'{mid}.mp4').stat().st_size, 'created_at': now_iso(),
+                   'nsfw': job.get('nsfw') or None, 'usage': {k: usage[k] for k in ('total_tokens', 'completion_tokens') if usage.get(k)} or None}
+            rec = {k: v for k, v in rec.items() if v not in (None, '', [], {})}
+            h['motions'].append(rec)
+            return rec
+        rec = mutate(doc, _do)
+        set_job(doc, jid, status='done', motion=rec['id'])
+        log(f"[canvas] 已存为动图 {rec['id']}" + (f"({actual.get('width')}x{actual.get('height')},{actual.get('duration')}s)" if actual else ''))
+        return rec
+    except Exception as e:
+        _fail(doc, jid, e)
+        raise
+
+
+def delete_motion(doc: Path, mid: str) -> dict:
+    """从动图列表里移除一段(视频与封面挪进 trash/,不真删)。"""
+    def _do(h: dict):
+        m = next((x for x in h['motions'] if x.get('id') == mid and not x.get('deleted')), None)
+        if not m:
+            raise CanvasError(f'没有这段动图:{mid or "(空)"}', 404, en=f'No such video: {mid or "(empty)"}')
+        trash = doc / 'trash'
+        trash.mkdir(exist_ok=True)
+        for name in (m.get('file'), m.get('poster')):
+            if name and (doc / name).is_file():
+                os.replace(doc / name, trash / Path(name).name)
+        m['deleted'] = now_iso()
+        return {'ok': True, 'id': mid}
+    return mutate(doc, _do)
+
+
 # ---------------------------------------------------------------- 最终版
 OP_LABELS = {'original': '原图', 'external': '外部更新', 'edit': '编辑', 'upscale': '放大', 'transform': '调整'}
 
@@ -1209,7 +1517,8 @@ def public_job(job: dict | None) -> dict | None:
     if not job:
         return None
     keep = ('id', 'op', 'status', 'mode', 'preview', 'parent', 'created_at', 'updated_at', 'error', 'error_en', 'version', 'run_id', 'prompt',
-            'template_prompt', 'provider', 'model', 'target', 'upscaler', 'lock', 'text', 'nsfw', 'refused', 'style')
+            'template_prompt', 'provider', 'model', 'target', 'upscaler', 'lock', 'text', 'nsfw', 'refused', 'style',
+            'duration', 'resolution', 'aspect', 'audio', 'image_mode', 'ref2', 'last', 'motion')
     return {k: job.get(k) for k in keep if job.get(k) not in (None, '')}
 
 
@@ -1217,11 +1526,14 @@ def state(base: Path, doc: Path, h: dict, *, run_ended=None) -> dict:
     """页面要的全部状态(路径都是项目内相对路径,URL 由宿主拼)。"""
     rel = h['source']
     droot = doc.relative_to(base).as_posix()
-    jobs = recent_jobs(doc, h, 6)
-    active = active_job(doc, h, run_ended)
-    if active:
-        jobs = recent_jobs(doc, h, 6)                 # active_job 可能刚把死任务改成 failed
-    last = next((j for j in reversed(jobs) if j.get('status') not in ACTIVE), None)
+    lanes = {}
+    for key, lane in (('job', 'jobs'), ('motion_job', 'motion_jobs'), ('prompt_job', 'prompt_jobs')):
+        active = active_job(doc, h, run_ended, lane)
+        jobs = recent_jobs(doc, h, 6, lane)           # active_job 可能刚把死任务改成 failed:之后再读
+        last = next((j for j in reversed(jobs) if j.get('status') not in ACTIVE), None)
+        lanes.update({key: public_job(active), f'last_{key}': public_job(last)})
+    motions = [{**m, 'file_rel': f"{droot}/{m['file']}", 'poster_rel': f"{droot}/{m['poster']}" if m.get('poster') else ''}
+               for m in h.get('motions') or [] if not m.get('deleted')]
     vers = []
     for v in h['versions']:
         if v.get('deleted'):
@@ -1237,9 +1549,10 @@ def state(base: Path, doc: Path, h: dict, *, run_ended=None) -> dict:
     return {'file': rel, 'opened': h.get('opened') or rel, 'doc': droot, 'kind': kind, 'storage': h.get('storage') or 'fixed',
             'meta': h.get('meta') or {}, 'info': {**file_info(base / rel), 'path': rel}, 'versions': vers,
             'final': h.get('final'), 'disk': h.get('disk'), 'refs': [r for r in h['refs'] if not r.get('removed')],
-            'job': public_job(active), 'last_job': public_job(last), 'provenance': provenance(base, h),
+            **lanes, 'motions': motions, 'provenance': provenance(base, h),
             'setting_kind': SETTING_KINDS.get(kind) or '', 'pref_kind': PREF_KINDS.get(kind) or '',
-            'drift_warn': DRIFT_WARN, 'max_refs': MAX_REFS}
+            'drift_warn': DRIFT_WARN, 'max_refs': MAX_REFS,
+            'motion_limits': {'min_s': MOTION_MIN_S, 'max_s': MOTION_MAX_S, 'resolutions': list(MOTION_RESOLUTIONS)}}
 
 
 def set_ui(doc: Path, label: str = '', oid: str = '') -> None:

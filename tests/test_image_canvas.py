@@ -648,7 +648,7 @@ def test_api_nsfw_toggle_routes_edit_and_upscale(runtime, monkeypatch):
     monkeypatch.setattr(core, 'nsfw_settings', lambda: cfg)
     doc = ic.doc_dir_of(base, SHEET)
     st = asyncio.run(core.api_canvas_get('p', SHEET))
-    assert st['nsfw_mode'] == {'enabled': True, 'text': cfg['text'], 'image': cfg['image']}
+    assert st['nsfw_mode'] == {'enabled': True, 'text': cfg['text'], 'image': cfg['image'], 'video': None}   # 没配备用视频渠道
     st = asyncio.run(core.api_canvas_edit('p', {'file': SHEET, **edit_payload(refs=[], mode='agent', preview=False),
                                                 'provider': 'volcengine', 'model': 'seedream', 'nsfw': True}))
     job = st['job']
@@ -857,6 +857,350 @@ def test_routes_page_and_agent_are_registered():
     soul = root / 'agents' / core.CANVAS_AGENT / 'SOUL.md'
     assert soul.is_file() and 'code/canvas_edit.py submit' in soul.read_text(encoding='utf-8')
     assert core.AM_AGENT_TIERS[core.CANVAS_AGENT] == 'low'
+    for path in ('canvas/motion"', 'canvas/motion/delete'):
+        assert f'/projects/{{project}}/{path}' in app_src, path
+    soul = root / 'agents' / core.CANVAS_MOTION_AGENT / 'SOUL.md'
+    assert soul.is_file() and 'code/canvas_edit.py motion' in soul.read_text(encoding='utf-8')
+    assert core.AM_AGENT_TIERS[core.CANVAS_MOTION_AGENT] == 'low'
+
+
+# ---------------------------------------------------------------- 动图(以某个版本为首帧生成视频)
+def motion_payload(**over):
+    p = {'parent': 'v000', 'text': '她转头微笑,镜头缓推', 'duration': 15, 'resolution': '480p', 'audio': False, 'mode': 'direct', 'preview': False}
+    p.update(over)
+    return p
+
+
+def fake_video(prompt, output, refs, first, last, duration, resolution, aspect, audio, provider, model):
+    Path(output).write_bytes(b'\x00\x00\x00\x18ftypmp42fake-video')
+    Path(output).with_suffix('.meta.json').write_text(json.dumps({'usage': {'total_tokens': 1234}}), encoding='utf-8')
+    return {'provider': provider or 'volcengine', 'model': model or 'seedance-2-0'}
+
+
+def test_motion_job_lanes_validation_and_frames(base):
+    """动图任务:直接发送要有提示词、时长 / 分辨率校验、参考图另存一份、画幅取最近的常用比例、没点名 @Image 1 时补参考图说明;
+    动图 / 写提示词 / 编辑三条通道互不阻塞,各自一个。"""
+    doc, _ = ic.open_doc(base, SHEET)
+    for bad in (dict(text=''), dict(duration=1), dict(duration=31), dict(resolution='4k')):
+        with pytest.raises(ic.CanvasError):
+            ic.create_motion_job(base, doc, motion_payload(**bad))
+    job = ic.create_motion_job(base, doc, motion_payload(preview=True))
+    assert job['op'] == 'motion' and job['status'] == 'awaiting_confirm' and job['prompt'] == job['template_prompt'] == 'Use @Image 1 as the reference image: keep its subjects, their appearance, the setting and the visual style.\n她转头微笑,镜头缓推'
+    assert (job['duration'], job['resolution'], job['aspect'], job['audio']) == (15, '480p', '16:9', False)
+    ref = base / job['images'][0]['file']
+    assert job['images'][0]['role'] == 'ref' and ref.name == 'ref1.jpg' and ref.read_bytes() == (base / SHEET).read_bytes()
+    assert ic.load_history(doc)['motion_jobs'] == [job['id']] and not ic.load_history(doc)['jobs']
+    with pytest.raises(ic.CanvasError) as e:                                         # 动图通道同时只跑一个
+        ic.create_motion_job(base, doc, motion_payload())
+    assert e.value.status == 409 and 'video job' in e.value.text(zh=False)
+    draft = ic.create_motion_job(base, doc, motion_payload(text='', draft_only=True, mode='direct'))   # 写提示词走自己的通道,总是经 Agent
+    assert draft['op'] == 'motion_prompt' and draft['status'] == 'drafting' and draft['mode'] == 'agent'
+    with pytest.raises(ic.CanvasError) as e:
+        ic.create_motion_job(base, doc, motion_payload(draft_only=True))
+    assert 'still writing' in e.value.text(zh=False)
+    assert ic.create_edit_job(base, doc, edit_payload(refs=[], preview=False))['status'] == 'queued'   # 编辑不受动图影响
+    st = ic.state(base, doc, ic.load_history(doc))
+    assert (st['job']['op'], st['motion_job']['op'], st['prompt_job']['op']) == ('edit', 'motion', 'motion_prompt')
+    assert st['motion_limits'] == {'min_s': 2, 'max_s': 30, 'resolutions': ['480p', '720p', '1080p']}
+    ic.set_job(doc, job['id'], status='cancelled')
+    ic.transform(base, doc, 'v000', 'flip_h')
+    with pytest.raises(ic.CanvasError):
+        ic.create_motion_job(base, doc, motion_payload(ref2='v000'))                 # 第二张参考图与正在查看的同一版本
+    j2 = ic.create_motion_job(base, doc, motion_payload(mode='agent', text='', ref2='v001', audio=True))
+    assert j2['status'] == 'drafting' and j2['ref2'] == 'v001' and j2['audio'] is True and 'template_prompt' not in j2
+    assert [(i['n'], i['role'], i['version']) for i in j2['images']] == [(1, 'ref', 'v000'), (2, 'ref', 'v001')] and ic.public_job(j2)['ref2'] == 'v001'
+    ic.set_job(doc, j2['id'], status='cancelled')
+    j3 = ic.create_motion_job(base, doc, motion_payload(ref2='v001'))
+    assert j3['template_prompt'].startswith('Use @Image 1 as the reference image') and '@Image 2 is a second reference image.' in j3['template_prompt']
+
+
+def test_motion_template_only_adds_reference_line_when_not_named():
+    assert ic.motion_template('她转头微笑', 1) == '''Use @Image 1 as the reference image: keep its subjects, their appearance, the setting and the visual style.\n她转头微笑'''
+    for named in ('@Image 1 中的老者转头', '@image1 转头', '[Image 1] turns', '<Picture 1> turns'):
+        assert ic.motion_template(named, 2) == named
+
+
+def test_motion_ref_image_is_shrunk_and_flattened_when_needed(tmp_path):
+    big = tmp_path / 'big.png'
+    Image.new('RGB', (3000, 1000), 'red').save(big, 'PNG')
+    out = ic._motion_ref_image(big, tmp_path / 'a')
+    assert out.name == 'a.jpg' and Image.open(out).size == (2048, 683)
+    alpha = tmp_path / 'alpha.png'
+    Image.new('RGBA', (200, 100), (0, 0, 0, 0)).save(alpha, 'PNG')
+    out = ic._motion_ref_image(alpha, tmp_path / 'b')
+    assert out.name == 'b.jpg' and Image.open(out).mode == 'RGB' and Image.open(out).getpixel((5, 5)) == (255, 255, 255)
+    small = tmp_path / 'small.png'
+    Image.new('RGB', (200, 100), 'blue').save(small, 'PNG')
+    assert ic._motion_ref_image(small, tmp_path / 'c').read_bytes() == small.read_bytes()
+    assert [ic.motion_aspect(*s) for s in ((1920, 1080), (1080, 1920), (1000, 1000), (2048, 1024), (1200, 900), (2560, 1080))] == \
+        ['16:9', '9:16', '1:1', '16:9', '4:3', '21:9']
+
+
+def test_run_motion_records_video_and_delete(base):
+    doc, _ = ic.open_doc(base, SHEET)
+    job = ic.create_motion_job(base, doc, motion_payload(nsfw=True))
+    seen = []
+    gen = lambda *a: seen.append(a) or fake_video(*a)   # noqa: E731
+    m = ic.run_motion(base, doc, job['id'], 'She turns and smiles.', generate=gen,
+                      probe=lambda p: {'duration': 15.04, 'width': 864, 'height': 496, 'has_audio': False}, log=QUIET)
+    prompt, output, refs, first, last, duration, resolution, aspect, audio, provider, model = seen[0]
+    assert prompt == 'She turns and smiles.' and [Path(r).name for r in refs] == ['ref1.jpg'] and first == last == ''
+    assert (duration, resolution, aspect, audio) == (15, '480p', '16:9', False) and m['image_mode'] == 'ref'
+    assert m['id'] == 'm001' and (doc / 'motion' / 'm001.mp4').is_file() and (doc / 'motion' / 'm001.poster.jpg').is_file()   # 假视频 ffmpeg 取不了帧:封面用参考图缩略图
+    assert (m['provider'], m['model'], m['usage'], m['nsfw'], m['parent']) == ('volcengine', 'seedance-2-0', {'total_tokens': 1234}, True, 'v000')
+    assert m['actual']['width'] == 864 and m['audio'] is False and 'ref2' not in m
+    j = ic.load_job(doc, job['id'])
+    assert j['status'] == 'done' and j['motion'] == 'm001' and ic.public_job(j)['motion'] == 'm001'
+    st = ic.state(base, doc, ic.load_history(doc))
+    assert [x['id'] for x in st['motions']] == ['m001'] and st['motions'][0]['file_rel'].endswith('/motion/m001.mp4')
+    assert st['motion_job'] is None and st['last_motion_job']['status'] == 'done'
+    bad = ic.create_motion_job(base, doc, motion_payload())
+    with pytest.raises(RuntimeError):
+        ic.run_motion(base, doc, bad['id'], 'x', generate=lambda *a: (_ for _ in ()).throw(RuntimeError('审核拒收')), log=QUIET)
+    assert ic.load_job(doc, bad['id'])['status'] == 'failed' and '审核拒收' in ic.load_job(doc, bad['id'])['error']
+    ic.delete_motion(doc, 'm001')
+    assert not ic.state(base, doc, ic.load_history(doc))['motions'] and (doc / 'trash' / 'm001.mp4').is_file()
+    with pytest.raises(ic.CanvasError):
+        ic.delete_motion(doc, 'm001')
+
+
+def test_default_generate_video_sends_refs_not_first_frame(tmp_path, monkeypatch):
+    """动图走多参考图模式:genmedia 收 refs、不收首尾帧(ComfyUI MiniMax-H3 Ref2VA 收到首帧会报「首尾帧请使用对应 H3 FL2VA 工作流」);
+    ComfyUI 声音关时不传 generate_audio(Ref2VA 固定出原生音频,传 off 会报错),其余渠道传 False。"""
+    calls = []
+    cfgs = {'comfyui': {'provider': 'comfyui', 'mode': 'rh_ai'}, 'volcengine': {'provider': 'volcengine', 'model': 'seedance'}}
+    monkeypatch.setattr(genmedia, 'get_config', lambda kind, provider='', model='': cfgs[provider or 'volcengine'])
+    monkeypatch.setattr(genmedia, 'generate_video', lambda prompt, output, **kw: calls.append(kw) or output)
+    used = ic._default_generate_video('@Image 1 turns.', str(tmp_path / 'o.mp4'), ['/a/ref1.jpg', '/a/ref2.jpg'], '', '', 15, '480p', '16:9',
+                                      False, 'comfyui', 'rh_ai')
+    kw = calls[-1]
+    assert kw['refs'] == ['/a/ref1.jpg', '/a/ref2.jpg'] and not kw['first_frame'] and not kw['last_frame']
+    assert kw['generate_audio'] is None and kw['resolution_gate'] is False and used == {'provider': 'comfyui', 'model': 'rh_ai'}
+    ic._default_generate_video('x', str(tmp_path / 'o.mp4'), ['/a/ref1.jpg'], '', '', 15, '480p', '16:9', False, '', '')
+    assert calls[-1]['generate_audio'] is False and calls[-1]['provider'] == ''
+    ic._default_generate_video('x', str(tmp_path / 'o.mp4'), [], '/a/first.jpg', '/a/last.jpg', 5, '480p', '16:9', True, '', '')   # 首尾帧方式
+    assert calls[-1]['refs'] is None and (calls[-1]['first_frame'], calls[-1]['last_frame']) == ('/a/first.jpg', '/a/last.jpg')
+
+
+def test_motion_frames_mode_job_run_and_record(base):
+    """首尾帧方式:尾帧必选、图按 first / last 存、提示词原样(不补参考图说明);出视频传 first / last、不传 refs;记录 image_mode / last。"""
+    doc, _ = ic.open_doc(base, SHEET)
+    ic.transform(base, doc, 'v000', 'flip_h')
+    with pytest.raises(ic.CanvasError) as e:
+        ic.create_motion_job(base, doc, motion_payload(image_mode='frames'))
+    assert 'last frame' in e.value.text(zh=False)
+    with pytest.raises(ic.CanvasError):
+        ic.create_motion_job(base, doc, motion_payload(image_mode='frames', last='v000'))   # 尾帧与首帧同一版本
+    with pytest.raises(ic.CanvasError):
+        ic.create_motion_job(base, doc, motion_payload(image_mode='bogus'))
+    job = ic.create_motion_job(base, doc, motion_payload(image_mode='frames', last='v001', ref2='v001'))   # 首尾帧方式忽略 ref2
+    assert job['image_mode'] == 'frames' and job['last'] == 'v001' and 'ref2' not in job and job['template_prompt'] == '她转头微笑,镜头缓推'
+    assert [(i['n'], i['role'], i['version'], Path(i['file']).stem) for i in job['images']] == [(1, 'first', 'v000', 'first'), (2, 'last', 'v001', 'last')]
+    seen = []
+    m = ic.run_motion(base, doc, job['id'], job['template_prompt'], generate=lambda *a: seen.append(a) or fake_video(*a), probe=lambda p: {}, log=QUIET)
+    _, _, refs, first, last, *_ = seen[0]
+    assert refs == [] and first.endswith('first.jpg') and last.endswith('last.jpg')
+    assert (m['image_mode'], m['last'], m['parent']) == ('frames', 'v001', 'v000') and 'ref2' not in m
+    j = ic.create_motion_job(base, doc, motion_payload(ref2='v001', last='v001'))       # 参考图方式忽略 last
+    assert j['image_mode'] == 'ref' and j['ref2'] == 'v001' and 'last' not in j
+
+
+def test_motion_channel_problem_by_comfy_workflow_type(monkeypatch):
+    """发送前预检:ComfyUI H3 Ref2VA / Seedance 云端参考模板只收参考图;LTX-2.5 两种都收;基础图生视频模板只收首尾帧;非 ComfyUI 渠道不拦。"""
+    kinds = {'wf': 'ref2va'}
+    monkeypatch.setattr(genmedia, 'get_config', lambda kind, provider='', model='':
+                        {'provider': provider or 'comfyui', 'workflow': 'comfy/video-minimax-h3-ref2va.json'})
+    monkeypatch.setattr(genmedia, '_is_h3_ref2va_workflow', lambda cfg: kinds['wf'] == 'ref2va')
+    monkeypatch.setattr(genmedia, '_seedance_cloud_workflow_gen', lambda cfg: 2.0 if kinds['wf'] == 'seedance' else 0.0)
+    monkeypatch.setattr(genmedia, '_is_ltx25_workflow', lambda cfg: kinds['wf'] == 'ltx')
+    monkeypatch.setattr(genmedia, '_comfy_configured_workflow', lambda cfg: None if kinds['wf'] == 'none' else {})
+    for wf, bad_mode in (('ref2va', 'frames'), ('seedance', 'frames'), ('basic', 'ref')):
+        kinds['wf'] = wf
+        zh, en = ic.motion_channel_problem('comfyui', 'local', bad_mode)
+        assert 'video-minimax-h3-ref2va.json' in zh and ('First/last frames' in en if bad_mode == 'ref' else 'Reference image' in en), wf
+        assert ic.motion_channel_problem('comfyui', 'local', 'ref' if bad_mode == 'frames' else 'frames') is None, wf
+    kinds['wf'] = 'ltx'
+    assert ic.motion_channel_problem('', '', 'ref') is None and ic.motion_channel_problem('', '', 'frames') is None
+    kinds['wf'] = 'none'                                                             # 工作流读不到:不猜类型
+    assert ic.motion_channel_problem('comfyui', 'local', 'ref') is None and ic.motion_channel_problem('comfyui', 'local', 'frames') is None
+    assert ic.motion_channel_problem('volcengine', 'm', 'frames') is None                # 非 ComfyUI:交给 genmedia
+    monkeypatch.setattr(genmedia, 'get_config', lambda *a, **k: (_ for _ in ()).throw(RuntimeError('未配置')))
+    assert ic.motion_channel_problem('comfyui', 'local', 'frames') is None              # 配置读不到:留给出视频时报
+
+
+def test_api_motion_frames_mode_preflight_and_work_order(runtime, monkeypatch):
+    core, base, spawned, chats = runtime
+    asyncio.run(core.api_canvas_transform('p', {'file': SHEET, 'version': 'v000', 'op': 'flip_h'}))
+    problem = {'v': ('当前 ComfyUI 视频工作流(x.json)是参考图生视频模板,不收首尾帧', 'The current ComfyUI video workflow (x.json) is a reference-to-video template')}
+    asked = []
+    monkeypatch.setattr(ic, 'motion_channel_problem', lambda provider, model, mode: asked.append(mode) or (problem['v'] if mode == 'frames' else None))
+    with pytest.raises(core.ServiceError) as e:
+        asyncio.run(core.api_canvas_motion('p', {'file': SHEET, **motion_payload(image_mode='frames', last='v001')}))
+    assert e.value.status_code == 400 and '不收首尾帧' in str(e.value.detail) and not spawned
+    st = asyncio.run(core.api_canvas_motion('p', {'file': SHEET, **motion_payload(image_mode='frames', last='v001', draft_only=True)}))
+    assert st['prompt_job']['image_mode'] == 'frames' and asked == ['frames']           # 🎲 写一段不出视频,不预检
+    msg = chats[-1]['message']
+    for needle in ('生成方式:首尾帧', '首帧:', '画板版本 v000)——视频从这张图开始', '尾帧:', '(画板版本 v001)——视频结束在这张图', '不用 @Image N 点名',
+                   '画幅 16:9(按首帧)'):
+        assert needle in msg, needle
+    assert '@Image 1 参考图' not in msg
+    problem['v'] = None
+    st = asyncio.run(core.api_canvas_motion('p', {'file': SHEET, **motion_payload(image_mode='frames', last='v001')}))
+    assert st['motion_job']['image_mode'] == 'frames' and st['motion_job']['last'] == 'v001' and spawned[-1][1] == 'motion'
+
+
+def test_api_motion_second_reference_in_work_order(runtime):
+    core, base, spawned, chats = runtime
+    asyncio.run(core.api_canvas_transform('p', {'file': SHEET, 'version': 'v000', 'op': 'flip_h'}))
+    st = asyncio.run(core.api_canvas_motion('p', {'file': SHEET, **motion_payload(mode='agent', ref2='v001')}))
+    msg = chats[-1]['message']
+    assert st['motion_job']['ref2'] == 'v001' and '@Image 2 参考图:' in msg and '(画板版本 v001)' in msg and '@Image 1 / @Image 2 点名' in msg
+    assert '生成方式:参考图' in msg and '\n首帧:' not in msg
+
+
+def test_cli_motion_agent_submit_then_host_generates(base, monkeypatch, capsys):
+    doc, _ = ic.open_doc(base, SHEET)
+    monkeypatch.setattr(ic, '_default_generate_video', fake_video)
+    monkeypatch.setattr(ic, 'probe_video', lambda p: {})
+    draft = ic.create_motion_job(base, doc, motion_payload(draft_only=True))
+    assert run_cli(monkeypatch, base, 'motion', '--doc', doc.name, '--job', draft['id'], '--prompt', '镜头缓缓推近,她抬眼。') == 0
+    assert json.loads(capsys.readouterr().out.strip().splitlines()[-1])['canvas_edit']['status'] == 'drafted'
+    assert ic.load_job(doc, draft['id'])['status'] == 'done' and ic.load_job(doc, draft['id'])['prompt'] == '镜头缓缓推近,她抬眼。'
+    assert run_cli(monkeypatch, base, 'motion', '--doc', doc.name, '--job', draft['id'], '--prompt', 'again') == 1   # 不再接收提示词
+    job = ic.create_motion_job(base, doc, motion_payload(mode='agent', text=''))
+    assert run_cli(monkeypatch, base, 'motion', '--doc', doc.name, '--job', job['id'], '--prompt', 'She smiles.') == 0
+    j = ic.load_job(doc, job['id'])
+    assert j['status'] == 'queued' and j['by_agent'] is True and not (doc / 'motion').exists()          # Agent 只交提示词,不出视频
+    assert run_cli(monkeypatch, base, 'motion', '--doc', doc.name, '--job', job['id'], '--confirmed') == 0
+    out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])['canvas_edit']
+    assert out['status'] == 'done' and out['motion'] == 'm001'
+    job3 = ic.create_motion_job(base, doc, motion_payload())
+    assert run_cli(monkeypatch, base, 'motion', '--doc', doc.name, '--job', job3['id'], '--template') == 0
+    assert ic.load_history(doc)['motions'][-1]['prompt'] == 'Use @Image 1 as the reference image: keep its subjects, their appearance, the setting and the visual style.\n她转头微笑,镜头缓推'
+    assert run_cli(monkeypatch, base, 'motion', '--doc', doc.name, '--job', job3['id'], '--template') == 1   # 已完成的任务不能再出
+
+
+def test_api_motion_direct_agent_draft_confirm_and_hook(runtime, monkeypatch):
+    core, base, spawned, chats = runtime
+    st = asyncio.run(core.api_canvas_get('p', SHEET))
+    assert st['motion_agent'] == core.CANVAS_MOTION_AGENT and st['motions'] == [] and st['motion_job'] is None
+    assert {c['id'] for c in st['video_models']['channels']} >= {'volcengine', 'fal', 'comfyui'}
+    st = asyncio.run(core.api_canvas_motion('p', {'file': SHEET, **motion_payload()}))
+    jid = st['motion_job']['id']
+    assert st['motion_job']['status'] == 'queued' and spawned[-1] == (jid, 'motion', ('--template',))
+    with pytest.raises(core.ServiceError) as e:
+        asyncio.run(core.api_canvas_motion('p', {'file': SHEET, **motion_payload()}))
+    assert e.value.status_code == 409
+    st = asyncio.run(core.api_canvas_edit('p', {'file': SHEET, **edit_payload(refs=[], mode='direct', preview=False)}))   # 出视频期间照样能编辑
+    assert st['job']['op'] == 'edit' and st['motion_job']['id'] == jid
+    doc = ic.doc_dir_of(base, SHEET)
+    ic.set_job(doc, jid, status='failed', error='x')
+    st = asyncio.run(core.api_canvas_motion('p', {'file': SHEET, **motion_payload(mode='agent', text='', audio=True)}))
+    job = st['motion_job']
+    msg = chats[-1]['message']
+    assert chats[-1]['agent'] == core.CANVAS_MOTION_AGENT and msg.startswith(f"[画板动图 {job['id']}] 看图写视频提示词并提交生成")
+    for needle in (f"@Image 1 参考图:{doc / 'jobs' / job['id'] / 'ref1.jpg'}", '不是首帧', '提示词里用 @Image 1 点名', '时长 15 秒', '分辨率 480p',
+                   '画幅 16:9', '声音开', '用户的描述:(没写)',
+                   '提示词语言:中文', f"python3 code/canvas_edit.py motion --project p --doc {doc.name} --job {job['id']} --prompt-file",
+                   '视频由宿主在本单结束后出'):
+        assert needle in msg, needle
+    ic.submit_motion_prompt(doc, job['id'], 'She smiles.')
+    n = len(spawned)
+    core._canvas_motion_after_run({'agent': core.CANVAS_AGENT, 'message': msg, 'project': 'p'})        # 别的 Agent 不管
+    assert len(spawned) == n
+    core._canvas_motion_after_run({'agent': core.CANVAS_MOTION_AGENT, 'message': msg, 'project': 'p'})
+    assert spawned[-1] == (job['id'], 'motion', ('--confirmed',))
+    ic.set_job(doc, job['id'], status='done')
+    st = asyncio.run(core.api_canvas_motion('p', {'file': SHEET, **motion_payload(mode='agent', preview=True)}))   # 先看提示词
+    job = st['motion_job']
+    assert '发送前先看提示词' in chats[-1]['message'] and '用户的描述:她转头微笑' in chats[-1]['message']
+    ic.submit_motion_prompt(doc, job['id'], 'She turns.')
+    n = len(spawned)
+    core._canvas_motion_after_run({'agent': core.CANVAS_MOTION_AGENT, 'message': chats[-1]['message'], 'project': 'p'})
+    assert len(spawned) == n                                                         # 待确认:Agent 结束时不起进程
+    st = asyncio.run(core.api_canvas_confirm('p', {'file': SHEET, 'job': job['id'], 'prompt': 'She turns slowly.'}))
+    assert spawned[-1] == (job['id'], 'motion', ('--confirmed',)) and ic.load_job(doc, job['id'])['prompt'] == 'She turns slowly.'
+    core._canvas_motion_after_run({'agent': core.CANVAS_MOTION_AGENT, 'message': chats[-1]['message'], 'project': 'p'})
+    assert len(spawned) == n + 1                                                     # 用户抢在 Agent 收尾前确认了:不再起第二次
+    st = asyncio.run(core.api_canvas_motion('p', {'file': SHEET, **motion_payload(draft_only=True)}))
+    assert st['prompt_job']['op'] == 'motion_prompt' and '填回画板输入框' in chats[-1]['message']
+    ic.submit_motion_prompt(doc, st['prompt_job']['id'], '她转头微笑。')
+    st = asyncio.run(core.api_canvas_get('p', SHEET))
+    assert st['prompt_job'] is None and st['last_prompt_job']['prompt'] == '她转头微笑。'
+
+
+def test_api_motion_channel_validation_nsfw_and_delete(runtime, monkeypatch):
+    core, base, spawned, chats = runtime
+    gc = {'image': {'provider': 'fal', 'fal': {'api_key': 'k', 'model': 'm'}},
+          'video': {'provider': 'volcengine', 'volcengine': {'api_key': 'k', 'model': 'doubao-seedance-2-0-260128'}}}
+    monkeypatch.setattr(core, 'load_genconfig', lambda: gc)
+    for k in ('FAL_KEY', 'BYTEPLUS_API_KEY', 'OPENROUTER_API_KEY', 'MINIMAX_API_KEY', 'VIDEOAGENTS_USER_JWT'):
+        monkeypatch.delenv(k, raising=False)
+    doc = ic.doc_dir_of(base, SHEET)
+    st = asyncio.run(core.api_canvas_get('p', SHEET))
+    vm = st['video_models']
+    assert vm['global']['provider'] == 'volcengine' and vm['global']['model'] == 'doubao-seedance-2-0-260128'
+    assert next(c for c in vm['channels'] if c['id'] == 'volcengine')['configured'] and not next(c for c in vm['channels'] if c['id'] == 'byteplus')['configured']
+    for bad in ({'provider': 'nope'}, {'provider': 'byteplus'}, {'provider': 'volcengine', 'model': 'not-a-model'}):
+        with pytest.raises(core.ServiceError) as e:
+            asyncio.run(core.api_canvas_motion('p', {'file': SHEET, **motion_payload(), **bad}))
+        assert e.value.status_code == 400, bad
+    st = asyncio.run(core.api_canvas_motion('p', {'file': SHEET, **motion_payload(), 'provider': 'volcengine'}))   # 不写模型 = 生成模型页保存的
+    assert (st['motion_job']['provider'], st['motion_job']['model']) == ('volcengine', 'doubao-seedance-2-0-260128')
+    ic.set_job(doc, st['motion_job']['id'], status='done')
+    cfg = nsfw_cfg()
+    cfg['video'] = {'provider': 'fal', 'model': 'nsfw-v'}
+    monkeypatch.setattr(core, 'nsfw_settings', lambda: cfg)
+    st = asyncio.run(core.api_canvas_motion('p', {'file': SHEET, **motion_payload(mode='agent'), 'provider': 'volcengine', 'nsfw': True}))
+    job = st['motion_job']
+    assert job['nsfw'] is True and (job['provider'], job['model']) == ('fal', 'nsfw-v') and chats[-1]['nsfw'] is True
+    assert 'nsfw: true  # 用户在画板工具栏打开了 🔞' in chats[-1]['message'] and st['nsfw_mode']['video'] == cfg['video']
+    ic.set_job(doc, job['id'], status='done')
+    cfg['enabled'] = False
+    with pytest.raises(core.ServiceError):
+        asyncio.run(core.api_canvas_motion('p', {'file': SHEET, **motion_payload(), 'nsfw': True}))
+    m = ic.run_motion(base, doc, ic.create_motion_job(base, doc, motion_payload())['id'], 'x', generate=fake_video, probe=lambda p: {}, log=QUIET)
+    st = asyncio.run(core.api_canvas_get('p', SHEET))
+    assert st['motions'][0]['url'].startswith('/projects/p/assets/canvas/') and st['motions'][0]['poster_url'].endswith(tuple('0123456789'))
+    st = asyncio.run(core.api_canvas_motion_delete('p', {'file': SHEET, 'motion': m['id']}))
+    assert st['motions'] == []
+    with pytest.raises(core.ServiceError) as e:
+        asyncio.run(core.api_canvas_motion_delete('p', {'file': SHEET, 'motion': m['id']}))
+    assert e.value.status_code == 404
+
+
+def test_canvas_motion_refusal_is_marked_with_video_wording(runtime, monkeypatch):
+    core, base, spawned, chats = runtime
+    monkeypatch.setattr(core, 'nsfw_settings', lambda: nsfw_cfg())
+    st = asyncio.run(core.api_canvas_motion('p', {'file': SHEET, **motion_payload(mode='agent')}))
+    run = {'id': st['motion_job']['run_id'], 'agent': core.CANVAS_MOTION_AGENT, 'message': chats[-1]['message'], 'project': 'p', 'status': 'done'}
+    assert core._canvas_drafting_job(run)['job'] == st['motion_job']['id']
+    core._canvas_mark_refused(run, core._canvas_drafting_job(run), 'regex')
+    j = ic.load_job(ic.doc_dir_of(base, SHEET), st['motion_job']['id'])
+    assert j['status'] == 'failed' and j['refused'] == 'regex' and j['error'].startswith('画板动图 Agent拒绝了这次动图')
+    assert j['error_en'].startswith('The canvas video agent refused this video')
+
+
+def test_generate_video_explicit_channel_skips_overrides_and_resolution_gate(tmp_path, monkeypatch):
+    """画板动图:显式渠道 / 模型 → 不套集级 / 组级覆盖;resolution_gate=False → 不按项目输出设置压分辨率(Agent 工单仍走闸门)。"""
+    proj = tmp_path / 'projects' / 'p'
+    proj.mkdir(parents=True)
+    (proj / 'settings.json').write_text(json.dumps({'output': {'draft_resolution': '480p', 'final_resolution': '480p'}}))
+    monkeypatch.setattr(genmedia, 'DATA_DIR', tmp_path)
+    monkeypatch.setenv('VIDEOAGENTS_PROJECT', 'p')
+    monkeypatch.delenv('VIDEOAGENTS_AGENT', raising=False)
+    asked, sent = [], []
+    monkeypatch.setattr(genmedia, 'get_config', lambda kind, provider='', model='': asked.append((provider, model)) or
+                        {'provider': 'volcengine', 'model': model or 'global-m', 'api_key': 'k'})
+    monkeypatch.setattr(genmedia, 'apply_nsfw_route', lambda kind, cfg, group='': cfg)
+    monkeypatch.setattr(genmedia, '_video_ark', lambda cfg, prompt, first, last, duration, resolution, *a, **k: sent.append((cfg['model'], resolution)) or 'out.mp4')
+    out = str(tmp_path / 'x.mp4')
+    monkeypatch.setattr(genmedia, 'apply_group_video_override', lambda cfg, group: (_ for _ in ()).throw(AssertionError('override')))
+    genmedia.generate_video('p', out, first_frame='f.jpg', resolution='720p', provider='volcengine', model='m2', resolution_gate=False)
+    assert asked[-1] == ('volcengine', 'm2') and sent[-1] == ('m2', '720p')
+    monkeypatch.setattr(genmedia, 'apply_group_video_override', lambda cfg, group: cfg)
+    genmedia.generate_video('p', out, first_frame='f.jpg', resolution='720p')
+    assert sent[-1] == ('global-m', '480p')                                         # 默认仍走闸门
 
 
 # ---------------------------------------------------------------- 界面词典
@@ -894,7 +1238,7 @@ def canvas_ui_strings() -> list[str]:
     script = src[src.index("'use strict';"):]
     keys = c.out + [s for s in re.findall(r"'((?:[^'\\\n]|\\.)*)'", script) if cjk.search(s)]
     keys += re.findall(r"T\('((?:[^'\\]|\\.)*)'\)", (static / 'canvas-entry.js').read_text(encoding='utf-8'))
-    keys += [u['label'] for u in genmedia.IMAGE_UPSCALERS if cjk.search(u['label'])] + ['agent·画板修图师']
+    keys += [u['label'] for u in genmedia.IMAGE_UPSCALERS if cjk.search(u['label'])] + ['agent·画板修图师', 'agent·画板动图师']
     return list(dict.fromkeys(keys))
 
 

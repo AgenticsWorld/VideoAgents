@@ -2412,6 +2412,7 @@ AM_AGENT_TIERS = {                                      # 分类内的例外
     "03-characters/character-manager": "low",           # 角色索引管理
     "06-art/aspect-ratio": "low",                       # 画幅规范 = 机械活
     "06-art/image-retouch": "low",                      # 画板修图:看图把用户圈的位置和说明整理成一条编辑提示词,求快
+    "08-video-gen/canvas-motion": "low",                # 画板动图:看参考图把用户的描述写成一段视频提示词,求快
     "08-video-gen/prompt": "high",                      # 生成 prompt 质量决定画面上限
     "08-video-gen/video-generation": "high",            # 视频生成主力
 }
@@ -4354,7 +4355,7 @@ def _refusal_judge_gate(run: dict, text: str, canvas_drafting: bool) -> bool:
         return False
     if canvas_drafting:
         return True
-    if run.get("agent") == CANVAS_AGENT:       # 画板任务已经交了提示词(或找不到任务):不是拒绝
+    if run.get("agent") in CANVAS_AGENTS:     # 画板任务已经交了提示词(或找不到任务):不是拒绝
         return False
     return bool(_wo_task_id(run.get("message") or "")) and not run.get("files")
 
@@ -4883,6 +4884,7 @@ async def execute_run(run: dict, message: str, model: str | None):
             _prompt_skill_postcheck(run)
             _keypoints_postcheck(run)
             await _nsfw_refusal_postcheck(run)
+            _canvas_motion_after_run(run)
             # 会话续用:记录本次会话 id(无状态服务型 agent 不留会话)。
             # 无任何 assistant 产出的运行不记:部分引擎(如 pi)惰性落盘会话文件,
             # 刚启动就被停止/报错的运行留下的是从未写盘的幽灵会话 id,续用必报
@@ -4938,7 +4940,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                          + (f"task_id `{tid}` 已记为 nsfw_suspect,同 task_id 重派时宿主自动改用备用语言模型"
                             f"{' ' + fb['engine'] + '/' + (fb['model'] or '(引擎默认)') if fb else '(尚未配置备用语言模型,请到「设置→高级→NSFW 模式」配置)'}"
                             if tid else "画板任务已标失败,下一步怎么做见画板任务框里的提示"
-                            if agent_id == CANVAS_AGENT else
+                            if agent_id in CANVAS_AGENTS else
                             "工单未写 task_id,无法记入重派名单;重派时请带 `nsfw: true` / --nsfw")
                          + "。\n\n" + reply)
                 chat_entry.update(text=reply, nsfw_suspect=True)
@@ -8228,6 +8230,11 @@ async def api_scene_plate_flip(project: str, sid: str, body: dict):
 # 经 Agent 的编辑由画板修图 Agent(06-art/image-retouch)整理提示词后自己跑同一条命令。页面轮询 GET 取进度。
 CANVAS_AGENT = "06-art/image-retouch"
 CANVAS_CLI_TIMEOUT = 1500
+# 「动图」页(2026-10-21):以当前查看的版本为参考图(多参考图模式,不当首帧)生成视频。经 Agent 时画板动图 Agent 只写提示词(canvas_edit.py motion 几秒返回),
+# 几分钟的视频由宿主在它本轮结束后起进程出(_canvas_motion_after_run),不让 Agent 的工具调用干等
+CANVAS_MOTION_AGENT = "08-video-gen/canvas-motion"
+CANVAS_MOTION_TIMEOUT = 5400
+CANVAS_AGENTS = (CANVAS_AGENT, CANVAS_MOTION_AGENT)
 
 
 def _canvas_zh() -> bool:
@@ -8251,8 +8258,8 @@ _CANVAS_WO_JOB_RE = re.compile(r"--doc ([\w\-.]{4,160}) --job ([\w\-]+)")
 
 def _canvas_drafting_job(run: dict) -> dict | None:
     """画板修图 Agent 的运行结束时,它的任务若还停在整理提示词(没交提示词)→ {doc, job};其余 None。
-    画板目录与任务号取自工单里的 canvas_edit.py 命令行(_canvas_work_order)。"""
-    if run.get("agent") != CANVAS_AGENT:
+    画板目录与任务号取自工单里的 canvas_edit.py 命令行(_canvas_work_order / _canvas_motion_work_order)。"""
+    if run.get("agent") not in CANVAS_AGENTS:
         return None
     m = _CANVAS_WO_JOB_RE.search(run.get("message") or "")
     if not m or ".." in m.group(1):
@@ -8269,21 +8276,24 @@ def _canvas_drafting_job(run: dict) -> dict | None:
 
 
 def _canvas_mark_refused(run: dict, canvas: dict, by: str) -> None:
-    """画板任务被画板修图 Agent 拒绝:标失败并提示打开 🔞 再发送(只提示,不自动重发;用户决定)。"""
+    """画板任务被画板修图 / 动图 Agent 拒绝:标失败并提示打开 🔞 再发送(只提示,不自动重发;用户决定)。"""
     from modules import image_canvas as ic
     fb = nsfw_text_fallback()
     how_zh, how_en = ("审核模型", "the moderation model") if by == "judge" else ("拒绝套话", "a refusal phrase")
+    motion = run.get("agent") == CANVAS_MOTION_AGENT
+    who_zh, what_zh = ("画板动图 Agent", "这次动图") if motion else ("画板修图 Agent", "这次编辑")
+    who_en, what_en = ("The canvas video agent", "this video") if motion else ("The image-retouch agent", "this edit")
     if fb:
         m = f"{fb['engine']} / {fb['model'] or '引擎默认'}"
-        zh = (f"画板修图 Agent 拒绝了这次编辑(由{how_zh}识别)。NSFW 模式开着:打开工具栏的 🔞 再发送,"
+        zh = (f"{who_zh}拒绝了{what_zh}(由{how_zh}识别)。NSFW 模式开着:打开工具栏的 🔞 再发送,"
               f"会改用备用语言模型 {m} 整理提示词。")
-        en = (f"The image-retouch agent refused this edit (detected by {how_en}). NSFW mode is on: turn on 🔞 in the "
+        en = (f"{who_en} refused {what_en} (detected by {how_en}). NSFW mode is on: turn on 🔞 in the "
               f"toolbar and send again to have the fallback language model {fb['engine']} / "
               f"{fb['model'] or 'engine default'} write the prompt.")
     else:
-        zh = (f"画板修图 Agent 拒绝了这次编辑(由{how_zh}识别)。NSFW 模式没有配置备用语言模型,打开 🔞 也仍由当前引擎"
+        zh = (f"{who_zh}拒绝了{what_zh}(由{how_zh}识别)。NSFW 模式没有配置备用语言模型,打开 🔞 也仍由当前引擎"
               "整理提示词;可先到「设置→高级→NSFW 模式」配置备用语言模型。")
-        en = (f"The image-retouch agent refused this edit (detected by {how_en}). NSFW mode has no fallback language "
+        en = (f"{who_en} refused {what_en} (detected by {how_en}). NSFW mode has no fallback language "
               "model, so even with 🔞 on the current engine writes the prompt; set one under Settings → Advanced → "
               "NSFW mode first.")
     try:
@@ -8325,9 +8335,12 @@ def _canvas_state(base: Path, doc: Path, hist: dict | None = None) -> dict:
         r["url"] = _canvas_url(base, r["file"])
     st["info"]["url"] = _canvas_url(base, st["file"])
     st["project"] = base.name
+    for m in st["motions"]:
+        m["url"] = _canvas_url(base, m["file_rel"])
+        m["poster_url"] = _canvas_url(base, m["poster_rel"]) if m.get("poster_rel") else ""
     zh = _canvas_zh()
-    for j in (st.get("job"), st.get("last_job")):      # 任务报错:中文界面出中文,其余有英文版的出英文
-        if j:
+    for j in (st.get(k) for k in ("job", "last_job", "motion_job", "last_motion_job", "prompt_job", "last_prompt_job")):
+        if j:                                            # 任务报错:中文界面出中文,其余有英文版的出英文
             en = j.pop("error_en", "")
             if en and not zh:
                 j["error"] = en
@@ -8340,22 +8353,59 @@ def _canvas_state(base: Path, doc: Path, hist: dict | None = None) -> dict:
                     "pref": image_model_pref(st["pref_kind"]) if st["pref_kind"] else {"provider": "", "model": ""}}
     st["upscalers"] = genmedia.image_upscalers()
     st["agent"] = CANVAS_AGENT if agent_dir(CANVAS_AGENT) else ""
+    st["motion_agent"] = CANVAS_MOTION_AGENT if agent_dir(CANVAS_MOTION_AGENT) else ""
+    st["video_models"] = _canvas_video_models()
     nc = nsfw_settings()
     st["nsfw_mode"] = ({"enabled": True, "text": nc["text"] if nc["text"]["engine"] else None,
-                        "image": nc["image"] if nc["image"]["provider"] else None} if nc["enabled"] else {"enabled": False})
+                        "image": nc["image"] if nc["image"]["provider"] else None,
+                        "video": nc["video"] if nc["video"]["provider"] else None} if nc["enabled"] else {"enabled": False})
     return st
 
 
-def _canvas_nsfw(body: dict, provider: str, model: str) -> tuple[bool, str, str]:
-    """画板工具栏 🔞:本次编辑 / 重绘放大按 NSFW 路由(同工单 nsfw: true)。返回 (nsfw, provider, model):
-    配了备用图像渠道时图像改用它(页面所选渠道让位);备用语言模型由派单(api_chat nsfw)套用。NSFW 模式关着时拒收。"""
+def _canvas_video_models() -> dict:
+    """「动图」页的视频模型下拉:渠道清单(口径同分镜预览顶部的集级渠道下拉 video_provider_options,未配置的置灰)
+    + 「生成模型」页当前的全局视频渠道 / 模型(页面「跟随全局」时显示用)。"""
+    cfg = load_genconfig()
+    gp = active_video_provider(cfg)
+    gm = comfy_global_mode((cfg.get("video") or {}).get("comfyui")) if gp == "comfyui" else active_video_model(cfg)
+    return {"channels": video_provider_options(cfg), "global": {"provider": gp, "model": gm, "label": video_model_label(gm, gp)}}
+
+
+def _canvas_video_channel(body: dict) -> tuple[str, str]:
+    """「动图」页选的视频渠道 / 模型(空渠道 = 跟随「生成模型」页的全局视频设置)。只收已配置的渠道;模型须在该渠道的清单里
+    (comfyui 是已配置的运行方式),或就是该渠道在「生成模型」页保存的模型;不写模型取后者。"""
+    provider = str((body or {}).get("provider") or "").strip()
+    model = str((body or {}).get("model") or "").strip()
+    if not provider:
+        return "", ""
+    zh = _canvas_zh()
+    cfg = load_genconfig()
+    opt = next((o for o in video_provider_options(cfg) if o["id"] == provider), None)
+    if not opt:
+        raise ServiceError(400, f"不认识的视频渠道:{provider}" if zh else f"Unknown video provider: {provider}")
+    if not opt["configured"]:
+        raise ServiceError(400, f"视频渠道 {provider} 还没有配置(「🎨 生成模型」页)" if zh
+                           else f"Video provider {provider} is not configured (🎨 Generation Models page)")
+    model = model or opt["default_model"]
+    if model != opt["default_model"] and not episode_provider_models(cfg, provider).get(model):
+        raise ServiceError(400, f"视频渠道 {provider} 没有这个可选模型:{model}" if zh
+                           else f"Video provider {provider} has no selectable model {model}")
+    return provider, model
+
+
+def _canvas_nsfw(body: dict, provider: str, model: str, kind: str = "image") -> tuple[bool, str, str]:
+    """画板工具栏 🔞:本次编辑 / 重绘放大 / 动图按 NSFW 路由(同工单 nsfw: true)。返回 (nsfw, provider, model):
+    配了该类(kind = image | video)备用渠道时改用它(页面所选渠道让位);备用语言模型由派单(api_chat nsfw)套用。NSFW 模式关着时拒收。"""
     if not (body or {}).get("nsfw"):
         return False, provider, model
     cfg = nsfw_settings()
     if not cfg["enabled"]:
         raise ServiceError(400, "NSFW 模式没有开启(控制台「设置→高级→NSFW 模式」),不能按 🔞 发送" if _canvas_zh()
                            else "NSFW mode is off (Settings → Advanced → NSFW mode in the console), so 🔞 cannot be used")
-    if cfg["image"]["provider"]:
+    if kind == "video":
+        if cfg["video"]["provider"]:
+            provider, model = cfg["video"]["provider"], cfg["video"]["model"]
+    elif cfg["image"]["provider"]:
         provider, model = _canvas_channel(cfg["image"])
     return True, provider, model
 
@@ -8425,7 +8475,8 @@ def _canvas_spawn(base: Path, doc: Path, jid: str, action: str, *flags: str) -> 
             env = None
             if ic.load_job(doc, jid).get("nsfw"):        # 🔞 任务:出图走 NSFW 路由(modules/genmedia.py nsfw_route_reason)
                 env = {**os.environ, "VIDEOAGENTS_NSFW": "1"}
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=CANVAS_CLI_TIMEOUT, cwd=str(ROOT), env=env)
+            r = subprocess.run(cmd, capture_output=True, text=True, cwd=str(ROOT), env=env,
+                               timeout=CANVAS_MOTION_TIMEOUT if action == "motion" else CANVAS_CLI_TIMEOUT)
             if r.returncode != 0:
                 err = (r.stderr or r.stdout or "").strip()[-600:] or f"exit {r.returncode}"
         except Exception as e:  # noqa: BLE001
@@ -8433,7 +8484,7 @@ def _canvas_spawn(base: Path, doc: Path, jid: str, action: str, *flags: str) -> 
         try:
             job = ic.load_job(doc, jid)
             if job.get("status") in ic.ACTIVE:
-                job = ic.set_job(doc, jid, status="failed", error=err or "出图进程结束但没有产出",
+                job = ic.set_job(doc, jid, status="failed", error=err or "生成进程结束但没有产出",
                                  error_en="" if err else "The generation process ended without producing a result")
         except Exception:  # noqa: BLE001
             job = {}
@@ -8536,7 +8587,7 @@ async def api_canvas_confirm(project: str, body: dict):
         ic.set_job(doc, jid, status="queued", prompt=prompt[:8000])
     except ic.CanvasError as e:
         raise _canvas_error(e) from None
-    _canvas_spawn(base, doc, jid, "submit", "--confirmed")
+    _canvas_spawn(base, doc, jid, "motion" if job.get("op") == "motion" else "submit", "--confirmed")
     return _canvas_state(base, doc)
 
 
@@ -8554,6 +8605,120 @@ async def api_canvas_upscale(project: str, body: dict):
     except ic.CanvasError as e:
         raise _canvas_error(e) from None
     _canvas_spawn(base, doc, job["id"], "upscale")
+    return _canvas_state(base, doc)
+
+
+def _canvas_motion_work_order(base: Path, doc: Path, job: dict, hist: dict) -> str:
+    """发给画板动图 Agent 的工单(Agent 指令文本,不随界面语言;提示词语言按界面语言定)。首行 [画板动图 <任务号>] 供对话记录里检索。"""
+    absp = lambda rel: str(base / rel)   # noqa: E731
+    imgs = sorted(job["images"], key=lambda i: i["n"])
+    frames = job.get("image_mode") == "frames"
+    w, h = job.get("parent_size") or [0, 0]
+    ui = hist.get("ui") or {}
+    draft = job["op"] == "motion_prompt"
+    channel = (f"{job['provider']} {video_model_label(job['model'], job['provider'])}".strip() if job.get("provider")
+               else "「生成模型」页的全局视频渠道")
+    lines = [f"[画板动图 {job['id']}] " + ("看图写一段视频提示词,填回画板输入框" if draft else "看图写视频提示词并提交生成")
+             + f"(项目 {base.name})",
+             f"对象:{ui.get('label') or hist['source']}(类别 {hist.get('kind')};原路径 {hist['source']})"]
+    if frames:
+        lines += ["生成方式:首尾帧",
+                  f"首帧:{absp(imgs[0]['file'])}({w}x{h},画板版本 {job['parent']})——视频从这张图开始",
+                  f"尾帧:{absp(imgs[1]['file'])}(画板版本 {job['last']})——视频结束在这张图,中间怎么过渡由你写",
+                  "首尾帧模式不用 @Image N 点名,直接写画面怎么从首帧变到尾帧"]
+    else:
+        lines += ["生成方式:参考图", f"@Image 1 参考图:{absp(imgs[0]['file'])}({w}x{h},画板版本 {job['parent']})"]
+        if len(imgs) > 1:
+            lines.append(f"@Image 2 参考图:{absp(imgs[1]['file'])}(画板版本 {job['ref2']})")
+        lines.append("图是**参考图**(多参考图模式),不是首帧:视频不一定从这张图开始,模型按它取人物 / 外观 / 场景 / 画风;"
+                     "提示词里用 @Image 1" + (" / @Image 2" if len(imgs) > 1 else "") + " 点名,不写首帧 / 尾帧的说法")
+    lines.append(f"视频参数(用户在画板里定的,由宿主套用,不要改):{channel};时长 {job['duration']} 秒;分辨率 {job['resolution']};"
+                 f"画幅 {job['aspect']}({'按首帧' if frames else '按参考图'});声音{'开' if job.get('audio') else '关'}")
+    lines.append(f"用户的描述:{job['text']}" if job.get("text")
+                 else "用户的描述:(没写)——" + ("看首尾帧,写一段从首帧自然过渡到尾帧的动态" if frames else "看参考图自己构思一段自然、合理的动态"))
+    lines.append("提示词语言:" + ("中文" if _canvas_zh() else "English"))
+    if job.get("nsfw"):
+        lines.append("nsfw: true  # 用户在画板工具栏打开了 🔞:本单按 NSFW 模式路由,语言模型与视频渠道由宿主套用,不要改")
+    prompt_file = doc / "jobs" / job["id"] / "prompt.txt"
+    lines.append(f"把写好的视频提示词存到 {prompt_file},然后只跑这一条命令(几秒就返回):")
+    lines.append(f"python3 code/canvas_edit.py motion --project {base.name} --doc {doc.name} --job {job['id']} --prompt-file {prompt_file}")
+    if draft:
+        lines.append("用户点的是「让语言模型写一段」:命令只把提示词填回画板的输入框,不出视频,跑完即结束本单。")
+    elif job.get("preview"):
+        lines.append("用户勾了「发送前先看提示词」:命令只把提示词存为待确认,用户在画板确认后宿主出视频;跑完即结束本单。")
+    else:
+        lines.append("命令只收下提示词;视频由宿主在本单结束后出(要几分钟),不要等、不要自己调 genmedia。")
+    return "\n".join(lines)
+
+
+async def api_canvas_motion(project: str, body: dict):
+    """画板「动图」:以 parent 版本(页面上正在查看的)生成一段视频,结果只进这张图的动图列表。
+    {file, kind, image_mode, parent, ref2, last, text, provider, model, duration, resolution, audio, mode: agent|direct, preview, nsfw, draft_only}。
+    image_mode = ref(默认,parent 作参考图 @Image 1,ref2 = 可选的第二张 @Image 2)| frames(parent 作首帧,last = 尾帧);
+    ComfyUI 工作流类型和方式对不上时发送前就拒(image_canvas.motion_channel_problem)。
+    直接发送 = 用户写的提示词给视频模型(参考图方式没点名 @Image 1 时宿主开头补一句参考图说明),宿主后台出;经 Agent = 派画板动图 Agent 看图写提示词(用户没写描述也行),
+    它交了提示词宿主再出(_canvas_motion_after_run);preview = 先停在待确认。draft_only(「🎲 让语言模型写一段」)只写提示词填回页面。
+    provider 空 = 跟随全局视频渠道;nsfw = 工具栏 🔞:配了 NSFW 备用视频渠道时改用它,经 Agent 时派单带 nsfw,出视频子进程带 VIDEOAGENTS_NSFW=1。"""
+    from modules import image_canvas as ic
+    body = body or {}
+    base, doc, _ = _canvas_open(project, body.get("file"), body.get("kind"))
+    nsfw, provider, model = _canvas_nsfw(body, *_canvas_video_channel(body), kind="video")
+    draft = bool(body.get("draft_only"))
+    mode = "direct" if body.get("mode") == "direct" and not draft else "agent"
+    if mode == "agent" and not agent_dir(CANVAS_MOTION_AGENT):
+        raise ServiceError(404, f"Unknown agent: {CANVAS_MOTION_AGENT}")
+    payload = {k: body.get(k) for k in ("image_mode", "parent", "ref2", "last", "text", "duration", "resolution", "audio", "preview")}
+    payload.update({"provider": provider, "model": model, "mode": mode, "nsfw": nsfw, "draft_only": draft})
+    if not draft:
+        problem = await asyncio.to_thread(ic.motion_channel_problem, provider, model, str(body.get("image_mode") or "ref"))
+        if problem:
+            raise ServiceError(400, problem[0] if _canvas_zh() else problem[1])
+    try:
+        job = await asyncio.to_thread(ic.create_motion_job, base, doc, payload, run_ended=_canvas_run_ended)
+    except ic.CanvasError as e:
+        raise _canvas_error(e) from None
+    if job["status"] == "queued":
+        _canvas_spawn(base, doc, job["id"], "motion", "--template")
+    elif job["status"] == "drafting":
+        try:
+            res = await api_chat({"agent": CANVAS_MOTION_AGENT, "message": _canvas_motion_work_order(base, doc, job, ic.load_history(doc)),
+                                  "project": base.name, "source": "user", "nsfw": bool(job.get("nsfw"))})
+            ic.set_job(doc, job["id"], run_id=res.get("run_id") or "")
+        except Exception as e:  # noqa: BLE001
+            why = getattr(e, "detail", None) or e
+            ic.set_job(doc, job["id"], status="failed", error=f"派单失败:{why}"[:500], error_en=f"Dispatch failed: {why}"[:500])
+            raise
+    return _canvas_state(base, doc)
+
+
+def _canvas_motion_after_run(run: dict) -> None:
+    """画板动图 Agent 本轮结束:它交了提示词(任务 queued)→ 宿主起进程出视频。Agent 只写提示词,不在自己的回合里等几分钟的视频。"""
+    if run.get("agent") != CANVAS_MOTION_AGENT:
+        return
+    m = _CANVAS_WO_JOB_RE.search(run.get("message") or "")
+    if not m or ".." in m.group(1):
+        return
+    from modules import image_canvas as ic
+    try:
+        base = _proj_base(run.get("project") or "")
+        doc = base / ic.ROOT_REL / m.group(1)
+        job = ic.load_job(doc, m.group(2))
+    except Exception:  # noqa: BLE001
+        return
+    # 勾了「先看提示词」的由用户确认时起进程(api_canvas_confirm);用户可能在 Agent 本轮结束前就确认了,这里不能再起一次
+    if job.get("op") == "motion" and job.get("status") == "queued" and job.get("by_agent") and not job.get("preview"):
+        _canvas_spawn(base, doc, job["id"], "motion", "--confirmed")
+
+
+async def api_canvas_motion_delete(project: str, body: dict):
+    """从动图列表里删一段:{file, motion}(视频与封面挪进 trash,不真删)。"""
+    from modules import image_canvas as ic
+    body = body or {}
+    base, doc, _ = _canvas_open(project, body.get("file"), create=False)
+    try:
+        await asyncio.to_thread(ic.delete_motion, doc, str(body.get("motion") or ""))
+    except ic.CanvasError as e:
+        raise _canvas_error(e) from None
     return _canvas_state(base, doc)
 
 

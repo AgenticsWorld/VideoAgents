@@ -685,6 +685,18 @@ async def canvas_upscale(project: str, body: dict[str, Any]) -> dict[str, Any]:
     return _artifact_urls(await core.api_canvas_upscale(project, body), project)
 
 
+@api.post("/projects/{project}/canvas/motion", tags=["artifacts"])
+async def canvas_motion(project: str, body: dict[str, Any]) -> dict[str, Any]:
+    """画板「动图」:以当前查看的版本为首帧生成一段视频(或只让 Agent 看图写一段视频提示词)。"""
+    return _artifact_urls(await core.api_canvas_motion(project, body), project)
+
+
+@api.post("/projects/{project}/canvas/motion/delete", tags=["artifacts"])
+async def canvas_motion_delete(project: str, body: dict[str, Any]) -> dict[str, Any]:
+    """从这张图的动图列表里删一段(挪进回收目录,不真删)。"""
+    return _artifact_urls(await core.api_canvas_motion_delete(project, body), project)
+
+
 @api.post("/projects/{project}/canvas/transform", tags=["artifacts"])
 async def canvas_transform(project: str, body: dict[str, Any]) -> dict[str, Any]:
     """画板非 AI 操作:裁剪 / 翻转 / 旋转 / 缩放,同样记为一个版本。"""

@@ -7606,8 +7606,13 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
                    generate_audio: bool | None = None,
                    return_last_frame: str = "",
                    video_refs: list[str] | None = None,
-                   ref_image_size: str = "", group: str = "") -> str:
+                   ref_image_size: str = "", group: str = "",
+                   provider: str = "", model: str = "", resolution_gate: bool = True) -> str:
     """生成一段视频,返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json。
+
+    provider/model:调用方显式指定渠道/模型(画板「动图」页按用户所选,2026-10-21),给了就不套集级/组级覆盖;
+    Key 仍取该渠道在 genconfig 的配置,NSFW 路由照常。resolution_gate=False 跳过派单链路的分辨率闸门
+    (_resolution_gate)——仅供分辨率由用户在页面上明确选定的宿主调用,Agent 工单一律走闸门。
 
     ref_image_size 仅 ComfyUI H3 Ref2VA 工作流支持:空=内置默认 match(参考图压到
     与输出同像素面积);max=短边 ≤2048 不压缩直进模型,人脸/身份保真更好但更慢更贵,
@@ -7632,7 +7637,10 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
     """
     _forbid_dispatch_layer("视频")
     group = group or _group_from_output(output)
-    cfg = apply_nsfw_route("video", apply_group_video_override(get_config("video"), group), group)
+    base_cfg = get_config("video", provider, model) if provider else apply_group_video_override(get_config("video"), group)
+    cfg = apply_nsfw_route("video", base_cfg, group)
+    if not resolution_gate:
+        cfg = dict(cfg, _user_resolution=True)
     try:
         saved = _generate_video_with(cfg, prompt, output, first_frame, last_frame, duration, resolution, aspect,
                                      seed, refs, audio_refs, generate_audio, return_last_frame, video_refs,
@@ -7641,7 +7649,7 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
         alt = nsfw_failover_cfg("video", cfg, e, group)
         if alt is None:
             raise
-        cfg = alt
+        cfg = dict(alt, _user_resolution=True) if not resolution_gate else alt
         saved = _generate_video_with(cfg, prompt, output, first_frame, last_frame, duration, resolution, aspect,
                                      seed, refs, audio_refs, generate_audio, return_last_frame, video_refs,
                                      ref_image_size)
@@ -7660,7 +7668,8 @@ def _generate_video_with(cfg: dict, prompt: str, output: str, first_frame: str, 
     if ref_image_size and cfg["provider"] != "comfyui":
         raise RuntimeError(f"--ref-image-size 仅 ComfyUI MiniMax-H3 Ref2VA 工作流支持,"
                            f"当前渠道 {cfg['provider']} 请去掉该参数")
-    resolution = _resolution_gate(resolution)
+    if not cfg.get("_user_resolution"):
+        resolution = _resolution_gate(resolution)
     seed = seed if seed is not None else random.randint(1, 2**31)
     if cfg["provider"] == "agentics":
         data = _agentics_generate("video", cfg, {

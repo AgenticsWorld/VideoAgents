@@ -18,7 +18,7 @@
 | `05-scenes/` | 场景资产 | 5 | scene, environment, architecture, lighting, scene-modeling |
 | `06-art/` | 美术资产 | 10 | art-director, character-concept, environment-concept, creature-concept, costume-concept, prop, costume, color-script, aspect-ratio, image-retouch |
 | `07-directing/` | 导演 | 9 | director, storyboard, shot-planning, camera-movement, composition, cinematography, blocking, continuity-planning, whitebox-staging |
-| `08-video-gen/` | 视频生成 | 8 | prompt, image-generation, character-consistency, video-generation, lip-sync, animation, upscale, shot-plates |
+| `08-video-gen/` | 视频生成 | 9 | prompt, image-generation, character-consistency, video-generation, lip-sync, animation, upscale, shot-plates, canvas-motion |
 | `09-audio/` | 音频 | 7 | voice-generation, narrator, music, sound-effect, ambience, audio-mixing, audio-transcription |
 | `10-editing/` | 剪辑 | 8 | edit, transition, subtitle, caption, title, thumbnail, post-finishing, grade-planner |
 | `11-qa/` | 审核 | 12 | logic-qa, character-consistency-qa, timeline-qa, world-consistency-qa, visual-qa, audio-qa, content-safety, copyright;项目类型专属:av-sync-qa(音频配画)、mashup-qa(混剪)、digital-human-sync-qa(数字人)、code-video-qa(演示视频) |
