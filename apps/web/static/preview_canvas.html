@@ -214,7 +214,7 @@ dl.kv dd{min-width:0;word-break:break-all}
       </div>
       <div class="sec">
         <label class="opt" id="o-lock-l"><input type="checkbox" id="o-lock" checked><span>圈外锁定:出图后只取圈内贴回原图,圈外保持不变</span></label>
-        <label class="opt"><input type="checkbox" id="o-direct"><span>直接发送:文字按固定模板直接发给图像模型,不经 Agent 整理(快,适合小改)</span></label>
+        <label class="opt"><input type="checkbox" id="o-direct"><span>直接发给图像模型,不经 Agent 整理(快,适合小改)</span></label>
         <label class="opt"><input type="checkbox" id="o-preview"><span>发送前先看提示词:确认或修改后再出图</span></label>
         <div class="row" style="margin-top:8px"><button class="pri" id="send">发送</button><span class="hint" id="send-hint"></span></div>
         <div class="err" id="edit-err"></div>
@@ -587,12 +587,19 @@ const nsfwMode=()=>(S&&S.nsfw_mode)||{enabled:false};
 const nsfwActive=()=>NSFW_ON&&nsfwMode().enabled;
 const nsfwImage=()=>nsfwActive()?nsfwMode().image||null:null;
 const chDesc=c=>[c.provider,c.model].filter(Boolean).join(' ');
+// 🔞 生效时自动勾上「直接发给图像模型」(不经修图 Agent,免得语言模型拒单),用户可再取消;🔞 失效时只撤回自动勾的那一下,用户自己动过就不管
+let NSFW_WAS=false, DIRECT_AUTO=false;
 function syncNsfw(){
-  const m=nsfwMode(), on=nsfwActive(), img=nsfwImage(), b=$('#nsfw');
+  const m=nsfwMode(), on=nsfwActive(), img=nsfwImage(), b=$('#nsfw'), d=$('#o-direct');
+  if(on!==NSFW_WAS){
+    if(on&&!d.checked){d.checked=true;DIRECT_AUTO=true}
+    else if(!on&&DIRECT_AUTO){d.checked=false;DIRECT_AUTO=false}
+    NSFW_WAS=on;
+  }
   b.hidden=$('#nsfw-sep').hidden=!m.enabled;
   b.classList.toggle('warn',on);
   b.title=on?t('已打开:本图的编辑与重绘放大走 NSFW 模式的备用模型;点击关闭')
-    :t('打开后,本图的编辑与重绘放大改走「设置→高级→NSFW 模式」的备用模型:画板修图 Agent 用备用语言模型,图像用备用渠道');
+    :t('打开后,本图的编辑与重绘放大改走「设置→高级→NSFW 模式」的备用模型:图像用备用渠道;编辑自动勾选「直接发给图像模型」,不经画板修图 Agent(取消勾选则修图 Agent 用备用语言模型)');
   [['#imp-edit','#imp-edit-nsfw'],['#imp-up','#imp-up-nsfw']].forEach(([host,note])=>{
     $(host).style.opacity=img?'.45':'';$(host).style.pointerEvents=img?'none':'';
     $(note).hidden=!on;
@@ -616,9 +623,10 @@ $('#nsfw').onclick=()=>{
 function syncSendHint(){
   const direct=$('#o-direct').checked, txt=nsfwMode().text;
   $('#send-hint').textContent=(!direct&&S&&!S.agent?t('没有找到画板修图 Agent,只能直接发送'):direct?t('直接发给图像模型'):t('先由画板修图 Agent 整理成提示词'))
-    +(nsfwActive()&&!direct&&S&&S.agent?' · '+(txt?F('🔞 语言模型改用 {m}',{m:txt.engine+' / '+(txt.model||t('引擎默认'))}):t('🔞 没有配置 NSFW 备用语言模型,沿用当前引擎')):'');
+    +(nsfwActive()&&!direct&&S&&S.agent?' · '+(txt?F('🔞 语言模型改用 {m}',{m:txt.engine+' / '+(txt.model||t('引擎默认'))}):t('🔞 没有配置 NSFW 备用语言模型,沿用当前引擎')):'')
+    +(nsfwActive()&&direct&&DIRECT_AUTO&&S&&S.agent?' · '+t('🔞 已自动勾选,取消勾选则改经画板修图 Agent'):'');
 }
-$('#o-direct').onchange=syncSendHint;
+$('#o-direct').onchange=()=>{DIRECT_AUTO=false;syncSendHint()};
 $('#send').onclick=async()=>{
   $('#edit-err').textContent='';
   const ch=PICK_EDIT?PICK_EDIT.value():{};
