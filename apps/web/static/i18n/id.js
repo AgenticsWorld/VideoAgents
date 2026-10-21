@@ -4517,6 +4517,7 @@ window.I18N_DICT = {
 "测试中…": "Menguji…",
 "测试失败": "Uji gagal",
 "Jev 1.13(TypeSafe)· 决策模型,直接给出各类别的概率": "Jev 1.13 (TypeSafe) · model keputusan yang langsung memberi probabilitas tiap kategori",
+"Jev 1.14(TypeSafe)· 决策模型,直接给出各类别的概率": "Jev 1.14 (TypeSafe) · model keputusan yang langsung memberi probabilitas tiap kategori",
 "用一段拒绝样例真实调用一次(计费,约 $0.00003)": "Melakukan satu panggilan nyata dengan contoh penolakan (berbayar, sekitar $0.00003)",
 "置信度 {p}": "keyakinan {p}",
 "✓ 可用:拒绝样例判为 policy": "✓ Berfungsi: contoh penolakan dinilai policy",

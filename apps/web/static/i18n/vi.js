@@ -4517,6 +4517,7 @@ window.I18N_DICT = {
 "测试中…": "Đang kiểm tra…",
 "测试失败": "Kiểm tra thất bại",
 "Jev 1.13(TypeSafe)· 决策模型,直接给出各类别的概率": "Jev 1.13 (TypeSafe) · mô hình quyết định, trả thẳng xác suất cho từng loại",
+"Jev 1.14(TypeSafe)· 决策模型,直接给出各类别的概率": "Jev 1.14 (TypeSafe) · mô hình quyết định, trả thẳng xác suất cho từng loại",
 "用一段拒绝样例真实调用一次(计费,约 $0.00003)": "Gọi thật một lần với một câu từ chối mẫu (tính phí, khoảng $0.00003)",
 "置信度 {p}": "độ tin cậy {p}",
 "✓ 可用:拒绝样例判为 policy": "✓ Dùng được: câu từ chối mẫu được xét là policy",

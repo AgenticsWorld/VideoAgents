@@ -246,6 +246,11 @@ def test_moderation_config_gates_judge_switch(monkeypatch):
     d = asyncio.run(core.api_nsfw_set({"judge": True}))
     assert d["judge"] is True and d["judge_model"]["ready"] is True and saved[-1]["judge"] is True
     assert asyncio.run(core.api_nsfw_set({"judge": False}))["judge"] is False     # 关闭不需要审核模型可用
+    gc["moderation"]["openrouter"]["model"] = "typesafe/jev-1.14"
+    assert core.resolve_moderation()["model"] == "typesafe/jev-1.14"               # 2026-10-21 加入清单
+    keep = {"moderation": {"openrouter": {"api_key": "", "model": "typesafe/jev-1.14"}}}
+    core._migrate_genconfig(keep)
+    assert keep["moderation"]["openrouter"]["model"] == "typesafe/jev-1.14"        # 迁移不把 1.14 改回 1.13
     gc["moderation"]["openrouter"]["model"] = "typesafe/jev-router"
     assert core.moderation_status()["ready"] is False                              # 只认清单里的模型
     gc["moderation"]["openrouter"].update(api_key="", model="typesafe/jev-1.13")

@@ -1379,7 +1379,8 @@ function buildDeepagents(){
 
 /* ---------- 审核模型(2026-10-20,NSFW 模式的拒绝判定):TypeSafe 决策模型 Jev,走 OpenRouter Decisions API
    (Agentics 不支持该接口,只有 OpenRouter 一个渠道);模型清单与 modules/refusal_judge.MODELS 一致,只能选清单里的 ---------- */
-const MOD_MODELS=[['typesafe/jev-1.13','Jev 1.13(TypeSafe)· 决策模型,直接给出各类别的概率']];
+const MOD_MODELS=[['typesafe/jev-1.13','Jev 1.13(TypeSafe)· 决策模型,直接给出各类别的概率'],
+  ['typesafe/jev-1.14','Jev 1.14(TypeSafe)· 决策模型,直接给出各类别的概率']];
 function buildModeration(){
   const o=el('div',{className:'panel show',id:'panel-mod-openrouter'});
   o.appendChild(keyRow('mod-or-key','sk-or-v1-…'));

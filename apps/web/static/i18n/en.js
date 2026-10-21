@@ -4528,6 +4528,7 @@ window.I18N_DICT = {
 "测试中…": "Testing…",
 "测试失败": "Test failed",
 "Jev 1.13(TypeSafe)· 决策模型,直接给出各类别的概率": "Jev 1.13 (TypeSafe) · decision model that returns a probability for each category",
+"Jev 1.14(TypeSafe)· 决策模型,直接给出各类别的概率": "Jev 1.14 (TypeSafe) · decision model that returns a probability for each category",
 "用一段拒绝样例真实调用一次(计费,约 $0.00003)": "Makes one real call with a sample refusal (billed, about $0.00003)",
 "置信度 {p}": "confidence {p}",
 "✓ 可用:拒绝样例判为 policy": "✓ Works: the sample refusal was classed as policy",

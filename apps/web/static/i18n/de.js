@@ -4517,6 +4517,7 @@ window.I18N_DICT = {
 "测试中…": "Teste…",
 "测试失败": "Test fehlgeschlagen",
 "Jev 1.13(TypeSafe)· 决策模型,直接给出各类别的概率": "Jev 1.13 (TypeSafe) · Entscheidungsmodell, liefert direkt eine Wahrscheinlichkeit je Kategorie",
+"Jev 1.14(TypeSafe)· 决策模型,直接给出各类别的概率": "Jev 1.14 (TypeSafe) · Entscheidungsmodell, liefert direkt eine Wahrscheinlichkeit je Kategorie",
 "用一段拒绝样例真实调用一次(计费,约 $0.00003)": "Ruft einmal echt mit einer Beispiel-Ablehnung auf (kostenpflichtig, ca. $0.00003)",
 "置信度 {p}": "Konfidenz {p}",
 "✓ 可用:拒绝样例判为 policy": "✓ Funktioniert: Die Beispiel-Ablehnung wurde als policy eingestuft",

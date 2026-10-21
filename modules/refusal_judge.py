@@ -10,6 +10,7 @@
 - 只给回复正文末尾 TAIL 字,不给原始请求与图片。
 - 2026-10-20 实测(用户拍板换掉路由聊天模型 typesafe/jev-router):原工单 4542f699e746 的拒绝判 policy(概率 1),
   缺文件 / 反问 / 已完成三类各判对;单次约 700 输入 token、$0.00002–0.00003、1.4 s。Agentics 渠道不支持该接口,只走 OpenRouter。
+- 2026-10-21 按用户要求加入 typesafe/jev-1.14(2026-10-14 发布,快照 jev-1.14-20261014),默认仍是 jev-1.13。
 """
 from __future__ import annotations
 
@@ -18,7 +19,7 @@ import time
 import urllib.error
 import urllib.request
 
-MODELS = ("typesafe/jev-1.13",)
+MODELS = ("typesafe/jev-1.13", "typesafe/jev-1.14")
 URL = "https://openrouter.ai/api/alpha/decisions"
 KINDS = ("policy", "missing_input", "clarification", "done", "other")
 TAIL = 1500
