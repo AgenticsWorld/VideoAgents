@@ -99,6 +99,7 @@ a.btn:hover{border-color:var(--accent)}
 .badge.fin{border-color:var(--green);color:var(--green)}
 .badge.warn{border-color:var(--yellow);color:var(--yellow)}
 .badge.key{border-color:var(--purple);color:var(--purple)}
+.badge.sty{border-color:var(--accent);color:var(--accent);max-width:180px;overflow:hidden;text-overflow:ellipsis}
 dl.kv{display:grid;grid-template-columns:max-content 1fr;gap:3px 12px}
 dl.kv dt{color:var(--dim)}
 dl.kv dd{min-width:0;word-break:break-all}
@@ -124,6 +125,21 @@ dl.kv dd{min-width:0;word-break:break-all}
 .empty{color:var(--dim);text-align:center;margin-top:40px}
 #side .imp{display:flex;width:100%;gap:6px}
 #side .imp select,#side .imp input{flex:1;min-width:0;max-width:none}
+/* 风格库弹窗(整体说明 → 🎨 选择风格库;库与控制台「画面风格」的风格库是同一份) */
+.sty-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:8px 0}
+.sty-bar #sty-q{margin-inline-start:auto;width:170px}
+.sty-chip{border:1px solid var(--border);border-radius:14px;padding:2px 12px;cursor:pointer;user-select:none;background:var(--panel2)}
+.sty-chip:hover{border-color:var(--accent)}
+.sty-chip.on{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
+.sty-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;padding:2px}
+.sty-card{position:relative;border:2px solid transparent;border-radius:8px;overflow:hidden;cursor:pointer;aspect-ratio:3/2;background:var(--panel2)}
+.sty-card:hover{border-color:var(--accent)}
+.sty-card.on{border-color:var(--green)}
+.sty-card img{width:100%;height:100%;object-fit:cover;display:block}
+.sty-card .nm{position:absolute;left:0;right:0;bottom:0;padding:14px 8px 5px;font-size:12px;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.78));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sty-card .cat{position:absolute;top:5px;right:5px;font-size:10px;background:rgba(0,0,0,.55);color:#fff;border-radius:4px;padding:0 5px}
+.sty-card .zoom{position:absolute;top:5px;left:5px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px;background:rgba(0,0,0,.55);border-radius:4px;cursor:zoom-in;opacity:.75}
+.sty-card .zoom:hover{opacity:1}
 </style>
 </head>
 <body>
@@ -184,8 +200,9 @@ dl.kv dd{min-width:0;word-break:break-all}
         <div id="rgs"></div>
         <div class="hint" id="rg-hint">用上方的矩形 / 椭圆 / 套索 / 画笔在图上圈出要改的位置,每个区域可以单独写修改内容;不圈就是对整张图提要求</div>
       </div>
-      <div class="sec"><h3>整体说明</h3>
+      <div class="sec"><h3>整体说明<button class="sm" id="sty-pick" style="margin-inline-start:auto" title="从风格库挑一种画风写进整体说明:只用于这次编辑试效果,不改项目的画面风格">🎨 选择风格库</button></h3>
         <textarea id="txt" rows="4" placeholder="要改什么;输入 @ 可以点名一张参考图"></textarea>
+        <div class="hint" id="sty-note" hidden></div>
       </div>
       <div class="sec"><h3>参考图<span class="n" id="rf-n"></span></h3>
         <div id="refs"></div>
@@ -498,6 +515,61 @@ $('#rf-lib').onclick=async()=>{
   };
   load();
 };
+/* 风格库:挑一种画风,把「整体改成这种风格」连同该风格的提示词写进整体说明。只是这次编辑的文字,项目设定的画面风格不动;
+   发送时整体说明里还留着这段风格描述,就带上 style,服务端把提示词开头的「保持原图风格」换成「构图不动、按下文换风格」 */
+// 同 index.html 的 STYLE_LIB_V(静态文件不带 Cache-Control,改了 styles/ 下任何文件两处一起改)
+const STYLE_LIB_V='20261021';
+let STYLE_LIB=null, STY_CAT='全部', STY=null, STY_LINE='';
+async function loadStyleLib(){
+  if(!STYLE_LIB){
+    const r=await fetch('/static/styles/style_library.json?v='+STYLE_LIB_V);
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const lib=await r.json();
+    let tr={};
+    if(I18N.lang!=='zh'){try{const r2=await fetch('/static/styles/i18n/'+I18N.lang+'.json?v='+STYLE_LIB_V);if(r2.ok)tr=await r2.json()}catch(_){}}
+    lib.forEach(s=>{const x=tr[s.id]||{};s.tname=x.name||s.name;s.tprompt=x.prompt||s.prompt});
+    STYLE_LIB=lib;
+  }
+  return STYLE_LIB;
+}
+// 整体说明里还留着所选风格的描述(用户可以改前后的话,只要风格那段还在)才算风格测试
+const styleInText=()=>STY&&$('#txt').value.includes(STY.tprompt)?STY:null;
+function syncStyleNote(){
+  const s=styleInText();
+  $('#sty-note').hidden=!s;
+  $('#sty-note').textContent=s?F('🎨 风格测试:{name} · 只用于这次编辑,不改项目的画面风格',{name:s.tname}):'';
+}
+function pickStyle(s){
+  const el=$('#txt'), line=F('整体改成「{name}」画面风格(只换画风,构图、人物、物件和位置保持不变):{prompt}',{name:s.tname,prompt:s.tprompt});
+  el.value=STY_LINE&&el.value.includes(STY_LINE)?el.value.replace(STY_LINE,line):(el.value.trim()?el.value.replace(/\s+$/,'')+'\n':'')+line;   // 再选一种就替换上一种
+  STY=s;STY_LINE=line;closeModal();el.focus();syncStyleNote();
+}
+function renderStyleGrid(){
+  const kw=$('#sty-q').value.trim().toLowerCase(), cur=styleInText();
+  const hit=s=>[s.tname,s.tprompt,s.name,s.prompt].some(v=>v.toLowerCase().includes(kw));
+  $('#sty-cats').innerHTML=['全部',...new Set(STYLE_LIB.map(s=>s.category))]
+    .map(c=>`<span class="sty-chip${c===STY_CAT?' on':''}" data-cat="${esc(c)}">${esc(t(c))}</span>`).join('');
+  const list=STYLE_LIB.filter(s=>(STY_CAT==='全部'||s.category===STY_CAT)&&(!kw||hit(s)));
+  $('#sty-grid').innerHTML=list.length?list.map(s=>`<div class="sty-card${cur&&cur.id===s.id?' on':''}" data-sty="${esc(s.id)}" title="${esc(s.tprompt)}">`
+    +`<img loading="lazy" src="/static/styles/${esc(s.image)}?v=${STYLE_LIB_V}" alt=""><span class="zoom" data-szoom="${esc(s.image)}" title="${esc(t('放大查看'))}">🔍</span>`
+    +`<span class="cat">${esc(t(s.category))}</span><span class="nm" data-no-i18n>${esc(s.tname)}</span></div>`).join('')
+    :`<div class="empty">${esc(t('没有匹配的风格'))}</div>`;
+}
+$('#sty-pick').onclick=async()=>{
+  try{await loadStyleLib()}catch(err){toast(t('风格库加载失败:')+err.message,true);return}
+  modal(t('🎨 选择风格库'),`<div class="hint">${esc(t('从风格库挑一种画风写进整体说明:只用于这次编辑试效果,不改项目的画面风格'))}</div>`
+    +`<div class="sty-bar"><span id="sty-cats" style="display:flex;gap:6px;flex-wrap:wrap"></span><input type="text" id="sty-q" placeholder="${esc(t('搜索风格…'))}"></div>`
+    +`<div class="sty-grid" id="sty-grid"></div>`,[{label:t('关闭')}],true);
+  renderStyleGrid();
+  $('#sty-q').oninput=renderStyleGrid;
+  $('#sty-cats').onclick=e=>{const c=e.target.dataset.cat;if(c){STY_CAT=c;renderStyleGrid()}};
+  $('#sty-grid').onclick=e=>{
+    if(e.target.dataset.szoom){$('#lightbox img').src='/static/styles/'+e.target.dataset.szoom+'?v='+STYLE_LIB_V;$('#lightbox').style.display='flex';return}
+    const c=e.target.closest('[data-sty]');if(c)pickStyle(STYLE_LIB.find(s=>s.id===c.dataset.sty));
+  };
+};
+$('#txt').addEventListener('input',syncStyleNote);
+
 /* @ 点名参考图:在文字里敲 @ 弹出托盘清单 */
 const mbox=$('#mention');
 document.addEventListener('input',e=>{
@@ -552,6 +624,7 @@ $('#send').onclick=async()=>{
   const ch=PICK_EDIT?PICK_EDIT.value():{};
   const body=withFile({parent:VIEW,regions:REGIONS,text:$('#txt').value.trim(),refs:usedRefs(),provider:ch.provider||'',model:ch.model||'',
     lock:$('#o-lock').checked&&!!REGIONS.length,mode:$('#o-direct').checked||!S.agent?'direct':'agent',preview:$('#o-preview').checked,nsfw:nsfwActive()});
+  const sty=styleInText();if(sty)body.style={id:sty.id,name:sty.tname};
   $('#send').disabled=true;
   try{apply(await api('/edit',body));toast(t('已发送'))}
   catch(err){$('#edit-err').textContent=err.message}
@@ -721,6 +794,7 @@ function renderVers(){
     if(v.plate_key)b.push(`<span class="badge key" data-no-i18n title="${esc(t('已登记进背景图库'))}">${esc(v.plate_key)}</span>`);
     if(lock.applied)b.push(`<span class="badge${lock.warn?' warn':''}" title="${esc(lock.warn?t('模型把圈外也改了不少(可能整张图挪了位置):圈内贴回原图后接缝可能对不上,可以改用整图看看'):t('圈外保持原图不变'))}">${esc(t(lock.warn?'圈外漂移':'圈外锁定'))}</span>`);
     if(v.aspect_changed)b.push(`<span class="badge warn">${esc(t('画幅变了'))}</span>`);
+    if(v.style)b.push(`<span class="badge sty" data-no-i18n title="${esc(t('风格测试:按风格库里的这种画风试改,项目的画面风格不变'))}">🎨 ${esc(v.style.name)}</span>`);
     if(v.nsfw&&nsfwMode().enabled)b.push(`<span class="badge warn" title="${esc(t('按 NSFW 模式的备用模型出的图'))}">🔞</span>`);
     const use=v.usage&&v.usage.total_tokens?F('用量 {n} tokens',{n:v.usage.total_tokens}):'';
     const meta=[`${v.width}×${v.height}`,fmtSize(v.bytes),[v.provider,v.model].filter(Boolean).join(' '),use,fmtTime(v.created_at),v.parent?'← '+v.parent:''].filter(Boolean).join(' · ');

@@ -43,6 +43,7 @@ STALE_S = {'queued': 15 * 60, 'drafting': 45 * 60, 'running': 30 * 60, 'awaiting
 MAX_REGIONS = 12
 MAX_REFS = 8                      # 一次编辑带的用户参考图上限(原图与标注图另算)
 MAX_TEXT = 2000
+MAX_STYLE_NAME = 80               # 风格测试记下的风格名(风格库条目名,页面按界面语言取)
 MAX_EDGE = 8192                   # 手动缩放 / 放大目标的单边上限
 JPEG_QUALITY = 95
 PNG_MAX_BYTES = 2 * 1024 * 1024   # 无透明的 PNG 超过这个体积改存 JPEG 字节(方舟内联参考图上限,见 genmedia REF_INLINE_MAX_BYTES)
@@ -653,8 +654,13 @@ def compose_prompt(job: dict) -> str:
     regions = job.get('regions') or []
     image_no = {int(k): v for k, v in (job.get('images_by_ref') or {}).items()}
     fix = lambda s: resolve_mentions(s, image_no).strip()   # noqa: E731
-    lines = ['Edit [Image 1]. Keep the framing, composition, camera angle, lighting, colour and style exactly as in [Image 1], '
-             'and leave everything that is not mentioned below unchanged. Return the complete image.']
+    # 风格测试(job.style,用户从风格库挑了一种画风写进整体说明):开头不再要求保持原图风格,改成「构图不动、按下文换画风」
+    keep = ('Keep the framing, composition, camera angle, subjects and their positions exactly as in [Image 1], but change the visual style '
+            'as instructed below (the requested style replaces the original rendering, colour treatment and lighting mood); '
+            'leave everything else that is not mentioned below unchanged.' if job.get('style') else
+            'Keep the framing, composition, camera angle, lighting, colour and style exactly as in [Image 1], '
+            'and leave everything that is not mentioned below unchanged.')
+    lines = [f'Edit [Image 1]. {keep} Return the complete image.']
     if regions:
         lines.append('[Image 2] is a copy of [Image 1] with numbered coloured outlines marking where to edit. '
                      'The outlines and numbers are guides only and must not appear in the result.')
@@ -671,16 +677,26 @@ def compose_prompt(job: dict) -> str:
     return '\n'.join(lines)
 
 
+def norm_style(raw) -> dict | None:
+    """风格测试标记 {id, name}:页面在整体说明里还留着从风格库选的那段风格描述时才带;只影响这一次编辑,不碰项目设定的画面风格。"""
+    if not isinstance(raw, dict):
+        return None
+    name = str(raw.get('name') or '').strip()[:MAX_STYLE_NAME]
+    return {'id': str(raw.get('id') or '').strip()[:64], 'name': name} if name else None
+
+
 def create_edit_job(base: Path, doc: Path, payload: dict, *, run_ended=None) -> dict:
     """建一个编辑任务:校验 → 画蒙版 / 带圈标注图 / 各区域裁切图 → 写 job.json(状态由调用方按发送方式定)。
-    payload: {parent, regions, text, refs:[n…], provider, model, lock, mode: agent|direct, preview, nsfw}。
-    nsfw = 用户在画板工具栏打开了 🔞(宿主已把 provider / model 换成 NSFW 备用图像渠道),记进任务供派单 / 出图子进程路由。"""
+    payload: {parent, regions, text, refs:[n…], provider, model, lock, mode: agent|direct, preview, nsfw, style}。
+    nsfw = 用户在画板工具栏打开了 🔞(宿主已把 provider / model 换成 NSFW 备用图像渠道),记进任务供派单 / 出图子进程路由。
+    style = 风格测试 {id, name}(norm_style),提示词开头改成换画风的说法,任务与版本记下风格名。"""
     from PIL import Image
     regions = norm_regions(payload.get('regions'))
     text = str(payload.get('text') or '').strip()[:MAX_TEXT]
     if not text and not any(r['text'] for r in regions):
         raise CanvasError('写一下要改什么(整体说明或某个区域的说明)', en='Describe what to change (overall instruction or a region instruction)')
     mode = 'direct' if payload.get('mode') == 'direct' else 'agent'
+    style = norm_style(payload.get('style'))
 
     def _do(h: dict):
         busy = active_job(doc, h, run_ended)
@@ -700,7 +716,7 @@ def create_edit_job(base: Path, doc: Path, payload: dict, *, run_ended=None) -> 
         job = _new_job(doc, h, {'op': 'edit', 'status': status, 'parent': parent['id'], 'mode': mode, 'preview': preview,
                                 'lock': bool(payload.get('lock')) and bool(regions), 'text': text, 'regions': regions,
                                 'provider': str(payload.get('provider') or ''), 'model': str(payload.get('model') or ''),
-                                **({'nsfw': True} if payload.get('nsfw') else {})})
+                                **({'nsfw': True} if payload.get('nsfw') else {}), **({'style': style} if style else {})})
         jd = _job_dir(doc, job['id'])
         src = doc / parent['file']
         suffix = src.suffix
@@ -898,7 +914,7 @@ def run_edit(base: Path, doc: Path, jid: str, prompt: str, *, generate=None, log
                              regions=[{k: r[k] for k in r if k != 'crop'} for r in regions],
                              refs=[{'n': i['ref'], 'file': i['file'], 'note': i.get('note') or ''} for i in images if i['role'] == 'ref'],
                              seed=seed, model_size=model_size, lock=lock, usage=_job_usage(jd), nsfw=job.get('nsfw') or None,
-                             aspect_changed=not _same_aspect(tuple(model_size), (W, H)) or None)
+                             style=job.get('style') or None, aspect_changed=not _same_aspect(tuple(model_size), (W, H)) or None)
             if lock.get('applied') and raw_im is not None:
                 name = f"{v['id']}.raw{Path(v['file']).suffix}"
                 (doc / name).write_bytes(encode_image(raw_im, like))
@@ -1019,7 +1035,7 @@ def unlock_version(base: Path, doc: Path, vid: str) -> dict:
     if not raw or not (doc / raw).is_file():
         raise CanvasError('这个版本没有可用的整图(不是圈外锁定出的)', en='This version has no full-image result (it was not produced with outside-lock)')
     data = (doc / raw).read_bytes()
-    keep = {k: v.get(k) for k in ('job', 'mode', 'provider', 'model', 'prompt', 'text', 'regions', 'refs', 'seed', 'model_size', 'nsfw')}
+    keep = {k: v.get(k) for k in ('job', 'mode', 'provider', 'model', 'prompt', 'text', 'regions', 'refs', 'seed', 'model_size', 'nsfw', 'style')}
     return mutate(doc, lambda hist: _add_version(doc, hist, data, op='edit', parent=v.get('parent'), from_raw=vid,
                                                  lock={'applied': False, 'from_raw': vid}, **keep))
 
@@ -1193,7 +1209,7 @@ def public_job(job: dict | None) -> dict | None:
     if not job:
         return None
     keep = ('id', 'op', 'status', 'mode', 'preview', 'parent', 'created_at', 'updated_at', 'error', 'error_en', 'version', 'run_id', 'prompt',
-            'template_prompt', 'provider', 'model', 'target', 'upscaler', 'lock', 'text', 'nsfw', 'refused')
+            'template_prompt', 'provider', 'model', 'target', 'upscaler', 'lock', 'text', 'nsfw', 'refused', 'style')
     return {k: job.get(k) for k in keep if job.get(k) not in (None, '')}
 
 

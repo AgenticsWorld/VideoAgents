@@ -8459,6 +8459,9 @@ def _canvas_work_order(base: Path, doc: Path, job: dict, hist: dict) -> str:
             lines.append(f"  区域{r['n']}({ic.region_where(r)};裁切图 {absp(r['crop']) if r.get('crop') else '-'}):"
                          f"{r.get('text') or '(没有单独说明,按整体说明处理)'}")
     lines.append(f"整体说明:{job.get('text') or '(无)'}")
+    if job.get("style"):
+        lines.append(f"风格测试:用户从风格库选了「{job['style']['name']}」,整体说明里那段风格描述就是要换成的画风——本单要换画风,"
+                     "模板开头已改成「构图不动、按下文换风格」,照它保留;只试这一张图,不涉及项目设定的画面风格")
     refs = [i for i in job["images"] if i["role"] == "ref"]
     if refs:
         lines.append("参考图(用户文字里的 @图N / @refN 指的就是它们):")
@@ -8480,9 +8483,10 @@ def _canvas_work_order(base: Path, doc: Path, job: dict, hist: dict) -> str:
 
 
 async def api_canvas_edit(project: str, body: dict):
-    """画板「编辑」发送:{file, kind, parent, regions[], text, refs[参考图编号], provider, model, lock, mode: agent|direct, preview, nsfw}。
+    """画板「编辑」发送:{file, kind, parent, regions[], text, refs[参考图编号], provider, model, lock, mode: agent|direct, preview, nsfw, style}。
     直接发送 = 宿主按模板提示词出图;经 Agent = 派画板修图 Agent 整理提示词;preview = 先停在待确认,用户看过提示词再出图。
-    nsfw = 工具栏 🔞:图像改用 NSFW 备用渠道,经 Agent 时派单带 nsfw(备用语言模型),出图子进程带 VIDEOAGENTS_NSFW=1。"""
+    nsfw = 工具栏 🔞:图像改用 NSFW 备用渠道,经 Agent 时派单带 nsfw(备用语言模型),出图子进程带 VIDEOAGENTS_NSFW=1。
+    style = 风格测试 {id, name}:整体说明里写着从风格库选的画风,提示词模板与工单按换画风写;项目设定的画面风格不动。"""
     from modules import image_canvas as ic
     body = body or {}
     base, doc, hist = _canvas_open(project, body.get("file"), body.get("kind"))
@@ -8490,7 +8494,7 @@ async def api_canvas_edit(project: str, body: dict):
     mode = "direct" if body.get("mode") == "direct" else "agent"
     if mode == "agent" and not agent_dir(CANVAS_AGENT):
         raise ServiceError(404, f"Unknown agent: {CANVAS_AGENT}")
-    payload = {k: body.get(k) for k in ("parent", "regions", "text", "refs", "lock", "preview")}
+    payload = {k: body.get(k) for k in ("parent", "regions", "text", "refs", "lock", "preview", "style")}
     payload.update({"provider": provider, "model": model, "mode": mode, "nsfw": nsfw})
     try:
         job = await asyncio.to_thread(ic.create_edit_job, base, doc, payload, run_ended=_canvas_run_ended)

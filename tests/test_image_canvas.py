@@ -757,6 +757,42 @@ def test_nsfw_job_spawns_with_nsfw_env_and_marks_version(base, channel, monkeypa
     assert 'nsfw' not in v2
 
 
+def test_style_test_switches_template_and_is_recorded(base, channel):
+    """整体说明 → 🎨 选择风格库:带 style 时提示词开头不再要求保持原图风格;任务 / 版本记风格名,「改用整图」沿用;不带或格式不对时照旧。"""
+    doc, _ = ic.open_doc(base, SHEET)
+    keep_style = 'lighting, colour and style exactly as in [Image 1]'
+    style = {'id': '1780651424491_style', 'name': '复古科幻原子朋克'}
+    job = ic.create_edit_job(base, doc, edit_payload(refs=[], preview=False, text='整体改成「复古科幻原子朋克」画面风格:…', style=style))
+    p = job['template_prompt']
+    assert job['style'] == style and ic.public_job(job)['style'] == style
+    assert keep_style not in p and 'but change the visual style as instructed below' in p and p.rstrip().endswith('Change only the marked regions.')
+    v = ic.run_edit(base, doc, job['id'], 'Restyle.', generate=lambda p, o, r, s, sd: Image.new('RGB', (320, 180), 'navy').save(o, 'PNG'), log=QUIET)
+    assert v['style'] == style and ic.unlock_version(base, doc, v['id'])['style'] == style
+    for junk in (None, 'x', {'id': 'only-id'}, {'name': '  '}):
+        plain = ic.create_edit_job(base, doc, edit_payload(refs=[], preview=False, style=junk))
+        assert 'style' not in plain and keep_style in plain['template_prompt']
+        ic.set_job(doc, plain['id'], status='cancelled')
+
+
+def test_api_style_test_passes_through_to_work_order(runtime):
+    core, base, spawned, chats = runtime
+    st = asyncio.run(core.api_canvas_edit('p', {'file': SHEET, **edit_payload(refs=[], mode='agent', preview=False),
+                                                'style': {'id': 's1', 'name': '水彩绘本'}}))
+    assert st['job']['style'] == {'id': 's1', 'name': '水彩绘本'}
+    assert '风格测试:用户从风格库选了「水彩绘本」' in chats[-1]['message'] and 'but change the visual style' in chats[-1]['message']
+    ic.set_job(ic.doc_dir_of(base, SHEET), st['job']['id'], status='cancelled')
+    asyncio.run(core.api_canvas_edit('p', {'file': SHEET, **edit_payload(refs=[], mode='agent', preview=False)}))
+    assert '风格测试' not in chats[-1]['message']
+
+
+def test_canvas_style_library_version_matches_console():
+    """画板与控制台读同一份风格库:两页的 STYLE_LIB_V 须一致(改了 styles/ 下任何文件两处一起改)。"""
+    import re
+    static = Path(__file__).resolve().parents[1] / 'apps/web/static'
+    ver = lambda name: re.findall(r"const STYLE_LIB_V='([^']+)'", (static / name).read_text(encoding='utf-8'))   # noqa: E731
+    assert len(ver('index.html')) == 1 and ver('preview_canvas.html') == ver('index.html')
+
+
 def test_api_transform_upscale_version_refs_limits(runtime, monkeypatch):
     core, base, spawned, chats = runtime
     st = asyncio.run(core.api_canvas_transform('p', {'file': SHEET, 'version': 'v000', 'op': 'flip_h'}))

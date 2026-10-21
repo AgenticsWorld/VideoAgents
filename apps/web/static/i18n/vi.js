@@ -4794,4 +4794,9 @@ window.I18N_DICT = {
 "上一页": "Trang trước",
 "下一页": "Trang sau",
 "读取项目列表失败:": "Không tải được danh sách dự án: ",
+"从风格库挑一种画风写进整体说明:只用于这次编辑试效果,不改项目的画面风格": "Chọn một phong cách từ thư viện phong cách và ghi vào mô tả tổng thể: chỉ thử cho lần chỉnh sửa này, không đổi phong cách hình ảnh của dự án",
+"🎨 风格测试:{name} · 只用于这次编辑,不改项目的画面风格": "🎨 Thử phong cách: {name} · chỉ cho lần chỉnh sửa này, phong cách hình ảnh của dự án không đổi",
+"整体改成「{name}」画面风格(只换画风,构图、人物、物件和位置保持不变):{prompt}": "Đổi toàn bộ ảnh sang phong cách hình ảnh \"{name}\" (chỉ đổi phong cách thể hiện; giữ nguyên bố cục, nhân vật, đồ vật và vị trí): {prompt}",
+"没有匹配的风格": "Không có phong cách phù hợp",
+"风格测试:按风格库里的这种画风试改,项目的画面风格不变": "Thử phong cách: bản này thử phong cách này trong thư viện phong cách; phong cách hình ảnh của dự án không đổi",
 };

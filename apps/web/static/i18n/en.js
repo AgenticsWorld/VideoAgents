@@ -4786,4 +4786,9 @@ window.I18N_DICT = {
 "上一页": "Previous page",
 "下一页": "Next page",
 "读取项目列表失败:": "Could not load the project list: ",
+"从风格库挑一种画风写进整体说明:只用于这次编辑试效果,不改项目的画面风格": "Pick a style from the style library and write it into the overall instruction: it only tries the look on this edit and does not change the project's visual style",
+"🎨 风格测试:{name} · 只用于这次编辑,不改项目的画面风格": "🎨 Style test: {name} · this edit only; the project's visual style is unchanged",
+"整体改成「{name}」画面风格(只换画风,构图、人物、物件和位置保持不变):{prompt}": "Change the whole image to the \"{name}\" visual style (change only the rendering style; keep the composition, characters, objects and their positions unchanged): {prompt}",
+"没有匹配的风格": "No matching styles",
+"风格测试:按风格库里的这种画风试改,项目的画面风格不变": "Style test: this version tries this style from the style library; the project's visual style is unchanged",
 };

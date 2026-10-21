@@ -49,10 +49,16 @@ assets/canvas/index.json    aliases:分镜背景图登记出去的 <key>_revN �
 
 ## 编辑
 
-页面发 `POST /api/v1/projects/<p>/canvas/edit`:`{file, parent, regions[], text, refs[参考图编号], provider, model, lock, mode: agent|direct, preview, nsfw}`。
+页面发 `POST /api/v1/projects/<p>/canvas/edit`:`{file, parent, regions[], text, refs[参考图编号], provider, model, lock, mode: agent|direct, preview, nsfw, style}`。
 
 - **圈选**:矩形 / 椭圆 / 套索 / 画笔,页面只传几何(0..1 归一化坐标),蒙版与带圈标注图由服务端用 PIL 画(`render_mask` / `render_marked`)。每个区域带编号与一条说明,最多 12 个。
 - **参考图**:托盘里每张有编号 n 和注释;文字里写 `@图n`(非中文界面 `@refn`)点名,拼提示词时换成 `[Image N]`。一次最多带 8 张。
+- **🎨 选择风格库**(整体说明标题右侧,2026-10-21):弹窗列出与控制台「画面风格」同一份风格库(`static/styles/`,1034 条,按界面语言取译文),
+  选中后在整体说明里写一句「整体改成「风格名」画面风格(只换画风,构图、人物、物件和位置保持不变):<风格提示词>」,再选一种就替换上一句。
+  **只是这次编辑的文字,不改项目设定的画面风格。** 发送时整体说明里还留着这段风格提示词才带 `style: {id, name}`:
+  `compose_prompt` 开头的「保持原图的光线、色彩与风格」换成「构图 / 机位 / 人物与位置不变,按下文换画风」;工单多一行「风格测试」,
+  修图 Agent 只取风格描述里的媒介 / 笔触 / 配色 / 光影,不写构图 / 景别 / 镜头;任务与版本记 `style`,历史里标「🎨 风格名」。
+  画板页的 `STYLE_LIB_V` 与 index.html 同值(测试校验),改了 styles/ 下任何文件两处一起改。
 - **图序固定**:`[Image 1]` 底图、`[Image 2]` 带圈标注图(有圈选时)、其后参考图。
 - **发送方式**
   - 经 Agent(默认):建任务(状态 `drafting`)→ 派画板修图 Agent(`06-art/image-retouch`,智能分配固定低档)→ Agent 看图写一条英文提示词 → 跑 `code/canvas_edit.py submit --prompt-file …`。

@@ -4794,4 +4794,9 @@ window.I18N_DICT = {
 "上一页": "Halaman sebelumnya",
 "下一页": "Halaman berikutnya",
 "读取项目列表失败:": "Gagal memuat daftar proyek: ",
+"从风格库挑一种画风写进整体说明:只用于这次编辑试效果,不改项目的画面风格": "Pilih gaya dari pustaka gaya dan tuliskan ke instruksi keseluruhan: hanya dicoba pada suntingan ini, tidak mengubah gaya visual proyek",
+"🎨 风格测试:{name} · 只用于这次编辑,不改项目的画面风格": "🎨 Uji gaya: {name} · hanya suntingan ini; gaya visual proyek tidak berubah",
+"整体改成「{name}」画面风格(只换画风,构图、人物、物件和位置保持不变):{prompt}": "Ubah seluruh gambar ke gaya visual \"{name}\" (hanya ubah gaya penggambaran; komposisi, tokoh, objek, dan posisinya tetap): {prompt}",
+"没有匹配的风格": "Tidak ada gaya yang cocok",
+"风格测试:按风格库里的这种画风试改,项目的画面风格不变": "Uji gaya: versi ini mencoba gaya ini dari pustaka gaya; gaya visual proyek tidak berubah",
 };
