@@ -1467,6 +1467,8 @@ async function restorePrefs(){
   }
   if(p.engine==='codex'&&p.model==='gpt-5.5')p.model='gpt-5.6-sol'; // 旧默认一次性迁移
   if(p.engine&&MODEL_OPTIONS[p.engine])$('#engine').value=p.engine;
+  // 首装(本地与服务端都没存过引擎):中文界面默认 kimicode(开屏随之检测并引导安装 Kimi Code),其余语言 claudecode
+  else if(!p.engine)$('#engine').value=I18N.lang==='zh'?'kimi':'claude';
   await populateModels($('#engine').value,p.model||null);
   if(p.model&&[...$('#model').options].some(o=>o.value===p.model)){
     $('#model').value=p.model;

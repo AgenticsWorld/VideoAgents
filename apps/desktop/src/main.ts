@@ -164,13 +164,9 @@ function initializeFirstLoginDefaults(): void {
     tts: {provider: 'agentics'},
     deepagents: {provider: 'agentics'},
   })
-  writeInitialJson(path.join(runtime, 'state.json'), {
-    sessions: {},
-    // 顶栏默认引擎与网页版一致为 claude(2026-09-22);model '__smart' = 智能分配,
-    // 服务端副本 model 留空 = 跟随 CLI 默认(与网页版无 state.json 的首装行为相同)
-    ui_prefs: {engine: 'claude', model: '__smart', model_custom: '', project: ''},
-    global_model: {engine: 'claude', model: ''},
-  })
+  // 不预置顶栏引擎(ui_prefs / global_model):与网页版首装相同,由控制台首次打开时按界面语言
+  // 选定(中文 kimicode,其余 claudecode)并同步回服务端
+  writeInitialJson(path.join(runtime, 'state.json'), {sessions: {}})
 }
 
 async function loginOnce(region: ServiceRegion): Promise<LoginResult> {
