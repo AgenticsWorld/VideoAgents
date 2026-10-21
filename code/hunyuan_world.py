@@ -13,7 +13,7 @@ hunyuan 时由宿主后台调用本脚本(仅项目「白模」选项开启时�
   python code/hunyuan_world.py --project <slug> --scene SCN-0001 --sources                   # 列出可用全景来源(JSON)
   python code/hunyuan_world.py --check                                                       # worker 自检(GPU/env/磁盘)
 可选:--classes outdoor|indoor(缺省按场景自动)--views N --steps N --smoke(袖珍自检:4 视图 200 步)
-Key/地址:控制台「🎨 生成模型」→「🌍 世界模型」→ HunyuanWorld(远程);也可用环境变量
+Key/地址:控制台「🎨 生成模型」→「🌍 世界模型」→ HunyuanWorld;也可用环境变量
 HUNYUAN_WORKER_URL / HUNYUAN_WORKER_TOKEN。
 退出码:0 完成;1 出错;2 项目「白模」选项关闭。
 """

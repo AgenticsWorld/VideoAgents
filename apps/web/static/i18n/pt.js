@@ -934,7 +934,6 @@ window.I18N_DICT = {
 "音频": "Áudio",
 "音频/角色/内容安全/版权/逻辑/时间线/画面/世界观 审核力度,按项目独立": "Rigor de revisão de áudio/personagens/segurança de conteúdo/copyright/lógica/linha do tempo/imagem/worldbuilding, independente por projeto",
 "页「语言模型DeepAgents」": "página \"Modelo de linguagem DeepAgents\"",
-"顶栏引擎选「deepagents」时生效": "Vale quando a engine da barra superior é \"deepagents\"",
 "项目": "Projeto",
 "项目名称": "Nome do projeto",
 "项目名称只能使用英文字母和数字": "O nome do projeto só pode conter letras e números",
@@ -1254,7 +1253,6 @@ window.I18N_DICT = {
 "对这个场景的设定提修改意见,发消息给总制片": "Dar notas de revisão sobre esta cena; envia uma mensagem ao Produtor",
 "道具 {name}({id};设定卡 bible/props.json 中 id={id})": "Adereço {name} ({id}; ficha id={id} em bible/props.json)",
 "对这个道具的设定提修改意见,发消息给总制片": "Dar notas de revisão sobre este adereço; envia uma mensagem ao Produtor",
-"旁白/角色音色样本/兜底配音由 TTS 生成": "Narração/amostras de voz de personagens/dublagem de reserva são geradas por TTS",
 "旁白声线": "Voz de narração",
 "旁白声线卡": "Cartão de voz do narrador",
 "(旁白样本未生成)": "(amostra de narração não gerada)",
@@ -1291,7 +1289,6 @@ window.I18N_DICT = {
 "Eleven v3 · 最新,情感表现力强(文内 [audio tag] 控情绪)": "Eleven v3 · mais recente, muito expressivo (controle a emoção com [audio tags] no texto)",
 "Turbo v2.5 · 32 语种,低延迟": "Turbo v2.5 · 32 idiomas, baixa latência",
 "Flash v2.5 · 最快/最省": "Flash v2.5 · mais rápido/barato",
-"BGM 走音乐生成": "A BGM vai pela geração de música",
 "强制纯音乐(无人声,适合 BGM)": "Forçar instrumental (sem vocais; ideal para BGM)",
 ";可用 --duration 指定配乐时长(3–600 秒,省略=模型按 prompt 自定);输出仅 .mp3/.opus": "; a duração pode ser definida com --duration (3–600 s; se omitido, o modelo decide pelo prompt); saída apenas .mp3/.opus",
 "Eleven Music v1(官方默认)": "Eleven Music v1 (padrão oficial)",
@@ -2957,7 +2954,6 @@ window.I18N_DICT = {
 "机位": "Câmera",
 "罗盘:北 0 · 东 90": "bússola: N 0 · L 90",
 "world.json 里没有 splats 文件": "world.json não lista arquivos splat",
-"场景预览页「生成世界模型」按钮使用(仅项目「白模」开启时)": "Usado pelo botão “Gerar modelo de mundo” na pré-visualização de cenas (apenas com a opção “Whitebox” do projeto ativa)",
 "✅ World Labs": "✅ World Labs",
 "✓ Key 有效 · 余额 {c} credits": "✓ Key válida · {c} créditos restantes",
 "按场景白模/全景图生成可漫游的 3D 世界(高斯泼溅),在场景预览页「🌍 世界模型」板块查看;Key 在 ": "Gera um mundo 3D explorável (Gaussian splats) a partir do whitebox/panorama da cena; veja na seção “🌍 Modelo de mundo” da pré-visualização de cenas. Crie a Key em ",
@@ -3393,7 +3389,6 @@ window.I18N_DICT = {
 "待手动补图": "aguardando complemento manual",
 // 生成模型设置·数字人板块(2026-09-22,models.html):HeyGen/Kling/Agentics/ComfyUI(InfiniteTalk)面板文案 + 连接/验证状态
 "🧑 数字人": "🧑 Humano digital",
-"人物图片 + 对白音频生成说话片段": "Gera clipes falados a partir de uma imagem do personagem + áudio do diálogo",
 "任意人物图片 + 已有对白音频；Key 在": "Qualquer imagem de personagem + áudio de diálogo existente; crie a Key em",
 "HeyGen API 设置": "configurações da API HeyGen",
 "创建。": ".",
@@ -3732,7 +3727,6 @@ window.I18N_DICT = {
 // 生成模型设置·超分板块 + 成片发布页组 clip 方法标签(2026-09-23,models.html / preview_videos.html)
 "图像 / 视频 / 数字人 / 超分 / 音乐 / 音效 / TTS旁白 / 世界模型 生成渠道与模型": "Provedores e modelos: imagem / vídeo / humano digital / upscale / música / efeitos sonoros / narração TTS / modelo de mundo",
 "🔍 超分": "🔍 Upscale",
-"不跟随视频渠道": "Não segue o provedor de vídeo",
 "缩放算法": "Filtro de escala",
 "lanczos(默认,较锐利)": "lanczos (padrão, mais nítido)",
 "bicubic(平滑)": "bicubic (suave)",
@@ -4547,7 +4541,6 @@ window.I18N_DICT = {
 "选作对比": "Comparar",
 // 生成模型设置·音效板块(2026-10-20,models.html)
 "🔊 音效模型": "🔊 Modelo de efeitos sonoros",
-"音效 / 环境床音兜底贴片用(仅缺陷单要求补做时)": "Para patches de reserva de efeitos sonoros / camadas de ambiente (só quando um ticket de defeito pedir)",
 "CC0 / 公有领域(免署名,默认)": "CC0 / domínio público (sem atribuição, padrão)",
 "CC0 / 公有领域 + CC BY(须署名)": "CC0 / domínio público + CC BY (atribuição obrigatória)",
 "Freesound(默认)": "Freesound (padrão)",
@@ -4764,7 +4757,6 @@ window.I18N_DICT = {
 "agent·动画程序": "Programador de animação",
 "agent·音效与混音": "Efeitos sonoros e mixagem",
 "agent·演示视频终审官": "Revisão final do vídeo demo",
-"HunyuanWorld(远程)": "HunyuanWorld (remoto)",
 "worker 地址": "Endereço do worker",
 "验证": "Verificar",
 "高级参数": "Parâmetros avançados",
@@ -4804,5 +4796,4 @@ window.I18N_DICT = {
 // 生成模型设置·生效渠道下拉(2026-10-21,models.html):标签页只管查看 / 编辑,生效渠道在板块标题栏右侧选
 "生效渠道": "Provedor ativo",
 "生成时实际使用的渠道(标签上的 ✅),保存后生效;标签页只用来查看 / 编辑各渠道配置,不改变生效渠道": "O provedor realmente usado na geração (✅ na aba dele), vale após salvar; as abas servem só para ver / editar a configuração de cada provedor e não mudam o provedor ativo",
-"标签页只用来查看 / 编辑,各渠道配置可同时保存": "As abas servem só para ver / editar; as configurações de todos os provedores podem ser salvas juntas",
 };

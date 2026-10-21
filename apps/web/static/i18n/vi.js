@@ -934,7 +934,6 @@ window.I18N_DICT = {
 "音频": "Âm thanh",
 "音频/角色/内容安全/版权/逻辑/时间线/画面/世界观 审核力度,按项目独立": "Mức độ kiểm duyệt âm thanh/nhân vật/an toàn nội dung/bản quyền/logic/dòng thời gian/hình ảnh/thế giới quan, độc lập theo từng dự án",
 "页「语言模型DeepAgents」": "trang “Mô hình ngôn ngữ DeepAgents”",
-"顶栏引擎选「deepagents」时生效": "Có hiệu lực khi engine trên thanh trên cùng chọn “deepagents”",
 "项目": "Dự án",
 "项目名称": "Tên dự án",
 "项目名称只能使用英文字母和数字": "Tên dự án chỉ được dùng chữ cái Latinh và số",
@@ -1254,7 +1253,6 @@ window.I18N_DICT = {
 "对这个场景的设定提修改意见,发消息给总制片": "Gửi ý kiến chỉnh sửa cho thiết lập bối cảnh này; gửi tin nhắn cho Tổng chế tác",
 "道具 {name}({id};设定卡 bible/props.json 中 id={id})": "Đạo cụ {name}({id}; thẻ thiết lập id={id} trong bible/props.json)",
 "对这个道具的设定提修改意见,发消息给总制片": "Gửi ý kiến chỉnh sửa cho thiết lập đạo cụ này; gửi tin nhắn cho Tổng chế tác",
-"旁白/角色音色样本/兜底配音由 TTS 生成": "Lời dẫn chuyện/mẫu giọng nhân vật/lồng tiếng dự phòng do TTS tạo",
 "旁白声线": "Giọng dẫn chuyện",
 "旁白声线卡": "Thẻ giọng dẫn chuyện",
 "(旁白样本未生成)": "(chưa tạo mẫu dẫn chuyện)",
@@ -1291,7 +1289,6 @@ window.I18N_DICT = {
 "Eleven v3 · 最新,情感表现力强(文内 [audio tag] 控情绪)": "Eleven v3 · mới nhất, biểu cảm mạnh (điều khiển cảm xúc bằng [audio tag] trong văn bản)",
 "Turbo v2.5 · 32 语种,低延迟": "Turbo v2.5 · 32 ngôn ngữ, độ trễ thấp",
 "Flash v2.5 · 最快/最省": "Flash v2.5 · nhanh nhất/rẻ nhất",
-"BGM 走音乐生成": "BGM đi qua tạo nhạc",
 "强制纯音乐(无人声,适合 BGM)": "Buộc thuần nhạc cụ (không giọng hát, hợp với BGM)",
 ";可用 --duration 指定配乐时长(3–600 秒,省略=模型按 prompt 自定);输出仅 .mp3/.opus": "; có thể chỉ định độ dài nhạc bằng --duration (3–600 giây, bỏ qua = mô hình tự quyết theo prompt); chỉ xuất .mp3/.opus",
 "Eleven Music v1(官方默认)": "Eleven Music v1 (mặc định chính thức)",
@@ -2955,7 +2952,6 @@ window.I18N_DICT = {
 "机位": "Camera",
 "罗盘:北 0 · 东 90": "la bàn: Bắc 0 · Đông 90",
 "world.json 里没有 splats 文件": "world.json không có tệp splat",
-"场景预览页「生成世界模型」按钮使用(仅项目「白模」开启时)": "Dùng cho nút “Tạo mô hình thế giới” ở trang xem trước cảnh (chỉ khi bật tùy chọn “Whitebox” của dự án)",
 "✅ World Labs": "✅ World Labs",
 "✓ Key 有效 · 余额 {c} credits": "✓ Key hợp lệ · còn {c} credits",
 "按场景白模/全景图生成可漫游的 3D 世界(高斯泼溅),在场景预览页「🌍 世界模型」板块查看;Key 在 ": "Tạo thế giới 3D có thể đi lại (Gaussian splats) từ whitebox/toàn cảnh của cảnh, xem tại mục “🌍 Mô hình thế giới” trong trang xem trước cảnh. Tạo Key tại ",
@@ -3391,7 +3387,6 @@ window.I18N_DICT = {
 "待手动补图": "chờ bổ sung thủ công",
 // 生成模型设置·数字人板块(2026-09-22,models.html):HeyGen/Kling/Agentics/ComfyUI(InfiniteTalk)面板文案 + 连接/验证状态
 "🧑 数字人": "🧑 Người ảo",
-"人物图片 + 对白音频生成说话片段": "Tạo đoạn nói chuyện từ ảnh nhân vật + âm thanh thoại",
 "任意人物图片 + 已有对白音频；Key 在": "Ảnh nhân vật bất kỳ + âm thanh thoại có sẵn; tạo Key tại",
 "HeyGen API 设置": "Cài đặt HeyGen API",
 "创建。": ".",
@@ -3730,7 +3725,6 @@ window.I18N_DICT = {
 // 生成模型设置·超分板块 + 成片发布页组 clip 方法标签(2026-09-23,models.html / preview_videos.html)
 "图像 / 视频 / 数字人 / 超分 / 音乐 / 音效 / TTS旁白 / 世界模型 生成渠道与模型": "Nhà cung cấp và mô hình: Ảnh / Video / Người ảo / Nâng độ phân giải / Nhạc / Hiệu ứng âm thanh / TTS thuyết minh / Mô hình thế giới",
 "🔍 超分": "🔍 Nâng độ phân giải",
-"不跟随视频渠道": "Không theo nhà cung cấp video",
 "缩放算法": "Bộ lọc phóng",
 "lanczos(默认,较锐利)": "lanczos (mặc định, sắc nét)",
 "bicubic(平滑)": "bicubic (mượt)",
@@ -4545,7 +4539,6 @@ window.I18N_DICT = {
 "选作对比": "So sánh",
 // 生成模型设置·音效板块(2026-10-20,models.html)
 "🔊 音效模型": "🔊 Mô hình hiệu ứng âm thanh",
-"音效 / 环境床音兜底贴片用(仅缺陷单要求补做时)": "Dùng cho bản vá hiệu ứng âm thanh / nền âm thanh môi trường dự phòng (chỉ khi phiếu lỗi yêu cầu làm bổ sung)",
 "CC0 / 公有领域(免署名,默认)": "CC0 / phạm vi công cộng (không cần ghi công, mặc định)",
 "CC0 / 公有领域 + CC BY(须署名)": "CC0 / phạm vi công cộng + CC BY (bắt buộc ghi công)",
 "Freesound(默认)": "Freesound (mặc định)",
@@ -4762,7 +4755,6 @@ window.I18N_DICT = {
 "agent·动画程序": "Lập trình hoạt ảnh",
 "agent·音效与混音": "Hiệu ứng âm thanh & mix",
 "agent·演示视频终审官": "Duyệt cuối video demo",
-"HunyuanWorld(远程)": "HunyuanWorld (từ xa)",
 "worker 地址": "Địa chỉ worker",
 "验证": "Xác thực",
 "高级参数": "Tham số nâng cao",
@@ -4802,5 +4794,4 @@ window.I18N_DICT = {
 // 生成模型设置·生效渠道下拉(2026-10-21,models.html):标签页只管查看 / 编辑,生效渠道在板块标题栏右侧选
 "生效渠道": "Kênh hiệu lực",
 "生成时实际使用的渠道(标签上的 ✅),保存后生效;标签页只用来查看 / 编辑各渠道配置,不改变生效渠道": "Kênh thực sự dùng khi tạo (dấu ✅ trên tab), có hiệu lực sau khi lưu; tab chỉ để xem / chỉnh sửa cấu hình từng kênh, không đổi kênh hiệu lực",
-"标签页只用来查看 / 编辑,各渠道配置可同时保存": "Tab chỉ dùng để xem / chỉnh sửa; cấu hình các kênh có thể lưu cùng lúc",
 };

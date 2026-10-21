@@ -934,7 +934,6 @@ window.I18N_DICT = {
 "音频": "Audio",
 "音频/角色/内容安全/版权/逻辑/时间线/画面/世界观 审核力度,按项目独立": "Review-Strenge für Audio/Figuren/Inhaltssicherheit/Copyright/Logik/Timeline/Bild/Worldbuilding, pro Projekt separat",
 "页「语言模型DeepAgents」": "Seite „Sprachmodell DeepAgents“",
-"顶栏引擎选「deepagents」时生效": "Wirksam, wenn in der Topbar die Engine „deepagents“ gewählt ist",
 "项目": "Projekt",
 "项目名称": "Projektname",
 "项目名称只能使用英文字母和数字": "Projektname darf nur Buchstaben und Ziffern enthalten",
@@ -1254,7 +1253,6 @@ window.I18N_DICT = {
 "对这个场景的设定提修改意见,发消息给总制片": "Änderungswünsche zur Szene geben; sendet eine Nachricht an den Produzenten",
 "道具 {name}({id};设定卡 bible/props.json 中 id={id})": "Requisite {name} ({id}; Karte id={id} in bible/props.json)",
 "对这个道具的设定提修改意见,发消息给总制片": "Änderungswünsche zur Requisite geben; sendet eine Nachricht an den Produzenten",
-"旁白/角色音色样本/兜底配音由 TTS 生成": "Erzählstimme/Charakter-Stimmproben/Fallback-Vertonung werden per TTS erzeugt",
 "旁白声线": "Erzählstimme",
 "旁白声线卡": "Erzählstimmen-Karte",
 "(旁白样本未生成)": "(Erzählstimmen-Probe noch nicht erzeugt)",
@@ -1291,7 +1289,6 @@ window.I18N_DICT = {
 "Eleven v3 · 最新,情感表现力强(文内 [audio tag] 控情绪)": "Eleven v3 · neu, sehr ausdrucksstark (Emotion über [audio tags] im Text)",
 "Turbo v2.5 · 32 语种,低延迟": "Turbo v2.5 · 32 Sprachen, geringe Latenz",
 "Flash v2.5 · 最快/最省": "Flash v2.5 · am schnellsten/günstigsten",
-"BGM 走音乐生成": "BGM läuft über Musikgenerierung",
 "强制纯音乐(无人声,适合 BGM)": "Instrumental erzwingen (ohne Gesang — für BGM geeignet)",
 ";可用 --duration 指定配乐时长(3–600 秒,省略=模型按 prompt 自定);输出仅 .mp3/.opus": "; Länge per --duration festlegbar (3–600 s; ohne Angabe entscheidet das Modell nach dem Prompt); Ausgabe nur .mp3/.opus",
 "Eleven Music v1(官方默认)": "Eleven Music v1 (offizieller Standard)",
@@ -2955,7 +2952,6 @@ window.I18N_DICT = {
 "机位": "Kamera",
 "罗盘:北 0 · 东 90": "Kompass: N 0 · O 90",
 "world.json 里没有 splats 文件": "world.json enthält keine Splat-Dateien",
-"场景预览页「生成世界模型」按钮使用(仅项目「白模」开启时)": "Wird vom Button „Weltmodell erzeugen“ der Szenenvorschau verwendet (nur bei aktivierter Projektoption „Whitebox“)",
 "✅ World Labs": "✅ World Labs",
 "✓ Key 有效 · 余额 {c} credits": "✓ Key gültig · {c} Credits übrig",
 "按场景白模/全景图生成可漫游的 3D 世界(高斯泼溅),在场景预览页「🌍 世界模型」板块查看;Key 在 ": "Erzeugt aus Whitebox/Panorama der Szene eine begehbare 3D-Welt (Gaussian Splats); zu sehen im Abschnitt „🌍 Weltmodell“ der Szenenvorschau. Key erstellen unter ",
@@ -3391,7 +3387,6 @@ window.I18N_DICT = {
 "待手动补图": "wartet auf manuelle Ergänzung",
 // 生成模型设置·数字人板块(2026-09-22,models.html):HeyGen/Kling/Agentics/ComfyUI(InfiniteTalk)面板文案 + 连接/验证状态
 "🧑 数字人": "🧑 Digitaler Mensch",
-"人物图片 + 对白音频生成说话片段": "Erzeugt Sprechclips aus Personenbild + Dialog-Audio",
 "任意人物图片 + 已有对白音频；Key 在": "Beliebiges Personenbild + vorhandenes Dialog-Audio; Key erstellen in den",
 "HeyGen API 设置": "HeyGen-API-Einstellungen",
 "创建。": ".",
@@ -3730,7 +3725,6 @@ window.I18N_DICT = {
 // 生成模型设置·超分板块 + 成片发布页组 clip 方法标签(2026-09-23,models.html / preview_videos.html)
 "图像 / 视频 / 数字人 / 超分 / 音乐 / 音效 / TTS旁白 / 世界模型 生成渠道与模型": "Anbieter und Modelle: Bild / Video / Digitaler Mensch / Upscaling / Musik / Soundeffekte / TTS-Erzählung / Weltmodell",
 "🔍 超分": "🔍 Upscaling",
-"不跟随视频渠道": "Folgt nicht dem Videoanbieter",
 "缩放算法": "Skalierungsfilter",
 "lanczos(默认,较锐利)": "lanczos (Standard, schärfer)",
 "bicubic(平滑)": "bicubic (weich)",
@@ -4545,7 +4539,6 @@ window.I18N_DICT = {
 "选作对比": "Vergleichen",
 // 生成模型设置·音效板块(2026-10-20,models.html)
 "🔊 音效模型": "🔊 Soundeffekt-Modell",
-"音效 / 环境床音兜底贴片用(仅缺陷单要求补做时)": "Für Ersatz-Patches von Soundeffekten / Atmo-Betten (nur wenn ein Fehlerticket einen anfordert)",
 "CC0 / 公有领域(免署名,默认)": "CC0 / gemeinfrei (ohne Namensnennung, Standard)",
 "CC0 / 公有领域 + CC BY(须署名)": "CC0 / gemeinfrei + CC BY (Namensnennung erforderlich)",
 "Freesound(默认)": "Freesound (Standard)",
@@ -4762,7 +4755,6 @@ window.I18N_DICT = {
 "agent·动画程序": "Animations-Coder",
 "agent·音效与混音": "Sounddesign & Mischung",
 "agent·演示视频终审官": "Demovideo-Endprüfung",
-"HunyuanWorld(远程)": "HunyuanWorld (remote)",
 "worker 地址": "Worker-Adresse",
 "验证": "Prüfen",
 "高级参数": "Erweiterte Parameter",
@@ -4802,5 +4794,4 @@ window.I18N_DICT = {
 // 生成模型设置·生效渠道下拉(2026-10-21,models.html):标签页只管查看 / 编辑,生效渠道在板块标题栏右侧选
 "生效渠道": "Aktiver Anbieter",
 "生成时实际使用的渠道(标签上的 ✅),保存后生效;标签页只用来查看 / 编辑各渠道配置,不改变生效渠道": "Der bei der Generierung tatsächlich genutzte Anbieter (✅ auf seinem Tab), gilt nach dem Speichern; Tabs dienen nur zum Ansehen / Bearbeiten der Einstellungen jedes Anbieters und ändern den aktiven Anbieter nicht",
-"标签页只用来查看 / 编辑,各渠道配置可同时保存": "Tabs dienen nur zum Ansehen / Bearbeiten; die Einstellungen aller Anbieter lassen sich gemeinsam speichern",
 };

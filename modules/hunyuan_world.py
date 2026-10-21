@@ -11,7 +11,7 @@ world/worlds/<key>/world.json + splats_<res>.spz + collider.glb + world_pano.jpg
 scale_fix = 全景相机真实离地高(白模精确值)/ worker 拟合的 ground_plane_offset(原始单位),
 残余误差用视窗 ⚙ 设置里的 yaw/尺度微调(同一条已打通的链路)。
 
-配置:控制台「🎨 生成模型」→「🌍 世界模型」→ HunyuanWorld(远程)tab(genconfig.json#world):
+配置:控制台「🎨 生成模型」→「🌍 世界模型」→ HunyuanWorld tab(genconfig.json#world):
 provider 选 hunyuan;hunyuan.base_url(worker 地址)、hunyuan.token(X-Worker-Token)、
 hunyuan.{fp8, views, gs_steps, max_gaussians, radius_m}(缺省见下)。环境变量 HUNYUAN_WORKER_URL /
 HUNYUAN_WORKER_TOKEN 可覆盖。
@@ -64,7 +64,7 @@ def _request(method: str, path: str, *, body: bytes | None = None, content_type:
              timeout: int = 120, base: str | None = None, token: str | None = None) -> dict:
     url = (base if base is not None else base_url()) + path
     if not url.startswith('http'):
-        raise HunyuanWorldError('未配置 HunyuanWorld worker 地址:控制台「🎨 生成模型」→「🌍 世界模型」→ HunyuanWorld(远程)填 base_url')
+        raise HunyuanWorldError('未配置 HunyuanWorld worker 地址:控制台「🎨 生成模型」→「🌍 世界模型」→ HunyuanWorld 填 base_url')
     tok = token if token is not None else (hunyuan_config().get('token') or '')
     req = urllib.request.Request(url, data=body, method=method)
     req.add_header('X-Worker-Token', tok)

@@ -11,7 +11,7 @@
 ## 配置
 
 控制台「🎨 生成模型」→「🌍 世界模型」:渠道 = 标题栏右侧「生效渠道」下拉(保存生效;标签页只用来查看 / 编辑各渠道配置),`genconfig.json#world.provider` ∈
-`marble`(默认)/ `hunyuan`。HunyuanWorld(远程)标签页:`hunyuan.base_url`(worker 地址)、
+`marble`(默认)/ `hunyuan`。HunyuanWorld 标签页:`hunyuan.base_url`(worker 地址)、
 `hunyuan.token`(X-Worker-Token)、高级参数 `hunyuan.{views, gs_steps, fp8}`(留空按缺省:32 视图、8000 步、FP8 关);
 「验证」打 `GET /health` 回 GPU/env/磁盘自检。环境变量 `HUNYUAN_WORKER_URL` / `HUNYUAN_WORKER_TOKEN` 可覆盖。
 

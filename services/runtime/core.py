@@ -9107,9 +9107,9 @@ async def api_scene_world_start(project: str, sid: str, body: dict):
         from modules import hunyuan_world as hw
         if not hw.base_url():
             zh = (ui_lang_code() or "zh") == "zh"   # 文案随界面语言,非中文一律英文
-            raise ServiceError(400, "HunyuanWorld worker 地址未配置:请到控制台「🎨 生成模型」→「🌍 世界模型」→ HunyuanWorld(远程)填写"
+            raise ServiceError(400, "HunyuanWorld worker 地址未配置:请到控制台「🎨 生成模型」→「🌍 世界模型」→ HunyuanWorld 填写"
                                if zh else "HunyuanWorld worker address is not configured: fill it in under Console "
-                               "「🎨 Generation Models」→「🌍 World model」→ HunyuanWorld (remote)")
+                               "「🎨 Generation Models」→「🌍 World model」→ HunyuanWorld")
         script = "hunyuan_world.py"
     else:
         if not worldlabs.marble_config().get("api_key"):

@@ -34,10 +34,8 @@ a.back:hover{color:var(--accent);border-color:var(--accent)}
 main{max-width:860px;margin:0 auto;padding:22px 18px 60px;display:flex;flex-direction:column;gap:22px}
 .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 .card>h2{font-size:14px;padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;white-space:nowrap}
-.card>h2 .cur{margin-left:auto;font-size:12px;color:var(--dim);font-weight:400;white-space:normal;min-width:0}
 /* 生效渠道下拉(标题栏右侧):标签页只管查看 / 编辑,生效渠道在这里选 */
 .card>h2 .eff{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:400;color:var(--dim);flex:none}
-.card>h2 .cur~.eff{margin-left:12px}
 .card>h2 .eff select{flex:none;min-width:0;padding:3px 8px;font-size:12px}
 .tabs{display:flex;border-bottom:1px solid var(--border);background:var(--panel2)}
 .tab{flex:1;padding:9px 10px;text-align:center;cursor:pointer;font-size:13px;color:var(--dim);border-bottom:2px solid transparent;user-select:none;display:flex;align-items:center;justify-content:center;gap:6px}
@@ -116,27 +114,27 @@ button:disabled{opacity:.5;cursor:default}
 </header>
 <main>
   <div class="card" id="card-image">
-    <h2>🖼 图像模型 <span class="cur">标签页只用来查看 / 编辑,各渠道配置可同时保存</span></h2>
+    <h2>🖼 图像模型</h2>
     <div class="tabs" id="image-tabs"></div>
     <div id="image-panels"></div>
   </div>
   <div class="card" id="card-video">
-    <h2>🎬 视频模型 <span class="cur">标签页只用来查看 / 编辑,各渠道配置可同时保存</span></h2>
+    <h2>🎬 视频模型</h2>
     <div class="tabs" id="video-tabs"></div>
     <div id="video-panels"></div>
   </div>
-  <div class="card" id="card-music">
-    <h2>🎵 音乐模型 <span class="cur">BGM 走音乐生成</span></h2>
-    <div class="tabs" id="music-tabs"></div>
-    <div id="music-panels"></div>
-  </div>
   <div class="card" id="card-tts">
-    <h2>🎙 TTS语音模型 <span class="cur">旁白/角色音色样本/兜底配音由 TTS 生成</span></h2>
+    <h2>🎙 TTS语音模型</h2>
     <div class="tabs" id="tts-tabs"></div>
     <div id="tts-panels"></div>
   </div>
+  <div class="card" id="card-music">
+    <h2>🎵 音乐模型</h2>
+    <div class="tabs" id="music-tabs"></div>
+    <div id="music-panels"></div>
+  </div>
   <div class="card" id="card-sfx">
-    <h2>🔊 音效模型 <span class="cur">音效 / 环境床音兜底贴片用(仅缺陷单要求补做时)</span></h2>
+    <h2>🔊 音效模型</h2>
     <div class="tabs" id="sfx-tabs">
       <div class="tab" id="tab-sfx-code">代码音效</div>
       <div class="tab" id="tab-sfx-openverse">Openverse</div>
@@ -150,7 +148,7 @@ button:disabled{opacity:.5;cursor:default}
     <div class="panel" id="panel-sfx-fal"></div>
   </div>
   <div class="card" id="card-digital-human">
-    <h2>🧑 数字人 <span class="cur">人物图片 + 对白音频生成说话片段</span></h2>
+    <h2>🧑 数字人</h2>
     <div class="tabs" id="digital-human-tabs">
       <div class="tab" id="tab-dh-agentics">Agentics</div>
       <div class="tab" id="tab-dh-heygen">HeyGen</div>
@@ -177,7 +175,7 @@ button:disabled{opacity:.5;cursor:default}
     <div class="panel" id="panel-dh-comfyui"></div>
   </div>
   <div class="card" id="card-upscale">
-    <h2>🔍 超分 <span class="cur">不跟随视频渠道</span></h2>
+    <h2>🔍 超分</h2>
     <div class="tabs" id="upscale-tabs">
       <div class="tab" id="tab-up-ffmpeg">ffmpeg</div>
       <div class="tab" id="tab-up-agentics">Agentics</div>
@@ -218,10 +216,10 @@ button:disabled{opacity:.5;cursor:default}
     <div class="panel" id="panel-up-comfyui"></div>
   </div>
   <div class="card" id="card-world">
-    <h2>🌍 世界模型 <span class="cur">场景预览页「生成世界模型」按钮使用(仅项目「白模」开启时)</span></h2>
+    <h2>🌍 世界模型</h2>
     <div class="tabs" id="world-tabs">
       <div class="tab" id="tab-world-marble">World Labs</div>
-      <div class="tab" id="tab-world-hunyuan">HunyuanWorld(远程)</div>
+      <div class="tab" id="tab-world-hunyuan">HunyuanWorld</div>
     </div>
     <div class="panel show" id="panel-world-marble">
       <div class="row"><label>API Key</label><input type="password" id="world-marble-key" placeholder="World Labs API Key"><button onclick="testWorldLabs()">验证 Key</button></div>
@@ -237,7 +235,7 @@ button:disabled{opacity:.5;cursor:default}
     </div>
   </div>
   <div class="card" id="card-text">
-    <h2>🧩 语言模型/DeepAgents <span class="cur">顶栏引擎选「deepagents」时生效</span></h2>
+    <h2>🧩 语言模型/DeepAgents</h2>
     <div class="tabs" id="text-tabs">
       <div class="tab" id="tab-text-agentics">Agentics</div>
       <div class="tab" id="tab-text-local">本地模型</div>
@@ -1429,7 +1427,7 @@ async function testWorldLabs(){
 }
 
 /* 世界模型渠道(2026-10-10):marble(云端,耗 credits)/ hunyuan(本地算力,远程 GPU worker);生效 = 标题栏「生效渠道」下拉 */
-const WORLD_PROVIDERS={marble:'World Labs',hunyuan:'HunyuanWorld(远程)'};
+const WORLD_PROVIDERS={marble:'World Labs',hunyuan:'HunyuanWorld'};
 async function testHunyuan(){
   const st=$('#world-hunyuan-status');st.className='status';st.textContent='验证中…';
   const r=await api('/api/v1/providers/hunyuan/test',{base_url:$('#world-hunyuan-url').value.trim(),token:$('#world-hunyuan-token').value.trim()}).catch(e=>({ok:false,error:e.message}));
