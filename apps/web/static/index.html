@@ -2481,17 +2481,20 @@ function rhythmCollect(prefix){
 
 /* ---------- 风格库弹窗(为设计风格字段挑选风格提示词) ---------- */
 let STYLE_LIB=null,STYLE_TARGET='#brief-style',STYLE_CAT='全部';
+// 风格库版本:静态文件不带 Cache-Control,浏览器会长期沿用旧的库 / 译文 / 封面(原地替换的封面同名);
+// 改了 styles/ 下任何文件都要改这个版本号
+const STYLE_LIB_V='20261021';
 // 风格库多语言:styles/i18n/<lang>.json 按风格 id 存 {name,prompt} 译文;按当前界面语言合并为
 // s.tname/s.tprompt(缺译文回退中文原文),卡片显示与填入「画面风格」的内容都跟界面语言走
 async function loadStyleLib(){
   if(!STYLE_LIB){
-    const r=await fetch('/static/styles/style_library.json');
+    const r=await fetch('/static/styles/style_library.json?v='+STYLE_LIB_V);
     if(!r.ok)throw new Error('HTTP '+r.status);
     const lib=await r.json();
     const lang=(window.I18N&&I18N.lang)||'zh';
     let tr={};
     if(lang!=='zh'){
-      try{const r2=await fetch('/static/styles/i18n/'+lang+'.json');if(r2.ok)tr=await r2.json()}
+      try{const r2=await fetch('/static/styles/i18n/'+lang+'.json?v='+STYLE_LIB_V);if(r2.ok)tr=await r2.json()}
       catch(e){/* 无译文:回退中文 */}
     }
     lib.forEach(s=>{const x=tr[s.id]||{};s.tname=x.name||s.name;s.tprompt=x.prompt||s.prompt});
@@ -2526,7 +2529,7 @@ function styleGridRender(){
     .forEach(s=>{
       const d=document.createElement('div');
       d.className='style-card'+(styleIs(s,cur)?' on':'');
-      d.innerHTML=`<img loading="lazy" src="/static/styles/${s.image}" alt="">`
+      d.innerHTML=`<img loading="lazy" src="/static/styles/${s.image}?v=${STYLE_LIB_V}" alt="">`
         +`<span class="zoom" title="${esc(t('放大查看'))}">🔍</span>`
         +`<span class="cat">${esc(t(s.category))}</span><span class="nm" data-no-i18n>${esc(s.tname)}</span>`;
       d.title=s.tprompt;
@@ -2536,7 +2539,7 @@ function styleGridRender(){
     });
 }
 function styleZoomShow(s){
-  $('#style-zoom-img').src='/static/styles/'+s.image;
+  $('#style-zoom-img').src='/static/styles/'+s.image+'?v='+STYLE_LIB_V;
   $('#style-zoom-nm').textContent=s.tname;
   $('#style-zoom-cat').textContent=t(s.category);
   $('#style-zoom').style.display='flex';
