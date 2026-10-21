@@ -591,11 +591,12 @@ def test_beats_check_honours_off_and_kept(tmp_path):
 
 
 def test_code_video_agents_default_to_high_tier():
-    """演示视频新增的 5 个成员,智能分配默认一律高档(2026-10-21 用户要求)。"""
+    """演示视频新增的 4 个创作成员智能分配默认高档;终审 11-qa/code-video-qa 随审核类低档(2026-10-21 用户要求)。"""
     members = ["18-code-video/film-director", "18-code-video/scene-coder", "18-code-video/code-composer",
-               "18-code-video/sound-designer", "11-qa/code-video-qa"]
+               "18-code-video/sound-designer"]
     for aid in members:
         assert (ROOT / "agents" / aid / "SOUL.md").is_file(), aid
         for mode in ("smart_claude", "smart_codex"):
             assert core.default_agent_model(aid, mode) == core.AM_MODE_MODELS[mode]["high"] | {}, (aid, mode)
-    assert core.default_agent_model("11-qa/visual-qa", "smart_claude")["model"] == core.AM_MODE_MODELS["smart_claude"]["low"]["model"]
+    for aid in ("11-qa/code-video-qa", "11-qa/visual-qa"):
+        assert core.default_agent_model(aid, "smart_claude")["model"] == core.AM_MODE_MODELS["smart_claude"]["low"]["model"], aid

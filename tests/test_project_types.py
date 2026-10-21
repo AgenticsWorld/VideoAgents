@@ -78,6 +78,19 @@ def test_agent_list_tags_project_type():
     assert by_id["07-directing/storyboard"]["project_type"] is None
 
 
+def test_project_type_members_default_to_high_tier():
+    # 项目类型专属成员智能分配一律高档;11-qa/ 下全部低档,含各类型的终审(2026-10-21 用户要求)
+    agents = core.list_agents(refresh=True)
+    members = [a["id"] for a in agents if a["project_type"] and not a["id"].startswith("11-qa/")]
+    assert len(members) >= 16
+    for aid in members:
+        assert core.default_agent_model(aid, "smart_claude") == core.AM_MODE_MODELS["smart_claude"]["high"], aid
+    qa = [a["id"] for a in agents if a["id"].startswith("11-qa/")]
+    assert "11-qa/mashup-qa" in qa
+    for aid in qa:
+        assert core.default_agent_model(aid, "smart_claude") == core.AM_MODE_MODELS["smart_claude"]["low"], aid
+
+
 def test_film_project_unchanged(env):
     _create({"name": "novel", "novel": "第一章", "settings": {"output": {"narration_enabled": True}}})
     cfg = core.load_project_settings("novel")
