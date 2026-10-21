@@ -73,7 +73,7 @@ button.red:disabled{background:var(--panel2);border-color:var(--border);color:va
 <main>
   <div class="card copy" id="copy-card">
     <h3>📋 复制项目</h3>
-    <p>完整复制当前项目目录(全部产物、运行记录)为一个全新项目;复制完成后自动切换到新项目的控制台。大项目可能占用较多磁盘空间。</p>
+    <p>完整复制当前项目目录(全部产物、运行记录)为一个全新项目;复制完成后返回当前项目的控制台,新项目可在顶栏项目选择中打开。大项目可能占用较多磁盘空间。</p>
     <div class="copy-row">
       <input id="copy-name" placeholder="新项目名称" autocomplete="off" spellcheck="false">
       <button id="copy-btn">复制项目</button>
@@ -154,12 +154,13 @@ function pollCopy(src,name){
     }else{
       clearInterval(timer);COPYING=false;$('#copy-btn').disabled=false;
       if(st.state==='done'){
-        copyStatus('ok',t('✓ 复制完成,正在打开新项目控制台…'));
+        // 复制完成不切到新项目,回被复制项目(源项目)的控制台首页;新项目从顶栏项目选择打开
+        copyStatus('ok',t('✓ 复制完成,正在返回当前项目控制台…'));
         try{
           const p=JSON.parse(localStorage.getItem('webui_prefs')||'{}');
-          p.project=name;localStorage.setItem('webui_prefs',JSON.stringify(p));
+          p.project=src;localStorage.setItem('webui_prefs',JSON.stringify(p));
         }catch(e){}
-        location.href='/?project='+encodeURIComponent(name);
+        location.href='/?project='+encodeURIComponent(src);
       }else{
         copyStatus('err','✗ '+t('复制失败:')+esc(st.error||t('未知错误')));
       }
@@ -222,7 +223,7 @@ function showStatus(html){const g=$('#global-status');g.innerHTML=html;g.classLi
   await initProjects();
   refreshDanger();
   refreshCopy();
-  // 页面打开时若已有整份复制在跑(如刷新页面),恢复轮询并在完成后照常切换
+  // 页面打开时若已有整份复制在跑(如刷新页面),恢复轮询,完成后照常返回本项目控制台
   try{
     const st=await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/copy');
     if(st.state==='running'){
