@@ -1023,8 +1023,8 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <thead><tr>
         <th>项目</th><th>类型</th>
         <th title="自动运行">自动</th>
-        <th class="num" title="备份数量(源项目名-日期),点击展开">备份</th>
         <th class="num" title="正在运行的 Agent 数">运行</th>
+        <th class="num" title="备份数量(源项目名-日期),点击展开">备份</th>
         <th class="num" title="项目目录占用的磁盘空间(10 分钟内复用上次统计)">磁盘</th>
       </tr></thead>
       <tbody id="pm-body"></tbody>
@@ -1564,8 +1564,8 @@ function pmRow(p,{backup=false,group=null}={}){
     +'<td><span class="pm-nm" data-no-i18n>'+esc(p.name)+'</span></td>'
     +'<td>'+pmTypeCell(p.type)+'</td>'
     +'<td>'+(p.watchdog?'<span class="pm-on" title="'+esc(t('自动运行已开启'))+'">🤖</span>':'<span class="pm-dim">—</span>')+'</td>'
-    +'<td class="num">'+(backup?'':bk)+'</td>'
     +'<td class="num"><span dir="ltr">'+run+q+'</span></td>'
+    +'<td class="num">'+(backup?'':bk)+'</td>'
     +'<td class="num"><span dir="ltr" data-disk="'+esc(p.name)+'">'+pmBytes(PM.disk[p.name])+'</span></td></tr>';
 }
 function pmRender(){
