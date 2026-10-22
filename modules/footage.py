@@ -61,7 +61,7 @@ Python:
   - mux 封装铁律:-c:v copy -c:a copy,**严禁 -shortest**(会静默截断音频末帧
     且总长检查仍 PASS);要求视频时长 >= 音频,不满足直接报错。
   - ledger 是台账 sources.json 的**唯一合法写入口**(mx2 clip-cutter 全量并发,
-    多进程读-改-写同一 JSON 必然互相覆盖丢更新):flock 独占锁 + 临时文件原子替换;
+    多进程读-改-写同一 JSON 必然互相覆盖丢更新):文件独占锁 + 临时文件原子替换;
     只更新已存在条目(file/sha256/used_by 追加/状态标记),条目登记归 curator/merge。
 机检入口见 code/check_footage.py。
 """
@@ -244,6 +244,16 @@ def _footage_library():
         sys.path.insert(0, str(Path(__file__).resolve().parent))
         import footage_library
     return footage_library
+
+
+def _file_lock():
+    """同上:跨平台文件锁 modules/file_lock.py(本文件也会被当脚本直接跑)。"""
+    try:
+        from modules import file_lock
+    except ImportError:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import file_lock
+    return file_lock
 
 
 def _library_entry(lib: str, source: dict, clip: dict) -> dict:
@@ -629,7 +639,7 @@ def _file_sha256(path: str) -> str:
 def ledger_update(sources: str, provider: str, source_id: str,
                   file: str | None = None, sha256: str | None = None,
                   used_by_add: str | None = None, mark: str | None = None) -> dict:
-    """并发安全地更新 sources.json 的单个源条目(flock 独占锁 + 原子替换写)。
+    """并发安全地更新 sources.json 的单个源条目(文件独占锁 + 原子替换写)。
 
     条目必须已存在(登记归 curator/merge,本原语只补录);sha256 传 "auto" 时
     对 --file 现算。返回更新后的条目。
@@ -641,13 +651,7 @@ def ledger_update(sources: str, provider: str, source_id: str,
         if not file:
             raise FootageError('--sha256 auto 需要同时给 --file')
         sha256 = _file_sha256(file)
-    lock_fd = os.open(str(p) + ".lock", os.O_CREAT | os.O_RDWR)
-    try:
-        try:
-            import fcntl
-            fcntl.flock(lock_fd, fcntl.LOCK_EX)
-        except (ImportError, OSError):      # 非 POSIX(如 Windows)无 fcntl,退化为无锁(同 ark_assets._Ledger)
-            pass
+    with _file_lock().locked(str(p) + ".lock"):
         data = json.loads(p.read_text(encoding="utf-8"))
         hit = next((s for s in (data.get("sources") or [])
                     if s.get("provider") == provider
@@ -667,13 +671,6 @@ def ledger_update(sources: str, provider: str, source_id: str,
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         os.replace(tmp, p)
         return hit
-    finally:
-        try:
-            import fcntl
-            fcntl.flock(lock_fd, fcntl.LOCK_UN)
-        except (ImportError, OSError):
-            pass
-        os.close(lock_fd)
 
 
 # ---------------- doctor ----------------

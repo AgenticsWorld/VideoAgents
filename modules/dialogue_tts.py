@@ -649,7 +649,7 @@ def _default_tts(base: Path):
 
 
 class _Lock:
-    """同一集的库目录文件锁(fcntl 独占;非 POSIX 退化为空操作)。"""
+    """同一集的库目录文件锁(独占锁,见 modules/file_lock.py)。"""
 
     def __init__(self, path: Path):
         self.path, self.fh = path, None
@@ -657,19 +657,13 @@ class _Lock:
     def __enter__(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.fh = open(self.path, "a+")
-        try:
-            import fcntl
-            fcntl.flock(self.fh.fileno(), fcntl.LOCK_EX)
-        except (ImportError, OSError):
-            pass
+        from modules import file_lock
+        file_lock.acquire(self.fh)
         return self
 
     def __exit__(self, *exc):
-        try:
-            import fcntl
-            fcntl.flock(self.fh.fileno(), fcntl.LOCK_UN)
-        except (ImportError, OSError):
-            pass
+        from modules import file_lock
+        file_lock.release(self.fh)
         self.fh.close()
 
 

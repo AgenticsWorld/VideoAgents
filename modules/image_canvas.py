@@ -37,22 +37,7 @@ import shutil
 import time
 from pathlib import Path
 
-
-def _lock(lk) -> None:
-    """fcntl 独占锁;非 POSIX(如 Windows)无 fcntl,退化为无锁(同 ark_assets._Ledger)。"""
-    try:
-        import fcntl as _fc
-        _fc.flock(lk, _fc.LOCK_EX)
-    except (ImportError, OSError):
-        pass
-
-
-def _unlock(lk) -> None:
-    try:
-        import fcntl as _fc
-        _fc.flock(lk, _fc.LOCK_UN)
-    except (ImportError, OSError):
-        pass
+from modules import file_lock
 
 SCHEMA = 'image_canvas/1.0'
 ROOT_REL = 'assets/canvas'
@@ -242,8 +227,7 @@ def _set_alias(base: Path, rel: str, root_rel: str) -> None:
     """分镜背景图设为最终版后新登记的 <key>_revN 文件 → 记到原图的画板,之后从 _revN 打开看到的是同一份历史。"""
     root = canvas_root(base)
     root.mkdir(parents=True, exist_ok=True)
-    with open(root / 'index.lock', 'w') as lk:
-        _lock(lk)
+    with file_lock.locked(root / 'index.lock'):
         al = _aliases(base)
         al[rel] = root_rel
         tmp = root / 'index.json.tmp'
@@ -259,12 +243,8 @@ def doc_dir_of(base: Path, rel: str) -> Path:
 @contextlib.contextmanager
 def _locked(doc: Path):
     doc.mkdir(parents=True, exist_ok=True)
-    with open(doc / 'history.lock', 'w') as lk:
-        _lock(lk)
-        try:
-            yield
-        finally:
-            _unlock(lk)
+    with file_lock.locked(doc / 'history.lock'):
+        yield
 
 
 def load_history(doc: Path) -> dict:

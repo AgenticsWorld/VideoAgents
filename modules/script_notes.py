@@ -17,22 +17,7 @@ import re
 import time
 from pathlib import Path
 
-
-def _lock(lf) -> None:
-    """fcntl 独占锁;非 POSIX(如 Windows)无 fcntl,退化为无锁(同 ark_assets._Ledger)。"""
-    try:
-        import fcntl
-        fcntl.flock(lf, fcntl.LOCK_EX)
-    except (ImportError, OSError):
-        pass
-
-
-def _unlock(lf) -> None:
-    try:
-        import fcntl
-        fcntl.flock(lf, fcntl.LOCK_UN)
-    except (ImportError, OSError):
-        pass
+from modules import file_lock
 
 NOTES_REL = "story/episodes/{ep}/script_notes.json"
 NOTES_SCHEMA = "script_notes/1.0"
@@ -88,33 +73,29 @@ def update_note(base: Path, ep: str, key: str, text: str, label: str = "") -> di
     p = notes_path(base, ep)
     p.parent.mkdir(parents=True, exist_ok=True)
     lock = p.with_suffix(".lock")
-    with open(lock, "w") as lf:
-        _lock(lf)
-        try:
-            d = load_notes(base, ep)
-            now = time.strftime("%Y-%m-%d %H:%M:%S")
-            if not text:
-                d["notes"].pop(key, None)
-            else:
-                rec = d["notes"].get(key) or {"created_at": now}
-                if (label or "").strip():
-                    rec["label"] = label.strip()[:LABEL_MAX_CHARS]
-                rec.update({"text": text, "level": note_level(key), "updated_at": now})
-                d["notes"][key] = rec
-            d["updated_at"] = now
-            d["_readme"] = ("用户在「📜 剧本预览」页写的注释:键 = 页面对象(* 整集 / S01 场次 / S01/b3 场内第 3 块 / nar:ID 旁白 / "
-                            "hook:ID 钩子 / event:ID 事件卡 / pacing:S01 节奏 / trim:S01/n 删减建议 / plan 分集计划),"
-                            "label = 写注释时该对象的定位文本(含文件路径)。修改师改本集剧本层文件时有则必读,按 label 对回对象逐条落实;"
-                            "用户点「📨 提交注释」后本文件会被清空、内容转入修改单。")
-            if not d["notes"]:
-                p.unlink(missing_ok=True)
-                d["notes"] = {}
-            else:
-                tmp = p.with_suffix(".json.tmp")
-                tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
-                os.replace(tmp, p)
-        finally:
-            _unlock(lf)
+    with file_lock.locked(lock):
+        d = load_notes(base, ep)
+        now = time.strftime("%Y-%m-%d %H:%M:%S")
+        if not text:
+            d["notes"].pop(key, None)
+        else:
+            rec = d["notes"].get(key) or {"created_at": now}
+            if (label or "").strip():
+                rec["label"] = label.strip()[:LABEL_MAX_CHARS]
+            rec.update({"text": text, "level": note_level(key), "updated_at": now})
+            d["notes"][key] = rec
+        d["updated_at"] = now
+        d["_readme"] = ("用户在「📜 剧本预览」页写的注释:键 = 页面对象(* 整集 / S01 场次 / S01/b3 场内第 3 块 / nar:ID 旁白 / "
+                        "hook:ID 钩子 / event:ID 事件卡 / pacing:S01 节奏 / trim:S01/n 删减建议 / plan 分集计划),"
+                        "label = 写注释时该对象的定位文本(含文件路径)。修改师改本集剧本层文件时有则必读,按 label 对回对象逐条落实;"
+                        "用户点「📨 提交注释」后本文件会被清空、内容转入修改单。")
+        if not d["notes"]:
+            p.unlink(missing_ok=True)
+            d["notes"] = {}
+        else:
+            tmp = p.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
+            os.replace(tmp, p)
     return d
 
 
@@ -122,11 +103,7 @@ def clear_notes(base: Path, ep: str) -> int:
     """「提交注释」后清空:删文件,返回清掉的条数。"""
     p = notes_path(base, ep)
     lock = p.with_suffix(".lock")
-    with open(lock, "w") as lf:
-        _lock(lf)
-        try:
-            n = len(load_notes(base, ep)["notes"])
-            p.unlink(missing_ok=True)
-        finally:
-            _unlock(lf)
+    with file_lock.locked(lock):
+        n = len(load_notes(base, ep)["notes"])
+        p.unlink(missing_ok=True)
     return n

@@ -27,6 +27,7 @@ import time
 import urllib.error
 from pathlib import Path
 
+from modules import file_lock
 from modules.continuity_refs import TAIL_IMAGE, TAIL_VIDEO
 from modules.volc_openapi import signed_call
 
@@ -79,7 +80,7 @@ def _long_take_on(base: Path) -> bool:
 
 
 class _Ledger:
-    """台账读改写事务(fcntl 独占锁防并发 genmedia 互相覆盖;非 POSIX 退化为无锁)。
+    """台账读改写事务(文件独占锁防并发 genmedia 互相覆盖,见 modules/file_lock.py)。
     服务端 core.py 写同一台账不走此锁(await 前后整读整写),极少数情况会盖掉这里刚记的
     条目——下次提交时 GetAsset 复核 / 重新入库即自愈。"""
 
@@ -89,11 +90,7 @@ class _Ledger:
     def __enter__(self) -> dict:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.fh = open(self.path.with_name(self.path.name + ".lock"), "a+")
-        try:
-            import fcntl
-            fcntl.flock(self.fh.fileno(), fcntl.LOCK_EX)
-        except (ImportError, OSError):
-            pass
+        file_lock.acquire(self.fh)
         self.data = _read_json(self.path)
         self.data.setdefault("assets", {})
         self.data.setdefault("files", {})
@@ -104,11 +101,7 @@ class _Ledger:
             if exc_type is None:
                 _write_json(self.path, self.data)
         finally:
-            try:
-                import fcntl
-                fcntl.flock(self.fh.fileno(), fcntl.LOCK_UN)
-            except (ImportError, OSError):
-                pass
+            file_lock.release(self.fh)
             self.fh.close()
 
 

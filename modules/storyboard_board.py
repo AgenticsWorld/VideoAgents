@@ -33,24 +33,8 @@ import re
 import time
 from pathlib import Path
 
+from modules import file_lock
 from modules.entity_ids import CHAR_ID_PAT, is_creature_id
-
-
-def _lock(lf) -> None:
-    """fcntl 独占锁;非 POSIX(如 Windows)无 fcntl,退化为无锁(同 ark_assets._Ledger)。"""
-    try:
-        import fcntl as _fc
-        _fc.flock(lf, _fc.LOCK_EX)
-    except (ImportError, OSError):
-        pass
-
-
-def _unlock(lf) -> None:
-    try:
-        import fcntl as _fc
-        _fc.flock(lf, _fc.LOCK_UN)
-    except (ImportError, OSError):
-        pass
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -424,23 +408,19 @@ def update_index(base: Path, ep: str, key: str, patch: dict | None, remove: bool
     p = index_path(base, ep)
     p.parent.mkdir(parents=True, exist_ok=True)
     lock = p.with_suffix(".lock")
-    with open(lock, "w") as lf:
-        _lock(lf)
-        try:
-            d = load_index(base, ep)
-            if remove:
-                d["shots"].pop(key, None)
-            else:
-                rec = d["shots"].get(key) or {}
-                rec.update(patch or {})
-                rec["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
-                d["shots"][key] = rec
-            d["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
-            tmp = p.with_suffix(".json.tmp")
-            tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
-            os.replace(tmp, p)
-        finally:
-            _unlock(lf)
+    with file_lock.locked(lock):
+        d = load_index(base, ep)
+        if remove:
+            d["shots"].pop(key, None)
+        else:
+            rec = d["shots"].get(key) or {}
+            rec.update(patch or {})
+            rec["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+            d["shots"][key] = rec
+        d["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        tmp = p.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
+        os.replace(tmp, p)
     return d
 
 
@@ -488,32 +468,28 @@ def update_note(base: Path, ep: str, key: str, text: str, meta: dict | None = No
     p = notes_path(base, ep)
     p.parent.mkdir(parents=True, exist_ok=True)
     lock = p.with_suffix(".lock")
-    with open(lock, "w") as lf:
-        _lock(lf)
-        try:
-            d = load_notes(base, ep)
-            now = time.strftime("%Y-%m-%d %H:%M:%S")
-            if not text:
-                d["notes"].pop(key, None)
-            else:
-                rec = d["notes"].get(key) or {"created_at": now}
-                rec.update({k: v for k, v in (meta or {}).items() if v not in (None, "")})
-                rec.update({"text": text, "level": note_level(key), "updated_at": now})
-                d["notes"][key] = rec
-            d["updated_at"] = now
-            d["_readme"] = ("用户在「📋 故事板」页写的注释,按键分三级:* = 整集,S01 = 场次,S01-03 = 场次-草案镜序。"
-                            "分镜师(storyboard)重做本集分镜、镜头表工位(shot-planning)定稿镜头表、修改师改分镜时,"
-                            "必须先读本文件,把每条注释当作用户对分镜设计的意见/约束:能落实的落实,不能落实的在汇报里说明原因。"
-                            "镜级条目带 scene_no/order/shot_id/content(写注释时那一镜的内容摘要),重拆镜后镜序变了就按 content 对回原镜。")
-            if not d["notes"]:
-                p.unlink(missing_ok=True)
-                d["notes"] = {}
-            else:
-                tmp = p.with_suffix(".json.tmp")
-                tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
-                os.replace(tmp, p)
-        finally:
-            _unlock(lf)
+    with file_lock.locked(lock):
+        d = load_notes(base, ep)
+        now = time.strftime("%Y-%m-%d %H:%M:%S")
+        if not text:
+            d["notes"].pop(key, None)
+        else:
+            rec = d["notes"].get(key) or {"created_at": now}
+            rec.update({k: v for k, v in (meta or {}).items() if v not in (None, "")})
+            rec.update({"text": text, "level": note_level(key), "updated_at": now})
+            d["notes"][key] = rec
+        d["updated_at"] = now
+        d["_readme"] = ("用户在「📋 故事板」页写的注释,按键分三级:* = 整集,S01 = 场次,S01-03 = 场次-草案镜序。"
+                        "分镜师(storyboard)重做本集分镜、镜头表工位(shot-planning)定稿镜头表、修改师改分镜时,"
+                        "必须先读本文件,把每条注释当作用户对分镜设计的意见/约束:能落实的落实,不能落实的在汇报里说明原因。"
+                        "镜级条目带 scene_no/order/shot_id/content(写注释时那一镜的内容摘要),重拆镜后镜序变了就按 content 对回原镜。")
+        if not d["notes"]:
+            p.unlink(missing_ok=True)
+            d["notes"] = {}
+        else:
+            tmp = p.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
+            os.replace(tmp, p)
     return d
 
 
@@ -522,13 +498,9 @@ def clear_notes(base: Path, ep: str) -> int:
     注释正文已随修改单进入修改师的对话记录,文件不留副本。"""
     p = notes_path(base, ep)
     lock = p.with_suffix(".lock")
-    with open(lock, "w") as lf:
-        _lock(lf)
-        try:
-            n = len(load_notes(base, ep)["notes"])
-            p.unlink(missing_ok=True)
-        finally:
-            _unlock(lf)
+    with file_lock.locked(lock):
+        n = len(load_notes(base, ep)["notes"])
+        p.unlink(missing_ok=True)
     return n
 
 

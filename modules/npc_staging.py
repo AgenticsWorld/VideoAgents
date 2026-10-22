@@ -28,6 +28,8 @@ import re
 import time
 from pathlib import Path
 
+from modules import file_lock
+
 MASTER_MODES = ("auto", "off")
 DENSITIES = ("sparse", "medium", "dense")
 LAYERS = ("fg", "mg", "bg")
@@ -102,12 +104,7 @@ def set_override(base: Path, ep: str, scene_no: str, mode: str, density: str | N
     density = density or None
     p = override_path(base, ep)
     p.parent.mkdir(parents=True, exist_ok=True)
-    with open(p.with_suffix(".lock"), "w") as lf:
-        try:
-            import fcntl
-            fcntl.flock(lf, fcntl.LOCK_EX)
-        except (ImportError, OSError):      # 非 POSIX(如 Windows)无 fcntl,退化为无锁(同 ark_assets._Ledger)
-            pass
+    with file_lock.locked(p.with_suffix(".lock")):
         d = load_overrides(base, ep)
         if mode == "auto" and not density:
             d["scenes"].pop(scene_no, None)
