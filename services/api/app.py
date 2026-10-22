@@ -1350,6 +1350,18 @@ async def set_watchdog(project: str, body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_watchdog_set(body)
 
 
+@api.get("/projects/{project}/full-auto", tags=["automation"])
+async def full_auto(project: str) -> dict[str, Any]:
+    """全自动模式(工作流预览页勾选,按项目,默认关)。"""
+    return await core.api_full_auto_get(project)
+
+
+@api.post("/projects/{project}/full-auto", tags=["automation"])
+async def set_full_auto(project: str, body: dict[str, Any]) -> dict[str, Any]:
+    """{enabled}:开启后签字卡由宿主代签、确认卡按默认项代答,Agent 按保证出片的标准自行决定各项选择。"""
+    return await core.api_full_auto_set(project, body or {})
+
+
 @api.post("/draw-sessions", tags=["storyboard"])
 async def draw_session(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_draw_session(body)

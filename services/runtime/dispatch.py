@@ -18,6 +18,8 @@
                                                   # 通过。按钮文字由界面按用户语言显示,不要用 --options 传译文;
                                                   # stdout 恒为中文原键「签字」/「暂缓」(服务端把各语言按钮归一)
                                                   # 通过,应把任务记为等待人工后正常结束,弹窗仍保留
+                                                  # 项目开了「全自动模式」时宿主建卡即代答(签字类「签字」、其余默认项);
+                                                  # 代签被签字前置机检拦下则 stdout 输出「自动签字未通过:<原因>」
 
 零依赖(仅标准库)。通过公开 API 派单,所以所有客户端都能实时看到。
 """
@@ -115,18 +117,28 @@ def confirm(question: str, timeout: int | None, options: list[str], default: str
         timeout = resp.get("timeout") or timeout or 60
         default = resp.get("default") or default   # 服务端可能改默认项(重跑次数=0 → 「跳过」)
     deadline = time.time() + timeout
-    while time.time() < deadline:
+    c = resp
+    while True:
+        if c.get("answer"):
+            heartbeat((f"🤖 全自动模式代选「{c['answer']}」" if c.get("auto") else f"✅ 用户选择「{c['answer']}」")
+                      + f":{question[:100]}")
+            print(c["answer"])
+            return
+        if c.get("auto_blocked"):
+            # 全自动模式代签被宿主签字前置机检拦下:原因交给调用方自行处理后重新发起(签字卡保留)
+            heartbeat(f"🤖 全自动模式代签未通过:{c['auto_blocked'][:160]}")
+            print(f"自动签字未通过:{c['auto_blocked']}")
+            return
+        if time.time() >= deadline:
+            break
+        if c:
+            heartbeat(("✍️ 等待用户签字" if sign else "❓ 等待用户确认")
+                      + f"(剩 {int(deadline - time.time())}s):{question[:120]}")
         time.sleep(2)
         try:
             c = api(f"/approvals/{cid}")
         except Exception:
-            continue
-        if c.get("answer"):
-            heartbeat(f"✅ 用户选择「{c['answer']}」:{question[:100]}")
-            print(c["answer"])
-            return
-        heartbeat(("✍️ 等待用户签字" if sign else "❓ 等待用户确认")
-                  + f"(剩 {int(deadline - time.time())}s):{question[:120]}")
+            c = {}
     if sign:
         heartbeat(f"⏱ 等待签字超时,弹窗保留,任务转入等待人工:{question[:100]}")
         print("未签字")

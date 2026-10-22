@@ -4262,6 +4262,12 @@ function showConfirm(c){
     const g=document.createElement('div');g.className='gate';g.setAttribute('data-no-i18n','');g.textContent='🚧 '+c.gate_label;d.appendChild(g);
   }
   const q=document.createElement('div');q.className='q';q.textContent=(sign?'✍️ ':'❓ ')+c.question;d.appendChild(q);
+  if(c.auto_blocked){   // 全自动模式代签被签字前置机检拦下:Agent 会自行处理后重新发起,原因留在卡上(原因是服务端文案,不走词典)
+    const ab=document.createElement('div');ab.style.cssText='margin-top:6px;font-size:12px;color:var(--yellow)';
+    const lb=document.createElement('span');lb.textContent='🤖 '+t('全自动模式代签未通过:');ab.appendChild(lb);
+    const why=document.createElement('span');why.setAttribute('data-no-i18n','');why.textContent=c.auto_blocked;ab.appendChild(why);
+    d.appendChild(ab);
+  }
   if(sign&&c.project&&String(c.checkpoint||'').toUpperCase().startsWith('H3A')){
     // H3A 分镜签字:在弹窗里确认本项目的视频提示词技能(改动即保存;签字时服务端冻结快照)
     const pr=document.createElement('div');pr.className='ps-row';

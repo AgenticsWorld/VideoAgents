@@ -576,6 +576,48 @@ def episode_order_prompt_section(project: str) -> str:
         "- 「试点集策略」(首集过 H4 后批量并行)在本设定下不适用:每一集都等前一集结束再开始")
 
 
+def full_auto_enabled(project: str | None) -> bool:
+    """全自动模式(按项目,默认关;工作流预览页汇总条「全自动模式」勾选,state.json#full_auto):
+    开启后该项目的签字卡与确认卡由宿主代答——签字类答「签字」(各闸门签字前置机检照常拦),其余答默认项;
+    Agent 提示词注入「全自动模式」段,规约里等用户签字 / 裁决 / 选择的地方由 Agent 按保证出片的标准自行决定。"""
+    return bool(project) and bool(STATE.get("full_auto", {}).get(str(project)))
+
+
+def full_auto_prompt_section(project: str, dispatcher: bool = False) -> str:
+    """「全自动模式」段(仅该项目开关开启时注入;条件式,关闭时不出现任何相关条款)。"""
+    if not full_auto_enabled(project):
+        return ""
+    head = ("\n\n## 全自动模式:开启(工作流预览页「全自动模式」勾选,按项目设置,实时生效"
+            + (";本段优先于上方派单守则 4、5、8、9、「用户重跑次数设定」与 SOUL.md / WORKFLOW.md 里"
+               "「等用户签字 / 升级用户裁决 / 征询用户」的条款,其余纪律不变)\n" if dispatcher else ")\n"))
+    bounds = ("不改用户设置、不开成本 / 画质开关、不赛马、不换引擎、不做额外的计费生成;"
+              "只能由用户亲手完成的操作(如手工截取背景图、计费生成世界模型)不代办,有不依赖它的稳妥路径就走该路径,没有就如实上报")
+    if not dispatcher:
+        return head + (
+            "- 用户已授权本项目不再人工签字、不再等用户做选择:规约里「上报用户裁决 / 征询用户 / 交用户选择」的地方,"
+            "由你按**保证出片**的标准自行选定——优先能稳定产出可用成片的方案(沿用已定稿设定与在库素材,"
+            "选现有设置下最稳妥、返工最少的选项),在回执里写明「全自动模式自行决定:选了什么、为什么」,不要停下等用户\n"
+            "- 重跑 / 重出次数仍按上方「用户重跑次数设定」;额度用尽仍不过时保留已有版本中最好的一版,缺陷逐条写进回执交总制片\n"
+            f"- 不越权:{bounds}")
+    return head + (
+        "用户已授权本项目不再人工签字、不再等用户做选择,由你按**保证出片**的标准一路推进到成片:\n"
+        f"- **签字点照常发起**:H 门仍按守则 5、9 执行 `python3 services/runtime/dispatch.py --confirm \"【<checkpoint>】…\" --sign --project {project}`"
+        "——宿主立即代签,stdout 为「签字」,照常走复核 / 冻结流程;gate JSON 的签字人(decided_by、waivers[].signed_by)记 `full-auto`,"
+        "gate 定义里的人工检查项视为由全自动代签覆盖并在 note 写明,机检项照常。严禁不发签字单直接把人工节点写成 passed\n"
+        "- **代签被拦**:stdout 以「自动签字未通过」开头 = 宿主签字前置机检拦下(如本集还有组缺视频提示词、白模阻断级待决项未清、"
+        "后期处方在派单中 / post_ok FAIL):按原因自行补齐或修复——白模阻断级待决项选推荐方案(无推荐用默认取舍),"
+        f"用 `python3 code/whitebox_issues.py --project {project} --ep <ep> --decide <WBI-…> --choice <选项> --by auto:full-auto` 裁决后回派 "
+        "whitebox-staging 套用;处理完重新发起同一签字,宿主会再次代签。不要以「等待人工」结束\n"
+        "- **重跑不征询**:守则 4 的重跑确认免发,额度内(用户重跑次数设定)直接带意见重派;额度用尽仍不过不升级用户:"
+        "在已有版本里择优采用最好的一版继续(不新派并行重做,这不是赛马),残留问题记缺陷单,major / minor 按 waiver 流程豁免"
+        "(signed_by: full-auto,follow_up 写明),闸门以 PASS_WITH_WAIVER 放行;**内容安全 / 版权类 blocker 不得代为豁免**——"
+        "该链路停下并在汇报中说明,其余无依赖任务照常推进\n"
+        "- **一切选择自行决定**:规约里「上报用户裁决 / 征询用户 / 等用户选择」的地方,按保证出片的标准自行选定(沿用已定稿设定与在库素材,"
+        "选现有设置下最稳妥、返工最少的方案),决定与理由写进工单与汇报;不要用 `--confirm` 向用户提问——即便发起,"
+        "宿主也会立即按你给的 `--default`(未给则第一个选项)代答\n"
+        f"- **不越权**:{bounds},并在汇报中说明、继续推进其它任务")
+
+
 def confirm_timeout_setting() -> int:
     """重跑类确认弹窗倒计时时长(秒,CONFIRM_TIMEOUT_MIN..CONFIRM_TIMEOUT_MAX,越界钳制;
     设置菜单「高级→Agent 高级设置」)。签字类确认永不超时,不受此项影响。"""
@@ -3859,6 +3901,8 @@ def build_role_prompt(agent_id: str, project: str,
               "- 提交 issue **不改变**既有纪律:宿主代码仍然禁止自行修改/改写,照常上报 orchestrator 并在回执里注明已提交的 issue;"
               "同一问题只提交一次(重复提交会被签名去重)。")
     p += nsfw_prompt_section(project)     # NSFW 模式(仅开关开启时注入,条件式)
+    if not is_dispatcher_agent(agent_id):
+        p += full_auto_prompt_section(project)   # 全自动模式(仅该项目开启时注入;调度型 Agent 的版本在调度权一节之后)
     p += id_scheme.prompt_section(load_project_settings(project)["numbering"]["step"])   # 编号制(仅预留插入位制项目注入)
     if agent_id == WHITEBOX_REEL_AGENT:
         p += ("\n\n## 白模自检设定(Web 客户端「设置→高级→Agent 高级设置」全局设置,实时生效)\n"
@@ -4157,6 +4201,7 @@ def build_role_prompt(agent_id: str, project: str,
    只有签字单已经发起、确有 blocker/暂缓，或 DAG 全部完成时才可结束。严禁只回复“后续必须签字”后关单，
    严禁自行把人工节点写成 passed；服务端漏单守卫只负责补建同类永久签字单，不替代本项职责"""
         p += episode_order_prompt_section(project)
+        p += full_auto_prompt_section(project, dispatcher=True)
         p += project_types.orchestrator_section(ps["project"], proj_rel, [a["id"] for a in list_agents()])
         plugs = active_plugins()
         if plugs:
@@ -14039,7 +14084,7 @@ def _preview_workflow(project: str):
     base = _proj_base(project)
     dag_path = base / "runs" / "dag.json"
     if not dag_path.is_file():
-        return {"project": base.name, "nodes": [], "summary": None}
+        return {"project": base.name, "nodes": [], "summary": None, "full_auto": full_auto_enabled(base.name)}
     raw = _dag_load_nodes(dag_path)
     by_id = {n["id"]: n for n in raw if n.get("id")}
 
@@ -14133,7 +14178,7 @@ def _preview_workflow(project: str):
                                               for r in remaining)),
         "critical_path_s": round(critical_s),
     }
-    return {"project": base.name, "nodes": nodes, "summary": summary}
+    return {"project": base.name, "nodes": nodes, "summary": summary, "full_auto": full_auto_enabled(base.name)}
 
 
 async def api_preview_workflow(project: str = "demo"):
@@ -17471,7 +17516,7 @@ def confirm_public(c: dict) -> dict:
                  max(0, int(c["created"] + c["timeout"] - time.time())))
     public = {k: c[k] for k in ("id", "question", "options", "default",
                                 "timeout", "parent", "answer", "kind")}
-    for key in ("project", "gate_id", "checkpoint"):
+    for key in ("project", "gate_id", "checkpoint", "auto", "auto_blocked"):
         if c.get(key):
             public[key] = c[key]
     if c.get("kind") == "sign" and c.get("gate_id"):
@@ -17510,13 +17555,26 @@ async def api_confirm_create(body: dict):
             elif str(checkpoint or "").upper().startswith("H3A"):
                 # H3A 分镜确认:签字卡追加过场设计待裁决数(签字即接受剩余建议,docs/transition_design.md)
                 q = _transition_design_question(project, gate_id, q)
+    auto = full_auto_enabled(project)
+    origin = body.get("origin") or "dispatch"   # dispatch(有 dispatch.py 在轮询)/ runtime_gate_guard(漏单守卫补建,无等待方)
     if kind == "sign":
         dups = [o for o in CONFIRMS.values()
                 if o["kind"] == "sign" and o["question"] == q[:500]]
+        if auto and gate_id:
+            # 全自动模式按闸门去重:总制片与漏单守卫对同一闸门的措辞不同,不再各建一张、各代签一次
+            dups += [o for o in CONFIRMS.values()
+                     if o["kind"] == "sign" and o.get("gate_id") == gate_id
+                     and _approval_project(o) == project and o not in dups]
         pending = next((o for o in dups if o["answer"] is None), None)
         if pending:
-            return {"confirm_id": pending["id"]}
-        fresh = max((o for o in dups if o.get("answered")),
+            extra = {}
+            if auto:
+                if parent:   # 重新发起的运行接手这张卡:被拦原因由它的 dispatch.py 输出,签字后续跑也认它
+                    pending.update(parent=parent, origin=origin)
+                extra = await _full_auto_resolve(pending)
+            return {"confirm_id": pending["id"], **extra}
+        fresh = max((o for o in dups if o.get("answered")
+                     and (not auto or o["answer"] == "签字")),   # 全自动模式下勾选前的「暂缓」不复用,另建卡代签
                     key=lambda o: o["answered"], default=None)
         if fresh and time.time() - fresh["answered"] < 600:
             return {"confirm_id": fresh["id"]}
@@ -17538,15 +17596,72 @@ async def api_confirm_create(body: dict):
          "created": time.time(), "answer": None}
     if project:
         c["project"] = project
+    c["origin"] = origin
     if gate_id:
-        c.update({"gate_id": gate_id, "checkpoint": checkpoint,
-                  "origin": body.get("origin") or "dispatch"})
+        c.update({"gate_id": gate_id, "checkpoint": checkpoint})
     CONFIRMS[c["id"]] = c
+    if auto:
+        # 全自动模式:建卡即代答,不弹窗、不发本机通知;签字被前置机检拦下时卡照常弹出(带拦截原因),等方另行收到原因
+        extra = await _full_auto_resolve(c)
+        if c["answer"] is not None:
+            return {"confirm_id": c["id"], "timeout": c["timeout"], "default": c["default"], **extra}
     HUB.publish({"type": "confirm", **confirm_public(c)})
-    notify_user(("需要你签字:" if kind == "sign" else "需要你确认:") + q)
+    if not auto:   # 全自动模式代签被拦由 Agent 自行处理,不叫用户来签
+        notify_user(("需要你签字:" if kind == "sign" else "需要你确认:") + q)
     # timeout 返回服务端实际生效值(经用户设置钳制),等待方(dispatch.py)据此对齐本地截止时间
     # default 同理返回服务端生效值(重跑次数为 0 时重跑类确认被改为「跳过」)
-    return {"confirm_id": c["id"], "timeout": c["timeout"], "default": c["default"]}
+    return {"confirm_id": c["id"], "timeout": c["timeout"], "default": c["default"],
+            **({"auto_blocked": c["auto_blocked"]} if c.get("auto_blocked") else {})}
+
+
+def _full_auto_has_waiter(c: dict) -> bool:
+    """这张卡是否有 dispatch.py 在轮询(建卡的运行仍在跑):有则代签被拦的原因由 dispatch.py 直接输出给该运行。"""
+    parent = RUNS.get(c.get("parent") or "")
+    return c.get("origin") == "dispatch" and bool(parent) and parent.get("status") in ("queued", "running")
+
+
+async def _full_auto_resolve(c: dict) -> dict:
+    """全自动模式代答一张待答复的卡:签字类答「签字」(走 api_confirm_answer,H3W / H3P / H3V 等签字前置机检照常拦),
+    其余答默认项(重跑次数为 0 时重跑类默认已是「跳过」)。返回给等待方的附加字段:
+    {"auto": True, "answer": …} 或 {"auto_blocked": 原因}(签字被拦,卡保留待处理)。
+    被拦且没有 dispatch.py 在等这张卡(漏单守卫补建 / 勾选时扫到的存量卡 / 等待方已退出)时知会总制片,同一原因只知会一次。"""
+    if c.get("answer") is not None:
+        return {"auto": bool(c.get("auto")), "answer": c["answer"]}
+    sign = c.get("kind") == "sign"
+    c["auto"] = True                     # 先打标记:签字后唤醒总制片的回执(_continue_signed_gate)按全自动口径写
+    if sign:
+        c["signed_from"] = "auto"
+    try:
+        await api_confirm_answer(c["id"], {"answer": "签字" if sign else c["default"]})
+    except ServiceError as e:
+        c.pop("auto", None)
+        c.pop("signed_from", None)
+        c["auto_blocked"] = str(e.detail)[:400]
+        print(f"[full_auto] {_approval_project(c)} 代签被拦:{c['auto_blocked']}", flush=True)
+        if not _full_auto_has_waiter(c) and c.get("auto_blocked_notified") != c["auto_blocked"]:
+            c["auto_blocked_notified"] = c["auto_blocked"]
+            await _full_auto_blocked_notify(c)
+        return {"auto_blocked": c["auto_blocked"]}
+    c.pop("auto_blocked", None)
+    print(f"[full_auto] {_approval_project(c)} 代答「{c['answer']}」:{c['question'][:80]}", flush=True)
+    return {"auto": True, "answer": c["answer"]}
+
+
+async def _full_auto_blocked_notify(c: dict) -> None:
+    """代签被拦且没有等待方:唤醒总制片按全自动模式规则自行处理后重新发起签字(否则流水线停在这张卡上,看门狗也不唤醒)。"""
+    proj = _approval_project(c)
+    if not proj:
+        return
+    what = (f"{c.get('checkpoint') or c.get('gate_id')}(DAG 节点 {c['gate_id']})" if c.get("gate_id")
+            else f"签字单「{c['question'][:120]}」")
+    message = (f"[全自动模式·代签未通过] 项目 {proj} 的 {what}已解锁,全自动模式代签时被宿主签字前置机检拦下:"
+               f"{c['auto_blocked']}\n请按「全自动模式」段的规则自行处理(补齐 / 修复缺项;白模阻断级待决项选推荐方案自行裁决并回派套用),"
+               "处理完后重新发起同一签字(dispatch.py --confirm … --sign),宿主会再次代签;不要等用户。")
+    try:
+        await api_chat({"agent": ORCHESTRATOR_AGENT, "message": message, "project": proj,
+                        "source": "approval", "parent": c.get("parent")})
+    except Exception as e:  # noqa: BLE001
+        print(f"[full_auto] 知会总制片失败(忽略):{e}", flush=True)
 
 
 async def api_confirms():
@@ -18423,6 +18538,11 @@ async def ensure_human_gate_approvals(proj: str, parent: str | None = None) -> l
                     and c.get("gate_id") == gate_id]
         if not existing and gate_id in held:
             continue
+        pend = next((c for c in existing if c.get("answer") is None), None)
+        if pend and full_auto_enabled(proj):
+            # 全自动模式:此前代签被拦(或勾选前就在等)的卡,每次核对重试代签;仍被拦且原因没变不重复知会总制片
+            await _full_auto_resolve(pend)
+            continue
         if existing:
             # 服务若恰在签字落盘后、续跑派单前退出，重启后由核对钩子补唤醒。
             signed = next((c for c in reversed(existing)
@@ -18482,15 +18602,25 @@ async def _continue_signed_gate(c: dict) -> str | None:
             "role": "assistant", "status": "done",
             "text": (f"🧹 签字通过,已自动清理会话记录({'、'.join(cleared)}),"
                      "闸门复核将以全新会话开始。")})
-    message = (
-        f"[人工签字回执] 用户已在永久签字单 {c['id']} 对项目 {proj} 的 "
-        f"{checkpoint}(DAG 节点 {c['gate_id']})明确选择「签字」。"
-        "这是人工签字证据，不是自动放行。请立即复核该闸门的缺陷清零、到期缺陷、"
-        "QA hold 与人工检查项；满足后写入完整 gate JSON、更新 DAG。"
-        "若机检不满足则保持 HOLD 并向用户说明，禁止重复发起同一签字。"
-        "注意:你的会话刚被重置,没有此前对话记忆;闸门/工单/缺陷状态一律读项目文件"
-        "(runs/dag.json、gate 快照、缺陷单)重建,不要臆测。"
-    )
+    if c.get("auto"):
+        message = (
+            f"[全自动模式签字回执] 项目 {proj} 已开启全自动模式,宿主已在签字单 {c['id']} 代用户对 "
+            f"{checkpoint}(DAG 节点 {c['gate_id']})选择「签字」(用户授权的自动签字,gate JSON 签字人记 full-auto)。"
+            "请立即复核该闸门的缺陷清零、到期缺陷与 QA hold;满足后写入完整 gate JSON、更新 DAG,并按「全自动模式」段继续推进。"
+            "若机检不满足,按「全自动模式」段的规则自行处理后再放行,禁止重复发起同一签字。"
+            "注意:你的会话刚被重置,没有此前对话记忆;闸门/工单/缺陷状态一律读项目文件"
+            "(runs/dag.json、gate 快照、缺陷单)重建,不要臆测。"
+        )
+    else:
+        message = (
+            f"[人工签字回执] 用户已在永久签字单 {c['id']} 对项目 {proj} 的 "
+            f"{checkpoint}(DAG 节点 {c['gate_id']})明确选择「签字」。"
+            "这是人工签字证据，不是自动放行。请立即复核该闸门的缺陷清零、到期缺陷、"
+            "QA hold 与人工检查项；满足后写入完整 gate JSON、更新 DAG。"
+            "若机检不满足则保持 HOLD 并向用户说明，禁止重复发起同一签字。"
+            "注意:你的会话刚被重置,没有此前对话记忆;闸门/工单/缺陷状态一律读项目文件"
+            "(runs/dag.json、gate 快照、缺陷单)重建,不要臆测。"
+        )
     result = await api_chat({"agent": ORCHESTRATOR_AGENT, "message": message,
                              "project": proj, "source": "approval",
                              "parent": c.get("parent")})
@@ -18597,6 +18727,74 @@ def _ensure_awake():
                 _ES_CONTINUOUS | _ES_SYSTEM_REQUIRED)
             _KEEPAWAKE_WIN_ON = True
             print("[keepawake] 防休眠已开启(SetThreadExecutionState)", flush=True)
+
+
+async def api_full_auto_get(project: str):
+    """全自动模式开关(按项目,默认关)。"""
+    proj = _proj_base(project).name
+    return {"project": proj, "enabled": full_auto_enabled(proj)}
+
+
+async def api_full_auto_set(project: str, body: dict):
+    """工作流预览页「全自动模式」勾选:{enabled}。按项目持久化在 state.json#full_auto,变化广播 HUB full_auto 事件。
+    开启时当场代答该项目待答复的卡、为已解锁还没有签字单的人工闸门补建签字单(建单即代签,签字后照常唤醒总制片复核);
+    关闭时清掉待答复卡上的代签拦截标记,之后的卡照常等用户(已代签的不撤回)。"""
+    proj = _proj_base(project).name
+    enabled = bool((body or {}).get("enabled"))
+    fa = STATE.setdefault("full_auto", {})
+    changed = bool(fa.get(proj)) != enabled
+    if enabled:
+        fa[proj] = True
+    else:
+        fa.pop(proj, None)
+    save_state(STATE)
+    out = {"project": proj, "enabled": enabled}
+    if not changed:
+        return out
+    HUB.publish({"type": "full_auto", "project": proj, "enabled": enabled})
+    print(f"[full_auto] {proj} 全自动模式{'开启' if enabled else '关闭'}", flush=True)
+    if enabled:
+        out.update(await _full_auto_sweep(proj))
+    else:
+        for c in CONFIRMS.values():
+            if c.get("answer") is None and _approval_project(c) == proj:
+                c.pop("auto_blocked", None)   # 否则 dispatch.py 轮询到它会当成代签被拦直接退出
+                c.pop("auto_blocked_notified", None)
+    return out
+
+
+async def _full_auto_sweep(proj: str) -> dict:
+    """勾选全自动模式时:代答该项目待答复的卡 → 补建并代签已解锁的人工闸门 →
+    这一扫没有唤醒总制片、总制片也没在跑、DAG 还没走完时,知会它检查是否停在等用户裁决 / 选择处(含上一轮结尾的提问)。"""
+    now = time.time()
+    answered, blocked = [], []
+    for c in list(CONFIRMS.values()):
+        if c.get("answer") is not None or _approval_project(c) != proj:
+            continue
+        if c["timeout"] is not None and now - c["created"] >= c["timeout"]:
+            continue
+        (blocked if (await _full_auto_resolve(c)).get("auto_blocked") else answered).append(c["id"])
+    for cid in await ensure_human_gate_approvals(proj):
+        c = CONFIRMS.get(cid) or {}
+        (answered if c.get("answer") is not None else blocked).append(cid)
+    busy = any(r.get("project") == proj and r.get("agent") == ORCHESTRATOR_AGENT
+               and r.get("status") in ("queued", "running") for r in RUNS.values())
+    unfinished = any(n.get("state") not in _DONE_STATES and n.get("state") not in _WF_TERMINAL_SKIP
+                     and n.get("state") not in ("expanded", "template")
+                     for n in _dag_load_nodes(PROJECTS_DIR / proj / "runs" / "dag.json"))
+    notified = False
+    if not busy and unfinished:
+        msg = (f"[全自动模式已开启] 用户刚在工作流预览页为项目 {proj} 开启全自动模式:此后不再人工签字、不再等用户做选择"
+               "(规则见提示词「全自动模式」段)。请检查项目是否停在等用户签字 / 裁决 / 选择处(含你上一轮结尾向用户提出、"
+               "尚未得到答复的问题):有则按保证出片的标准自行决定并继续推进;没有则简要确认后结束,不要额外派活。")
+        try:
+            gm = agent_effective_model(ORCHESTRATOR_AGENT)
+            await api_chat({"agent": ORCHESTRATOR_AGENT, "message": msg, "project": proj,
+                            "source": "settings", "engine": gm["engine"], "model": gm["model"]})
+            notified = True
+        except Exception as e:  # noqa: BLE001
+            print(f"[full_auto] 知会总制片失败(忽略):{e}", flush=True)
+    return {"answered": answered, "blocked": blocked, "notified": notified}
 
 
 def _release_awake():
