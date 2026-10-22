@@ -1384,8 +1384,12 @@ plugins/<plugin-name>/
      即视为该分支业务进行中,**一个也不跳**,仅在汇报中说明;
    - 用户在同一指令中明确要求同时推进被跳分支(如「小说和视频都做」)时,不执行跳过。
    `skipped` 是挂起不是放弃:用户其后要求推进对应业务(如视频成片)时,orchestrator 把这些节点
-   恢复 `pending` 重新排产。闸门判定时 skipped 依赖视为已满足(如 g3 不因 p3-voice/p3-lighting
-   被跳过而阻塞签字)。每次改动照常 `dagcheck.py --strict`。首个使用方:derivative-fiction
+   恢复 `pending` 重新排产。依赖为 `skipped` / `waived` 的视为已满足(`cancelled` 不算),闸门判定与宿主待办前沿同口径
+   (`dagcheck.py --frontier`、空转看门狗、闸门补建签字单都按此算;如 g3 不因 p3-voice/p3-lighting
+   被跳过而阻塞签字);仅当人工闸门(`human`)的依赖全部是 `skipped` / `waived`、没有一个真正完成时,宿主不把它算作
+   已解锁、不发签字单——这种闸门在本流程里无判定对象,应随所属分支一并列入清单。清单须覆盖本流程不适用的全部主流程节点
+   (含 g0 与 g6s/g6w/g7p/g9p 这类阶段内闸门;`p0-parse-*` 只匹配按批展开的 `p0-parse-bNN`,模板节点 `p0-parse` 另列),
+   漏列的节点在上游被跳过后会出现在待办前沿上(看门狗据此反复唤醒总制片)。每次改动照常 `dagcheck.py --strict`。首个使用方:derivative-fiction
    (小说只依赖正史 bible/,跳过 p3-voice/p3-lighting 与 p4–p11 全部视听制作节点);
    fusion-fiction 直改正史喂回视频主流程,**不适用**本机制。
 

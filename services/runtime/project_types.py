@@ -264,7 +264,7 @@ def orchestrator_section(block: dict, proj_rel: str, agent_ids) -> str:
             "`python3 code/codevideo.py` 逐帧渲染;一个项目 = 一部片 = ep01;段(timeline.json sections)= 组(grp)= 场次,"
             "cv3-sec 按组扇出")
     lines += [
-        f"- 立项/排产:生成或改写 {proj_rel}/runs/dag.json 时,主流程节点照 agents/workflow.yaml 实例化(p0-init/g0 照常),"
+        f"- 立项/排产:生成或改写 {proj_rel}/runs/dag.json 时,主流程节点照 agents/workflow.yaml 实例化(p0-init 照常),"
         f"再把 `{t['workflow']}` 的全部节点并入同一份 dag.json,并在**同一次改动**中按该文件顶层 `main_dag_on_start.skip` "
         f"把清单内主流程节点置 skipped(skip_reason 写「项目类型 {tid} 不适用,可恢复」;条件白名单同 WORKFLOW.md §10.3 第 6 条);"
         "每个并入节点显式写 phase 字段(取所属 phase 的 id);改完照常 `dagcheck.py --strict`",

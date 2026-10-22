@@ -4257,7 +4257,9 @@ def build_role_prompt(agent_id: str, project: str,
 - 插件 manifest 的 requires.artifacts 声明了前置产物(如需正史 bible/ 冻结);缺前置时先补主流程对应阶段,不要硬跑
 - 插件流程 YAML 若声明顶层 main_dag_on_start.skip(与该插件业务无关的主流程节点清单),并入节点的同一次改动中
   按 WORKFLOW.md §10.3 第 6 条执行:清单节点全部未开工(pending/template/blocked)才整组置 skipped 并写 skip_reason,
-  存在任一已开工节点则一个不跳;闸门判定时 skipped 依赖视为已满足;用户其后要求推进被跳分支时恢复 pending 重新排产"""
+  存在任一已开工节点则一个不跳;闸门判定时 skipped / waived 依赖视为已满足(cancelled 不算,与宿主待办前沿同口径),
+  但人工闸门的依赖全是 skipped / waived 时宿主不算解锁、不发签字单(这种闸门应随所属分支一并列入清单);
+  用户其后要求推进被跳分支时恢复 pending 重新排产"""
     if agent_id == REVISER_ID:
         p += _revision_role_suffix(project, target)
     from modules import script_keypoints as kp
@@ -14119,6 +14121,7 @@ def _preview_workflow(project: str):
         return {"project": base.name, "nodes": [], "summary": None, "full_auto": full_auto_enabled(base.name)}
     raw = _dag_load_nodes(dag_path)
     by_id = {n["id"]: n for n in raw if n.get("id")}
+    state_of = dagcheck.state_index(raw)
 
     nodes = []
     for n in raw:
@@ -14138,6 +14141,8 @@ def _preview_workflow(project: str):
                            if isinstance(d, str)],
             "agent": n.get("agent"), "gate": bool(n.get("gate")),
             "human": bool(n.get("human")), "checkpoint": n.get("checkpoint"),
+            # 依赖是否已满足(dagcheck 口径,#149):页面据此给人工节点标「等待签字」,与宿主补建签字单一致
+            "deps_ready": dagcheck.deps_satisfied(n, state_of),
             "for_each": n.get("for_each"),
             "for_each_instance": n.get("for_each_instance"),
             "outputs": n.get("outputs") or [], "attempt": n.get("attempt"),
@@ -18281,7 +18286,8 @@ def _dag_load_nodes(dag_path) -> list[dict]:
 def _dag_frontier(proj: str) -> dict:
     """读 runs/dag.json 的待办前沿(dagcheck.frontier,与总制片 `dagcheck.py --frontier` 同口径):
     skipped/cancelled/waived 终态、blocked(用户明确暂缓)、template/expanded 扇出骨架(#72)都不算待办,
-    否则看门狗每轮都会据此空唤醒总制片;多集并行关闭时另把按集顺序暂缓的后续集节点剔出(held)。"""
+    否则看门狗每轮都会据此空唤醒总制片;多集并行关闭时另把按集顺序暂缓的后续集节点剔出(held)。
+    依赖满足按 dagcheck.deps_satisfied:skipped/waived 依赖视同满足(#149,§10.3 第 6 条),人工闸门另有保护。"""
     dag_path = PROJECTS_DIR / proj / "runs" / "dag.json"
     nodes = _dag_load_nodes(dag_path) if dag_path.is_file() else []
     return dagcheck.frontier(nodes, episode_parallel_setting())
@@ -18375,15 +18381,13 @@ def _gate_display_by_id(proj: str | None, gate_id: str | None, lang: str | None 
 
 
 def _ready_human_gates(proj: str) -> list[dict]:
-    """返回依赖均完成、状态仍为 pending 的人工闸门节点。"""
+    """返回依赖已满足、状态仍为 pending 的人工闸门节点(dagcheck.ready_human_gates,与看门狗前沿、
+    `dagcheck.py --frontier` 同口径:skipped/waived 依赖视同满足;依赖全是 skipped/waived、没有一个真正完成的闸门
+    不算解锁,不补建签字单、不绑定签字,#149)。"""
     dag_path = PROJECTS_DIR / proj / "runs" / "dag.json"
     if not dag_path.is_file():
         return []
-    nodes = _dag_load_nodes(dag_path)
-    done = {n["id"] for n in nodes if n.get("state") in _DONE_STATES}
-    return [n for n in nodes
-            if n.get("id") and n.get("human") and n.get("state") == "pending"
-            and all(dep in done for dep in (n.get("depends_on") or []))]
+    return dagcheck.ready_human_gates(_dag_load_nodes(dag_path))
 
 
 def _sign_gate_binding(proj: str, question: str,

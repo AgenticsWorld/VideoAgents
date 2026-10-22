@@ -33,6 +33,9 @@ STATES = {"pending", "dispatched", "running", "failed", "blocked", "done",
 
 
 DONE_STATES = {"done", "passed", "passed_human_override"}
+# 依赖视同满足的状态(WORKFLOW.md §10.3 第 6 条;类型 DAG 的条件节点):条件不成立 / 随 main_dag_on_start.skip
+# 挂起的 skipped、按豁免放行的 waived。cancelled(撤销)不算——下游要么改依赖、要么一并撤销,由总制片裁定
+SATISFIED_STATES = DONE_STATES | {"skipped", "waived"}
 FINAL_STATES = DONE_STATES | {"skipped", "cancelled", "waived"}   # 不再执行的终态
 # 发布环节(Phase 11,按平台展开、常由用户暂缓或跳过)不算「一集是否做完」
 PUBLISH_PREFIX = "p11-"
@@ -155,16 +158,42 @@ def episode_map(nodes: list[dict]) -> dict[str, int | None]:
     return {nid: ep_of(nid, frozenset()) for nid in by_id}
 
 
+def deps_satisfied(node: dict, state_of: dict) -> bool:
+    """节点依赖是否已满足(state_of = 节点 id → state):每个依赖都在 SATISFIED_STATES(skipped / waived 视同满足)。
+    人工签字节点(human 为真)另加闸门保护:依赖非空却没有一个真正完成(DONE_STATES)、全部是 skipped / waived 的,
+    不算就绪——skip 清单漏列闸门时不凭空发签字单(这种闸门应随所属分支一并置 skipped)。"""
+    deps = node.get("depends_on") or []
+    if not all(state_of.get(d) in SATISFIED_STATES for d in deps):
+        return False
+    if node.get("human") and deps and not any(state_of.get(d) in DONE_STATES for d in deps):
+        return False
+    return True
+
+
+def state_index(nodes: list[dict]) -> dict:
+    """节点 id → state(deps_satisfied 的入参)。"""
+    return {n.get("id"): n.get("state") for n in nodes if n.get("id")}
+
+
+def ready_human_gates(nodes: list[dict]) -> list[dict]:
+    """依赖已满足、仍为 pending 的人工签字节点(节点对象)。宿主补建签字单 / 签字绑定(core._ready_human_gates)
+    与 ready_nodes 的 human_waiting 同口径。"""
+    state_of = state_index(nodes)
+    return [n for n in nodes if n.get("id") and n.get("human") and n.get("state") == "pending"
+            and deps_satisfied(n, state_of)]
+
+
 def ready_nodes(nodes: list[dict]) -> tuple[list[str], list[str]]:
-    """依赖已满足的待办前沿:(非人工节点, pending 人工签字节点)。runtime 看门狗同口径。"""
-    done = {n["id"] for n in nodes if n.get("state") in DONE_STATES}
+    """依赖已满足的待办前沿:(非人工节点, pending 人工签字节点)。runtime 看门狗同口径;
+    依赖满足的判定见 deps_satisfied(skipped / waived 视同满足,人工闸门另有保护)。"""
+    state_of = state_index(nodes)
     runnable, human_waiting = [], []
     for n in nodes:
         state = n.get("state")
         # 终态不再执行;blocked 是用户明确暂缓;template/expanded 是 for_each 扇出骨架(#72)
         if state in FINAL_STATES or state in ("blocked", "template", "expanded"):
             continue
-        if not all(d in done for d in (n.get("depends_on") or [])):
+        if not deps_satisfied(n, state_of):
             continue
         if n.get("human"):
             if state == "pending":   # 只有 pending 人工节点能发起新的签字

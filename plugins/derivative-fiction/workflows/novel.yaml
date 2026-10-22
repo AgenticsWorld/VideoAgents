@@ -24,7 +24,8 @@ defaults:
 # skipped 是挂起不是放弃:用户其后要求制作视频时恢复 pending 重新排产。
 # g3(H1A)照常判定,skipped 依赖(p3-voice/p3-lighting)视为已满足。
 main_dag_on_start:
-  skip:                # p*- 为前缀通配(含按集展开后的逐集节点);g4–g10 为闸门节点精确 id
+  skip:                # p*- 为前缀通配(含按集展开后的逐集节点);g4–g10 与 g6s/g6w/g7p/g9p 为闸门节点精确 id
+                       # (阶段内闸门须一并列出:依赖全是 skipped 的人工闸门宿主不发签字单,但会永远停在 pending)
     - p3-voice         # 声纹选角(TTS 配音用)
     - p3-lighting      # 灯光设计(出图用)
     - p4-*             # 美术风格
@@ -37,9 +38,13 @@ main_dag_on_start:
     - p11-*            # 视频发布
     - g4               # H2-美术风格锁定
     - g5               # H3-第1集剧本确认
+    - g6s              # H3S-故事板确认
+    - g6w              # H3W-白模确认
     - g6               # H3A-分镜确认
+    - g7p              # H3V-视频提示词确认
     - g7               # H3B-视觉生成确认
     - g8
+    - g9p              # H3P-后期确认
     - g9               # H4-首集成片确认
     - g10              # H5-发布签字
 

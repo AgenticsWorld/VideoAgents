@@ -249,3 +249,74 @@ def test_integrated_plugin_packages(tmp_path, monkeypatch):
     ("gm1", "mx1m"), ("gm2", "mx3"), ("dh2-avatar-utt0001", "dh2"), ("p6-shots-ep01", "p6"), ("ep06-x", "extra")])
 def test_workflow_preview_phase_of(nid, phase):
     assert core._wf_phase_of({"id": nid}) == phase
+
+
+# ---- #149:main_dag_on_start.skip 须覆盖本类型不适用的全部主流程节点 ----
+# 宿主待办前沿把 skipped 依赖视同满足(WORKFLOW.md §10.3 第 6 条),漏列的主流程节点在上游被跳过后会出现在前沿上
+# (p0-bible-init 只依赖已 done 的 p0-init,看门狗反复唤醒总制片);依赖全 skipped 的人工闸门永远停在 pending。
+def _wf_nodes(rel: str) -> list[dict]:
+    """DAG 模板节点,phase 级 depends_on 并入各节点;@prev_group 之类组间自依赖去掉。"""
+    yaml = pytest.importorskip("yaml")
+    doc = yaml.safe_load((ROOT / rel).read_text(encoding="utf-8"))
+    out = []
+    for ph in doc["phases"]:
+        for t in ph.get("tasks", []):
+            deps = [d for d in list(t.get("depends_on") or []) + list(ph.get("depends_on") or []) if "@" not in d]
+            out.append({"id": t["id"], "phase": ph["id"], "for_each": t.get("for_each") or ph.get("for_each"),
+                        "human": bool(t.get("human") or t.get("human_on")), "depends_on": deps})
+    return out
+
+
+def _skip_hit(entry: str, nid: str) -> bool:
+    return nid.startswith(entry[:-1]) if entry.endswith("*") else nid == entry
+
+
+_MAIN = "agents/workflow.yaml"
+_NOVEL = "plugins/derivative-fiction/workflows/novel.yaml"
+
+
+def _skip_keep() -> dict[str, set[str]]:
+    """各类型 / 插件 DAG 刻意保留(不跳)的主流程节点。"""
+    main = _wf_nodes(_MAIN)
+    keep = {project_types.TYPES[t]["workflow"]: {"p0-init"}
+            for t in ("audio-to-video", "code-video", "digital-human")}
+    # 混剪:文稿走 p0 解析、p1 structure/events 出 story_graph / events(mx0-design 的输入),g0 照常
+    keep[project_types.TYPES["mashup"]["workflow"]] = {
+        "p0-init", "p0-bible-init", "p0-scan", "p0-parse", "p0-merge", "g0", "p1-structure", "p1-events"}
+    # 衍生小说:只依赖正史 bible/(p0–p3 文字设定与 H1 / H1A),声纹 / 灯光与 p4 起的视听节点全跳
+    keep[_NOVEL] = {n["id"] for n in main if n["phase"] in ("p0", "p1", "p2", "p3")} - {"p3-voice", "p3-lighting"}
+    return keep
+
+
+def test_main_dag_skip_lists_cover_all_inapplicable_main_nodes():
+    yaml = pytest.importorskip("yaml")
+    main = _wf_nodes(_MAIN)
+    ids = {n["id"] for n in main}
+    fanout = {n["id"] for n in main if n["for_each"]}
+    keep = _skip_keep()
+    assert set(keep) == {t["workflow"] for tid, t in project_types.TYPES.items()
+                         if tid != project_types.DEFAULT} | {_NOVEL}
+    for rel, kept in keep.items():
+        skip = yaml.safe_load((ROOT / rel).read_text(encoding="utf-8"))["main_dag_on_start"]["skip"]
+        for e in skip:   # 防笔误:精确 id 须存在;通配须命中模板节点,或是按 for_each 展开的 <模板 id>-*
+            assert any(_skip_hit(e, i) for i in ids) or (e.endswith("-*") and e[:-2] in fanout), (rel, e)
+        uncovered = {i for i in ids if not any(_skip_hit(e, i) for e in skip)}
+        assert uncovered == kept, (rel, sorted(uncovered - kept), sorted(kept - uncovered))
+
+
+def test_main_dag_skip_lists_leave_no_stray_main_frontier():
+    """立项时(p0-init done、清单节点 skipped、其余 pending)的待办前沿里,主流程节点只能是该类型刻意保留的,
+    也不会冒出主流程人工闸门的签字单。"""
+    yaml = pytest.importorskip("yaml")
+    from services.runtime import dagcheck
+    main = _wf_nodes(_MAIN)
+    for rel, kept in _skip_keep().items():
+        skip = yaml.safe_load((ROOT / rel).read_text(encoding="utf-8"))["main_dag_on_start"]["skip"]
+        nodes = [{**n, "state": "done" if n["id"] == "p0-init" else
+                  "skipped" if any(_skip_hit(e, n["id"]) for e in skip) else "pending"} for n in main]
+        nodes += [{**n, "state": "pending"} for n in _wf_nodes(rel)]
+        main_ids = {n["id"] for n in main}
+        runnable, human = dagcheck.ready_nodes(nodes)
+        assert {i for i in runnable if i in main_ids} <= kept, (rel, runnable)
+        assert not [i for i in human if i in main_ids], (rel, human)
+        assert [i for i in runnable if i not in main_ids], rel     # 类型 / 插件 DAG 的首节点照常可派

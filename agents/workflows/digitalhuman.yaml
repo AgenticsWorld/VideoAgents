@@ -14,10 +14,17 @@
 version: 1
 project_type: digital-human
 
+# 主流程分支联动跳过(WORKFLOW.md §10.3 第 6 条):输入是录音 / 照片不是小说,主 DAG 整条不适用。
+# 刻意不含 p0-init(立项时已 done,列入会触发「一个也不跳」);g0 立项时仍是 pending,随清单一并置 skipped。
+# 清单须覆盖除 p0-init 外的全部主流程节点:宿主待办前沿把 skipped 依赖视同满足,漏列的节点会出现在前沿上。
 main_dag_on_start:
   skip:
+    - p0-bible-init
     - p0-scan
+    - p0-parse
     - p0-parse-*
+    - p0-merge
+    - g0
     - p1-*
     - p2-*
     - p3-*
@@ -34,9 +41,13 @@ main_dag_on_start:
     - g3
     - g4
     - g5
+    - g6s
+    - g6w
     - g6
+    - g7p
     - g7
     - g8
+    - g9p
     - g9
     - g10
 

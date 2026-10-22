@@ -186,7 +186,8 @@ function fmtDur(s){
 }
 const fmtM=v=>v==null?'—':(v/1e6).toFixed(4)+'M';               // token 数按百万(M)为单位,保留 4 位小数
 
-/* 单节点显示状态(叠加"等待签字"派生态:human 节点依赖全通过但未签) */
+/* 单节点显示状态(叠加"等待签字"派生态:human 节点依赖已满足但未签;依赖满足以服务端 deps_ready 为准——
+   dagcheck 口径,skipped/waived 依赖视同满足、依赖全是 skipped/waived 的闸门不算;旧服务端没有该字段时按全通过判) */
 function nodeState(n,doneSet){
   if(DONE.has(n.state))return 'done';
   if(SKIP.has(n.state))return 'skipped';
@@ -194,7 +195,7 @@ function nodeState(n,doneSet){
   if(n.state==='running')return 'running';
   if(n.state==='dispatched')return 'dispatched';
   if(n.state==='failed')return 'failed';
-  if(n.human&&(n.depends_on||[]).every(d=>doneSet.has(d)))return 'waitsign';
+  if(n.human&&(n.deps_ready??(n.depends_on||[]).every(d=>doneSet.has(d))))return 'waitsign';
   if(n.state==='blocked')return 'blocked';
   return 'pending';
 }

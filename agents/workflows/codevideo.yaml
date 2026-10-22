@@ -67,12 +67,21 @@ project_type: code-video
 # 全部未开工(pending/template/blocked)时整组置 skipped(写 skip_reason 含项目类型名);
 # 清单内存在任一已开工节点则视为视频制作进行中,一个也不跳。
 # skipped 是挂起不是放弃:用户其后要求按主流程做视频时恢复 pending 重新排产。
-# ⚠️ 刻意不含 p0-init 与 g0:项目创建时 orchestrator 已跑过项目初始化(状态 done),
+# ⚠️ 刻意不含 p0-init:项目创建时 orchestrator 已跑过项目初始化(状态 done),
 #    把已开工节点列进清单会触发「一个也不跳」的白名单条件,导致整组跳过失效。
+#    g0 立项时仍是 pending(它的依赖 p0-merge / p0-bible-init 也在清单内,无判定对象),随清单一并置 skipped。
+# 清单须覆盖除 p0-init 外的全部主流程节点(含 g6s/g6w/g7p/g9p 这类阶段内闸门):宿主待办前沿把 skipped 依赖
+#    视同满足(§10.3 第 6 条),漏列的节点在上游被跳过后会出现在前沿上(如 p0-bible-init 只依赖已 done 的 p0-init),
+#    看门狗据此反复唤醒总制片;依赖全是 skipped 的人工闸门宿主不发签字单,但会永远停在 pending。
 main_dag_on_start:
-  skip:                # p*- 为前缀通配(含按集展开后的逐集节点);g1–g10 为闸门节点精确 id
+  skip:                # p*- 为前缀通配(含按集展开后的逐集节点,不含同名模板节点本身——p0-parse 另列);
+                       # g0–g10 与 g6s/g6w/g7p/g9p 为闸门节点精确 id
+    - p0-bible-init    # 正史 bible/ 骨架——不适用(风格规范 STYLE.md 即视觉权威)
     - p0-scan          # 小说分章扫描——本流程没有小说
-    - p0-parse-*       # 小说分章解析
+    - p0-parse         # 小说分章解析(模板节点)
+    - p0-parse-*       # 小说分章解析(按批展开的 p0-parse-bNN)
+    - p0-merge         # 分章总表拼装
+    - g0               # 立项闸门——依赖 p0-merge / p0-bible-init 都在清单内
     - p1-*             # 剧情理解——由 cv1-treatment 导演方案替代
     - p2-*             # 世界圣经九维——不适用(风格规范 STYLE.md 即视觉权威)
     - p3-*             # 角色与资产——角色在页面代码里画,不出概念图
@@ -89,9 +98,13 @@ main_dag_on_start:
     - g3               # H1A-角色与资产确认
     - g4               # H2-美术风格锁定
     - g5               # H3-第1集剧本确认
+    - g6s              # H3S-故事板确认
+    - g6w              # H3W-白模确认
     - g6               # H3A-分镜确认
+    - g7p              # H3V-视频提示词确认
     - g7               # H3B-视觉生成确认
     - g8
+    - g9p              # H3P-后期确认
     - g9               # H4-首集成片确认
     - g10              # H5-发布签字
 
