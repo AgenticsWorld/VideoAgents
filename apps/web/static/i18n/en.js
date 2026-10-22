@@ -10,7 +10,6 @@ window.I18N_DICT = {
 "有完整风格规范与样片的 43 种风格": "43 styles with a full style specification and a demo film",
 "轻量": "Light",
 "轻量风格": "Light style",
-"在线看 OPUSCAR 98 ↗": "Watch OPUSCAR 98 online ↗",
 "轻量风格只有一段风格提示,没有完整规范与样片源码:材质、字体、镜头语法、声音等提示没写到的部分,导演会在方案里补全": "A light style is only a style prompt, without a full specification or demo source: whatever the prompt leaves open (materials, type, camera grammar, sound…) the director fills in in the treatment",
 "项目音乐库选曲": "Picked from the project music library",
 "{bpm} BPM,已测节拍": "{bpm} BPM, beats detected",

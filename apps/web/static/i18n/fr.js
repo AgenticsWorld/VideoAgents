@@ -10,7 +10,6 @@ window.I18N_DICT = {
 "有完整风格规范与样片的 43 种风格": "43 styles avec une spécification complète et un film de démonstration",
 "轻量": "Léger",
 "轻量风格": "Style léger",
-"在线看 OPUSCAR 98 ↗": "Voir OPUSCAR 98 en ligne ↗",
 "轻量风格只有一段风格提示,没有完整规范与样片源码:材质、字体、镜头语法、声音等提示没写到的部分,导演会在方案里补全": "Un style léger n'est qu'un prompt de style, sans spécification complète ni source de démo : ce que le prompt ne précise pas (matières, typographie, grammaire de caméra, son…) est complété par le réalisateur dans le traitement",
 "项目音乐库选曲": "Choisie dans la bibliothèque musicale du projet",
 "{bpm} BPM,已测节拍": "{bpm} BPM, temps détectés",

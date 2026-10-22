@@ -10,7 +10,6 @@ window.I18N_DICT = {
 "有完整风格规范与样片的 43 种风格": "43 phong cách có đặc tả đầy đủ và phim mẫu",
 "轻量": "Nhẹ",
 "轻量风格": "Phong cách nhẹ",
-"在线看 OPUSCAR 98 ↗": "Xem OPUSCAR 98 trực tuyến ↗",
 "轻量风格只有一段风格提示,没有完整规范与样片源码:材质、字体、镜头语法、声音等提示没写到的部分,导演会在方案里补全": "Phong cách nhẹ chỉ là một đoạn gợi ý phong cách, không có đặc tả đầy đủ hay mã nguồn phim mẫu: những gì gợi ý chưa nói (chất liệu, phông chữ, ngữ pháp máy quay, âm thanh…) đạo diễn sẽ bổ sung trong phương án",
 "项目音乐库选曲": "Chọn từ thư viện nhạc của dự án",
 "{bpm} BPM,已测节拍": "{bpm} BPM, đã dò nhịp",

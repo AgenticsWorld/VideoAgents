@@ -1870,7 +1870,6 @@ async function npCsLoad(){
   $('#np-cs-picked').innerHTML=cur?`${esc(t('已选:'))}<b>${esc(cur.tname)}</b>(${esc(cur.tcat)})`
     +`<div class="film">${esc(cur.tline)}</div>`
     :curL?`${esc(t('已选:'))}<b>${esc(curL.tname)}</b>(${esc(t('轻量风格'))} · ${esc(curL.tfilm)})`
-    +` · <a href="${esc(lib.light.gallery)}" target="_blank" rel="noopener">${esc(t('在线看 OPUSCAR 98 ↗'))}</a>`
     +`<div class="film">${esc((curL.tuses||[]).join(' · '))}</div><div class="film">${esc(t('轻量风格只有一段风格提示,没有完整规范与样片源码:材质、字体、镜头语法、声音等提示没写到的部分,导演会在方案里补全'))}</div>`
     :esc(t('从下面选一种风格(必选)'));
 }
