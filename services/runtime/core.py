@@ -49,6 +49,7 @@ from services.runtime import rhythm as narrative_rhythm
 from services.runtime import project_types
 from services.runtime import engine_setup
 from services.runtime import opencode_cli
+from services.runtime import run_steer
 from services.runtime import dagcheck
 
 # ---------------- 配置 ----------------
@@ -440,6 +441,7 @@ def ensure_project(project: str):
 RUNS: dict[str, dict] = {}                       # run_id -> run 记录
 RUN_TASKS: dict[str, asyncio.Task] = {}          # run_id -> execute_run 任务(停止排队用)
 RUN_PROCS: dict[str, asyncio.subprocess.Process] = {}  # run_id -> 子进程(停止运行用)
+RUN_STEER: dict[str, "run_steer.SteerChannel"] = {}   # run_id -> 运行中插话通道(见 run_steer / api_steer)
 CONFIRMS: dict[str, dict] = {}                   # confirm_id -> 待用户确认项
 # 全局并发总闸:(创建时的额度, 信号量)。跨 Agent 并发额度被用户调整后按需重建;
 # 旧信号量由仍持有它的 run 自然释放后回收,切换瞬间总并发可能短暂超出新额度(可接受)
@@ -2292,6 +2294,15 @@ def agentics_pi_launch(model: str, da: dict, home: Path, *, thinking: bool,
     args = ["--mode", "json", "--approve", "--no-extensions", "--no-skills",
             "--no-prompt-templates", "--no-context-files", "--provider", provider, "--model", model]
     return args, env
+
+
+def _pi_rpc_args(cmd: list[str]) -> list[str]:
+    """pi 命令行的 --mode json 换成 rpc(派单走 RPC 以支持运行中插话;素材库画面分析仍用 json)。"""
+    out = list(cmd)
+    for i, a in enumerate(out[:-1]):
+        if a == "--mode":
+            out[i + 1] = "rpc"
+    return out
 
 
 def _moderation_provider(m: dict) -> str:
@@ -4710,12 +4721,12 @@ async def execute_run(run: dict, message: str, model: str | None):
         def make_cmd(sid: str | None) -> list[str]:
             """按会话 id 生成引擎命令;会话失效回退时以 sid=None 重建全新会话命令。"""
             if engine == "deepagents":
-                # 内置 pi:与 pi 引擎同样的 JSON 事件流,系统提示走文件。无状态 Agent 每单全新会话、
+                # 内置 pi:与 pi 引擎同样的 RPC 模式,系统提示走文件。无状态 Agent 每单全新会话、
                 # 不 resume,--no-session 免得扇出工位每单留一个会话文件
-                base = da_cmd + ["--append-system-prompt", str(system_prompt_file)]
+                base = _pi_rpc_args(da_cmd) + ["--append-system-prompt", str(system_prompt_file)]
                 if sid:
-                    return base + ["--session", sid, message]
-                return base + (["--no-session"] if is_stateless else []) + [message]
+                    return base + ["--session", sid]
+                return base + (["--no-session"] if is_stateless else [])
             if engine == "codex":
                 # codex 无 --append-system-prompt:首轮把角色说明拼进 prompt;续轮走 resume(会话已带上下文)
                 base = [cli_executable, "exec", "--json", "--skip-git-repo-check",
@@ -4795,20 +4806,24 @@ async def execute_run(run: dict, message: str, model: str | None):
                                    "-p", skill_resume_message(message, skill_contract, True)]
                 return base + ["-p", f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
             if engine == "pi":
-                # pi 原生 JSON 事件流与持久会话。系统提示通过文件传入，既避免
+                # pi 原生持久会话;--mode rpc:事件流同 json 模式,提示词与运行中插话都经 stdin
+                # 的 JSONL 命令送入(run_steer.PiSteer)。系统提示通过文件传入，既避免
                 # Windows 命令行长度限制，也让续接进程每轮恢复同一 Agent 身份。
-                base = [cli_executable, "--mode", "json", "--approve",
+                base = [cli_executable, "--mode", "rpc", "--approve",
                         "--append-system-prompt", str(system_prompt_file)]
                 if model:
                     base += ["--model", model]
                 base += engine_effort_args("pi", thinking_effort)
                 if sid:
                     base += ["--session", sid]
-                return base + [message]
+                return base
             # --include-partial-messages:逐块增量 stream_event(文字/工具入参/思考心跳),
             # 否则一个内容块(如几千字的 heredoc 工具调用)生成完才有一条 assistant 事件,
-            # 期间前端无任何日志;整块 assistant 事件照旧发出,处理器按已流出前缀去重
-            c = [cli_executable, "-p", message,
+            # 期间前端无任何日志;整块 assistant 事件照旧发出,处理器按已流出前缀去重。
+            # --input-format stream-json:提示词作为 stdin 的一行 user 消息送入、stdin 保持打开,
+            # 运行中插话再写一行(run_steer.ClaudeSteer);--replay-user-messages 回放确认送达
+            c = [cli_executable, "-p",
+                 "--input-format", "stream-json", "--replay-user-messages",
                  "--output-format", "stream-json", "--verbose",
                  "--include-partial-messages"]
             if claude_prompt_file:
@@ -4879,7 +4894,17 @@ async def execute_run(run: dict, message: str, model: str | None):
                 run["session_reset"] = True
                 STATE["sessions"].pop(session_key, None)
                 save_state(STATE)
+            # 运行中插话(api_steer):claude / pi / Agentics 经 stdin,opencode 2.x 经会话 inbox
+            steer_stdin = engine in ("claude", "pi", "deepagents")
+            run["_steerable"] = steer_stdin or oc_v2
             while True:
+                # 排队期间 / 进程起来之前 / 上个进程(会话失效重试)没送达的插话:并进本次提示词
+                folded = [i for i in run.get("steers") or () if not i.get("delivered")]
+                if folded:
+                    message = run_steer.fold_steers(message, [i["text"] for i in folded])
+                    for i in folded:
+                        i.update(delivered=True, via="prompt", failed=False)
+                run["_steer_spawned"] = True
                 stdin_payload = codex_stdin(session_id)
                 run["_resume_sid"] = session_id   # 引擎处理器据此识别「续接被静默换成新会话」
                 proc = await asyncio.create_subprocess_exec(
@@ -4887,12 +4912,25 @@ async def execute_run(run: dict, message: str, model: str | None):
                     start_new_session=True,   # 独立进程组:停止时可连同其派生子进程一起杀
                     # opencode 2.x 的 run 在 stdin 非终端时先读到 EOF 才发提示词,继承来的管道
                     # 不关就永远卡住:不喂 stdin 的 opencode 一律接 DEVNULL
-                    stdin=(asyncio.subprocess.PIPE if stdin_payload is not None
+                    stdin=(asyncio.subprocess.PIPE if stdin_payload is not None or steer_stdin
                            else asyncio.subprocess.DEVNULL if engine == "opencode" else None),
                     stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
                 if oc_v2:
                     proc._sigint_first = True   # 停止时先 SIGINT 正式中断会话,见 _kill_proc_tree
                 RUN_PROCS[run["id"]] = proc
+                steer_ch = (run_steer.ClaudeSteer(proc) if engine == "claude"
+                            else run_steer.PiSteer(proc) if engine in ("pi", "deepagents")
+                            else run_steer.OpencodeSteer(cli_executable, env, ROOT) if oc_v2
+                            else None)
+                if steer_ch:
+                    RUN_STEER[run["id"]] = steer_ch
+                    if steer_stdin:
+                        await steer_ch.start(message)   # 提示词经 stdin 送入,stdin 保持打开
+                    # 起进程期间收下、还没进通道的插话
+                    for item in [i for i in run.get("steers") or ()
+                                 if not i.get("delivered")
+                                 and all(i is not x for x in steer_ch.items)]:
+                        await steer_ch.steer(item)
                 if stdin_payload is not None and proc.stdin:
                     proc.stdin.write(stdin_payload)
                     try:
@@ -4910,10 +4948,15 @@ async def execute_run(run: dict, message: str, model: str | None):
                     wait = deadline - now
                     if idle_timeout:
                         wait = min(wait, last_output + idle_timeout - now)
+                    if steer_ch and steer_ch.close_deadline:
+                        wait = min(wait, steer_ch.close_deadline - now)
                     try:
                         raw = await asyncio.wait_for(read_jsonl_line(proc.stdout),
                                                      timeout=max(1, wait))
                     except asyncio.TimeoutError:
+                        if (steer_ch and steer_ch.close_deadline
+                                and time.time() >= steer_ch.close_deadline):
+                            steer_ch.on_deadline()   # 插话迟迟没被取用:收尾,收尾后补派
                         if idle_timeout and time.time() - last_output >= idle_timeout:
                             raise TimeoutError(
                                 f"连续 {idle_timeout}s 无输出") from None
@@ -4949,6 +4992,8 @@ async def execute_run(run: dict, message: str, model: str | None):
                         handle_antigravity_event(run, obj)
                     else:
                         handle_claude_event(run, obj)
+                    if steer_ch:
+                        steer_ch.on_event(obj)
                     if run.get("net_error") and proc.returncode is None:
                         # 连接层错误快速失败:不等 CLI 的退避重试,直接杀进程组
                         _kill_proc_tree(proc)
@@ -4958,17 +5003,22 @@ async def execute_run(run: dict, message: str, model: str | None):
                         # 趁还没调用任何工具立刻杀掉,下面按会话失效回退带完整角色重跑
                         _kill_proc_tree(proc)
                         break
+                if steer_ch:
+                    steer_ch.shutdown()
                 await proc.wait()
                 # 成员结单但其进程组里还有派生子进程在跑(把长命令留在后台就回复了):
                 # 宿主代等其排空,已在跑的出图/出视频不白白被杀;标记透传给调度层
                 await _drain_orphaned_children(run, proc, deadline)
                 stderr = (await stderr_task).decode("utf-8", "replace").strip()
+                if steer_ch:
+                    await steer_ch.finalize()   # opencode:核对插话是否送达,会话空闲后才写入的撤回
                 if oc_v2 and run.get("session_id"):
                     # opencode 2.x 事件流常缺本轮最后一步的 step_finish:按 session export 补记
                     # 该步用量(落盘带 synthetic 标记,用量索引照常累加)
                     for ev in await asyncio.to_thread(
                             opencode_cli.missing_step_finishes, cli_executable, run["session_id"],
-                            run.get("_oc_steps") or (), env, ROOT):
+                            run.get("_oc_steps") or (), env, ROOT,
+                            [i["ref"] for i in (steer_ch.items if steer_ch else ()) if i.get("ref")]):
                         log_f.write(json.dumps(ev, ensure_ascii=False) + "\n")
                         handle_opencode_event(run, ev)
                     log_f.flush()
@@ -4995,6 +5045,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                         run["session_reset"] = True
                         STATE["sessions"].pop(session_key, None)
                         save_state(STATE)
+                        RUN_STEER.pop(run["id"], None)   # 期间来的插话挂起,下一轮起进程前并进提示词
                         continue
                     run["status"] = "error"
                     # 引擎事件流里报过错(如 pi 的 error 事件 / 请求 stopReason=error)则保留原始信息
@@ -5039,6 +5090,8 @@ async def execute_run(run: dict, message: str, model: str | None):
         finally:
             RUN_PROCS.pop(run["id"], None)
             RUN_TASKS.pop(run["id"], None)
+            if (ch := RUN_STEER.pop(run["id"], None)):
+                ch.shutdown()
             if stderr_task and not stderr_task.done():
                 stderr_task.cancel()
             log_f.close()
@@ -5119,6 +5172,9 @@ async def execute_run(run: dict, message: str, model: str | None):
                 chat_entry.update(text=reply, orphaned_children=True)
             append_chat(agent_id, run["project"], chat_entry)
             publish_run(run)
+            left = [i for i in run.get("steers") or () if not i.get("delivered")]
+            if left:
+                await _requeue_steers(run, left)
             if agent_id == REVISER_ID:
                 try:
                     await _finish_revision(run)
@@ -5326,10 +5382,19 @@ def _pi_message_text(message: dict) -> str:
 
 
 def handle_pi_event(run: dict, obj: dict):
-    """解析 pi --mode json 的 JsonAgentSessionEvent JSONL 事件。"""
+    """解析 pi --mode rpc 的 JSONL 输出:事件同 --mode json 的 JsonAgentSessionEvent,
+    另有命令回执 response(插话的回执与送达确认见 run_steer.PiSteer)。"""
     event = obj.get("type")
     if event == "session":
         run["session_id"] = obj.get("id")
+        return
+    if event == "response":
+        # RPC 模式不发 session 事件:会话 id 取 get_state 回执;提示词被拒(模型不可用等)记错
+        data = obj.get("data")
+        if obj.get("id") == run_steer.PI_STATE_ID and obj.get("success") and isinstance(data, dict):
+            run["session_id"] = data.get("sessionId") or run.get("session_id")
+        elif obj.get("id") == run_steer.PI_PROMPT_ID and obj.get("success") is False:
+            run["error"] = str(obj.get("error") or "pi rejected the prompt")[:500]
         return
     if event == "message_start" and (obj.get("message") or {}).get("role") == "assistant":
         run["_pi_message_text"] = ""
@@ -5698,7 +5763,9 @@ def handle_claude_event(run: dict, obj: dict):
             # 让退出码判定为失败,错误文案进 error(网络快速失败已写的 error 优先)
             run["error"] = run.get("error") or str(obj.get("result") or "API error")[:500]
         else:
-            run["result"] = obj.get("result") or ""
+            # 运行中插话撞上本轮收尾时 CLI 会接着再跑一轮、再出一个 result:各轮回复都留下
+            res, prev = obj.get("result") or "", run.get("result")
+            run["result"] = f"{prev}\n\n{res}" if prev and res else (res or prev or "")
         run["session_id"] = obj.get("session_id") or run.get("session_id")
         run["cost"] = round(obj.get("total_cost_usd") or 0, 4)
         run["turns"] = obj.get("num_turns")
@@ -17685,12 +17752,95 @@ async def api_chat(body: dict):
         run["nsfw_route"] = nsfw_route
     init_skill_records(run)
     RUNS[run["id"]] = run
-    append_chat(agent, project, {"role": "user", "text": message,
-                                 "run_id": run["id"], "source": source})
+    entry = {"role": "user", "text": message, "run_id": run["id"], "source": source}
+    if body.get("steer") in ("queued", "requeued"):
+        # 插话没能进当前任务、改排新单(api_steer 兜底 / 收尾补派):对话里标注原因
+        entry["steer"] = body["steer"]
+        if body.get("steer_reason"):
+            entry["steer_reason"] = body["steer_reason"]
+    append_chat(agent, project, entry)
     publish_run(run)
     RUN_TASKS[run["id"]] = asyncio.create_task(
         execute_run(run, message, model))
     return {"run_id": run["id"]}
+
+
+async def api_steer(body: dict):
+    """控制台 Ctrl+Enter「插话」:把消息追加进该 Agent 在本项目里正在执行的任务,而不是排队另起一单。
+
+    目标与去向(条目记在 run["steers"],见 run_steer):
+    - 恰有一单在运行:进程还没起来 → 挂起,起进程时并进提示词;引擎支持(claude / pi / Agentics /
+      opencode 2.x)→ 立即送进运行中的进程(mode=steer);引擎不支持 / 正在收尾 → 往下走。
+    - 有排队中的单:并进最近一单的提示词(mode=merged)。
+    - 都没有:照常新建一单(mode=new;是从上面退下来的则 mode=queued 并带 reason)。
+    斜杠命令与修改师(宿主要拼修改单头)照常走 api_chat。"""
+    agent = safe_agent(body.get("agent", ""))
+    message = (body.get("message") or "").strip()
+    project = require_project_slug(body.get("project"))
+    source = body.get("source", "user")
+    if not message:
+        raise ServiceError(400, "message must not be empty")
+    if not agent_dir(agent):
+        raise ServiceError(404, f"Unknown agent: {agent}")
+    if message.startswith("/") or agent == REVISER_ID:
+        return {**await api_chat(body), "mode": "new"}
+    live = [r for r in RUNS.values() if r.get("agent") == agent and r.get("project") == project
+            and r.get("status") in ("queued", "running") and not r.get("stopped")]
+    running = [r for r in live if r["status"] == "running"]
+    reason = ""
+    if len(running) == 1:
+        r = running[0]
+        ch = RUN_STEER.get(r["id"])
+        item = {"text": message, "ts": time.time(), "delivered": False}
+        if not r.get("_steer_spawned") or (ch is None and r.get("_steerable")):
+            # 进程还没起来(或会话失效重试的间隙):起进程前并进提示词
+            r.setdefault("steers", []).append(item)
+            ok = True
+        elif ch is not None and ch.open:
+            r.setdefault("steers", []).append(item)   # 先挂上:steer 的 await 期间运行收尾也不会漏看
+            ok = await ch.steer(item)
+            if not ok:
+                r["steers"].remove(item)
+                reason = "finishing"
+        else:
+            ok = False
+            reason = "finishing" if ch is not None else "unsupported"
+        if ok:
+            append_chat(agent, project, {"role": "user", "text": message, "run_id": r["id"],
+                                         "source": source, "steer": "run"})
+            return {"ok": True, "mode": "steer", "run_id": r["id"]}
+    elif len(running) > 1:
+        reason = "multiple"
+    queued = [r for r in live if r["status"] == "queued"]
+    if queued:
+        r = max(queued, key=lambda x: x.get("created") or 0)
+        r.setdefault("steers", []).append({"text": message, "ts": time.time(), "delivered": False})
+        append_chat(agent, project, {"role": "user", "text": message, "run_id": r["id"],
+                                     "source": source, "steer": "merged"})
+        return {"ok": True, "mode": "merged", "run_id": r["id"]}
+    res = await api_chat({**body, "steer": "queued" if reason else None, "steer_reason": reason})
+    return {**res, "mode": "queued" if reason else "new", "reason": reason}
+
+
+async def _requeue_steers(run: dict, items: list[dict]):
+    """任务结束前没送达的插话:手动停止的只在对话里记一笔;其余补派一单(同 Agent、同引擎 / 模型)。"""
+    texts = [i["text"] for i in items]
+    for i in items:
+        i["via"] = "requeued"
+    if run.get("stopped"):
+        zh = (ui_lang_code() or "zh") == "zh"
+        note = (("⏹ 任务已停止,以下插话没有送达,如仍需要请重新发送:" if zh else
+                 "⏹ The task was stopped before these interjections were delivered; "
+                 "resend them if still needed:") + "\n\n" + "\n\n".join(texts))
+        append_chat(run["agent"], run["project"], {"role": "assistant", "text": note, "status": "done"})
+        return
+    try:
+        await api_chat({"agent": run["agent"], "project": run["project"],
+                        "message": run_steer.requeue_message(texts),
+                        "engine": run.get("engine") or "", "model": run.get("model") or None,
+                        "source": "user", "steer": "requeued"})
+    except Exception as e:  # noqa: BLE001
+        print(f"[steer] 补派未送达的插话失败:{e}", flush=True)
 
 
 def _kill_proc_tree(proc):

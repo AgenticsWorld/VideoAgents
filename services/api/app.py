@@ -844,6 +844,12 @@ async def create_run(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_chat(body)
 
 
+@api.post("/runs/steer", tags=["runs"])
+async def steer_run(body: dict[str, Any]) -> dict[str, Any]:
+    """控制台 Ctrl+Enter 插话:追加进该 Agent 正在执行的任务(引擎不支持时并进排队单或照常新建)。"""
+    return await core.api_steer(body)
+
+
 @api.get("/runs/{run_id}", tags=["runs"])
 async def run(run_id: str) -> dict[str, Any]:
     return await core.api_run(run_id)

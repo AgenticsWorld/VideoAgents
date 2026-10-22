@@ -61,6 +61,23 @@ macOS 桌面端从 Finder 启动时会读取用户登录 Shell 的 `PATH`，并�
 
 顶栏切到某个 CLI 引擎（或开屏）时若检测到命令未安装或未登录，会弹出引导窗口：「一键安装」在后台运行该 CLI 的官方安装命令（`curl -fsSL <官方脚本> | bash`，Windows 为 `irm <官方脚本> | iex`；OpenCode 装 OpenCode 2：`https://opencode.ai/v2/install`，Windows 上走 `npm install -g @opencode/cli`），日志实时显示，失败可「在终端中安装」以便回答脚本的交互提问；装好后「登录」会弹出终端窗口运行该 CLI 自己的登录命令（如 `claude auth login`、`codex login`、`kimi login`），用户在浏览器中用自己的账号授权，程序轮询到已登录即关窗，全程不经手令牌。安装子进程不带本程序与各渠道的密钥环境变量；一键安装与登录只对本机访问开放。
 
+### 运行中插话(Ctrl+Enter)
+
+控制台输入框按 Enter 是新建一单(同一 Agent 上一单没跑完就排队);按 Ctrl+Enter(macOS 也可 ⌘+Enter)
+是「插话」:`POST /api/v1/runs/steer` 把消息送进该 Agent 在当前项目里正在执行的那一单,
+在当前工具调用结束后、下一次调用模型前送达(长命令要等它跑完)。各引擎的通道(`services/runtime/run_steer.py`):
+
+- `claude`:派单改用 `-p --input-format stream-json --replay-user-messages`,提示词与插话都作为 stdin 的
+  user 消息写入,出 `result` 后由宿主关 stdin;插话撞上本轮最后一次模型输出时 CLI 会接着再跑一轮。
+- `pi` 与 `agentics`:派单改用 `--mode rpc`,提示词走 `prompt` 命令,插话走 `prompt` + `streamingBehavior: "steer"`,
+  `agent_settled` 后关 stdin;会话 id 取 `get_state` 的回执。
+- `opencode` 2.x:另起 `opencode api --standalone` 往会话 inbox 写 `delivery: "steer"`、`resume: false` 的输入,
+  运行中的 `--standalone` 进程在下一步边界取走;收尾时仍在 inbox 里的撤回。
+- `codex`、`kimi`、`grok`、`antigravity` 与 opencode 1.x 没有运行中输入通道:插话并进该 Agent 排队中的那一单,
+  没有排队的就照常新建一单,对话里标明原因。
+
+排队中或进程还没起来时收到的插话并进提示词;任务结束前没送达的补派一单(手动停止的只在对话里记一笔)。
+
 ### 全自动模式
 
 如需无人值守的全自动流水线，用全自动模式启动，`claude` 引擎的 Agent 执行

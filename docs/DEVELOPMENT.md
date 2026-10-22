@@ -70,6 +70,17 @@ When launched from Finder, the macOS desktop client imports the login shell `PAT
 
 When the top-bar engine (or the one restored at startup) is a CLI that is missing or not signed in, a setup dialog opens. **One-click install** runs that CLI's official install command in the background (`curl -fsSL <official script> | bash`, or `irm <official script> | iex` on Windows; OpenCode installs OpenCode 2 from `https://opencode.ai/v2/install`, and on Windows uses `npm install -g @opencode/cli`) and streams the log; if it fails, **Install in a terminal** reruns it in a terminal window so the script's questions can be answered. Once installed, **Sign in** opens a terminal window running the CLI's own login command (such as `claude auth login`, `codex login`, `kimi login`); the user authorizes with their own account in the browser and the dialog closes when the login is detected. The app never handles the tokens. The install process gets no app or provider secrets in its environment, and install and sign-in are only offered to requests from the local machine.
 
+### Adding to a running task (Ctrl+Enter)
+
+In the console, Enter sends a new task (queued if the same agent's previous task is still running). Ctrl+Enter (or ⌘+Enter on macOS) instead adds the message to the task that agent is running in the current project (`POST /api/v1/runs/steer`). The message reaches the model after the current tool call finishes and before its next model call, so a long command has to finish first. How each engine takes it (`services/runtime/run_steer.py`):
+
+- `claude`: runs use `-p --input-format stream-json --replay-user-messages`; the prompt and any added messages are written to stdin as user messages, and the service closes stdin after the `result`. A message that arrives during the turn's final model output is run by the CLI as one more turn.
+- `pi` and `agentics`: runs use `--mode rpc`; the prompt is a `prompt` command, added messages are `prompt` with `streamingBehavior: "steer"`, and stdin is closed after `agent_settled`. The session id comes from the `get_state` reply.
+- `opencode` 2.x: a separate `opencode api --standalone` call writes the message to the session's inbox with `delivery: "steer"` and `resume: false`; the running `--standalone` process picks it up at its next step. Anything still in the inbox when the run ends is withdrawn.
+- `codex`, `kimi`, `grok`, `antigravity` and opencode 1.x cannot take input once a run has started: the message is merged into that agent's queued task, or sent as a new task if none is queued, and the chat says why.
+
+Messages that arrive while the task is still queued or before its process has started are added to its prompt. Messages not delivered before the task ends are sent as a new task (for a task stopped by hand, the chat only notes them).
+
 ### Full-auto mode
 
 For unattended pipelines, start the console in full-auto mode so agents on the

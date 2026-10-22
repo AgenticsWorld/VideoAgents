@@ -409,7 +409,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div id="messages"><div class="empty">左侧选择 Agent;跟「总制片」对话可自动调度整个团队</div></div>
     <div id="soul-view"></div>
     <div id="composer">
-      <textarea id="input" placeholder="输入工作指令… (Enter 发送,Shift+Enter 换行)"></textarea>
+      <textarea id="input" placeholder="输入工作指令… (Enter 发送,Shift+Enter 换行,Ctrl+Enter 插话到运行中的任务)"></textarea>
       <button class="primary" id="send">发送</button>
     </div>
   </div>
@@ -3835,7 +3835,7 @@ async function selectAgent(id){
   $('#c-title').textContent=agentName(a.name); $('#c-sub').textContent=id;
   $('#composer').classList.toggle('dispatcher',!!a.dispatcher);   // 总制片输入框加 grow 光晕,便于识别
   $('#composer').classList.toggle('member',!a.dispatcher);          // 其它 Agent 输入框改暖琥珀色
-  $('#input').placeholder=I18N.f('给{name}发送工作指令… (Enter 发送,Shift+Enter 换行)',{name:agentName(a.name)});
+  $('#input').placeholder=I18N.f('给{name}发送工作指令… (Enter 发送,Shift+Enter 换行,Ctrl+Enter 插话到运行中的任务)',{name:agentName(a.name)});
   updateModelBtn();updateSkillBtn();
   $('#soul-view').style.display='none'; $('#messages').style.display='flex';
   OPEN_GROUPS.add(agentGroup(a));   // 展开该 Agent 所在组
@@ -3899,6 +3899,7 @@ function appendMsg(role,text,meta={}){
   const SRC={director:'📨 来自总制片派单',watchdog:'🤖 自动运行',settings:'⚙️ 设置变更通知',wechat:'💬 来自微信 ClawBot',feishu:'✈️ 来自飞书',whatsapp:'🟢 来自 WhatsApp'};
   const parts=[];
   if(SRC[meta.source])parts.push(t(SRC[meta.source]));
+  const st=steerLabel(meta);if(st)parts.push(t(st));
   if(role==='assistant'&&meta.status==='error')parts.push(meta.stopped==='user'?'<span style="color:var(--dim)">⏹ 已手动停止</span>':'<span style="color:var(--red)">⚠ 运行出错</span>');
   if(meta.ts)parts.push(fmtTs(meta.ts));
   const head=parts.length?'<div class="meta">'+parts.join(' · ')+'</div>':'';
@@ -3917,6 +3918,16 @@ function saveDraft(){
 }
 function loadDraft(){try{return localStorage.getItem(DRAFT_KEY)||''}catch(e){return''}}
 
+/* ---------- 插话标注(Ctrl+Enter,见 steer()) ---------- */
+const STEER_LABELS={run:'↪ 插话:已追加到运行中的任务',merged:'↪ 插话:已并入排队中的任务',
+  requeued:'⏳ 插话未在任务结束前送达,已补派为新任务'};
+const STEER_REASONS={unsupported:'⏳ 插话:当前引擎不支持运行中追加,已排队为新任务',
+  finishing:'⏳ 插话:任务正在收尾,已排队为新任务',multiple:'⏳ 插话:该 Agent 有多个任务在运行,已排队为新任务'};
+function steerLabel(meta){
+  if(meta.steer==='queued')return STEER_REASONS[meta.steer_reason]||'';
+  return STEER_LABELS[meta.steer]||'';
+}
+
 /* ---------- 发送 ---------- */
 async function send(){
   const t=$('#input').value.trim(); if(!t||!CURRENT)return;
@@ -3931,8 +3942,27 @@ async function send(){
     appendMsg('assistant','发送失败:'+e.message,{status:'error'})
   }
 }
+// Ctrl+Enter(macOS 也认 ⌘+Enter)插话:追加进该 Agent 正在执行的任务;引擎不支持时由服务端
+// 并进排队中的单或照常排队(对话里的用户消息会标注去向)
+async function steer(){
+  const t=$('#input').value.trim(); if(!t||!CURRENT)return;
+  const files=ATTACH.paths();
+  const msg=ATTACH.compose(t);
+  $('#input').value='';saveDraft();ATTACH.clear();
+  try{
+    await api('/api/v1/runs/steer',{agent:CURRENT,message:msg,project:$('#project').value.trim()||'demo',
+      model:getModel(),engine:$('#engine').value});
+  }catch(e){
+    $('#input').value=t;saveDraft();ATTACH.setPaths(files);
+    appendMsg('assistant','发送失败:'+e.message,{status:'error'})
+  }
+}
 $('#send').onclick=send;
-$('#input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();send()}});   // Enter 发送、Shift+Enter 换行;输入法选词中的 Enter 不发送
+$('#input').addEventListener('keydown',e=>{
+  if(e.key!=='Enter'||e.shiftKey||e.isComposing||e.keyCode===229)return;   // Shift+Enter 换行;输入法选词中的 Enter 不发送
+  e.preventDefault();
+  (e.ctrlKey||e.metaKey)?steer():send();   // Enter 发送、Ctrl/⌘+Enter 插话
+});
 $('#input').addEventListener('input',saveDraft);
 VoiceInput.attach($('#input'));   // 语音输入按钮:仅设置「语音输入」开启时显示
 const ATTACH=FileAttach.attach($('#input'),{storageKey:'webui_draft_files'});   // 输入框右上角「+」附件按钮(语音按钮在右下角):附件随草稿留存
@@ -4167,7 +4197,11 @@ function connect(){
     if(ev.type==='watchdog'||ev.type==='run'&&(RUNS[ev.run.id]||{}).status!==ev.run.status)pmLiveRefresh();   // 项目选择弹窗里的自动运行 / 运行数
     if(ev.type==='run'){RUNS[ev.run.id]=ev.run;renderRuns();renderAgents()}
     else if(ev.type==='chat'&&ev.agent===CURRENT&&ev.project===curProj()){
-      if(ev.role==='user')appendMsg('user',ev.text,ev);
+      if(ev.role==='user'){
+        appendMsg('user',ev.text,ev);
+        // 插话进了正在流式输出的任务:实时进度框挪到这条消息下面,后续输出接着往下长
+        const live=ev.steer==='run'&&LIVE[ev.run_id];if(live)$('#messages').appendChild(live);
+      }
       else{ // 最终回复:替换流式占位
         const live=LIVE[ev.run_id];
         if(live){live.classList.remove('streaming');live.querySelectorAll('.livetext').forEach(x=>x.remove());

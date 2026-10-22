@@ -24,6 +24,10 @@ OpenCode 2(2026-09 起;官方安装脚本 opencode.ai/v2/install、npm 包 @open
 - JSON 事件流每轮最后一步常缺 step_finish(客户端 session.wait 返回后不再消费事件)
   → 结束后按 session export 里本轮 assistant 消息的 tokens 补记。
 - 1.x 升级上来时 opencode.db 原地迁移,会话 id 保留,已记录的会话照常续接。
+- 运行中插话(run_steer):另起 `api --standalone` 往会话 inbox 写 delivery=steer、resume=false
+  的输入,正在跑的 --standalone 进程在下一步边界取走;会话已空闲才写进去的用 inbox.cancel 撤回。
+  (另一条路是自起 `opencode serve` + `run --server`,但服务端须设 OPENCODE_PASSWORD 否则
+  客户端报 Authentication required;没采用,沿用 --standalone。)
 """
 from __future__ import annotations
 
@@ -146,9 +150,10 @@ def session_exists(exe: str, sid: str, env: dict | None = None,
 
 
 def missing_step_finishes(exe: str, sid: str, reported, env: dict | None = None,
-                          cwd: str | Path | None = None) -> list[dict]:
+                          cwd: str | Path | None = None, steer_ids=()) -> list[dict]:
     """补本轮事件流缺的 step_finish:session export 里最后一条 user 消息(即本轮提示词)之后的
-    assistant 消息各带 tokens / cost,事件流已报过的按 messageID 跳过。读不到返回 []。"""
+    assistant 消息各带 tokens / cost,事件流已报过的按 messageID 跳过。本轮的运行中插话
+    (steer_ids,即 steer_prompt 返回的消息 id)也是 user 消息,不算本轮起点。读不到返回 []。"""
     r = _call(exe, ["session", "export", sid, "--standalone"], env, cwd)
     if not r or r.returncode != 0:
         return []
@@ -156,8 +161,9 @@ def missing_step_finishes(exe: str, sid: str, reported, env: dict | None = None,
         msgs = json.loads(r.stdout).get("messages") or []
     except (ValueError, AttributeError):
         return []
-    start = max((i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("type") == "user"),
-                default=-1)
+    skip = set(steer_ids or ())
+    start = max((i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("type") == "user"
+                 and m.get("id") not in skip), default=-1)
     seen = set(reported or ())
     out = []
     for m in msgs[start + 1:]:
@@ -168,6 +174,44 @@ def missing_step_finishes(exe: str, sid: str, reported, env: dict | None = None,
                         "part": {"messageID": m["id"], "type": "step-finish",
                                  "tokens": m["tokens"], "cost": m.get("cost") or 0}})
     return out
+
+
+def steer_prompt(exe: str, sid: str, text: str, env: dict | None = None,
+                 cwd: str | Path | None = None) -> str | None:
+    """运行中插话:把一条 user 输入写进会话的持久化 inbox(delivery=steer),返回其消息 id。
+    resume=false:不在这个短命的私有服务器里起执行——正在跑该会话的进程在下一步边界
+    从库里取走(实测 2.1.2 跨 --standalone 进程送达)。失败返回 None。"""
+    body = json.dumps({"text": text, "delivery": "steer", "resume": False}, ensure_ascii=False)
+    r = _call(exe, ["api", "--standalone", "POST", f"/api/session/{sid}/prompt", "-d", body], env, cwd)
+    if not r or r.returncode != 0:
+        return None
+    try:
+        data = json.loads(r.stdout).get("data") or {}
+    except (ValueError, AttributeError):
+        return None
+    return data.get("id") if isinstance(data, dict) else None
+
+
+def inbox_ids(exe: str, sid: str, env: dict | None = None,
+              cwd: str | Path | None = None) -> set[str] | None:
+    """会话 inbox 里尚未送达的条目 id(session.inbox.list);读不到返回 None。"""
+    r = _call(exe, ["api", "--standalone", "GET", f"/api/session/{sid}/inbox"], env, cwd)
+    if not r or r.returncode != 0:
+        return None
+    try:
+        items = json.loads(r.stdout).get("data")
+    except (ValueError, AttributeError):
+        return None
+    if not isinstance(items, list):
+        return None
+    return {i["id"] for i in items if isinstance(i, dict) and i.get("id")}
+
+
+def inbox_cancel(exe: str, sid: str, iid: str, env: dict | None = None,
+                 cwd: str | Path | None = None) -> bool:
+    """撤回一条未送达的 inbox 条目(session.inbox.cancel;已送达的为空操作)。"""
+    r = _call(exe, ["api", "--standalone", "DELETE", f"/api/session/{sid}/inbox/{iid}"], env, cwd)
+    return bool(r and r.returncode == 0)
 
 
 def auth_list(exe: str, env: dict | None = None) -> list[dict] | None:
