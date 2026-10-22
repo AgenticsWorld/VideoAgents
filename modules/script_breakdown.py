@@ -511,7 +511,9 @@ def parse_screenplay(text: str, known_names: set[str] | None = None) -> dict:
 
 # ---------------------------------------------------------------- narration / hooks / pacing 归一
 
-_NARR_RE = re.compile(r"^\[(?P<id>N-\d+[A-Za-z]?)\s*\|\s*(?P<meta>[^\]]*)\]\s*$")
+# 条目头:方括号内先取 ID,其余 `键: 值` 字段任意顺序(按键取 anchor / est_duration_s / tone / source,多出的 scene / scene_id / cue 等不影响);
+# 字段值里可以带方括号(如 source: screenplay S08 `[旁白候选]`),取到行尾最后一个 `]`(#141,机检 / 白模字幕 / 分镜预览共用)
+_NARR_RE = re.compile(r"^\[(?P<id>N-\d+[A-Za-z]?)\s*\|\s*(?P<meta>.*)\]\s*$")
 
 
 def parse_narration_md(text: str) -> list[dict]:

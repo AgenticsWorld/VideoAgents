@@ -4,8 +4,11 @@
 拆解表把人物 V.O. 留在对白里;台词演法的时长上限按画外窗口算。离线,不调 ffmpeg / TTS。"""
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -197,3 +200,62 @@ def test_direction_limit_for_offscreen_line():
     assert dd._line_limit(sh1, [on, os_ln], 0, by_id) == round(4.0 - dd.LEAD_S, 2)
     # 画外句上限 = Σ heard_in 镜长 7 − 画内估时 2 − offset 0.4
     assert dd._line_limit(sh1, [on, os_ln], 1, by_id) == 4.6
+
+
+# ---------------------------------------------------------------- 旁白条目头(#141)
+
+NARR_HEADS = {
+    # issue 原样:ID 后先插场景元数据,再写 anchor / est_duration_s
+    "scene_meta": "[N-01 | scene: S01 | scene_id: SCN-0001 | anchor: 林昭推门 | est_duration_s: 4.4 | source: ch001#p001]\n那一夜之后,一切都变了。\n",
+    # 故事板 SOUL 规定的四段锚点
+    "four_seg": "[N-01 | anchor: S01 | SCN-0001 | ev0001 | 场首「林昭推门」一镜 | est_duration_s: 4.4 | source: ch001#p001]\n那一夜之后,一切都变了。\n",
+    # 字段值里带方括号(旧正则认得,换解析后不能丢)
+    "bracket": "[N-01 | anchor: S01 | est_duration_s: 4.4 | source: screenplay S01 `[旁白候选]`]\n那一夜之后,一切都变了。\n",
+}
+
+
+def _narr_sl(est=4.4):
+    return {"shots": [{"shot_id": "sh001", "duration_s": 8}],
+            "generation_groups": [{"group_id": "grp001", "shots": ["sh001"], "audio_plan": "voice_over", "total_duration_s": 8}],
+            "narration_anchors": [{"narration_id": "N-01", "anchor_group": "grp001", "anchor_shots": ["sh001"],
+                                   "est_duration_s": est, "window_s": 6}]}
+
+
+@pytest.mark.parametrize("head", sorted(NARR_HEADS))
+def test_check_7d_reads_narration_heads_with_extra_fields(head):
+    """#141:条目头 ID 之后字段任意顺序 / 多出元数据 / 四段锚点都解析得到 ID 与 est_duration_s,不再误报「解析不到任何条目」。"""
+    assert cgg.check_7d(_narr_sl(), NARR_HEADS[head]) == []
+    errs = cgg.check_7d(_narr_sl(est=3.0), NARR_HEADS[head])                 # 估时照常核对
+    assert any("N-01 est_mismatch" in e and "4.4" in e for e in errs) and not any("解析不到" in e for e in errs)
+
+
+def test_check_7d_narration_head_without_est_is_named():
+    md = NARR_HEADS["scene_meta"] + "\n[N-02 | anchor: S01 | audio_duration_s: 3.0]\n第二句。\n"
+    sl = _narr_sl()
+    sl["narration_anchors"].append({"narration_id": "N-02", "anchor_group": "grp001", "anchor_shots": ["sh001"], "window_s": 6})
+    errs = cgg.check_7d(sl, md)
+    assert errs == ["narration_anchors_cover_all: 条目头缺 est_duration_s ['N-02']"]
+    assert cgg.check_7d(_narr_sl(), "# 旁白稿\n(待写)\n") == [
+        "narration_anchors_cover_all: narration.md 解析不到任何条目(条目头格式应为 [N-xx | anchor: … | est_duration_s: …])"]
+
+
+def test_check_generation_groups_cli_accepts_scene_meta_head(tmp_path):
+    """issue 复现命令:python3 code/check_generation_groups.py <shot_list.json> --narration <narration.md>。"""
+    (tmp_path / "settings.json").write_text(json.dumps({"output": {"narration_enabled": True}}))
+    d = tmp_path / "directing" / "ep01"
+    d.mkdir(parents=True)
+    sl = _narr_sl()
+    sl["shots"][0].update({"scene_id": "SCN-0001", "scene_no": "S01"})
+    sl["generation_groups"][0].update({"scene_id": "SCN-0001", "scene_no": "S01", "characters_union": []})
+    (d / "shot_list.json").write_text(json.dumps(sl, ensure_ascii=False), encoding="utf-8")
+
+    def run(md):
+        (tmp_path / "narration.md").write_text(md, encoding="utf-8")
+        return subprocess.run([sys.executable, str(ROOT / "code" / "check_generation_groups.py"), str(d / "shot_list.json"),
+                               "--narration", str(tmp_path / "narration.md")], capture_output=True, text=True, cwd=tmp_path)
+
+    r = run(NARR_HEADS["scene_meta"])
+    assert r.returncode == 0 and "解析不到任何条目" not in r.stdout, r.stdout + r.stderr
+    r = run("# 旁白稿\n")                                                     # 对照:真没有条目时照报
+    assert r.returncode == 1 and "解析不到任何条目" in r.stdout, r.stdout + r.stderr
+

@@ -165,9 +165,6 @@ AUDIO_LEAD_MAX_S = 1.0                         # 旧字段上限(归一时 >1.5 
 INSERT_BUDGET_DEFAULT_PCT = 8.0               # 读不到项目「过场模式」时的兜底(经典档)
 BLOCK_KINDS = ("flashback", "dream", "montage", "imagination")
 BLOCK_ROLES = ("start", "middle", "end", "single")
-# narration.md 条目头:[N-xx | anchor: 场景锚 | est_duration_s: 秒 | source: 章#段]
-NARR_ITEM_RE = re.compile(
-    r"^\[(N-\d+)\s*\|\s*anchor:\s*[^|\]]+\|\s*est_duration_s:\s*([\d.]+)", re.M)
 
 
 def project_max_group_s(shot_list_path: Path) -> int:
@@ -491,11 +488,17 @@ def check_7d(shot_list: dict, narration_md: str | None,
     if narration_md is None:
         errors.append("narration_anchors_cover_all: narration.md 未找到"
                       "(--narration 指定或 --skip-7d 显式跳过)")
-        narr = {}
+        narr, no_est = {}, []
     else:
-        narr = {m.group(1): float(m.group(2))
-                for m in NARR_ITEM_RE.finditer(narration_md)}
-        if not narr:
+        # 条目头 [N-xx | anchor: 场景锚 | est_duration_s: 秒 | source: 章#段]:与剧本拆解 / 白模字幕 / 分镜预览同一解析(#141)——
+        # ID 之后的字段任意顺序、可多出 scene / scene_id 等元数据,锚点可写四段(S01 | SCN-… | ev… | …)
+        from modules.script_breakdown import parse_narration_md
+        items = parse_narration_md(narration_md)
+        narr = {it["id"]: it["est_s"] for it in items if it.get("est_s") is not None}
+        no_est = [it["id"] for it in items if it.get("est_s") is None]
+        if no_est:
+            errors.append(f"narration_anchors_cover_all: 条目头缺 est_duration_s {no_est}")
+        if not items:
             errors.append("narration_anchors_cover_all: narration.md 解析不到任何条目"
                           "(条目头格式应为 [N-xx | anchor: … | est_duration_s: …])")
 
@@ -509,7 +512,7 @@ def check_7d(shot_list: dict, narration_md: str | None,
     for a in anchors:
         nid = a.get("narration_id", "?")
         seen_ids.add(nid)
-        if narr and nid not in narr:
+        if narr and nid not in narr and nid not in no_est:
             errors.append(f"{nid} anchor_ref: narration.md 无此条目")
         a_shots = a.get("anchor_shots") or []
         gid = a.get("anchor_group")
@@ -542,7 +545,7 @@ def check_7d(shot_list: dict, narration_md: str | None,
                 errors.append(f"{nid} narration_window_gte_est_x1.15: window_s={win} <"
                               f" est {est_ref}×{WINDOW_FACTOR}={est_ref * WINDOW_FACTOR:.2f}"
                               "(优先调镜时长消化,装不下上报回派 narration 精简)")
-    missing = sorted(set(narr) - seen_ids, key=lambda x: int(x.split("-")[1]))
+    missing = sorted(set(narr) - seen_ids, key=lambda x: (int(re.sub(r"\D", "", x) or 0), x))
     if missing:
         errors.append(f"narration_anchors_cover_all: 条目缺挂点 {missing}")
 

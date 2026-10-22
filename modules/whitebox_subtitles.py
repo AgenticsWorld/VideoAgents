@@ -7,7 +7,7 @@
 字幕来源(只读,不写回任何源文件):
 - 对白:directing/<ep>/shot_list.json shots[].dialogue_lines[{speaker,text,est_duration_s}],
   在该镜时段内按各句估时按比例分配显示区间;说话人名取 bible/characters|creatures/index.json。
-- 旁白:文本取 story/episodes/<ep>/narration.md([N-xx | anchor … | est_duration_s: …] 条目),
+- 旁白:文本取 story/episodes/<ep>/narration.md([N-xx | anchor … | est_duration_s: …] 条目,按 script_breakdown.parse_narration_md 解析),
   挂点取 shot_list narration_anchors(首个挂点镜起点起、est_duration_s 内,不超出挂点镜窗口),
   没有挂点表时按 shots[].narration_ref(如 "N-01(前段)")的镜段兜底。
 - 逐镜时间:directing/<ep>/whitebox/episode.json groups[].cameras[](shot_id/start/duration_s),
@@ -30,8 +30,6 @@ ROOT = Path(__file__).resolve().parents[1]
 DIALOGUE_COLOR = (251, 191, 36)
 NARRATION_COLOR = (192, 132, 252)
 MIN_CUE_S = 0.6
-NARRATION_RE = re.compile(
-    r"^\[(N-\d+)\s*\|\s*anchor:\s*([^|\]]+)\|\s*est_duration_s:\s*([\d.]+)(?:\s*\|.*)?\]\s*\n(.+)$", re.M)
 
 
 def _read(p: Path):
@@ -84,20 +82,21 @@ def character_names(base: Path) -> dict[str, str]:
 
 
 def narration_texts(base: Path, ep: str) -> dict[str, dict]:
-    """narration.md → {N-xx: {text, est_s}}(与分镜预览 narration_items 同一正则)。"""
+    """narration.md → {N-xx: {text, est_s}}(与机检 / 分镜预览 narration_items 同一解析 script_breakdown.parse_narration_md,#141:
+    条目头 ID 之后字段任意顺序、可带额外元数据、锚点可多段;只认带 est_duration_s 且有正文的条目)。"""
     p = base / "story" / "episodes" / ep / "narration.md"
     try:
         md = p.read_text(encoding="utf-8") if p.is_file() else ""
     except OSError:
         md = ""
-    out = {}
-    for m in NARRATION_RE.finditer(md):
-        try:
-            est = float(m.group(3))
-        except ValueError:
-            est = 0.0
-        out[m.group(1)] = {"text": m.group(4).strip(), "est_s": est}
-    return out
+    if not md:
+        return {}
+    try:
+        from modules.script_breakdown import parse_narration_md
+    except ImportError:                                  # 脚本直跑时无包前缀
+        from script_breakdown import parse_narration_md
+    return {it["id"]: {"text": it["text"].strip(), "est_s": it["est_s"]}
+            for it in parse_narration_md(md) if it.get("est_s") is not None and (it.get("text") or "").strip()}
 
 
 def _offscreen():

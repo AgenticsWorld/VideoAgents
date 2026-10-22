@@ -9871,14 +9871,12 @@ def _preview_storyboard(project: str, ep: str):
     # narration.md 这里只解析成逐条 narration_items 供分镜对位,原文不进载荷
     narration_md = _read_text(f"story/episodes/{ep}/narration.md")
     # 导演计划 directing_plan.md 2026-09-11 起移到「故事板」页(api_preview_board)展示,本页不再下发
-    # 结构化旁白条目:[N-xx | anchor: 场景锚 | est_duration_s: 秒 | source: 章#段]\n正文
+    # 结构化旁白条目:[N-xx | anchor: 场景锚 | est_duration_s: 秒 | source: 章#段]\n正文。与机检 / 白模字幕同一解析(#141):
+    # ID 之后字段任意顺序、可多出 scene / scene_id 等元数据、锚点可写四段;只认带 est_duration_s 的条目
+    from modules import script_breakdown as sbk
     data["narration_items"] = [
-        {"id": m.group(1), "anchor": m.group(2).strip(),
-         "est_s": float(m.group(3)), "text": m.group(4).strip()}
-        for m in re.finditer(
-            r"^\[(N-\d+)\s*\|\s*anchor:\s*([^|\]]+)\|\s*est_duration_s:\s*([\d.]+)"
-            r"(?:\s*\|.*)?\]\s*\n(.+)$",
-            narration_md, re.M)]
+        {"id": it["id"], "anchor": it.get("anchor") or "", "est_s": it["est_s"], "text": it["text"]}
+        for it in (sbk.parse_narration_md(narration_md) if narration_md else []) if it.get("est_s") is not None]
     # 旁白音频对位:narration/<ep>/manifest.json(早期集)或 narration_track.json
     # 的 segments[].num(N-xx)→ file;manifest 缺失时按 <ep>_nar_<xx>.mp3 命名兜底
     ndir = base / "assets" / "audio" / "narration" / ep

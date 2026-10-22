@@ -105,6 +105,31 @@ def test_parse_narration_md_keeps_full_anchor():
     assert items[0]["est_s"] == 9.9 and items[0]["source"] == "ch181#s01" and items[0]["text"] == "正文一句。"
 
 
+def test_narration_heads_with_extra_fields_in_whitebox_subtitles_and_storyboard_preview(tmp_path, monkeypatch):
+    """#141:白模样片旁白字幕(whitebox_subtitles.narration_texts)与分镜预览 narration_items 跟机检同一解析(parse_narration_md)——
+    条目头多出 scene / scene_id 元数据、四段锚点、字段值带方括号都读得到;没写 est_duration_s 的条目照旧不算。"""
+    from modules import whitebox_subtitles as ws
+    from services.runtime import core
+    base = tmp_path / "demo"
+    d = base / "story" / "episodes" / "ep01"
+    d.mkdir(parents=True)
+    (d / "narration.md").write_text(
+        "# EP01 旁白稿\n\n"
+        "[N-01 | scene: S01 | scene_id: SCN-0001 | anchor: 林昭推门 | est_duration_s: 4.4 | source: ch001#p001]\n那一夜之后,一切都变了。\n\n"
+        "[N-02 | anchor: S02 | SCN-0002 | ev0002 | 场首「门开」一镜 | est_duration_s: 3.5 | source: ch001#p002]\n门开了。\n\n"
+        "[N-03 | anchor: S03集市 | est_duration_s: 2.0 | source: screenplay S03 `[旁白候选]`]\n人声鼎沸。\n\n"
+        "[N-04 | anchor: S03 | audio_duration_s: 3.0]\n没写估时的不算。\n", encoding="utf-8")
+    assert ws.narration_texts(base, "ep01") == {"N-01": {"text": "那一夜之后,一切都变了。", "est_s": 4.4},
+                                                "N-02": {"text": "门开了。", "est_s": 3.5}, "N-03": {"text": "人声鼎沸。", "est_s": 2.0}}
+    monkeypatch.setattr(core, "PROJECTS_DIR", tmp_path)
+    items = core._preview_storyboard("demo", "ep01")["narration_items"]
+    assert [(i["id"], i["anchor"], i["est_s"], i["text"]) for i in items] == [
+        ("N-01", "林昭推门", 4.4, "那一夜之后,一切都变了。"),
+        ("N-02", "S02 | SCN-0002 | ev0002 | 场首「门开」一镜", 3.5, "门开了。"),
+        ("N-03", "S03集市", 2.0, "人声鼎沸。")]
+    assert all(i.get("audio") is None or isinstance(i["audio"], str) for i in items)
+
+
 def test_attach_narration_priority_and_fallbacks():
     scenes = _board_scenes()
     narration = [
