@@ -701,7 +701,7 @@ window.I18N_DICT = {
 "OpenCode 智能分配": "التوزيع الذكي OpenCode",
 "Grok 智能分配": "التوزيع الذكي Grok",
 "Antigravity 智能分配": "التوزيع الذكي Antigravity",
-"按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4 Flash": "اختيار نموذج DeepSeek تلقائيًا حسب تعقيد مهمة الـ Agent (محرك opencode): النواة الإبداعية→V4 Pro والبقية→V4 Flash",
+"按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4.1 Flash": "اختيار نموذج DeepSeek تلقائيًا حسب تعقيد مهمة الـ Agent (محرك opencode): النواة الإبداعية→V4 Pro والبقية→V4.1 Flash",
 "暂无运行": "لا توجد عمليات تشغيل بعد",
 "服务地址": "عنوان الخدمة",
 "未上传": "لم يُرفع",

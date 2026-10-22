@@ -701,7 +701,7 @@ window.I18N_DICT = {
 "OpenCode 智能分配": "Asignación inteligente OpenCode",
 "Grok 智能分配": "Asignación inteligente Grok",
 "Antigravity 智能分配": "Asignación inteligente Antigravity",
-"按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4 Flash": "Selecciona automáticamente el modelo DeepSeek según la complejidad de la tarea del Agent (motor opencode): núcleo creativo→V4 Pro, resto→V4 Flash",
+"按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4.1 Flash": "Selecciona automáticamente el modelo DeepSeek según la complejidad de la tarea del Agent (motor opencode): núcleo creativo→V4 Pro, resto→V4.1 Flash",
 "暂无运行": "Sin ejecuciones",
 "服务地址": "Dirección del servicio",
 "未上传": "No subido",

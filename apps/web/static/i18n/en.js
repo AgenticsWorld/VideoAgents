@@ -740,7 +740,7 @@ window.I18N_DICT = {
 "OpenCode 智能分配": "OpenCode Smart Assignment",
 "Grok 智能分配": "Grok Smart Assignment",
 "Antigravity 智能分配": "Antigravity Smart Assignment",
-"按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4 Flash": "Auto-select the DeepSeek model by agent task complexity (opencode engine): creative core→V4 Pro, others→V4 Flash",
+"按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4.1 Flash": "Auto-select the DeepSeek model by agent task complexity (opencode engine): creative core→V4 Pro, others→V4.1 Flash",
 "暂无运行": "No runs yet",
 "服务地址": "Service URL",
 "未上传": "Not uploaded",

@@ -701,7 +701,7 @@ window.I18N_DICT = {
 "OpenCode 智能分配": "Phân bổ thông minh OpenCode",
 "Grok 智能分配": "Phân bổ thông minh Grok",
 "Antigravity 智能分配": "Phân bổ thông minh Antigravity",
-"按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4 Flash": "Tự động chọn mô hình DeepSeek theo độ phức tạp nhiệm vụ của Agent (engine opencode): lõi sáng tạo→V4 Pro, còn lại→V4 Flash",
+"按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4.1 Flash": "Tự động chọn mô hình DeepSeek theo độ phức tạp nhiệm vụ của Agent (engine opencode): lõi sáng tạo→V4 Pro, còn lại→V4.1 Flash",
 "暂无运行": "Chưa có lần chạy nào",
 "服务地址": "Địa chỉ dịch vụ",
 "未上传": "Chưa tải lên",

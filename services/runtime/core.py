@@ -2540,7 +2540,8 @@ AGENTMODELS_PATH = RUNTIME_DIR / "agentmodels.json"
 #   smart_codex  按任务复杂度自动选 codex 模型(high→gpt-6.1-sol low→gpt-6-luna)
 #   smart_kimi   按任务复杂度自动选 kimi 模型(high→K3 low→K2.7 Coding)
 #   smart_pi     按任务复杂度自动选 pi 模型(high→openai-codex/gpt-6.1-sol low→openai-codex/gpt-6-luna)
-#   smart_deepseek 按任务复杂度自动选 DeepSeek 模型(opencode 引擎,high→V4 Pro low→V4 Flash)
+#   smart_deepseek 按任务复杂度自动选 DeepSeek 模型(opencode 引擎,high→V4 Pro low→V4.1 Flash;
+#     Go 渠道的 V4 Flash 已于 2026-10 从模型目录下架,OpenCode 2 直接报 Model unavailable)
 #   smart_grok   按任务复杂度自动选 grok 模型(high→Grok 4.6 low→Grok 4.5)
 #   smart_antigravity 按任务复杂度自动选 antigravity 模型(high→Gemini 4 Argon High
 #                low→Gemini 3.8 Flash Medium)
@@ -2587,7 +2588,7 @@ AM_MODE_MODELS = {
     # DeepSeek 经 opencode 引擎调用,走 OpenCode Go 订阅渠道(opencode-go/ 前缀;
     # Zen 按量渠道为 opencode/ 前缀,动态模型列表 /engines/opencode/models 反映实际可用集)
     "smart_deepseek": {"high": {"engine": "opencode", "model": "opencode-go/deepseek-v4-pro"},
-                       "low": {"engine": "opencode", "model": "opencode-go/deepseek-v4-flash"}},
+                       "low": {"engine": "opencode", "model": "opencode-go/deepseek-v4.1-flash"}},
     # grok 引擎(Grok Build CLI,grok.com 登录凭证;模型 id 同 `grok models` 列表)
     "smart_grok": {"high": {"engine": "grok", "model": "grok-4.6"},
                    "low": {"engine": "grok", "model": "grok-4.5"}},

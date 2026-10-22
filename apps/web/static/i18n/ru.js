@@ -701,7 +701,7 @@ window.I18N_DICT = {
 "OpenCode 智能分配": "Умное распределение OpenCode",
 "Grok 智能分配": "Умное распределение Grok",
 "Antigravity 智能分配": "Умное распределение Antigravity",
-"按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4 Flash": "Автовыбор модели DeepSeek по сложности задачи Agent (движок opencode): творческое ядро→V4 Pro, остальные→V4 Flash",
+"按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4.1 Flash": "Автовыбор модели DeepSeek по сложности задачи Agent (движок opencode): творческое ядро→V4 Pro, остальные→V4.1 Flash",
 "暂无运行": "Нет запусков",
 "服务地址": "Адрес сервиса",
 "未上传": "Не загружено",

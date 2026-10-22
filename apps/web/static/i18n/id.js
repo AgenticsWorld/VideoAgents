@@ -701,7 +701,7 @@ window.I18N_DICT = {
 "OpenCode 智能分配": "Alokasi Cerdas OpenCode",
 "Grok 智能分配": "Alokasi Cerdas Grok",
 "Antigravity 智能分配": "Alokasi Cerdas Antigravity",
-"按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4 Flash": "Pilih model DeepSeek otomatis menurut kompleksitas tugas Agent (engine opencode): inti kreatif→V4 Pro, lainnya→V4 Flash",
+"按 Agent 任务复杂度自动选 DeepSeek 模型(opencode 引擎):创作核心→V4 Pro 其余→V4.1 Flash": "Pilih model DeepSeek otomatis menurut kompleksitas tugas Agent (engine opencode): inti kreatif→V4 Pro, lainnya→V4.1 Flash",
 "暂无运行": "Belum ada eksekusi",
 "服务地址": "Alamat layanan",
 "未上传": "Belum diunggah",
