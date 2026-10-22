@@ -49,11 +49,11 @@
 ```json
 {
   "episode": 1, "budget_s": 612,
-  "shots": [ { "shot_id": "sh001", "scene_id": "s001", "duration_s": 7.0,
+  "shots": [ { "shot_id": "sh001", "scene_id": "SCN-0001", "duration_s": 7.0,
                "size": "全景", "camera_position": "平视缓推", "characters": [],
                "is_dialogue": false, "storyboard_ref": "S01/order:1",
                "content": "咸阳宫远景,旌旗蔽日" } ],
-  "generation_groups": [ { "group_id": "grp001", "scene_id": "s001",
+  "generation_groups": [ { "group_id": "grp001", "scene_id": "SCN-0001",
       "shots": ["sh001", "sh002"], "total_duration_s": 13,
       "av_span_s": 13, "audio_in_s": 0.0, "audio_out_s": 13.0,
       "segment_ids": ["S001"], "characters_union": [], "has_dialogue": false,

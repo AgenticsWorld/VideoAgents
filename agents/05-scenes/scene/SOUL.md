@@ -49,13 +49,15 @@
     "name": "青云宗·藏经阁·顶层",
     "level": "room",
     "parent": "SCN-0030",
-    "geo_ref": "GEO-qingyun-zong",
+    "geo_ref": "geo_mt_qingyun",
     "aliases": [{ "name": "阁中", "source_chapter": 12 }],
     "chapters": [12, 13, 44],
     "mobile": false
   }]
 }
 ```
+
+> 示例中的实体 ID 按 WORKFLOW.md「实体 ID 写法」表写(新项目适用;存量项目以 `bible/*/index.json` 已发 ID 与项目写入规则为准,不改已发 ID、不做迁移)。
 
 ## 接受的工作指令(Work Order)
 

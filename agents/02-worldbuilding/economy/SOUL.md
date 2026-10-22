@@ -43,16 +43,21 @@
 关键字段/结构约定:
 ```json
 {
-  "currencies": [{ "id": "cur_lingshi", "name": "灵石", "grades": ["下品", "中品", "上品"],
-                   "circulation": "修炼界", "source": { "chapters": [11] } }],
-  "exchange_rates": [{ "from": "cur_lingshi_low", "to": "cur_silver", "rate": 100,
+  "currencies": [{ "id": "cur_lingshi", "name": "灵石",
+                   "grades": [{ "id": "low", "name": "下品" }, { "id": "mid", "name": "中品" }, { "id": "high", "name": "上品" }],
+                   "circulation": "修炼界", "source": { "chapters": [11] } },
+                 { "id": "cur_silver", "name": "白银", "circulation": "凡俗", "source": { "chapters": [3] } }],
+  "exchange_rates": [{ "from": "cur_lingshi#low", "to": "cur_silver", "rate": 100,
                        "inferred": true, "reason": "按 ch.35 客栈报价与 ch.11 丹药价插值" }],
-  "price_samples": [{ "item": "回气丹", "price": { "amount": 10, "currency": "cur_lingshi_low" },
+  "price_samples": [{ "item": "回气丹", "price": { "amount": 10, "currency": "cur_lingshi#low" },
                       "context": "坊市零售", "source": { "chapters": [35] } }],
   "trade": [{ "id": "trade_south_salt", "route_refs": ["geo_city_a", "geo_city_b"], "goods": ["盐"],
               "controller_ref": "faction_…", "source": { "chapters": [77] } }]
 }
 ```
+
+> **分档货币的引用写法**:分档货币在 `grades[]` 每档给 ASCII `id`(如 `low` / `mid` / `high`);引用某一档写 `<货币 id>#<档位 id>`(如 `cur_lingshi#low`),不分档或不指明档位时直接写货币 id。不把档位拼进货币 id 另起新 id(那样的 id 在 `currencies[]` 里没有定义)。
+> 示例中的实体 ID 按 WORKFLOW.md「实体 ID 写法」表写(新项目适用;存量项目以 `bible/*/index.json` 已发 ID 与项目写入规则为准,不改已发 ID、不做迁移)。
 
 ## 接受的工作指令(Work Order)
 
@@ -72,7 +77,7 @@ instruction: |
 
 **机检(不过直接退回)**:
 - schema 通过;`source_refs_required`:每条含章节出处或 `inferred:true` + `reason`;`no_unknown_placeholder`:制作必需字段无 UNKNOWN/未知/待定占位(§1 原则 10)。
-- 货币 id 唯一;`exchange_rates` 引用的货币均已定义;`route_refs`/`controller_ref` 可在 geography/world 命中。
+- 货币 id 唯一;`exchange_rates` / `price_samples` 引用的货币均已定义(`<货币 id>#<档位 id>` 按 `#` 前的货币 id 与 `#` 后的 `grades[].id` 分别核对);`route_refs`/`controller_ref` 可在 geography/world 命中。
 - 每个 `price_sample` 必须带交易情境(`context`:零售/拍卖/黑市),裸价格退回。
 
 **评分(evaluation Agent,rubric `extraction_v1`,阈值 80)**:

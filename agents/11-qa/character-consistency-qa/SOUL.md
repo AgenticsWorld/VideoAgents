@@ -45,7 +45,7 @@
 
 关键字段/结构约定:
 ```json
-{ "score": 88, "by_character": { "char-001": { "face": 91, "costume": 85, "voice": 90 } },
+{ "score": 88, "by_character": { "CHAR-0001": { "face": 91, "costume": 85, "voice": 90 } },
   "unrecognizable_shots": [], "defects": ["qa/defects/DEF-ep01-0042.json"] }
 ```
 

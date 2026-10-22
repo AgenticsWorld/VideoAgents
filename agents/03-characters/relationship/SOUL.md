@@ -46,13 +46,15 @@
     "from": "CHAR-0001", "to": "CHAR-0007",
     "type": "师徒", "directed": true, "strength": 4, "key": true,
     "states": [
-      { "state": "师徒", "from_chapter": 3, "event_id": "EV-0102" },
-      { "state": "反目", "from_chapter": 34, "event_id": "EV-0388" }
+      { "state": "师徒", "from_chapter": 3, "event_id": "ev0102" },
+      { "state": "反目", "from_chapter": 34, "event_id": "ev0388" }
     ],
     "secret": { "hidden_from": ["CHAR-0002"], "reveal_chapter": 60 }
   }]
 }
 ```
+
+> 示例中的实体 ID 按 WORKFLOW.md「实体 ID 写法」表写(新项目适用;存量项目以 `bible/*/index.json` 已发 ID 与项目写入规则为准,不改已发 ID、不做迁移)。
 
 ## 接受的工作指令(Work Order)
 

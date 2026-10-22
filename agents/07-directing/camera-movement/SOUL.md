@@ -45,7 +45,7 @@
 {
   "shot_id": "sh014", "movement": "push_in",
   "rig": "gimbal", "speed_curve": "ease_in_out",
-  "start_frame": "全景:殿门与人物剪影", "end_frame": "近景:c003 面部",
+  "start_frame": "全景:殿门与人物剪影", "end_frame": "近景:CHAR-0003 面部",
   "capability_check": { "supported": true, "fallback_from": null }
 }
 ```

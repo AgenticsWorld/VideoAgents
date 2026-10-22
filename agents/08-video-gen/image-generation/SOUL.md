@@ -69,11 +69,11 @@ python3 modules/genmedia.py image --prompt "<image_prompt>" --negative "<negativ
   "group_id": "grp005",
   "generation_channel": "reuse-first(1 张缺口补生成;概念库全覆盖时写 reuse-only)",
   "anchors": [
-    { "image_index": 1, "file": null, "role": "character", "char_id": "c003",
-      "source": "reuse:assets/concepts/characters/c003/sheet.png",
+    { "image_index": 1, "file": null, "role": "character", "char_id": "CHAR-0003",
+      "source": "reuse:assets/concepts/characters/CHAR-0003/sheet.png",
       "source_sha256": "<入包时刻源文件 sha256(2026-08-24 引用化:复用锚不落盘副本,凭此指纹溯源概念图改版)>" },
-    { "image_index": 2, "file": "anchor_expression_admonition.png", "role": "character", "char_id": "c004",
-      "source": "generated", "gap_reason": "概念库无 c004 训诫表情特写,组 prompt Shot 2 需要",
+    { "image_index": 2, "file": "anchor_expression_admonition.png", "role": "character", "char_id": "CHAR-0004",
+      "source": "generated", "gap_reason": "概念库无 CHAR-0004 训诫表情特写,组 prompt Shot 2 需要",
       "seed": 1234, "self_check": { "composition_ok": true, "limb_artifact": false } }
   ],
   "resolution": "2560x1440", "aspect": "16:9"
@@ -90,7 +90,7 @@ task_id: p7-ep01-grp005-imagegen
 agent: 08-video-gen/image-generation
 instruction: |
   为第 1 集生成组 grp005(sh014–sh016)备齐参考锚点包:
-  角色 c003/c007 各一张形象锚(复用整版三视图 sheet.png)、场景 s012 一张(复用概念图)、
+  角色 CHAR-0003/CHAR-0007 各一张形象锚(复用整版三视图 sheet.png)、场景 SCN-0012 一张(复用概念图)、
   道具 prop_001 道具图一张(复用 main_01.png);概念库全覆盖则 reuse-only 零新生成,
   仅当组 prompt 需要而概念库缺的形象(按 <shot>.json image_prompt)才补生成候选并记 gap_reason。
   分辨率 2560x1440(16:9),总数 ≤5 张。

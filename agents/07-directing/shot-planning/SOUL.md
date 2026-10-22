@@ -80,37 +80,37 @@
 {
   "episode": 1, "budget_s": 480,
   "shots": [{
-    "shot_id": "sh014", "scene_id": "s012", "duration_s": 4.0,
+    "shot_id": "sh014", "scene_id": "SCN-0012", "duration_s": 4.0,
     "size": "近景", "camera_position": "殿门内侧,略低机位",
-    "characters": ["c003", "c007"], "costumes": { "c003": "c003_battle_02", "c007": "c007_daily_01" }, "creatures": [], "is_dialogue": true,
+    "characters": ["CHAR-0003", "CHAR-0007"], "costumes": { "CHAR-0003": "CHAR-0003_battle_02", "CHAR-0007": "CHAR-0007_daily_01" }, "creatures": [], "is_dialogue": true,
     "dialogue_lines": [
-      { "speaker": "c003", "text": "师父,这卷经书……", "emotion": "疑惑", "pace": "medium" },
-      { "speaker": "c007", "text": "放回去。", "emotion": "冷", "pace": "slow", "placement": "os", "heard_in": ["sh014"], "source_fx": "door",
+      { "speaker": "CHAR-0003", "text": "师父,这卷经书……", "emotion": "疑惑", "pace": "medium" },
+      { "speaker": "CHAR-0007", "text": "放回去。", "emotion": "冷", "pace": "slow", "placement": "os", "heard_in": ["sh014"], "source_fx": "door",
         "offset_s": 0.4, "placement_source": "script", "placement_reason": { "trigger": "S-door", "evidence": "剧本括注 (O.S.):老执事在门外" } }
     ],
     "storyboard_ref": "S03/order:1", "view_tile": 5,
-    "poses": { "c003": { "pose": "stand", "action": "自殿门行至殿中停步按剑" }, "c007": { "pose": "stand", "action": "" } }
+    "poses": { "CHAR-0003": { "pose": "stand", "action": "自殿门行至殿中停步按剑" }, "CHAR-0007": { "pose": "stand", "action": "" } }
   }],
   "generation_groups": [{
-    "group_id": "grp005", "scene_id": "s012",
+    "group_id": "grp005", "scene_id": "SCN-0012",
     "time_of_day": "深夜", "lighting_scheme_id": "LGT-0012-01",
     "shots": ["sh014", "sh015", "sh016"],
     "total_duration_s": 12,
-    "characters_union": ["c003", "c007"], "costumes_by_char": { "c003": "c003_battle_02", "c007": "c007_daily_01" }, "creatures_union": [], "has_dialogue": true,
+    "characters_union": ["CHAR-0003", "CHAR-0007"], "costumes_by_char": { "CHAR-0003": "CHAR-0003_battle_02", "CHAR-0007": "CHAR-0007_daily_01" }, "creatures_union": [], "has_dialogue": true,
     "audio_plan": "dialogue",
-    "speakers": ["c003"],
+    "speakers": ["CHAR-0003"],
     "nsfw": false,   // NSFW 模式开启时必填:场景任一事件 content_flags 非空 → true;关闭时不写
     "continuity_from": "grp004",
     "storyboard_group_ref": "S03/group_order:2",
-    "scene_refs": { "layout_top": "assets/concepts/scenes/s012/layout_top.png", "layout_json": "assets/concepts/scenes/s012/layout.json" },
+    "scene_refs": { "layout_top": "assets/concepts/scenes/SCN-0012/layout_top.png", "layout_json": "assets/concepts/scenes/SCN-0012/layout.json" },
     "blocking_map": { "characters": [
-      { "id": "c003", "label": "林昭", "start": { "landmark": "main_door", "offset_en": "one step inside" }, "path": [{ "landmark": "long_table" }], "end": { "landmark": "fireplace" }, "facing_end_en": "facing the fireplace", "route_en": "enters through the main door, walks past the long table and stops at the fireplace" },
-      { "id": "c007", "label": "老执事", "start": { "landmark": "fireplace", "xy": [0.84, 0.46] }, "route_en": "stands beside the fireplace facing the main door and does not move" }
+      { "id": "CHAR-0003", "label": "林昭", "start": { "landmark": "main_door", "offset_en": "one step inside" }, "path": [{ "landmark": "long_table" }], "end": { "landmark": "fireplace" }, "facing_end_en": "facing the fireplace", "route_en": "enters through the main door, walks past the long table and stops at the fireplace" },
+      { "id": "CHAR-0007", "label": "老执事", "start": { "landmark": "fireplace", "xy": [0.84, 0.46] }, "route_en": "stands beside the fireplace facing the main door and does not move" }
     ] }
   }, {
-    "group_id": "grp006", "scene_id": "s013",
+    "group_id": "grp006", "scene_id": "SCN-0013",
     "shots": ["sh017", "sh018"], "total_duration_s": 9,
-    "characters_union": ["c003"], "creatures_union": ["CRE-001"], "has_dialogue": false,
+    "characters_union": ["CHAR-0003"], "creatures_union": ["CRE-001"], "has_dialogue": false,
     "audio_plan": "ambient_only",
     "silent_rationale": "纯动作追逃段,叙事由画面与脚步/风声承担,无需旁白",
     "continuity_from": null,
@@ -124,6 +124,8 @@
   }]
 }
 ```
+
+> 示例中的实体 ID 按 WORKFLOW.md「实体 ID 写法」表写(新项目适用;存量项目以 `bible/*/index.json` 已发 ID 与项目写入规则为准,不改已发 ID、不做迁移)。
 (`window_s` = 挂点镜区间总时长 − 区间内画内对白占时 − 同窗画外句(os/vo)占时;每条 narration.md 条目必有对应 anchor 记录。`dialogue_lines[].placement` 缺省 on,os/vo 句必填 `heard_in`(同组镜),§8D 2026-10-03;`audio_plan` 只按画内句判:dialogue / voice_over(旧名 narration_over)/ ambient_only;`speakers` 只列画内说话人)
 
 ## 接受的工作指令(Work Order)

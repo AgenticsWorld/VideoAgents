@@ -56,7 +56,7 @@
 ```json
 { "metrics": { "integrated_lufs": -14.3, "true_peak_dbtp": -1.4, "clipping": false },
   "lip_sync_sampled": { "checked": 20, "max_offset_ms": 64 },
-  "voice_consistency": { "char-001": "ok" }, "defects": [] }
+  "voice_consistency": { "CHAR-0001": "ok" }, "defects": [] }
 ```
 
 ## 接受的工作指令(Work Order)

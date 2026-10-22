@@ -101,13 +101,13 @@ python3 code/blocking_map_check.py --project <slug> --scene <id>
 
 示例:
 ```yaml
-task_id: p6-ep01-env-concept-s012
+task_id: p6-ep01-env-concept-SCN-0012
 agent: 06-art/environment-concept
 instruction: |
-  ep01 用到、库里还没有的场景 s012(青云宗大殿):产出场景布局包:俯视空间布局图 layout_top.png + layout.json
-  (≥3 地标坐标、机位语义 views)。建筑依 bible/scenes/s012/architecture.json,
+  ep01 用到、库里还没有的场景 SCN-0012(青云宗大殿):产出场景布局包:俯视空间布局图 layout_top.png + layout.json
+  (≥3 地标坐标、机位语义 views)。建筑依 bible/scenes/SCN-0012/architecture.json,
   俯视图用中性均匀光、不带时段(不按 lighting.json 方案画),风格遵循 bible/style.json 并注入负面清单。
-  产出 assets/concepts/scenes/s012/,交付前跑 blocking_map_check.py --scene s012。
+  产出 assets/concepts/scenes/SCN-0012/,交付前跑 blocking_map_check.py --scene SCN-0012。
 ```
 
 ## 质量标准(Definition of Done)

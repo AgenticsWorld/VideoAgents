@@ -45,14 +45,18 @@
 {
   "polities": [{ "id": "pol_liang", "entity_ref": "nation_liang", "government": "君主制",
                  "ruler_title": "梁帝", "succession": "嫡长子", "institutions": ["御史台"], "source": { "chapters": [6] } }],
+  "camps": [{ "id": "camp_zhengdao", "name": "正道", "note": "…", "source": { "chapters": [12] } }],
   "alignments": [{ "faction_ref": "faction_qingyun", "camp": "camp_zhengdao", "since_chapter": 12,
-                   "cause_event": "evt_…", "source": { "chapters": [12] } }],
+                   "cause_event": "ev0038", "source": { "chapters": [12] } }],
   "relations": [{ "a": "nation_liang", "b": "nation_yan", "phases": [
-                   { "type": "alliance", "chapters": [30, 120], "basis": "evt_…" },
-                   { "type": "hostile", "chapters": [121, null], "basis": "evt_…" } ], "source": {} }],
+                   { "type": "alliance", "chapters": [30, 120], "basis": "ev0101" },
+                   { "type": "hostile", "chapters": [121, null], "basis": "ev0233" } ], "source": {} }],
   "laws_offices": [{ "polity_ref": "pol_liang", "office": "九品官制", "note": "…", "inferred": true, "reason": "…" }]
 }
 ```
+
+> **阵营定义容器**:阵营定义在本文件 `camps[]`(键名固定;`id` 用 `camp_` 前缀),`alignments[].camp` 引用它;势力随剧情换阵营按 `alignments[]` 分段记,不写进 `camps[]`。事件引用写 `story/events.json` 已发的事件 ID(`ev` + 数字)。
+> 示例中的实体 ID 按 WORKFLOW.md「实体 ID 写法」表写(新项目适用;存量项目以 `bible/*/index.json` 已发 ID 与项目写入规则为准,不改已发 ID、不做迁移)。
 
 ## 接受的工作指令(Work Order)
 
@@ -72,7 +76,7 @@ instruction: |
 
 **机检(不过直接退回)**:
 - schema 通过;`source_refs_required`:每条含章节出处或 `inferred:true` + `reason`;`no_unknown_placeholder`:制作必需字段无 UNKNOWN/未知/待定占位(§1 原则 10)。
-- 与 world 势力表对齐:`entity_ref` / `faction_ref` / 关系双方 100% 能在 `world.json` 命中,零悬空。
+- 与 world 势力表对齐:`entity_ref` / `faction_ref` / 关系双方 100% 能在 `world.json` 命中,`alignments[].camp` 100% 能在本文件 `camps[]` 命中,零悬空。
 - `relations[].phases` 章节区间不重叠、不留空洞(未知期显式标 `unknown`)。
 
 **评分(evaluation Agent,rubric `extraction_v1`,阈值 80)**:
@@ -83,7 +87,7 @@ instruction: |
 
 **本领域易错点**:
 - 只记关系终态不记变化区间——中期剧集会按结局关系画错敌我。
-- 「阵营」与「国家」混为一谈:阵营是跨势力集合,必须单独建 camp,不复用 nation id。
+- 「阵营」与「国家」混为一谈:阵营是跨势力集合,必须在 `camps[]` 单独建(`camp_…`),不复用 nation id。
 - 幕后主使类设定把「读者视角的真相」提前写成公开事实——需标注「何章揭露」。
 - 官职品级搬现实朝代模板而不标 `inferred`。
 

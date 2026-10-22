@@ -70,9 +70,9 @@ prompt 写完必跑 `python3 code/sync_continuity_refs.py --project <slug> --ep 
 {
   "episode": 1,
   "axis_violations": [{ "shots": ["sh021", "sh022"], "waiver": "导演阐述:混乱感,见 directing_plan §重点场次 S07" }],
-  "lighting_chain": [{ "scene": "s012", "shots": ["sh014", "sh015"], "time_of_day": "深夜", "lighting_scheme_id": "LGT-0012-01", "key_light": "frame_left", "ok": true }],
-  "costume_states": [{ "shot_id": "sh014", "c003": { "outfit": "c003_battle_02", "state": "左袖撕裂" } }],
-  "prop_states": [{ "shot_id": "sh014", "prop_017": "在 c003 手中,出鞘" }],
+  "lighting_chain": [{ "scene": "SCN-0012", "shots": ["sh014", "sh015"], "time_of_day": "深夜", "lighting_scheme_id": "LGT-0012-01", "key_light": "frame_left", "ok": true }],
+  "costume_states": [{ "shot_id": "sh014", "CHAR-0003": { "outfit": "CHAR-0003_battle_02", "state": "左袖撕裂" } }],
+  "prop_states": [{ "shot_id": "sh014", "prop_017": "在 CHAR-0003 手中,出鞘" }],
   "group_transitions": [{
     "from_group": "grp004", "to_group": "grp005",
     "boundary_shots": ["sh013", "sh014"], "same_scene": true,
@@ -80,10 +80,12 @@ prompt 写完必跑 `python3 code/sync_continuity_refs.py --project <slug> --ep 
     "transition": { "type": "hard_cut" },
     "cast_change": true, "framing_change_ok": true,
     "checks": { "axis": true, "lighting": true, "costume": true, "props": true },
-    "notes": "同场连续动作,交界必须传 grp004 尾帧作参考锚;sh014 新增 c007,首镜已改反打过肩,构图与尾帧明显不同"
+    "notes": "同场连续动作,交界必须传 grp004 尾帧作参考锚;sh014 新增 CHAR-0007,首镜已改反打过肩,构图与尾帧明显不同"
   }]
 }
 ```
+
+> 示例中的实体 ID 按 WORKFLOW.md「实体 ID 写法」表写(新项目适用;存量项目以 `bible/*/index.json` 已发 ID 与项目写入规则为准,不改已发 ID、不做迁移)。
 
 ## 接受的工作指令(Work Order)
 

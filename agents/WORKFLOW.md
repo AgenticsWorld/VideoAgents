@@ -323,6 +323,22 @@ refs/
 | dictionary | 全库专有名词统一释义 | `bible/dictionary.json` | 机检:词条唯一;QA:其余 8 份文件的术语 100% 能在词典命中 |
 | memory-bible | 将 9 份文件合并为 Bible v1,解决冲突或上报 | 上述 9 份 | `bible/` v1 + changelog | 机检:合并后交叉引用完整——`cross_refs_valid` 必须覆盖**全部 ID 命名空间**(事件 `ev*`、角色 `CHAR-*`、场景 `SCN-*`、地名/势力/术语),任何引用指向不存在的 ID 即 FAIL,禁止只查部分命名空间的空洞通过。QA:world-consistency-qa 终审 |
 
+> **实体 ID 写法(2026-10-22)**:**新项目适用**——各工位起 ID、跨文件引用 ID 按下表写,各 SOUL 示例同口径;**存量项目以 `bible/*/index.json` 已发 ID 与项目写入规则为准,不改已发 ID、不做迁移**(memory-bible 合并时也不据此重编号)。新项目里「宿主解析」为「是」的命名空间写法不合时,宿主正则会静默漏抓(拆场、过场设计、故事板、台词说话人 / 出场名单等)。引用方一律写权威定义处已发的 ID,不用别名、不自造前缀。
+
+| 命名空间 | 前缀 / 形态 | 例 | 权威定义处 | 宿主是否解析 |
+|---|---|---|---|---|
+| 场景 | `SCN-` + 数字 | `SCN-0012` | `bible/scenes/index.json`(05-scenes/scene) | 是:拆场、过场设计、故事板、剧本场头只认 `SCN-\d+`;`SCN-cangjinge` / `sc-…` / `s012` 抓不到 |
+| 人物 | `CHAR-` + 数字;或字母开头的 ASCII slug(连字符分段);区分大小写 | `CHAR-0003` | `bible/characters/index.json`(03-characters/character-manager) | 是:`modules/entity_ids.py` `CHAR_ID_PAT`(台词说话人、出场名单);`char-…` / `c003` / `chr_…` 抓不到 |
+| 生物(含坐骑本体) | `CRE-` + 数字(或 slug) | `CRE-0012` | `bible/creatures/index.json`(04-creatures/creature) | 是:`ACTOR_ID_PAT` 只认 `CRE-`;`is_creature_id` 另兼容存量 `cre_` |
+| 坐骑卡 | `mnt_` + slug | `mnt_bingjiao_01` | `bible/creatures/mount.json`(04-creatures/mount,单文件内部编号) | 否;跨文件一律引 `creature_ref` 指向的 `CRE-` |
+| 事件 | `ev` + 数字(以数字结尾) | `ev0042` | `story/events.json`(01-story/event) | 是:剧本 `[事件]` 位、事件取舍机检按 `ev…数字` 抓;`evt_slug` 抓不到 |
+| 服装 | `<人物 ID>_<场合>_<序号>` | `CHAR-0003_battle_02` | `bible/costumes.json`(06-art/costume) | 否(按键查) |
+| 地理节点 | `geo_` + 类别 + slug(`geo_region_` / `geo_mt_` / `geo_city_` …) | `geo_city_yunzhou` | `bible/geography.json`(02-worldbuilding/geography) | 否 |
+| 国家 / 势力 | `nation_` / `faction_` + slug | `faction_qingyun` | `bible/world.json`(02-worldbuilding/world) | 否 |
+| 政体 / 阵营 | `pol_` / `camp_` + slug | `camp_zhengdao` | `bible/politics.json` 的 `polities[]` / `camps[]`(02-worldbuilding/political) | 否 |
+| 货币 | `cur_` + slug;分档引用 `<货币 id>#<档位 id>` | `cur_lingshi#low` | `bible/economy.json` 的 `currencies[]`(档位 `grades[].id`)(02-worldbuilding/economy) | 否 |
+| 修炼等级 | `rank_` + slug | `rank_jindan` | `bible/cultivation.json`(02-worldbuilding/magic-cultivation) | 否 |
+
 **G2 闸门 + H1 人工确认**:用户审阅 Bible 摘要并签字。签字后 Bible 进入受控状态(改动需走变更流程)。
 
 ### Phase 3 — 角色与资产
@@ -1210,7 +1226,7 @@ python3 modules/genmedia.py image \
   --prompt "<英文正向 prompt>" --negative "<负面词>" \
   --output assets/keyframes/ep01/sh014/first_01.png \
   --aspect 16:9 \                       # 或 --size 2560x1440 精确尺寸
-  --ref assets/concepts/characters/c003/sheet.png \  # 参考图可多张(角色整版三视图 sheet/分镜背景图 plates/<key>.png;俯视图不进视频 refs)
+  --ref assets/concepts/characters/CHAR-0003/sheet.png \  # 参考图可多张(角色整版三视图 sheet/分镜背景图 plates/<key>.png;俯视图不进视频 refs)
   --n 4                                 # 候选张数,>1 时自动加 _01.._04 后缀
 
 # 生成视频(组 clip;Seedance 2.0 多镜头多参考图模式,默认路径)

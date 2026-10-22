@@ -67,7 +67,7 @@ python3 modules/genmedia.py image \
 {
   "group_id": "grp005",
   "corrections": [
-    { "file": "first_02.png", "char_id": "chr_lin_feng",
+    { "file": "first_02.png", "char_id": "CHAR-0001",
       "method": "face_swap+ref_inject", "face_similarity": 0.91, "rolls": 1 }
   ]
 }
@@ -82,7 +82,7 @@ python3 modules/genmedia.py image \
 task_id: p7-ep01-sh014-consistency
 agent: 08-video-gen/character-consistency
 instruction: |
-  第 1 集第 14 镜关键帧含角色 chr_lin_feng,请对全部候选帧做一致性校正:
+  第 1 集第 14 镜关键帧含角色 CHAR-0001,请对全部候选帧做一致性校正:
   锚定其三视图,人脸相似度须 ≥0.85;不达标自动重 roll(次数以用户重跑次数设定为准,0=不自动重 roll、直接升级);
   同时核对发色/瞳色/眉间疤等 appearance 标志物。
 ```

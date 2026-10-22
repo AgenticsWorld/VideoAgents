@@ -51,7 +51,7 @@
 {
   "episode": "ep01",
   "groups_draft": [
-    { "order": 1, "segment_ids": ["S001"], "scene_id": "s001",
+    { "order": 1, "segment_ids": ["S001"], "scene_id": "SCN-0001",
       "content": "咸阳宫远景推入,旌旗蔽日,阶前甲士列阵",
       "size": "全景→中景", "camera": "缓推", "characters": [],
       "rationale": "对应「秦王政统一六国」的宏大开篇,用宫城气象立时代" }

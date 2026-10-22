@@ -45,8 +45,8 @@
 ```json
 {
   "shot_id": "sh014",
-  "subject": { "id": "c003", "grid": "right_third", "size_in_frame": "chest_up" },
-  "layers": { "fg": "门框剪影", "mg": "c003", "bg": "殿内烛光" },
+  "subject": { "id": "CHAR-0003", "grid": "right_third", "size_in_frame": "chest_up" },
+  "layers": { "fg": "门框剪影", "mg": "CHAR-0003", "bg": "殿内烛光" },
   "gaze": { "direction": "frame_left", "lead_room": "left" },
   "safe_area_ok": true
 }
@@ -66,7 +66,7 @@
 task_id: p6-ep01-sh014-composition
 agent: 07-directing/composition
 instruction: |
-  为第 1 集 sh014(近景,对白镜,c003/c007 正反打之 c003 侧)做构图:
+  为第 1 集 sh014(近景,对白镜,CHAR-0003/CHAR-0007 正反打之 CHAR-0003 侧)做构图:
   主体位于右三分线,视线朝画左并留视线空间,与 sh015 的反打视线匹配;
   前景用门框做遮挡。产出 directing/ep01/shots/sh014/composition.json。
 ```

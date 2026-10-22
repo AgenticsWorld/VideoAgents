@@ -45,7 +45,7 @@
 ```json
 {
   "creatures": [{
-    "id": "cre_bingjiao", "name": "冰蛟", "dictionary_ref": "冰蛟", "category": "妖兽",
+    "id": "CRE-0012", "name": "冰蛟", "dictionary_ref": "冰蛟", "category": "妖兽",
     "forms": [{ "stage": "成年", "since_chapter": 210,
       "appearance": { "size": "体长十丈(约三层楼)", "surface": "青白鳞片,腹部霜色",
         "head": "独角,颚下冰须", "eyes": "竖瞳、淡蓝", "marks": ["左目旧伤疤"] } }],
@@ -56,6 +56,8 @@
   }]
 }
 ```
+
+> 示例中的实体 ID 按 WORKFLOW.md「实体 ID 写法」表写(新项目适用;存量项目以 `bible/*/index.json` 已发 ID 与项目写入规则为准,不改已发 ID、不做迁移)。
 
 ## 接受的工作指令(Work Order)
 

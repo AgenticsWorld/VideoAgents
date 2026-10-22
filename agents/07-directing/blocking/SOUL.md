@@ -67,9 +67,9 @@
 {
   "shot_id": "sh014",
   "characters": [{
-    "id": "c003", "pose": "stand", "start_pos": "殿门内一步,面向 c007",
-    "space_fragment_en": "one step inside the hall doorway on screen-left, facing c007, then strides to the center of the hall",
-    "path": [{ "t": 1.5, "to": "殿中,距 c007 三步" }],
+    "id": "CHAR-0003", "pose": "stand", "start_pos": "殿门内一步,面向 CHAR-0007",
+    "space_fragment_en": "one step inside the hall doorway on screen-left, facing CHAR-0007, then strides to the center of the hall",
+    "path": [{ "t": 1.5, "to": "殿中,距 CHAR-0007 三步" }],
     "beats": [{ "t": 3.2, "action": "按剑,停步", "sync": "台词『站住』" }],
     "performance": {
       "goal": "逼对方先开口,不让他走",
@@ -92,8 +92,8 @@
 task_id: p6-ep01-sh014-blocking
 agent: 07-directing/blocking
 instruction: |
-  为第 1 集 sh014(4.0s,近景,c003/c007 对峙)做人物调度:
-  c003 自殿门行至殿中停步按剑,节拍对齐台词『站住』;
+  为第 1 集 sh014(4.0s,近景,CHAR-0003/CHAR-0007 对峙)做人物调度:
+  CHAR-0003 自殿门行至殿中停步按剑,节拍对齐台词『站住』;
   两人距离依 relationship(敌对)拉开;先过 story_timeline 在场核查。
   产出 directing/ep01/shots/sh014/blocking.json。
 ```

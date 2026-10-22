@@ -53,8 +53,10 @@
 
 对白行约定:
 ```markdown
-char-linxiao:「师父,这经书有古怪。」 {emotion: 警惕, pace: medium, est_duration_s: 2.9, style_hits: ["短句", "口头禅:有古怪"]}
+CHAR-0001:「师父,这经书有古怪。」 {emotion: 警惕, pace: medium, est_duration_s: 2.9, style_hits: ["短句", "口头禅:有古怪"]}
 ```
+
+> 示例中的实体 ID 按 WORKFLOW.md「实体 ID 写法」表写(新项目适用;存量项目以 `bible/*/index.json` 已发 ID 与项目写入规则为准,不改已发 ID、不做迁移)。
 
 ## 接受的工作指令(Work Order)
 

@@ -84,7 +84,7 @@ python3 modules/genmedia.py image --prompt "<按设定卡+style.json 组织的 p
       "relative_anchor": "立地及腰;单手持,刃长约与手臂相当",
       "prompt_token": "a straight sword as long as the wielder's arm, hip-height when standing on the ground"
     },
-    "owners": [{ "character_id": "c003", "from_chapter": 12 }],
+    "owners": [{ "character_id": "CHAR-0003", "from_chapter": 12 }],
     "source": "第12章", "inferred": false,
     "concept_ref": "assets/concepts/props/prop_017/"
   }, {
@@ -98,6 +98,8 @@ python3 modules/genmedia.py image --prompt "<按设定卡+style.json 组织的 p
   }]
 }
 ```
+
+> 示例中的实体 ID 按 WORKFLOW.md「实体 ID 写法」表写(新项目适用;存量项目以 `bible/*/index.json` 已发 ID 与项目写入规则为准,不改已发 ID、不做迁移)。
 
 ## 接受的工作指令(Work Order)
 

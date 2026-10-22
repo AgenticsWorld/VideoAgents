@@ -150,8 +150,8 @@ prompt 写完必跑 `python3 code/sync_continuity_refs.py --project <slug> --ep 
   ],
   "video_prompt": "Overall visual style: <style 串>.\n\n塔尔@Image 1:成年男性,黑发束髻,青灰布袍.\n\nSpatial layout: [Image 2] is the clean top-down layout map of this location — use it only for where each character or creature stands, faces and walks; do not render the map itself. [Image 3] is the 3x3 multi-angle sheet of the same location (tiles numbered 1-9, left-to-right, top-to-bottom) — use it only for spatial layout, architecture and lighting continuity from every camera angle; do not copy its tiling. Map usage: [Image 2] is a spatial position reference only, never the picture — do not reproduce its top-down / bird's-eye viewpoint, its flat plan look, its colors or any part of it in any shot; every shot is filmed from the ground-level camera described in that shot.\n\n塔尔 route on the map: enters through the main door, walks past the long table and stops at the fireplace.\n\nopening continues from [Image 4].\n\nShot 1: slow push-in, framed like tile 5 of [Image 3], 塔尔 ... {雪化了是清的。}\n\nShot 2: ...\n\nShot 3: ...\n\nWhitebox reference: [Video 1] is the camera-view whitebox previs of this exact group — …\n\nWhitebox legend: red figure = 塔尔 (CHAR-0003); …\n\nGlobal constraints: ... No whitebox look: no grey boxes, no placeholder figures, no color-coded people, no camera icon or sight line.",
   "refs": [
-    "assets/concepts/characters/c003/sheet.png",
-    "assets/concepts/scenes/s012/plates/LGT-0012-01_b090_h2_x-4_z5_f27.png",
+    "assets/concepts/characters/CHAR-0003/sheet.png",
+    "assets/concepts/scenes/SCN-0012/plates/LGT-0012-01_b090_h2_x-4_z5_f27.png",
     "assets/clips/epNN/grp004.last_frame.png"
   ],
   "audio_refs": ["assets/audio/voice/refs/CHAR-0003_voiceprint.mp3",

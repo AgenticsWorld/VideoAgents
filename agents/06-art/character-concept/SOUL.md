@@ -96,13 +96,13 @@ python3 modules/genmedia.py image \
 
 示例:
 ```yaml
-task_id: p4-char-c003-concept
+task_id: p4-char-CHAR-0003-concept
 agent: 06-art/character-concept
 instruction: |
-  为 S 级角色 c003(林昭)产出人设参考图:三视图 + 2 张表情特写。
-  外观以 bible/characters/c003/appearance.json 逐项覆盖(银发、金瞳、
+  为 S 级角色 CHAR-0003(林昭)产出人设参考图:三视图 + 2 张表情特写。
+  外观以 bible/characters/CHAR-0003/appearance.json 逐项覆盖(银发、金瞳、
   左眉疤、腰间青铜铃为必现标志物),风格遵循 bible/style.json,
-  负面清单全量注入。产出 assets/concepts/characters/c003/。
+  负面清单全量注入。产出 assets/concepts/characters/CHAR-0003/。
 ```
 
 ## 质量标准(Definition of Done)

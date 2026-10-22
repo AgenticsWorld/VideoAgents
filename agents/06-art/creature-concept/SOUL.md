@@ -69,7 +69,7 @@ python3 modules/genmedia.py image \
 |---|---|---|
 | 生物参考图包 | `assets/concepts/creatures/<CRE-id>/` | 定稿 `sheet.png`(+ 阶段变体 `sheet_<stage>.png`)+ prompts.json + selection.json + usage_ledger.jsonl |
 
-> **目录键用 CRE-\*,不用 MNT-\***:`bible/creatures/index.json` 是 CRE-* 的权威定义处,坐骑卡的 `MNT-*` 是 mount.json 单文件内部编号,下游跨文件一律引 `creature_ref` 指向的 CRE-*(WRITE_RULES.md §4);概念图目录、shot_list `creatures[]`、prompt refs 全部以 CRE-* 为键。
+> **目录键用 CRE-\*,不用坐骑卡 id**:`bible/creatures/index.json` 是 CRE-* 的权威定义处,坐骑卡自己的 `id`(`mnt_…`)是 mount.json 单文件内部编号,下游跨文件一律引 `creature_ref` 指向的 CRE-*(WORKFLOW.md「实体 ID 写法」表;新项目适用,存量项目以已发 ID 为准);概念图目录、shot_list `creatures[]`、prompt refs 全部以 CRE-* 为键。
 
 > **一生物一张 sheet,不裁切子图**;**主目录只放定稿**:`<id>/` 主目录仅保留最终采用的最新版本图与 prompts.json、selection.json;落选候选、中间尝试、测试图一律移入 `<id>/candidates/` 留档(§Phase 4 目录卫生,`candidates/` 不计入 §6A 现货)。重 roll 替换定稿时旧图先移入 `candidates/` 再落新图。
 

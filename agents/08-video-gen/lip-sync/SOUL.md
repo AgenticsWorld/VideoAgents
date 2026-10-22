@@ -48,7 +48,7 @@
 ```json
 {
   "group_id": "grp005", "defect_id": "DEF-ep01-visual-00xx",
-  "lines": [ { "line_id": "ep01_sh014_l01", "char_id": "chr_lin_feng",
+  "lines": [ { "line_id": "ep01_sh014_l01", "char_id": "CHAR-0001",
                "voice": "assets/audio/voice/ep01/ep01_sh014_l01.wav", "av_offset_ms": 42 } ]
 }
 ```
@@ -63,7 +63,7 @@ task_id: p7-ep01-sh014-lipsync
 agent: 08-video-gen/lip-sync
 depends_on: [p7-ep01-sh014-videogen, p8-ep01-voice]
 instruction: |
-  第 1 集第 14 镜为对白镜(chr_lin_feng 两句台词),
+  第 1 集第 14 镜为对白镜(CHAR-0001 两句台词),
   用 assets/audio/voice/ep01/ 对应 wav 做口型同步并更新 clip;
   音画偏移须 <80ms,不得改变镜头时长与画质。
 ```
