@@ -2841,10 +2841,12 @@ function renderProjectSkills(){
       box.appendChild(h);
     }
     const row=document.createElement('label');
-    row.style.cssText='display:flex;align-items:flex-start;gap:10px;padding:9px 10px;margin:4px 0;border:1px solid var(--border);border-radius:8px;cursor:pointer;min-width:0';
-    row.innerHTML=`<input type="checkbox" style="margin:4px 0;flex:none"><div style="flex:1;min-width:0"><div style="display:flex;gap:8px;align-items:baseline;min-width:0"><b style="font-size:12px;overflow-wrap:anywhere">${esc(s.name)}</b>${s.name!==s.dir?`<code style="color:var(--dim);font-size:11px;overflow-wrap:anywhere">${esc(s.dir)}</code>`:''}${!s.enabled?`<span style="color:var(--dim);font-size:11px">${esc(t('已被全局禁用'))}</span>`:''}</div><div class="project-skill-description" style="font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px" title="${esc(s.description||'')}">${esc(s.description||'')}</div>${s.condition?`<div style="font-size:11px;color:var(--dim);margin-top:3px">${esc(t(s.condition))}</div>`:''}</div>`;
+    // 项目勾着但已不在安装清单的技能(installed:false):标灰,只能取消勾选(保存即从项目设置移除)
+    const missing=s.installed===false,desc=missing?t('找不到这个技能的 SKILL.md(已移除或未随升级保留),运行时按未勾选处理;取消勾选并保存即可从项目设置中移除'):(s.description||'');
+    row.style.cssText='display:flex;align-items:flex-start;gap:10px;padding:9px 10px;margin:4px 0;border:1px solid var(--border);border-radius:8px;cursor:pointer;min-width:0'+(missing?';opacity:.6':'');
+    row.innerHTML=`<input type="checkbox" style="margin:4px 0;flex:none"><div style="flex:1;min-width:0"><div style="display:flex;gap:8px;align-items:baseline;min-width:0"><b style="font-size:12px;overflow-wrap:anywhere">${esc(s.name)}</b>${s.name!==s.dir?`<code style="color:var(--dim);font-size:11px;overflow-wrap:anywhere">${esc(s.dir)}</code>`:''}${!s.enabled?`<span style="color:var(--dim);font-size:11px">${esc(t('已被全局禁用'))}</span>`:''}${missing?`<span style="color:var(--yellow);font-size:11px">${esc(t('未安装'))}</span>`:''}</div><div class="project-skill-description" style="font-size:12px;color:var(--dim);white-space:${missing?'normal':'nowrap'};overflow:hidden;text-overflow:ellipsis;margin-top:3px" title="${esc(desc)}">${esc(desc)}</div>${s.condition?`<div style="font-size:11px;color:var(--dim);margin-top:3px">${esc(t(s.condition))}</div>`:''}</div>`;
     const input=row.querySelector('input');
-    input.checked=s.selected;input.disabled=!s.enabled;
+    input.checked=s.selected;input.disabled=!s.enabled&&!missing;
     input.setAttribute('aria-label',agentName(s.agent_name)+' '+s.name);
     input.onchange=()=>{s.selected=input.checked;updateProjectSkillsCount()};
     box.appendChild(row);

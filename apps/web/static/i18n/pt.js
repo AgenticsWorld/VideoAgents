@@ -3496,6 +3496,8 @@ window.I18N_DICT = {
 "默认仅开启视频模型对应的提示词技能，其余技能（包括表演控制）默认关闭。手动改动会保留；未改动的提示词技能继续跟随视频模型设置。": "Por padrão só fica ativada a skill de prompt correspondente ao modelo de vídeo; as demais (inclusive a direção de atuação) começam desligadas. As alterações manuais são mantidas; as skills de prompt não alteradas continuam seguindo a configuração do modelo de vídeo.",
 "搜索 Agent 或技能": "Buscar Agent ou skill",
 "已被全局禁用": "Desabilitado globalmente",
+"未安装": "Não instalada",
+"找不到这个技能的 SKILL.md(已移除或未随升级保留),运行时按未勾选处理;取消勾选并保存即可从项目设置中移除": "O SKILL.md desta skill não foi encontrado (foi removida ou não foi mantida numa atualização); as execuções a tratam como não selecionada. Desmarque e salve para removê-la das configurações do projeto",
 "没有匹配的技能": "Nenhuma skill corresponde",
 "已选 {n} / {total} 项": "{n} / {total} selecionados",
 "可跨机访问);「测试连接」会列出可用 checkpoint;工作流下拉列出": "para acesso entre máquinas); «Testar conexão» lista os checkpoints disponíveis; o menu suspenso de workflows lista",

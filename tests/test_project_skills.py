@@ -199,3 +199,111 @@ def test_group_override_cannot_auto_activate_an_unselected_skill(runtime, monkey
     save(core, "one", {core.PROMPT_SKILL_SD20: False})
     gs["prompt_skill"] = {"mode": "manual", "skill_id": core.PROMPT_SKILL_SD20}
     assert core.resolve_group_settings("one", "ep01", "grp001", gs=gs)["reason"] == "disabled"
+
+
+# #137:项目设置里勾着但技能已不在安装清单(已移除 / 桌面端升级丢失)
+GONE = f"{PROMPT}/high-density-fight"
+ORPHAN = "plugin-gone/writer/polish"
+
+
+def stale_settings(core, project, overrides):
+    path = core.project_settings_path(project)
+    path.write_text(json.dumps({"project_skills": {"overrides": overrides}}), encoding="utf-8")
+    return path
+
+
+@pytest.fixture
+def stale(runtime, monkeypatch):
+    core, _ = runtime
+    monkeypatch.setattr(core, "list_agents", lambda refresh=False: [
+        {"id": PROMPT, "name": "提示词工程师", "category_name": "视频生成"}])
+    stale_settings(core, "one", {GONE: True, ORPHAN: True, f"{PROMPT}/old-off": False, CUSTOM: True})
+    return core
+
+
+def test_stale_selection_is_listed_as_not_installed(stale):
+    core = stale
+    skills = asyncio.run(core.api_project_skills_get("one"))["skills"]
+    by_id = {s["id"]: s for s in skills}
+    assert by_id[GONE]["installed"] is False
+    assert (by_id[GONE]["selected"], by_id[GONE]["path"], by_id[GONE]["name"]) == (True, "", "high-density-fight")
+    assert by_id[GONE]["agent_name"] == "提示词工程师"
+    assert by_id[ORPHAN]["agent_name"] == "plugin-gone/writer" and not by_id[ORPHAN]["installed"]
+    assert f"{PROMPT}/old-off" not in by_id          # 勾掉的失效项没有影响,不列出
+    assert all(s["installed"] for s in skills if s["id"] not in (GONE, ORPHAN))
+    # 挂在所属 Agent 的已安装技能之后(界面按 agent_id 连续分组)
+    ids = [s["id"] for s in skills]
+    last_prompt = max(i for i, s in enumerate(skills) if s["agent_id"] == PROMPT and s["installed"])
+    assert ids.index(GONE) == last_prompt + 1 and ids[-1] == ORPHAN
+    assert len(skills) == 11
+
+
+def test_stale_selection_can_be_unchecked_but_not_enabled(stale):
+    core = stale
+    path = core.project_settings_path("one")
+    # 未安装的 id 写 true 照旧拒绝,文件不动
+    before = path.read_text(encoding="utf-8")
+    for body in ({GONE: True}, {"missing/skill": True}, {GONE: False, "missing/skill": True}):
+        with pytest.raises(core.ServiceError) as exc:
+            save(core, "one", body)
+        assert exc.value.status_code == 400
+        assert path.read_text(encoding="utf-8") == before
+    # 写 false = 从项目设置删掉该键;其它勾选与本次的已安装改动照常保存
+    response = save(core, "one", {GONE: False, PERFORMANCE: True})
+    overrides = json.loads(path.read_text(encoding="utf-8"))["project_skills"]["overrides"]
+    assert GONE not in overrides and overrides[ORPHAN] is True
+    assert overrides[CUSTOM] is True and overrides[PERFORMANCE] is True
+    assert GONE not in {s["id"] for s in response["skills"]}
+    save(core, "one", {ORPHAN: False, f"{PROMPT}/old-off": False})
+    overrides = json.loads(path.read_text(encoding="utf-8"))["project_skills"]["overrides"]
+    assert set(overrides) == {CUSTOM, PERFORMANCE}
+    assert all(s["installed"] for s in core.list_project_skills("one"))
+
+
+def test_skill_report_explains_not_installed(stale, monkeypatch):
+    core = stale
+    monkeypatch.setattr(core, "RUNS", {})
+    monkeypatch.setattr(core, "publish_run", lambda run: None)
+    stale_settings(core, "one", {GONE: True, PERFORMANCE: True})
+    run = {"id": "run137", "project": "one", "agent": PROMPT, "agent_name": "提示词工程师",
+           "status": "queued", "created": 1000, "message": "ep01/grp001"}
+    core.init_skill_records(run)
+    assert PERFORMANCE in run["_skill_bound_ids"] and GONE not in run["_skill_bound_ids"]
+    assert run["_skill_missing_ids"] == [GONE]
+    assert GONE not in {r["skill_id"] for r in run["_skill_records"]}
+    run["status"] = "running"
+    core.RUNS[run["id"]] = run
+
+    def report(skill_id):
+        with pytest.raises(core.ServiceError) as exc:
+            asyncio.run(core.api_skill_report(run["id"], {"skill_id": skill_id, "status": "failed",
+                                                          "reason": "selected but skill file unavailable"}))
+        assert exc.value.status_code == 400
+        return str(exc.value)
+
+    assert "未安装" in report(GONE) and GONE in report(GONE)
+    core.STATE["ui_lang"] = "en"
+    assert "not installed" in report(GONE)
+    assert report(CUSTOM) == "skill is not selected for this agent/run"
+
+
+def test_not_installed_prompt_line_is_conditional(stale, monkeypatch):
+    core = stale
+    line = "不调用 skill_report 登记"
+    stale_settings(core, "one", {CUSTOM: True})
+    assert line not in core.agent_skill_prompt(PROMPT, "one")
+    stale_settings(core, "one", {GONE: True, CUSTOM: True, PERFORMANCE: True})
+    contract = core.agent_skill_prompt(PROMPT, "one")
+    assert f"项目启用的技能 `{GONE}` 未安装" in contract and line in contract
+    assert f"- `{GONE}`" not in contract                       # 不进「本工位已勾选」清单
+    assert "表演控制:项目已勾选" in contract
+    other = core.agent_skill_prompt(CUSTOM.rsplit("/", 1)[0], "one")
+    assert line not in other and GONE not in other
+    dispatcher = core.agent_skill_prompt(next(iter(core.DISPATCHERS)), "one")
+    assert GONE not in dispatcher and CUSTOM in dispatcher
+    # 表演控制本身不在安装清单时,勾着也不按「已勾选」注入
+    catalog = [s for s in core.scan_agent_skills() if s["id"] != PERFORMANCE]
+    monkeypatch.setattr(core, "scan_agent_skills", lambda refresh=False: catalog)
+    contract = core.agent_skill_prompt(PROMPT, "one")
+    assert "表演控制:项目未勾选" in contract and f"`{PERFORMANCE}`、`{GONE}`" not in contract
+    assert f"`{GONE}`、`{PERFORMANCE}` 未安装" in contract

@@ -147,6 +147,8 @@ window.I18N_DICT = {
 "默认仅开启视频模型对应的提示词技能，其余技能（包括表演控制）默认关闭。手动改动会保留；未改动的提示词技能继续跟随视频模型设置。": "Only the prompt skill selected for the video model is enabled by default. All other skills, including performance direction, start off. Manual changes are kept; untouched prompt skills follow video model settings.",
 "搜索 Agent 或技能": "Search agents or skills",
 "已被全局禁用": "Disabled globally",
+"未安装": "Not installed",
+"找不到这个技能的 SKILL.md(已移除或未随升级保留),运行时按未勾选处理;取消勾选并保存即可从项目设置中移除": "This skill's SKILL.md cannot be found (it was removed or not kept through an upgrade); runs treat it as unselected. Uncheck it and save to remove it from the project settings",
 "没有匹配的技能": "No matching skills",
 "已选 {n} / {total} 项": "{n} / {total} selected",
 

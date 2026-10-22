@@ -3494,6 +3494,8 @@ window.I18N_DICT = {
 "默认仅开启视频模型对应的提示词技能，其余技能（包括表演控制）默认关闭。手动改动会保留；未改动的提示词技能继续跟随视频模型设置。": "Secara default hanya skill prompt yang sesuai model video yang aktif; skill lain (termasuk pengarahan akting) nonaktif. Perubahan manual dipertahankan; skill prompt yang tidak diubah tetap mengikuti setelan model video.",
 "搜索 Agent 或技能": "Cari Agent atau skill",
 "已被全局禁用": "Dinonaktifkan secara global",
+"未安装": "Belum terpasang",
+"找不到这个技能的 SKILL.md(已移除或未随升级保留),运行时按未勾选处理;取消勾选并保存即可从项目设置中移除": "SKILL.md untuk skill ini tidak ditemukan (sudah dihapus atau tidak ikut terbawa saat pembaruan); saat dijalankan dianggap tidak dipilih. Hapus centangnya lalu simpan untuk menghapusnya dari pengaturan proyek",
 "没有匹配的技能": "Tidak ada skill yang cocok",
 "已选 {n} / {total} 项": "{n} / {total} dipilih",
 "可跨机访问);「测试连接」会列出可用 checkpoint;工作流下拉列出": "untuk akses lintas mesin); “Uji Koneksi” menampilkan checkpoint yang tersedia; dropdown workflow menampilkan workflow API",

@@ -1709,8 +1709,6 @@ SKILL_ACTIVATIONS: dict[str, dict] = {
         "kind": "soul", "condition": "组 audio_plan 为 dialogue 或所属场次为情绪峰值场(SOUL.md 引用,引擎无关)"},
     "08-video-gen/prompt/fight-choreography": {
         "kind": "soul", "condition": "组内含交手/武打动作镜(引擎无关,按项目技能契约触发)"},
-    "08-video-gen/prompt/high-density-fight": {
-        "kind": "soul", "condition": "组内交手镜时长 ≥ 组总时长 60% 的整组连续打斗(引擎无关,按项目技能契约触发)"},
     "08-video-gen/video-generation/runninghub-cloud-workflow": {
         "kind": "conditional", "condition": "视频渠道为 ComfyUI RunningHub 运行方式"},
     "08-video-gen/video-generation/agentics-media-generation": {
@@ -1843,17 +1841,36 @@ def project_skill_enabled(skill_id: str, project: str, *, default: bool | None =
 
 
 def list_project_skills(project: str, refresh: bool = False) -> list[dict]:
+    """项目技能清单。项目设置里勾着(override=true)但已不在安装清单的技能(已移除 / 桌面端升级后丢失)
+    以 installed:false 附在所属 Agent 之后(selected 为原勾选,界面据此标灰并允许取消勾选);
+    派单绑定、提示词勾选清单与技能登记只认已安装的。"""
     skills = list_agent_skills(refresh)
     default_id = resolve_prompt_skill(project, apply_project=False)["skill_id"]
     overrides = {canon_skill_id(k): v for k, v in
                  ((load_project_settings(project).get("project_skills") or {}).get("overrides") or {}).items()}
-    return [dict(s, selected=s["enabled"] and overrides.get(s["id"], s["id"] == default_id),
-                 default_selected=s["id"] == default_id) for s in skills]
+    out = [dict(s, installed=True, selected=s["enabled"] and overrides.get(s["id"], s["id"] == default_id),
+                default_selected=s["id"] == default_id) for s in skills]
+    installed = {s["id"] for s in out}
+    missing = sorted(k for k, v in overrides.items() if v is True and k and k not in installed)
+    agents = {a["id"]: a for a in list_agents()} if missing else {}
+    for sid in missing:
+        agent_id, _, directory = sid.rpartition("/")
+        a = agents.get(agent_id) or {}
+        at = max((i for i, s in enumerate(out) if s["agent_id"] == agent_id), default=len(out) - 1)
+        out.insert(at + 1, {
+            "id": sid, "agent_id": agent_id, "agent_name": a.get("name") or agent_id or sid,
+            "category_name": a.get("category_name", ""), "plugin": a.get("plugin"),
+            "dir": directory or sid, "name": directory or sid, "description": "", "path": "",
+            "kind": "generic", "condition": "", "enabled": skill_enabled(sid),
+            "installed": False, "selected": True, "default_selected": False})
+    return out
 
 
 def agent_skill_prompt(agent_id: str, project: str) -> str:
     """每轮注入当前项目的技能契约,包括 SOUL 中的旧自动触发规则覆盖。"""
     skills = list_project_skills(project)
+    missing = [s["id"] for s in skills if s["agent_id"] == agent_id and not s.get("installed", True)]
+    skills = [s for s in skills if s.get("installed", True)]
     mine = [s for s in skills if s["agent_id"] == agent_id]
     p = "\n\n## 项目技能自动激活契约(本轮最新设置,优先于历史会话与 SOUL.md 的自动触发规则)\n"
     p += ("仅自动激活当前项目勾选的技能;安装技能不等于允许自动执行。"
@@ -1885,6 +1902,10 @@ def agent_skill_prompt(agent_id: str, project: str) -> str:
     if disabled:
         p += "\n本工位未启用自动激活(覆盖 SOUL.md 中的默认/强制加载指引,本单不要自动读取或执行):"
         p += "".join(f"\n- `{s['id']}`" for s in disabled)
+    if missing:   # 条件式:仅本工位有勾着但已不在安装清单的技能时注入
+        p += ("\n项目启用的技能 " + "、".join(f"`{x}`" for x in missing) +
+              " 未安装(找不到 SKILL.md):本单不找它的 SKILL.md、不调用 skill_report 登记,"
+              "按无该技能执行,并在回执里注明。")
     if agent_id == PROMPT_AGENT_ID:
         active = resolve_prompt_skill(project)
         p += (f"\n本轮提示词主技能: {active['skill_id'] or '无'};文件: {active['path'] or '无'}。"
@@ -1911,7 +1932,8 @@ def skill_resume_message(message: str, contract: str, resumed: bool) -> str:
 
 def init_skill_records(run: dict):
     """Bind installed skill versions to the run, refreshing queued selections at launch."""
-    fresh = skill_records.seed(run, list_project_skills(run["project"]), ROOT)
+    skills = list_project_skills(run["project"])
+    fresh = skill_records.seed(run, [s for s in skills if s.get("installed", True)], ROOT)
     old = run.get("_skill_records", [])
     selected = {r["skill_id"] for r in fresh}
     for r in fresh:
@@ -1923,6 +1945,9 @@ def init_skill_records(run: dict):
                for r in old if r["skill_id"] not in selected]
     run["_skill_records"] = fresh + removed
     run["_skill_bound_ids"] = sorted(selected)
+    # 项目勾着但未安装的技能:不绑定、不建记录;登记时据此回「未安装」而不是「未勾选」
+    run["_skill_missing_ids"] = sorted(s["id"] for s in skills if not s.get("installed", True)
+                                       and s["agent_id"] == run["agent"] and s["selected"])
     run.pop("_skill_records_phase", None)
 
 
@@ -1945,7 +1970,14 @@ async def api_skill_report(run_id: str, body: dict):
         raise ServiceError(404, "run not found")
     if run.get("status") != "running":
         raise ServiceError(409, "skill reports require an active run")
-    if body.get("skill_id") not in run.get("_skill_bound_ids", []):
+    sid = body.get("skill_id")
+    if sid not in run.get("_skill_bound_ids", []):
+        if sid in run.get("_skill_missing_ids", []):
+            raise ServiceError(400, (
+                f"技能 {sid} 已在项目设置中勾选,但未安装(找不到 SKILL.md):本单按无该技能执行,"
+                "不必登记,并在回执里注明" if (ui_lang_code() or "zh") == "zh" else
+                f"skill {sid} is enabled in project settings but not installed (SKILL.md missing): "
+                "proceed without it, do not report it, and note this in the receipt"))
         raise ServiceError(400, "skill is not selected for this agent/run")
     try:
         records = skill_records.report(run.get("_skill_records", []), body)
@@ -14701,12 +14733,19 @@ PROJ_SETTING_LABELS = {"output": "输出设置", "duration": "视频节奏",
 async def api_projconfig_set(body: dict):
     project = safe_slug(body.get("project"))
     old = load_project_settings(project)
+    dropped: set[str] = set()
     if "project_skills" in body:
         _validate_project_skills(body["project_skills"])
         known = {s["id"] for s in scan_agent_skills(refresh=True)}
-        unknown = set(body["project_skills"]["overrides"]) - known
-        if unknown:
-            raise ServiceError(400, "unknown skill id: " + ", ".join(sorted(unknown)))
+        overrides = body["project_skills"]["overrides"]
+        unknown = set(overrides) - known
+        bad = sorted(k for k in unknown if overrides[k] or canon_skill_id(k) in known)
+        if bad:
+            raise ServiceError(400, "unknown skill id: " + ", ".join(bad))
+        # 未安装(已移除 / 升级丢失)的技能只允许取消勾选:写 false 即从项目设置里删掉该键
+        dropped = {canon_skill_id(k) for k in unknown}
+        body = dict(body, project_skills={"overrides": {k: v for k, v in overrides.items()
+                                                        if k not in unknown}})
     cfg = _merge(load_project_settings(project),
                  {k: v for k, v in (body or {}).items()
                   if k in PROJECT_SETTINGS_KEYS and k not in PROJECT_SETTINGS_LOCKED})
@@ -14716,6 +14755,10 @@ async def api_projconfig_set(body: dict):
     _validate_review(cfg.get("review") or {})
     _validate_packaging(cfg.get("packaging") or {})
     _validate_prompt_skill(cfg.get("prompt_skill") or {})
+    if dropped:
+        ov = cfg["project_skills"]["overrides"]
+        for k in [k for k in ov if canon_skill_id(k) in dropped]:
+            del ov[k]
     _validate_project_skills(cfg.get("project_skills"))
     if "transitions" in (body or {}):
         # 用户整段提交(非 _merge 叠加):custom 的附属项与 custom_map 以提交为准,切回预设时附属项不落盘

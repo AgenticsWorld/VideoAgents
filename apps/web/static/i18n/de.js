@@ -3494,6 +3494,8 @@ window.I18N_DICT = {
 "默认仅开启视频模型对应的提示词技能，其余技能（包括表演控制）默认关闭。手动改动会保留；未改动的提示词技能继续跟随视频模型设置。": "Standardmäßig ist nur der zum Videomodell passende Prompt-Skill aktiv, alle übrigen Skills (einschließlich Performance-Steuerung) sind aus. Manuelle Änderungen bleiben erhalten; unveränderte Prompt-Skills folgen weiterhin der Videomodell-Einstellung.",
 "搜索 Agent 或技能": "Agent oder Skill suchen",
 "已被全局禁用": "Global deaktiviert",
+"未安装": "Nicht installiert",
+"找不到这个技能的 SKILL.md(已移除或未随升级保留),运行时按未勾选处理;取消勾选并保存即可从项目设置中移除": "Die SKILL.md dieses Skills wurde nicht gefunden (entfernt oder beim Upgrade nicht übernommen); Läufe behandeln ihn als nicht ausgewählt. Haken entfernen und speichern, um ihn aus den Projekteinstellungen zu entfernen",
 "没有匹配的技能": "Keine passenden Skills",
 "已选 {n} / {total} 项": "{n} / {total} ausgewählt",
 "可跨机访问);「测试连接」会列出可用 checkpoint;工作流下拉列出": "auch von anderen Rechnern erreichbar); „Verbindung testen“ listet verfügbare checkpoints auf; das Workflow-Dropdown zeigt die API-Workflows mit passendem Präfix aus dem Verzeichnis",
