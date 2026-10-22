@@ -26,6 +26,10 @@ def _fingerprint(payload, *, legacy=False, prefix='v2:'):
     return digest if legacy else prefix + digest
 
 
+# v3 之后才新增的说明键(#154 layout_check_waiver:机检比例豁免声明,只给 code/whitebox_layout_check.py 读,不进编译 / 渲染)。
+# 存量 v2 / legacy 指纹算的时候场景里还没有这些键,旧口径(整份场景)比对时同样剔除:不改变任何存量匹配,
+# 登记豁免也不会让旧口径已审机位失效。
+SCENE_POST_V3_KEYS = frozenset(('layout_check_waiver',))
 # 场景白模 bible/scenes/<sid>/whitebox.json 里的纯说明/台账字段(#65):不参与编译、渲染与机位几何
 # (modules/whitebox.load_scene 只读 dimensions_m / objects;inferred、scale_basis 只进预览页说明文字),
 # 改它们不应让引用该场景的已审机位契约失效。v3 起 placement 指纹剔除这些字段;未列出的键一律照算(宁可失效不可漏)。
@@ -33,7 +37,7 @@ SCENE_DESCRIPTIVE_KEYS = frozenset((
     'workflow_notes', 'modeling_notes', 'orientation_note', 'clearance_note', 'collision_clearance_note', 'units_note',
     'scale_basis', 'inferred', 'inferred_items', 'landmarks_covered', 'covered_landmarks', 'landmark_coverage',
     'handover', 'downstream', 'task_id', 'agent', 'date', 'revision', 'supersedes_task', 'deviation_from_parent',
-    'source', 'source_files', '_meta'))
+    'source', 'source_files', '_meta')) | SCENE_POST_V3_KEYS
 OBJECT_DESCRIPTIVE_KEYS = frozenset(('note',))
 PLACEMENT_PREFIX = 'v3:'
 
@@ -46,6 +50,12 @@ def _geometric_scene(scene):
         out['objects'] = [{k: v for k, v in o.items() if k not in OBJECT_DESCRIPTIVE_KEYS} if isinstance(o, dict) else o
                           for o in out['objects']]
     return out
+
+
+def _legacy_scene(scene):
+    if not isinstance(scene, dict):
+        return scene
+    return {k: v for k, v in scene.items() if k not in SCENE_POST_V3_KEYS}
 
 
 def _source_payload(base, ep, shot):
@@ -74,7 +84,7 @@ def _placement_payload(base, ep, gid, *, full_scene=False):
     scene = read(f'bible/scenes/{group.get("scene_id")}/whitebox.json')
     payload = {'group': {k: group.get(k) for k in ('scene_id', 'scene_no', 'blocking_map', 'scene_presence')},
                'staging': {k: plan.get(k) for k in ('actors', 'scene_actors', 'extras', 'props')},
-               'scene': scene if full_scene else _geometric_scene(scene)}
+               'scene': _legacy_scene(scene) if full_scene else _geometric_scene(scene)}
     return payload
 
 

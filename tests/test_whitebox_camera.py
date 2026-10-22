@@ -250,3 +250,28 @@ def test_check_only_cli_reports_source_groups_and_issues_of_failed_groups(tmp_pa
     assert all(f"{s['shot_id']}: camera_contract" in head['errors'][0]['error'] for s in shots)
     assert issues['issues']['total'] == 1 and issues['issues']['open'] == 1 and issues['issues']['groups_open'] == ['grp1']
     assert '待处理 1' in issues['issues_text']
+
+
+def test_layout_check_waiver_does_not_touch_fingerprints(tmp_path):
+    """#154:whitebox.json 登记 layout_check_waiver(机检比例豁免)后,v3 / v2 / legacy placement 指纹照旧匹配,
+    编译出的场景 dict(进视频源指纹)也不变、不含该键。"""
+    import hashlib
+    from PIL import Image
+    from modules.whitebox import load_scene
+    from modules.whitebox_camera import _canonical_numbers, _placement_payload
+    shot, camera, scene_path, scene = _scene_fixture(tmp_path)
+    layout = tmp_path/'assets/concepts/scenes/SCN-1'; layout.mkdir(parents=True)
+    (layout/'layout.json').write_text(json.dumps({'scene_name': 'Room', 'landmarks': []}))
+    Image.new('RGB', (200, 100), 'white').save(layout/'layout_top.png')
+    v3 = placement_fingerprint(tmp_path, 'ep01', 'g1')
+    v2 = 'v2:' + hashlib.sha256(json.dumps(_canonical_numbers(_placement_payload(tmp_path, 'ep01', 'g1', full_scene=True)),
+                                           ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    legacy = placement_fingerprint(tmp_path, 'ep01', 'g1', legacy=True)
+    compiled = json.dumps(load_scene(tmp_path, 'SCN-1'), sort_keys=True)
+    scene['layout_check_waiver'] = {'defect_id': 'DEF-p6-env-1-001', 'items': ['aspect']}
+    scene_path.write_text(json.dumps(scene))
+    assert placement_fingerprint(tmp_path, 'ep01', 'g1') == v3
+    for saved in (v3, v2, legacy):
+        camera['placement_fingerprint'] = saved
+        assert not check_camera(tmp_path, 'ep01', shot, camera, 'g1'), saved
+    assert json.dumps(load_scene(tmp_path, 'SCN-1'), sort_keys=True) == compiled and 'layout_check_waiver' not in compiled

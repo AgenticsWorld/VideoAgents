@@ -84,3 +84,86 @@ def test_overlay_draws_rotated_polygon(scene_project):
     assert any(red((x, 120)) for x in (95, 96, 97))
     assert any(red((100, y)) for y in (39, 40, 41))
     assert not any(red((60, y)) for y in range(94, 107)) and not any(red((140, y)) for y in range(94, 107))
+
+
+# ---------------- #154:比例项凭用户签字的缺陷单豁免 ----------------
+
+DEFECT = {'defect_id': 'DEF-p6-env-1-001', 'scene_id': 'SCN-1', 'severity': 'major', 'status': 'waived',
+          'waiver': {'defect_id': 'DEF-p6-env-1-001', 'reason': '用户接受本图、不改卡', 'signed_by': 'user'}}
+
+
+def _waived_scene(base, sid, waiver, objects=(), defect=DEFECT):
+    """dimensions_m 20:10 对 200x200 俯视图 → 比例偏差 100%;按需登记豁免与缺陷单。"""
+    data = {'dimensions_m': [20, 3, 10], 'inferred': False, 'objects': list(objects)}
+    if waiver is not None:
+        data['layout_check_waiver'] = waiver
+    write(base / 'bible/scenes' / sid / 'whitebox.json', data)
+    if defect is not None:
+        write(base / 'qa/defects' / f"{defect['defect_id']}.json", defect)
+
+
+def test_aspect_waiver_signed_by_user_passes(scene_project, tmp_path):
+    import subprocess
+    wlc = _mod()
+    base, sid = scene_project
+    _waived_scene(base, sid, None)
+    report = wlc.check_scene(base, sid, write_overlay=False)
+    assert report['status'] == 'FAIL' and report['waived'] == [] and '偏差 100.0%' in report['problems'][0]
+    _waived_scene(base, sid, {'defect_id': DEFECT['defect_id'], 'items': ['aspect']})
+    report = wlc.check_scene(base, sid, write_overlay=False)
+    assert report['status'] == 'PASS' and report['problems'] == []
+    assert [(w['item'], w['status'], w['defect_id']) for w in report['waived']] == [('aspect', 'WAIVED', DEFECT['defect_id'])]
+    assert '偏差 100.0%' in report['waived'][0]['detail'] and report['aspect_deviation_pct'] == 100.0
+    # 状态写法 waived_by_user、签名 user:chat / 用户(…) 同样认
+    for status, signer in (('waived_by_user', 'user:chat'), ('waived', '用户(控制台确认)'), ('Waived', 'user (via webui --confirm)')):
+        _waived_scene(base, sid, {'defect_id': DEFECT['defect_id'], 'items': ['aspect']},
+                      defect={**DEFECT, 'status': status, 'waiver': {**DEFECT['waiver'], 'signed_by': signer}})
+        assert wlc.check_scene(base, sid, write_overlay=False)['status'] == 'PASS', (status, signer)
+    run = subprocess.run([sys.executable, str(ROOT / 'code/whitebox_layout_check.py'), '--project', 'demo', '--out-root', str(base),
+                          '--scene', sid, '--no-overlay'], capture_output=True, text=True, cwd=ROOT,
+                         env={'PATH': '/usr/bin:/bin', 'VIDEOAGENTS_DATA_DIR': str(tmp_path / 'data')})
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert f'1 场景比例项已按用户签字豁免 {sid}({DEFECT["defect_id"]})' in run.stdout and '-> PASS' in run.stdout
+
+
+@pytest.mark.parametrize('waiver, defect, reason', [
+    ({'defect_id': 'DEF-p6-env-1-001', 'items': ['aspect']}, {**DEFECT, 'waiver': {**DEFECT['waiver'], 'signed_by': 'workflow-orchestrator'}}, '不是用户签字'),
+    ({'defect_id': 'DEF-p6-env-1-001', 'items': ['aspect']}, {**DEFECT, 'waiver': {**DEFECT['waiver'], 'signed_by': 'full-auto'}}, '不是用户签字'),
+    ({'defect_id': 'DEF-p6-env-1-001', 'items': ['aspect']}, {**DEFECT, 'waiver': {**DEFECT['waiver'], 'signed_by': 'users-bot'}}, '不是用户签字'),
+    ({'defect_id': 'DEF-p6-env-1-001', 'items': ['aspect']}, {**DEFECT, 'waiver': None}, '不是用户签字'),
+    ({'defect_id': 'DEF-p6-env-1-001', 'items': ['aspect']}, {**DEFECT, 'scene_id': 'SCN-2'}, '不是本场景 SCN-1'),
+    ({'defect_id': 'DEF-p6-env-1-001', 'items': ['aspect']}, {k: v for k, v in DEFECT.items() if k != 'scene_id'}, '不是本场景 SCN-1'),
+    ({'defect_id': 'DEF-p6-env-1-001', 'items': ['aspect']}, {**DEFECT, 'status': 'open'}, '不是 waived'),
+    ({'defect_id': 'DEF-p6-env-1-001', 'items': ['aspect']}, {**DEFECT, 'status': 'resolved'}, '不是 waived'),
+    ({'defect_id': 'DEF-p6-env-1-001', 'items': ['aspect', 'bounds']}, DEFECT, 'items 只能写'),
+    ({'defect_id': 'DEF-p6-env-1-001', 'items': []}, DEFECT, 'items 只能写'),
+    ({'defect_id': 'DEF-p6-env-1-001'}, DEFECT, 'items 只能写'),
+    ('DEF-p6-env-1-001', DEFECT, '须为'),
+    ({'defect_id': '../defects/DEF-p6-env-1-001', 'items': ['aspect']}, DEFECT, '不是合法缺陷单号'),
+    ({'defect_id': 'DEF-p6-env-1-001/../DEF-p6-env-1-001', 'items': ['aspect']}, DEFECT, '不是合法缺陷单号'),
+    ({'defect_id': None, 'items': ['aspect']}, DEFECT, '不是合法缺陷单号'),
+    ({'defect_id': 'DEF-missing-001', 'items': ['aspect']}, DEFECT, '不存在'),
+])
+def test_aspect_waiver_invalid_still_fails(scene_project, waiver, defect, reason):
+    wlc = _mod()
+    base, sid = scene_project
+    _waived_scene(base, sid, waiver, defect=defect)
+    report = wlc.check_scene(base, sid, write_overlay=False)
+    assert report['status'] == 'FAIL' and report['waived'] == []
+    assert len(report['problems']) == 1 and '偏差 100.0%' in report['problems'][0]
+    assert '比例豁免无效' in report['problems'][0] and reason in report['problems'][0], report['problems']
+
+
+def test_aspect_waiver_never_covers_out_of_bounds(scene_project):
+    """豁免只管比例:几何越出图幅照旧 FAIL;比例在容差内时声明豁免只记一条说明。"""
+    wlc = _mod()
+    base, sid = scene_project
+    _waived_scene(base, sid, {'defect_id': DEFECT['defect_id'], 'items': ['aspect']},
+                  objects=[{'id': 'wall_n', 'size_m': [4, 2, .2], 'xy': [.5, .005], 'collision_role': 'wall'}])
+    report = wlc.check_scene(base, sid, write_overlay=False)
+    assert report['status'] == 'FAIL' and [w['item'] for w in report['waived']] == ['aspect']
+    assert len(report['problems']) == 1 and '脚印越出图幅' in report['problems'][0]
+    write(base / 'bible/scenes' / sid / 'whitebox.json', {'dimensions_m': [10, 3, 10], 'inferred': False, 'objects': [],
+                                                         'layout_check_waiver': {'defect_id': DEFECT['defect_id'], 'items': ['aspect']}})
+    report = wlc.check_scene(base, sid, write_overlay=False)
+    assert report['status'] == 'PASS' and report['waived'] == [] and any('无须豁免' in n for n in report['notes'])
