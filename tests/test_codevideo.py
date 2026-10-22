@@ -413,6 +413,11 @@ def test_cli_doctor_runs_without_gl():
     d = json.loads(r.stdout)
     ids = {i["id"] for i in d["items"]}
     assert {"ffmpeg", "host_library", "style_library", "playwright"} <= ids
+    # 流程文档写的是 doctor --project <slug>:接受并忽略,不再 argparse 退出 2
+    r = subprocess.run([sys.executable, "code/codevideo.py", "doctor", "--project", "x", "--no-gl", "--json"],
+                       cwd=ROOT, capture_output=True, text=True)
+    assert r.returncode in (0, 1), r.stderr
+    assert {i["id"] for i in json.loads(r.stdout)["items"]} == ids
     r = subprocess.run([sys.executable, "code/codevideo.py", "packs", "--json"], cwd=ROOT, capture_output=True, text=True)
     assert r.returncode == 0 and any(x["name"] == "hdri" for x in json.loads(r.stdout))
 

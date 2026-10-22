@@ -91,9 +91,8 @@ def main(argv=None) -> int:
         sp.add_argument("--json", action="store_true", help="结果以 JSON 打印")
         return sp
 
-    d = sub.add_parser("doctor")
+    d = p("doctor")                  # 与其它子命令一致接受 --project(自检不看项目,忽略)
     d.add_argument("--no-gl", action="store_true", help="不启动浏览器测 WebGL")
-    d.add_argument("--json", action="store_true")
     p("style").add_argument("--slug", default="")
     p("demo").add_argument("--slug", default="", help="轻量风格须指定一个完整风格拉它的样片学技法")
     p("sync")
