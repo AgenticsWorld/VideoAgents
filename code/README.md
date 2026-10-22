@@ -1,6 +1,6 @@
 # code/ — 仓库级通用工具
 
-只放**项目无关、可参数化**的工具脚本;共享库放 `modules/`(genmedia / audiodsp / vc / deepagents_runner)。
+只放**项目无关、可参数化**的工具脚本;共享库放 `modules/`(genmedia / audiodsp / vc)。
 
 | 文件 | 用途 |
 |---|---|

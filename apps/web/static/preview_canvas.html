@@ -690,7 +690,7 @@ $('#nsfw').onclick=()=>{
 function syncSendHint(){
   const direct=$('#o-direct').checked, txt=nsfwMode().text;
   $('#send-hint').textContent=(!direct&&S&&!S.agent?t('没有找到画板修图 Agent,只能直接发送'):direct?t('直接发给图像模型'):t('先由画板修图 Agent 整理成提示词'))
-    +(nsfwActive()&&!direct&&S&&S.agent?' · '+(txt?F('🔞 语言模型改用 {m}',{m:txt.engine+' / '+(txt.model||t('引擎默认'))}):t('🔞 没有配置 NSFW 备用语言模型,沿用当前引擎')):'')
+    +(nsfwActive()&&!direct&&S&&S.agent?' · '+(txt?F('🔞 语言模型改用 {m}',{m:(txt.engine==='deepagents'?'agentics':txt.engine)+' / '+(txt.model||t('引擎默认'))}):t('🔞 没有配置 NSFW 备用语言模型,沿用当前引擎')):'')
     +(nsfwActive()&&direct&&DIRECT_AUTO&&S&&S.agent?' · '+t('🔞 已自动勾选,取消勾选则改经画板修图 Agent'):'');
 }
 $('#o-direct').onchange=()=>{DIRECT_AUTO=false;syncSendHint()};
@@ -1001,7 +1001,7 @@ function syncMoHint(){
   $('#mo-hint').textContent=(!direct&&S&&!agent?t('没有找到画板动图 Agent,只能直接发送')
       :direct?t(frames?'提示词原样发给视频模型':'提示词直接发给视频模型(没写 @Image 1 时开头补一句参考图说明)')
       :t(frames?'先由画板动图 Agent 看首尾帧整理提示词':'先由画板动图 Agent 看参考图整理提示词'))
-    +(nsfwActive()&&!direct&&agent?' · '+(txt?F('🔞 语言模型改用 {m}',{m:txt.engine+' / '+(txt.model||t('引擎默认'))}):t('🔞 没有配置 NSFW 备用语言模型,沿用当前引擎')):'')
+    +(nsfwActive()&&!direct&&agent?' · '+(txt?F('🔞 语言模型改用 {m}',{m:(txt.engine==='deepagents'?'agentics':txt.engine)+' / '+(txt.model||t('引擎默认'))}):t('🔞 没有配置 NSFW 备用语言模型,沿用当前引擎')):'')
     +(nsfwActive()&&direct&&MO_DIRECT_AUTO&&agent?' · '+t('🔞 已自动勾选,取消勾选则改经画板动图 Agent'):'');
 }
 $('#mo-direct').onchange=()=>{MO_DIRECT_AUTO=false;syncMoHint()};

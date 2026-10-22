@@ -34,6 +34,9 @@ agents/12-publishing/publisher/skills/XiaohongshuSkills/tmp/
 # Python
 .venv/
 venv/
+# Agentics 引擎内置的 pi(make install-pi / apps/desktop/scripts/vendor_pi.py 按 lockfile 安装)
+vendor/pi/node_modules/
+# 旧 deepagents 引擎专用 venv(2026-10-22 引擎已换成内置 pi,本机残留可删)
 .venv-deepagents/
 __pycache__/
 *.py[cod]

@@ -1,0 +1,9 @@
+{
+  "name": "videoagents-bundled-pi",
+  "private": true,
+  "description": "Pinned Pi Coding Agent for the built-in Agentics engine (installed by apps/desktop/scripts/vendor_pi.py)",
+  "type": "module",
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "1.3.0"
+  }
+}

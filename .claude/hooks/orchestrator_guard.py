@@ -6,7 +6,7 @@ runtime 派单时把 VIDEOAGENTS_AGENT 注入运行环境;本 hook 在 00-orches
 拒绝理由里给出正确的派单路径。命令文本绕过本拦截(如自写 driver 脚本)的,
 由 modules/genmedia.py 内的 _forbid_dispatch_layer 运行时守卫兜底。
 
-codex / deepagents 引擎不走 Claude hooks,只依赖 genmedia 内守卫。
+codex / agentics(内置 pi)等引擎不走 Claude hooks,只依赖 genmedia 内守卫。
 交互式人工会话没有 VIDEOAGENTS_AGENT,不受影响。
 
 第二道拦截(2026-09-23,全员):非转写工位的 Agent 在 Bash 里调用 faster-whisper /
@@ -22,7 +22,7 @@ import re
 import sys
 
 FORBIDDEN = re.compile(
-    r"genmedia|audiodsp|deepagents_runner|generate_(image|video|tts|music)",
+    r"genmedia|audiodsp|generate_(image|video|tts|music)",
     re.IGNORECASE)
 
 # 本地语音识别(会触发模型权重下载/长时推理)的命令特征

@@ -71,7 +71,7 @@ Bring your own engines and providers. Each modality is configured on its own, so
 
 |                         | Supported                                                                                                                      |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| 🤖 **Agent engines**    | Claude Code · Codex CLI · Kimi Code · Pi · OpenCode · Grok Build · Antigravity CLI · DeepAgents (any OpenAI-compatible model: local, cloud or OpenRouter) |
+| 🤖 **Agent engines**    | Agentics (built in: bundled Pi running on your Agentics account or a local OpenAI-compatible model) · Claude Code · Codex CLI · Kimi Code · Pi · OpenCode · Grok Build · Antigravity CLI |
 | 🖼 **Image**            | Agentics · OpenRouter · Volcano Engine · BytePlus · Fal · RunningHub · ComfyUI                                                  |
 | 🎬 **Video**            | Agentics · OpenRouter · Volcano Engine · BytePlus · Fal · RunningHub · ComfyUI                                                  |
 | 🎙 **Voice / TTS**      | Agentics · OpenRouter · Volcano Engine · ElevenLabs · MiniMax · ComfyUI                                                         |
@@ -254,7 +254,7 @@ Open <http://127.0.0.1:8630>. API documentation is at <http://127.0.0.1:8630/api
 
 For unattended pipelines, `make run-auto` starts the console in full-auto mode, so agents on the `claude` engine run shell commands without approval prompts. Agents can then execute any command, so use it only on a trusted machine.
 
-Desktop development, packaging, releases and DeepAgents tuning are covered in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
+Desktop development, packaging, releases and the built-in Agentics engine are covered in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
 
 <br/>
 
@@ -271,7 +271,7 @@ Desktop development, packaging, releases and DeepAgents tuning are covered in [`
 ```text
 agents/           Agent role specifications, workflow documentation, and DAG
 code/             Repository-level validation and utility scripts
-modules/          Media, audio, and DeepAgents adapters
+modules/          Media and audio adapters
 services/api/     Independently runnable Python API service, schemas, and runtime state
 services/runtime/ Agent scheduling, project services, providers, and runtime tools
 apps/web/         Original static WebUI plus Python static server/API reverse proxy

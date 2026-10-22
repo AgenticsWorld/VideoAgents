@@ -717,7 +717,7 @@ def test_canvas_agent_refusal_marks_job_and_prompts_nsfw_toggle(runtime, monkeyp
     assert calls == [reply] and run['nsfw_suspect'] == {'task_id': '', 'at': run['nsfw_suspect']['at'], 'by': 'judge'}
     assert seen == ['drafting'] and '_refusal_checking' not in run
     assert job['status'] == 'failed' and job['refused'] == 'judge' and '打开工具栏的 🔞 再发送' in job['error']
-    assert 'deepagents' in job['error'] and 'turn on 🔞' in job['error_en'] and not spawned          # 只提示,不重发
+    assert 'agentics' in job['error'] and 'turn on 🔞' in job['error_en'] and not spawned          # 只提示,不重发(引擎显示名)
     assert events[-1] == {'type': 'canvas', 'project': 'p', 'file': SHEET, 'job': job['id'], 'status': 'failed'}
     assert asyncio.run(core.api_canvas_get('p', SHEET))['last_job']['refused'] == 'judge'
     cfg['text'] = {'engine': '', 'model': ''}                                        # 没配备用语言模型:提示先去配置

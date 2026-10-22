@@ -82,9 +82,8 @@ def test_other_engines_receipts(bus):
     core.handle_kimi_event(run, {"role": "tool", "tool_call_id": "t", "content": "1\tline"})
     core.handle_opencode_event(run, {"type": "tool_use", "sessionID": "s", "part": {
         "tool": "read", "state": {"status": "completed", "input": {}, "output": "text"}}})
-    core.handle_deepagents_event(run, {"type": "tool_result", "name": "execute", "output": "x", "is_error": False})
     descs = [e["desc"] for e in bus if e["type"] == "tool" and e.get("kind") == "result"]
-    assert descs == ["↩ 3 B · ok", "↩ 4 B · done", "↩ 6 B · 1\tline", "↩ 4 B · text", "↩ execute 1 B · x"]
+    assert descs == ["↩ 3 B · ok", "↩ 4 B · done", "↩ 6 B · 1\tline", "↩ 4 B · text"]
 
 
 # ---------------------------------------------------------------- antigravity(agy stream-json,实测 1.4.3)

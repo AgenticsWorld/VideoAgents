@@ -71,7 +71,7 @@ VideoAgents 是一套开源、文件驱动的多 Agent 视频生产系统，用�
 
 |                     | 支持                                                                                                              |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| 🤖 **执行引擎**     | Claude Code · Codex CLI · Kimi Code · Pi · OpenCode · Grok Build · Antigravity CLI · DeepAgents（任意 OpenAI 兼容模型：本地、云端或 OpenRouter） |
+| 🤖 **执行引擎**     | Agentics（内置：随程序打包的 Pi，使用 Agentics 账号或本地 OpenAI 兼容模型）· Claude Code · Codex CLI · Kimi Code · Pi · OpenCode · Grok Build · Antigravity CLI |
 | 🖼 **图像**         | Agentics · OpenRouter · 火山引擎 · BytePlus · Fal · RunningHub · ComfyUI                                           |
 | 🎬 **视频**         | Agentics · OpenRouter · 火山引擎 · BytePlus · Fal · RunningHub · ComfyUI                                           |
 | 🎙 **语音 / TTS**   | Agentics · OpenRouter · 火山引擎 · ElevenLabs · MiniMax · ComfyUI                                                  |
@@ -256,7 +256,7 @@ python apps/web/server.py
 
 需要无人值守的全自动流水线时，用 `make run-auto` 启动，`claude` 引擎的 Agent 执行命令时不再弹审批。该模式下 Agent 可以执行任意命令，请只在可信的机器上使用。
 
-桌面端开发、打包、发版和 DeepAgents 调参见 [`docs/DEVELOPMENT.zh-CN.md`](docs/DEVELOPMENT.zh-CN.md)。
+桌面端开发、打包、发版和内置 Agentics 引擎见 [`docs/DEVELOPMENT.zh-CN.md`](docs/DEVELOPMENT.zh-CN.md)。
 
 <br/>
 
@@ -273,7 +273,7 @@ python apps/web/server.py
 ```text
 agents/           Agent 职责、工作流文档和 DAG
 code/             仓库级校验与工具脚本
-modules/          媒体、音频和 DeepAgents 适配器
+modules/          媒体与音频适配器
 services/api/     可独立运行的 Python API 服务、Schema 和运行状态
 services/runtime/ Agent 调度、项目业务、Provider 与内部运行工具
 apps/web/         原 WebUI 静态页面、Python 静态服务与同源 API 反向代理

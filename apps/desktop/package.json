@@ -109,6 +109,22 @@
         ]
       },
       {
+        "from": "../../vendor/pi",
+        "to": "backend/vendor/pi",
+        "filter": [
+          "launch.mjs",
+          "package.json"
+        ]
+      },
+      {
+        "from": "../../vendor/pi/node_modules",
+        "to": "backend/vendor/pi/node_modules",
+        "filter": [
+          "**/*",
+          "!.videoagents-install.json"
+        ]
+      },
+      {
         "from": "../../.claude",
         "to": "backend/.claude",
         "filter": [

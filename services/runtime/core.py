@@ -168,36 +168,40 @@ def cli_not_found_error(engine: str) -> str:
             f"请确认已安装 {label} 并将其加入 PATH，"
             f"或通过 {env_var} 配置可执行文件的完整路径。")
 
-# deepagents 引擎:OpenAI 兼容端点(如 LM Studio 本地模型)。解释器按优先级解析:
-# DEEPAGENTS_PY 环境变量 → 项目根 .venv-deepagents(deepagents 需 Python ≥3.11,
-# 主环境为 3.10 时用 make install-deepagents 建)→ 当前解释器(已装 [deepagents] extra 时)
-DEEPAGENTS_PY_DEFAULT = str(ROOT / ".venv-deepagents" / "bin" / "python")
-# deepagents 会话续接(Agent记忆):LangGraph SqliteSaver 检查点库,thread_id 即
-# 会话 id,与 claude --resume 同语义走 STATE["sessions"] 回存/恢复;续接一个已
-# 不存在的 thread 只得到空历史(等效新会话)不报错,无需失效回退重试
-DEEPAGENTS_SESSIONS_DB = RUNTIME_DIR / "deepagents_sessions.sqlite"
+# Agentics 引擎(engine id 沿用 deepagents,界面名「Agentics」;2026-10-22 起替代原 deepagents
+# runner):随安装包打包的 pi(vendor/pi,版本钉在 vendor/pi/package.json + package-lock.json,
+# 源码版 make install-pi 安装),LLM 端点取「🎨 生成模型 → 语言模型/Agentics」的生效渠道。
+# 与用户自装、自己 /login 的 pi 引擎互不干扰:每次运行用独立的 pi 配置目录(models.json 按
+# 生效渠道生成,API Key 只经环境变量传入不落盘,运行结束即删);会话统一存 AGENTICS_PI_SESSIONS,
+# --session 续接(与 claude --resume 同语义走 STATE["sessions"] 回存/恢复)
+AGENTICS_PI_DIR = ROOT / "vendor" / "pi"
+AGENTICS_PI_HOME = RUNTIME_DIR / "agentics-pi"
+AGENTICS_PI_SESSIONS = AGENTICS_PI_HOME / "sessions"
+AGENTICS_PI_KEY_ENV = "VIDEOAGENTS_LLM_API_KEY"
 
 
-def deepagents_python() -> str:
-    env = os.environ.get("DEEPAGENTS_PY")
-    if env:
-        return env
-    for rel in ("bin/python", "Scripts/python.exe"):
-        cand = ROOT / ".venv-deepagents" / rel
-        if cand.exists():
-            return str(cand)
-    if importlib.util.find_spec("deepagents") is not None:
-        return sys.executable
-    return DEEPAGENTS_PY_DEFAULT
+def agentics_pi_command() -> list[str] | None:
+    """内置 pi 的启动命令前缀 [node, launch.mjs];未安装或找不到 Node 时返回 None。
+    桌面端 VIDEOAGENTS_NODE=Electron 主程序(子进程环境加 ELECTRON_RUN_AS_NODE=1 当 Node 用,
+    见 agentics_pi_launch);源码版用 PATH 上的 node(pi 要求 22.19+)。"""
+    launcher = AGENTICS_PI_DIR / "launch.mjs"
+    cli = (AGENTICS_PI_DIR / "node_modules" / "@earendil-works" / "pi-coding-agent"
+           / "dist" / "bundle" / "cli.js")
+    if not (launcher.is_file() and cli.is_file()):
+        return None
+    node = os.environ.get("VIDEOAGENTS_NODE") or shutil.which("node")
+    return [node, str(launcher)] if node else None
 ENGINES = ("claude", "codex", "kimi", "pi", "opencode", "grok", "antigravity",
-           "deepagents")   # 执行引擎:CLI 或 deepagents runner
+           "deepagents")   # 执行引擎:CLI 或内置 pi(deepagents = 界面上的 Agentics)
+# 面向用户的引擎名(与控制台顶栏下拉一致;其余引擎显示 id 本身)
+ENGINE_DISPLAY = {"claude": "claudecode", "kimi": "kimicode", "deepagents": "agentics"}
 PERMISSION_MODE = os.environ.get("VIDEOAGENTS_PERMISSION_MODE", "acceptEdits")
 CLAUDE_USAGE_PROBE_ENABLED = os.environ.get(
     "VIDEOAGENTS_ENABLE_CLAUDE_USAGE_PROBE", ""
 ).lower() in {"1", "true", "yes"}
 # 单次运行引擎轮次上限(设置菜单「高级→Agent 高级设置」可调,存 state.json):
-# 仅 claude/grok 引擎有此参数(--max-turns);codex/pi/opencode/antigravity 不传轮次上限,
-# deepagents 走 LangGraph recursion_limit。撞上限时引擎直接退出且无续跑机制
+# 仅 claude/grok 引擎有此参数(--max-turns);codex/pi/opencode/antigravity/agentics 不传轮次上限。
+# 撞上限时引擎直接退出且无续跑机制
 # (回执只见退出码 1),大批量工位(curate/cut)实测 100 轮不够,缺省放宽到 250
 MAX_TURNS_DEFAULT = 250
 MAX_TURNS_MIN, MAX_TURNS_MAX = 10, 1000
@@ -267,17 +271,16 @@ CONFIRM_TIMEOUT_MIN, CONFIRM_TIMEOUT_MAX = 5, 3600
 #   opencode --variant <level>                   (模型无该 variant 时由 opencode 忽略)
 #   grok     --reasoning-effort <level>          (low/medium/high/xhigh,无 max,max→xhigh)
 #   antigravity --effort <level>                 (low/medium/high/xhigh/max 原样,实测 1.4.3 帮助)
-#   deepagents --reasoning-effort <level>        (仅云端/OpenRouter 渠道;本地端点不传)
+#   deepagents(Agentics,内置 pi)--thinking <level>(本地模型渠道不传)
 #   kimi     CLI 无推理强度参数,不传(沿用其自身默认)
 # 空串=引擎默认(不传任何参数,沿用各引擎 CLI 自身配置),亦为缺省值
 THINKING_EFFORT_DEFAULT = ""
 THINKING_EFFORT_LEVELS = ("", "low", "medium", "high", "xhigh", "max")
-# deepagents 引擎单独封顶(实际生效额度取 min(记忆额度滑块值, 此上限)):
-# 记忆额度量的是 chats/*.jsonl(只有用户/助手文本),而 deepagents 检查点历史含
-# 全部工具消息(DAG 查询输出、read_file 全文),真实会话体量被严重低估;
-# 且 OpenAI 兼容端点 resume=每轮重发全史,本地模型上下文窗口小、OpenRouter 渠道
-# 无厂商 prompt cache 兜底,须更早换新会话
-DEEPAGENTS_RESUME_LIMIT = 32 * 1024
+# Agentics 引擎单独封顶(实际生效额度取 min(记忆额度滑块值, 此上限)):
+# 记忆额度量的是 chats/*.jsonl(只有用户/助手文本),而 pi 会话含全部工具消息
+# (DAG 查询输出、read 全文),真实会话体量被严重低估;且 OpenAI 兼容端点 resume=每轮
+# 重发全史,本地模型上下文窗口小,须更早换新会话(沿用原 deepagents 的口径)
+AGENTICS_RESUME_LIMIT = 32 * 1024
 # 运行面板手动停止的统一错误文案:core/dispatch.py/前端/agent 提示词都按这句字面识别
 STOPPED_BY_USER_MSG = "已被用户手动停止"
 # stopped 字段取值 → 收尾错误文案(user=运行面板 ⏹;shutdown=服务关闭/重启连带停止)
@@ -604,8 +607,8 @@ def engine_effort_args(engine: str, level: str, *, local_endpoint: bool = False)
         return ["--reasoning-effort", "xhigh" if level == "max" else level]
     if engine == "antigravity":
         return ["--effort", level]
-    if engine == "deepagents":
-        return [] if local_endpoint else ["--reasoning-effort", level]
+    if engine == "deepagents":   # Agentics(内置 pi);本地模型渠道不传(models.json 里也标为不推理)
+        return [] if local_endpoint else ["--thinking", level]
     return []   # kimi 等无对应参数
 
 
@@ -998,9 +1001,10 @@ DEFAULT_GENCONFIG = {
         "marble": {"api_key": "", "model": "marble-1.1", "custom_model": ""},
         "hunyuan": {"base_url": "", "token": "", "views": None, "gs_steps": None, "fp8": False},
     },
-    # deepagents 文字模型:local=OpenAI 兼容本地端点(LM Studio/Ollama/vLLM…);
+    # 语言模型(生成模型页「语言模型/Agentics」,agentics 引擎 = 内置 pi 的 LLM 端点;键名沿用 deepagents):
+    # agentics=已登录桌面端账号的 AgenticsLLM;local=OpenAI 兼容本地端点(LM Studio/Ollama/vLLM…);
     # cloud=OpenAI 兼容云端端点(默认 DeepSeek 官方 API,可换任意兼容服务商);
-    # openrouter=OpenRouter 云端(base_url 固定 https://openrouter.ai/api/v1)
+    # openrouter=OpenRouter 云端(base_url 固定 https://openrouter.ai/api/v1)。cloud/openrouter 界面上默认隐藏
     "deepagents": {
         "provider": "agentics",   # agentics | local | cloud | openrouter
         "agentics": {"model": "deepseek/deepseek-v4.1-flash-1017", "custom_model": ""},
@@ -2153,6 +2157,131 @@ def resolve_deepagents(cfg: dict | None = None) -> dict:
             "base_url": lo.get("base_url") or "http://127.0.0.1:1234/v1",
             "api_key": lo.get("api_key") or "lm-studio",
             "model": lo.get("model") or ""}
+
+
+AGENTICS_CHANNEL_LABELS = {"agentics": ("Agentics", "Agentics"), "local": ("本地模型", "Local model"),
+                           "cloud": ("云端模型", "Cloud model"), "openrouter": ("OpenRouter", "OpenRouter")}
+
+
+def agentics_error_text(reason: str, provider: str = "", detail: str = "") -> str:
+    """Agentics 引擎不能启动的原因 → 用户可见文案(界面语言中文出中文,其余出英文)。"""
+    zh = (ui_lang_code() or "zh") == "zh"
+    label = AGENTICS_CHANNEL_LABELS.get(provider, (provider, provider))[0 if zh else 1]
+    if reason == "missing":
+        return ("未找到内置的 Agentics 引擎(pi):桌面版请重新安装 VideoAgents;源码版请在项目根目录运行 "
+                "make install-pi(需要 Node.js 22.19 或更新版本)" if zh else
+                "The built-in Agentics engine (pi) is missing: reinstall VideoAgents desktop; from source, "
+                "run make install-pi in the project root (requires Node.js 22.19 or newer).")
+    if reason == "login":
+        return ("Agentics 引擎需要先登录 VideoAgents 账号:在桌面版右上角设置菜单「账号」中登录后即可开始使用;"
+                "也可在 🎨 生成模型 页「语言模型/Agentics」改用本地模型" if zh else
+                "The Agentics engine needs a signed-in VideoAgents account: sign in from Settings → Account "
+                "in the desktop app and you can start right away, or switch 🎨 Generation Models → "
+                "Language Model/Agentics to a local model.")
+    if reason == "key":
+        return (f"Agentics 引擎当前生效渠道为{label},但未配置 API Key:请在 🎨 生成模型 页"
+                f"「语言模型/Agentics → {label}」填写" if zh else
+                f"The Agentics engine uses the {label} channel but no API key is set: fill it in under "
+                f"🎨 Generation Models → Language Model/Agentics → {label}.")
+    if reason == "model":
+        return ("Agentics 引擎未配置模型:请在 🎨 生成模型 页「语言模型/Agentics」为生效渠道选择模型" if zh else
+                "The Agentics engine has no model: choose one for the active channel under "
+                "🎨 Generation Models → Language Model/Agentics.")
+    return detail or reason
+
+
+def agentics_preflight(requested_model: str = "") -> dict:
+    """Agentics 引擎启动前检查:{da(生效渠道连接), model(实际模型 ID), reason, error}。
+    reason 为空即可启动;否则 missing(内置 pi 不在)/ login(Agentics 渠道未登录)/
+    key(OpenRouter、云端渠道缺 Key)/ model(没选模型)/ service(Agentics 服务地址不可用)。"""
+    reason, detail = "", ""
+    try:
+        da = resolve_deepagents()
+    except ServiceError as exc:
+        da = {"provider": "agentics", "base_url": "", "api_key": "", "model": ""}
+        reason = "login" if exc.status_code == 401 else "service"
+        detail = exc.detail
+    requested = str(requested_model or "").strip()
+    # 兼容旧 UI 落盘/传入的渠道占位值(顶栏第一层存的是渠道名),绝不把它当模型发给端点
+    model = da["model"] if not requested or requested in AGENTICS_CHANNEL_LABELS else requested
+    if agentics_pi_command() is None:
+        reason = "missing"
+    elif not reason:
+        if da["provider"] == "agentics" and not da["api_key"]:
+            reason = "login"
+        elif da["provider"] in ("openrouter", "cloud") and not da["api_key"]:
+            reason = "key"
+        elif not model:
+            reason = "model"
+    return {"da": da, "model": model, "reason": reason,
+            "error": agentics_error_text(reason, da["provider"], detail) if reason else ""}
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name) or default)
+    except ValueError:
+        return default
+
+
+def _windows_git_bash() -> bool:
+    """pi 的 bash 工具在 Windows 上要 Git Bash(或 PATH 上非 WSL 的 bash.exe);没有就改用 powershell 工具。"""
+    for base in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)")):
+        if base and (Path(base) / "Git" / "bin" / "bash.exe").is_file():
+            return True
+    found = shutil.which("bash")
+    return bool(found) and "system32" not in found.lower()
+
+
+def agentics_pi_launch(model: str, da: dict, home: Path, *, thinking: bool,
+                       vision: bool = False) -> tuple[list[str], dict]:
+    """按语言模型生效渠道 da(resolve_deepagents 结果)把 pi 配置目录 home 写好,
+    返回 (启动参数,接在 agentics_pi_command() 之后;子进程追加的环境变量)。
+
+    渠道 = pi 里的自定义 provider(OpenAI 兼容接口):agentics 是 OpenRouter 包装端点,按 pi 对
+    OpenRouter 的处理显式写 compat(provider 名不叫 openrouter,pi 认不出来);openrouter / 云端
+    (DeepSeek 等)由 pi 按 provider 名或 baseUrl 自动识别。不能复用 pi 内置的 openrouter 目录:
+    它把 anthropic/* 走 Anthropic Messages 接口,换成包装端点后路径不对(2026-10-22 实测)。
+    API Key 只写成 "$环境变量名",真值经子进程环境传入,不落盘。thinking=False 时模型标为不推理,
+    pi 不发任何推理参数(=「思考深度:引擎默认」,沿用渠道自身默认)。"""
+    provider = da["provider"]
+    local = provider == "local"
+    entry = {"id": model, "name": model,
+             "contextWindow": _env_int("AGENTICS_CONTEXT_WINDOW", 128_000),
+             "maxTokens": _env_int("AGENTICS_MAX_OUTPUT_TOKENS", 8_192 if local else 16_384),
+             "reasoning": bool(thinking and not local),
+             "input": ["text", "image"] if vision else ["text"]}
+    if provider == "agentics":
+        compat = {"thinkingFormat": "openrouter", "sendSessionAffinityHeaders": True,
+                  "sessionAffinityFormat": "openrouter",
+                  "supportsDeveloperRole": model.startswith(("anthropic/", "openai/"))}
+        if model.startswith("anthropic/"):
+            compat["cacheControlFormat"] = "anthropic"
+        entry["compat"] = compat
+    home.mkdir(parents=True, exist_ok=True)
+    atomic_write_json(home / "models.json", {"providers": {provider: {
+        "baseUrl": da["base_url"], "api": "openai-completions",
+        "apiKey": "$" + AGENTICS_PI_KEY_ENV, "models": [entry]}}})
+    settings = {"enableInstallTelemetry": False}
+    if os.name == "nt" and not _windows_git_bash():
+        settings["defaultTools"] = ["read", "powershell", "edit", "write"]
+    atomic_write_json(home / "settings.json", settings)
+    AGENTICS_PI_SESSIONS.mkdir(parents=True, exist_ok=True)
+    env = {"PI_CODING_AGENT_DIR": str(home),
+           "PI_CODING_AGENT_SESSION_DIR": str(AGENTICS_PI_SESSIONS),
+           "PI_OFFLINE": "1", "PI_SKIP_VERSION_CHECK": "1", "PI_TELEMETRY": "0",
+           # 桌面端 node 是 Electron 主程序;真 Node 忽略该变量。launch.mjs 进入后即删掉
+           "ELECTRON_RUN_AS_NODE": "1",
+           AGENTICS_PI_KEY_ENV: da["api_key"] or "none"}
+    if local:
+        # 本地端点强制直连:pi 认 HTTP(S)_PROXY,系统代理会把 localhost 请求也转走
+        host = urllib.parse.urlsplit(da["base_url"]).hostname or ""
+        no_proxy = ",".join(x for x in (os.environ.get("NO_PROXY") or os.environ.get("no_proxy"),
+                                        host, "127.0.0.1", "localhost") if x)
+        env["NO_PROXY"] = env["no_proxy"] = no_proxy
+    args = ["--mode", "json", "--approve", "--no-extensions", "--no-skills",
+            "--no-prompt-templates", "--no-context-files", "--provider", provider, "--model", model]
+    return args, env
 
 
 def resolve_moderation(cfg: dict | None = None) -> dict:
@@ -3925,7 +4054,7 @@ def build_role_prompt(agent_id: str, project: str,
    择优交付)。同一任务返工达到重跑次数上限({max_retries} 次)仍未过,必须走 --confirm 升级用户裁决;确有必要时可在
    --confirm 征询或升级说明中向用户**建议**赛马,只有用户明确下达赛马指令后,才可改派职责相近的
    Agent 并行重做、先达标者交付(赛马也不换引擎)。**任何情况下禁止切换执行引擎**(不得传 --engine 覆盖,
-   不得因 GraphRecursionError/超时/API 5xx 等报错改用 claude/codex/kimi/pi/opencode/grok/antigravity/deepagents 中的另一个)。
+   不得因超时/API 5xx 等报错改用 claude/codex/kimi/pi/opencode/grok/antigravity/deepagents 中的另一个)。
    报错后重试一律沿用原引擎与 Agent/全局模型配置——不要在同一条路上串行耗死,也不要用换引擎当兜底
 9. 【结束前 DAG 前沿巡检】每次准备结束当前运行前,必须先运行
    `python3 services/runtime/dagcheck.py --project {project} --strict --frontier` 并检查它列出的依赖已满足节点
@@ -4508,7 +4637,7 @@ async def execute_run(run: dict, message: str, model: str | None):
         if session_id:
             resume_limit = agent_memory_kb() * 1024
             if engine == "deepagents":
-                resume_limit = min(resume_limit, DEEPAGENTS_RESUME_LIMIT)
+                resume_limit = min(resume_limit, AGENTICS_RESUME_LIMIT)
             try:
                 if chat_path(agent_id, run["project"]).stat().st_size > resume_limit:
                     session_id = None
@@ -4516,51 +4645,24 @@ async def execute_run(run: dict, message: str, model: str | None):
             except OSError:
                 pass
 
+        pi_home = None   # Agentics 引擎本次运行的 pi 配置目录(运行结束即删)
         if engine == "deepagents":
-            try:
-                da = resolve_deepagents()
-                resolution_error = None
-            except ServiceError as exc:
-                da = {"provider": "agentics", "base_url": "", "api_key": "", "model": ""}
-                resolution_error = exc.detail
-            requested_model = str(model or "").strip()
-            # 兼容修复前已落盘/传入的渠道占位值，绝不把 local/openrouter 发给模型端点。
-            use_model = (da["model"] if not requested_model
-                         or requested_model == da["provider"] else requested_model)
-            err = resolution_error
-            if not use_model:
-                err = err or ("deepagents 引擎未配置模型:请在 🎨 生成模型 页"
-                              "「语言模型/DeepAgents」为生效渠道"
-                              "(AgenticsLLM/本地模型/云端模型/OpenRouter)配置模型")
-            elif da["provider"] == "agentics" and not da["api_key"]:
-                err = err or ("deepagents 引擎当前生效渠道为 AgenticsLLM，"
-                              "请先登录桌面端账号")
-            elif da["provider"] == "openrouter" and not da["api_key"]:
-                err = ("deepagents 引擎当前生效渠道为 OpenRouter,但未配置 API Key:"
-                       "请在 🎨 生成模型 页「语言模型/DeepAgents → OpenRouter」填写")
-            elif da["provider"] == "cloud" and not da["api_key"]:
-                err = ("deepagents 引擎当前生效渠道为云端模型,但未配置 API Key:"
-                       "请在 🎨 生成模型 页「语言模型/DeepAgents → 云端模型」填写")
-            if err:
+            pre = agentics_preflight(model)
+            if pre["reason"]:
                 run["status"] = "error"
-                run["error"] = err
+                run["error"] = pre["error"][:500]
                 run["ended"] = time.time()
                 append_chat(agent_id, run["project"],
                             {"role": "assistant", "text": run["error"],
                              "run_id": run["id"], "status": "error"})
                 publish_run(run)
                 return
-            da_cmd = [deepagents_python(), str(ROOT / "modules" / "deepagents_runner.py"),
-                      "--model", use_model,
-                      "--base-url", da["base_url"],
-                      "--api-key", da["api_key"]]
-            da_cmd += engine_effort_args("deepagents", thinking_effort,
-                                         local_endpoint=da["provider"] == "local")
-            # 有状态 agent 启用检查点(会话续接);记忆开关关闭时 session_id 为
-            # None,runner 仍新开会话并回报 id,照常回存——与 claude/codex 语义
-            # 一致(关闭期间照存,重新开启后从最近一次会话继续)
-            if not is_stateless:
-                da_cmd += ["--checkpoint-db", str(DEEPAGENTS_SESSIONS_DB)]
+            pi_home = AGENTICS_PI_HOME / "runs" / run["id"]
+            pi_args, pi_env = agentics_pi_launch(pre["model"], pre["da"], pi_home,
+                                                 thinking=bool(thinking_effort))
+            da_cmd = (agentics_pi_command() + pi_args
+                      + engine_effort_args("deepagents", thinking_effort,
+                                           local_endpoint=pre["da"]["provider"] == "local"))
 
         def codex_stdin(sid: str | None) -> bytes | None:
             if engine != "codex":
@@ -4571,7 +4673,12 @@ async def execute_run(run: dict, message: str, model: str | None):
         def make_cmd(sid: str | None) -> list[str]:
             """按会话 id 生成引擎命令;会话失效回退时以 sid=None 重建全新会话命令。"""
             if engine == "deepagents":
-                return da_cmd + (["--thread-id", sid] if sid else [])
+                # 内置 pi:与 pi 引擎同样的 JSON 事件流,系统提示走文件。无状态 Agent 每单全新会话、
+                # 不 resume,--no-session 免得扇出工位每单留一个会话文件
+                base = da_cmd + ["--append-system-prompt", str(system_prompt_file)]
+                if sid:
+                    return base + ["--session", sid, message]
+                return base + (["--no-session"] if is_stateless else []) + [message]
             if engine == "codex":
                 # codex 无 --append-system-prompt:首轮把角色说明拼进 prompt;续轮走 resume(会话已带上下文)
                 base = [cli_executable, "exec", "--json", "--skip-git-repo-check",
@@ -4696,22 +4803,14 @@ async def execute_run(run: dict, message: str, model: str | None):
             env.setdefault("BASH_MAX_TIMEOUT_MS", "7200000")
         if engine == "opencode":   # 缓存目录不可写时改道,避免模型注册表过期
             env = opencode_env(env)
-        if engine == "deepagents":   # 长文本走环境变量,避免超长 argv
-            env["DA_SYSTEM"] = role
-            env["DA_PROMPT"] = message
-            # LangGraph recursion_limit 默认过低时,多工具任务会稳定 GraphRecursionError。
-            # 用户已设 DEEPAGENTS_RECURSION_LIMIT 时尊重;否则工人 250 / 调度器 500。
-            # runner 撞上限后会从检查点自动续跑(DEEPAGENTS_MAX_CONTINUATIONS,默认 3 轮)。
-            if "DEEPAGENTS_RECURSION_LIMIT" not in env:
-                env["DEEPAGENTS_RECURSION_LIMIT"] = (
-                    "500" if agent_id in DISPATCHERS else "250"
-                )
+        if engine == "deepagents":   # Agentics(内置 pi):配置目录 / 渠道 Key / 当 Node 跑等
+            env.update(pi_env)
 
         # Windows has a short process command-line limit. Agent role prompts can
         # exceed it, so pass Pi's prompt (and Claude's on Windows) through a UTF-8
         # file. Keep Claude's argv behavior elsewhere for older CLI compatibility.
         system_prompt_file = (RUNS_DIR / f"{run['id']}.system-prompt.txt"
-                              if engine == "pi" or (os.name == "nt" and engine == "claude")
+                              if engine in ("pi", "deepagents") or (os.name == "nt" and engine == "claude")
                               else None)
         claude_prompt_file = system_prompt_file if engine == "claude" else None
         log_f = (RUNS_DIR / f"{run['id']}.jsonl").open("w", encoding="utf-8")
@@ -4777,7 +4876,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                         handle_codex_event(run, obj)
                     elif engine == "kimi":
                         handle_kimi_event(run, obj)
-                    elif engine == "pi":
+                    elif engine in ("pi", "deepagents"):   # deepagents = Agentics(内置 pi)
                         handle_pi_event(run, obj)
                     elif engine == "opencode":
                         handle_opencode_event(run, obj)
@@ -4785,8 +4884,6 @@ async def execute_run(run: dict, message: str, model: str | None):
                         handle_grok_event(run, obj)
                     elif engine == "antigravity":
                         handle_antigravity_event(run, obj)
-                    elif engine == "deepagents":
-                        handle_deepagents_event(run, obj)
                     else:
                         handle_claude_event(run, obj)
                     if run.get("net_error") and proc.returncode is None:
@@ -4804,7 +4901,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                 await _drain_orphaned_children(run, proc, deadline)
                 stderr = (await stderr_task).decode("utf-8", "replace").strip()
                 failed = ((proc.returncode != 0 and not run.get("result"))
-                          or (engine in ("pi", "antigravity") and bool(run.get("error")))
+                          or (engine in ("pi", "deepagents", "antigravity") and bool(run.get("error")))
                           or bool(run.get("_session_lost")))
                 if run.get("stopped"):
                     # 用户在运行面板手动停止(或服务关闭):不走会话失效重试,不让引擎的
@@ -4828,9 +4925,9 @@ async def execute_run(run: dict, message: str, model: str | None):
                         save_state(STATE)
                         continue
                     run["status"] = "error"
-                    # 引擎事件流里报过错(如 deepagents 的 error 事件)则保留原始信息
+                    # 引擎事件流里报过错(如 pi 的 error 事件 / 请求 stopReason=error)则保留原始信息
                     run["error"] = (run.get("error") or stderr
-                                    or f"{engine} 退出码 {proc.returncode}")[:500]
+                                    or f"{ENGINE_DISPLAY.get(engine, engine)} 退出码 {proc.returncode}")[:500]
                 else:
                     run["status"] = "done"
                 break
@@ -4845,17 +4942,12 @@ async def execute_run(run: dict, message: str, model: str | None):
             if proc and proc.returncode is None:
                 _kill_proc_tree(proc)
             raise
-        except FileNotFoundError as error:
+        except FileNotFoundError:
             run["status"] = "error"
             if engine in CLI_BINS:
                 run["error"] = cli_not_found_error(engine)[:500]
             else:
-                missing = error.filename or deepagents_python()
-                run["error"] = (f"无法启动 DeepAgents Python 运行环境："
-                                f"未找到“{missing}”。请在项目根目录运行 "
-                                f"make install-deepagents 创建专用环境；或在当前环境执行 "
-                                f"pip install -e \".[deepagents]\"（需 Python ≥3.11）；"
-                                f"或设置 DEEPAGENTS_PY 指向已安装 deepagents 的解释器。")[:500]
+                run["error"] = agentics_error_text("missing")[:500]
             if proc:
                 proc.kill()
         except OSError as error:
@@ -4880,6 +4972,8 @@ async def execute_run(run: dict, message: str, model: str | None):
             log_f.close()
             if system_prompt_file:
                 system_prompt_file.unlink(missing_ok=True)
+            if pi_home:
+                shutil.rmtree(pi_home, ignore_errors=True)
             run["ended"] = time.time()
             run.pop("progress", None)
             _prompt_skill_postcheck(run)
@@ -4939,7 +5033,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                          + (",由审核模型识别" if run["nsfw_suspect"].get("by") == "judge" else "")
                          + "):本次未自动切换;"
                          + (f"task_id `{tid}` 已记为 nsfw_suspect,同 task_id 重派时宿主自动改用备用语言模型"
-                            f"{' ' + fb['engine'] + '/' + (fb['model'] or '(引擎默认)') if fb else '(尚未配置备用语言模型,请到「设置→高级→NSFW 模式」配置)'}"
+                            f"{' ' + ENGINE_DISPLAY.get(fb['engine'], fb['engine']) + '/' + (fb['model'] or '(引擎默认)') if fb else '(尚未配置备用语言模型,请到「设置→高级→NSFW 模式」配置)'}"
                             if tid else "画板任务已标失败,下一步怎么做见画板任务框里的提示"
                             if agent_id in CANVAS_AGENTS else
                             "工单未写 task_id,无法记入重派名单;重派时请带 `nsfw: true` / --nsfw")
@@ -5420,62 +5514,6 @@ def handle_antigravity_event(run: dict, obj: dict):
             # ERROR/CANCELED/INTERRUPTED 等:留空 result,错误文案进 error
             run["error"] = run.get("error") or str(
                 res.get("error") or f"Antigravity status {res.get('status')}")[:500]
-
-
-def handle_deepagents_event(run: dict, obj: dict):
-    """解析 deepagents_runner 的 JSONL 事件。"""
-    t = obj.get("type")
-    if t == "session":
-        run["session_id"] = obj.get("session_id")
-    elif t == "text":
-        txt = obj.get("text") or ""
-        if txt:
-            run["text"] = run.get("text", "") + txt
-            HUB.publish({"type": "text", "run_id": run["id"],
-                         "agent": run["agent"], "text": txt})
-    elif t == "notice":   # runner 自身提示(如撞 recursion_limit 自动续跑),不计入产出文本
-        txt = obj.get("text") or ""
-        if txt:
-            run.setdefault("activity", []).append(txt)
-            HUB.publish({"type": "tool", "run_id": run["id"],
-                         "agent": run["agent"], "desc": txt})
-            publish_run(run)
-    elif t == "tool":
-        name = obj.get("name", "?")
-        inp = obj.get("input") or {}
-        fp = inp.get("file_path") or inp.get("path")
-        if fp:
-            fp = rel_path(fp)
-        if name in ("write_file", "edit_file"):
-            desc = f"✎ {name}: {fp}"
-        elif name == "execute":
-            desc = "⚙ $ " + str(inp.get("command") or "")[:160]
-            fp = None
-        elif name in ("read_file", "ls", "glob", "grep"):
-            desc = f"📖 {name}: {fp or inp.get('pattern', '')}"
-            fp = None
-        else:
-            desc = f"🔧 {name}"
-            fp = None
-        run.setdefault("activity", []).append(desc)
-        if fp:
-            run.setdefault("files", []).append(fp)
-            HUB.publish({"type": "file", "run_id": run["id"],
-                         "agent": run["agent"], "path": fp})
-        HUB.publish({"type": "tool", "run_id": run["id"],
-                     "agent": run["agent"], "desc": desc})
-        publish_run(run)
-        run_progress(run, "⚙ 执行工具中…")
-    elif t == "tool_result":
-        tool_receipt(run, obj.get("output"), is_error=bool(obj.get("is_error")),
-                     label=str(obj.get("name") or ""))
-    elif t == "usage":
-        run["tokens"] = (run.get("tokens") or 0) + \
-            (obj.get("input_tokens") or 0) + (obj.get("output_tokens") or 0)
-    elif t == "result":
-        run["result"] = obj.get("text") or ""
-    elif t == "error":
-        run["error"] = str(obj.get("message") or "")[:500]
 
 
 def _claude_stream_event(run: dict, ev: dict):
@@ -8285,11 +8323,12 @@ def _canvas_mark_refused(run: dict, canvas: dict, by: str) -> None:
     who_zh, what_zh = ("画板动图 Agent", "这次动图") if motion else ("画板修图 Agent", "这次编辑")
     who_en, what_en = ("The canvas video agent", "this video") if motion else ("The image-retouch agent", "this edit")
     if fb:
-        m = f"{fb['engine']} / {fb['model'] or '引擎默认'}"
+        eng = ENGINE_DISPLAY.get(fb["engine"], fb["engine"])
+        m = f"{eng} / {fb['model'] or '引擎默认'}"
         zh = (f"{who_zh}拒绝了{what_zh}(由{how_zh}识别)。NSFW 模式开着:打开工具栏的 🔞 再发送,"
               f"会改用备用语言模型 {m} 整理提示词。")
         en = (f"{who_en} refused {what_en} (detected by {how_en}). NSFW mode is on: turn on 🔞 in the "
-              f"toolbar and send again to have the fallback language model {fb['engine']} / "
+              f"toolbar and send again to have the fallback language model {eng} / "
               f"{fb['model'] or 'engine default'} write the prompt.")
     else:
         zh = (f"{who_zh}拒绝了{what_zh}(由{how_zh}识别)。NSFW 模式没有配置备用语言模型,打开 🔞 也仍由当前引擎"
@@ -16211,7 +16250,15 @@ async def api_soul(agent: str):
 async def api_enginecheck(engine: str):
     """检测执行引擎 CLI 是否已安装、是否已登录(顶栏切换 claude/codex/kimi/pi/opencode/grok/
     antigravity 时前端调用;一键安装 / 登录后前端轮询)。logged_in:True/False/None(判断不了,不打扰)。
-    deepagents 为进程内 runner,无 CLI 依赖,视为始终可用。"""
+    deepagents(界面名 Agentics)是随安装包打包的 pi,不用安装:available=内置 pi 在且找得到 Node;
+    logged_in 只对 Agentics 渠道有意义(其余渠道 None);reason/error 为启动前检查的结论与文案。"""
+    if engine == "deepagents":
+        pre = await asyncio.to_thread(agentics_preflight)
+        provider = pre["da"]["provider"]
+        return {"engine": engine, "available": pre["reason"] != "missing", "bin": "",
+                "label": "Agentics", "provider": provider,
+                "logged_in": bool(pre["da"]["api_key"]) if provider == "agentics" else None,
+                "reason": pre["reason"], "error": pre["error"]}
     if engine not in CLI_BINS:
         return {"engine": engine, "available": True, "bin": ""}
     path = await asyncio.to_thread(resolve_cli_executable, engine)
@@ -19156,8 +19203,9 @@ def _footage_call(fn, *args, **kw):
         raise ServiceError(exc.status, exc.detail) from exc
 
 
-def footage_engine_spec() -> dict:
-    """AI 画面分析用的引擎规格:当前全局默认引擎/模型(未设置回落 claude)。"""
+def footage_engine_spec(prepare: bool = False) -> dict:
+    """AI 画面分析用的引擎规格:当前全局默认引擎/模型(未设置回落 claude)。
+    prepare=True(真要分析时)才为 Agentics 引擎写 pi 配置目录;列表 / 详情只取引擎与模型名。"""
     pref = global_model_pref()
     engine = pref["engine"] or "claude"
     model = pref["model"]
@@ -19168,11 +19216,15 @@ def footage_engine_spec() -> dict:
     spec = {"engine": engine, "model": model, "permission_mode": PERMISSION_MODE,
             "executable": resolve_cli_executable(engine) if engine != "deepagents" else None}
     if engine == "deepagents":
-        da = resolve_deepagents()
-        spec["deepagents"] = {"python": deepagents_python(),
-                              "runner": str(ROOT / "modules" / "deepagents_runner.py"),
-                              "base_url": da["base_url"], "api_key": da["api_key"],
-                              "model": da["model"]}
+        # Agentics(内置 pi):单轮看图,配置目录固定一个(各次分析写入的内容相同),模型标为可看图
+        pre = agentics_preflight(model)
+        spec["model"] = pre["model"]
+        if pre["reason"]:
+            spec["agentics"] = {"error": pre["error"]}
+        elif prepare:
+            args, env = agentics_pi_launch(pre["model"], pre["da"], AGENTICS_PI_HOME / "footage",
+                                           thinking=False, vision=True)
+            spec["agentics"] = {"cmd": agentics_pi_command() + args, "env": env}
     return spec
 
 
@@ -19232,13 +19284,13 @@ async def api_footage_clip_delete(name: str, clip_id: str):
 
 
 async def api_footage_clip_analyze(name: str, clip_id: str):
-    spec, lang = footage_engine_spec(), ui_lang_code() or "zh"
+    spec, lang = footage_engine_spec(prepare=True), ui_lang_code() or "zh"
     return await asyncio.to_thread(
         _footage_call, lambda lib: lib.analyze_clip(name, clip_id, spec, lang))
 
 
 async def api_footage_analyze_all(name: str, body: dict):
-    spec, lang = footage_engine_spec(), ui_lang_code() or "zh"
+    spec, lang = footage_engine_spec(prepare=True), ui_lang_code() or "zh"
     return _footage_call(lambda lib: lib.analyze_all(name, spec, lang, bool((body or {}).get("force"))))
 
 

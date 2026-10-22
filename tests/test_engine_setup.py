@@ -267,7 +267,6 @@ def test_api_enginecheck_reports_login(home, monkeypatch):
     monkeypatch.setattr(core, "resolve_cli_executable", lambda e: None)
     r = asyncio.run(core.api_enginecheck("codex"))
     assert not r["available"] and r["logged_in"] is None
-    assert asyncio.run(core.api_enginecheck("deepagents"))["available"] is True
 
 
 def test_api_engine_login_and_terminal_install(monkeypatch, tmp_path):

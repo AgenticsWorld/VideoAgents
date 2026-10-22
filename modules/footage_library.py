@@ -1056,8 +1056,8 @@ def _walk_strings(obj, key=None, acc=None):
 
 def extract_final_text(blob: str, prompt: str = "") -> str:
     """从引擎输出里取最终回答文本(纯文本口径,不再解析 JSON 结构):
-    1. 事件里最后一个 result 字段(claude/grok/kimi 的 result 汇总、deepagents runner);
-    2. 否则最后一个非提示词回显的 text 字段(opencode/pi 事件流);
+    1. 事件里最后一个 result 字段(claude/grok/kimi 的 result 汇总);
+    2. 否则最后一个非提示词回显的 text 字段(opencode/pi/Agentics 事件流);
     3. 否则整段输出。统一剥掉 ``` 围栏。"""
     echo = (prompt or "").strip()[:60]
     values = list(_iter_json_values(blob))
@@ -1080,9 +1080,10 @@ def run_engine_vision(image_path: Path, prompt: str, spec: dict, cwd: Path,
                       timeout: int = 240) -> dict:
     """用当前默认 CLI 引擎做一次性画面分析,返回 {"text": 纯文本回答, "_meta": {...}}。
 
-    spec = {"engine", "model", "executable", "permission_mode", "deepagents": {python, runner, base_url, api_key}}
+    spec = {"engine", "model", "executable", "permission_mode", "agentics": {cmd, env} 或 {error}}
     claude/kimi/grok/opencode/pi:提示词里给图片绝对路径,由 CLI 自带的文件读取工具看图;
-    codex:走 `--image` + `-o` 取最后一条消息;deepagents:runner 无看图能力,仅文本兜底;
+    codex:走 `--image` + `-o` 取最后一条消息;deepagents(界面名 Agentics,内置 pi):宿主备好的
+    pi 命令与环境(core.footage_engine_spec,模型按可看图声明;所选模型不支持图片时由渠道报错);
     antigravity:暂不支持(首期未接,直接报错,不落到 claude 分支用错参数)。"""
     engine = str(spec.get("engine") or "claude")
     model = str(spec.get("model") or "")
@@ -1113,13 +1114,11 @@ def run_engine_vision(image_path: Path, prompt: str, spec: dict, cwd: Path,
         elif engine == "pi":
             cmd = [exe, "--mode", "json", "--approve"] + (["--model", model] if model else []) + [prompt]
         elif engine == "deepagents":
-            da = spec.get("deepagents") or {}
-            if not da.get("python") or not da.get("runner"):
-                raise FootageLibError(500, "deepagents 引擎未配置")
-            cmd = [da["python"], da["runner"], "--model", model or da.get("model", ""),
-                   "--base-url", da.get("base_url", ""), "--api-key", da.get("api_key", "")]
-            env["DA_SYSTEM"] = "你是视频画面分析助手,只输出 JSON。"
-            env["DA_PROMPT"] = prompt
+            ag = spec.get("agentics") or {}
+            if not ag.get("cmd"):
+                raise FootageLibError(400, ag.get("error") or "Agentics 引擎不可用")
+            cmd = list(ag["cmd"]) + ["--no-session", prompt]
+            env.update(ag.get("env") or {})
         else:  # claude
             cmd = [exe, "-p", prompt, "--output-format", "json", "--max-turns", "8",
                    "--permission-mode", str(spec.get("permission_mode") or "acceptEdits")]

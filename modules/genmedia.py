@@ -282,7 +282,7 @@ def _forbid_dispatch_layer(kind: str) -> None:
     """调度层守卫:00-orchestration 各 Agent(总制片/context/evaluation 等)只派单
     不生成,禁止直接调用生成能力(SOUL.md 边界)。VIDEOAGENTS_AGENT 由 runtime 注入运行
     环境并传递到全部子进程,所以总制片自己写 driver 脚本绕道也拦得住;对 codex /
-    deepagents 引擎(没有 PreToolUse hook)这里是唯一的机制级硬拦截。"""
+    agentics(内置 pi)等引擎(没有 PreToolUse hook)这里是唯一的机制级硬拦截。"""
     agent = os.environ.get("VIDEOAGENTS_AGENT", "")
     # 修改师(00-orchestration/reviser)归入调度层分组但亲手代行专业工位重出产物,放行
     if agent.startswith("00-orchestration/") and agent != "00-orchestration/reviser":

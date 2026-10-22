@@ -158,13 +158,6 @@ def main() -> None:
     run(str(python), "-c",
         "import cv2,fastapi,fontTools,faster_whisper,lark_oapi,numpy,onnxruntime,PIL,playwright,qrcode,scenedetect,scipy,tos,uvicorn,yaml,yt_dlp",
         env=env)
-    # deepagents 引擎(桌面版默认引擎):运行时自带,core.deepagents_python() 回落到当前解释器
-    run(str(python), "-c",
-        "import deepagents,langchain_openai\n"
-        "from deepagents.backends import LocalShellBackend\n"
-        "from deepagents.middleware.summarization import SummarizationMiddleware\n"
-        "from langgraph.checkpoint.sqlite import SqliteSaver",
-        env=env)
     run(str(python), "-c",
         "import os\n"
         "from playwright.sync_api import sync_playwright\n"

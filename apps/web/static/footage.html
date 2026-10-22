@@ -296,7 +296,7 @@ function msg(text,cls){const m=$('#msg');m.textContent=text||'';m.className=cls|
 function fmtDur(s){s=Math.max(0,Number(s)||0);const m=Math.floor(s/60),sec=Math.floor(s%60);const h=Math.floor(m/60);return (h?h+':':'')+String(h?m%60:m).padStart(2,'0')+':'+String(sec).padStart(2,'0')}
 function fmtDate(iso){if(!iso)return '';const d=new Date(iso);return isNaN(d)?iso:d.toLocaleString()}
 function chip(status,running){const cls=RUNNING.has(status)||running?'run':status==='ready'?'ready':status==='failed'?'failed':'empty';return `<span class="chip ${cls}">${esc(t(STATUS_LABEL[status]||status||'未导入'))}</span>`}
-function setEngineChip(r){$('#engine-chip').textContent=t('分析引擎:')+(r.engine||'claude')+' · '+(r.model||t('引擎默认模型'))}
+function setEngineChip(r){$('#engine-chip').textContent=t('分析引擎:')+(r.engine==='deepagents'?'agentics':r.engine||'claude')+' · '+(r.model||t('引擎默认模型'))}
 function fileUrl(name,rel){return `${API}/${encodeURIComponent(name)}/files/${rel.split('/').map(encodeURIComponent).join('/')}`}
 
 /* ---------- 路由:#p=<项目名> ---------- */
@@ -622,7 +622,7 @@ function syncClipFields(c){
     if(document.activeElement===ta||ta.dataset.orig!==ta.value)return;   // 正在编辑/未保存的不覆盖
     if(ta.value!==v){ta.value=v;ta.dataset.orig=v}
   });
-  if(c.analyzed_at){const st=card.querySelector('.st');const txt=t('已分析 ')+fmtDate(c.analyzed_at)+(c.analysis_meta&&c.analysis_meta.engine?` · ${c.analysis_meta.engine}${c.analysis_meta.model?'/'+c.analysis_meta.model:''}`:'');if(st.textContent!==txt)st.textContent=txt;card.classList.toggle('analyzed',!!c.info)}
+  if(c.analyzed_at){const st=card.querySelector('.st');const txt=t('已分析 ')+fmtDate(c.analyzed_at)+(c.analysis_meta&&c.analysis_meta.engine?` · ${c.analysis_meta.engine==='deepagents'?'agentics':c.analysis_meta.engine}${c.analysis_meta.model?'/'+c.analysis_meta.model:''}`:'');if(st.textContent!==txt)st.textContent=txt;card.classList.toggle('analyzed',!!c.info)}
 }
 async function saveField(ta){
   if(ta.value===ta.dataset.orig)return;

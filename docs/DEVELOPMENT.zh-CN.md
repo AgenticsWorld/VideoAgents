@@ -55,7 +55,7 @@ Python 运行时与 Electron 应用完全分开版本化。运行时写入用户
 
 ### CLI 发现与模型下拉
 
-macOS 桌面端从 Finder 启动时会读取用户登录 Shell 的 `PATH`，并补充 Homebrew、`~/.local/bin`、Kimi、OpenCode、Grok、Volta、pnpm 等常见 CLI 目录。因此终端中已安装的 `claude`、`codex`、`kimi`、`pi`、`opencode`、`grok`、`agy`（Antigravity CLI）会被本地 Python 服务及其 Agent 子进程继承，无需把第三方 CLI 打入客户端安装包。切换到 `pi` 引擎后，语言模型下拉会通过 `pi --list-models` 动态读取当前 Pi 登录凭证实际可用的渠道与模型。`opencode` 引擎同样通过 `opencode models` 动态读取；`grok` 引擎（Grok Build CLI，安装见 https://grok.com/build，`grok login` 登录）通过 `grok models` 动态读取；`antigravity` 引擎（Antigravity CLI，命令 `agy`，安装见 https://antigravity.google/docs/getting-started?tab=cli，在终端运行一次 `agy` 完成登录）通过 `agy models` 动态读取。各引擎（deepagents 除外）的语言模型下拉均默认「智能分配」：按 Agent 任务复杂度自动选模型（如 opencode 引擎把创作核心 Agent 派给 DeepSeek V4 Pro、其余派给 DeepSeek V4 Flash），切换引擎或语言模型会自动同步全部 Agent 的模型设置。
+macOS 桌面端从 Finder 启动时会读取用户登录 Shell 的 `PATH`，并补充 Homebrew、`~/.local/bin`、Kimi、OpenCode、Grok、Volta、pnpm 等常见 CLI 目录。因此终端中已安装的 `claude`、`codex`、`kimi`、`pi`、`opencode`、`grok`、`agy`（Antigravity CLI）会被本地 Python 服务及其 Agent 子进程继承，无需把第三方 CLI 打入客户端安装包。切换到 `pi` 引擎后，语言模型下拉会通过 `pi --list-models` 动态读取当前 Pi 登录凭证实际可用的渠道与模型。`opencode` 引擎同样通过 `opencode models` 动态读取；`grok` 引擎（Grok Build CLI，安装见 https://grok.com/build，`grok login` 登录）通过 `grok models` 动态读取；`antigravity` 引擎（Antigravity CLI，命令 `agy`，安装见 https://antigravity.google/docs/getting-started?tab=cli，在终端运行一次 `agy` 完成登录）通过 `agy models` 动态读取。各引擎（agentics 除外）的语言模型下拉均默认「智能分配」：按 Agent 任务复杂度自动选模型（如 opencode 引擎把创作核心 Agent 派给 DeepSeek V4 Pro、其余派给 DeepSeek V4 Flash），切换引擎或语言模型会自动同步全部 Agent 的模型设置。
 
 ### 安装与登录引导
 
@@ -64,7 +64,7 @@ macOS 桌面端从 Finder 启动时会读取用户登录 Shell 的 `PATH`，并�
 ### 全自动模式
 
 如需无人值守的全自动流水线，用全自动模式启动，`claude` 引擎的 Agent 执行
-命令时不再弹审批（`codex`、`pi` 与 `deepagents` 引擎本就免审批）：
+命令时不再弹审批（`codex`、`pi` 与 `agentics` 引擎本就免审批）：
 
 ```bash
 make run-auto
@@ -83,37 +83,31 @@ python -m pip install -e ".[storage]"
 python -m pip install -e ".[dev]"
 ```
 
-## DeepAgents
+## Agentics 引擎（内置 pi）
 
-deepagents 引擎需要 Python ≥3.11。若主环境是 3.10，请改用
-`make install-deepagents` 创建专用的 `.venv-deepagents`（运行时自动发现）；
-也可设置 `DEEPAGENTS_PY` 指向任意已安装 deepagents 的解释器。
+`agentics` 引擎（设置、接口与 `dispatch.py` 里的引擎 id 仍是 `deepagents`）就是随程序打包的
+[Pi Coding Agent](https://github.com/earendil-works/pi)，版本钉在 `vendor/pi/package.json` 与
+`vendor/pi/package-lock.json`；它与用户自己安装、自己登录的 `pi` 互不相干，后者仍作为 `pi` 引擎可选。
 
-如需为该独立环境指定 Python 解释器：
+- **桌面端**：打包时运行 `apps/desktop/scripts/vendor_pi.py --prune`（`npm ci` 后去掉 source map
+  与其他平台的原生组件），把 `vendor/pi` 作为 `backend/vendor/pi` 打进安装包。客户端不另带 Node.js：
+  服务端用桌面程序本身（`VIDEOAGENTS_NODE`）加 `ELECTRON_RUN_AS_NODE=1` 启动 pi。
+- **源码运行**：先执行一次 `make install-pi`（需要 PATH 上有 Node.js 22.19 或更新版本；也可用
+  `VIDEOAGENTS_NODE` 指定 Node）。`make desktop-dev` 会自动执行这一步。
 
-```bash
-make install-deepagents DEEPAGENTS_PYTHON=python3.11
-```
+语言模型取自 🎨 生成模型 →「语言模型/Agentics」：Agentics（已登录的桌面端账号）、本地 OpenAI 兼容端点，
+以及默认隐藏（已是生效渠道时才显示）的云端模型与 OpenRouter。每次运行在
+`<数据目录>/.videoagents/agentics-pi/runs/` 下建一个独立的 pi 配置目录，按生效渠道写 `models.json`
+（API Key 只写成 `$VIDEOAGENTS_LLM_API_KEY`，真值经环境变量传入），运行结束即删除；会话存在
+`agentics-pi/sessions/`，用 `--session` 续接。pi 带 `--no-extensions --no-skills --no-prompt-templates
+--no-context-files` 启动，用户自己的 `~/.pi/agent` 配置不会生效。
 
-如果通过 asdf 管理 Python，可显式选择已安装的 3.11 版本：
-
-```bash
-ASDF_PYTHON_VERSION=3.11.12 make install-deepagents DEEPAGENTS_PYTHON=python
-```
-
-DeepAgents 默认按 128000 token 上下文运行，单次输出上限 8192 token，图递归上限为 250
-（调度类 Agent 为 500）。runner 还会为系统提示词和工具 schema 预留 16384 token，首轮输入
-超限直接拒绝；约 48000 个估算 token 时压缩历史，只保留约 8000 个估算 token；每次 shell 工具输出最多返回 24000
-字节。为避免无界扫描和递归放大上下文，`glob` 工具与自动泛用子 Agent 默认关闭。
-只有当本地推理服务实际配置了相同或更大的上下文窗口时，才覆盖下面的值：
+模型按 128000 token 上下文、单次输出上限 16384 token（本地模型渠道 8192）声明，上下文将满前由 pi
+自动压缩会话。只有当模型服务确实支持更大的值时才覆盖：
 
 ```bash
-DEEPAGENTS_CONTEXT_WINDOW=131072 DEEPAGENTS_MAX_OUTPUT_TOKENS=8192 ./run.sh
+AGENTICS_CONTEXT_WINDOW=262144 AGENTICS_MAX_OUTPUT_TOKENS=32768 ./run.sh
 ```
-
-还可调整 `DEEPAGENTS_RECURSION_LIMIT` 与 `DEEPAGENTS_MAX_TOOL_OUTPUT_BYTES`；提高任一值都会
-增加运行时间或上下文压力。撞到 recursion_limit 时 runner 会从最后检查点自动续跑，
-最多 `DEEPAGENTS_MAX_CONTINUATIONS`（默认 3）轮，仍未收敛才报错。
 
 ## FFmpeg
 

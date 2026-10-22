@@ -25,7 +25,7 @@
 |---|---|
 | **ffmpeg / ffprobe 可用** | `brew install ffmpeg`(macOS)。整条时间轴靠它实测,不可缺 |
 | **playwright + Chromium**(花字开启时) | `pip install playwright && python3 -m playwright install chromium`。`python3 code/render_captions.py doctor` 自检;花字开关关闭可不装 |
-| **至少一个 agent 引擎** | Claude CLI / Codex CLI / Kimi / DeepAgents 等,任选其一并已登录 |
+| **至少一个 agent 引擎** | 内置 Agentics(登录 VideoAgents 账号)/ Claude CLI / Codex CLI / Kimi 等,任选其一并已登录 |
 | 生成服务凭据 | 图像/视频渠道的 API Key(在「生成模型」设置页配) |
 
 时间轴原语 `modules/avsync.py` 与机检 `code/check_av_sync.py` 随主程序发布。流程第一个节点 `av0-ingest`

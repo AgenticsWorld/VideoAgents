@@ -129,6 +129,8 @@ jobs:
             --channel release --version "$RELEASE_VERSION" --build-hash "${BUILD_HASH}-${DISTRIBUTION}" \
             --distribution "$DISTRIBUTION" --update-index-url "$update_index" --package-base-url "$package_base"
       - run: npm run build:desktop
+      - name: Vendor bundled pi (Agentics engine)
+        run: python apps/desktop/scripts/vendor_pi.py --prune
       - name: Prepare Apple API key
         if: matrix.platform == 'mac'
         shell: bash

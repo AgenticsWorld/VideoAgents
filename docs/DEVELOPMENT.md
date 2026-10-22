@@ -64,7 +64,7 @@ Local `make desktop` packaging defaults to `CSC_IDENTITY_AUTO_DISCOVERY=false`, 
 
 ### CLI discovery and model menus
 
-When launched from Finder, the macOS desktop client imports the login shell `PATH` and supplements common Homebrew, `~/.local/bin`, Kimi, OpenCode, Grok, Volta, and pnpm locations. Existing `claude`, `codex`, `kimi`, `pi`, `opencode`, `grok`, and `agy` (Antigravity CLI) installations are therefore inherited by the local Python service and its Agent child processes instead of being bundled into the client. When the `pi` engine is selected, its language-model menus are populated from `pi --list-models`, so they reflect the providers and models available to the current Pi login. The `opencode` engine likewise populates its menus from `opencode models`, and the `grok` engine (Grok Build CLI, install from https://grok.com/build, sign in with `grok login`) from `grok models`, and the `antigravity` engine (Antigravity CLI, binary `agy`, install from https://antigravity.google/docs/getting-started?tab=cli, sign in by running `agy` once in a terminal) from `agy models`. For every engine except deepagents the language-model menu defaults to Smart Assignment, which picks a model per agent by task complexity (e.g. on the opencode engine creative-core agents go to DeepSeek V4 Pro and the rest to DeepSeek V4 Flash); switching the engine or language model automatically re-syncs every agent's model settings.
+When launched from Finder, the macOS desktop client imports the login shell `PATH` and supplements common Homebrew, `~/.local/bin`, Kimi, OpenCode, Grok, Volta, and pnpm locations. Existing `claude`, `codex`, `kimi`, `pi`, `opencode`, `grok`, and `agy` (Antigravity CLI) installations are therefore inherited by the local Python service and its Agent child processes instead of being bundled into the client. When the `pi` engine is selected, its language-model menus are populated from `pi --list-models`, so they reflect the providers and models available to the current Pi login. The `opencode` engine likewise populates its menus from `opencode models`, and the `grok` engine (Grok Build CLI, install from https://grok.com/build, sign in with `grok login`) from `grok models`, and the `antigravity` engine (Antigravity CLI, binary `agy`, install from https://antigravity.google/docs/getting-started?tab=cli, sign in by running `agy` once in a terminal) from `agy models`. For every engine except agentics the language-model menu defaults to Smart Assignment, which picks a model per agent by task complexity (e.g. on the opencode engine creative-core agents go to DeepSeek V4 Pro and the rest to DeepSeek V4 Flash); switching the engine or language model automatically re-syncs every agent's model settings.
 
 ### Setup dialog
 
@@ -74,7 +74,7 @@ When the top-bar engine (or the one restored at startup) is a CLI that is missin
 
 For unattended pipelines, start the console in full-auto mode so agents on the
 `claude` engine can run shell commands without approval prompts (the `codex`,
-`pi`, and `deepagents` engines already run unattended):
+`pi`, and `agentics` engines already run unattended):
 
 ```bash
 make run-auto
@@ -94,42 +94,36 @@ python -m pip install -e ".[storage]"
 python -m pip install -e ".[dev]"
 ```
 
-## DeepAgents
+## Agentics engine (bundled pi)
 
-The deepagents engine requires Python 3.11 or newer. If your main environment
-runs Python 3.10, use `make install-deepagents` instead to create a dedicated
-`.venv-deepagents` that the runtime discovers automatically; alternatively set
-`DEEPAGENTS_PY` to any interpreter that has deepagents installed.
+The `agentics` engine (engine id `deepagents` in settings, APIs and `dispatch.py`) is
+[Pi Coding Agent](https://github.com/earendil-works/pi) shipped with the app. The version is
+pinned in `vendor/pi/package.json` and `vendor/pi/package-lock.json`; it is separate from a
+`pi` you install and sign in to yourself, which stays available as the `pi` engine.
 
-To choose a specific interpreter for that dedicated environment:
+- **Desktop**: packaging runs `apps/desktop/scripts/vendor_pi.py --prune` (`npm ci`, then drops
+  source maps and other platforms' native helpers) and ships `vendor/pi` as
+  `backend/vendor/pi`. The app has no separate Node.js: the service starts pi with the desktop
+  executable (`VIDEOAGENTS_NODE`) and `ELECTRON_RUN_AS_NODE=1`.
+- **From source**: run `make install-pi` once (needs Node.js 22.19 or newer on `PATH`;
+  `VIDEOAGENTS_NODE` can point at another Node). `make desktop-dev` does this automatically.
+
+The language model comes from 🎨 Generation Models → Language Model/Agentics: Agentics (the
+signed-in desktop account), a local OpenAI-compatible endpoint, and — hidden unless already
+active — a cloud endpoint or OpenRouter. Each run gets its own pi configuration directory under
+`<data>/.videoagents/agentics-pi/runs/` with a `models.json` for the active channel (the API key
+is referenced as `$VIDEOAGENTS_LLM_API_KEY` and passed only through the environment) and is
+removed when the run ends; sessions live in `agentics-pi/sessions/` and are resumed with
+`--session`. pi is started with `--no-extensions --no-skills --no-prompt-templates
+--no-context-files`, so a user's own `~/.pi/agent` setup never applies.
+
+Models are declared with a 128,000-token context window and a 16,384-token output cap
+(8,192 for the local channel); pi compacts the session before the window fills. Override them
+only when the model server allows the larger values:
 
 ```bash
-make install-deepagents DEEPAGENTS_PYTHON=python3.11
+AGENTICS_CONTEXT_WINDOW=262144 AGENTICS_MAX_OUTPUT_TOKENS=32768 ./run.sh
 ```
-
-When using asdf, select an installed Python 3.11 version explicitly:
-
-```bash
-ASDF_PYTHON_VERSION=3.11.12 make install-deepagents DEEPAGENTS_PYTHON=python
-```
-
-DeepAgents defaults to a 128,000-token context window, an 8,192-token output cap,
-and a graph recursion limit of 250 (500 for dispatcher agents). The runner
-reserves 16,384 tokens for prompt and tool-schema overhead, rejects an oversized
-first request, summarizes at 48,000 estimated tokens, keeps 8,000 tokens, and caps each shell
-tool result at 24,000 bytes. The `glob` tool and automatic general-purpose
-subagent are disabled to prevent unbounded scans and recursive context growth.
-Override the model window only when the model server is configured with the
-same or larger value:
-
-```bash
-DEEPAGENTS_CONTEXT_WINDOW=131072 DEEPAGENTS_MAX_OUTPUT_TOKENS=8192 ./run.sh
-```
-
-`DEEPAGENTS_RECURSION_LIMIT` and `DEEPAGENTS_MAX_TOOL_OUTPUT_BYTES` can also be
-adjusted; raising either increases runtime or context pressure. When the recursion
-limit is hit, the runner resumes from the last checkpoint up to
-`DEEPAGENTS_MAX_CONTINUATIONS` (default 3) times before failing.
 
 ## FFmpeg
 

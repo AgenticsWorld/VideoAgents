@@ -164,8 +164,8 @@ function initializeFirstLoginDefaults(): void {
     tts: {provider: 'agentics'},
     deepagents: {provider: 'agentics'},
   })
-  // 不预置顶栏引擎(ui_prefs / global_model):与网页版首装相同,由控制台首次打开时按界面语言
-  // 选定(中文 kimicode,其余 claudecode)并同步回服务端
+  // 不预置顶栏引擎(ui_prefs / global_model):由控制台首次打开时选定并同步回服务端——桌面端默认
+  // agentics(内置 pi,engine id 沿用 deepagents),网页版按界面语言(中文 kimicode,其余 claudecode)
   writeInitialJson(path.join(runtime, 'state.json'), {sessions: {}})
 }
 
@@ -587,6 +587,9 @@ async function ensureWebServer(): Promise<void> {
     PYTHONPYCACHEPREFIX: pythonCacheRoot,
     VIDEOAGENTS_APP_ROOT: backend,
     VIDEOAGENTS_DATA_DIR: dataRoot,
+    // Agentics 引擎(内置 pi,backend/vendor/pi)没有独立 Node:用本程序自带的 Node 跑
+    // (服务端启动 pi 时加 ELECTRON_RUN_AS_NODE=1,见 core.agentics_pi_command)
+    VIDEOAGENTS_NODE: process.execPath,
     VIDEOAGENTS_PERMISSION_MODE: process.env.VIDEOAGENTS_PERMISSION_MODE || 'bypassPermissions',
     VIDEOAGENTS_WEB_HOST: '127.0.0.1',
     VIDEOAGENTS_WEB_PORT: webPort,

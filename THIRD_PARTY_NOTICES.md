@@ -5,8 +5,15 @@ hosted services. They are not relicensed by this repository and remain subject
 to their own terms.
 
 Core Python dependencies include FastAPI, Uvicorn, NumPy, SciPy, PyYAML, and
-qrcode. Optional integrations include DeepAgents, LangChain OpenAI, boto3,
-Volcengine TOS, Alibaba Cloud OSS, and Tencent Cloud COS SDKs.
+qrcode. Optional integrations include boto3, Volcengine TOS, Alibaba Cloud OSS,
+and Tencent Cloud COS SDKs.
+
+The built-in Agentics engine bundles Pi Coding Agent (`@earendil-works/pi-coding-agent`,
+MIT, https://github.com/earendil-works/pi) together with its npm dependencies (MIT,
+Apache-2.0, BSD, ISC and similar permissive licenses), pinned in `vendor/pi/package.json`
+and `vendor/pi/package-lock.json`; each package declares its license in its
+`package.json` (with a LICENSE file where the package ships one) under
+`vendor/pi/node_modules`. The desktop app runs it with Electron's own Node.
 
 External tools and services may include FFmpeg, Claude, Codex, OpenRouter,
 Volcengine ModelArk, BytePlus ModelArk, ComfyUI, and compatible object

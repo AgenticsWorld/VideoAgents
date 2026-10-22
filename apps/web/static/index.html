@@ -311,7 +311,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
   <input type="hidden" id="project">
   <input type="file" id="proj-import-file" accept=".zip,application/zip" style="display:none">
   <label style="color:var(--dim);font-size:12px">引擎</label>
-  <select id="engine" title="Agent 执行引擎:claude / codex / kimicode / pi / opencode / grok / antigravity / deepagents(本地模型如 LM Studio,或 OpenRouter,在 🎨 生成模型 页配置)">
+  <select id="engine" title="Agent 执行引擎:claude / codex / kimicode / pi / opencode / grok / antigravity / agentics(内置,随 VideoAgents 安装;语言模型在 🎨 生成模型 页「语言模型/Agentics」配置)">
     <option value="claude" selected>claudecode</option>
     <option value="codex">codex</option>
     <option value="kimi">kimicode</option>
@@ -319,11 +319,11 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <option value="opencode">opencode</option>
     <option value="grok">grok</option>
     <option value="antigravity">antigravity</option>
-    <option value="deepagents">deepagents</option>
+    <option value="deepagents">agentics</option>
   </select>
   <label style="color:var(--dim);font-size:12px">语言模型</label>
   <select id="model"></select>
-  <select id="da-model" style="display:none" title="deepagents 当前渠道的模型:即选即写入 🎨 生成模型 页「语言模型/DeepAgents」,两处同步"></select>
+  <select id="da-model" style="display:none" title="agentics 当前渠道的模型:即选即写入 🎨 生成模型 页「语言模型/Agentics」,两处同步"></select>
   <input type="text" id="model-custom" style="width:130px;display:none" placeholder="输入模型ID">
   <div id="conn" title="实时连接状态"></div>
   <div id="preview-menu">
@@ -466,7 +466,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <option value="opencode">opencode</option>
         <option value="grok">grok</option>
         <option value="antigravity">antigravity</option>
-        <option value="deepagents">deepagents</option>
+        <option value="deepagents">agentics</option>
       </select></div>
     <div class="row"><label>语言模型</label>
       <select id="am-model" style="flex:1"></select>
@@ -978,7 +978,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="row"><label>轮次上限</label>
       <input type="number" id="conc-turns" min="10" max="1000" step="10" style="width:90px">
     <button type="button" class="info-btn" data-info="conc-info-turns" title="说明">i</button></div>
-    <div class="note info-note" id="conc-info-turns">单个工单内引擎的对话轮次上限,默认 250:仅对 claude 与 grok 引擎生效(headless 的 --max-turns 参数,不传则不限,这里主动设闸防失控循环);codex/pi/opencode/antigravity 引擎无此参数不受影响,deepagents 走框架自身的递归上限。撞上限时引擎会被直接切断且无法续跑,回执只显示退出码 1,已落盘的产物保留但核验与回执缺失——大批量工位(逐组选片、批量切片)一单几十组时 100 轮远远不够,如仍撞限优先调小派单批宽、其次上调本值。全局设置,保存后对后续启动的工单生效。</div>
+    <div class="note info-note" id="conc-info-turns">单个工单内引擎的对话轮次上限,默认 250:仅对 claude 与 grok 引擎生效(headless 的 --max-turns 参数,不传则不限,这里主动设闸防失控循环);codex/pi/opencode/antigravity/agentics 引擎无此参数不受影响。撞上限时引擎会被直接切断且无法续跑,回执只显示退出码 1,已落盘的产物保留但核验与回执缺失——大批量工位(逐组选片、批量切片)一单几十组时 100 轮远远不够,如仍撞限优先调小派单批宽、其次上调本值。全局设置,保存后对后续启动的工单生效。</div>
     <div class="row"><label>思考深度</label>
       <select id="conc-effort" style="width:160px">
         <option value="">引擎默认</option>
@@ -989,7 +989,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <option value="max">max</option>
       </select>
     <button type="button" class="info-btn" data-info="conc-info-effort" title="说明">i</button></div>
-    <div class="note info-note" id="conc-info-effort">思考深度(Thinking Effort)统一设置,默认「引擎默认」:派单时按当前引擎翻译成各自的推理强度参数——claude → --effort,codex → model_reasoning_effort(无 max,按 xhigh),pi → --thinking,opencode → --variant(模型没有该档位时被忽略),grok → --reasoning-effort(无 max,按 xhigh),antigravity → --effort,deepagents → reasoning_effort(仅云端/OpenRouter 渠道,本地模型不传);kimi CLI 无对应参数,不受影响。越深越稳但越慢、token 消耗越高;「引擎默认」不传任何参数,沿用各引擎自身配置(如 ~/.claude/settings.json 的 effortLevel、~/.codex/config.toml 的 model_reasoning_effort)。全局设置,对所有 Agent 生效,保存后对后续启动的工单生效。</div>
+    <div class="note info-note" id="conc-info-effort">思考深度(Thinking Effort)统一设置,默认「引擎默认」:派单时按当前引擎翻译成各自的推理强度参数——claude → --effort,codex → model_reasoning_effort(无 max,按 xhigh),pi → --thinking,opencode → --variant(模型没有该档位时被忽略),grok → --reasoning-effort(无 max,按 xhigh),antigravity → --effort,agentics → --thinking(本地模型不传);kimi CLI 无对应参数,不受影响。越深越稳但越慢、token 消耗越高;「引擎默认」不传任何参数,沿用各引擎自身配置(如 ~/.claude/settings.json 的 effortLevel、~/.codex/config.toml 的 model_reasoning_effort)。全局设置,对所有 Agent 生效,保存后对后续启动的工单生效。</div>
     <div class="row"><label>白模自检</label>
       <span style="display:flex;align-items:center;gap:8px;flex:1"><input type="checkbox" id="conc-wbcheck" checked style="flex:none;width:auto;margin:0"><span onclick="$('#conc-wbcheck').click()" style="cursor:pointer">白模调度编译后出静帧自检取景</span></span>
     <button type="button" class="info-btn" data-info="conc-info-wbcheck" title="说明">i</button></div>
@@ -1264,7 +1264,7 @@ function uiAlert(message){
 }
 const AM_MODE_LABELS={global:'跟随全局',smart_claude:'Claude 智能分配',smart_codex:'Codex 智能分配',smart_kimi:'Kimi 智能分配',smart_pi:'Pi 智能分配',smart_deepseek:'OpenCode 智能分配',smart_grok:'Grok 智能分配',smart_antigravity:'Antigravity 智能分配'};
 
-/* 顶栏「语言模型」下拉的「智能分配」选项(各引擎默认;deepagents 无此选项):
+/* 顶栏「语言模型」下拉的「智能分配」选项(各引擎默认;agentics(engine id deepagents)无此选项):
    选中→策略切 smart_<引擎>(按 Agent 任务复杂度自动分配模型),选具体模型→策略回 global 跟随全局 */
 const SMART='__smart';
 const SMART_MODE_BY_ENGINE={claude:'smart_claude',codex:'smart_codex',kimi:'smart_kimi',pi:'smart_pi',opencode:'smart_deepseek',grok:'smart_grok',antigravity:'smart_antigravity'};
@@ -1322,8 +1322,11 @@ const MODEL_OPTIONS={
   opencode:[[SMART,'智能分配'],...OPENCODE_STATIC,['','默认(CLI配置)'],['__custom','自定义…']],
   grok:[[SMART,'智能分配'],...GROK_STATIC,['','默认(CLI配置)'],['__custom','自定义…']],
   antigravity:[[SMART,'智能分配'],...AGY_STATIC,['','默认(CLI配置)'],['__custom','自定义…']],
-  deepagents:[['agentics','Agentics'],['local','本地模型'],['cloud','云端模型'],['openrouter','OpenRouter']],   // 第一层=生效渠道开关(存 genconfig);第二层 #da-model=该渠道模型,同样即选即存;API Key/端点在 🎨 生成模型 页「语言模型/DeepAgents」配置
+  deepagents:[['agentics','Agentics'],['local','本地模型'],['cloud','云端模型'],['openrouter','OpenRouter']],   // agentics 引擎(内置 pi)。第一层=生效渠道开关(存 genconfig);第二层 #da-model=该渠道模型,同样即选即存;API Key/端点在 🎨 生成模型 页「语言模型/Agentics」配置
 };
+// 云端模型 / OpenRouter 渠道 2026-10-22 起隐藏(仍是生效渠道时照常列出,与 🎨 生成模型 页标签一致)
+const DA_HIDDEN=['cloud','openrouter'];
+function daChannelOptions(){return MODEL_OPTIONS.deepagents.filter(([v])=>!DA_HIDDEN.includes(v)||v===DA_PROVIDER)}
 let DA_PROVIDER='agentics';   // deepagents 生效渠道缓存(服务端 genconfig 为准,syncDaProvider/切引擎时同步)
 let DA_MODEL='';           // 当前渠道的真实模型 ID；顶栏选项值 local/openrouter 只是渠道名
 let PI_MODEL_ERROR='';
@@ -1415,25 +1418,26 @@ async function populateModels(engine,selected=null){
   if(engine==='antigravity')await loadAgyModelOptions();
   if($('#engine').value!==engine)return;   // 等模型接口期间用户已切到其他引擎
   const sel=$('#model'); sel.innerHTML='';
-  MODEL_OPTIONS[engine].forEach(([v,label])=>{
+  const opts=engine==='deepagents'?daChannelOptions():MODEL_OPTIONS[engine];
+  opts.forEach(([v,label])=>{
     const o=document.createElement('option'); o.value=v; o.textContent=label;
     if(v===SMART)o.title=SMART_TITLES[engine]||'';
     sel.appendChild(o);
   });
-  const values=MODEL_OPTIONS[engine].map(x=>x[0]);
+  const values=opts.map(x=>x[0]);
   if(selected!==null&&values.includes(selected))sel.value=selected;
   else if(selected&&values.includes('__custom')){
     sel.value='__custom';$('#model-custom').value=selected;
   }else sel.value=engine==='deepagents'?DA_PROVIDER:MODEL_OPTIONS[engine][0][0];
   sel.title=engine==='deepagents'
-    ?'deepagents 生效渠道:Agentics/本地模型/云端模型/OpenRouter;右侧下拉选该渠道的模型,端点与 API Key 在 🎨 生成模型 页「语言模型/DeepAgents」配置'
+    ?'agentics 生效渠道:Agentics/本地模型;右侧下拉选该渠道的模型,端点与 API Key 在 🎨 生成模型 页「语言模型/Agentics」配置'
     :engine==='pi'?(PI_MODEL_ERROR?'pi 模型列表读取失败:'+PI_MODEL_ERROR:'来自当前 pi 登录凭证的可用模型')
     :engine==='opencode'?(OPENCODE_MODEL_ERROR?'opencode 模型列表读取失败:'+OPENCODE_MODEL_ERROR:'来自当前 opencode 登录凭证的可用模型')
     :engine==='codex'?(CODEX_MODEL_ERROR?'codex 模型列表读取失败:'+CODEX_MODEL_ERROR:'来自 codex CLI 官方模型目录,随 CLI 版本自动更新')
     :engine==='grok'?(GROK_MODEL_ERROR?'grok 模型列表读取失败:'+GROK_MODEL_ERROR:'来自当前 grok 登录凭证的可用模型')
     :engine==='antigravity'?(AGY_MODEL_ERROR?'antigravity 模型列表读取失败:'+AGY_MODEL_ERROR:'来自当前 antigravity 登录凭证的可用模型'):'';
   $('#model-custom').style.display=sel.value==='__custom'?'':'none';
-  renderDaModels();   // deepagents 显示第二层模型下拉,其余引擎隐藏
+  renderDaModels();   // agentics 显示第二层模型下拉,其余引擎隐藏
 }
 function getModel(){
   if($('#engine').value==='deepagents')return DA_MODEL;
@@ -1467,8 +1471,9 @@ async function restorePrefs(){
   }
   if(p.engine==='codex'&&p.model==='gpt-5.5')p.model='gpt-5.6-sol'; // 旧默认一次性迁移
   if(p.engine&&MODEL_OPTIONS[p.engine])$('#engine').value=p.engine;
-  // 首装(本地与服务端都没存过引擎):中文界面默认 kimicode(开屏随之检测并引导安装 Kimi Code),其余语言 claudecode
-  else if(!p.engine)$('#engine').value=I18N.lang==='zh'?'kimi':'claude';
+  // 首装(本地与服务端都没存过引擎):桌面端默认 agentics(内置 pi,不用安装;没登录时开屏提示登录);
+  // 网页版中文界面默认 kimicode(开屏随之检测并引导安装 Kimi Code),其余语言 claudecode
+  else if(!p.engine)$('#engine').value=window.videoagentsDesktop?'deepagents':I18N.lang==='zh'?'kimi':'claude';
   await populateModels($('#engine').value,p.model||null);
   if(p.model&&[...$('#model').options].some(o=>o.value===p.model)){
     $('#model').value=p.model;
@@ -2133,9 +2138,9 @@ $('#np-skip').onclick=async()=>{   // 后续步骤按当前值(未改即默认)�
 
 const busyAgents=()=>new Set(Object.values(RUNS).filter(r=>r.project===curProj()&&['queued','running'].includes(r.status)).map(r=>r.agent));
 
-/* ---------- deepagents 渠道/模型两层下拉 ----------
-   第一层 #model = 生效渠道(Agentics/本地模型/云端模型/OpenRouter),第二层 #da-model = 该渠道的具体模型;
-   两层都即选即写回 genconfig.deepagents,与 🎨 生成模型 页「语言模型/DeepAgents」共用同一份配置(端点/API Key 仍在该页配)。
+/* ---------- agentics(engine id deepagents,内置 pi)渠道/模型两层下拉 ----------
+   第一层 #model = 生效渠道(Agentics/本地模型;云端模型/OpenRouter 已隐藏,仍生效时照常列出),第二层 #da-model = 该渠道的具体模型;
+   两层都即选即写回 genconfig.deepagents,与 🎨 生成模型 页「语言模型/Agentics」共用同一份配置(端点/API Key 仍在该页配)。
    模型清单按渠道拉取:Agentics→/providers/agentics/models?modality=text;OpenRouter→/providers/openrouter/models?modality=text
    (text-models.js 推荐置顶);本地/云端→/providers/deepagents/models?provider=…(端点 /models,云端拉不到用内置 DeepSeek 清单)。 */
 const DA_PROVIDERS=['agentics','local','cloud','openrouter'];
@@ -2154,6 +2159,11 @@ function syncDaSelect(cfg){
   DA_MODEL=daSavedModel(DA_PROVIDER);
   if($('#engine').value!=='deepagents')return;
   const sel=$('#model');
+  const opts=daChannelOptions();
+  if([...sel.options].map(o=>o.value).join()!==opts.map(x=>x[0]).join()){   // 生效渠道进出隐藏名单时重排第一层
+    sel.innerHTML='';
+    opts.forEach(([v,label])=>{const o=document.createElement('option');o.value=v;o.textContent=label;sel.appendChild(o)});
+  }
   sel.value=DA_PROVIDER;
   [...sel.options].forEach(o=>{const m=daSavedModel(o.value);o.title=m?`${t(o.textContent)} · ${m}`:''});
   renderDaModels();
@@ -2176,7 +2186,7 @@ function renderDaModels(){
   sel.style.display='';
   sel.title=DA_LIST_ERR[p]
     ?t('模型列表读取失败:')+DA_LIST_ERR[p]+'('+t('仍可选「自定义…」手填模型 ID')+')'
-    :t('deepagents 当前渠道的模型:即选即写入 🎨 生成模型 页「语言模型/DeepAgents」,两处同步');
+    :t('agentics 当前渠道的模型:即选即写入 🎨 生成模型 页「语言模型/Agentics」,两处同步');
 }
 async function loadDaModels(p,refresh=false){
   if(DA_LISTS[p]&&!refresh)return;
@@ -2365,7 +2375,34 @@ function engWaitDone(engine,r){
   }else engRender(engine,r);   // 终端里装好了但还没登录 → 切到登录步骤
 }
 function engClose(){engStop();$('#eng-modal').style.display='none'}
+/* agentics(engine id deepagents)是随安装包打包的 pi,不用安装:生效渠道为 Agentics 而没登录时弹窗提示登录
+   (桌面端「登录」直接走账号登录,登录后应用自动重启);内置 pi 缺失(源码版没 make install-pi)也在这里提示 */
+async function checkAgenticsEngine(){
+  let r;
+  try{r=await api(engApi('deepagents','availability'))}
+  catch(e){return}
+  if(r.available&&r.logged_in!==false)return;
+  if($('#engine').value!=='deepagents')return;   // 检测期间用户又切了引擎
+  engStop();
+  ENG.engine='deepagents';ENG.av=r;
+  $('#eng-err').textContent='';$('#eng-status').textContent='';
+  $('#eng-log').style.display='none';$('#eng-cmd').style.display='none';
+  const bridge=desktopAuthBridge();
+  if(!r.available){
+    $('#eng-title').textContent='⚠️ '+t('未找到内置的 Agentics 引擎');
+    $('#eng-note').textContent=r.error||'';
+    engShowButtons({});
+  }else{
+    $('#eng-title').textContent='🔑 '+t('登录后即可开始使用');
+    $('#eng-note').textContent=bridge
+      ?t('Agentics 引擎使用你的 VideoAgents 账号调用语言模型,登录账号后即可开始使用。')
+      :t('Agentics 引擎使用 VideoAgents 账号调用语言模型,需要在 VideoAgents 桌面版登录后使用;也可在 🎨 生成模型 页「语言模型/Agentics」改用本地模型。');
+    engShowButtons({login:!!bridge});
+  }
+  $('#eng-modal').style.display='flex';
+}
 async function checkEngineCli(engine){
+  if(engine==='deepagents')return checkAgenticsEngine();
   const info=ENGINE_CLI[engine];if(!info)return;
   let r;
   try{r=await api(engApi(engine,'availability'))}
@@ -2400,6 +2437,13 @@ $('#eng-term').onclick=async()=>{
 };
 $('#eng-login').onclick=async()=>{
   const engine=ENG.engine,info=ENGINE_CLI[engine];
+  if(engine==='deepagents'){   // agentics:桌面端账号登录,登录成功后应用自动重启
+    const bridge=desktopAuthBridge();if(!bridge)return;
+    $('#eng-err').textContent='';
+    try{if(!await bridge.login())$('#eng-status').textContent=t('已取消登录')}
+    catch(e){$('#eng-err').textContent=t('操作失败:')+(e.message||e)}
+    return;
+  }
   try{
     await api(engApi(engine,'login'),{});
     $('#eng-err').textContent='';
@@ -2409,6 +2453,7 @@ $('#eng-login').onclick=async()=>{
 };
 $('#eng-recheck').onclick=async()=>{
   const engine=ENG.engine,info=ENGINE_CLI[engine];
+  if(engine==='deepagents'){engClose();checkAgenticsEngine();return}
   if(!info){engClose();return}
   let r=null;try{r=await api(engApi(engine,'availability'))}catch(e){}
   if(!r||(r.available&&r.logged_in!==false)){engClose();return}
@@ -3330,7 +3375,7 @@ function nsfwRender(d){
     :(d.judge?t('⚠ 审核模型现在不可用,运行里只按拒绝套话判'):t('未配置审核模型:先到「🎨 生成模型」页「🛡 审核模型」配置'))+(jm.error?' ('+jm.error+')':'');
   $('#nsfw-st').textContent=d.enabled?t('✓ 已开启:标记 NSFW 的工单/分镜组改走备用模型'):t('已关闭:全部按主模型执行');
   $('#nsfw-body').style.opacity=d.enabled?'1':'.55';
-  nsfwOpt($('#nsfw-t-engine'),(d.engines||[]).map(e=>({id:e,label:e==='claude'?'claudecode':e==='kimi'?'kimicode':e})),d.text.engine,t('不设置'));
+  nsfwOpt($('#nsfw-t-engine'),(d.engines||[]).map(e=>({id:e,label:e==='claude'?'claudecode':e==='kimi'?'kimicode':e==='deepagents'?'agentics':e})),d.text.engine,t('不设置'));
   // MiniMax 界面隐藏(2026-09-30,同「生成模型」页):已选中的仍显示
   nsfwOpt($('#nsfw-i-prov'),(d.image_channels||[]).filter(c=>c.id!=='minimax'||d.image.provider==='minimax').map(c=>({id:c.id,label:t(NSFW_PROV_NAMES[c.id]||c.id)+(c.configured?'':' '+t('(未配 Key)')),disabled:!c.configured})),d.image.provider,t('不设置'));
   nsfwOpt($('#nsfw-v-prov'),(d.video_providers||[]).filter(c=>c.id!=='minimax'||d.video.provider==='minimax').map(c=>({id:c.id,label:t(NSFW_PROV_NAMES[c.id]||c.id)+(c.configured?'':' '+t(c.id==='agentics'?'(未登录)':'(未配 Key)')),disabled:!c.configured})),d.video.provider,t('不设置'));
@@ -3944,9 +3989,11 @@ function amEffective(id){
   return AGENT_MODELS.overrides[id]||AGENT_MODELS.defaults[id]
     ||{engine:'',model:''};
 }
+// 引擎 id → 界面名(deepagents 即内置 pi 的 agentics 引擎,id 沿用旧名)
+function engName(e){return e==='deepagents'?'agentics':e}
 function amLabel(id){
   const c=amEffective(id);
-  return c.engine?`${c.engine}·${c.model||t('默认')}`:t('全局');
+  return c.engine?`${engName(c.engine)}·${c.model||t('默认')}`:t('全局');
 }
 function updateModelBtn(){
   if(!CURRENT)return;
@@ -3985,7 +4032,7 @@ async function openAmModal(){
   await amPopulateModels(c.engine||'',c.model||'');
   const d=AGENT_MODELS.defaults[CURRENT]||{};
   $('#am-note').textContent=I18N.f('该 Agent 策略默认(语言模型:{m}):',{m:t(AM_MODE_LABELS[AM_MODE]||AM_MODE)})
-    +(d.engine?`${d.engine}·${d.model||t('默认')}`:t('跟随全局'))
+    +(d.engine?`${engName(d.engine)}·${d.model||t('默认')}`:t('跟随全局'))
     +(AGENT_MODELS.overrides[CURRENT]?t('(当前使用单独配置)'):t('(当前生效)'));
 }
 $('#btn-models').onclick=openAmModal;
@@ -4089,7 +4136,7 @@ function renderRuns(){
     const par=r.parent?`<span class="parent">${esc(I18N.f('↳ 由 {name} 派单',{name:RUNS[r.parent]?agentName(RUNS[r.parent].agent_name):t('总制片')}))}</span> `:'';
     const usage=(r.cost?' · $'+r.cost:'')+(r.tokens?' · '+Math.round(r.tokens/1000)+'k tok':'');
     const stoppable=['queued','running'].includes(r.status);
-    const engLabel=r.engine?(r.engine+(r.model?' · '+r.model:'')):'';
+    const engLabel=r.engine?(engName(r.engine)+(r.model?' · '+r.model:'')):'';
     // 视频提示词技能 chip(仅 prompt 工位运行带 skill 字段):本项目生效技能;运行结束核出漏读时红色 ✗
     const skillChip=r.skill===undefined?'':(r.skill
       ?`<span class="skill${r.skill_read===false?' bad':''}" title="${esc(r.skill_read===false?t('本次运行未读取技能文件,已按机检退回'):t('本项目生效的视频提示词技能'))}">🧰 ${esc(r.skill)}${r.skill_read===false?' ✗':''}</span>`

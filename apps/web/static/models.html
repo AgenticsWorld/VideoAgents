@@ -236,7 +236,7 @@ button:disabled{opacity:.5;cursor:default}
     </div>
   </div>
   <div class="card" id="card-text">
-    <h2>🧩 语言模型/DeepAgents</h2>
+    <h2>🧩 语言模型/Agentics</h2>
     <div class="tabs" id="text-tabs">
       <div class="tab" id="tab-text-agentics">Agentics</div>
       <div class="tab" id="tab-text-local">本地模型</div>
@@ -435,7 +435,8 @@ const SECTIONS={
   tts:{providers:['agentics','openrouter','volcengine','elevenlabs','minimax','comfyui']},
 };
 /* 界面隐藏的渠道标签(面板仍构建、配置照常读写;已生效的渠道仍显示,免得选中项看不见;生效渠道下拉同理) */
-const HIDDEN_TABS={image:['minimax'],video:['minimax']};
+// 隐藏的渠道标签:仍是生效渠道时照常显示(见 chanView)。语言模型的云端模型 / OpenRouter 2026-10-22 起隐藏
+const HIDDEN_TABS={image:['minimax'],video:['minimax'],text:['cloud','openrouter']};
 /* Eleven Music(POST /v1/music):BGM 配乐渠道,时长可指定(3–600s)或模型自定 */
 const EL_MUSIC_MODELS=[
   ['music_v1','Eleven Music v1(官方默认)'],
@@ -1346,7 +1347,7 @@ async function showWfDoc(sel,custom){
   }
 }
 
-/* ---------- deepagents 语言模型(AgenticsLLM / 本地/云端 OpenAI 兼容端点 / OpenRouter) ---------- */
+/* ---------- 语言模型/Agentics(agentics 引擎 = 内置 pi;配置键沿用 deepagents):AgenticsLLM / 本地/云端 OpenAI 兼容端点 / OpenRouter ---------- */
 const TEXT_TABS={agentics:'Agentics',local:'本地模型',cloud:'云端模型',openrouter:'OpenRouter'};
 /* 云端渠道默认模型(DeepSeek 官方端点;测试连接后替换为端点实际列表) */
 const CLOUD_MODELS=TEXT_MODEL_LISTS.cloud;   // 见 text-models.js
@@ -1376,7 +1377,7 @@ function buildDeepagents(){
   // OpenRouter 面板复用图像/视频的 openrouter 构建逻辑(ids: text-or-*)
   $('#panel-text-openrouter').replaceWith(buildPanel('text','openrouter'));
   chanInit('text',{card:'#card-text',list:Object.keys(TEXT_TABS),label:p=>TEXT_TABS[p],
-    tab:p=>$(`#tab-text-${p}`),panel:p=>$(`#panel-text-${p}`)});
+    tab:p=>$(`#tab-text-${p}`),panel:p=>$(`#panel-text-${p}`),hidden:HIDDEN_TABS.text});
 }
 
 /* ---------- 审核模型(2026-10-20,NSFW 模式的拒绝判定):TypeSafe 决策模型 Jev,走 OpenRouter Decisions API
@@ -1948,7 +1949,7 @@ function loadIntoForm(){
   loadModerationForm();
 }
 
-/* deepagents 段单独装载:控制台顶栏(引擎选 deepagents 时的渠道/模型两层下拉)也会即选即写这段配置,
+/* deepagents 段单独装载:控制台顶栏(引擎选 agentics 时的渠道/模型两层下拉)也会即选即写这段配置,
    本页在切回可见时重读服务端并按需刷新,避免带着旧值保存把顶栏的选择覆盖回去 */
 function loadDeepagentsForm(){
   const da=CFG.deepagents||{},aa=da.agentics||{},lo=da.local||{},cl=da.cloud||{},or=da.openrouter||{};

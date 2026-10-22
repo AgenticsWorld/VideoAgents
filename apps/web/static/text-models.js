@@ -1,5 +1,5 @@
-/* 文本(语言)模型清单(deepagents 引擎各渠道,2026-09-11 自 models.html 抽出):「生成模型」页 models.html
- * 与控制台顶栏 index.html(引擎选 deepagents 时的渠道/模型两层下拉)共用,改这里两处同时生效。
+/* 文本(语言)模型清单(agentics 引擎各渠道,配置键沿用 deepagents;2026-09-11 自 models.html 抽出):「生成模型」页 models.html
+ * 与控制台顶栏 index.html(引擎选 agentics 时的渠道/模型两层下拉)共用,改这里两处同时生效。
  * [模型 id, 说明];openrouter 为推荐置顶清单(完整目录另拉 /providers/openrouter/models?modality=text);
  * cloud 为云端渠道默认清单(DeepSeek 官方端点;端点实际列表另拉 /providers/deepagents/models?provider=cloud)。 */
 window.TEXT_MODEL_LISTS={
