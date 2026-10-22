@@ -422,6 +422,44 @@ def test_cli_doctor_runs_without_gl():
     assert r.returncode == 0 and any(x["name"] == "hdri" for x in json.loads(r.stdout))
 
 
+def test_sheet_labels_use_cjk_font_and_pixel_truncation(tmp_path, monkeypatch):
+    """#150:联系表标签用中文字体画(不落到 PIL 位图默认字体成方块),超宽按像素截断并以「…」收尾。"""
+    from PIL import Image, ImageDraw, ImageFont
+
+    from modules import whitebox_subtitles as ws
+    from modules.codevideo import render as R
+    cjk = next((f for f in ws.FONT_CANDIDATES if Path(f).is_file()), None)
+    if not cjk:
+        pytest.skip("本机没有候选中文字体")
+    monkeypatch.setattr(ws, "ROOT", tmp_path)                 # data/fonts/ 为空:只走候选字体
+    monkeypatch.setattr(ws, "FONT_CANDIDATES", [cjk])
+    drawn = []
+    orig = ImageDraw.ImageDraw.text
+
+    def rec(self, xy, text, *a, **kw):
+        drawn.append((text, kw.get("font")))
+        return orig(self, xy, text, *a, **kw)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "text", rec)
+    imgs = []
+    for k in range(3):
+        p = tmp_path / f"f{k}.jpg"
+        Image.new("RGB", (160, 90), (40 * k, 60, 90)).save(p)
+        imgs.append(p)
+    long_cn = "SC01 S01 · wide · 2.5s · " + "主角推开仓库大门,逆光里尘埃翻飞,镜头缓缓推近到他的侧脸" * 3
+    labels = [long_cn, "SC02 S03 · close · 1.0s · 短", "x" * 300]
+    out = R.sheet(tmp_path / "sheet.jpg", imgs, cols=3, width=320, labels=labels)
+    assert out.is_file() and len(drawn) == 3
+    probe = ImageDraw.Draw(Image.new("RGB", (8, 8)))
+    for (text, font), src in zip(drawn, labels):
+        assert isinstance(font, ImageFont.FreeTypeFont) and str(font.path) == cjk
+        assert probe.textlength(text, font=font) <= 320 - 12
+    assert drawn[0][0].endswith("…") and drawn[0][0].startswith("SC01 S01 · wide")
+    assert drawn[1][0] == labels[1]                            # 放得下原样
+    assert drawn[2][0].endswith("…") and len(drawn[2][0]) > 20  # 英文按像素宽能放更多字,不是固定字符数
+    assert R.fit_label(probe, "多行\n内容", drawn[0][1], 300) == "多行 内容"
+
+
 def test_demo_requires_treatment(tmp_path):
     from modules.codevideo import project as P
     base = tmp_path / "p"

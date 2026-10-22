@@ -116,20 +116,49 @@ def stills(base: Path, times: list[float], out_dir: Path | None = None, size=Non
     return asyncio.run(_stills(base, times, out_dir or base / NS / "stills", size, prefix))
 
 
+SHEET_LABEL_H = 22          # 联系表每格上方标签条高(px)
+SHEET_LABEL_PX = 15         # 标签字号
+
+
+def fit_label(draw, text: str, font, max_w: int) -> str:
+    """标签按像素宽截断:放得下原样返回,放不下截到能放下为止再接「…」(中文与英文宽度不同,不按字符数截)。"""
+    text = " ".join(str(text).split())
+    if draw.textlength(text, font=font) <= max_w:
+        return text
+    lo, hi = 0, len(text)
+    while lo < hi:                      # 最长的、接上「…」后不超宽的前缀
+        mid = (lo + hi + 1) // 2
+        if draw.textlength(text[:mid].rstrip() + "…", font=font) <= max_w:
+            lo = mid
+        else:
+            hi = mid - 1
+    return text[:lo].rstrip() + "…"
+
+
 def sheet(out: Path, images: list[Path], cols: int = 4, width: int = 480, labels: list[str] | None = None) -> Path:
     from PIL import Image, ImageDraw
+
+    from modules.whitebox_subtitles import find_font     # data/fonts/ > 系统中文字体 > PIL 默认(与白模字幕、动态样片同一套)
     if not images:
         raise CodeVideoError("联系表没有图")
     im0 = Image.open(images[0])
     h = width * im0.height // im0.width
     rows = (len(images) + cols - 1) // cols
-    canvas = Image.new("RGB", (cols * width, rows * (h + 22)), (20, 20, 24))
+    lh = SHEET_LABEL_H
+    canvas = Image.new("RGB", (cols * width, rows * (h + lh)), (20, 20, 24))
     d = ImageDraw.Draw(canvas)
+    font = find_font(SHEET_LABEL_PX)
+    try:
+        top, bottom = font.getbbox("Ag中")[1::2]
+    except Exception:
+        top, bottom = 0, 11
+    dy = max(0, (lh - (bottom - top)) // 2 - top)
     for k, f in enumerate(images):
         im = Image.open(f).convert("RGB").resize((width, h))
-        x, y = (k % cols) * width, (k // cols) * (h + 22)
-        canvas.paste(im, (x, y + 22))
-        d.text((x + 6, y + 5), (labels[k] if labels else f.stem)[:70], fill=(230, 230, 230))
+        x, y = (k % cols) * width, (k // cols) * (h + lh)
+        canvas.paste(im, (x, y + lh))
+        label = fit_label(d, labels[k] if labels else f.stem, font, width - 12)
+        d.text((x + 6, y + dy), label, font=font, fill=(230, 230, 230))
     out.parent.mkdir(parents=True, exist_ok=True)
     canvas.save(out, quality=88)
     return out
@@ -409,7 +438,7 @@ def board(base: Path, keys: list[str] | None = None, log=print) -> dict:
                                          "model": slug or "codevideo", "mode": "code", "t": round(t, 3),
                                          "note": f"{sec['id']}/{sh['id']} @ {t:.2f}s"})
     labels = [f"{sec['scene_no']} {sh['shot_id']} · {sh.get('size') or ''} · {(sh['f1'] - sh['f0']) / tl['fps']:.1f}s · "
-              f"{(sh.get('content') or '')[:40]}" for _, _, _, sec, sh in rows]
+              f"{sh.get('content') or ''}" for _, _, _, sec, sh in rows]       # 超宽由 sheet 按像素截断
     sh_path = sheet(d / "board_sheet.jpg", [r[1] for r in rows], cols=3, width=560, labels=labels)
     log(f"✓ 故事板 {len(rows)} 镜 → {d.relative_to(base)}/(联系表 {sh_path.relative_to(base)})")
     return {"shots": [r[0] for r in rows], "sheet": sh_path.relative_to(base).as_posix()}
