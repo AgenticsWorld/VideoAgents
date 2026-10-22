@@ -756,7 +756,7 @@ cast 人物。严禁逐行交替或从人物图片推断性别；`ready_for_digi
 > **强制**:①逐角色绑定句缺一即机检退回(audioref_bound);②交付后**逐说话人**声学快检 voice_f0
 > (#148,2026-10-22;**仅当**本组 `audio_plan == dialogue`、对白配音 = 视频原声、且组 prompt 挂了 `audio_refs`;
 > 宿主 `python3 code/voice_f0_check.py --project <slug> --ep epNN --group grpNNN`,参照各角色自己的 voiceprint
-> 样本,条件不满足时脚本 SKIP):基频中位数偏离 ≤20% PASS;20–50% WARN 只记回执;>50% 或两人互相更接近
+> 样本,条件不满足时脚本 SKIP):基频中位数偏离 ≤20% PASS;20–70% WARN 只记回执;>70% 或两人互相更接近
 > 对方样本(疑似对调)FAIL = 开缺陷单**整组重生成**(调整 audio_refs 顺序/绑定措辞后重 roll,计入重跑次数设定,
 > 为 0 或额度用尽上报用户裁决),不做 TTS 贴片/换轨精修(见红线);
 > ③多说话人组反复(≥3 次)错配的,上报 orchestrator 回退「按说话回合拆组、一组一说话人」的

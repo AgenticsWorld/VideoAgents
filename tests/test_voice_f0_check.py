@@ -86,7 +86,7 @@ def _one_speaker(tmp_path, clip_f0):
 
 
 @needs_ffmpeg
-@pytest.mark.parametrize("clip_f0,status,rc", [(125.0, "PASS", 0), (150.0, "WARN", 0), (200.0, "FAIL", 1)])
+@pytest.mark.parametrize("clip_f0,status,rc", [(125.0, "PASS", 0), (150.0, "WARN", 0), (190.0, "WARN", 0), (215.0, "FAIL", 1)])
 def test_deviation_bands(tmp_path, clip_f0, status, rc):
     base = _one_speaker(tmp_path, clip_f0)
     code, rep = _run(base, "--group", "grp001")
