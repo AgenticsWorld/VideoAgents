@@ -97,7 +97,8 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
-- 有台词角色(tier=main)样本覆盖率 100%(逐年龄形态);**样本时长 ∈ [3,5]s(超 5s=FAIL:两段配对即撞方舟 15.2s 总时长硬限,§8A)**;纯人声(无背景音)。
+- **voiceprint_coverage_main_100**:有台词角色(tier=main)样本覆盖率 100%(逐年龄形态;集级 p8-voiceprints 按本集说话角色×出场形态核对)。
+- **sample_duration_3_5s**:样本时长 ∈ [3,5]s(**超 5s=FAIL:两段配对即撞方舟 15.2s 总时长硬限,§8A**);纯人声(无背景音)。
 - **casting_bound**:每段样本的(角色,variant,tts_model,tts_voice)与 casting.json 条目一致,缺条目即 FAIL。
 - **casting_gender_match(2026-07-20)**:casting 条目的 tts_voice 在音色库中的性别标签与 voice.json 的 `gender`(有 presented_gender 按呈现口径)不符即 FAIL;音色库无性别标签的音色须人工听辨确认后在条目备注 `gender_verified: true`。
 - **voice_collision**:同 tts_voice 分给两个有台词角色而无 collision_waiver 登记即 FAIL;**同组两说话人共用音色一律 FAIL**(waiver 也不豁免——两人样本同嗓,模型无从区分)。
@@ -108,7 +109,7 @@ instruction: |
 
 ## 校验与返工
 
-- 验收方:机检(voiceprint_coverage_main_100 + casting_bound + voice_collision)+ `11-qa/audio-qa` 抽检。
+- 验收方:机检(voiceprint_coverage_main_100 + sample_duration_3_5s + casting_bound + voice_collision,与 workflow.yaml p8-voiceprints 的 validation.auto 同名)+ `11-qa/audio-qa` 抽检。
 - 不过时:带意见退回重做(最多 3 次)→ 升级人工;声纹设定本身与人设矛盾时,上报 orchestrator 改派 `03-characters/voiceprint`,不自行改设定。
 - 发现设定冲突(声纹与人设/剧情矛盾):上报 `memory-bible`,禁止擅自改 Bible。
 
