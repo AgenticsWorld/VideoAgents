@@ -59,7 +59,7 @@ def test_install_plans_use_official_commands(monkeypatch):
         "codex": "curl -fsSL https://chatgpt.com/codex/install.sh | sh",
         "kimi": "curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash",
         "pi": "curl -fsSL https://pi.dev/install.sh | sh",
-        "opencode": "curl -fsSL https://opencode.ai/install | bash",
+        "opencode": "curl -fsSL https://opencode.ai/v2/install | bash",   # OpenCode 2(旧脚本拒装 2.x)
         "grok": "curl -fsSL https://x.ai/cli/install.sh | bash",
         "antigravity": "curl -fsSL https://antigravity.google/cli/install.sh | bash",
     }
@@ -80,7 +80,7 @@ def test_install_plans_windows(monkeypatch):
     assert es.install_plan("opencode", windows=True) == {"unsupported": "need_node"}   # 无官方 ps1、无 npm
     monkeypatch.setattr(es.shutil, "which", lambda name: r"C:\node\npm.cmd" if name == "npm" else None)
     oc = es.install_plan("opencode", windows=True)
-    assert oc["argv"] == [r"C:\node\npm.cmd", "install", "-g", "opencode-ai"]
+    assert oc["argv"] == [r"C:\node\npm.cmd", "install", "-g", "@opencode/cli"]   # 2.x 的 npm 包
     assert oc["terminal_line"].startswith("call ")
 
 

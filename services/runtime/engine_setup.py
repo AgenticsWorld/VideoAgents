@@ -32,6 +32,8 @@ from collections import deque
 from pathlib import Path
 from typing import Callable
 
+from services.runtime import opencode_cli
+
 IS_WIN = os.name == "nt"
 
 # 官方安装命令(2026-10-09 逐个下载脚本核对过安装位置与交互行为):
@@ -49,8 +51,11 @@ INSTALLERS: dict[str, dict] = {
              "ps1": "https://code.kimi.com/kimi-code/install.ps1"},
     "pi": {"sh": ("https://pi.dev/install.sh", "sh"),
            "ps1": "https://pi.dev/install.ps1"},
-    "opencode": {"sh": ("https://opencode.ai/install", "bash"),
-                 "npm": "opencode-ai"},
+    # 2026-10-22 改装 OpenCode 2:旧脚本 opencode.ai/install 只装 1.x(拒装 2.x),旧 npm 包
+    # opencode-ai 停在 1.x;v2 脚本装到同一 ~/.opencode/bin/opencode,无 install.ps1(404)。
+    # 1.x 与 2.x 的对接差异见 opencode_cli
+    "opencode": {"sh": ("https://opencode.ai/v2/install", "bash"),
+                 "npm": "@opencode/cli"},
     "grok": {"sh": ("https://x.ai/cli/install.sh", "bash"),
              "ps1": "https://x.ai/cli/install.ps1"},
     # 2026-10-20 核对:装到 ~/.local/bin/agy(Windows %LOCALAPPDATA%\agy\bin\agy.exe),无交互提问
@@ -75,7 +80,8 @@ BIN_FALLBACKS_WIN: dict[str, tuple[tuple[str, str], ...]] = {
     "codex": (("LOCALAPPDATA", r"Programs\OpenAI\Codex\bin\codex.exe"),),
     "kimi": (("USERPROFILE", r".kimi-code\bin\kimi.exe"),),
     "pi": (("APPDATA", r"npm\pi.cmd"), ("USERPROFILE", r".pi\agent\bin\pi.cmd")),
-    "opencode": (("APPDATA", r"npm\opencode.cmd"),),
+    # npm 垫片;Git Bash 里跑 v2 安装脚本则装到 ~/.opencode/bin/opencode.exe
+    "opencode": (("APPDATA", r"npm\opencode.cmd"), ("USERPROFILE", r".opencode\bin\opencode.exe")),
     "grok": (("USERPROFILE", r".grok\bin\grok.exe"),),
     "antigravity": (("LOCALAPPDATA", r"agy\bin\agy.exe"),),
 }
@@ -447,6 +453,14 @@ def _login_status(engine: str, exe: str | None) -> dict:
             return {"logged_in": None, "method": "env"}
         return {"logged_in": False, "method": ""}
     if engine == "opencode":
+        if exe and opencode_cli.is_v2(exe):
+            # 2.x 凭证存 opencode.db(1.x 的 auth.json 升级时导入一次后不再更新,不能当依据)
+            ents = opencode_cli.auth_list(exe)
+            if ents is None:
+                return {"logged_in": None, "method": ""}
+            ids = sorted(str(e.get("id") or "") for e in ents
+                         if isinstance(e, dict) and e.get("connections"))
+            return {"logged_in": bool(ids), "method": ",".join(ids)[:80]}
         data = Path(os.environ["XDG_DATA_HOME"]) if os.environ.get("XDG_DATA_HOME") else home / ".local" / "share"
         auth = _read_json(data / "opencode" / "auth.json")
         if isinstance(auth, dict) and auth:
@@ -556,6 +570,8 @@ def install_lines(label: str, display: str, zh: bool) -> list[str]:
 
 def login_command_line(engine: str, exe: str, windows: bool = IS_WIN) -> str:
     argv = [exe, *LOGIN_ARGS.get(engine, ())]
+    if engine == "opencode" and opencode_cli.is_v2(exe):
+        argv.append("--standalone")   # 2.x 不为登录拉起常驻后台服务(1.x 不认该参数)
     if windows:
         return "call " + subprocess.list2cmdline(argv)   # .cmd 垫片(npm 装的 pi/opencode)须 call
     return shlex.join(argv)

@@ -1080,7 +1080,8 @@ def run_engine_vision(image_path: Path, prompt: str, spec: dict, cwd: Path,
                       timeout: int = 240) -> dict:
     """用当前默认 CLI 引擎做一次性画面分析,返回 {"text": 纯文本回答, "_meta": {...}}。
 
-    spec = {"engine", "model", "executable", "permission_mode", "agentics": {cmd, env} 或 {error}}
+    spec = {"engine", "model", "executable", "permission_mode", "agentics": {cmd, env} 或 {error},
+            "standalone"(opencode 2.x 才有)}
     claude/kimi/grok/opencode/pi:提示词里给图片绝对路径,由 CLI 自带的文件读取工具看图;
     codex:走 `--image` + `-o` 取最后一条消息;deepagents(界面名 Agentics,内置 pi):宿主备好的
     pi 命令与环境(core.footage_engine_spec,模型按可看图声明;所选模型不支持图片时由渠道报错);
@@ -1107,7 +1108,11 @@ def run_engine_vision(image_path: Path, prompt: str, spec: dict, cwd: Path,
         elif engine == "kimi":
             cmd = [exe, "--output-format", "stream-json"] + (["-m", model] if model else []) + ["-p", prompt]
         elif engine == "opencode":
-            cmd = [exe, "run", "--format", "json", "--auto"] + (["-m", model] if model else []) + [prompt]
+            # 2.x(spec.standalone):私有子服务器;工作目录按 PWD 定,stdin 非终端时先读到 EOF
+            cmd = [exe, "run", "--format", "json", "--auto"] + (["--standalone"] if spec.get("standalone") else []) \
+                + (["-m", model] if model else []) + [prompt]
+            env["PWD"] = str(cwd)
+            stdin_data = b""
         elif engine == "grok":
             cmd = [exe, "-p", prompt, "--output-format", "streaming-messages-json", "--always-approve",
                    "--max-turns", "8"] + (["-m", model] if model else [])

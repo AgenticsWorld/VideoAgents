@@ -48,6 +48,7 @@ from modules import refusal_judge as _refusal_judge
 from services.runtime import rhythm as narrative_rhythm
 from services.runtime import project_types
 from services.runtime import engine_setup
+from services.runtime import opencode_cli
 from services.runtime import dagcheck
 
 # ---------------- 配置 ----------------
@@ -268,7 +269,8 @@ CONFIRM_TIMEOUT_MIN, CONFIRM_TIMEOUT_MAX = 5, 3600
 #   claude   --effort <level>                    (low/medium/high/xhigh/max 原样)
 #   codex    -c model_reasoning_effort=<level>   (无 max,max→xhigh)
 #   pi       --thinking <level>                  (原样)
-#   opencode --variant <level>                   (模型无该 variant 时由 opencode 忽略)
+#   opencode --variant <level>                   (1.x;模型无该 variant 时由 opencode 忽略)
+#            -m <model>#<level>                  (2.x;只拼模型支持的档位,见 opencode_cli.model_ref)
 #   grok     --reasoning-effort <level>          (low/medium/high/xhigh,无 max,max→xhigh)
 #   antigravity --effort <level>                 (low/medium/high/xhigh/max 原样,实测 1.4.3 帮助)
 #   deepagents(Agentics,内置 pi)--thinking <level>(本地模型渠道不传)
@@ -2713,7 +2715,7 @@ _OPENROUTER_TTL = 600
 #   留空自动读本机 kimi CLI 登录凭证),usage=周配额,limits[](300min 窗口)=5h 会话配额。
 # opencode:OpenCode Go 订阅用量 GET opencode.ai/zen/go/v1/usage(额度按美元计,
 #   5 小时/周/月三窗口,面板取 5h→Session、周→Weekly);Key 在设置里配,留空自动读
-#   本机 opencode 登录凭证 auth.json。
+#   本机 opencode 登录凭证(2.x 存 opencode.db,经 auth export 读;1.x 为 auth.json)。
 CODEX_SESSIONS_DIR = Path.home() / ".codex" / "sessions"
 CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 KIMI_USAGE_URL = "https://api.kimi.com/coding/v1/usages"
@@ -2987,7 +2989,8 @@ _OPENCODE_SNAPSHOT_MAX_AGE = 24 * 3600
 
 def opencode_models_stale(env: dict[str, str]) -> bool:
     """models.json 快照缺失或超过一天:`opencode models` 自身的后台刷新不可靠(实测锁目录
-    可写后连跑数次仍沿用 11 天前的快照),须显式 --refresh 才能看到新上线模型。"""
+    可写后连跑数次仍沿用 11 天前的快照),须显式 --refresh 才能看到新上线模型。仅 1.x:
+    2.x 不写该快照、不认 --refresh。"""
     snapshot = Path(env.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "opencode" / "models.json"
     try:
         return time.time() - snapshot.stat().st_mtime > _OPENCODE_SNAPSHOT_MAX_AGE
@@ -2996,11 +2999,17 @@ def opencode_models_stale(env: dict[str, str]) -> bool:
 
 
 def _opencode_go_key() -> str | None:
-    """OpenCode Go API Key:设置里配置的优先;留空时读本机 opencode 登录凭证
-    (auth.json 里 provider 名含 opencode 的条目,常见字段名逐个尝试)。"""
+    """OpenCode Go API Key:设置里配置的优先;留空时读本机 opencode 登录凭证——2.x 存
+    opencode.db(auth export 读);1.x 的 auth.json 里 provider 名含 opencode 的条目,常见字段名
+    逐个尝试(2.x 升级上来的机器 auth.json 仍在但不再更新,排在 auth export 之后兜底)。"""
     key = (resource_cfg().get("opencode_api_key") or "").strip()
     if key:
         return key
+    exe = resolve_cli_executable("opencode")
+    if exe and opencode_cli.is_v2(exe):
+        key = opencode_cli.go_key(exe, opencode_env())
+        if key:
+            return key
     try:
         auth = json.loads((_opencode_data_dir() / "auth.json").read_text())
     except Exception:
@@ -4664,6 +4673,8 @@ async def execute_run(run: dict, message: str, model: str | None):
                       + engine_effort_args("deepagents", thinking_effort,
                                            local_endpoint=pre["da"]["provider"] == "local"))
 
+        oc_v2, oc_model = False, model   # opencode 2.x 口径与 -m 取值,起进程前按实际版本定
+
         def codex_stdin(sid: str | None) -> bytes | None:
             if engine != "codex":
                 return None
@@ -4706,9 +4717,16 @@ async def execute_run(run: dict, message: str, model: str | None):
                 # 首轮把角色说明拼进 prompt;续轮走 --session(会话已带上下文)。
                 # --auto 放行未显式拒绝的工具权限(非交互运行必需)
                 base = [cli_executable, "run", "--format", "json", "--auto"]
-                if model:
-                    base += ["-m", model]
-                base += engine_effort_args("opencode", thinking_effort)
+                if oc_v2:
+                    # 2.x:--standalone 用私有子服务器(随进程组收尾,不交给常驻后台服务);
+                    # 推理档位已并进 -m(模型不支持的档位不拼),见 opencode_cli
+                    base.append("--standalone")
+                    if oc_model:
+                        base += ["-m", oc_model]
+                else:
+                    if model:
+                        base += ["-m", model]
+                    base += engine_effort_args("opencode", thinking_effort)
                 if sid:
                     return base + ["--session", sid, skill_resume_message(message, skill_contract, True)]
                 return base + [f"{role}\n\n---\n\n## 当前工作指令\n\n{message}"]
@@ -4803,6 +4821,11 @@ async def execute_run(run: dict, message: str, model: str | None):
             env.setdefault("BASH_MAX_TIMEOUT_MS", "7200000")
         if engine == "opencode":   # 缓存目录不可写时改道,避免模型注册表过期
             env = opencode_env(env)
+            env["PWD"] = str(ROOT)   # 2.x 按 PWD 而非进程 cwd 定工作目录;服务启动目录可能不是 ROOT
+            oc_v2 = await asyncio.to_thread(opencode_cli.is_v2, cli_executable)
+            if oc_v2:
+                oc_model = await asyncio.to_thread(opencode_cli.model_ref, cli_executable,
+                                                   model, thinking_effort, env, ROOT)
         if engine == "deepagents":   # Agentics(内置 pi):配置目录 / 渠道 Key / 当 Node 跑等
             env.update(pi_env)
 
@@ -4821,14 +4844,28 @@ async def execute_run(run: dict, message: str, model: str | None):
                 system_prompt_file.write_text(role, encoding="utf-8")
             deadline = time.time() + run_timeout
             session_retried = False
+            if oc_v2 and session_id and await asyncio.to_thread(
+                    opencode_cli.session_exists, cli_executable, session_id, env, ROOT) is False:
+                # opencode 2.x 续接不存在的会话不报错、静默新建同 id 空会话(续轮 prompt 不带
+                # 角色说明),事后无从识别:起进程前预检,按会话失效回退直接换全新会话
+                session_retried = True
+                session_id = None
+                run["session_reset"] = True
+                STATE["sessions"].pop(session_key, None)
+                save_state(STATE)
             while True:
                 stdin_payload = codex_stdin(session_id)
                 run["_resume_sid"] = session_id   # 引擎处理器据此识别「续接被静默换成新会话」
                 proc = await asyncio.create_subprocess_exec(
                     *make_cmd(session_id), cwd=ROOT, env=env, limit=STREAM_LIMIT,
                     start_new_session=True,   # 独立进程组:停止时可连同其派生子进程一起杀
-                    stdin=(asyncio.subprocess.PIPE if stdin_payload is not None else None),
+                    # opencode 2.x 的 run 在 stdin 非终端时先读到 EOF 才发提示词,继承来的管道
+                    # 不关就永远卡住:不喂 stdin 的 opencode 一律接 DEVNULL
+                    stdin=(asyncio.subprocess.PIPE if stdin_payload is not None
+                           else asyncio.subprocess.DEVNULL if engine == "opencode" else None),
                     stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                if oc_v2:
+                    proc._sigint_first = True   # 停止时先 SIGINT 正式中断会话,见 _kill_proc_tree
                 RUN_PROCS[run["id"]] = proc
                 if stdin_payload is not None and proc.stdin:
                     proc.stdin.write(stdin_payload)
@@ -4900,6 +4937,15 @@ async def execute_run(run: dict, message: str, model: str | None):
                 # 宿主代等其排空,已在跑的出图/出视频不白白被杀;标记透传给调度层
                 await _drain_orphaned_children(run, proc, deadline)
                 stderr = (await stderr_task).decode("utf-8", "replace").strip()
+                if oc_v2 and run.get("session_id"):
+                    # opencode 2.x 事件流常缺本轮最后一步的 step_finish:按 session export 补记
+                    # 该步用量(落盘带 synthetic 标记,用量索引照常累加)
+                    for ev in await asyncio.to_thread(
+                            opencode_cli.missing_step_finishes, cli_executable, run["session_id"],
+                            run.get("_oc_steps") or (), env, ROOT):
+                        log_f.write(json.dumps(ev, ensure_ascii=False) + "\n")
+                        handle_opencode_event(run, ev)
+                    log_f.flush()
                 failed = ((proc.returncode != 0 and not run.get("result"))
                           or (engine in ("pi", "deepagents", "antigravity") and bool(run.get("error")))
                           or bool(run.get("_session_lost")))
@@ -5328,12 +5374,15 @@ def handle_pi_event(run: dict, obj: dict):
 
 
 def handle_opencode_event(run: dict, obj: dict):
-    """解析 opencode run --format json 的 JSONL 事件(实测 1.18)。
+    """解析 opencode run --format json 的 JSONL 事件(实测 1.18 / 2.1)。
 
     每条事件顶层带 sessionID;text 事件的 part.text 是完成的文本块(非增量);
-    工具调用 tool_use 事件 part.tool=工具名、part.state.input=参数(文件参数是
-    驼峰 filePath);step_finish 每次模型调用一条,part.tokens 计 token
-    (total 已含 cache read/reasoning;cost 免费模型恒为 0,不采)。"""
+    工具调用 tool_use 事件 part.tool=工具名、part.state.input=参数(文件参数 1.x 是
+    驼峰 filePath、2.x 是 path;2.x 的 shell / subagent 即 1.x 的 bash / task);
+    step_finish 每次模型调用一条,part.tokens 计 token(1.x 带 total,已含 cache
+    read/reasoning;2.x 无 total 按分项求和;cost 免费模型恒为 0,不采)。2.x 常缺本轮
+    最后一步的 step_finish,宿主结束后补发 synthetic 一条,已报过的步按 messageID 记在
+    _oc_steps 里防重复。2.x 的 error 是 {type, message} 对象。"""
     sid = obj.get("sessionID")
     if sid:
         run["session_id"] = sid
@@ -5350,7 +5399,8 @@ def handle_opencode_event(run: dict, obj: dict):
         inp = (part.get("state") or {}).get("input") or {}
         if isinstance(inp.get("filePath"), str) and "file_path" not in inp:
             inp = {**inp, "file_path": inp["filePath"]}
-        desc, fp = tool_summary(str(part.get("tool") or "?"), inp)
+        tool = str(part.get("tool") or "?")
+        desc, fp = tool_summary(opencode_cli.TOOL_ALIASES.get(tool, tool), inp)
         run.setdefault("activity", []).append(desc)
         if fp:
             run.setdefault("files", []).append(fp)
@@ -5368,6 +5418,8 @@ def handle_opencode_event(run: dict, obj: dict):
         run_progress(run, "💭 模型思考中…")
     elif t == "step_finish":
         run_progress(run, None)
+        if part.get("messageID"):
+            run.setdefault("_oc_steps", []).append(part["messageID"])
         tok = part.get("tokens") or {}
         total = tok.get("total")
         if not isinstance(total, (int, float)):
@@ -5377,7 +5429,10 @@ def handle_opencode_event(run: dict, obj: dict):
                 cache.get("read"), cache.get("write")))
         run["tokens"] = (run.get("tokens") or 0) + int(total or 0)
     elif t == "error":
-        run["error"] = str(obj.get("error") or part.get("error") or obj)[:500]
+        err = obj.get("error") or part.get("error") or obj
+        if isinstance(err, dict) and err.get("message"):
+            err = err["message"]
+        run["error"] = str(err)[:500]
 
 
 # Grok Build 内置工具名 → claude 同义工具名(tool_summary 按 claude 命名归类活动/产物文件)
@@ -16116,11 +16171,15 @@ async def api_opencode_models(refresh: bool = False):
     if not executable:
         raise ServiceError(503, cli_not_found_error("opencode"))
     env = opencode_env()
+    env["PWD"] = str(ROOT)
     argv = [executable, "models"]
-    if refresh or opencode_models_stale(env):   # 显式刷新 models.dev 快照(约 10s)
+    if await asyncio.to_thread(opencode_cli.is_v2, executable):
+        # 2.x 每次现拉模型目录、不认 --refresh;--standalone 免得拉起常驻后台服务
+        argv.append("--standalone")
+    elif refresh or opencode_models_stale(env):   # 1.x 显式刷新 models.dev 快照(约 10s)
         argv.append("--refresh")
     proc = await asyncio.create_subprocess_exec(
-        *argv, cwd=ROOT, env=env,
+        *argv, cwd=ROOT, env=env, stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     try:
         stdout, stderr = await asyncio.wait_for(
@@ -16325,10 +16384,10 @@ async def api_engine_login(engine: str):
     if not exe:
         raise ServiceError(409, "not_installed")
     zh = (ui_lang_code() or "zh") == "zh"
+    login_line = await asyncio.to_thread(engine_setup.login_command_line, engine, exe)   # opencode 要测版本
     script = engine_setup.terminal_script(
         engine_setup.login_lines(engine, CLI_LABELS[engine], zh),
-        engine_setup.login_command_line(engine, exe), zh,
-        path_dirs=_engine_terminal_path_dirs(exe))
+        login_line, zh, path_dirs=_engine_terminal_path_dirs(exe))
     await asyncio.to_thread(_engine_open_terminal, f"login-{engine}", script, None)
     return {"engine": engine, "opened": True}
 
@@ -17432,6 +17491,20 @@ def _kill_proc_tree(proc):
             pass
         return
 
+    if getattr(proc, "_sigint_first", False) and proc.returncode is None:
+        # opencode 2.x:SIGKILL 不释放会话的执行占用,托管后台服务下次启动会把它续跑起来
+        # (见 opencode_cli 模块说明)。先只给客户端发 SIGINT,由它在私有服务器上正式中断会话
+        # (实测 0.1s 内退出),宽限期后再兜底杀组;再次调用(已发过 SIGINT)直接杀组
+        proc._sigint_first = False
+        try:
+            os.kill(proc.pid, signal.SIGINT)
+        except Exception:
+            pass
+        else:
+            timer = threading.Timer(SIGINT_GRACE_S, _killpg_quiet, (proc.pid,))
+            timer.daemon = True
+            timer.start()
+            return
     try:
         os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
     except Exception:
@@ -17439,6 +17512,18 @@ def _kill_proc_tree(proc):
             proc.kill()
         except Exception:
             pass
+
+
+SIGINT_GRACE_S = 3
+
+
+def _killpg_quiet(pgid: int):
+    """按组 id 杀(start_new_session 起的进程组 id = 组长 pid);组已散则什么也不做。"""
+    import signal
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except Exception:
+        pass
 
 
 async def _drain_orphaned_children(run: dict, proc, deadline: float) -> None:
@@ -19215,6 +19300,8 @@ def footage_engine_spec(prepare: bool = False) -> dict:
         model = ((AM_MODE_MODELS.get(mode) or {}).get("low") or {}).get("model", "")
     spec = {"engine": engine, "model": model, "permission_mode": PERMISSION_MODE,
             "executable": resolve_cli_executable(engine) if engine != "deepagents" else None}
+    if prepare and engine == "opencode" and opencode_cli.is_v2(spec["executable"]):
+        spec["standalone"] = True   # 2.x 私有子服务器,不拉起常驻后台服务(见 opencode_cli)
     if engine == "deepagents":
         # Agentics(内置 pi):单轮看图,配置目录固定一个(各次分析写入的内容相同),模型标为可看图
         pre = agentics_preflight(model)
