@@ -8685,7 +8685,8 @@ def main():
 
     pi = sub.add_parser("image", help="生成图像")
     pi.add_argument("--prompt", required=True)
-    pi.add_argument("--output", required=True, help="输出 png 路径")
+    pi.add_argument("--output", required=True,
+                    help="输出路径(契约名 *.png;内容按渠道返回的编码原样保存,可能是 JPEG 字节,以文件头为准,不转码)")
     pi.add_argument("--negative", default="")
     pi.add_argument("--aspect", default="", help="画幅,如 16:9(与 --size 二选一)")
     pi.add_argument("--size", default="", help="精确尺寸,如 1280x720")
