@@ -276,10 +276,14 @@ def test_agentics_schema_enforces_fixed_constraints_and_profile_file_limits(tmp_
             {"reference_images": [str(tmp_path / "a.png"), str(tmp_path / "b.png")]})
 
 
-def test_agentics_generation_entrypoints_use_fixed_contract_fields(monkeypatch):
+def test_agentics_generation_entrypoints_use_fixed_contract_fields(monkeypatch, tmp_path):
     from modules import genmedia
 
     calls = []
+    # 音乐渠道由 _music_provider 直读 CONFIG_PATH(不经 get_config);不隔离会读到本机真实配置(默认代码作曲,要 --script)
+    cfg_path = tmp_path / "genconfig.json"
+    cfg_path.write_text(json.dumps({kind: {"provider": "agentics"} for kind in ("image", "video", "music")}))
+    monkeypatch.setattr(genmedia, "CONFIG_PATH", cfg_path)
     monkeypatch.setattr(genmedia, "_forbid_dispatch_layer", lambda kind: None)
     monkeypatch.setattr(genmedia, "get_config", lambda kind: {
         "provider": "agentics", "profile_code": f"{kind}-profile",
