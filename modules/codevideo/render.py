@@ -19,6 +19,8 @@ import tempfile
 import time
 from pathlib import Path
 
+from modules import file_lock
+
 from . import EP, NS, CodeVideoError, ffmpeg, upstream
 from . import timeline as TL
 from .page import FilmPage, launch, open_film
@@ -346,13 +348,18 @@ def render(base: Path, sections: list[str] | None = None, force: bool = False, w
     w = max(1, min(6, workers or workers_default()))
     log(f"渲染 {len(todo)} 段({', '.join(s['id'] for s in todo)}),{w} 个 worker,{tl['size'][0]}x{tl['size'][1]}@{tl['fps']}")
     done = asyncio.run(_render_sections(base, tl, todo, w, log))
-    led = load_ledger(base)
-    for rec in done:
-        led["sections"][rec["section"]] = {"group_id": rec["group_id"], "fingerprint": fps_now[rec["section"]],
-                                           "frames": rec["frames"], "rendered_at": rec["generated_at"],
-                                           "seconds": rec["seconds"]}
-    led["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
-    ledger_path(base).write_text(json.dumps(led, ensure_ascii=False, indent=1), encoding="utf-8")
+    # 台账读-改-写加锁、原子落盘:cv3-sec 分段工单并行 `render --section` 时各自只记自己的段,不互相覆盖
+    path = ledger_path(base)
+    with file_lock.locked(path.with_name(".render.json.lock")):
+        led = load_ledger(base)
+        for rec in done:
+            led["sections"][rec["section"]] = {"group_id": rec["group_id"], "fingerprint": fps_now[rec["section"]],
+                                               "frames": rec["frames"], "rendered_at": rec["generated_at"],
+                                               "seconds": rec["seconds"]}
+        led["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+        tmp = path.with_name(f".render.json.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(led, ensure_ascii=False, indent=1), encoding="utf-8")
+        os.replace(tmp, path)
     return {"rendered": [r["section"] for r in done], "skipped": skipped}
 
 

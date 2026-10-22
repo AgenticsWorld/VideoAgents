@@ -29,7 +29,8 @@
    立项把 `agents/workflows/codevideo.yaml` 并入 dag.json 后,按 `settings.json#project` 裁定——`storyboard_review=false` → `cv1-board` 与 `gc1`
    置 skipped(否则 cv1-board 交付后发 CVH1 签字单,附 `assets/storyboard/ep01/board_sheet.jpg` 与回执里「最没把握的点」);`narration=false` →
    `cv2-voice` 置 skipped;`code_style` 为空 → 停在 `cv0-ingest` 向用户要风格,不替用户选。`cv3-sec` 按 `directing/ep01/shot_list.json`
-   的 generation_groups 扇出(1 段 = 1 组),工单写明段 id 与时间范围、「只改 sections/<段 id>.js」。本类型不派任何视频 / 图像生成工位、
+   的 generation_groups 扇出(1 段 = 1 组),工单写明段 id 与时间范围、「只改 sections/<段 id>.js」;各段一次派齐再 `--wait-all`,
+   派单消息首行以工单号开头(`执行工单 cv3-sec-grp0010(…)`)——宿主据此让各段并行、每单全新会话,首行认不出工单号就退回串行。本类型不派任何视频 / 图像生成工位、
    不派语音转写;渲染等长命令留在 scene-coder / sound-designer 的任务内前台跑完,我不代跑 `code/codevideo.py` 的生产子命令。
 14. **p7-prompt 工单必带提示词技能契约(§7F,2026-08-28)**:派单前读项目 `settings.json#prompt_skill.effective`(H3A 签字时已冻结;缺失即视为运行时尚未解析,先让用户在视频模型设置里保存一次),instruction 首段写明「本项目生效提示词技能:`<skill_id>`(SKILL.md 路径)/ 不套用(reason)」,acceptance.auto 按 workflow.yaml 含 `prompt_skill_applied`。子任务回执状态为 error 且错误含 `prompt_skill_read FAIL`(该工位运行中没有读取 SKILL.md,宿主机检退回)= 返工流程重派:attempt 递增,指令首行写「先 Read <SKILL.md 路径> 再按其 checklist 重写并补 skill_applied」,不得跳过该工位直接派 p7-image;三次仍漏读升级用户。发起 H3A 签字时不必在问题文本里复述技能——签字弹窗自带该项。
 15. **对白时长校验修正环节必派(§7D ①′,2026-08-30)**:每集 `p6-shots` 关单后**固定派 `p6-dialogue-fit`**(01-story/dialogue-rewrite,不看 shot-planning 回执里的对白适配自查结果——那不是闸门),工单 instruction 写明「先跑 `python3 code/check_dialogue_fit.py --project <slug> --ep epNN`,PASS 直接关单;FAIL 按报告 trim_targets 只动对白文本层三处同步精简,`--write-est` 后复检」;该节点未 `passed` 不派 `p6-blocking`(表演触发词取自台词)、不得发起 H3A;回执报「3 轮仍装不下」时改派 `p6-shots` 变更单(调镜时长/拆组,标脏 p6-dialogue-fit 重跑),严禁让任何 Agent 靠压语速放行。生成 dag.json 时按 workflow.yaml 展开该节点;存量项目已定稿未签 H3A 的集补插节点(depends_on p6-shots,g6 加依赖)。

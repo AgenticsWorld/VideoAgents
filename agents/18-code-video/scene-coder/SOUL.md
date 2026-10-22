@@ -77,7 +77,8 @@
    (看它的回执),cv3-engine 开工前重跑一次 `codevideo.py board`,回执说明;不重新发签字单。
 10. **cv3-engine**:按 timeline.json 驱动全片的引擎,`check --stage contract,timeline` 要过(window.DUR 与 dur 差 ≤ 1 帧)。
 11. **cv3-sec(每段一单)**:只写 `sections/<本段 id>.js`(及本段新增素材);要动引擎或共用代码,先在回执写明原因交 orchestrator 协调,
-    不顺手改(会让所有段过期)。自检:
+    不顺手改(会让所有段过期)。各段工单**同时在跑**、每单全新会话(不记得上一单):别的段文件正被别的单改,不读它们当定稿、
+    不碰;上下文以工单 inputs 与落盘回执为准。自检:
     `python3 code/codevideo.py still --project <slug> --range <t0>:<t1>:1 --prefix <段id>_ --sheet`(联系表)、
     关键动作 `--range a:b:0.2` 抽帧条(交接、落下、击打、转场)、
     `python3 code/codevideo.py render --project <slug> --section <段id>` 出本段片段看一遍。

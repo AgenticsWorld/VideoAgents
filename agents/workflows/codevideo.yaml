@@ -298,6 +298,9 @@ phases:
         #   出本段片段看一遍(只渲本段,指纹没变自动跳过)。
         # section_module_only:本单改动只落在 sections/<本段>.js 及其新增素材;section_stills_reviewed:回执写联系表
         #   看到的问题与处置(主体太小 / 太暗 / 字幕压主体 / 转场空帧 / 跟随特效脱靶)。
+        # 并行(2026-10-22):各段工单同时派出即同时跑(额度 =「单 Agent 并发额度」),每单全新会话、不接上一单的会话——
+        #   宿主按派单消息首行的工单号认(「执行工单 cv3-sec-grp0010(…)」,或内联工单的 task_id 行),首行认不出就退回串行;
+        #   本段需要的上下文写进工单 inputs(cv3-engine 回执、TREATMENT.md 对应节…),别指望会话记忆。
         validation:
           auto: [section_module_only, deterministic, no_page_errors, section_stills_reviewed]
           rubric: visual_gen_v1

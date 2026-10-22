@@ -71,6 +71,12 @@ STATELESS_AGENTS = frozenset({
     "17-digital-human/avatar-generator",
 })
 
+# 有状态成员里「按组扇出」的工单(2026-10-22 用户拍板):工单号以这些前缀开头的运行按无状态派——每单全新会话、
+# 同 Agent 按「单 Agent 并发额度」并行;该成员其余工单(引擎 / 渲染 / 修改单…)照旧串行续会话
+FANOUT_TASK_PREFIXES = {
+    "18-code-video/scene-coder": ("cv3-sec-",),     # 每段一单,只写 sections/<段 id>.js
+}
+
 # 已并入主程序的插件包名 → 项目类型(插件名与类型 id 相同)
 INTEGRATED_PLUGINS = frozenset(t for t in TYPES if t != DEFAULT)
 

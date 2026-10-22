@@ -61,7 +61,7 @@ cv2 旁白与配乐     narrator:codevideo.py voice(逐句 TTS,旁白关时跳�
                    ∥ code-composer:代码作曲 score.py → genmedia.py music --provider code --script
                                     或 外来音乐(音乐模型 raw / 项目音乐库 / 用户音乐)→ codevideo.py music-fit
                    → film-director:codevideo.py snap 把时间轴对到拍上(cv2-beatsync,只在外来音乐时派)
-cv3 画面编程       scene-coder:引擎(cv3-engine)→ 每段 sections/<段 id>.js(cv3-sec,按组扇出)
+cv3 画面编程       scene-coder:引擎(cv3-engine)→ 每段 sections/<段 id>.js(cv3-sec,按组扇出、各段并行,每单全新会话)
                     → codevideo.py render(按段出片,指纹未变跳过)+ readcheck + events(cv3-render)
 cv4 混音与成片     sound-designer:mix.py → codevideo.py mix → CREDITS → codevideo.py master
 cv5 终审           code-video-qa:codevideo.py check --stage all + 人工级抽检
