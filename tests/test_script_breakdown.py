@@ -198,6 +198,84 @@ def test_validate_reports_schema_errors(project):
     assert ok_errors == []
 
 
+AGENT_MIN = {"schema_version": sb.SCHEMA_VERSION, "ep": "ep01", "title": "正式版",
+             "scenes": [{"no": "S01", "summary": "老者拦路", "dialogue": [{"speaker": "CHAR-0002", "text": "施主,请留步!", "est_s": 1.6}]}]}
+
+
+def test_chapter_bounds_shapes():
+    """#140:episode_plan.json chapter_range 的各种写法取首尾章节 ID;取不到回退 chapters[]。"""
+    assert sb.chapter_bounds({"start": "ch001", "end": "ch011"}) == ("ch001", "ch011")
+    assert sb.chapter_bounds({"from": "ch012", "to": "ch013"}) == ("ch012", "ch013")
+    assert sb.chapter_bounds({"start": "ch004"}) == ("ch004", "ch004")
+    assert sb.chapter_bounds(["ch001"]) == ("ch001", "ch001")
+    assert sb.chapter_bounds(["ch001", "ch002", "ch005"]) == ("ch001", "ch005")
+    assert sb.chapter_bounds("ch001-ch003") == ("ch001", "ch003")
+    assert sb.chapter_bounds("ch001#p003 - ch004#p001") == ("ch001#p003", "ch004#p001")
+    assert sb.chapter_bounds("ch012~ch020") == ("ch012", "ch020") and sb.chapter_bounds("ch-007") == ("ch-007", "ch-007")
+    assert sb.chapter_bounds(None, ["ch002", "ch005"]) == ("ch002", "ch005")
+    assert sb.chapter_bounds([], ["ch002"]) == ("ch002", "ch002") and sb.chapter_bounds({}, None) == (None, None)
+    assert sb.chapter_bounds([None, " "]) == (None, None)
+
+
+@pytest.mark.parametrize("fields, act", [
+    ({"chapter_range": ["ch001"]}, "act1"),                       # issue 原样:章节 ID 数组
+    ({"chapter_range": ["ch012", "ch013"]}, "act2"),
+    ({"chapter_range": "ch001-ch003"}, "act1"),                   # 字符串区间
+    ({"chapter_range": "ch020"}, "act2"),
+    ({"chapter_range": {"from": "ch012", "to": "ch013"}}, "act2"),
+    ({"chapters": ["ch012", "ch014"]}, "act2"),                   # 无 chapter_range:回退 chapters[]
+    ({"chapter_range": [], "chapters": ["ch012"]}, "act2"),
+])
+def test_load_accepts_chapter_range_shapes(project, fields, act):
+    plan = json.loads((project / "story/episode_plan.json").read_text(encoding="utf-8"))
+    plan["episodes"][0].pop("chapter_range")
+    plan["episodes"][0].update(fields)
+    write(project / "story/episode_plan.json", plan)
+    res = sb.load(project, "ep01")                               # 推导视图
+    assert res["source"] == "derived" and res["breakdown"]["structure"]["current_act"] == act
+    write(sb.breakdown_path(project, "ep01"), AGENT_MIN)         # 正式表 + 推导补块
+    res = sb.load(project, "ep01")
+    assert res["source"] == "agent" and res["errors"] == [] and res["breakdown"]["structure"]["current_act"] == act
+    assert sb.scene_nos(project, "ep01") == ["S01"]
+
+
+def test_chapter_range_array_in_voice_variants_and_treatments(project):
+    """#140 顺带:声纹形态判定的本集章节范围、拆集取舍的 roadmap 对账范围也认章节 ID 数组。"""
+    from modules import episode_treatments as et
+    from modules import voice_variants as vv
+
+    write(project / "story/episode_plan.json", {"episodes": [{"episode_id": "ep01", "chapter_range": ["ch012", "ch014"]}]})
+    assert vv.episode_chapters(project, "ep01") == (12, 14)
+    plan = {"roadmap": True, "episodes": [{"ep": "ep01", "chapter_range": ["ch001", "ch003"]}]}
+    ids, scope = et.events_in_scope(plan, [{"id": "ev1", "chapter": "ch002"}, {"id": "ev2", "chapter": "ch009"}])
+    assert ids == ["ev1"] and "≤ 3" in scope
+
+
+def test_load_keeps_agent_table_when_derive_fails(project, monkeypatch):
+    """#140:推导视图抛错时预览不 500——有正式表照常返回正式表、错误进 errors;没有正式表给零场推导视图。"""
+    write(sb.breakdown_path(project, "ep01"), AGENT_MIN)
+
+    def boom(base, ep):
+        raise AttributeError("'list' object has no attribute 'get'")
+
+    monkeypatch.setattr(sb, "derive", boom)
+    res = sb.load(project, "ep01")
+    bd = res["breakdown"]
+    assert res["source"] == "agent" and bd["title"] == "正式版" and [s["no"] for s in bd["scenes"]] == ["S01"]
+    assert any("推导视图生成失败" in e and "AttributeError" in e for e in res["errors"])
+    assert sb.scene_nos(project, "ep01") == ["S01"]
+    from services.runtime import core
+    monkeypatch.setattr(core, "PROJECTS_DIR", project.parent)
+    d = core._preview_script("demo", "ep01")
+    assert d["source"] == "agent" and d["breakdown"]["scenes"][0]["no"] == "S01" and d["errors"]
+    sb.breakdown_path(project, "ep01").unlink()
+    res = sb.load(project, "ep01")
+    assert res["source"] == "derived" and res["breakdown"]["scenes"] == [] and res["errors"]
+    assert res["breakdown"]["issues"][0]["level"] == "error" and sb.scene_nos(project, "ep01") == []
+    d = core._preview_script("demo", "ep01")
+    assert d["source"] == "derived" and d["breakdown"]["scenes"] == [] and d["errors"]
+
+
 def test_check_cli_and_preview_api(project, monkeypatch):
     import subprocess, sys
     root = Path(__file__).resolve().parents[1]

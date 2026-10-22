@@ -198,6 +198,10 @@ def events_in_scope(plan: dict, events: list[dict]) -> tuple[list[str], str]:
             n = _chapter_num(cr.get("end"))
             if n is not None:
                 ends.append(n)
+        elif isinstance(cr, list) and cr:               # 章节 ID 数组写法(#140)取末项
+            n = _chapter_num(cr[-1])
+            if n is not None:
+                ends.append(n)
         elif isinstance(ep.get("chapters"), list) and ep["chapters"]:
             n = _chapter_num(ep["chapters"][-1])
             if n is not None:

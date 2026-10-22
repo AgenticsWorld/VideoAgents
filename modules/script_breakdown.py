@@ -727,11 +727,37 @@ def _ep_events(events: dict | list | None, ids: list[str]) -> list[dict]:
     return out
 
 
-def _structure(graph: dict | None, chapter_range: dict | None) -> dict | None:
+_CR_SEP = re.compile(r"\s*(?:[~～–—至到,，、/]|\.\.|(?<=\d)\s*-)\s*")
+
+
+def chapter_bounds(chapter_range: Any, chapters: Any = None) -> tuple[str | None, str | None]:
+    """episode_plan.json episodes[] 的本集首尾章节 ID(#140)。正式写法 chapter_range: {start, end};也认 {from, to}、
+    章节 ID 数组 ["ch001", "ch003"](取首尾)、字符串 "ch001-ch003" / "ch001"。都取不到时回退 chapters[] 首尾。"""
+    def _one(v: Any) -> str | None:
+        return (str(v).strip() or None) if isinstance(v, (str, int)) and not isinstance(v, bool) else None
+
+    def _ends(items: list) -> tuple[str | None, str | None]:
+        vals = [x for x in (_one(v) for v in items) if x]
+        return (vals[0], vals[-1]) if vals else (None, None)
+
+    cr = chapter_range
+    if isinstance(cr, dict):
+        lo, hi = _one(cr.get("start") or cr.get("from")), _one(cr.get("end") or cr.get("to"))
+    elif isinstance(cr, (list, tuple)):
+        lo, hi = _ends(list(cr))
+    elif isinstance(cr, str):
+        lo, hi = _ends(_CR_SEP.split(cr.strip()))
+    else:
+        lo, hi = _one(cr), None
+    if lo is None and hi is None and isinstance(chapters, list):
+        lo, hi = _ends(chapters)
+    return lo, hi or lo
+
+
+def _structure(graph: dict | None, start: str | None) -> dict | None:
     acts = [a for a in (graph or {}).get("acts") or [] if isinstance(a, dict)]
     if not acts:
         return None
-    start = (chapter_range or {}).get("start")
     cur = None
     if isinstance(start, str):
         m = re.search(r"(\d+)", start)
@@ -982,7 +1008,8 @@ def derive(base: Path, ep: str) -> dict:
                   "hook_point": plan.get("hook_point") if isinstance(plan.get("hook_point"), dict) else None,
                   "carry_over": plan.get("carry_over") or [], "recap_needed": plan.get("recap_needed") or []} if plan else None),
         "events": _ep_events(read_json(base / "story" / "events.json"), ev_ids) if ev_ids else [],
-        "structure": _structure(read_json(base / "story" / "story_graph.json"), (plan or {}).get("chapter_range")),
+        "structure": _structure(read_json(base / "story" / "story_graph.json"),
+                                chapter_bounds((plan or {}).get("chapter_range"), (plan or {}).get("chapters"))[0]),
         "issues": issues,
     }
 
@@ -1004,8 +1031,17 @@ def input_mtimes(base: Path, ep: str) -> dict[str, float]:
 
 def load(base: Path, ep: str) -> dict:
     """返回 {"breakdown", "source": agent|derived|none, "stale", "file", "inputs", "errors"}。
-    正式产物存在且可解析时以之为准,缺的顶层块用推导视图补齐;否则整份用推导视图。"""
-    derived = derive(base, ep)
+    正式产物存在且可解析时以之为准,缺的顶层块用推导视图补齐;否则整份用推导视图。
+    推导抛错(剧情层文件写法超出解析器口径)时不让预览接口整体失败(#140):有正式表照常返回正式表(缺的块不补)、
+    没有正式表时给零场的推导视图,错误都进 errors 与 issues。"""
+    derive_err = None
+    try:
+        derived = derive(base, ep)
+    except Exception as e:  # noqa: BLE001 — 推导视图只是补块,任何解析异常都不该挡住正式表
+        derive_err = f"推导视图生成失败({type(e).__name__}: {e}),由剧情层文件补的块缺失"
+        derived = {"schema_version": SCHEMA_VERSION, "ep": ep, "source": "derived", "scenes": [],
+                   "issues": [{"level": "error", "text": derive_err}]}
+    derr = [derive_err] if derive_err else []
     inputs = input_mtimes(base, ep)
     p = breakdown_path(base, ep)
     has_inputs = any(k.endswith("screenplay.md") for k in inputs)
@@ -1026,11 +1062,11 @@ def load(base: Path, ep: str) -> dict:
             if errors:
                 merged["issues"] = [{"level": "error", "text": e} for e in errors] + list(merged["issues"])
             return {"breakdown": scene_links.annotate(merged, sp_text), "source": "agent", "stale": stale,
-                    "file": str(p.relative_to(base)), "mtime": mt, "inputs": inputs, "errors": errors}
+                    "file": str(p.relative_to(base)), "mtime": mt, "inputs": inputs, "errors": errors + derr}
         return {"breakdown": scene_links.annotate(derived, sp_text), "source": "derived", "stale": [], "file": None, "mtime": None,
-                "inputs": inputs, "errors": ["script_breakdown.json 不是合法拆解表(缺 scenes[] 或 JSON 无法解析)"]}
+                "inputs": inputs, "errors": ["script_breakdown.json 不是合法拆解表(缺 scenes[] 或 JSON 无法解析)"] + derr}
     return {"breakdown": scene_links.annotate(derived, sp_text) if has_inputs else None, "source": "derived" if has_inputs else "none",
-            "stale": [], "file": None, "mtime": None, "inputs": inputs, "errors": []}
+            "stale": [], "file": None, "mtime": None, "inputs": inputs, "errors": derr if has_inputs else []}
 
 
 def validate(bd: dict, base: Path | None = None, ep: str | None = None) -> tuple[list[str], list[str]]:
@@ -1129,5 +1165,8 @@ def scene_nos(base: Path, ep: str) -> list[str]:
             return [str(sc.get("no")) for sc in agent["scenes"] if isinstance(sc, dict) and sc.get("no") is not None]
     if not (base / "story" / "episodes" / ep / "screenplay.md").is_file():
         return []
-    d = derive(base, ep) or {}
+    try:
+        d = derive(base, ep) or {}
+    except Exception:  # noqa: BLE001 — 只用来决定显不显示跳转链接,推导失败不连累故事板 / 分镜预览(#140)
+        return []
     return [str(sc.get("no")) for sc in (d.get("scenes") or []) if isinstance(sc, dict) and sc.get("no") is not None]

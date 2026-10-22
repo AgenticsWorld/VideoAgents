@@ -371,6 +371,15 @@ function statusHtml(d){
   return h;
 }
 
+// 本集章节范围(#140):正式写法 {start, end};也认 {from, to}、章节 ID 数组(取首尾)、字符串原样;两端都空不显示
+function chapterRange(cr){
+  let a='',b='';
+  if(Array.isArray(cr)){const v=cr.filter(x=>(typeof x==='string'||typeof x==='number')&&String(x).trim()).map(x=>String(x).trim());a=v[0]||'';b=v.length>1?v[v.length-1]:''}
+  else if(cr&&typeof cr==='object'){a=String(cr.start||cr.from||'').trim();b=String(cr.end||cr.to||'').trim()}
+  else if(typeof cr==='string'||typeof cr==='number')return String(cr).trim();
+  return a&&b&&a!==b?`${a} – ${b}`:(a||b);
+}
+
 /* 本集行:看点/概要 ↔ 预算/章节/事件/钩子选定 */
 function episodeRow(d,bd,ep,A){
   const p=bd.plan||{},hk=bd.hooks||{},sel=hk.selected||{};
@@ -380,7 +389,7 @@ function episodeRow(d,bd,ep,A){
   if((p.beats||[]).length)l+=`<ol style="padding-left:20px;color:var(--dim);font-size:12.5px">${p.beats.map(b=>`<li>${esc(b)}</li>`).join('')}</ol>`;
   const r=[];
   if(bd.duration_budget_s!=null)r.push(['⏱',`${esc(t('预算'))} <b>${secs(bd.duration_budget_s)}</b> · ${esc(t('预计'))} <b>${secs(bd.total_est_s)}</b>`]);
-  if(p.chapter_range)r.push(['📖',`${esc(p.chapter_range.start||'')} – ${esc(p.chapter_range.end||'')}`]);
+  const cr=chapterRange(p.chapter_range);if(cr)r.push(['📖',esc(cr)]);
   if((p.events||[]).length)r.push(['🧩',p.events.map(e=>`<span class="chip ev">${esc(e)}</span>`).join('')]);
   const selTxt=['opening','ending'].filter(k=>typeof sel[k]==='string'&&sel[k]&&sel[k]!=='none').map(k=>`${esc(t(k==='opening'?'开场':'结尾'))} ★ ${esc(sel[k])}`);
   if(selTxt.length||hk.note)r.push(['🪝',(selTxt.join(' · ')||esc(clip(hk.note,80)))+' '+editBtn(A.hooks,I18N.f('钩子 {ep}(文件 {f})',{ep,f:epFile(ep,'hooks.json')}),'sm','','hook:*')+noteHtml('hook:*',true)]);

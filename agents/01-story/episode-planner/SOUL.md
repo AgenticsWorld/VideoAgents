@@ -46,7 +46,8 @@
 {
   "target_platform": "…", "default_duration_budget_s": 180,
   "episodes": [{
-    "ep": "ep01", "events": ["ev0001", "ev0002", "ev0003", "ev0009"],
+    "ep": "ep01", "chapter_range": { "start": "ch001", "end": "ch003" },
+    "events": ["ev0001", "ev0002", "ev0003", "ev0009"],
     "duration_budget_s": 180,
     "treatments": [
       { "event": "ev0001", "treatment": "dramatize" },
@@ -59,6 +60,7 @@
   }]
 }
 ```
+- 写本集章节范围 `chapter_range` 时,正式写法是对象 `{ "start": "<首章 ID>", "end": "<末章 ID>" }`(章节 ID 与 `events.json` 的 `chapter` 同一写法,单章集首尾写同一个);不写成数组(`["ch001"]`)或字符串(`"ch001-ch003"`)。
 
 ## 接受的工作指令(Work Order)
 

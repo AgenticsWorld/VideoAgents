@@ -68,7 +68,7 @@ def _span(lo, hi) -> tuple[int, int] | None:
 
 
 def episode_chapters(base: Path, ep: str) -> tuple[int, int] | None:
-    """本集章节范围(story/episode_plan.json 的 chapter_range{start,end} 或 chapters[] 首尾);读不到返回 None。"""
+    """本集章节范围(story/episode_plan.json 的 chapter_range{start,end}、章节 ID 数组或 chapters[] 首尾);读不到返回 None。"""
     plan = _read(Path(base) / "story" / "episode_plan.json") or {}
     for e in plan.get("episodes") or []:
         if not isinstance(e, dict) or ep not in (e.get("ep"), e.get("episode_id"), e.get("id")):
@@ -76,6 +76,8 @@ def episode_chapters(base: Path, ep: str) -> tuple[int, int] | None:
         cr = e.get("chapter_range")
         if isinstance(cr, dict):
             return _span(cr.get("start") or cr.get("from"), cr.get("end") or cr.get("to"))
+        if isinstance(cr, list) and cr:                  # 章节 ID 数组写法(#140)取首尾
+            return _span(cr[0], cr[-1])
         ch = e.get("chapters")
         if isinstance(ch, list) and ch:
             return _span(ch[0], ch[-1])
