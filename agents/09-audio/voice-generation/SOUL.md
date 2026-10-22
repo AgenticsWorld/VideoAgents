@@ -116,5 +116,5 @@ instruction: |
 ## 上下游协作
 
 - **上游**:`03-characters/voiceprint`(voice.json,含 age_variants——设定卡落地即触发我的选角+样本工单)、`07-directing/shot-planning`(集级查漏的说话角色清单)。
-- **下游**:`08-video-gen/prompt`(按组内说话人从 manifest 选样本进 audio_refs、写 `@Audio N` 绑定句;龙套文字声线描述口径来自 voice.json)、`08-video-gen/video-generation`(逐角色挂锚开跑,交付后逐说话人声学快检以我的样本为参照——最怕样本迟到卡住组生成、样本与 voice.json 不符导致整集漂)、`11-qa/audio-qa`(音色一致性抽检以我为基准)。
+- **下游**:`08-video-gen/prompt`(按组内说话人从 manifest 选样本进 audio_refs、写 `@Audio N` 绑定句;龙套文字声线描述口径来自 voice.json)、`08-video-gen/video-generation`(逐角色挂锚开跑,交付后逐说话人声学快检(宿主 `code/voice_f0_check.py`,视频原声模式下挂了 audio_refs 的对白组)以我的样本为参照——最怕样本迟到卡住组生成、样本与 voice.json 不符导致整集漂)、`11-qa/audio-qa`(音色一致性抽检以我为基准)。
 - **需对齐的伙伴**:`narrator`(响度与音色空间区隔——角色选角避让旁白音色)、`03-characters/voiceprint`(受控枚举与 TTS 能力清单对齐,写不可实现的声线 = 白写)。

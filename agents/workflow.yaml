@@ -411,9 +411,10 @@ phases:
           depends_on: [g7p, p7-consistency, p7-video@prev_group, p8-voiceprints, p8-narrator],  # g7p:本集视频提示词用户签字(H3V)后才生成组视频(p7-consistency 是条件节点,故此处显式再挂一次);组序串行:前组尾帧作续接锚(仅「长镜头」开启的项目;关闭时无续接链,prev_group 依赖可解除、组可并行,2026-09-01);对白组逐说话角色挂项目级 voiceprint 样本(assets/audio/voice/refs/,≤3 段)作 reference_audio 嗓音锚(仅锚嗓音特点,对白语音口型模型原生;TTS 严禁作配音,§8A 红线;组级台词干声 lines/ 2026-07-20 废止);旁白实测适配 narration_fit、对白估时适配(p6-dialogue-fit)未过不派发(§7D ②);开跑前核对 refs 素材完备(剧情道具缺参考图=违规配置退回,prop_ref_attached)
           # 组 json 有 video_refs(白模 camera.mp4,2026-09-07;2026-09-08 起无 top.mp4)时按序传 --ref-video;方舟/MiniMax 参考视频须公网 URL(文件托管已配置)
           # 原生先入(三期 2026-10-03,§8D ⑨):组有 native_lead 句时开跑前 code/sync_native_leads.py check 复核 native_lead_bound;交付后 code/sync_native_leads.py audible --groups {group}(人声起点落在前一镜窗口 ≥0.3s = PASS,否则 WARN「先入未生效」只记回执、不阻断、不开缺陷单)
+          # 逐说话人声学快检 voice_f0(#148,2026-10-22;仅 group.audio_plan == dialogue 且 output.dialogue_voice == native 且组 prompt 有 audio_refs):交付后 python3 code/voice_f0_check.py --project <slug> --ep {ep} --group {group};FAIL(基频偏离自己 voiceprint 样本 >50% 或两人对调)进整组重 roll(受重跑次数设定限制),WARN(20–50%)只记回执;条件不满足时脚本 SKIP、退出码 0
           outputs: ["assets/clips/{ep}/{group}.mp4", "assets/clips/{ep}/{group}.meta.json"],
           validation: { auto: [group_duration_pm_1s, fps_ok, resolution_ok, audio_track_present, dialogue_audible,   # dialogue_audible(2026-10-03):对白镜计划时段 ±1.5s 窗内最长人声段 / 台词估时 <0.3 判疑似整句缺失(code/check_dialogue_audible.py,不转写);resolution_ok:画幅 16:9/9:16 只是大致比例——引擎原生输出近似比例(如 480p 档 864x496)即合规,不得因非严格 16:9/9:16 判失败或索要用户豁免(2026-08-03 Thedouble2 前科)
-                               last_frame_saved, boundaries_detected],
+                               last_frame_saved, boundaries_detected, voice_f0],   # voice_f0 条件式,见上方注释(code/voice_f0_check.py)
                         rubric: visual_gen_v1, qa: [11-qa/visual-qa] } }
       - { id: p7-dub, agent: 09-audio/voice-generation, depends_on: [p7-video],
           condition: "output.dialogue_voice == dubbing and group.audio_plan == dialogue",   # 项目「输出设置→对白配音=后期配音」时每个对白组必派;视频原声(默认)不派、严禁 TTS 进成片对白(§8A)

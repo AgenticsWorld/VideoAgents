@@ -52,7 +52,7 @@ def _asr_guard(agent: str, command: str):
         f"{agent} 不是转写工位,禁止自发调用本地语音识别(faster-whisper/WhisperModel/"
         "modules/transcription.py/speechalign 等)核查对白或音轨——这类调用会下载整套模型权重、"
         "空耗数十分钟(前科 fengshen3 p7-video-ep06-grp020)。产物验收只按 SOUL 与工单 acceptance "
-        "列出的机检执行(ffprobe 音轨/时长、voice_f0_check 等);工单没写的转写核查一律不做。"
+        "列出的机检执行(ffprobe 音轨/时长、code/voice_f0_check.py 等);工单没写的转写核查一律不做。"
         "确需核对台词时把疑点写进回执交用户裁决;只有用户明确要求转写才可由调度层改派 "
         "09-audio/audio-transcription 或带 VIDEOAGENTS_ALLOW_ASR=1 派单。")
 

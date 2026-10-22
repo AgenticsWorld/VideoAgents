@@ -37,7 +37,7 @@ prompt 写完必跑 `python3 code/sync_continuity_refs.py --project <slug> --ep 
 4. 生成后跑**切变边界检测**,把组内实际镜头边界写入 `grpNNN.meta.json`(供剪辑/QA/字幕对位):
    `ffmpeg -i grpNNN.mp4 -vf "select='gt(scene,0.3)',metadata=print" -f null - 2>&1 | grep pts_time`
    边界数应 = 组内镜数-1(±1 容忍,模型可能合并或加切);同时 ffprobe 核时长/fps/音轨。
-5. 提交前自检运动伪影、主体漂移、主体出画、道具尺度突变(前科 DEF-p7-visual-0001/0004);明显废片先内部重跑再提交(**内部重跑计入运行提示词「用户重跑次数设定」(Agent 高级设置→重跑次数)**:同一组累计不超过该值;该值为 0 或额度用尽时不得自行重出/重跑,保留当前产物、缺陷写入回执交用户裁决,废片缺陷如实写进回执,不得自行再生成一条);严禁出现 style.json 负面清单元素。**对白音轨自检只做机检,禁止自发语音识别(2026-09-23)**:核对对白/口型只跑 ffprobe 音轨存在与时长、§8A 的 voice_f0_check 声学快检;严禁自行调用 faster-whisper/WhisperModel/`modules/transcription.py` 等本地 ASR 转写台词「核查对白音轨」(会下载整套模型权重、空耗数十分钟;前科 fengshen3 p7-video-ep06-grp020,宿主 hook 已硬拦截)。台词是否说对说全不是本工位机检项——听感疑点写进回执 `notes` 交用户裁决,用户明确要求转写时由调度层派 09-audio/audio-transcription。
+5. 提交前自检运动伪影、主体漂移、主体出画、道具尺度突变(前科 DEF-p7-visual-0001/0004);明显废片先内部重跑再提交(**内部重跑计入运行提示词「用户重跑次数设定」(Agent 高级设置→重跑次数)**:同一组累计不超过该值;该值为 0 或额度用尽时不得自行重出/重跑,保留当前产物、缺陷写入回执交用户裁决,废片缺陷如实写进回执,不得自行再生成一条);严禁出现 style.json 负面清单元素。**对白音轨自检只做机检,禁止自发语音识别(2026-09-23)**:核对对白/口型只跑 ffprobe 音轨存在与时长、§8A 的宿主 `code/voice_f0_check.py` 声学快检(仅对白组满足其适用条件时,见下文「交付前逐说话人声学快检」);严禁自行调用 faster-whisper/WhisperModel/`modules/transcription.py` 等本地 ASR 转写台词「核查对白音轨」(会下载整套模型权重、空耗数十分钟;前科 fengshen3 p7-video-ep06-grp020,宿主 hook 已硬拦截)。台词是否说对说全不是本工位机检项——听感疑点写进回执 `notes` 交用户裁决,用户明确要求转写时由调度层派 09-audio/audio-transcription。
 6. 记录生成参数(模型、完整请求体摘要、锚点包版本、前组尾帧版本)入 meta——**Seedance 2.0 不支持 seed,重跑靠 prompt 微调**,可复现性靠留档完整请求体。
 7. 写回执 `<项目目录>/runs/<task_id>/result.json`。
 
@@ -51,7 +51,7 @@ prompt 写完必跑 `python3 code/sync_continuity_refs.py --project <slug> --ep 
 
 **局部穿帮修复(V2V 定向修改,Seedance 2.0 编辑能力)**:QA/剪辑缺陷单标注为**局部穿帮**(服饰/道具/小物件/背景元素级不一致,如"一镜手有袖子一镜没有")时,**优先走 V2V 定向修改而非整组重 roll**——原组 clip 作 `--ref-video` 传入 + 定向修改指令(必须以"其余画面、人物动作、运镜、节奏与声音保持完全不变"收尾),可配 1 张正确样式参考图作视觉锚(CLI 见下方第三式)。纪律:
 - **成本账**:编辑走"含视频输入"计费档(单价低但输入秒数计 token,5s 修 5s ≈ 同档重 roll 的 1.2 倍),胜在保留已过 QA 的表演/运镜/构图,一次到位;修复一律草稿档分辨率;
-- **整段重渲染风险**:输出是重新生成的新视频——目标穿帮修好≠验收通过,须按"新组"过 visual-qa 复检(脸部细节/纹理可能漂移);**对白组修复后强制重跑 voice_f0_check 声学快检 + 口型抽检**(generate_audio=on 会重出音轨,音色漂移即判失败,回退整组重 roll——计入用户重跑次数设定,为 0 或额度用尽则上报用户裁决、不自行重 roll);
+- **整段重渲染风险**:输出是重新生成的新视频——目标穿帮修好≠验收通过,须按"新组"过 visual-qa 复检(脸部细节/纹理可能漂移);**对白组修复后重跑声学快检 + 口型抽检**(generate_audio=on 会重出音轨;声学快检仅当满足下文 voice_f0 适用条件时跑 `python3 code/voice_f0_check.py --project <slug> --ep epNN --group grpNNN`,FAIL 即判失败,回退整组重 roll——计入用户重跑次数设定,为 0 或额度用尽则上报用户裁决、不自行重 roll;WARN 只记回执);
 - prompt 素材引用用官方「视频1/图片1」序号格式;重出前旧版本归档纪律(见下)同样适用;meta 记 `repair_mode: v2v_edit` 与修改指令原文;修复输入必须是模型原始产物或其无损副本(含人脸场景受方舟"仅信任同账号 30 天内未剪辑原始产物"约束,剪辑过的成片段不可回喂)。
 
 ## 不做什么(边界)
@@ -132,7 +132,7 @@ Seedance 2.0 不支持 --seed,重跑靠 prompt 微调。仅当生效渠道为 mi
 - **红线(2026-07-09 实证,继续有效):TTS 音轨不是配音成品**——prompt 写『原样使用参考音频人声+口型同步』强迫口型对齐外部 TTS 音轨,会导致**严重口型问题**;任何形式的 TTS 对白配音(生成期强绑、后期换轨/贴片)都禁止。方舟不逐字嵌入参考音频(波形互相关≈0,模型重演绎),样本内容与台词无关。
 - **交付前对白有声段核对(dialogue_audible,2026-10-03)**:对白组出片后跑 `python3 code/check_dialogue_audible.py --project <slug> --ep epNN <本组>`——不转写,只按自相关找人声段,对每个对白镜在计划时段 ±1.5s 窗内取最长连续人声段 / 台词估时,< 0.3 判 FAIL(疑似整句缺失;前科 fengshen3 ep07 grp011 sh084:5s 台词窗内只有 0.9s 人声,回执却写「对白出声」通过)、< 0.5 WARN;FAIL 的组按「用户重跑次数设定」处理,额度为 0 时如实写进回执交用户裁决,不得以「有音轨且有人声」笼统放行。带 `native_lead` 的镜该脚本已把窗口向前并入前一镜。
 - **原生先入(三期 2026-10-03,§8D ⑨;仅组内有 `dialogue_lines[].native_lead` 的组)**:开跑前跑 `python3 code/sync_native_leads.py check --project <slug> --ep epNN --groups grpNNN` 复核 native_lead_bound——未过 = 退回 prompt 跑 `sync --write`,不得带着缺标记句的 prompt 开跑、不得自己往 prompt 里补句;交付后跑 `python3 code/sync_native_leads.py audible --project <slug> --ep epNN --groups grpNNN`:人声起点落在前一镜窗口(先入 ≥0.3 s)= PASS,否则 WARN「先入未生效」——**只记进回执,画面仍成立,不开缺陷单、不重 roll、不计重跑额度**;由 audio-qa 作记录项复核。
-- **交付前逐说话人声学快检强制**:`python3 <项目目录>/code/voice_f0_check.py <clip> --seg 起:止:期望CHAR ...`,参照用**各角色自己的 voiceprint 样本**(段划分按 meta 切变边界+shot_list 对白归属);任一说话人错配开缺陷单整组重生成(调 audio_refs 顺序/绑定措辞后重 roll,勿盲目原样重试)。
+- **交付前逐说话人声学快检 voice_f0(#148,2026-10-22;仅当本组 `audio_plan == dialogue`、项目「对白配音」= 视频原声、且本组 prompt 挂了 `audio_refs` 时)**:跑宿主 `python3 code/voice_f0_check.py --project <slug> --ep epNN --group grpNNN`(只准调用,不得自写或复制到项目 `code/`;按 meta boundary_map + shot_list 画内句自动分段,参照本组 audio_refs 里**各说话人自己的 voiceprint 样本**,不转写)——三条任一不满足时脚本整体 SKIP、退出码 0,照录回执即可。按档处理:**FAIL**(某说话人基频中位数偏离自己样本 >50%,或两人互相更接近对方样本 = 疑似对调)= 开缺陷单整组重 roll(调 audio_refs 顺序 / 绑定措辞后重 roll,勿盲目原样重试),**计入用户重跑次数设定,为 0 或额度用尽则上报用户裁决、不自行重 roll**;**WARN**(偏离 20–50%,情绪抬高、样本与模型演绎的固定落差多在这档)只记回执(写明说话人与偏离),不开缺陷单、不重 roll;说话人记 SKIP(台词太短 / 浊音帧不足)的,回执写明未判。
 - **audio_ref 总时长硬限 15.2s(2026-07-20 实测)**:方舟 r2v 对 reference_audio **总时长**卡 15.2s,超限在任务创建时即 400 InvalidParameter(不计费,但拒因不点名是音频)——两段 ~12s 旧规格样本合计 24.1s 首提即被拒。开跑前 ffprobe 实测总时长(audioref_total_le_15s,genmedia 也会硬校验);超限先截短(`ffmpeg -t 4.9 -c copy`)再跑,并报 voice-generation 按 ≤5s/段 规格重出根治。
 - **【仅当项目视频模型为 Seedance 2.5(doubao-seedance-2-5-260628 / dreamina-seedance-2-5-260628)时】**:模型硬限放宽——时长 [4,30] 整数秒或 -1(单段 30s 直出)、refs ≤30、audio_refs ≤10(总时长 ≤30s)、参考视频 ≤10(总时长 ≤30s),支持纯音频参考;分辨率仅 480p/720p(1080p/4k genmedia 自动压 720p);视频编辑任务 ratio 仅 adaptive、duration 仅 -1,视频延长与首帧/首尾帧任务 ratio 仅 adaptive(首帧任务 genmedia 自动改写为 adaptive),违规将异步报错 InvalidParameter.TaskTypeConstraint。每组时长与参考数量的取用上限仍以系统提示词注入的项目「视频模型设置」为准。
 
