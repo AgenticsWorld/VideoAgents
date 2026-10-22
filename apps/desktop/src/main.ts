@@ -413,6 +413,17 @@ function closeRuntimeProgress(): void {
   resetRuntimeProgressMeter()
 }
 
+function agenticsNodeExecutable(): string {
+  // pi 启动时设 process.title,libuv 在 macOS 上会按可执行文件所在 bundle 的 Info.plist
+  // 向 LaunchServices 登记:用主程序跑就登记成前台应用,每个 pi 进程在 Dock 多一个 exec 图标。
+  // Electron Helper 的 Info.plist 带 LSUIElement,同样能当 Node 跑(ELECTRON_RUN_AS_NODE),不进 Dock
+  if (process.platform !== 'darwin') return process.execPath
+  const name = path.basename(process.execPath)
+  const helper = path.resolve(path.dirname(process.execPath), '..', 'Frameworks',
+    `${name} Helper.app`, 'Contents', 'MacOS', `${name} Helper`)
+  return existsSync(helper) ? helper : process.execPath
+}
+
 function executableSearchPath(): string {
   // The managed FFmpeg directory is listed even before anything is installed
   // there, so the running web server finds FFmpeg right after setup completes.
@@ -588,8 +599,8 @@ async function ensureWebServer(): Promise<void> {
     VIDEOAGENTS_APP_ROOT: backend,
     VIDEOAGENTS_DATA_DIR: dataRoot,
     // Agentics 引擎(内置 pi,backend/vendor/pi)没有独立 Node:用本程序自带的 Node 跑
-    // (服务端启动 pi 时加 ELECTRON_RUN_AS_NODE=1,见 core.agentics_pi_command)
-    VIDEOAGENTS_NODE: process.execPath,
+    // (服务端启动 pi 时加 ELECTRON_RUN_AS_NODE=1,见 core.agentics_pi_command;macOS 用 Helper,见 agenticsNodeExecutable)
+    VIDEOAGENTS_NODE: agenticsNodeExecutable(),
     VIDEOAGENTS_PERMISSION_MODE: process.env.VIDEOAGENTS_PERMISSION_MODE || 'bypassPermissions',
     VIDEOAGENTS_WEB_HOST: '127.0.0.1',
     VIDEOAGENTS_WEB_PORT: webPort,

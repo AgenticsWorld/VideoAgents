@@ -2,6 +2,11 @@
 
 All notable public changes to VideoAgents are documented here.
 
+## [Unreleased]
+
+### Fixed
+- **macOS desktop: Agentics runs no longer add an `exec` icon to the Dock for each running agent (2026-10-23).** The built-in pi ran on the app's main executable in Node mode. pi sets its process title at start-up, and on macOS that registers the process with the system using the app's own settings, so every running agent showed up in the Dock as a separate app with a generic `exec` icon until it finished. The desktop app now runs pi on its Electron helper (`VideoAgents Helper`), which is marked as a background app, so agent runs stay out of the Dock. Windows and the source version are unchanged. Takes effect after the desktop app is rebuilt.
+
 ## [1.0.41] - 2026-10-22
 
 ### Added

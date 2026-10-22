@@ -185,8 +185,9 @@ AGENTICS_PI_KEY_ENV = "VIDEOAGENTS_LLM_API_KEY"
 
 def agentics_pi_command() -> list[str] | None:
     """内置 pi 的启动命令前缀 [node, launch.mjs];未安装或找不到 Node 时返回 None。
-    桌面端 VIDEOAGENTS_NODE=Electron 主程序(子进程环境加 ELECTRON_RUN_AS_NODE=1 当 Node 用,
-    见 agentics_pi_launch);源码版用 PATH 上的 node(pi 要求 22.19+)。"""
+    桌面端 VIDEOAGENTS_NODE=Electron 主程序,macOS 为 Electron Helper(免得 pi 进程进 Dock)
+    (子进程环境加 ELECTRON_RUN_AS_NODE=1 当 Node 用,见 agentics_pi_launch);
+    源码版用 PATH 上的 node(pi 要求 22.19+)。"""
     launcher = AGENTICS_PI_DIR / "launch.mjs"
     cli = (AGENTICS_PI_DIR / "node_modules" / "@earendil-works" / "pi-coding-agent"
            / "dist" / "bundle" / "cli.js")
