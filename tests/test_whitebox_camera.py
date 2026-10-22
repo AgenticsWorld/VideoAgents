@@ -171,3 +171,82 @@ def test_stored_v2_and_legacy_placement_fingerprints_still_match(tmp_path):
     scene['objects'][0]['size_m'] = [2, .75, .5]
     scene_path.write_text(json.dumps(scene))
     assert any('placement changed' in e for e in check_camera(tmp_path, 'ep01', shot, camera, 'g1'))
+
+
+def _contract_group_project(tmp_path, n=3):
+    """#157:一组 n 镜,每镜都有机位契约 + 已审源指纹 / placement 指纹;计划带一条建议级待决项。"""
+    from modules.whitebox_camera import source_fingerprint as sfp
+    base = tmp_path/'demo'; scene = 'SCN-1'
+
+    def put(rel, data):
+        p = base/rel; p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(data, ensure_ascii=False))
+    put(f'assets/concepts/scenes/{scene}/layout.json', {
+        'scene_name': 'Room', 'landmarks': [{'id': 'door', 'xy': [.1, .5]}, {'id': 'desk', 'xy': [.7, .5]}],
+        'views': [{'tile': 1, 'camera_from': 'door', 'looking_at': 'desk'}]})
+    put(f'bible/scenes/{scene}/whitebox.json', {'dimensions_m': [10, 3, 8], 'inferred': False,
+                                                'objects': [{'id': 'desk', 'size_m': [1, .75, .5], 'xy': [.7, .5]}]})
+    shots = [{'shot_id': f'sh{i}', 'scene_id': scene, 'duration_s': 2, 'characters': ['CHAR-1'], 'view_tile': 1}
+             for i in range(1, n+1)]
+    group = {'group_id': 'grp1', 'scene_id': scene, 'scene_no': 'S1', 'shots': [s['shot_id'] for s in shots],
+             'total_duration_s': 2*n, 'characters_union': ['CHAR-1'], 'blocking_map': {'characters': [
+                 {'id': 'CHAR-1', 'label': 'A', 'start': {'landmark': 'door'}, 'end': {'landmark': 'desk'}}]}}
+    put('directing/ep01/shot_list.json', {'shots': shots, 'generation_groups': [group]})
+    for s in shots:
+        put(f'directing/ep01/shots/{s["shot_id"]}/camera.json', {'whitebox_contract': {'height_m': [0, 10]}})
+        put(f'directing/ep01/shots/{s["shot_id"]}/composition.json', {'note': '首版构图说明'})
+    issue = {'issue_id': 'WBI-ep01-grp1-001', 'kind': 'other', 'severity': 'advisory', 'question': '门开向哪边?',
+             'provisional': '向内开'}
+    plan = {'schema_version': 'whitebox_plan.v1', 'group_id': 'grp1', 'issues': [issue], 'cameras': [
+        {'shot_id': s['shot_id'], 'start': 2*i, 'duration_s': 2, 'movement': 'static',
+         'keyframes': [{'t': t, 'position': [0, 1.5, 3], 'target': [0, 1.5, 0], 'fov': 40} for t in (0, 2)],
+         'source_fingerprint': sfp(base, 'ep01', s)} for i, s in enumerate(shots)]}
+    put('directing/ep01/whitebox_plans/grp1.json', plan)
+    placement = placement_fingerprint(base, 'ep01', 'grp1')
+    for cam in plan['cameras']:
+        cam['placement_fingerprint'] = placement
+    put('directing/ep01/whitebox_plans/grp1.json', plan)
+    return base, shots
+
+
+def test_check_only_lists_every_stale_shot_in_group(tmp_path):
+    """#157:组内 3 镜的 composition 说明都改了 → 该组仍是一条 error,但列全 3 个镜号(不再只报首个);只改 1 镜只报那 1 镜。"""
+    from modules.whitebox import compile_episode
+    base, shots = _contract_group_project(tmp_path)
+    ok = compile_episode(base, 'ep01')
+    assert not ok['errors'] and len(ok['groups']) == 1
+    comp = lambda sid: base/'directing/ep01/shots'/sid/'composition.json'
+    comp('sh2').write_text(json.dumps({'note': '改过一句'}, ensure_ascii=False))
+    errors = compile_episode(base, 'ep01')['errors']
+    assert len(errors) == 1 and errors[0]['group_id'] == 'grp1'
+    assert 'sh2: camera_contract: source changed' in errors[0]['error'] and 'sh1:' not in errors[0]['error']
+    for sid in ('sh1', 'sh3'):
+        comp(sid).write_text(json.dumps({'note': '也改过'}, ensure_ascii=False))
+    episode = compile_episode(base, 'ep01')
+    assert len(episode['errors']) == 1 and not episode['groups'] and episode['source_group_count'] == 1
+    import re
+    assert re.findall(r'(?:^|; )(sh\d+): camera_contract: source changed', episode['errors'][0]['error']) == ['sh1', 'sh2', 'sh3']
+
+
+def test_check_only_cli_reports_source_groups_and_issues_of_failed_groups(tmp_path):
+    """#157:--check-only 输出带 source_groups(整集真实组数);待决项汇总按 H3W 闸门口径(collect),报错组的待决项也算进去。"""
+    import subprocess
+    import sys
+    root = Path(__file__).resolve().parents[1]
+    base, shots = _contract_group_project(tmp_path)
+    run = lambda: subprocess.run([sys.executable, str(root/'code/render_whitebox.py'), '--project', 'demo', '--ep', 'ep01',
+                                  '--out-root', str(base), '--check-only'], capture_output=True, text=True, cwd=root,
+                                 env={'PATH': '/usr/bin:/bin', 'VIDEOAGENTS_DATA_DIR': str(tmp_path/'data')})
+    good = run()
+    assert good.returncode == 0, good.stderr
+    head, issues = [json.loads(line) for line in good.stdout.splitlines()[:2]]
+    assert head['groups'] == 1 and head['source_groups'] == 1 and head['errors'] == []
+    assert issues['issues']['total'] == 1 and issues['issues']['open'] == 1
+    for s in shots:
+        (base/'directing/ep01/shots'/s['shot_id']/'composition.json').write_text(json.dumps({'note': '改'}, ensure_ascii=False))
+    bad = run()
+    assert bad.returncode == 1
+    head, issues = [json.loads(line) for line in bad.stdout.splitlines()[:2]]
+    assert head['groups'] == 0 and head['source_groups'] == 1 and len(head['errors']) == 1
+    assert all(f"{s['shot_id']}: camera_contract" in head['errors'][0]['error'] for s in shots)
+    assert issues['issues']['total'] == 1 and issues['issues']['open'] == 1 and issues['issues']['groups_open'] == ['grp1']
+    assert '待处理 1' in issues['issues_text']

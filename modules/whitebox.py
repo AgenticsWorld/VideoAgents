@@ -699,6 +699,7 @@ def compile_group(base, ep, group, shots, scene, colors=None):
     cursor = 0
     if [c['shot_id'] for c in cameras] != group['shots']:
         raise ValueError(f'{gid}: cameras must match group shot order')
+    contract_errors = []
     for camera in cameras:
         sd = shots[camera['shot_id']]['duration_s']
         if 'visible_actor_ids' in camera:
@@ -712,9 +713,10 @@ def compile_group(base, ep, group, shots, scene, colors=None):
             raise ValueError(f'{gid}: camera intervals must match shot timing')
         validate_keys(camera['keyframes'], sd, True); cursor += sd
         from modules.whitebox_camera import check_camera
-        camera_errors = check_camera(base, ep, shots[camera['shot_id']], camera, gid)
-        if camera_errors:
-            raise ValueError('; '.join(camera_errors))
+        contract_errors.extend(check_camera(base, ep, shots[camera['shot_id']], camera, gid))
+    if contract_errors:
+        # #157:机位契约失效逐镜累积,一组仍只报一条 error,但列全失效镜头(各条以镜号开头);结构性错误照旧在循环里立即抛
+        raise ValueError('; '.join(contract_errors))
     # 待决项(2026-09-09,docs/whitebox.md「待决项与用户裁决」):Agent 调度时拿不准的取舍,结构校验后随组透传给预览页
     from modules.whitebox_issues import validate_issues
     issues = validate_issues(plan, ep, gid, duration, group['shots'], seen | set(group.get('scene_cast', [])))

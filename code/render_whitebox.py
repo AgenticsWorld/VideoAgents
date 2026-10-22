@@ -55,10 +55,12 @@ def main():
                            "该字段会被逐字拼进视频 prompt,只写画面散文——裁决出处写 director_decisions / issues[].applied.note,数值写 keyframes,时序写 beats[].t"})
     missing=selected-{g['group_id'] for g in episode['groups']}-{e['group_id'] for e in errors}
     errors.extend({'group_id':g,'error':'Unknown group'} for g in sorted(missing))
-    print(json.dumps({'groups':len(episode['groups']),'scenes':len(episode['scenes']),'errors':errors},ensure_ascii=False),flush=True)
-    # 待决项汇总(docs/whitebox.md「待决项与用户裁决」):回执须原样带上;阻断级未清时 H3W 签字会被拒
-    from modules.whitebox_issues import format_summary
-    summary=episode.get('issues_summary') or {}
+    # #157:groups 只数编译成功的组,source_groups 给整集 shot_list 的真实组数(有报错组时两者不等)
+    print(json.dumps({'groups':len(episode['groups']),'source_groups':episode['source_group_count'],'scenes':len(episode['scenes']),'errors':errors},ensure_ascii=False),flush=True)
+    # 待决项汇总(docs/whitebox.md「待决项与用户裁决」):回执须原样带上;阻断级未清时 H3W 签字会被拒。
+    # #157:与 H3W 闸门同口径(whitebox_issues.collect 直读各组计划 + decisions),编译报错的组的待决项也算进去
+    from modules.whitebox_issues import collect, format_summary
+    summary=collect(base,args.ep)['summary']
     print(json.dumps({'issues':{k:summary.get(k) for k in ('total','open','blocking_open','decided','applied','stale','waived','groups_open','blocking_ids')},
                       'issues_text':format_summary(summary)},ensure_ascii=False),flush=True)
     if errors:return 1
