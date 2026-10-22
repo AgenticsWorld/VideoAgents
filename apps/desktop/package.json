@@ -1,7 +1,7 @@
 {
   "name": "@videoagents/desktop",
   "private": true,
-  "version": "1.0.40",
+  "version": "1.0.41",
   "author": "AgenticsWorld",
   "description": "VideoAgents desktop client",
   "main": "dist/main.js",
