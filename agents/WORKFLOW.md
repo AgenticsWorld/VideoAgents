@@ -61,8 +61,9 @@ data/projects/<slug>/
 │                   # narration.md, hooks.json, pacing.json, script_breakdown.json(剧本拆解表,剧本预览页数据源)} ...
 ├── bible/          # 世界圣经:world.json, timeline.json, geography.json, religion.json,
 │                   # culture.json, politics.json, economy.json, cultivation.json,
-│                   # dictionary.json, characters/<id>/*.json, creatures/, scenes/,
-│                   # style.json, props.json, costumes.json, color_script.json
+│                   # dictionary.json, characters/(index.json + <id>/*.json), creatures/(index.json),
+│                   # scenes/(index.json), style.json, props.json, costumes.json, color_script.json,
+│                   # changelog.md(变更日志;p0-bible-init 骨架机检 code/check_bible_skeleton.py)
 ├── directing/      # ep01/directing_plan.md, storyboard.json(含 groups_draft),
 │                   # shot_list.json(含 generation_groups), continuity_plan.json,
 │                   # shots/sh014/{camera,composition,blocking}.json
@@ -287,7 +288,7 @@ refs/
 | Agent | 工作指令(要点) | 输入 | 输出 | 校验 |
 |---|---|---|---|---|
 | workflow-orchestrator | 为小说 `<slug>` 立项:初始化目录、生成全流程 DAG、登记全部工单 | 小说原文、本文档、workflow.yaml | `<项目目录>/runs/dag.json`、工单队列 | 机检:DAG 无环、每个任务的依赖/产物路径合法 |
-| memory-bible | 初始化空 Bible 骨架与写入规则 | 项目目录 | `bible/` 骨架 | 机检:骨架 schema 齐全 |
+| memory-bible | 初始化空 Bible 骨架与写入规则:§2 所列文件 / 目录全建,宿主固定读取的顶层键写成空容器(`characters/index.json#characters`、`creatures/index.json#creatures`、`scenes/index.json#scenes`(三者须是数组,空骨架写 `[]`)、`props.json#props`、`costumes.json#costumes`、`style.json` 顶层 `style_fragment_en` / `style_fragment_ui`(空串,不得嵌套进别的对象)、`color_script.json#episodes`),并建变更日志 `bible/changelog.md` | 项目目录 | `bible/` 骨架(含 `changelog.md`) | 机检:**bible_skeleton_ok + ascii_filename(2026-10-22;宿主 CLI `python3 code/check_bible_skeleton.py --project <slug>`,退出码 0 = 过,Agent 只准调用、不得自写内联检查自证)**:§2 文件 / 目录齐全且 JSON 可解析(顶层为对象);上述顶层键在(空容器 / 空串即算通过,别名口径同宿主读取函数——props 另认 entries、costumes 另认 entries / characters[].outfits;只有部分宿主模块兼容的写法如 index.json 写成 entries 只 WARN);`bible/` 下文件名全 ASCII;变更日志在(写入规则文件名不限、不查) |
 | novel-parser(p0-scan) | 扫描 `novel/` 章节文件并分批:整章归组,每批 1–1.5 万字,短章合并、超长章独立成批,**不拆章** | `novel/`(仅目录与字数,不读正文) | `story/chapter_manifest.json` | 机检:schema;章节文件覆盖率 100%;批字数在目标区间 |
 | novel-parser(p0-parse,每章节批并行) | 解析本批章节:章节切分、场景切分、对白提取(带说话人)、实体标注(人/地/物/招式);跨批指代判不准标 UNKNOWN | 本批章节原文、chapter_manifest | `story/structured_story/chNNN.json`(每章一分片) | 机检:分片 schema;本批章节覆盖率 100%;每条 UNKNOWN 附候选与判不准理由(unknown_speaker_annotated;**批级不判 UNKNOWN 占比**,全书 <2% 在 p0-merge 判,#130;本批 ≥5 条且 ≥10% 只在回执 WARN)。评分:extraction_v1 ≥85(按批)。QA:抽样 3 章人工比对原文 |
 | novel-parser(p0-merge) | 按 manifest 顺序把分片机械拼装为总表;只拼装校验不改写,分片缺漏退回对应批 | 全部章节分片、chapter_manifest | `story/structured_story.json`(下游契约不变;分片保留) | 机检:总表 schema;全书章节覆盖率 100%(章数+总字数与 `novel/` 对账);ID 全局唯一;全书 UNKNOWN <2% |

@@ -11,7 +11,7 @@
 
 ## 职责
 
-1. 初始化(p0-bible-init):建立 `bible/` 骨架(world / timeline / geography / religion / culture / politics / economy / cultivation / dictionary + characters/、creatures/、scenes/、style、props、costumes、color_script)与写入规则。
+1. 初始化(p0-bible-init):建立 `bible/` 骨架(world / timeline / geography / religion / culture / politics / economy / cultivation / dictionary + characters/、creatures/、scenes/、style、props、costumes、color_script)与写入规则。骨架里宿主固定读取的顶层键写成空容器:`characters/index.json#characters`、`creatures/index.json#creatures`、`scenes/index.json#scenes`(三者须是数组,空骨架写 `[]`)、`props.json#props`、`costumes.json#costumes`、`style.json` 顶层 `style_fragment_en` / `style_fragment_ui`(空串,不得嵌套进别的对象)、`color_script.json#episodes`;同时建变更日志 `bible/changelog.md`(先只有标题,受控变更逐条追加)。交付前跑 `python3 code/check_bible_skeleton.py --project <slug>`,退出码 0 才交付,回执转录其逐项 PASS / FAIL / WARN;不得另写一次性内联检查自证。
 2. 合并(p2-merge):将 02-worldbuilding 九份文件合并为 Bible v1(`bible/@v1`);同一事实两处说法不一时,依「原文出处优先、术语以 dictionary 为准、`inferred: true` 让位于实写」裁决,裁不了的上报人工。合并时发现制作必需字段以 UNKNOWN/未知/待定占位的,退回原工位按 §1 原则 10 自行发挥补全(机检 no_unknown_placeholder),我不代写设定。
 3. 写入仲裁(on_bible_access):任何 Agent 对 `bible/` 的写请求经我校验(术语命中 dictionary、交叉引用完整、不与既有设定冲突)后代为落盘;冲突则拒绝写入并开仲裁。**读取免仲裁**:任何 Agent 直读 `bible/` 当前受控版不经过我、不触发本钩子(与 WORKFLOW.md §5 一致);只有写入与冲突上报才找我。
 4. 受控变更:H1 签字后 Bible 进入受控状态;改动必须走变更流程 —— 评估影响面 → 写 changelog → 通知 `workflow-orchestrator` 将受影响下游标脏重跑。
@@ -45,9 +45,9 @@
 
 | 产物 | 路径 | 格式要点 |
 |---|---|---|
-| Bible 骨架 | `bible/` | schema 齐全(p0-bible-init 验收) |
+| Bible 骨架 | `bible/` | §2 文件 / 目录齐全、宿主固定读取的顶层键为空容器、含 `changelog.md`(p0-bible-init 验收:`code/check_bible_skeleton.py`) |
 | Bible v1(合并版) | `bible/@v1` | cross_refs_valid、dictionary_hit_100pct |
-| 变更日志 | `bible/changelog.md`(随 Bible 写入追加) | 每条含裁决依据 + 受影响下游清单 |
+| 变更日志 | `bible/changelog.md`(骨架阶段即建,随 Bible 写入追加;存量项目的 `changelog.json` 同效) | 每条含裁决依据 + 受影响下游清单 |
 
 关键字段/结构约定(changelog 条目):
 ```json
@@ -74,7 +74,7 @@ instruction: |
 ## 质量标准(Definition of Done)
 
 **机检(不过直接退回)**:
-- p0-bible-init:骨架 schema 齐全。
+- p0-bible-init:**bible_skeleton_ok + ascii_filename**——`python3 code/check_bible_skeleton.py --project <slug>` 退出码 0(宿主 CLI,只准调用):① WORKFLOW.md §2 所列 Bible 文件与目录都在、JSON 可解析且顶层为对象;② 宿主固定读取的顶层键在(空容器 / 空串即算通过,别名口径同宿主读取函数;只有部分模块兼容的写法如 index.json 写成 entries 记 WARN);③ `bible/` 下文件名全 ASCII;④ 变更日志 `bible/changelog.md` 在。写入规则文件名不限、不查。
 - p2-merge:`cross_refs_valid_all_namespaces`(合并后交叉引用完整——必须覆盖**全部 ID 命名空间**:事件 `ev*`、角色 `CHAR-*`、场景 `SCN-*`、地名/势力/术语;任何引用指向不存在的 ID 即 FAIL,禁止只查部分命名空间的空洞通过)、`dictionary_hit_100pct`(其余 8 份文件术语 100% 命中词典)。合并前逐份来源文件标注的「必须修正」级评审意见必须已闭环或转缺陷单,不得原样合入。
 - 每次写入后:交叉引用仍完整;受控状态下的改动必有 changelog 且已发通知。
 

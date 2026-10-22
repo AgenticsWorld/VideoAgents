@@ -57,6 +57,13 @@ phases:
         agent: 00-orchestration/memory-bible
         depends_on: [p0-init]
         outputs: [bible/]
+        # 骨架机检(2026-10-22):宿主 CLI python3 code/check_bible_skeleton.py --project <slug>,退出码 0 才算过,回执转录逐项结果——
+        # ① WORKFLOW.md §2 所列 Bible 文件 / 目录都在、JSON 可解析且顶层为对象;② 宿主固定读取的顶层键在(空容器 / 空串即算通过,
+        # 口径同宿主读取函数):characters/index.json#characters、creatures/index.json#creatures、scenes/index.json#scenes、
+        # props.json#props(或 entries)、costumes.json#costumes(或 entries / characters[].outfits)、style.json 顶层 style_fragment_en / style_fragment_ui、
+        # color_script.json#episodes;只有部分宿主模块兼容的写法(如三份 index.json 写成 entries)只 WARN;③ bible/ 下文件名全 ASCII(ascii_filename);
+        # ④ 变更日志 bible/changelog.md 在。写入规则文件名不限,不查
+        validation: { auto: [bible_skeleton_ok, ascii_filename] }
       # p0 解析走「分章 map + 全局 merge」(2026-07-23 改版,治整本单任务上下文溢出):
       # scan 产章节批清单 → parse 按批并行结构化 → merge 机械拼装出总表。
       # 不设字数阈值分支——短篇就是少数几批,统一走这条路;粒度由 scan 的分批逻辑控制。
