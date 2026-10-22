@@ -1019,9 +1019,11 @@ DEFAULT_GENCONFIG = {
                        "custom_model": ""},
     },
     # 审核模型(2026-10-20,NSFW 模式「拒绝判定用审核模型」打开时用):Agent 没交产物就结束时判断回复是不是
-    # 内容拒绝。决策模型 Jev 走 OpenRouter Decisions API(Agentics 不支持该接口);模型清单见 modules/refusal_judge.MODELS
+    # 内容拒绝。决策模型 Jev 走 Decisions API:Agentics(桌面端账号,默认,2026-10-22 起支持该接口)/ OpenRouter;
+    # 模型清单见 modules/refusal_judge.MODELS
     "moderation": {
-        "provider": "openrouter",   # openrouter
+        "provider": "agentics",   # agentics | openrouter
+        "agentics": {"model": "typesafe/jev-1.13"},
         "openrouter": {"api_key": "", "model": "typesafe/jev-1.13"},
     },
     # 文件管理(设置页「文件管理」):对象存储托管,V2V 参考视频经预签名 URL 传给
@@ -1333,12 +1335,18 @@ def _migrate_genconfig(config: dict) -> None:
     MiniMax/RunningHub 单一 Key 拆分为按接口区域/站点分别保存)。"""
     mod = config.get("moderation")
     if isinstance(mod, dict):
-        # 审核模型首版(2ec795b)有 Agentics 渠道与路由模型 jev-router,同日改为只走 OpenRouter 的决策模型 jev-1.13
-        mod.pop("agentics", None)
-        mod["provider"] = "openrouter"
-        orc = mod.get("openrouter")
-        if isinstance(orc, dict) and orc.get("model") not in _refusal_judge.MODELS:
-            orc["model"] = _refusal_judge.MODELS[0]
+        # 审核模型首版(2ec795b)的路由模型 jev-router 已不在清单,回落 jev-1.13。7e53ca2–2026-10-22 只有 OpenRouter
+        # 渠道,那时存下的配置没有 agentics 段:没填过 OpenRouter Key(环境变量也没有)的跟新默认改走 Agentics
+        # (沿用选过的模型),填了 Key 的留在 OpenRouter。新版保存时总带 agentics 段,此后按用户所选,不再改
+        orc = mod.get("openrouter") if isinstance(mod.get("openrouter"), dict) else {}
+        if "agentics" not in mod and mod.get("provider") in (None, "openrouter") and not str(
+                orc.get("api_key") or os.environ.get("OPENROUTER_API_KEY") or "").strip():
+            mod["provider"] = "agentics"
+            if orc.get("model"):
+                mod["agentics"] = {"model": orc["model"]}
+        for sub in (mod.get("agentics"), mod.get("openrouter")):
+            if isinstance(sub, dict) and sub.get("model") not in _refusal_judge.MODELS:
+                sub["model"] = _refusal_judge.MODELS[0]
     for kind in ("image", "video", "music", "tts", "digital_human", "upscale"):
         section = config.get(kind, {})
         if not isinstance(section, dict):
@@ -2286,29 +2294,46 @@ def agentics_pi_launch(model: str, da: dict, home: Path, *, thinking: bool,
     return args, env
 
 
+def _moderation_provider(m: dict) -> str:
+    return m.get("provider") if m.get("provider") in ("agentics", "openrouter") else "agentics"
+
+
 def resolve_moderation(cfg: dict | None = None) -> dict:
-    """审核模型配置 -> {provider, api_key, model}(只有 OpenRouter:Jev 决策模型走它的 Decisions API);
-    没填 Key(也没有 OPENROUTER_API_KEY)或模型不在清单里时 ServiceError(400),文案随界面语言。"""
-    sub = ((cfg or load_genconfig()).get("moderation") or {}).get("openrouter") or {}
+    """审核模型配置 -> 生效渠道的 {provider, url, api_key, model}(Jev 决策模型走 Decisions API:Agentics 为桌面端账号的
+    OpenRouter wrapper + /api/alpha/decisions,OpenRouter 为 openrouter.ai);Agentics 未登录 / OpenRouter 没填 Key
+    (也没有 OPENROUTER_API_KEY)/ 模型不在清单里时 ServiceError(400),文案随界面语言。"""
+    m = (cfg or load_genconfig()).get("moderation") or {}
+    provider = _moderation_provider(m)
+    sub = m.get(provider) or {}
     model = str(sub.get("model") or "").strip() or _refusal_judge.MODELS[0]
     zh = (ui_lang_code() or "zh") == "zh"
     if model not in _refusal_judge.MODELS:
         raise ServiceError(400, f"审核模型不支持 {model}" if zh else f"Unsupported moderation model: {model}")
+    if provider == "agentics":
+        try:
+            conn = resolve_agentics_connection()
+        except ServiceError:
+            raise ServiceError(400, "审核模型选的是 Agentics,但桌面端账号没有登录" if zh
+                               else "The moderation model uses Agentics, but no desktop account is signed in") from None
+        wrapper = conn["base_url"][:-len(OPENROUTER_WRAPPER_API_SUFFIX)]
+        return {"provider": "agentics", "url": wrapper + _refusal_judge.PATH,
+                "api_key": conn["api_key"], "model": model}
     key = resolve_openrouter_connection(sub.get("api_key") or "")["api_key"]
     if not key:
         raise ServiceError(400, "审核模型没有填 OpenRouter API Key" if zh
                            else "The moderation model has no OpenRouter API key")
-    return {"provider": "openrouter", "api_key": key, "model": model}
+    return {"provider": "openrouter", "url": _refusal_judge.URL, "api_key": key, "model": model}
 
 
 def moderation_status(cfg: dict | None = None) -> dict:
-    """审核模型能不能用:{ready, provider, model[, error]}(不发请求,只看配置)。"""
-    sub = ((cfg or load_genconfig()).get("moderation") or {}).get("openrouter") or {}
+    """审核模型能不能用:{ready, provider, model[, error]}(不发请求,只看配置与登录态)。"""
+    m = (cfg or load_genconfig()).get("moderation") or {}
+    provider = _moderation_provider(m)
     try:
         r = resolve_moderation(cfg)
     except ServiceError as e:
-        return {"ready": False, "provider": "openrouter",
-                "model": str(sub.get("model") or _refusal_judge.MODELS[0]), "error": e.detail}
+        return {"ready": False, "provider": provider,
+                "model": str((m.get(provider) or {}).get("model") or _refusal_judge.MODELS[0]), "error": e.detail}
     return {"ready": True, "provider": r["provider"], "model": r["model"]}
 
 
@@ -4508,7 +4533,7 @@ def _run_refusal_judge(text: str) -> dict | None:
         print(f"[nsfw] 审核模型不可用,跳过拒绝判定:{e.detail}", file=sys.stderr)
         return None
     try:
-        v = _refusal_judge.classify(text, api_key=conn["api_key"], model=conn["model"])
+        v = _refusal_judge.classify(text, api_key=conn["api_key"], model=conn["model"], url=conn["url"])
     except Exception as e:  # noqa: BLE001
         print(f"[nsfw] 审核模型调用失败,只按拒绝套话判:{e}", file=sys.stderr)
         return {"error": str(e)[:200], "provider": conn["provider"], "model": conn["model"]}
@@ -15488,18 +15513,21 @@ async def api_test_deepagents(body: dict):
 
 
 async def api_test_moderation(body: dict):
-    """「🎨 生成模型 → 审核模型」测试:按表单里的 OpenRouter Key / 模型,对一段自然措辞的拒绝样例真实判一次(计费)。
-    返回 {ok, kind, refusal, confidence, probabilities, snapshot, cost, ms};样例应判 policy。"""
-    cfg = {"moderation": {"provider": "openrouter",
-                          "openrouter": {"api_key": str(body.get("api_key") or "").strip(),
-                                         "model": str(body.get("model") or "").strip()}}}
+    """「🎨 生成模型 → 审核模型」测试:按表单里的渠道(Agentics 桌面端账号 / OpenRouter Key)与模型,
+    对一段自然措辞的拒绝样例真实判一次(计费)。返回 {ok, kind, refusal, confidence, probabilities, snapshot, cost, ms};样例应判 policy。"""
+    provider = str(body.get("provider") or "openrouter").strip()
+    if provider not in ("agentics", "openrouter"):
+        raise ServiceError(400, "provider must be agentics or openrouter")
+    cfg = {"moderation": {"provider": provider,
+                          provider: {"api_key": str(body.get("api_key") or "").strip(),
+                                     "model": str(body.get("model") or "").strip()}}}
     try:
         conn = resolve_moderation(cfg)
     except ServiceError as e:
         return {"ok": False, "error": e.detail}
     try:
         v = await asyncio.to_thread(_refusal_judge.classify, _refusal_judge.SAMPLE,
-                                    api_key=conn["api_key"], model=conn["model"])
+                                    api_key=conn["api_key"], model=conn["model"], url=conn["url"])
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": str(e)[:300]}
     return {"ok": True, **v}

@@ -3371,7 +3371,7 @@ function nsfwRender(d){
   const jm=d.judge_model||{};
   $('#nsfw-judge').checked=!!d.judge;
   $('#nsfw-judge').disabled=!jm.ready&&!d.judge;
-  $('#nsfw-judge-st').textContent=jm.ready?I18N.f('审核模型:{p} · {m}',{p:'OpenRouter',m:jm.model})
+  $('#nsfw-judge-st').textContent=jm.ready?I18N.f('审核模型:{p} · {m}',{p:jm.provider==='agentics'?'Agentics':'OpenRouter',m:jm.model})
     :(d.judge?t('⚠ 审核模型现在不可用,运行里只按拒绝套话判'):t('未配置审核模型:先到「🎨 生成模型」页「🛡 审核模型」配置'))+(jm.error?' ('+jm.error+')':'');
   $('#nsfw-st').textContent=d.enabled?t('✓ 已开启:标记 NSFW 的工单/分镜组改走备用模型'):t('已关闭:全部按主模型执行');
   $('#nsfw-body').style.opacity=d.enabled?'1':'.55';

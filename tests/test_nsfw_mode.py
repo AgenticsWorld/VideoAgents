@@ -212,6 +212,9 @@ def test_refusal_judge_classify_posts_decisions_api(monkeypatch):
     assert seen["url"] == "https://openrouter.ai/api/alpha/decisions" and seen["auth"] == "Bearer sk"
     assert seen["body"]["questions"]["kind"] == rj.QUESTION and seen["body"]["state"]["final_reply"] == "要不要继续?"
     assert v["kind"] == "clarification" and v["refusal"] is False and v["model"] == "typesafe/jev-1.13"
+    rj.classify("x", api_key="jwt", model="typesafe/jev-1.14",
+                url="https://api.agentics.world/wrapper/openrouter" + rj.PATH)              # Agentics 渠道传 wrapper 地址
+    assert seen["url"] == "https://api.agentics.world/wrapper/openrouter/api/alpha/decisions" and seen["auth"] == "Bearer jwt"
 
     def boom(req, timeout):
         raise rj.urllib.error.HTTPError(req.full_url, 401, "no", {}, io.BytesIO(b'{"error":"bad key"}'))
@@ -221,15 +224,16 @@ def test_refusal_judge_classify_posts_decisions_api(monkeypatch):
 
 
 def test_moderation_config_gates_judge_switch(monkeypatch):
-    """审核模型只走 OpenRouter:没填 Key 时拒绝打开 judge;只认清单里的模型;首版存下的 Agentics / jev-router 配置迁成 OpenRouter + jev-1.13。"""
+    """OpenRouter 渠道:没填 Key 时拒绝打开 judge;只认清单里的模型;首版存下的 jev-router 回落 jev-1.13。"""
     from services.runtime import core
     monkeypatch.setattr(core, "ui_lang_code", lambda cfg=None: "zh")
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    old = {"moderation": {"provider": "agentics", "agentics": {"model": "typesafe/jev-router"},
+    old = {"moderation": {"provider": "openrouter", "agentics": {"model": "typesafe/jev-router"},
                           "openrouter": {"api_key": "", "model": "typesafe/jev-router"}}}
     core._migrate_genconfig(old)
     gc = core._merge(core.DEFAULT_GENCONFIG, old)
-    assert gc["moderation"] == {"provider": "openrouter", "openrouter": {"api_key": "", "model": "typesafe/jev-1.13"}}
+    assert gc["moderation"] == {"provider": "openrouter", "agentics": {"model": "typesafe/jev-1.13"},
+                                "openrouter": {"api_key": "", "model": "typesafe/jev-1.13"}}
     monkeypatch.setattr(core, "load_genconfig", lambda: gc)
     monkeypatch.setattr(core, "video_provider_options", lambda cfg=None: [])
     monkeypatch.setattr(core, "_image_channels", lambda: [])
@@ -242,7 +246,8 @@ def test_moderation_config_gates_judge_switch(monkeypatch):
         asyncio.run(core.api_nsfw_set({"judge": True}))
     assert e.value.status_code == 400 and "审核模型" in e.value.detail and not saved
     gc["moderation"]["openrouter"]["api_key"] = "sk-or"
-    assert core.resolve_moderation() == {"provider": "openrouter", "api_key": "sk-or", "model": "typesafe/jev-1.13"}
+    assert core.resolve_moderation() == {"provider": "openrouter", "url": "https://openrouter.ai/api/alpha/decisions",
+                                         "api_key": "sk-or", "model": "typesafe/jev-1.13"}
     d = asyncio.run(core.api_nsfw_set({"judge": True}))
     assert d["judge"] is True and d["judge_model"]["ready"] is True and saved[-1]["judge"] is True
     assert asyncio.run(core.api_nsfw_set({"judge": False}))["judge"] is False     # 关闭不需要审核模型可用
@@ -256,8 +261,61 @@ def test_moderation_config_gates_judge_switch(monkeypatch):
     gc["moderation"]["openrouter"].update(api_key="", model="typesafe/jev-1.13")
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-env")
     assert core.resolve_moderation()["api_key"] == "sk-env"                       # 没填 Key 时用环境变量
-    r = asyncio.run(core.api_test_moderation({"provider": "agentics", "api_key": "", "model": "typesafe/jev-router"}))
+    r = asyncio.run(core.api_test_moderation({"provider": "openrouter", "api_key": "", "model": "typesafe/jev-router"}))
     assert r["ok"] is False and "不支持" in r["error"]
+
+
+def test_moderation_agentics_default_and_migration(monkeypatch):
+    """2026-10-22 Agentics 支持 Decisions API:默认渠道 Agentics(桌面端账号,地址 = wrapper + /api/alpha/decisions);
+    只有 OpenRouter 时存下的配置,没填 Key 的改走 Agentics,填了 Key 的留在 OpenRouter;新版存的配置按所选不再改。"""
+    from services.runtime import core
+    monkeypatch.setattr(core, "ui_lang_code", lambda cfg=None: "zh")
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    for var in ("VIDEOAGENTS_USER_JWT", "VIDEOAGENTS_SERVICE_API_ORIGIN", "VIDEOAGENTS_OPENROUTER_WRAPPER_URL"):
+        monkeypatch.delenv(var, raising=False)
+    assert core.DEFAULT_GENCONFIG["moderation"]["provider"] == "agentics"
+    nokey = {"moderation": {"provider": "openrouter", "openrouter": {"api_key": "", "model": "typesafe/jev-1.14"}}}
+    core._migrate_genconfig(nokey)
+    assert nokey["moderation"]["provider"] == "agentics" and nokey["moderation"]["agentics"] == {"model": "typesafe/jev-1.14"}
+    assert nokey["moderation"]["openrouter"]["model"] == "typesafe/jev-1.14"      # 沿用选过的模型
+    keyed = {"moderation": {"provider": "openrouter", "openrouter": {"api_key": "sk-or", "model": "typesafe/jev-1.13"}}}
+    core._migrate_genconfig(keyed)
+    assert keyed["moderation"]["provider"] == "openrouter"
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-env")
+    env = {"moderation": {"provider": "openrouter", "openrouter": {"api_key": "", "model": "typesafe/jev-1.13"}}}
+    core._migrate_genconfig(env)
+    assert env["moderation"]["provider"] == "openrouter"                           # 靠环境变量 Key 在用的不动
+    monkeypatch.delenv("OPENROUTER_API_KEY")
+    chosen = {"moderation": {"provider": "openrouter", "agentics": {"model": "typesafe/jev-1.13"},
+                             "openrouter": {"api_key": "", "model": "typesafe/jev-1.13"}}}
+    core._migrate_genconfig(chosen)
+    assert chosen["moderation"]["provider"] == "openrouter"                        # 新版保存过:按用户所选
+
+    gc = core._merge(core.DEFAULT_GENCONFIG, {"moderation": {"agentics": {"model": "typesafe/jev-1.14"}}})
+    monkeypatch.setattr(core, "load_genconfig", lambda: gc)
+    st = core.moderation_status()
+    assert st["ready"] is False and st["provider"] == "agentics" and "没有登录" in st["error"]
+    r = asyncio.run(core.api_test_moderation({"provider": "agentics", "model": "typesafe/jev-1.14"}))
+    assert r["ok"] is False and "没有登录" in r["error"]
+    monkeypatch.setenv("VIDEOAGENTS_USER_JWT", "jwt-1")
+    monkeypatch.setenv("VIDEOAGENTS_OPENROUTER_WRAPPER_URL", "https://api.agentics.world/wrapper/openrouter")
+    assert core.resolve_moderation() == {
+        "provider": "agentics", "url": "https://api.agentics.world/wrapper/openrouter/api/alpha/decisions",
+        "api_key": "jwt-1", "model": "typesafe/jev-1.14"}
+    assert core.moderation_status() == {"ready": True, "provider": "agentics", "model": "typesafe/jev-1.14"}
+    seen = {}
+
+    def fake(text, **kw):
+        seen.update(kw)
+        return {"kind": "policy", "refusal": True, "confidence": 1, "cost": None, "model": kw["model"], "ms": 1}
+    monkeypatch.setattr(core._refusal_judge, "classify", fake)
+    r = asyncio.run(core.api_test_moderation({"provider": "agentics", "model": "typesafe/jev-1.13"}))
+    assert r["ok"] is True and r["refusal"] is True
+    assert seen == {"api_key": "jwt-1", "model": "typesafe/jev-1.13",
+                    "url": "https://api.agentics.world/wrapper/openrouter/api/alpha/decisions"}
+    assert core._run_refusal_judge("x")["provider"] == "agentics" and seen["model"] == "typesafe/jev-1.14"
+    with pytest.raises(core.ServiceError):
+        asyncio.run(core.api_test_moderation({"provider": "fal"}))
 
 
 def test_refusal_postcheck_prescreen_then_judge(tmp_path, monkeypatch):
@@ -268,7 +326,8 @@ def test_refusal_postcheck_prescreen_then_judge(tmp_path, monkeypatch):
            "image": {"provider": "", "model": ""}, "video": {"provider": "", "model": ""}}
     monkeypatch.setattr(core, "nsfw_settings", lambda: cfg)
     monkeypatch.setattr(core, "resolve_moderation", lambda cfg=None: {
-        "provider": "openrouter", "api_key": "k", "model": "typesafe/jev-1.13"})
+        "provider": "openrouter", "url": "https://openrouter.ai/api/alpha/decisions", "api_key": "k",
+        "model": "typesafe/jev-1.13"})
     verdict, calls = ["policy"], []
 
     def fake(text, **kw):

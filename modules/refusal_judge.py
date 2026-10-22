@@ -5,12 +5,14 @@
 宿主先按运行形态零成本预筛(正常结束、回复不长、没交产物,见 core._refusal_judge_gate),筛中的才调本模块
 把 Agent 最后的回复交给审核模型判一次。
 
-- 审核模型是 TypeSafe 的决策模型 Jev(typesafe/jev-1.13),走 OpenRouter 的 Decisions API(POST /api/alpha/decisions):
+- 审核模型是 TypeSafe 的决策模型 Jev(typesafe/jev-1.13),走 Decisions API(POST {渠道根}/api/alpha/decisions):
   不生成文字,对「state + 带类别说明的 choice 题」直接给出各类别概率。只有 policy(因内容 / 安全 / 政策拒绝)算拒绝。
 - 只给回复正文末尾 TAIL 字,不给原始请求与图片。
 - 2026-10-20 实测(用户拍板换掉路由聊天模型 typesafe/jev-router):原工单 4542f699e746 的拒绝判 policy(概率 1),
-  缺文件 / 反问 / 已完成三类各判对;单次约 700 输入 token、$0.00002–0.00003、1.4 s。Agentics 渠道不支持该接口,只走 OpenRouter。
+  缺文件 / 反问 / 已完成三类各判对;单次约 700 输入 token、$0.00002–0.00003、1.4 s。
 - 2026-10-21 按用户要求加入 typesafe/jev-1.14(2026-10-14 发布,快照 jev-1.14-20261014),默认仍是 jev-1.13。
+- 2026-10-22 Agentics 支持了 Decisions API(jev-1.13 / jev-1.14):渠道加回 Agentics 并作默认,地址是桌面端账号的
+  OpenRouter wrapper + PATH(core.resolve_moderation 拼);OpenRouter 渠道仍是 URL。请求体与返回格式两渠道相同。
 """
 from __future__ import annotations
 
@@ -20,7 +22,8 @@ import urllib.error
 import urllib.request
 
 MODELS = ("typesafe/jev-1.13", "typesafe/jev-1.14")
-URL = "https://openrouter.ai/api/alpha/decisions"
+PATH = "/api/alpha/decisions"
+URL = "https://openrouter.ai" + PATH
 KINDS = ("policy", "missing_input", "clarification", "done", "other")
 TAIL = 1500
 TIMEOUT = 30
@@ -72,10 +75,11 @@ def parse(data: dict) -> dict:
             "cost": cost if isinstance(cost, (int, float)) else None}
 
 
-def classify(text: str, *, api_key: str, model: str, timeout: float = TIMEOUT) -> dict:
-    """判一次:返回 parse() 的结果加 {model, ms};网络 / HTTP / 返回格式出错时 JudgeError。"""
+def classify(text: str, *, api_key: str, model: str, url: str = URL, timeout: float = TIMEOUT) -> dict:
+    """判一次(url 默认 OpenRouter,Agentics 渠道传 wrapper 地址):返回 parse() 的结果加 {model, ms};
+    网络 / HTTP / 返回格式出错时 JudgeError。"""
     req = urllib.request.Request(
-        URL, data=json.dumps(request_body(text, model)).encode(),
+        url, data=json.dumps(request_body(text, model)).encode(),
         headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}",
                  "X-Title": "VideoAgents"})
     t0 = time.time()

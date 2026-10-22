@@ -691,7 +691,8 @@ def test_canvas_agent_refusal_marks_job_and_prompts_nsfw_toggle(runtime, monkeyp
     cfg = {**nsfw_cfg(), 'judge': True}
     monkeypatch.setattr(core, 'nsfw_settings', lambda: cfg)
     monkeypatch.setattr(core, 'resolve_moderation', lambda cfg=None: {
-        'provider': 'openrouter', 'api_key': 'k', 'model': 'typesafe/jev-1.13'})
+        'provider': 'openrouter', 'url': 'https://openrouter.ai/api/alpha/decisions', 'api_key': 'k',
+        'model': 'typesafe/jev-1.13'})
     calls, events, seen = [], [], []
     doc = ic.doc_dir_of(base, SHEET)
 
