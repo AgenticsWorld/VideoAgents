@@ -347,8 +347,26 @@ def _style(base: Path) -> tuple[str, str]:
     return plate_style(frag), plate_negative(str(neg))
 
 
-def _scene_docs(base: Path, sid: str) -> tuple[str, str, str]:
-    """(建筑/材质描述, 光照片段, 建筑负面串)。"""
+def _split_negative(neg) -> tuple[str, list[str]]:
+    """建筑负面词按语言拆(#142):纯 ASCII 条目拼成英文负面串;含非 ASCII(中文等)的条目原文返回,由调用方写进正文约束句,
+    不混进英文 negative。列表与字符串都按逗号 / 分号 / 顿号 / 换行切成条目。"""
+    items = neg if isinstance(neg, list) else [neg]
+    eng, other = [], []
+    for it in items:
+        for c in re.split(r'[,，;；、\n]', str(it or '')):
+            c = c.strip().rstrip('.。')
+            if c:
+                (eng if c.isascii() else other).append(c)
+    return ', '.join(eng), other
+
+
+def _must_not(items: list[str]) -> str:
+    """非英文建筑负面条目 → 正文约束句(条目原文照录)。"""
+    return ('Must not include: ' + '; '.join(items) + '.') if items else ''
+
+
+def _scene_docs(base: Path, sid: str) -> tuple[str, str, str, list[str]]:
+    """(建筑/材质描述, 光照片段, 建筑负面串(纯 ASCII 条目), 非英文建筑负面条目(写进正文 Must not include 句))。"""
     bdir = base / 'bible/scenes' / component(sid)
     arch = read(bdir / 'architecture.json', {}) or {}
     interior = arch.get('interior') or {}
@@ -361,8 +379,8 @@ def _scene_docs(base: Path, sid: str) -> tuple[str, str, str]:
         if s.get('prompt_fragment_en'):
             light = re.sub(r'^\s*lighting:\s*', '', str(s['prompt_fragment_en']).strip(), flags=re.I)
             break
-    neg = arch.get('negative') or []
-    return desc, light, (', '.join(str(x) for x in neg) if isinstance(neg, list) else str(neg))
+    arch_neg, must_not = _split_negative(arch.get('negative') or [])
+    return desc, light, arch_neg, must_not
 
 
 def scene_name(base: Path, sid: str) -> str:
@@ -385,7 +403,7 @@ def build_reverse_prompt(base: Path, sid: str, rec: dict) -> tuple[str, str]:
     in_frame = rev.get('in_frame_en') or []
     behind = rev.get('behind_en') or front.get('in_frame_en') or []
     must_show = front.get('behind_en') or []
-    desc, light, arch_neg = _scene_docs(base, sid)
+    desc, light, arch_neg, must_not = _scene_docs(base, sid)
     light = scheme_fragment(base, sid, base_scheme(rec, 'front')) or light      # 反向图与正向图同一母版光照
     style, style_neg = _style(base)
     parts = [f'Empty location background plate, one single full-frame still with nobody present and nothing moving. Location: {name}.',
@@ -406,6 +424,8 @@ def build_reverse_prompt(base: Path, sid: str, rec: dict) -> tuple[str, str]:
         parts.append('Lighting: ' + light.rstrip('.') + '.')
     if desc:
         parts.append('Materials and era (reference only): ' + desc)
+    if must_not:
+        parts.append(_must_not(must_not))
     parts.append('Empty location plate: no people, no characters, no animals, no text, no watermark, one single photograph, everything in sharp focus front to back.')
     if style:
         parts.append('Style: ' + style)
@@ -475,15 +495,17 @@ def build_variant_prompt(base: Path, sid: str, rec: dict, scheme_id: str, view: 
     cond = (lighting_schemes(base, sid).get(scheme_id) or {}).get('condition') or {}
     when = _flat({k: cond.get(k) for k in ('time_of_day', 'weather', 'in_scene_light_source')})
     style, style_neg = _style(base)
-    _, _, arch_neg = _scene_docs(base, sid)
+    _, _, arch_neg, must_not = _scene_docs(base, sid)
     parts = [f'Empty location background plate, one single full-frame still with nobody present and nothing moving. Location: {name}.',
              f'[Image 1] is this exact location and this exact camera view' + (f' under its original lighting ({src.rstrip(".")})' if src else '') + '. '
              'Produce the same picture again — identical camera position, lens, framing and composition, identical architecture, openings, furniture '
              'and every fixed element in the same place — changing ONLY the lighting, time of day and weather.',
              'New lighting: ' + (dst.rstrip('.') if dst else scheme_id) + '.' + (f' Condition: {when}.' if when else ''),
              'Light sources, shadows, sky and window light, colour temperature and exposure all follow the new lighting consistently; '
-             'nothing is added, removed or moved.',
-             'Empty location plate: no people, no characters, no animals, no text, no watermark, one single photograph, everything in sharp focus front to back.']
+             'nothing is added, removed or moved.']
+    if must_not:
+        parts.append(_must_not(must_not))
+    parts.append('Empty location plate: no people, no characters, no animals, no text, no watermark, one single photograph, everything in sharp focus front to back.')
     if style:
         parts.append('Style: ' + style)
     negative = ', '.join(x for x in (NEGATIVE_BASE, style_neg, arch_neg) if x)

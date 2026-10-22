@@ -185,3 +185,45 @@ def test_lighting_variant_render_wire_and_stale(tmp_path, monkeypatch):
     assert sp.variant_stale(base, 'SCN-1', sp.load_scene_plates(base, 'SCN-1'), 'L-NIGHT', 'front')
     assert sp.status(base, 'ep01')['scenes'][0]['state'] in ('stale_variant', 'ok') and any('过期' in e for e in sp.status(base, 'ep01')['errors'])
     assert 'SCN-1:front×L-NIGHT' in sp.render_needed(base, 'ep01', log=lambda *a: None)['rendered']
+
+
+def _mixed_arch(base: Path, negative):
+    """中英混合的建筑负面词 + 英文风格片段 / 负面词(#142)。"""
+    (base / 'bible/scenes/SCN-1').mkdir(parents=True, exist_ok=True)
+    (base / 'bible/style.json').write_text(json.dumps({'style_fragment_en': 'ink wash, rice paper texture, cool grey-cyan palette',
+                                                       'negative_prompt_en': 'lowres, blurry, watermark'}))
+    (base / 'bible/scenes/SCN-1/architecture.json').write_text(json.dumps(
+        {'form': 'three-bay timber hall', 'materials': ['grey brick', 'fir beams'], 'negative': negative}, ensure_ascii=False))
+
+
+def test_reverse_prompt_keeps_chinese_arch_negative_out_of_negative(tmp_path):
+    base = _proj(tmp_path)
+    _mixed_arch(base, ['glass windows', '现代灯具', 'neon signs, 塑料桶', '铁皮屋顶。'])
+    prompt, negative = sp.build_reverse_prompt(base, 'SCN-1', sp.load_scene_plates(base, 'SCN-1'))
+    assert negative.isascii(), negative
+    assert 'glass windows' in negative and 'neon signs' in negative and 'lowres' in negative
+    assert 'Must not include: 现代灯具; 塑料桶; 铁皮屋顶.' in prompt
+    assert 'glass windows' not in prompt                          # 英文条目只进 negative
+    lines = prompt.split('\n')
+    i = next(k for k, x in enumerate(lines) if x.startswith('Must not include:'))
+    assert lines[i - 1].startswith('Materials and era') and lines[i + 1].startswith('Empty location plate')
+    assert 'REVERSE view' in prompt and 'Style: ink wash' in prompt   # 正向母版 / 反向站位 / 风格照旧
+    # 字符串写法同样拆;没有非英文条目时不加约束句
+    _mixed_arch(base, 'no glass, 霓虹灯招牌，no plastic')
+    prompt, negative = sp.build_reverse_prompt(base, 'SCN-1', sp.load_scene_plates(base, 'SCN-1'))
+    assert negative.isascii() and 'no glass, no plastic' in negative and 'Must not include: 霓虹灯招牌.' in prompt
+    _mixed_arch(base, ['glass windows'])
+    prompt, negative = sp.build_reverse_prompt(base, 'SCN-1', sp.load_scene_plates(base, 'SCN-1'))
+    assert 'Must not include' not in prompt and negative.endswith('glass windows')
+
+
+def test_variant_prompt_keeps_chinese_arch_negative_out_of_negative(tmp_path):
+    base = _proj(tmp_path)
+    _with_lighting(base)
+    _mixed_arch(base, ['glass windows', '现代灯具'])
+    prompt, negative = sp.build_variant_prompt(base, 'SCN-1', sp.load_scene_plates(base, 'SCN-1'), 'L-NIGHT', 'front')
+    assert negative.isascii() and 'glass windows' in negative, negative
+    assert 'Must not include: 现代灯具.' in prompt and 'oil lamp' in prompt
+    lines = prompt.split('\n')
+    i = next(k for k, x in enumerate(lines) if x.startswith('Must not include:'))
+    assert lines[i - 1].startswith('Light sources') and lines[i + 1].startswith('Empty location plate')
