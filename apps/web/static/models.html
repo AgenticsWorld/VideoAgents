@@ -114,6 +114,39 @@ button:disabled{opacity:.5;cursor:default}
   <span id="save-status">修改即自动保存</span>
 </header>
 <main>
+  <div class="card" id="card-text">
+    <h2>🧩 语言模型/Agentics</h2>
+    <div class="tabs" id="text-tabs">
+      <div class="tab" id="tab-text-agentics">Agentics</div>
+      <div class="tab" id="tab-text-local">本地模型</div>
+      <div class="tab" id="tab-text-cloud">云端模型</div>
+      <div class="tab" id="tab-text-openrouter">OpenRouter</div>
+    </div>
+    <div id="panel-text-agentics"></div>
+    <div class="panel show" id="panel-text-local">
+      <div class="row">
+        <label>Base URL</label>
+        <input type="text" id="da-url" placeholder="http://127.0.0.1:1234/v1">
+        <button id="da-test">测试连接</button>
+      </div>
+      <div class="status" id="da-status"></div>
+      <div class="row" id="da-key-row"></div>
+      <div class="row" id="da-model-row"></div>
+      <div class="hint">OpenAI 兼容端点(LM Studio / Ollama / vLLM…)。LM Studio:先 <code>lms server start</code>(默认端口 1234);「测试连接」会列出端点上已加载/可用的模型。API Key 本地端点一般随意填(如 lm-studio)</div>
+    </div>
+    <div class="panel" id="panel-text-cloud">
+      <div class="row">
+        <label>Base URL</label>
+        <input type="text" id="dc-url" placeholder="https://api.deepseek.com">
+        <button id="dc-test">测试连接</button>
+      </div>
+      <div class="status" id="dc-status"></div>
+      <div class="row" id="dc-key-row"></div>
+      <div class="row" id="dc-model-row"></div>
+      <div class="hint">所有 OpenAI 兼容 API 均可使用(默认 DeepSeek 官方端点):换 Base URL / API Key / 模型 ID 即可接入其他服务商;「测试连接」会列出端点上可用的模型</div>
+    </div>
+    <div id="panel-text-openrouter"></div>
+  </div>
   <div class="card" id="card-image">
     <h2>🖼 图像模型</h2>
     <div class="tabs" id="image-tabs"></div>
@@ -234,39 +267,6 @@ button:disabled{opacity:.5;cursor:default}
       <div class="row"><label>高级参数</label><input type="number" id="world-hunyuan-views" min="4" max="64" step="1" placeholder="32" title="轨迹渲染视图数"><input type="number" id="world-hunyuan-steps" min="200" max="30000" step="100" placeholder="8000" title="3DGS 训练步数"><label class="chk"><input type="checkbox" id="world-hunyuan-fp8"> FP8 量化(Windows 暂不推荐,见部署文档)</label></div>
       <div class="hint">本地算力生成(不耗 credits):场景全景 → GPU 主机 worker(HunyuanWorld-1.0 分层重建 + 3DGS 训练),约 20–40 分钟;worker 部署参考 <a href="https://github.com/AgenticsWorld/VideoAgents-hunyuan-rpc" target="_blank">github.com/AgenticsWorld/VideoAgents-hunyuan-rpc</a>(默认 Windows + 3090 24G)。</div>
     </div>
-  </div>
-  <div class="card" id="card-text">
-    <h2>🧩 语言模型/Agentics</h2>
-    <div class="tabs" id="text-tabs">
-      <div class="tab" id="tab-text-agentics">Agentics</div>
-      <div class="tab" id="tab-text-local">本地模型</div>
-      <div class="tab" id="tab-text-cloud">云端模型</div>
-      <div class="tab" id="tab-text-openrouter">OpenRouter</div>
-    </div>
-    <div id="panel-text-agentics"></div>
-    <div class="panel show" id="panel-text-local">
-      <div class="row">
-        <label>Base URL</label>
-        <input type="text" id="da-url" placeholder="http://127.0.0.1:1234/v1">
-        <button id="da-test">测试连接</button>
-      </div>
-      <div class="status" id="da-status"></div>
-      <div class="row" id="da-key-row"></div>
-      <div class="row" id="da-model-row"></div>
-      <div class="hint">OpenAI 兼容端点(LM Studio / Ollama / vLLM…)。LM Studio:先 <code>lms server start</code>(默认端口 1234);「测试连接」会列出端点上已加载/可用的模型。API Key 本地端点一般随意填(如 lm-studio)</div>
-    </div>
-    <div class="panel" id="panel-text-cloud">
-      <div class="row">
-        <label>Base URL</label>
-        <input type="text" id="dc-url" placeholder="https://api.deepseek.com">
-        <button id="dc-test">测试连接</button>
-      </div>
-      <div class="status" id="dc-status"></div>
-      <div class="row" id="dc-key-row"></div>
-      <div class="row" id="dc-model-row"></div>
-      <div class="hint">所有 OpenAI 兼容 API 均可使用(默认 DeepSeek 官方端点):换 Base URL / API Key / 模型 ID 即可接入其他服务商;「测试连接」会列出端点上可用的模型</div>
-    </div>
-    <div id="panel-text-openrouter"></div>
   </div>
   <div class="card" id="card-moderation">
     <h2>🛡 审核模型</h2>
