@@ -182,6 +182,15 @@ import urllib.request
 import uuid
 from pathlib import Path
 
+if __name__ == "__main__":
+    # 成员 python3 缺依赖 / 依赖加载不了时换宿主解释器重跑(modules/host_python.py);代码作曲 / 代码音效脚本随本进程解释器跑。
+    # 须在下面的模块级代码之前:其中有 3.10+ 写法,macOS 自带 3.9 跑到 __main__ 之前就报 TypeError
+    try:
+        from modules.host_python import ensure_host_python
+    except ModuleNotFoundError:  # python modules/genmedia.py ...
+        from host_python import ensure_host_python
+    ensure_host_python()
+
 try:
     from modules.timbre_selector import select_timbre, find_timbre
     from modules import voice_library

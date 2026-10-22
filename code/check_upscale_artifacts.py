@@ -31,10 +31,10 @@ import sys
 import tempfile
 from pathlib import Path
 
+from _common import DATA_DIR  # noqa: E402  (副作用:modules/ 入 sys.path;成员 python3 缺依赖时换宿主解释器,须在 numpy 之前)
+
 import numpy as np
 from PIL import Image
-
-from _common import DATA_DIR  # noqa: E402  (副作用:modules/ 入 sys.path)
 
 HALO_THRESH = 0.01
 SMEAR_THRESH = 0.25

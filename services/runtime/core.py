@@ -17,6 +17,7 @@ import mimetypes
 import os
 import random
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -2992,6 +2993,50 @@ def _dir_writable(path: Path) -> bool:
     return True
 
 
+HOST_PYTHON_BIN_DIR = RUNTIME_DIR / "host-python" / "bin"
+
+
+def host_python_bin_dir() -> Path | None:
+    """派单 PATH 最前的目录:只放 python3 / python 两个启动脚本,转到宿主解释器(sys.executable,桌面端即自带运行时)。
+
+    成员命令写 `python3 …`,不前置时落到用户机器 PATH 上随便哪个解释器(conda base / Homebrew / 系统占位),
+    缺依赖或依赖加载不了(前科 2026-10-22:conda base 的 scipy 1.15.3 在 macOS 27 上 import scipy.signal 失败,
+    代码作曲跑不起来)。用启动脚本而非符号链接:venv 的解释器经链接调用认不出 venv;只放这两个名字,pip 等不排到前面。
+    引擎在登录 / 交互 shell 里跑命令时 ~/.zprofile、~/.zshrc 仍可能把别的 python3 排回前面,
+    由宿主 CLI 入口再兜一次(modules/host_python.py)。目录写不了时返回 None,派单照常。"""
+    exe = os.path.abspath(sys.executable or "")
+    if not os.path.isfile(exe):
+        return None
+    if os.name == "nt":   # cmd / PowerShell 认 .cmd;未在 Windows 实测
+        files = {f"{n}.cmd": f'@"{exe}" %*\n' for n in ("python3", "python")}
+    else:
+        files = {n: f'#!/bin/sh\nexec {shlex.quote(exe)} "$@"\n' for n in ("python3", "python")}
+    d = HOST_PYTHON_BIN_DIR
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+        for name, text in files.items():
+            f = d / name
+            if f.is_file() and f.read_text(encoding="utf-8") == text:
+                continue
+            tmp = d / f".{name}.{os.getpid()}.tmp"
+            tmp.write_text(text, encoding="utf-8")
+            tmp.chmod(0o755)
+            os.replace(tmp, f)
+    except OSError as e:
+        print(f"[host-python] 无法写 {d}:{e}", flush=True)
+        return None
+    return d
+
+
+def with_host_python_path(env: dict[str, str]) -> dict[str, str]:
+    """把 host_python_bin_dir() 排到 env PATH 最前(去掉已有的同一项)。"""
+    d = host_python_bin_dir()
+    if d is None:
+        return env
+    rest = [p for p in (env.get("PATH") or "").split(os.pathsep) if p and p != str(d)]
+    return {**env, "PATH": os.pathsep.join([str(d), *rest])}
+
+
 _OPENCODE_CACHE_WARNED = False
 
 
@@ -4849,6 +4894,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                "VIDEOAGENTS_PROJECT_ROOT": project_prompt_path(run["project"]),
                # 兼容旧版媒体模块；值与 VIDEOAGENTS_PROJECT 始终一致，避免继承到旧项目。
                "WEBUI_PROJECT": run["project"]}
+        env = with_host_python_path(env)   # 成员写 python3 时优先落到宿主解释器(host_python_bin_dir)
         if run.get("nsfw_route"):
             # NSFW 路由的 run:子进程 genmedia 图像/视频调用按备用渠道出图(modules/genmedia.py nsfw_route_reason)
             env["VIDEOAGENTS_NSFW"] = "1"

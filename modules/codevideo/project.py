@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import importlib
 import json
 import shutil
 import subprocess
@@ -24,12 +25,16 @@ def doctor(gl: bool = True) -> dict:
     def add(cid, ok, detail="", fatal=True):
         items.append({"id": cid, "ok": bool(ok), "detail": detail, "fatal": fatal})
 
-    for mod in ("numpy", "scipy", "soundfile", "PIL"):
+    # scipy 查到实际用的子模块:扩展被系统拒绝加载时 `import scipy` 照样成功(前科 2026-10-22 scipy 1.15.3 @ macOS 27)
+    for cid, mods in (("numpy", ("numpy",)),
+                      ("scipy", ("scipy.signal", "scipy.ndimage")),
+                      ("soundfile", ("soundfile",)), ("PIL", ("PIL.Image",))):
         try:
-            __import__(mod)
-            add(f"python_{mod}", True)
+            for mod in mods:
+                importlib.import_module(mod)
+            add(f"python_{cid}", True)
         except Exception as e:  # noqa: BLE001
-            add(f"python_{mod}", False, f"{sys.executable} 缺少 {mod}:{e}")
+            add(f"python_{cid}", False, f"{sys.executable} 缺少或加载不了 {mod}:{e}")
     try:
         import soxr  # noqa: F401
         add("python_soxr", True, fatal=False)

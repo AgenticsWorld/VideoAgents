@@ -6,7 +6,6 @@ import 本模块的副作用:把 modules/ 加入 sys.path,之后可直接
 import argparse
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
 
@@ -20,31 +19,18 @@ if str(MODULES_DIR) not in sys.path:
 if str(REPO_ROOT) not in sys.path:
     sys.path.append(str(REPO_ROOT))
 
+from host_python import ensure_host_python  # noqa: E402  (只用标准库)
+
 
 def reexec_with_host_python(argv=None):
-    """当前解释器缺 Playwright 时,换宿主派单注入的解释器(VIDEOAGENTS_PYTHON=服务自身 sys.executable)重跑一次。
+    """当前解释器缺依赖、或依赖装了却加载不了时,换宿主派单注入的解释器(VIDEOAGENTS_PYTHON=服务自身 sys.executable)重跑一次。
 
-    前科(2026-09-20 fengshen3 ep06):codex 的登录 shell 里 python3 → Homebrew 3.13(无 Playwright),
-    python → conda(齐全),Agent 写 python3 即报「缺少 Playwright」。须在 CLI 产生任何输出/副作用之前调用(各入口 parse_args 之后第一件事),免得 stdout 重复。
-    不满足条件(有 Playwright / 未注入 / 已是宿主解释器 / 已重跑过)时原样返回,由后续 import 照常报错。
+    判定与重跑见 modules/host_python.py(真 import 探测,按解释器缓存)。前科:2026-09-20 fengshen3 ep06 codex 的 python3 →
+    Homebrew 3.13(缺 Playwright);2026-10-22 conda base 的 scipy 1.15.3 在 macOS 27 上 import scipy.signal 失败。
+    code/ 下的 CLI 作主脚本 import 本模块时已自动调用一次(见文件末尾);各入口保留的显式调用重复执行无副作用。
+    不满足条件(依赖都能加载 / 未注入 / 已是宿主环境 / 已重跑过)时原样返回,由后续 import 照常报错。
     """
-    try:
-        import playwright  # noqa: F401
-        return
-    except ImportError:
-        pass
-    host = os.environ.get('VIDEOAGENTS_PYTHON', '').strip()
-    if not host or os.environ.get('VIDEOAGENTS_PYTHON_REEXEC') or not Path(host).is_file():
-        return
-    try:
-        if os.path.samefile(host, sys.executable):
-            return
-    except OSError:
-        pass
-    print(f'{Path(sys.argv[0]).name}: {sys.executable} 缺少 Playwright,改用宿主解释器 {host} 重跑', file=sys.stderr, flush=True)
-    sys.stdout.flush()
-    code = subprocess.call([host, *(argv or sys.argv)], env={**os.environ, 'VIDEOAGENTS_PYTHON_REEXEC': '1'})
-    sys.exit(code)
+    ensure_host_python(argv)
 
 
 _NEGATIVE_VALUE = re.compile(r'^-\.?\d[\d.,eE+\-]*$')      # -8,5 / -1,0.85,0 / -.5,2:负数开头的坐标串
@@ -106,3 +92,10 @@ def spatial_blocking_enabled(proj_root: Path) -> bool:
     """项目输出设置「白模/人物精确空间位置」(output.spatial_blocking,默认关,2026-09-16 起未配置过的存量项目也视为关;2026-09-07 起含义=用白模摄影机视角视频给视频生成定位人物):开=场景布局包流程(俯视图/九格图/layout.json 直接进 refs + 组级 blocking_map 数据)+ 白模链(scene-modeling/whitebox-staging,导出视频自动接成组 video_refs,机检 whitebox_ref_bound);
     关=单张场景概念图旧流程,scene_layout_pack_ok / blocking_map_present / layout_map_bound 等机检跳过。"""
     return project_output_setting(proj_root, "spatial_blocking") is True
+
+
+# import 即兜底:主脚本是 code/ 下的宿主 CLI 时,赶在它 import 第三方包之前换解释器
+# (服务进程、pytest 里 import 本模块不触发;个别先 import 第三方包再 import 本模块的入口另行显式调用)
+_MAIN_FILE = getattr(sys.modules.get("__main__"), "__file__", None)
+if _MAIN_FILE and Path(_MAIN_FILE).resolve().parent == Path(__file__).resolve().parent:
+    reexec_with_host_python()

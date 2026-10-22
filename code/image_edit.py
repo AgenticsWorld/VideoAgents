@@ -22,6 +22,7 @@ import shutil
 import sys
 from pathlib import Path
 
+import _common  # noqa: F401  成员 python3 缺 Pillow 等依赖时换宿主解释器重跑(import 即生效,须在 PIL 之前)
 from PIL import Image, ImageFile
 
 JPEG_QUALITY = 92

@@ -154,9 +154,12 @@ def main() -> None:
     # beside it so the whole renderer remains relocatable and travels with the
     # runtime ZIP to end users.
     run(str(python), "-m", "playwright", "install", "chromium", env=browser_env)
-    # Validate after the final internal relocation.
+    # Validate after the final internal relocation. Import the scipy submodules the
+    # project uses: a wheel whose extensions the OS loader rejects still passes a bare
+    # `import scipy` (scipy 1.15.3 on macOS 27 failed only at scipy.signal).
     run(str(python), "-c",
-        "import cv2,fastapi,fontTools,faster_whisper,lark_oapi,numpy,onnxruntime,PIL,playwright,qrcode,scenedetect,scipy,tos,uvicorn,yaml,yt_dlp",
+        "import cv2,fastapi,fontTools,faster_whisper,lark_oapi,numpy,onnxruntime,PIL.Image,playwright,qrcode,"
+        "scenedetect,scipy.fft,scipy.ndimage,scipy.optimize,scipy.signal,soundfile,soxr,tos,uvicorn,yaml,yt_dlp",
         env=env)
     run(str(python), "-c",
         "import os\n"

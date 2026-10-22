@@ -24,6 +24,13 @@ import re
 from pathlib import Path
 from typing import Iterable
 
+if __name__ == "__main__":
+    try:   # 成员 python3 缺依赖 / 依赖加载不了时换宿主解释器重跑(modules/host_python.py),须在 numpy 之前
+        from modules.host_python import ensure_host_python
+    except ModuleNotFoundError:  # python modules/xxx.py ...
+        from host_python import ensure_host_python
+    ensure_host_python()
+
 import numpy as np
 from scipy.fft import dct
 
