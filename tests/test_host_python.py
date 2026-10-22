@@ -37,11 +37,16 @@ def _stubs(base: Path, broken: tuple = ()) -> Path:
     return base
 
 
-def _host(tmp: Path) -> Path:
-    """模拟宿主解释器:另一路径的启动脚本,调用时记一笔再转到当前解释器。"""
+def _host(tmp: Path, broken: tuple = ()) -> Path:
+    """模拟宿主解释器:另一路径的启动脚本,调用时记一笔(连同参数)、PYTHONPATH 换成宿主自己的桩包再转到当前解释器。
+
+    broken 是宿主自己加载不了的模块(默认宿主健康);重跑前的宿主探测(host_python.py --probe)也经它走。
+    """
+    host_stubs = _stubs(tmp / "host_stubs", broken=broken)
     p = tmp / "host" / "python3"
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(f'#!/bin/sh\necho host >> "{tmp / "host.log"}"\nexec "{sys.executable}" "$@"\n', encoding="utf-8")
+    p.write_text(f'#!/bin/sh\necho "host $*" >> "{tmp / "host.log"}"\nexport PYTHONPATH="{host_stubs}"\n'
+                 f'exec "{sys.executable}" "$@"\n', encoding="utf-8")
     p.chmod(0o755)
     return p
 
@@ -69,9 +74,22 @@ def _member(tmp: Path, env: dict, *args):
     return subprocess.run([sys.executable, str(script), *args], env=env, capture_output=True, text=True, timeout=60)
 
 
-def _host_calls(tmp: Path) -> int:
+def _host_lines(tmp: Path) -> list:
     log = tmp / "host.log"
-    return len(log.read_text().splitlines()) if log.exists() else 0
+    return log.read_text().splitlines() if log.exists() else []
+
+
+def _host_calls(tmp: Path) -> int:
+    """真正换到宿主解释器重跑的次数(不含重跑前的宿主探测)。"""
+    return sum(1 for ln in _host_lines(tmp) if " --probe" not in ln)
+
+
+def _host_probes(tmp: Path) -> int:
+    return sum(1 for ln in _host_lines(tmp) if " --probe" in ln)
+
+
+def _key(stubs: Path) -> str:
+    return f"{os.path.abspath(sys.executable)}|PYTHONPATH={stubs}"
 
 
 @posix_only
@@ -84,7 +102,10 @@ def test_broken_dependency_reexecs_with_host_and_caches(tmp_path):
     assert _host_calls(tmp_path) == 1
     assert "加载依赖失败(scipy.signal: ImportError: dlopen" in r.stderr and "改用宿主解释器" in r.stderr
     cache = json.loads((tmp_path / "rt" / hp.CACHE_NAME).read_text(encoding="utf-8"))
-    assert cache[os.path.abspath(sys.executable)]["error"].startswith("scipy.signal: ImportError")
+    assert list(cache[_key(stubs)]["errors"]) == ["scipy.signal"]                  # 存全部失败项
+    assert cache[_key(stubs)]["errors"]["scipy.signal"].startswith("ImportError: dlopen")
+    assert cache[_key(tmp_path / "host_stubs")]["errors"] == {}                    # 宿主探测由宿主进程按自己的签名写
+    assert _host_probes(tmp_path) == 1
     # 第二次命中缓存:不再真 import 探测,直接换解释器
     r = _member(tmp_path, env)
     assert r.stdout.splitlines() == ["RAN 1 []"] and _host_calls(tmp_path) == 2
@@ -124,6 +145,54 @@ def test_dash_m_invocation_reexecs_with_dash_m(tmp_path):
     env = _env(tmp_path, stubs, _host(tmp_path))
     r = subprocess.run([sys.executable, "-m", "member_mod", "x"], cwd=pkg, env=env, capture_output=True, text=True, timeout=60)
     assert r.stdout.splitlines() == ["member_mod RAN 1 ['x']"], r.stderr
+
+
+@posix_only
+def test_worse_or_equal_host_keeps_current_interpreter(tmp_path):
+    """#160:成员换了只缺 Playwright 的环境,宿主自己 scipy.signal 加载不了 → 不换(换过去必败);两边一样差也不换。"""
+    stubs = _stubs(tmp_path / "stubs", broken=("playwright",))
+    env = _env(tmp_path, stubs, _host(tmp_path, broken=("scipy.signal",)))
+    r = _member(tmp_path, env, "x")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.splitlines() == ["RAN None ['x']"] and _host_calls(tmp_path) == 0
+    assert "留在当前解释器运行" in r.stderr and "改用宿主解释器" not in r.stderr
+    assert "加载依赖失败(playwright: ImportError" in r.stderr and "加载依赖失败(scipy.signal: ImportError" in r.stderr
+    r = _member(tmp_path, env)                                                     # 两边都命中缓存:不再真 import
+    assert r.stdout.splitlines() == ["RAN None []"] and "PROBED" not in r.stderr
+    assert _host_probes(tmp_path) == 2 and _host_calls(tmp_path) == 0
+
+    tmp2 = tmp_path / "same"
+    stubs = _stubs(tmp2 / "stubs", broken=("soundfile",))
+    r = _member(tmp2, _env(tmp2, stubs, _host(tmp2, broken=("soundfile",))))
+    assert r.stdout.splitlines() == ["RAN None []"] and _host_calls(tmp2) == 0 and "留在当前解释器运行" in r.stderr
+
+
+@posix_only
+def test_better_host_still_reexecs(tmp_path):
+    """宿主失败项是当前失败项的真子集就换:偏旧的桌面运行时只缺 soundfile,对比全缺的 Homebrew 仍换过去。"""
+    stubs = _stubs(tmp_path / "stubs", broken=("numpy", "scipy.signal", "soundfile", "PIL.Image", "yaml"))
+    env = _env(tmp_path, stubs, _host(tmp_path, broken=("soundfile",)))
+    r = _member(tmp_path, env, "--ep", "ep01")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.splitlines() == ["RAN 1 ['--ep', 'ep01']"] and _host_calls(tmp_path) == 1
+    assert "加载依赖失败(numpy: ImportError" in r.stderr and ";soundfile: ImportError" in r.stderr
+    assert "改用宿主解释器" in r.stderr and "宿主仍缺:soundfile: ImportError" in r.stderr
+
+
+@posix_only
+def test_genmedia_ignores_missing_playwright(tmp_path):
+    """genmedia 不开无头浏览器:只缺 Playwright 的解释器照常跑,不换也不探测宿主;缓存仍记全量失败项供 code/ 入口用。"""
+    stubs = _stubs(tmp_path / "stubs", broken=("playwright",))
+    env = _env(tmp_path, stubs, _host(tmp_path))
+    r = subprocess.run([sys.executable, str(ROOT / "modules" / "genmedia.py"), "--help"],
+                       cwd=tmp_path, env=env, capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0 and "usage" in r.stdout, r.stderr
+    assert "加载依赖失败" not in r.stderr and "改用宿主解释器" not in r.stderr
+    assert _host_lines(tmp_path) == []
+    cache = json.loads((tmp_path / "rt" / hp.CACHE_NAME).read_text(encoding="utf-8"))
+    assert list(cache[_key(stubs)]["errors"]) == ["playwright"]
+    r = _member(tmp_path, env)                                                     # 全量判定的入口照旧换
+    assert r.stdout.splitlines() == ["RAN 1 []"] and _host_calls(tmp_path) == 1
 
 
 @posix_only
