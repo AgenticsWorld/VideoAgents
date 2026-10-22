@@ -4,9 +4,9 @@
 
 ## English
 
-[`image-z-image-turbo-bf16-img2img-api.json`](image-z-image-turbo-bf16-img2img-api.json)
+[`image-z-image-turbo-bf16-i2i-api.json`](image-z-image-turbo-bf16-i2i-api.json)
 is the image-to-image companion of
-[`image-z-image-turbo-bf16-api.md`](image-z-image-turbo-bf16-api.md), for
+[`image-z-image-turbo-bf16-t2i-api.md`](image-z-image-turbo-bf16-t2i-api.md), for
 [Tongyi-MAI/Z-Image-Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo).
 The reference image is loaded via `LoadImage`, Lanczos-scaled with center crop
 to the requested `WIDTH`x`HEIGHT`, VAE-encoded, then re-sampled at
@@ -18,7 +18,7 @@ Placeholders: `PROMPT` `FIRST_FRAME` `WIDTH` `HEIGHT` `SEED`.
 ### Install
 
 Same models as the text-to-image workflow; see the install section of
-[`image-z-image-turbo-bf16-api.md`](image-z-image-turbo-bf16-api.md). No extra
+[`image-z-image-turbo-bf16-t2i-api.md`](image-z-image-turbo-bf16-t2i-api.md). No extra
 downloads are needed.
 
 ### Console Configuration
@@ -32,8 +32,8 @@ image channel's **`ref_workflow`** field, next to the main workflow:
     "provider": "comfyui",
     "comfyui": {
       "url": "http://127.0.0.1:8188",
-      "workflow": "comfy/image-z-image-turbo-bf16-api.json",
-      "ref_workflow": "comfy/image-z-image-turbo-bf16-img2img-api.json",
+      "workflow": "comfy/image-z-image-turbo-bf16-t2i-api.json",
+      "ref_workflow": "comfy/image-z-image-turbo-bf16-i2i-api.json",
       "checkpoint": ""
     }
   }
@@ -58,8 +58,8 @@ use `negative_mode: "append_exclusions"` when exclusions matter).
 
 ## 中文
 
-[`image-z-image-turbo-bf16-img2img-api.json`](image-z-image-turbo-bf16-img2img-api.json)
-是 [`image-z-image-turbo-bf16-api.md`](image-z-image-turbo-bf16-api.md) 的图生图配套工作流,
+[`image-z-image-turbo-bf16-i2i-api.json`](image-z-image-turbo-bf16-i2i-api.json)
+是 [`image-z-image-turbo-bf16-t2i-api.md`](image-z-image-turbo-bf16-t2i-api.md) 的图生图配套工作流,
 基于 [Tongyi-MAI/Z-Image-Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo)。
 参考图经 `LoadImage` 载入,用 Lanczos 缩放并居中裁剪到请求的 `WIDTH`x`HEIGHT`,
 VAE 编码后以 `denoise 0.65` 重新采样(8 步、`cfg 1.0`,与文生图工作流相同的
@@ -70,7 +70,7 @@ turbo 设置)。
 ### 安装
 
 与文生图工作流使用相同模型,见
-[`image-z-image-turbo-bf16-api.md`](image-z-image-turbo-bf16-api.md) 的安装章节,
+[`image-z-image-turbo-bf16-t2i-api.md`](image-z-image-turbo-bf16-t2i-api.md) 的安装章节,
 无需额外下载。
 
 ### 控制台配置
@@ -84,8 +84,8 @@ turbo 设置)。
     "provider": "comfyui",
     "comfyui": {
       "url": "http://127.0.0.1:8188",
-      "workflow": "comfy/image-z-image-turbo-bf16-api.json",
-      "ref_workflow": "comfy/image-z-image-turbo-bf16-img2img-api.json",
+      "workflow": "comfy/image-z-image-turbo-bf16-t2i-api.json",
+      "ref_workflow": "comfy/image-z-image-turbo-bf16-i2i-api.json",
       "checkpoint": ""
     }
   }

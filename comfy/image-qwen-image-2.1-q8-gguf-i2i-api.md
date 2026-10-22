@@ -4,9 +4,9 @@
 
 ## English
 
-[`image-qwen-image-2.1-q8-gguf-ref10-api.json`](image-qwen-image-2.1-q8-gguf-ref10-api.json) is the
+[`image-qwen-image-2.1-q8-gguf-i2i-api.json`](image-qwen-image-2.1-q8-gguf-i2i-api.json) is the
 reference-image companion of
-[`image-qwen-image-2.1-q8-gguf-api.md`](image-qwen-image-2.1-q8-gguf-api.md), converted from
+[`image-qwen-image-2.1-q8-gguf-t2i-api.md`](image-qwen-image-2.1-q8-gguf-t2i-api.md), converted from
 `image_qwen_image_2_1_i2i_gguf.json` (the official Comfy-Org Qwen Image 2.1 image-edit template with the
 diffusion loader swapped for `UnetLoaderGGUF`). It accepts **1 to 10 reference images**, wired to
 `TextEncodeQwenImage21`'s `images.image_1` … `images.image_10` with the VAE connected: each reference is seen
@@ -21,13 +21,13 @@ for the same request on the same machine. 3 to 10 references were not run.
 
 > **Local only** (needs the ComfyUI-GGUF custom node, which Comfy Cloud does not have) and
 > **non-commercial only** (Qwen Research License). See
-> [`image-qwen-image-2.1-q8-gguf-api.md`](image-qwen-image-2.1-q8-gguf-api.md).
+> [`image-qwen-image-2.1-q8-gguf-t2i-api.md`](image-qwen-image-2.1-q8-gguf-t2i-api.md).
 
 ### Install
 
 Same ComfyUI version (0.37.0 or newer), same ComfyUI-GGUF node pack and same three model files as the
 text-to-image workflow; see the install section of
-[`image-qwen-image-2.1-q8-gguf-api.md`](image-qwen-image-2.1-q8-gguf-api.md). No extra downloads are
+[`image-qwen-image-2.1-q8-gguf-t2i-api.md`](image-qwen-image-2.1-q8-gguf-t2i-api.md). No extra downloads are
 needed.
 
 ### Console Configuration
@@ -40,8 +40,8 @@ This workflow goes into the image channel's **`ref_workflow`** field, next to th
   "image": {
     "provider": "comfyui",
     "comfyui": {
-      "workflow": "comfy/image-qwen-image-2.1-q8-gguf-api.json",
-      "ref_workflow": "comfy/image-qwen-image-2.1-q8-gguf-ref10-api.json",
+      "workflow": "comfy/image-qwen-image-2.1-q8-gguf-t2i-api.json",
+      "ref_workflow": "comfy/image-qwen-image-2.1-q8-gguf-i2i-api.json",
       "negative_mode": "append_exclusions",
       "checkpoint": ""
     }
@@ -92,8 +92,8 @@ placeholder (`cfg 1.0`; use `negative_mode: "append_exclusions"`) behave as in t
 
 ## 中文
 
-[`image-qwen-image-2.1-q8-gguf-ref10-api.json`](image-qwen-image-2.1-q8-gguf-ref10-api.json) 是
-[`image-qwen-image-2.1-q8-gguf-api.md`](image-qwen-image-2.1-q8-gguf-api.md) 的参考图配套工作流,由
+[`image-qwen-image-2.1-q8-gguf-i2i-api.json`](image-qwen-image-2.1-q8-gguf-i2i-api.json) 是
+[`image-qwen-image-2.1-q8-gguf-t2i-api.md`](image-qwen-image-2.1-q8-gguf-t2i-api.md) 的参考图配套工作流,由
 `image_qwen_image_2_1_i2i_gguf.json` 转换而来(把底模加载器换成 `UnetLoaderGGUF` 的 Comfy-Org 官方 Qwen Image
 2.1 图像编辑模板)。接受 **1–10 张参考图**,接在 `TextEncodeQwenImage21` 的 `images.image_1` …
 `images.image_10` 上并连上 VAE:每张参考图既给 Qwen3-VL 文本编码器看,也以 VAE latent 拼进序列。采样与文生图
@@ -106,12 +106,12 @@ placeholder (`cfg 1.0`; use `negative_mode: "append_exclusions"`) behave as in t
 
 > **只能在本地跑**(需要 ComfyUI-GGUF 自定义节点,Comfy Cloud 没有),且**仅限非商业用途**
 > (Qwen Research License)。详见
-> [`image-qwen-image-2.1-q8-gguf-api.md`](image-qwen-image-2.1-q8-gguf-api.md)。
+> [`image-qwen-image-2.1-q8-gguf-t2i-api.md`](image-qwen-image-2.1-q8-gguf-t2i-api.md)。
 
 ### 安装
 
 ComfyUI 版本(0.37.0 及以上)、ComfyUI-GGUF 节点包和三个模型文件都与文生图工作流相同,见
-[`image-qwen-image-2.1-q8-gguf-api.md`](image-qwen-image-2.1-q8-gguf-api.md) 的安装章节,无需额外下载。
+[`image-qwen-image-2.1-q8-gguf-t2i-api.md`](image-qwen-image-2.1-q8-gguf-t2i-api.md) 的安装章节,无需额外下载。
 
 ### 控制台配置
 
@@ -122,8 +122,8 @@ ComfyUI 版本(0.37.0 及以上)、ComfyUI-GGUF 节点包和三个模型文件�
   "image": {
     "provider": "comfyui",
     "comfyui": {
-      "workflow": "comfy/image-qwen-image-2.1-q8-gguf-api.json",
-      "ref_workflow": "comfy/image-qwen-image-2.1-q8-gguf-ref10-api.json",
+      "workflow": "comfy/image-qwen-image-2.1-q8-gguf-t2i-api.json",
+      "ref_workflow": "comfy/image-qwen-image-2.1-q8-gguf-i2i-api.json",
       "negative_mode": "append_exclusions",
       "checkpoint": ""
     }

@@ -4,7 +4,7 @@
 
 ## English
 
-[`image-qwen-image-edit-2511-ref3-api.json`](image-qwen-image-edit-2511-ref3-api.json) is an image-to-image
+[`image-qwen-image-edit-2511-i2i-api.json`](image-qwen-image-edit-2511-i2i-api.json) is an image-to-image
 workflow for [Qwen-Image-Edit-2511](https://huggingface.co/Qwen/Qwen-Image-Edit-2511) (20B, Apache 2.0) with
 **1 to 3 reference images** as *conditions* (identity, outfit, layout) and an empty latent — composition follows
 the prompt. It runs the Lightning 4-step LoRA: `KSampler` 4 steps, `cfg 1.0`, `euler` / `simple`,
@@ -13,8 +13,8 @@ the prompt. It runs the Lightning 4-step LoRA: `KSampler` 4 steps, `cfg 1.0`, `e
 Placeholders: `PROMPT` `FIRST_FRAME` `WIDTH` `HEIGHT` `GEN_WIDTH` `GEN_HEIGHT` `SEED`.
 
 It has no text-to-image counterpart of its own: pair it with any text-to-image template
-(e.g. [`image-flux2-dev-fp8-api.md`](image-flux2-dev-fp8-api.md), [`image-ideogram4-int8-api.md`](image-ideogram4-int8-api.md),
-[`image-z-image-turbo-bf16-api.md`](image-z-image-turbo-bf16-api.md)) and put this file in `ref_workflow`.
+(e.g. [`image-flux2-dev-fp8-t2i-api.md`](image-flux2-dev-fp8-t2i-api.md), [`image-ideogram4-int8-t2i-api.md`](image-ideogram4-int8-t2i-api.md),
+[`image-z-image-turbo-bf16-t2i-api.md`](image-z-image-turbo-bf16-t2i-api.md)) and put this file in `ref_workflow`.
 
 ### Install
 
@@ -36,8 +36,8 @@ ComfyUI/models/
   "image": {
     "provider": "comfyui",
     "comfyui": {
-      "workflow": "comfy/image-flux2-dev-fp8-api.json",
-      "ref_workflow": "comfy/image-qwen-image-edit-2511-ref3-api.json",
+      "workflow": "comfy/image-flux2-dev-fp8-t2i-api.json",
+      "ref_workflow": "comfy/image-qwen-image-edit-2511-i2i-api.json",
       "negative_mode": "append_exclusions",
       "checkpoint": ""
     }
@@ -67,15 +67,15 @@ with `cfg` around 4 (the negative encode node then takes effect).
 
 ## 中文
 
-[`image-qwen-image-edit-2511-ref3-api.json`](image-qwen-image-edit-2511-ref3-api.json) 是
+[`image-qwen-image-edit-2511-i2i-api.json`](image-qwen-image-edit-2511-i2i-api.json) 是
 [Qwen-Image-Edit-2511](https://huggingface.co/Qwen/Qwen-Image-Edit-2511)(20B,Apache 2.0)的图生图工作流:
 **1–3 张参考图**作*条件*(身份、服装、版式),空 latent 生成——构图听提示词的。挂 Lightning 4 步 LoRA:
 `KSampler` 4 步、`cfg 1.0`、`euler` / `simple`、`ModelSamplingAuraFlow shift 3`、`CFGNorm`。
 
 占位符:`PROMPT` `FIRST_FRAME` `WIDTH` `HEIGHT` `GEN_WIDTH` `GEN_HEIGHT` `SEED`。
 
-它没有自己的文生图配套:与任意文生图模板搭配(如 [`image-flux2-dev-fp8-api.md`](image-flux2-dev-fp8-api.md)、
-[`image-ideogram4-int8-api.md`](image-ideogram4-int8-api.md)、[`image-z-image-turbo-bf16-api.md`](image-z-image-turbo-bf16-api.md)),
+它没有自己的文生图配套:与任意文生图模板搭配(如 [`image-flux2-dev-fp8-t2i-api.md`](image-flux2-dev-fp8-t2i-api.md)、
+[`image-ideogram4-int8-t2i-api.md`](image-ideogram4-int8-t2i-api.md)、[`image-z-image-turbo-bf16-t2i-api.md`](image-z-image-turbo-bf16-t2i-api.md)),
 本文件填 `ref_workflow`。
 
 ### 安装
@@ -98,8 +98,8 @@ ComfyUI/models/
   "image": {
     "provider": "comfyui",
     "comfyui": {
-      "workflow": "comfy/image-flux2-dev-fp8-api.json",
-      "ref_workflow": "comfy/image-qwen-image-edit-2511-ref3-api.json",
+      "workflow": "comfy/image-flux2-dev-fp8-t2i-api.json",
+      "ref_workflow": "comfy/image-qwen-image-edit-2511-i2i-api.json",
       "negative_mode": "append_exclusions",
       "checkpoint": ""
     }

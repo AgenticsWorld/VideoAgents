@@ -4,8 +4,8 @@
 
 ## English
 
-[`image-noctq-v4-int8-ref10-api.json`](image-noctq-v4-int8-ref10-api.json) is the reference-image companion of
-[`image-noctq-v4-int8-api.md`](image-noctq-v4-int8-api.md), for
+[`image-noctq-v4-int8-i2i-api.json`](image-noctq-v4-int8-i2i-api.json) is the reference-image companion of
+[`image-noctq-v4-int8-t2i-api.md`](image-noctq-v4-int8-t2i-api.md), for
 [Noct Q V4](https://huggingface.co/Noctaluna/Noct-Q-Uncensored-Qwen-Image-2.1) — image editing runs on the
 same files as text-to-image. It accepts **1 to 10 reference images**, wired to `TextEncodeQwenImage21`'s
 `images.image_1` … `images.image_10` with the VAE connected: each reference is seen by the Qwen3-VL text
@@ -16,12 +16,12 @@ follows the prompt. Sampling is the same as text-to-image: 25 steps, `cfg 3.0`, 
 Placeholders: `PROMPT` `NEGATIVE` `FIRST_FRAME` `WIDTH` `HEIGHT` `GEN_WIDTH` `GEN_HEIGHT` `SEED`.
 
 > **License / content**: non-commercial only (Qwen Research License); the model renders adult content.
-> See [`image-noctq-v4-int8-api.md`](image-noctq-v4-int8-api.md).
+> See [`image-noctq-v4-int8-t2i-api.md`](image-noctq-v4-int8-t2i-api.md).
 
 ### Install
 
 Same ComfyUI version (0.37.0 or newer) and same three model files as the text-to-image workflow; see the
-install section of [`image-noctq-v4-int8-api.md`](image-noctq-v4-int8-api.md), including the Comfy Cloud
+install section of [`image-noctq-v4-int8-t2i-api.md`](image-noctq-v4-int8-t2i-api.md), including the Comfy Cloud
 note. No extra downloads are needed.
 
 ### Console Configuration
@@ -34,8 +34,8 @@ This workflow goes into the image channel's **`ref_workflow`** field, next to th
   "image": {
     "provider": "comfyui",
     "comfyui": {
-      "workflow": "comfy/image-noctq-v4-int8-api.json",
-      "ref_workflow": "comfy/image-noctq-v4-int8-ref10-api.json",
+      "workflow": "comfy/image-noctq-v4-int8-t2i-api.json",
+      "ref_workflow": "comfy/image-noctq-v4-int8-i2i-api.json",
       "negative_mode": "conditioning",
       "checkpoint": ""
     }
@@ -74,8 +74,8 @@ has the first reference's aspect ratio (the final `ImageScale` center-crops it t
 
 ## 中文
 
-[`image-noctq-v4-int8-ref10-api.json`](image-noctq-v4-int8-ref10-api.json) 是
-[`image-noctq-v4-int8-api.md`](image-noctq-v4-int8-api.md) 的参考图配套工作流,基于
+[`image-noctq-v4-int8-i2i-api.json`](image-noctq-v4-int8-i2i-api.json) 是
+[`image-noctq-v4-int8-t2i-api.md`](image-noctq-v4-int8-t2i-api.md) 的参考图配套工作流,基于
 [Noct Q V4](https://huggingface.co/Noctaluna/Noct-Q-Uncensored-Qwen-Image-2.1)——图像编辑与文生图用同一套文件。
 接受 **1–10 张参考图**,接在 `TextEncodeQwenImage21` 的 `images.image_1` … `images.image_10` 上并连上 VAE:每张
 参考图既给 Qwen3-VL 文本编码器看,也以 VAE latent 拼进序列。成图从请求宽高比的空 latent 生成,所以参考图是
@@ -84,12 +84,12 @@ has the first reference's aspect ratio (the final `ImageScale` center-crops it t
 占位符:`PROMPT` `NEGATIVE` `FIRST_FRAME` `WIDTH` `HEIGHT` `GEN_WIDTH` `GEN_HEIGHT` `SEED`。
 
 > **许可 / 内容**:仅限非商业用途(Qwen Research License);模型可生成成人内容。
-> 详见 [`image-noctq-v4-int8-api.md`](image-noctq-v4-int8-api.md)。
+> 详见 [`image-noctq-v4-int8-t2i-api.md`](image-noctq-v4-int8-t2i-api.md)。
 
 ### 安装
 
 ComfyUI 版本(0.37.0 及以上)与三个模型文件都和文生图工作流相同,见
-[`image-noctq-v4-int8-api.md`](image-noctq-v4-int8-api.md) 的安装章节(含 Comfy Cloud 说明),无需额外下载。
+[`image-noctq-v4-int8-t2i-api.md`](image-noctq-v4-int8-t2i-api.md) 的安装章节(含 Comfy Cloud 说明),无需额外下载。
 
 ### 控制台配置
 
@@ -100,8 +100,8 @@ ComfyUI 版本(0.37.0 及以上)与三个模型文件都和文生图工作流相
   "image": {
     "provider": "comfyui",
     "comfyui": {
-      "workflow": "comfy/image-noctq-v4-int8-api.json",
-      "ref_workflow": "comfy/image-noctq-v4-int8-ref10-api.json",
+      "workflow": "comfy/image-noctq-v4-int8-t2i-api.json",
+      "ref_workflow": "comfy/image-noctq-v4-int8-i2i-api.json",
       "negative_mode": "conditioning",
       "checkpoint": ""
     }

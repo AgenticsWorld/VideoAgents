@@ -1359,10 +1359,11 @@ def _migrate_genconfig(config: dict) -> None:
         if not isinstance(comfy, dict):
             continue
         _split_legacy_key(comfy, "rh_api_key", ("rh_api_key_cn", "rh_api_key_ai"))
+        from modules.genmedia import migrate_comfy_workflow_path
         for key in ("workflow", "ref_workflow", "design_workflow"):
             value = comfy.get(key)
-            if isinstance(value, str) and value.startswith("data/comfy/"):
-                comfy[key] = "comfy/" + value[len("data/comfy/"):]
+            if isinstance(value, str):
+                comfy[key] = migrate_comfy_workflow_path(value)
         # H3 uses the built-in compatible model/sampler settings. Older UI
         # versions persisted this advanced object; discard it on load.
         if kind == "video":

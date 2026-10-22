@@ -4,7 +4,7 @@
 
 ## English
 
-[`image-flux2-dev-fp8-api.json`](image-flux2-dev-fp8-api.json) is the
+[`image-flux2-dev-fp8-t2i-api.json`](image-flux2-dev-fp8-t2i-api.json) is the
 API-format ComfyUI text-to-image workflow for
 [black-forest-labs/FLUX.2-dev](https://huggingface.co/black-forest-labs/FLUX.2-dev)
 (32B). Sampling follows the official ComfyUI template: `BasicGuider` +
@@ -15,7 +15,7 @@ API-format ComfyUI text-to-image workflow for
 Placeholders: `PROMPT` `WIDTH` `HEIGHT` `SEED`.
 
 For image-to-image with up to 10 reference images, use the companion workflow
-[`image-flux2-dev-fp8-ref10-api.md`](image-flux2-dev-fp8-ref10-api.md).
+[`image-flux2-dev-fp8-i2i-api.md`](image-flux2-dev-fp8-i2i-api.md).
 
 > **License**: FLUX.2 [dev] weights are under the FLUX non-commercial license.
 > Confirm the terms before commercial use.
@@ -43,7 +43,7 @@ On the web console's `🎨 生成模型` page, switch the image channel to
 workflow path:
 
 ```text
-comfy/image-flux2-dev-fp8-api.json
+comfy/image-flux2-dev-fp8-t2i-api.json
 ```
 
 The `checkpoint` field stays empty: models are loaded by fixed file names via
@@ -67,7 +67,7 @@ which appends `Exclude from the image: …` to the positive prompt instead.
 
 ## 中文
 
-[`image-flux2-dev-fp8-api.json`](image-flux2-dev-fp8-api.json) 是
+[`image-flux2-dev-fp8-t2i-api.json`](image-flux2-dev-fp8-t2i-api.json) 是
 [black-forest-labs/FLUX.2-dev](https://huggingface.co/black-forest-labs/FLUX.2-dev)(32B)
 的 API 格式 ComfyUI 文生图工作流。采样参数照 ComfyUI 官方模板:`BasicGuider` +
 `FluxGuidance 4.0`、`Flux2Scheduler` 20 步、`euler` 采样器,`EmptyFlux2LatentImage`
@@ -76,7 +76,7 @@ which appends `Exclude from the image: …` to the positive prompt instead.
 占位符:`PROMPT` `WIDTH` `HEIGHT` `SEED`。
 
 带参考图(至多 10 张)的图生图请使用配套工作流
-[`image-flux2-dev-fp8-ref10-api.md`](image-flux2-dev-fp8-ref10-api.md)。
+[`image-flux2-dev-fp8-i2i-api.md`](image-flux2-dev-fp8-i2i-api.md)。
 
 > **授权**:FLUX.2 [dev] 权重为 FLUX 非商用许可,商用前须确认条款。
 
@@ -100,7 +100,7 @@ Comfy Cloud 已预装模型;文件名不一致时 fork 本 JSON 改加载节点�
 **Comfy Cloud**,工作流路径填:
 
 ```text
-comfy/image-flux2-dev-fp8-api.json
+comfy/image-flux2-dev-fp8-t2i-api.json
 ```
 
 `checkpoint` 字段留空:本工作流经 `UNETLoader`/`CLIPLoader`/`VAELoader` 按固定文件名加载模型。

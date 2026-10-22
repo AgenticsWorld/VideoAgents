@@ -4,7 +4,7 @@
 
 ## English
 
-[`image-qwen-image-2.1-q8-gguf-api.json`](image-qwen-image-2.1-q8-gguf-api.json) is the API-format
+[`image-qwen-image-2.1-q8-gguf-t2i-api.json`](image-qwen-image-2.1-q8-gguf-t2i-api.json) is the API-format
 text-to-image workflow for [Qwen/Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1) in the Q8_0 GGUF
 quantization (7.6 GB) from
 [abenzerps/Qwen-Image-2.1-Uncensored-GGUF](https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-GGUF).
@@ -15,11 +15,11 @@ with the diffusion loader swapped for `UnetLoaderGGUF` — and keeps its setting
 Placeholders: `PROMPT` `WIDTH` `HEIGHT` `GEN_WIDTH` `GEN_HEIGHT` `SEED`.
 
 Reference-image companion:
-[`image-qwen-image-2.1-q8-gguf-ref10-api.md`](image-qwen-image-2.1-q8-gguf-ref10-api.md).
+[`image-qwen-image-2.1-q8-gguf-i2i-api.md`](image-qwen-image-2.1-q8-gguf-i2i-api.md).
 
 Tested 2026-10-20 on a local ComfyUI 0.42.1 with ComfyUI-GGUF (Windows, RTX 4080 SUPER 32 GB): 1024x1024 in
 about 93 s including the first model load, 1280x720 in about 23 s after that; with the same seed the images are
-nearly identical to [`image-qwen-image-2.1-bf16-api.json`](image-qwen-image-2.1-bf16-api.md).
+nearly identical to [`image-qwen-image-2.1-bf16-t2i-api.json`](image-qwen-image-2.1-bf16-t2i-api.md).
 
 > **Local only.** `UnetLoaderGGUF` comes from the ComfyUI-GGUF custom node pack. Comfy Cloud's node catalog
 > (checked 2026-10-10, Cloud v0.39.2) does not include it, so on Cloud the submission is rejected with
@@ -61,8 +61,8 @@ Run mode **local**:
   "image": {
     "provider": "comfyui",
     "comfyui": {
-      "workflow": "comfy/image-qwen-image-2.1-q8-gguf-api.json",
-      "ref_workflow": "comfy/image-qwen-image-2.1-q8-gguf-ref10-api.json",
+      "workflow": "comfy/image-qwen-image-2.1-q8-gguf-t2i-api.json",
+      "ref_workflow": "comfy/image-qwen-image-2.1-q8-gguf-i2i-api.json",
       "negative_mode": "append_exclusions",
       "checkpoint": ""
     }
@@ -90,7 +90,7 @@ Prompting: Qwen Image 2.1 reads prose — write full sentences like a caption of
 ### Without the GGUF node
 
 If you have a safetensors build of the same model (for example Comfy-Org's `qwen_image_2.1_bf16.safetensors`
-in `models/diffusion_models`), use [`image-qwen-image-2.1-bf16-api.json`](image-qwen-image-2.1-bf16-api.md) —
+in `models/diffusion_models`), use [`image-qwen-image-2.1-bf16-t2i-api.json`](image-qwen-image-2.1-bf16-t2i-api.md) —
 this graph with node `1` replaced by the core loader; nothing else changes and no custom node is needed:
 
 ```json
@@ -104,7 +104,7 @@ Cloud account — neither is in Cloud's shared model catalog as of 2026-10-10.
 
 ## 中文
 
-[`image-qwen-image-2.1-q8-gguf-api.json`](image-qwen-image-2.1-q8-gguf-api.json) 是
+[`image-qwen-image-2.1-q8-gguf-t2i-api.json`](image-qwen-image-2.1-q8-gguf-t2i-api.json) 是
 [Qwen/Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1) Q8_0 GGUF 量化版(7.6 GB,来自
 [abenzerps/Qwen-Image-2.1-Uncensored-GGUF](https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-GGUF))的
 API 格式文生图工作流。由 `image_qwen_image_2_1_t2i_gguf.json` 转换而来——那是把底模加载器换成 `UnetLoaderGGUF`
@@ -114,10 +114,10 @@ API 格式文生图工作流。由 `image_qwen_image_2_1_t2i_gguf.json` 转换�
 占位符:`PROMPT` `WIDTH` `HEIGHT` `GEN_WIDTH` `GEN_HEIGHT` `SEED`。
 
 参考图配套工作流:
-[`image-qwen-image-2.1-q8-gguf-ref10-api.md`](image-qwen-image-2.1-q8-gguf-ref10-api.md)。
+[`image-qwen-image-2.1-q8-gguf-i2i-api.md`](image-qwen-image-2.1-q8-gguf-i2i-api.md)。
 
 2026-10-20 实测:本地 ComfyUI 0.42.1 + ComfyUI-GGUF(Windows、RTX 4080 SUPER 32 GB),1024x1024 约 93 秒(含首次加载
-模型),之后 1280x720 约 23 秒;同一种子下与 [`image-qwen-image-2.1-bf16-api.json`](image-qwen-image-2.1-bf16-api.md)
+模型),之后 1280x720 约 23 秒;同一种子下与 [`image-qwen-image-2.1-bf16-t2i-api.json`](image-qwen-image-2.1-bf16-t2i-api.md)
 的成图几乎一致。
 
 > **只能在本地跑。** `UnetLoaderGGUF` 来自 ComfyUI-GGUF 自定义节点包。Comfy Cloud 的节点目录(2026-10-10 核对,
@@ -156,8 +156,8 @@ ComfyUI/models/
   "image": {
     "provider": "comfyui",
     "comfyui": {
-      "workflow": "comfy/image-qwen-image-2.1-q8-gguf-api.json",
-      "ref_workflow": "comfy/image-qwen-image-2.1-q8-gguf-ref10-api.json",
+      "workflow": "comfy/image-qwen-image-2.1-q8-gguf-t2i-api.json",
+      "ref_workflow": "comfy/image-qwen-image-2.1-q8-gguf-i2i-api.json",
       "negative_mode": "append_exclusions",
       "checkpoint": ""
     }
@@ -182,7 +182,7 @@ ComfyUI/models/
 ### 不用 GGUF 节点
 
 手头有同一模型的 safetensors 版(例如 Comfy-Org 的 `qwen_image_2.1_bf16.safetensors`,放
-`models/diffusion_models`)时,用 [`image-qwen-image-2.1-bf16-api.json`](image-qwen-image-2.1-bf16-api.md)——
+`models/diffusion_models`)时,用 [`image-qwen-image-2.1-bf16-t2i-api.json`](image-qwen-image-2.1-bf16-t2i-api.md)——
 即本图把节点 `1` 换成原生加载器,其余不变,也不需要自定义节点:
 
 ```json

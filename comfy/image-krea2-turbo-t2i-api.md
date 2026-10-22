@@ -4,13 +4,13 @@
 
 ## English
 
-[`image-krea2-turbo-api.json`](image-krea2-turbo-api.json) is the API-format text-to-image workflow for
+[`image-krea2-turbo-t2i-api.json`](image-krea2-turbo-t2i-api.json) is the API-format text-to-image workflow for
 [Krea 2 Turbo](https://huggingface.co/Comfy-Org/Krea-2) (12B, Krea 2 Community License), native ComfyUI nodes
 only: `KSampler` 10 steps, `cfg 1.0`, `euler` / `simple`.
 
 Placeholders: `PROMPT` `WIDTH` `HEIGHT` `GEN_WIDTH` `GEN_HEIGHT` `SEED`.
 
-Reference-image companion: [`image-krea2-turbo-styleref-api.md`](image-krea2-turbo-styleref-api.md).
+Reference-image companion: [`image-krea2-turbo-i2i-api.md`](image-krea2-turbo-i2i-api.md).
 
 ### Install
 
@@ -34,8 +34,8 @@ Other precisions (`…_int8_convrot`, `…_bf16`, `…_nvfp4`) work too; fork th
   "image": {
     "provider": "comfyui",
     "comfyui": {
-      "workflow": "comfy/image-krea2-turbo-api.json",
-      "ref_workflow": "comfy/image-krea2-turbo-styleref-api.json",
+      "workflow": "comfy/image-krea2-turbo-t2i-api.json",
+      "ref_workflow": "comfy/image-krea2-turbo-i2i-api.json",
       "negative_mode": "append_exclusions",
       "checkpoint": ""
     }
@@ -61,12 +61,12 @@ Style LoRAs from the same repository (`loras/krea2_*.safetensors`) or community 
 
 ## 中文
 
-[`image-krea2-turbo-api.json`](image-krea2-turbo-api.json) 是 [Krea 2 Turbo](https://huggingface.co/Comfy-Org/Krea-2)
+[`image-krea2-turbo-t2i-api.json`](image-krea2-turbo-t2i-api.json) 是 [Krea 2 Turbo](https://huggingface.co/Comfy-Org/Krea-2)
 (12B,Krea 2 Community License)的 API 格式文生图工作流,全部 ComfyUI 原生节点:`KSampler` 10 步、`cfg 1.0`、`euler` / `simple`。
 
 占位符:`PROMPT` `WIDTH` `HEIGHT` `GEN_WIDTH` `GEN_HEIGHT` `SEED`。
 
-参考图配套工作流:[`image-krea2-turbo-styleref-api.md`](image-krea2-turbo-styleref-api.md)。
+参考图配套工作流:[`image-krea2-turbo-i2i-api.md`](image-krea2-turbo-i2i-api.md)。
 
 ### 安装
 
@@ -90,8 +90,8 @@ ComfyUI/models/
   "image": {
     "provider": "comfyui",
     "comfyui": {
-      "workflow": "comfy/image-krea2-turbo-api.json",
-      "ref_workflow": "comfy/image-krea2-turbo-styleref-api.json",
+      "workflow": "comfy/image-krea2-turbo-t2i-api.json",
+      "ref_workflow": "comfy/image-krea2-turbo-i2i-api.json",
       "negative_mode": "append_exclusions",
       "checkpoint": ""
     }

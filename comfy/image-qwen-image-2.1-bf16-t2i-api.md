@@ -4,10 +4,10 @@
 
 ## English
 
-[`image-qwen-image-2.1-bf16-api.json`](image-qwen-image-2.1-bf16-api.json) is the API-format text-to-image
+[`image-qwen-image-2.1-bf16-t2i-api.json`](image-qwen-image-2.1-bf16-t2i-api.json) is the API-format text-to-image
 workflow for [Qwen/Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1) using the bf16 safetensors
 weights from [Comfy-Org/Qwen-Image-2.1](https://huggingface.co/Comfy-Org/Qwen-Image-2.1). It is the same graph as
-[`image-qwen-image-2.1-q8-gguf-api.json`](image-qwen-image-2.1-q8-gguf-api.md) with node `1` replaced by the core
+[`image-qwen-image-2.1-q8-gguf-t2i-api.json`](image-qwen-image-2.1-q8-gguf-t2i-api.md) with node `1` replaced by the core
 `UNETLoader`, so it needs **no custom node**: `TextEncodeQwenImage21`, `KSampler` 25 steps, `cfg 1.0`,
 `euler` / `simple`.
 
@@ -48,8 +48,8 @@ Run mode **local**:
   "image": {
     "provider": "comfyui",
     "comfyui": {
-      "workflow": "comfy/image-qwen-image-2.1-bf16-api.json",
-      "ref_workflow": "comfy/image-qwen-image-2.1-bf16-ref10-api.json",
+      "workflow": "comfy/image-qwen-image-2.1-bf16-t2i-api.json",
+      "ref_workflow": "comfy/image-qwen-image-2.1-bf16-i2i-api.json",
       "negative_mode": "append_exclusions",
       "checkpoint": ""
     }
@@ -58,7 +58,7 @@ Run mode **local**:
 ```
 
 Reference-image companion (1 to 10 references, same model files):
-[`image-qwen-image-2.1-bf16-ref10-api.md`](image-qwen-image-2.1-bf16-ref10-api.md) — read its test note first;
+[`image-qwen-image-2.1-bf16-i2i-api.md`](image-qwen-image-2.1-bf16-i2i-api.md) — read its test note first;
 on a 32 GB card it was far slower than text-to-image.
 
 ### Runtime Parameters
@@ -81,10 +81,10 @@ Prompting: Qwen Image 2.1 reads prose — write full sentences like a caption of
 
 ## 中文
 
-[`image-qwen-image-2.1-bf16-api.json`](image-qwen-image-2.1-bf16-api.json) 是
+[`image-qwen-image-2.1-bf16-t2i-api.json`](image-qwen-image-2.1-bf16-t2i-api.json) 是
 [Qwen/Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1) bf16 safetensors 版(权重来自
 [Comfy-Org/Qwen-Image-2.1](https://huggingface.co/Comfy-Org/Qwen-Image-2.1))的 API 格式文生图工作流。与
-[`image-qwen-image-2.1-q8-gguf-api.json`](image-qwen-image-2.1-q8-gguf-api.md) 是同一张图,只把节点 `1` 换成原生
+[`image-qwen-image-2.1-q8-gguf-t2i-api.json`](image-qwen-image-2.1-q8-gguf-t2i-api.md) 是同一张图,只把节点 `1` 换成原生
 `UNETLoader`,因此**不需要任何自定义节点**:`TextEncodeQwenImage21`、`KSampler` 25 步、`cfg 1.0`、
 `euler` / `simple`。
 
@@ -122,8 +122,8 @@ ComfyUI/models/
   "image": {
     "provider": "comfyui",
     "comfyui": {
-      "workflow": "comfy/image-qwen-image-2.1-bf16-api.json",
-      "ref_workflow": "comfy/image-qwen-image-2.1-bf16-ref10-api.json",
+      "workflow": "comfy/image-qwen-image-2.1-bf16-t2i-api.json",
+      "ref_workflow": "comfy/image-qwen-image-2.1-bf16-i2i-api.json",
       "negative_mode": "append_exclusions",
       "checkpoint": ""
     }
@@ -132,7 +132,7 @@ ComfyUI/models/
 ```
 
 参考图配套工作流(1–10 张参考图,模型文件相同):
-[`image-qwen-image-2.1-bf16-ref10-api.md`](image-qwen-image-2.1-bf16-ref10-api.md)——先看其中的实测说明,32 GB 显卡上
+[`image-qwen-image-2.1-bf16-i2i-api.md`](image-qwen-image-2.1-bf16-i2i-api.md)——先看其中的实测说明,32 GB 显卡上
 它比文生图慢得多。
 
 ### 运行时参数

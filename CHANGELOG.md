@@ -2,6 +2,11 @@
 
 All notable public changes to VideoAgents are documented here.
 
+## [Unreleased]
+
+### Changed
+- **ComfyUI image templates now share one naming scheme: `-t2i` for text-to-image, `-i2i` for image-to-image (2026-10-22).** The 14 `comfy/image-*-api.json` templates (and their `.md` docs) are renamed: text-to-image templates, which had no marker, gain `-t2i` (e.g. `image-flux2-dev-fp8-t2i-api.json`), and the image-to-image ones replace `-ref10` / `-ref3` / `-styleref` / `-img2img` with `-i2i` (e.g. `image-flux2-dev-fp8-i2i-api.json`, `image-qwen-image-edit-2511-i2i-api.json`, `image-z-image-turbo-bf16-i2i-api.json`). Saved settings that point at the old names (`genconfig.json` `workflow` / `ref_workflow`) are rewritten to the new names on load, and an old path still resolves if it reaches the runner directly; custom templates are untouched. The number of reference images a template takes is still read from its `LoadImage` nodes, not from the file name.
+
 ## [1.0.40] - 2026-10-21
 
 ### Added

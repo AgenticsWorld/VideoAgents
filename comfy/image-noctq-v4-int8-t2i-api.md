@@ -4,7 +4,7 @@
 
 ## English
 
-[`image-noctq-v4-int8-api.json`](image-noctq-v4-int8-api.json) is the API-format text-to-image workflow for
+[`image-noctq-v4-int8-t2i-api.json`](image-noctq-v4-int8-t2i-api.json) is the API-format text-to-image workflow for
 [Noct Q V4](https://huggingface.co/Noctaluna/Noct-Q-Uncensored-Qwen-Image-2.1), a realism merge of
 [Qwen/Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1). It is converted from the author's
 `NoctQ_V4_workflow.json` and keeps its settings: `TextEncodeQwenImage21` (positive + negative),
@@ -12,7 +12,7 @@
 
 Placeholders: `PROMPT` `NEGATIVE` `WIDTH` `HEIGHT` `GEN_WIDTH` `GEN_HEIGHT` `SEED`.
 
-Reference-image companion: [`image-noctq-v4-int8-ref10-api.md`](image-noctq-v4-int8-ref10-api.md).
+Reference-image companion: [`image-noctq-v4-int8-i2i-api.md`](image-noctq-v4-int8-i2i-api.md).
 
 > **License**: Noct Q is a derivative of Qwen-Image-2.1 under the Qwen Research License —
 > **non-commercial use only**. Confirm the terms before any commercial use.
@@ -55,8 +55,8 @@ Run mode **local** or **Comfy Cloud**:
   "image": {
     "provider": "comfyui",
     "comfyui": {
-      "workflow": "comfy/image-noctq-v4-int8-api.json",
-      "ref_workflow": "comfy/image-noctq-v4-int8-ref10-api.json",
+      "workflow": "comfy/image-noctq-v4-int8-t2i-api.json",
+      "ref_workflow": "comfy/image-noctq-v4-int8-i2i-api.json",
       "negative_mode": "conditioning",
       "checkpoint": ""
     }
@@ -90,7 +90,7 @@ action, the place, the light, the framing. Qwen Image 2.1 reads prose, not tag l
 
 ## 中文
 
-[`image-noctq-v4-int8-api.json`](image-noctq-v4-int8-api.json) 是
+[`image-noctq-v4-int8-t2i-api.json`](image-noctq-v4-int8-t2i-api.json) 是
 [Noct Q V4](https://huggingface.co/Noctaluna/Noct-Q-Uncensored-Qwen-Image-2.1) 的 API 格式文生图工作流。
 Noct Q 是 [Qwen/Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1) 的写实向融合模型。本模板由作者的
 `NoctQ_V4_workflow.json` 转换而来,采样设置原样保留:`TextEncodeQwenImage21`(同时出正面 / 负面条件)、
@@ -98,7 +98,7 @@ Noct Q 是 [Qwen/Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1) 的
 
 占位符:`PROMPT` `NEGATIVE` `WIDTH` `HEIGHT` `GEN_WIDTH` `GEN_HEIGHT` `SEED`。
 
-参考图配套工作流:[`image-noctq-v4-int8-ref10-api.md`](image-noctq-v4-int8-ref10-api.md)。
+参考图配套工作流:[`image-noctq-v4-int8-i2i-api.md`](image-noctq-v4-int8-i2i-api.md)。
 
 > **许可**:Noct Q 是 Qwen-Image-2.1 的衍生模型,适用 Qwen Research License——**仅限非商业用途**,
 > 商用前请先确认条款。
@@ -137,8 +137,8 @@ ComfyUI/models/
   "image": {
     "provider": "comfyui",
     "comfyui": {
-      "workflow": "comfy/image-noctq-v4-int8-api.json",
-      "ref_workflow": "comfy/image-noctq-v4-int8-ref10-api.json",
+      "workflow": "comfy/image-noctq-v4-int8-t2i-api.json",
+      "ref_workflow": "comfy/image-noctq-v4-int8-i2i-api.json",
       "negative_mode": "conditioning",
       "checkpoint": ""
     }

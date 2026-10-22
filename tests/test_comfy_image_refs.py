@@ -143,3 +143,24 @@ def test_rh_negative_placeholder_not_folded(monkeypatch, tmp_path):
     monkeypatch.setattr(genmedia, "_rh_run", lambda cfg, wf, output, want_video: submitted.update(wf=wf) or output)
     genmedia._image_comfyui(_rh_cfg(), "P", "N", None, 1280, 720, 3, str(tmp_path / "o.png"))
     assert submitted["wf"]["6"]["inputs"]["text"] == "P" and submitted["wf"]["7"]["inputs"]["text"] == "N"
+
+
+def test_image_templates_named_t2i_i2i_and_old_names_migrate():
+    """图像模板统一命名 -t2i / -i2i(2026-10-22):现存模板都带其一;存量配置里的旧名(含 data/comfy/ 前缀)迁到新名,
+    解析兜底也能找到文件;用户自备模板原样不动。"""
+    names = [p.name for p in (genmedia.ROOT / "comfy").glob("image-*.json")]
+    assert names and all(n.endswith(("-t2i-api.json", "-i2i-api.json")) for n in names)
+    for old, new in genmedia.COMFY_WORKFLOW_RENAMES.items():
+        assert (genmedia.ROOT / "comfy" / new).is_file()
+        assert genmedia.migrate_comfy_workflow_path(f"comfy/{old}") == f"comfy/{new}"
+        assert genmedia._resolve_comfy_workflow_path(f"comfy/{old}") == genmedia.ROOT / "comfy" / new
+    assert genmedia.migrate_comfy_workflow_path("data/comfy/image-flux2-dev-fp8-ref10-api.json") \
+        == "comfy/image-flux2-dev-fp8-i2i-api.json"
+    assert genmedia.migrate_comfy_workflow_path("comfy/my-own-api.json") == "comfy/my-own-api.json"
+
+    from services.runtime import core
+    cfg = {"image": {"comfyui": {"workflow": "comfy/image-noctq-v4-int8-api.json",
+                                 "ref_workflow": "comfy/image-noctq-v4-int8-ref10-api.json"}}}
+    core._migrate_genconfig(cfg)
+    assert cfg["image"]["comfyui"]["workflow"] == "comfy/image-noctq-v4-int8-t2i-api.json"
+    assert cfg["image"]["comfyui"]["ref_workflow"] == "comfy/image-noctq-v4-int8-i2i-api.json"

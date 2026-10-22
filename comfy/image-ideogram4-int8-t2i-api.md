@@ -4,7 +4,7 @@
 
 ## English
 
-[`image-ideogram4-int8-api.json`](image-ideogram4-int8-api.json) is the API-format text-to-image workflow for
+[`image-ideogram4-int8-t2i-api.json`](image-ideogram4-int8-t2i-api.json) is the API-format text-to-image workflow for
 [Ideogram 4.0](https://huggingface.co/Comfy-Org/Ideogram-4) open weights (9.3B), native ComfyUI nodes only:
 `DualModelGuider` (conditional + separate unconditional model, `cfg 7`) with `CFGOverride` (`cfg 3` over the last
 30 % of steps), `Ideogram4Scheduler` and `euler`. The scheduler is fixed to the official **Quality** preset
@@ -41,7 +41,7 @@ ComfyUI/models/
   "image": {
     "provider": "comfyui",
     "comfyui": {
-      "workflow": "comfy/image-ideogram4-int8-api.json",
+      "workflow": "comfy/image-ideogram4-int8-t2i-api.json",
       "negative_mode": "append_exclusions",
       "checkpoint": ""
     }
@@ -67,7 +67,7 @@ prompts work too.
 
 ## 中文
 
-[`image-ideogram4-int8-api.json`](image-ideogram4-int8-api.json) 是
+[`image-ideogram4-int8-t2i-api.json`](image-ideogram4-int8-t2i-api.json) 是
 [Ideogram 4.0](https://huggingface.co/Comfy-Org/Ideogram-4) 开放权重(9.3B)的 API 格式文生图工作流,全部 ComfyUI 原生节点:
 `DualModelGuider`(条件模型 + 独立无条件模型,`cfg 7`)配 `CFGOverride`(后 30 % 步数 `cfg 3`)、`Ideogram4Scheduler`、`euler`。
 调度器固定为官方 **Quality** 预设(48 步、`mu 0.0`、`std 1.5`);*Default* 为 20 / 0.0 / 1.75,*Turbo* 为 12 / 0.5 / 1.75,要换请 fork 本 JSON。
@@ -100,7 +100,7 @@ ComfyUI/models/
   "image": {
     "provider": "comfyui",
     "comfyui": {
-      "workflow": "comfy/image-ideogram4-int8-api.json",
+      "workflow": "comfy/image-ideogram4-int8-t2i-api.json",
       "negative_mode": "append_exclusions",
       "checkpoint": ""
     }

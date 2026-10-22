@@ -6,7 +6,7 @@
 参考图:只带出场人物 sheet(≤3),缩到 512px 长边;场景只靠文字(俯视图会误导模型),不用风格参考图;画幅取项目「输出设置」的视频画幅;渠道/模型按 --provider/--model
 渠道为 comfyui / agentics 时**只有配置了收参考图的图生图才传参考图**(2026-09-19 用户拍板,取代 09-17/09-18 的一律纯文生图):
 comfyui 须选真正收参考图的模板(RunningHub 的 Qwen-Image-Edit / FLUX.2,或本地 / Comfy Cloud 的多 LoadImage 参考链模板
-comfy/image-flux2-dev-fp8-ref10-api.json:多个 LoadImage 作条件输入、空 latent),张数以模板 LoadImage 个数封顶;
+comfy/image-flux2-dev-fp8-i2i-api.json:多个 LoadImage 作条件输入、空 latent),张数以模板 LoadImage 个数封顶;
 单图原图重绘(img2img)模板是把图当初始画面,传 sheet 会把构图锁成设定稿,仍不传、走纯文生图。agentics 看图生图 profile 的 input_images.max_items,没配或取不到详情走文生图 profile。
 这两个渠道带参考图时风格句用正向写法 + 逐张点名(Picture N 是谁)+ 单实例句(cfg=1 蒸馏模型不吃 negative)。
 提示词(2026-09-12 用户拍板)**人物优先**:草图只为看镜头机位、人物比例、神态、动作,地点只留一句短提示放在最后;

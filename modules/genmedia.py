@@ -2645,22 +2645,53 @@ def _comfy_h3_frame_count(duration: float | None, fps: int = 24) -> int:
     return frames + (5 - frames % 17) % 17
 
 
+# 图像模板统一命名(2026-10-22):文生图加 -t2i、图生图(原 -ref10 / -ref3 / -styleref / -img2img)改 -i2i。
+# 旧文件名 → 新文件名,供存量配置迁移与解析兜底
+COMFY_WORKFLOW_RENAMES = {
+    "image-flux2-dev-fp8-api.json": "image-flux2-dev-fp8-t2i-api.json",
+    "image-flux2-dev-fp8-ref10-api.json": "image-flux2-dev-fp8-i2i-api.json",
+    "image-ideogram4-int8-api.json": "image-ideogram4-int8-t2i-api.json",
+    "image-krea2-turbo-api.json": "image-krea2-turbo-t2i-api.json",
+    "image-krea2-turbo-styleref-api.json": "image-krea2-turbo-i2i-api.json",
+    "image-noctq-v4-int8-api.json": "image-noctq-v4-int8-t2i-api.json",
+    "image-noctq-v4-int8-ref10-api.json": "image-noctq-v4-int8-i2i-api.json",
+    "image-qwen-image-2.1-bf16-api.json": "image-qwen-image-2.1-bf16-t2i-api.json",
+    "image-qwen-image-2.1-bf16-ref10-api.json": "image-qwen-image-2.1-bf16-i2i-api.json",
+    "image-qwen-image-2.1-q8-gguf-api.json": "image-qwen-image-2.1-q8-gguf-t2i-api.json",
+    "image-qwen-image-2.1-q8-gguf-ref10-api.json": "image-qwen-image-2.1-q8-gguf-i2i-api.json",
+    "image-qwen-image-edit-2511-ref3-api.json": "image-qwen-image-edit-2511-i2i-api.json",
+    "image-z-image-turbo-bf16-api.json": "image-z-image-turbo-bf16-t2i-api.json",
+    "image-z-image-turbo-bf16-img2img-api.json": "image-z-image-turbo-bf16-i2i-api.json",
+}
+
+
+def migrate_comfy_workflow_path(wf_path: str) -> str:
+    """存量配置里的模板路径改写为现行写法:``data/comfy/`` 前缀改 ``comfy/``,改过名的图像模板换新名。
+    其它路径(含绝对路径、用户自备模板)原样返回。"""
+    value = str(wf_path or "")
+    if value.startswith("data/comfy/"):
+        value = "comfy/" + value[len("data/comfy/"):]
+    if value.startswith("comfy/") and value[len("comfy/"):] in COMFY_WORKFLOW_RENAMES:
+        value = "comfy/" + COMFY_WORKFLOW_RENAMES[value[len("comfy/"):]]
+    return value
+
+
 def _resolve_comfy_workflow_path(wf_path: str) -> Path:
     """Resolve a workflow path, including configs saved before ``comfy/`` moved.
 
     ComfyUI templates are repository resources rather than runtime data.  Keep
-    the old ``data/comfy/`` spelling readable so existing user settings do not
-    break when the templates move beside ``data/``.
+    the old ``data/comfy/`` spelling and the pre-t2i/i2i template names readable
+    so existing user settings do not break when templates move or get renamed.
     """
     path = Path(wf_path)
     if path.is_absolute():
         return path
     primary = ROOT / path
-    legacy_prefix = "data/comfy/"
-    if str(path).replace("\\", "/").startswith(legacy_prefix):
-        migrated = ROOT / "comfy" / str(path).replace("\\", "/")[len(legacy_prefix):]
-        if migrated.is_file():
-            return migrated
+    if primary.is_file():
+        return primary
+    migrated = ROOT / migrate_comfy_workflow_path(str(path).replace("\\", "/"))
+    if migrated.is_file():
+        return migrated
     return primary
 
 
@@ -4286,7 +4317,7 @@ def _image_comfyui(cfg, prompt, negative, refs, width, height, seed, output):
     if refs:
         if len(refs) > 1 and not rh and _comfy_local_ref_slots(cfg) < 2:
             raise RuntimeError("当前 ComfyUI 参考图工作流仅支持一张 --ref"
-                               "(多张参考图请选多 LoadImage 模板,如 comfy/image-flux2-dev-fp8-ref10-api.json)")
+                               "(多张参考图请选多 LoadImage 模板,如 comfy/image-flux2-dev-fp8-i2i-api.json)")
         if rh:
             ref_id = str(cfg.get("rh_ref_workflow_id") or "").strip()
             if not ref_id:

@@ -4,9 +4,9 @@
 
 ## English
 
-[`image-flux2-dev-fp8-ref10-api.json`](image-flux2-dev-fp8-ref10-api.json)
+[`image-flux2-dev-fp8-i2i-api.json`](image-flux2-dev-fp8-i2i-api.json)
 is the reference-image companion of
-[`image-flux2-dev-fp8-api.md`](image-flux2-dev-fp8-api.md), for
+[`image-flux2-dev-fp8-t2i-api.md`](image-flux2-dev-fp8-t2i-api.md), for
 [black-forest-labs/FLUX.2-dev](https://huggingface.co/black-forest-labs/FLUX.2-dev).
 It accepts **1 to 10 reference images**. Each reference goes through
 `LoadImage` → `ImageScaleToTotalPixels` (1 MP) → `VAEEncode` →
@@ -23,7 +23,7 @@ Placeholders: `PROMPT` `FIRST_FRAME` `WIDTH` `HEIGHT` `SEED`.
 ### Install
 
 Same models as the text-to-image workflow; see the install section of
-[`image-flux2-dev-fp8-api.md`](image-flux2-dev-fp8-api.md). No extra downloads
+[`image-flux2-dev-fp8-t2i-api.md`](image-flux2-dev-fp8-t2i-api.md). No extra downloads
 are needed.
 
 ### Console Configuration
@@ -36,8 +36,8 @@ the main workflow (run mode **local** or **Comfy Cloud**):
   "image": {
     "provider": "comfyui",
     "comfyui": {
-      "workflow": "comfy/image-flux2-dev-fp8-api.json",
-      "ref_workflow": "comfy/image-flux2-dev-fp8-ref10-api.json",
+      "workflow": "comfy/image-flux2-dev-fp8-t2i-api.json",
+      "ref_workflow": "comfy/image-flux2-dev-fp8-i2i-api.json",
       "negative_mode": "append_exclusions",
       "checkpoint": ""
     }
@@ -79,8 +79,8 @@ references); single-image img2img templates still count as 0.
 
 ## 中文
 
-[`image-flux2-dev-fp8-ref10-api.json`](image-flux2-dev-fp8-ref10-api.json) 是
-[`image-flux2-dev-fp8-api.md`](image-flux2-dev-fp8-api.md) 的参考图配套工作流,模型为
+[`image-flux2-dev-fp8-i2i-api.json`](image-flux2-dev-fp8-i2i-api.json) 是
+[`image-flux2-dev-fp8-t2i-api.md`](image-flux2-dev-fp8-t2i-api.md) 的参考图配套工作流,模型为
 [black-forest-labs/FLUX.2-dev](https://huggingface.co/black-forest-labs/FLUX.2-dev)。
 支持 **1–10 张参考图**:每张走 `LoadImage` → `ImageScaleToTotalPixels`(1 MP)→
 `VAEEncode` → `ReferenceLatent`,各 `ReferenceLatent` 串联挂到提示词 conditioning 上
@@ -94,7 +94,7 @@ references); single-image img2img templates still count as 0.
 ### 安装
 
 模型与文生图工作流相同,见
-[`image-flux2-dev-fp8-api.md`](image-flux2-dev-fp8-api.md) 的安装一节,无需额外下载。
+[`image-flux2-dev-fp8-t2i-api.md`](image-flux2-dev-fp8-t2i-api.md) 的安装一节,无需额外下载。
 
 ### 控制台配置
 
@@ -106,8 +106,8 @@ references); single-image img2img templates still count as 0.
   "image": {
     "provider": "comfyui",
     "comfyui": {
-      "workflow": "comfy/image-flux2-dev-fp8-api.json",
-      "ref_workflow": "comfy/image-flux2-dev-fp8-ref10-api.json",
+      "workflow": "comfy/image-flux2-dev-fp8-t2i-api.json",
+      "ref_workflow": "comfy/image-flux2-dev-fp8-i2i-api.json",
       "negative_mode": "append_exclusions",
       "checkpoint": ""
     }

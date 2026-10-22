@@ -4,7 +4,7 @@
 
 ## English
 
-[`image-z-image-turbo-bf16-api.json`](image-z-image-turbo-bf16-api.json) is the
+[`image-z-image-turbo-bf16-t2i-api.json`](image-z-image-turbo-bf16-t2i-api.json) is the
 API-format ComfyUI text-to-image workflow for
 [Tongyi-MAI/Z-Image-Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo),
 a distilled turbo model that produces an image in 8 steps at `cfg 1.0`
@@ -14,7 +14,7 @@ a distilled turbo model that produces an image in 8 steps at `cfg 1.0`
 Placeholders: `PROMPT` `WIDTH` `HEIGHT` `SEED`.
 
 For image-to-image with a reference image, use the companion workflow
-[`image-z-image-turbo-bf16-img2img-api.md`](image-z-image-turbo-bf16-img2img-api.md).
+[`image-z-image-turbo-bf16-i2i-api.md`](image-z-image-turbo-bf16-i2i-api.md).
 
 ### Install
 
@@ -37,7 +37,7 @@ switched to **ComfyUI (local)** on the web console's `🎨 生成模型` page sh
 this workflow path be filled in:
 
 ```text
-comfy/image-z-image-turbo-bf16-api.json
+comfy/image-z-image-turbo-bf16-t2i-api.json
 ```
 
 The `checkpoint` field stays empty: this workflow loads its models by fixed
@@ -61,7 +61,7 @@ dropped. To make exclusions effective, set the image channel's
 
 ## 中文
 
-[`image-z-image-turbo-bf16-api.json`](image-z-image-turbo-bf16-api.json) 是
+[`image-z-image-turbo-bf16-t2i-api.json`](image-z-image-turbo-bf16-t2i-api.json) 是
 [Tongyi-MAI/Z-Image-Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo)
 的 API 格式 ComfyUI 文生图工作流。Z-Image Turbo 是蒸馏加速模型,8 步、`cfg 1.0`
 即可出图(`res_multistep` 采样器、`simple` 调度器、AuraFlow 采样 `shift 3.0`)。
@@ -69,7 +69,7 @@ dropped. To make exclusions effective, set the image channel's
 占位符:`PROMPT` `WIDTH` `HEIGHT` `SEED`。
 
 带参考图的图生图请使用配套工作流
-[`image-z-image-turbo-bf16-img2img-api.md`](image-z-image-turbo-bf16-img2img-api.md)。
+[`image-z-image-turbo-bf16-i2i-api.md`](image-z-image-turbo-bf16-i2i-api.md)。
 
 ### 安装
 
@@ -90,7 +90,7 @@ ComfyUI/models/
 **ComfyUI(本地)** 时,才按需填写本工作流路径:
 
 ```text
-comfy/image-z-image-turbo-bf16-api.json
+comfy/image-z-image-turbo-bf16-t2i-api.json
 ```
 
 `checkpoint` 字段保持留空:本工作流通过 `UNETLoader`/`CLIPLoader`/`VAELoader`

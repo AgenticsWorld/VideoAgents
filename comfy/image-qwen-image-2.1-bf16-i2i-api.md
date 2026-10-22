@@ -4,9 +4,9 @@
 
 ## English
 
-[`image-qwen-image-2.1-bf16-ref10-api.json`](image-qwen-image-2.1-bf16-ref10-api.json) is the reference-image
-companion of [`image-qwen-image-2.1-bf16-api.md`](image-qwen-image-2.1-bf16-api.md). It is the same graph as
-[`image-qwen-image-2.1-q8-gguf-ref10-api.json`](image-qwen-image-2.1-q8-gguf-ref10-api.md) with node `1`
+[`image-qwen-image-2.1-bf16-i2i-api.json`](image-qwen-image-2.1-bf16-i2i-api.json) is the reference-image
+companion of [`image-qwen-image-2.1-bf16-t2i-api.md`](image-qwen-image-2.1-bf16-t2i-api.md). It is the same graph as
+[`image-qwen-image-2.1-q8-gguf-i2i-api.json`](image-qwen-image-2.1-q8-gguf-i2i-api.md) with node `1`
 replaced by the core `UNETLoader` loading `qwen_image_2.1_bf16.safetensors`, so it needs **no custom node**.
 It accepts **1 to 10 reference images**, wired to `TextEncodeQwenImage21`'s `images.image_1` …
 `images.image_10` with the VAE connected: each reference is seen by the Qwen3-VL text encoder and spliced into
@@ -20,20 +20,20 @@ renders text-to-image at that size in about 20 s — and the ComfyUI HTTP server
 a time while it ran, so `genmedia.py` gave up polling after 669 s and reported a failure although ComfyUI
 finished the job. The bf16 diffusion model and text encoder together are about 31.7 GB; the cause was not
 investigated further. On the same machine the Q8_0 companion
-[`image-qwen-image-2.1-q8-gguf-ref10-api.json`](image-qwen-image-2.1-q8-gguf-ref10-api.md) (diffusion model
+[`image-qwen-image-2.1-q8-gguf-i2i-api.json`](image-qwen-image-2.1-q8-gguf-i2i-api.md) (diffusion model
 7.6 GB, needs ComfyUI-GGUF) ran the same request in about 38 s with a nearly identical image — prefer it on a
 32 GB card. The int8 files listed in
-[`image-qwen-image-2.1-bf16-api.md`](image-qwen-image-2.1-bf16-api.md#install) are the option without a custom
+[`image-qwen-image-2.1-bf16-t2i-api.md`](image-qwen-image-2.1-bf16-t2i-api.md#install) are the option without a custom
 node (not tested). 3 to 10 references were not run.
 
 > **Comfy Cloud** cannot run it as is (the diffusion model and VAE are not in Cloud's shared model catalog)
 > and the model is **non-commercial only** (Qwen Research License). See
-> [`image-qwen-image-2.1-bf16-api.md`](image-qwen-image-2.1-bf16-api.md).
+> [`image-qwen-image-2.1-bf16-t2i-api.md`](image-qwen-image-2.1-bf16-t2i-api.md).
 
 ### Install
 
 Same ComfyUI version (0.37.0 or newer) and same three model files as the text-to-image workflow; see the
-install section of [`image-qwen-image-2.1-bf16-api.md`](image-qwen-image-2.1-bf16-api.md). No extra
+install section of [`image-qwen-image-2.1-bf16-t2i-api.md`](image-qwen-image-2.1-bf16-t2i-api.md). No extra
 downloads are needed.
 
 ### Console Configuration
@@ -46,8 +46,8 @@ This workflow goes into the image channel's **`ref_workflow`** field, next to th
   "image": {
     "provider": "comfyui",
     "comfyui": {
-      "workflow": "comfy/image-qwen-image-2.1-bf16-api.json",
-      "ref_workflow": "comfy/image-qwen-image-2.1-bf16-ref10-api.json",
+      "workflow": "comfy/image-qwen-image-2.1-bf16-t2i-api.json",
+      "ref_workflow": "comfy/image-qwen-image-2.1-bf16-i2i-api.json",
       "negative_mode": "append_exclusions",
       "checkpoint": ""
     }
@@ -72,7 +72,7 @@ The canvas (always an `EmptyLatentImage` at `GEN_WIDTH`x`GEN_HEIGHT` rather than
 the reference size (`resolution` `1024` rather than `0`), the dropped `QwenImage21Cache` node and the
 `SaveImage` output are the same choices as in the GGUF companion; the reasons and how to fork each one back
 are in
-[`image-qwen-image-2.1-q8-gguf-ref10-api.md`](image-qwen-image-2.1-q8-gguf-ref10-api.md#what-differs-from-the-source-workflow).
+[`image-qwen-image-2.1-q8-gguf-i2i-api.md`](image-qwen-image-2.1-q8-gguf-i2i-api.md#what-differs-from-the-source-workflow).
 
 ### Runtime Parameters
 
@@ -83,9 +83,9 @@ placeholder (`cfg 1.0`; use `negative_mode: "append_exclusions"`) behave as in t
 
 ## 中文
 
-[`image-qwen-image-2.1-bf16-ref10-api.json`](image-qwen-image-2.1-bf16-ref10-api.json) 是
-[`image-qwen-image-2.1-bf16-api.md`](image-qwen-image-2.1-bf16-api.md) 的参考图配套工作流。与
-[`image-qwen-image-2.1-q8-gguf-ref10-api.json`](image-qwen-image-2.1-q8-gguf-ref10-api.md) 是同一张图,只把节点 `1`
+[`image-qwen-image-2.1-bf16-i2i-api.json`](image-qwen-image-2.1-bf16-i2i-api.json) 是
+[`image-qwen-image-2.1-bf16-t2i-api.md`](image-qwen-image-2.1-bf16-t2i-api.md) 的参考图配套工作流。与
+[`image-qwen-image-2.1-q8-gguf-i2i-api.json`](image-qwen-image-2.1-q8-gguf-i2i-api.md) 是同一张图,只把节点 `1`
 换成原生 `UNETLoader` 加载 `qwen_image_2.1_bf16.safetensors`,因此**不需要任何自定义节点**。接受
 **1–10 张参考图**,接在 `TextEncodeQwenImage21` 的 `images.image_1` … `images.image_10` 上并连上 VAE:每张参考图
 既给 Qwen3-VL 文本编码器看,也以 VAE latent 拼进序列。采样与文生图相同:25 步、`cfg 1.0`、`euler` / `simple`。
@@ -96,18 +96,18 @@ placeholder (`cfg 1.0`; use `negative_mode: "append_exclusions"`) behave as in t
 正确,但执行约 750 秒——同一台机器文生图出同尺寸约 20 秒——而且执行期间 ComfyUI 的 HTTP 服务一连几分钟不响应,
 `genmedia.py` 轮询到 669 秒超时放弃并报失败,实际 ComfyUI 那边跑完了。bf16 底模与文本编码器合计约 31.7 GB;
 原因没有进一步排查。同一台机器上 Q8_0 版
-[`image-qwen-image-2.1-q8-gguf-ref10-api.json`](image-qwen-image-2.1-q8-gguf-ref10-api.md)(底模 7.6 GB,需要
+[`image-qwen-image-2.1-q8-gguf-i2i-api.json`](image-qwen-image-2.1-q8-gguf-i2i-api.md)(底模 7.6 GB,需要
 ComfyUI-GGUF)同样的请求约 38 秒、成图几乎一致——32 GB 显卡上优先用它。不装自定义节点的办法是
-[`image-qwen-image-2.1-bf16-api.md`](image-qwen-image-2.1-bf16-api.md#安装) 里列的 int8 文件(未实测)。3–10 张
+[`image-qwen-image-2.1-bf16-t2i-api.md`](image-qwen-image-2.1-bf16-t2i-api.md#安装) 里列的 int8 文件(未实测)。3–10 张
 参考图没有跑过。
 
 > **Comfy Cloud** 原样跑不了(底模与 VAE 不在云端公共模型目录里),模型**仅限非商业用途**
-> (Qwen Research License)。详见 [`image-qwen-image-2.1-bf16-api.md`](image-qwen-image-2.1-bf16-api.md)。
+> (Qwen Research License)。详见 [`image-qwen-image-2.1-bf16-t2i-api.md`](image-qwen-image-2.1-bf16-t2i-api.md)。
 
 ### 安装
 
 ComfyUI 版本(0.37.0 及以上)和三个模型文件都与文生图工作流相同,见
-[`image-qwen-image-2.1-bf16-api.md`](image-qwen-image-2.1-bf16-api.md) 的安装章节,无需额外下载。
+[`image-qwen-image-2.1-bf16-t2i-api.md`](image-qwen-image-2.1-bf16-t2i-api.md) 的安装章节,无需额外下载。
 
 ### 控制台配置
 
@@ -118,8 +118,8 @@ ComfyUI 版本(0.37.0 及以上)和三个模型文件都与文生图工作流相
   "image": {
     "provider": "comfyui",
     "comfyui": {
-      "workflow": "comfy/image-qwen-image-2.1-bf16-api.json",
-      "ref_workflow": "comfy/image-qwen-image-2.1-bf16-ref10-api.json",
+      "workflow": "comfy/image-qwen-image-2.1-bf16-t2i-api.json",
+      "ref_workflow": "comfy/image-qwen-image-2.1-bf16-i2i-api.json",
       "negative_mode": "append_exclusions",
       "checkpoint": ""
     }
@@ -139,7 +139,7 @@ ComfyUI 版本(0.37.0 及以上)和三个模型文件都与文生图工作流相
 
 画布(一律用 `GEN_WIDTH`x`GEN_HEIGHT` 的 `EmptyLatentImage`,不按第一张参考图尺寸)、参考图尺寸(`resolution` 用
 `1024` 而不是 `0`)、去掉 `QwenImage21Cache` 节点、输出用 `SaveImage`,这几处取舍都与 GGUF 版相同;原因与各自的
-改回方法见 [`image-qwen-image-2.1-q8-gguf-ref10-api.md`](image-qwen-image-2.1-q8-gguf-ref10-api.md#与原工作流的差别)。
+改回方法见 [`image-qwen-image-2.1-q8-gguf-i2i-api.md`](image-qwen-image-2.1-q8-gguf-i2i-api.md#与原工作流的差别)。
 
 ### 运行时参数
 
