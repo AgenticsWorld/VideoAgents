@@ -5935,8 +5935,29 @@ def _upscale_default_resolution() -> str:
     return "1080p"
 
 
+def _ffmpeg_replace(cmd: list, output: str, tag: str, what: str) -> None:
+    """ffmpeg 先写 output 同目录的隐藏临时文件 `.<stem>.<随机>.<tag>.tmp<后缀>`,返回 0 且非空才 os.replace 到 output。
+
+    输入输出是同一文件时(同一字符串 ffmpeg 直接拒绝;相对 / 绝对写法不同则 -y 先清空源文件,原片毁成 1 帧还报成功,#147)
+    也安全;失败时原片不动、临时文件删掉。临时名保留后缀(ffmpeg 靠后缀选封装),随机段防同组并发撞名;
+    由 ffmpeg 自建(不用 mkstemp:其 0600 权限会随 os.replace 带到成片上)。
+    """
+    out = Path(output)
+    tmp = out.with_name(f".{out.stem}.{os.getpid()}-{uuid.uuid4().hex[:8]}.{tag}.tmp{out.suffix}")
+    try:
+        r = subprocess.run([*cmd, str(tmp)], capture_output=True, text=True)
+        if r.returncode != 0 or not tmp.is_file() or tmp.stat().st_size == 0:
+            raise RuntimeError(f"{what}:{(r.stderr or '').strip()[-400:]}")
+        os.replace(tmp, out)
+    finally:
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
+
+
 def _upscale_ffmpeg(ff: dict, input_video: str, output: str, width: int, height: int) -> str:
-    """内置非 AI 插值放大:scale 滤镜 + libx264,音轨流拷贝,fps/时长不变。"""
+    """内置非 AI 插值放大:scale 滤镜 + libx264,音轨流拷贝,fps/时长不变。输出可与输入同一文件(原位覆盖)。"""
     p = Path(input_video or "")
     if not input_video or not p.is_file():
         raise RuntimeError(f"源视频不存在: {input_video or '(未传 --input)'}")
@@ -5944,12 +5965,10 @@ def _upscale_ffmpeg(ff: dict, input_video: str, output: str, width: int, height:
     cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(p),
            "-vf", f"scale={width}:{height}:flags={ff['filter']}",
            "-c:v", "libx264", "-preset", ff["preset"], "-crf", str(ff["crf"]),
-           "-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart", output]
+           "-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart"]
     print(f"[genmedia] ffmpeg 插值放大 {p.name} → {width}x{height}"
           f"(flags={ff['filter']} crf={ff['crf']} preset={ff['preset']})", file=sys.stderr, flush=True)
-    r = subprocess.run(cmd, capture_output=True, text=True)
-    if r.returncode != 0 or not Path(output).is_file():
-        raise RuntimeError(f"ffmpeg 放大失败:{(r.stderr or '').strip()[-400:]}")
+    _ffmpeg_replace(cmd, output, "upscale", "ffmpeg 放大失败")
     return str(Path(output).resolve())
 
 
@@ -5958,14 +5977,10 @@ def _rescale_to(path: str, width: int, height: int) -> bool:
     meta = _probe_video_meta(path)
     if meta and meta["width"] == width and meta["height"] == height:
         return False
-    tmp = str(Path(path).with_name(Path(path).stem + ".rescale.tmp.mp4"))
     cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", path,
            "-vf", f"scale={width}:{height}:flags=lanczos", "-c:v", "libx264", "-preset", "slow",
-           "-crf", "18", "-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart", tmp]
-    r = subprocess.run(cmd, capture_output=True, text=True)
-    if r.returncode != 0 or not Path(tmp).is_file():
-        raise RuntimeError(f"缩放到成片档失败:{(r.stderr or '').strip()[-400:]}")
-    os.replace(tmp, path)
+           "-crf", "18", "-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart"]
+    _ffmpeg_replace(cmd, path, "rescale", "缩放到成片档失败")
     print(f"[genmedia] 产物已缩放到成片档 {width}x{height}(原 "
           f"{meta['width'] if meta else '?'}x{meta['height'] if meta else '?'})", file=sys.stderr)
     return True
@@ -8473,7 +8488,9 @@ def _cmd_upscale(args):
             ff = up["ffmpeg"]
             if not args.input or not Path(args.input).is_file():
                 raise RuntimeError(f"源视频不存在: {args.input or '(未传 --input)'}")
-            print(f"{head} flags={ff['filter']} crf={ff['crf']} preset={ff['preset']} → {args.output}")
+            in_place = Path(args.output).is_file() and os.path.samefile(args.input, args.output)
+            print(f"{head} flags={ff['filter']} crf={ff['crf']} preset={ff['preset']} → {args.output}"
+                  + ("(原位覆盖:先写同目录临时文件,成功后替换)" if in_place else ""))
             return
         if provider == "volcengine":
             if resolution != "1080p":

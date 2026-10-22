@@ -1,5 +1,8 @@
 """超分统一设置(2026-09-23):路由只看 genconfig.upscale、目标尺寸换算、样片模式请求体、渠道失败不降级。"""
 import json
+import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -259,3 +262,73 @@ def test_agentics_upscale_rejects_profile_without_video_slot(genconfig, tmp_path
     with pytest.raises(RuntimeError, match="未声明源视频附件位"):
         g._upscale_agentics(g._agentics_upscale_config(), str(src), str(tmp_path / "o.mp4"),
                             "1080p", "16:9", 1920, 1080, 1)
+
+
+needs_ffmpeg = pytest.mark.skipif(not (shutil.which("ffmpeg") and shutil.which("ffprobe")), reason="需要 ffmpeg / ffprobe")
+
+
+def _clip(path: Path) -> Path:
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=24:duration=1",
+                    "-f", "lavfi", "-i", "anoisesrc=d=1", "-shortest", "-c:v", "libx264", "-preset", "ultrafast",
+                    "-pix_fmt", "yuv420p", "-c:a", "aac", str(path)], check=True, capture_output=True)
+    return path
+
+
+def _leftovers(d: Path) -> list:
+    return sorted(p.name for p in d.iterdir() if ".tmp" in p.name)
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("mixed", [False, True], ids=["same-string", "relative-vs-absolute"])
+def test_upscale_ffmpeg_in_place(genconfig, tmp_path, monkeypatch, mixed):
+    """#147:输入输出同一文件——同一字符串 ffmpeg 原本直接拒绝;相对 / 绝对混用时 -y 先清空源文件,原片毁成 1 帧还报成功。"""
+    monkeypatch.setenv("VIDEOAGENTS_CONFIG_PATH", str(tmp_path / "genconfig.json"))
+    monkeypatch.setattr(g, "_forbid_dispatch_layer", lambda kind: None)
+    genconfig(upscale={"provider": "ffmpeg", "ffmpeg": {"filter": "lanczos", "crf": 23, "preset": "ultrafast"}})
+    clip = _clip(tmp_path / "grp0020.mp4")
+    clip.with_suffix(".meta.json").write_text(json.dumps({"prompt": "原字段"}), encoding="utf-8")
+    frames = g._probe_video_meta(str(clip))["frames"]
+    assert frames >= 20
+    monkeypatch.chdir(tmp_path)
+    saved = g.generate_upscale("grp0020.mp4" if mixed else str(clip), str(clip), resolution="360p")
+    assert Path(saved) == clip.resolve()
+    meta = g._probe_video_meta(str(clip))
+    assert (meta["width"], meta["height"], meta["frames"]) == (640, 360, frames) and meta["has_audio"]
+    side = json.loads(clip.with_suffix(".meta.json").read_text(encoding="utf-8"))
+    assert side["prompt"] == "原字段" and side["upscale"]["output_resolution"] == "640x360"
+    assert _leftovers(tmp_path) == []
+    umask = os.umask(0)
+    os.umask(umask)
+    assert clip.stat().st_mode & 0o777 == 0o666 & ~umask                # 按 umask 建,不是 mkstemp 的 0600
+    # 其它渠道产物缩到成片档同样原位替换,临时文件不留
+    assert g._rescale_to(str(clip), 320, 180) is True
+    assert g._probe_video_meta(str(clip))["width"] == 320 and _leftovers(tmp_path) == []
+
+
+def test_upscale_ffmpeg_failure_keeps_source(tmp_path, monkeypatch):
+    """ffmpeg 失败(非 0 退出 / 0 退出却没写出东西):原片字节不变,目录不留临时文件。"""
+    clip = tmp_path / "grp0030.mp4"
+    clip.write_bytes(b"original-bytes")
+    ff = {"filter": "lanczos", "crf": 18, "preset": "slow"}
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        Path(cmd[-1]).write_bytes(b"partial")                     # ffmpeg 写了一半就失败
+        return subprocess.CompletedProcess(cmd, 1, "", "boom")
+
+    monkeypatch.setattr(g.subprocess, "run", fake_run)
+    with pytest.raises(RuntimeError, match="ffmpeg 放大失败:boom"):
+        g._upscale_ffmpeg(ff, str(clip), str(clip), 640, 360)
+    assert Path(calls[0][-1]).name.startswith(".grp0030.") and calls[0][-1].endswith(".upscale.tmp.mp4")
+    assert calls[0][calls[0].index("-i") + 1] == str(clip)
+    assert clip.read_bytes() == b"original-bytes" and _leftovers(tmp_path) == []
+
+    def empty_run(cmd, **kw):
+        Path(cmd[-1]).touch()
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(g.subprocess, "run", empty_run)
+    with pytest.raises(RuntimeError, match="ffmpeg 放大失败"):
+        g._upscale_ffmpeg(ff, str(clip), str(clip), 640, 360)
+    assert clip.read_bytes() == b"original-bytes" and _leftovers(tmp_path) == []
