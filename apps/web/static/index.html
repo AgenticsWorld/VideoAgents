@@ -550,7 +550,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <div id="np-cs-cats"></div>
       <div id="np-cs-grid"></div>
       <div class="note" id="np-cs-note-light" style="display:none">轻量风格来自 lemo-opuscar 的《OPUSCAR 98》:98 部奥斯卡最佳影片,每部用一种风格重画。封面是那部短片里的一帧,画面里的主角 Clawd 只属于原片,不会出现在你的片子里;选中后团队只拿它的那段风格提示,故事、结构与镜头按你的主题来导演</div>
-      <div class="note" id="np-cs-note-full">每种风格都有一部用代码做出来的样片,选中后点上方的「在线看样片」观看。风格只决定画面材质、色彩、字体、运动和声音调色板;故事、结构与镜头由团队按你的主题来导演。风格库来自开源项目 lemo-opuscar(MIT)</div>
+      <div class="note" id="np-cs-note-full">风格只决定画面材质、色彩、字体、运动和声音调色板;故事、结构与镜头由团队按你的主题来导演。风格库来自开源项目 lemo-opuscar(MIT)</div>
     </div>
     <div class="np-step" data-step="pace" style="display:none">
       <div class="row" style="align-items:flex-start"><label style="padding-top:6px">叙事节奏</label>
@@ -1868,7 +1868,7 @@ async function npCsLoad(){
   });
   const cur=lib.styles.find(s=>s.slug===NP_CS),curL=lib.light.styles.find(s=>s.slug===NP_CS);
   $('#np-cs-picked').innerHTML=cur?`${esc(t('已选:'))}<b>${esc(cur.tname)}</b>(${esc(cur.tcat)})`
-    +` · <a href="${esc(cur.gallery)}" target="_blank" rel="noopener">${esc(t('在线看样片 ↗'))}</a><div class="film">${esc(cur.tline)}</div>`
+    +`<div class="film">${esc(cur.tline)}</div>`
     :curL?`${esc(t('已选:'))}<b>${esc(curL.tname)}</b>(${esc(t('轻量风格'))} · ${esc(curL.tfilm)})`
     +` · <a href="${esc(lib.light.gallery)}" target="_blank" rel="noopener">${esc(t('在线看 OPUSCAR 98 ↗'))}</a>`
     +`<div class="film">${esc((curL.tuses||[]).join(' · '))}</div><div class="film">${esc(t('轻量风格只有一段风格提示,没有完整规范与样片源码:材质、字体、镜头语法、声音等提示没写到的部分,导演会在方案里补全'))}</div>`
