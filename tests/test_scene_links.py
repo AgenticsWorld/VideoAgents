@@ -260,3 +260,32 @@ def test_transition_design_reads_all_transition_forms(tmp_path):
     assert diag["B-grp002-grp003"]["screenplay_hint"].startswith("转场:MATCH CUT TO S02")
     assert diag["B-grp003-grp004"]["screenplay_link"] is None and diag["B-grp003-grp004"]["screenplay_hint"] == "转场:CUT TO"
     assert diag["B-grp002-grp003"]["time_word"] == "三日后"               # 场头时间词照旧取到(新读到的排版)
+
+
+def test_transition_design_hint_not_on_same_scene_scene_id_change(tmp_path):
+    """#159:分镜层把剧本一场拆成两个 scene_id(scene_no 相同)时,这条组边界不挂场尾转场句(整集一场时那句是集尾收束句);
+    场尾句只挂在「本场最后一组 → 下一场第一组」,也不从它推时间词、不进 propose 的 reason。"""
+    from modules import transition_design as td
+
+    d = tmp_path / "story" / "episodes" / "ep01"
+    d.mkdir(parents=True)
+    (d / "screenplay.md").write_text(NEW + "# EP01\n\n## S01 | INT | SCN-0001 书房 | 夜\n动作:灯灭。\n转场:三日后,切黑,本集完\n",
+                                     encoding="utf-8")
+    (tmp_path / "directing" / "ep01").mkdir(parents=True)
+    shots = [{"shot_id": f"sh00{i}", "scene_no": "S01", "size": "中景", "duration_s": 2.0} for i in (1, 2, 3)]
+    groups = [{"group_id": "grp001", "scene_id": "SCN-0001", "scene_no": "S01", "shots": ["sh001"], "total_duration_s": 2, "time_of_day": "夜"},
+              {"group_id": "grp002", "scene_id": "SCN-0002", "scene_no": "S01", "shots": ["sh002"], "total_duration_s": 2, "time_of_day": "夜"},
+              {"group_id": "grp003", "scene_id": "SCN-0002", "scene_no": "S01", "shots": ["sh003"], "total_duration_s": 2, "time_of_day": "夜"}]
+    (tmp_path / "directing" / "ep01" / "shot_list.json").write_text(json.dumps(
+        {"episode": "ep01", "budget_s": 60, "shots": shots, "generation_groups": groups}, ensure_ascii=False), encoding="utf-8")
+    diag = {b["id"]: b["diagnosis"] for b in td.diagnose(tmp_path, "ep01")}
+    d12 = diag["B-grp001-grp002"]
+    assert d12["scene_change"] == ["SCN-0001", "SCN-0002"]               # 仍认作换场景
+    assert d12["screenplay_hint"] is None and d12["time_word"] is None      # 但不挂场尾句、不从它推时间词
+    assert diag["B-grp002-grp003"]["screenplay_hint"] is None
+    (tmp_path / "settings.json").write_text(json.dumps({"transitions": {"mode": "classic"}}), encoding="utf-8")   # 换场景出非硬切建议
+    td.propose(tmp_path, "ep01")
+    rows = td.load_design(tmp_path, "ep01")["boundaries"]
+    reasons = [str((r.get("design") or {}).get("reason") or "") for r in rows]
+    reasons += [str((a.get("transition_in") or {}).get("reason") or "") for r in rows for a in (r.get("alternatives") or [])]
+    assert any(reasons) and all("剧本" not in x and "本集完" not in x for x in reasons)

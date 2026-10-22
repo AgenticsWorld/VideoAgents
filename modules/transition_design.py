@@ -533,10 +533,12 @@ def diagnose(base: Path, ep: str) -> list[dict]:
             edge = "inside"
         spb = sp.get(str(b.get("scene_no") or fb.get("scene_no") or "")) or {}
         spa = sp.get(str(a.get("scene_no") or fa.get("scene_no") or "")) or {}
-        hint = spa.get("transition_out") if (sc or (spa.get("transition_out") and a.get("scene_no") != b.get("scene_no"))) else None
         # 剧本场间衔接初稿(2026-10-10,docs/scene_links.md):只挂在「本场最后一组 → 它点名的下一场第一组」这条边界上;
         # 一期只带进诊断供复核,出主设计仍按模式表(导演采纳的已在 shot_list,记 accepted)
         a_no, b_no = str(a.get("scene_no") or fa.get("scene_no") or ""), str(b.get("scene_no") or fb.get("scene_no") or "")
+        # 剧本场尾转场句(#159):同 screenplay_link,只挂在「本场最后一组 → 下一场第一组」;同一场内部因 scene_id 变化
+        # (分镜层拆出的子空间)产生的边界不挂——整集只有一场时那句其实是集尾收束句
+        hint = spa.get("transition_out") if _scene_links.norm_no(a_no) != _scene_links.norm_no(b_no) else None
         slink = spa.get("link_out")
         if not (slink and a_no != b_no and _scene_links.norm_no(slink["to"]) == _scene_links.norm_no(b_no)):
             slink = None
