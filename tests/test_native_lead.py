@@ -130,3 +130,109 @@ def test_check_prompt_detects_duplicate_full_line():
           "Shot 3: {你射死我门人,还推不知?} 【原生先入】本镜开场时石矶正说到一半,上一镜画外已说出的「你射死我门人,」不再重说,接着说完。")
     errs = nl.check_prompt(vp, prev_no=2, shot_no=3, full="你射死我门人,还推不知?", lead="你射死我门人,", rest="还推不知?", h3=False)
     assert any("缺 {还推不知?}" in e for e in errs) and any("会重说" in e for e in errs)
+
+
+# ---------------------------------------------------------------- #155 句末标点 / 破折号可切、英文按词取整、已写入记录不漂移
+
+def test_lead_split_sentence_end_dash_and_abbreviations():
+    assert nl.lead_split("Wait. Come here.", 0.5, 2.0) == ("Wait.", "Come here.")
+    assert nl.lead_split("放回去。快走！", 0.5, 1.6) == ("放回去。", "快走！")
+    assert nl.lead_split("放回去!快走!", 0.5, 1.6) == ("放回去!", "快走!")          # 中文台词里的半角感叹号
+    assert nl.lead_split("Over here — get down now!", 0.5, 2.0) == ("Over here —", "get down now!")
+    assert nl.lead_split("Over here--get down now!", 0.5, 2.0) == ("Over here--", "get down now!")
+    assert nl.lead_split("Dr. Who? He left.", 0.5, 2.0) == ("Dr. Who?", "He left.")      # Dr. 不切
+    assert nl.lead_split("Mr. Lee, come in now please.", 0.5, 2.0) == ("Mr. Lee,", "come in now please.")
+    assert nl.lead_split("No. Not now.", 0.5, 2.0) == ("No.", "Not now.")                # 单说 No. 是一句
+    assert nl.lead_split("No. 5. Go there right now.", 0.5, 2.0) == ("No. 5.", "Go there right now.")   # No. 5 是编号
+    assert nl.punct_cut("Mr. Smith is here now") is None
+    # 省略号不是切点
+    assert nl.punct_cut("Wait... you came back for me") is None and nl.punct_cut("Wait… you came back for me") is None
+    # 「首分句 ≤60%」上限保留:破折号太靠后 → 按词取整
+    assert nl.punct_cut("This way — go!") is None
+    assert nl.lead_split("This way — go!", 0.5, 2.0) == ("This", "way — go!")
+    # 先入去尾部空白
+    assert nl.lead_split("This way — against them! Keep your head down!", 1.0, 3.0) == ("This way —", "against them! Keep your head down!")
+
+
+@pytest.mark.parametrize("s", [0.2, 0.45, 0.7, 1.0, 1.6])
+def test_lead_split_word_text_snaps_to_word_boundary(s):
+    text = "It opens on purpose and nobody knows why"          # 无句读英文:按比例切也落在词边界
+    lead, rest = nl.lead_split(text, s, 3.0)
+    assert lead and rest and lead == lead.rstrip() and text == lead + " " + rest
+    assert nl.lead_split("原来是你啊真的是你", 0.4, 2.0)[0] == "原来"                     # 汉字句仍按字比例切(口径不变)
+
+
+def _set_text(base: Path, sid: str, text: str, est: float) -> None:
+    p = base / "directing" / "ep01" / "shot_list.json"
+    sl = json.loads(p.read_text(encoding="utf-8"))
+    for sh in sl["shots"]:
+        if sh["shot_id"] == sid:
+            sh["dialogue_lines"][0].update(text=text, est_duration_s=est)
+    p.write_text(json.dumps(sl, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def test_suggest_accepts_sentence_end_and_dash(tmp_path):
+    for i, (text, lead) in enumerate([("放回去。快走！", "放回去。"), ("Over here — get down now!", "Over here —"),
+                                      ("Wait. Come here, quickly.", "Wait."), ("This way — go!", None), ("Wait... you came back", None)]):
+        base = _proj(tmp_path / f"c{i}")
+        _set_text(base, "s3", text, 2.0)
+        sugg = [x for x in nl.suggest(base, "ep01") if x["shot_id"] == "s3"]
+        assert [x["lead"] for x in sugg] == ([lead] if lead else []), text
+
+
+def _prompt_line(text: str) -> str:
+    return ("Overall visual style: x。\n\nShot 1: 全景。\n\nShot 2: 李靖主观镜,箭在地上滚。\n\nShot 3: 近景。石矶:{" + text + "}说完转身。"
+            "\n\nShot 4: 李靖手部特写。\n\nShot 5: 李靖:{弟子不敢}\n\nGlobal constraints: no music.")
+
+
+def test_recorded_split_kept_when_full_line_unchanged(tmp_path, monkeypatch):
+    base = _proj(tmp_path)
+    text = "放回去。快走！"
+    _set_text(base, "s3", text, 1.6)
+    pp = base / "assets" / "prompts" / "ep01" / "grp001.json"
+    pp.write_text(json.dumps({"video_prompt": _prompt_line(text)}, ensure_ascii=False), encoding="utf-8")
+    nl.set_line(base, "ep01", "s3", 0, reason={"trigger": "N1", "evidence": "x"}, source="directing")
+    with monkeypatch.context() as m:       # 旧规则(不认句号、按字比例切)写入的记录
+        m.setattr(nl, "lead_split", lambda t, s, est: ("放回", "去。快走！"))
+        assert nl.sync_episode(base, "ep01", write=True)["errors"] == []
+    before = pp.read_bytes()
+    assert json.loads(before)["native_leads"][0]["lead"] == "放回"
+    # 新规则会在句号处切,但整句没变 → 沿用记录:check 不 FAIL,--write 不改写(H3V 指纹不变)
+    assert nl.lead_split(text, 0.64, 1.6)[0] == "放回去。"
+    assert [(r["lead"], r["rest"]) for r in nl.collect(base, "ep01")] == [("放回", "去。快走！")]
+    assert nl.sync_episode(base, "ep01", write=False)["errors"] == [] and nl.validate(base, "ep01") == []
+    res = nl.sync_episode(base, "ep01", write=True)
+    assert res["errors"] == [] and res["updated_prompts"] == [] and pp.read_bytes() == before
+    # 只差空白也算同一句
+    _set_text(base, "s3", text + " ", 1.6)
+    assert nl.collect(base, "ep01")[0]["lead"] == "放回"
+    # s 改了 → 按新规则重切
+    sl_p = base / "directing" / "ep01" / "shot_list.json"
+    sl = json.loads(sl_p.read_text(encoding="utf-8"))
+    sl["shots"][2]["dialogue_lines"][0]["native_lead"]["s"] = 0.5
+    sl_p.write_text(json.dumps(sl, ensure_ascii=False), encoding="utf-8")
+    assert nl.collect(base, "ep01")[0]["lead"] == "放回去。"
+    # 台词改了 → 按新规则切
+    sl["shots"][2]["dialogue_lines"][0]["native_lead"]["s"] = 0.64
+    sl["shots"][2]["dialogue_lines"][0]["text"] = "放回去。快走吧！"
+    sl_p.write_text(json.dumps(sl, ensure_ascii=False), encoding="utf-8")
+    assert [(r["lead"], r["rest"]) for r in nl.collect(base, "ep01")] == [("放回去。", "快走吧！")]
+    # 坏的 prompt json 不影响 collect
+    pp.write_text("{bad", encoding="utf-8")
+    assert nl.collect(base, "ep01")[0]["lead"] == "放回去。"
+
+
+def test_p8_judged_on_kept_lead(tmp_path, monkeypatch):
+    base = _proj(tmp_path)
+    text = "放回去。快走！"
+    _set_text(base, "s3", text, 1.6)
+    pp = base / "assets" / "prompts" / "ep01" / "grp001.json"
+    pp.write_text(json.dumps({"video_prompt": _prompt_line(text)}, ensure_ascii=False), encoding="utf-8")
+    nl.set_line(base, "ep01", "s3", 0, reason={"trigger": "N1", "evidence": "x"}, source="directing")
+    with monkeypatch.context() as m:
+        m.setattr(nl, "lead_split", lambda t, s, est: ("放回去。快", "走！"))
+        assert nl.sync_episode(base, "ep01", write=True)["errors"] == []
+    # 触发词「快」在记录的先入里(新规则的「放回去。」里没有)→ P8 按实际写进 prompt 的先入报
+    (base / "directing" / "ep01" / "shots" / "s3" / "blocking.json").write_text(json.dumps({"characters": [
+        {"id": "CHAR-0001", "performance": {"trigger": {"word": "快"}}}]}), encoding="utf-8")
+    assert any("P8" in e and "放回去。快" in e for e in nl.validate(base, "ep01"))

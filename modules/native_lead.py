@@ -28,17 +28,30 @@ from pathlib import Path
 
 from modules.entity_ids import extract_actor_id
 from modules.shot_timing import KIND_H3, KIND_SD25, group_kind, shot_paragraphs, ui_lang_is_zh
+from modules.time_cost import is_word_text
 from modules.whitebox import component, read
 
 MAX_LEAD_S = 1.0
 MIN_PREV_SHOT_S = 0.6
 LEAD_FRACTION = 0.4
 AUDIBLE_MIN_S = 0.3
+LEAD_MAX_SHARE = 0.6                   # 先入分句 ≤ 全句 60% 字数
 WIDE_SIZES = ("大远景", "远景", "全景", "大全景", "EWS", "WS", "LS", "ELS", "extreme wide", "wide", "establishing")
 TRIGGERS = {"N1": "插入镜 / 主观镜起声(前镜无人物)", "N2": "听者先行(前镜只有听者)", "N3": "定场起声(前镜是组首定场 / 远景)", "U": "用户手标"}
 MARK_ZH, MARK_EN = "【原生先入】", "Native lead:"
 MARK_RE = re.compile(r"[ \t]*(?:【原生先入】|Native lead:)[^\n]*?[。.](?=[ \t]*(?:\n|$))")
-_SPLIT_RE = re.compile(r"[,，、;；]")
+# 先入可切点(句读,#155):逗号 / 顿号 / 分号;句末标点——中文 。！？ 直接认,ASCII ! ? 后接空白或汉字 / 假名 / 谚文(中文台词常写半角),
+# ASCII . 须后接空白(省略号 ... / …、小数点、常见缩写不算);破折号 — / ——/ --(两侧空白可有可无)、两侧带空白的 –。句末标点后的收尾引号 / 括号归先入。
+_CLOSE = r"[」』”’\"')）\]】》]*"
+_CJK = r"぀-ヿ㐀-䶿一-鿿豈-﫿가-힯"
+_SPLIT_RE = re.compile(r"[,，、;；]"
+                       r"|[。！？]+" + _CLOSE +
+                       r"|[!?]+" + _CLOSE + r"(?=\s|[" + _CJK + r"])"
+                       r"|(?<!\.)\." + _CLOSE + r"(?=\s)"
+                       r"|—+|-{2,}|(?<=\s)–(?=\s)")
+_ABBR_TAIL_RE = re.compile(r"(?:^|(?<![A-Za-z]))(?:Mr|Mrs|Ms|Mx|Dr|St|Jr|Sr|Prof|Capt|Lt|Sgt|Col|Gen|Gov|Sen|Rev|Mt|Ft|vs|etc|e\.g|i\.e|a\.m|p\.m)$",
+                           re.I)
+_NO_DIGIT_RE = re.compile(r"(?:^|(?<![A-Za-z]))No$")      # No. 5 是编号缩写;单说 No. 是一句话
 
 
 # ---------------------------------------------------------------- 读取
@@ -102,15 +115,41 @@ def _is_wide(shot: dict) -> bool:
     return any(w.lower() in s for w in WIDE_SIZES)
 
 
-def lead_split(text: str, s: float, est: float | None) -> tuple[str, str]:
-    """先入文本 / 余句:优先在第一个句读(,，、;;)处切且首分句 ≤60% 字数;否则按 s/est 比例切字(≥2 字,留 ≥2 字)。"""
+def _has_word(s: str) -> bool:
+    return any(ch.isalnum() for ch in s)
+
+
+def punct_cut(text: str) -> int | None:
+    """第一个可用句读切点(切点下标,先入 = text[:k]);首分句须有字、≤60% 字数、余句留 ≥2 字且有字。没有 = None。"""
     text = text.strip()
-    m = _SPLIT_RE.search(text)
-    if m and 0 < m.end() <= len(text) * 0.6 and len(text) - m.end() >= 2:
-        return text[:m.end()], text[m.end():].strip()
+    for m in _SPLIT_RE.finditer(text):
+        k = m.end()
+        if text[m.start()] == "." and (_ABBR_TAIL_RE.search(text[:m.start()])
+                                       or (_NO_DIGIT_RE.search(text[:m.start()]) and re.match(r"\s*\d", text[k:]))):
+            continue
+        if not _has_word(text[:k]):
+            continue
+        if k > len(text) * LEAD_MAX_SHARE or len(text) - k < 2 or not _has_word(text[k:]):
+            return None
+        return k
+    return None
+
+
+def lead_split(text: str, s: float, est: float | None) -> tuple[str, str]:
+    """先入文本 / 余句:优先在第一个句读(见 _SPLIT_RE:逗号顿号分号、句末标点、破折号)处切且首分句 ≤60% 字数;
+    否则按 s/est 比例切(≥2 字,留 ≥2 字)——按词计的句子(time_cost.is_word_text)取最近的词边界,不切在词中间。先入去尾部空白。"""
+    text = text.strip()
+    k = punct_cut(text)
+    if k is not None:
+        return text[:k].rstrip(), text[k:].strip()
     frac = (s / est) if est and est > 0 else LEAD_FRACTION
-    n = max(2, min(len(text) - 2, int(round(len(text) * min(0.6, max(0.15, frac))))))
-    return text[:n], text[n:].strip()
+    n = max(2, min(len(text) - 2, int(round(len(text) * min(LEAD_MAX_SHARE, max(0.15, frac))))))
+    if is_word_text(text):
+        gaps = [(m.start(), m.end()) for m in re.finditer(r"\s+", text) if _has_word(text[:m.start()]) and _has_word(text[m.end():])]
+        if gaps:
+            a, b = min(gaps, key=lambda g: (0 if g[0] <= n <= g[1] else min(abs(n - g[0]), abs(n - g[1])), g[0]))
+            return text[:a].rstrip(), text[b:].strip()
+    return text[:n].rstrip(), text[n:].strip()
 
 
 def lead_seconds(prev_dur: float, est: float | None) -> float:
@@ -149,6 +188,39 @@ def _perf_words(base: Path, ep: str, sid: str, cid: str) -> list[str]:
 
 
 # ---------------------------------------------------------------- 条件判定 / 自动建议
+
+def _p8_errs(base: Path, ep: str, sid: str, spk: str, lead: str) -> list[str]:
+    return [f"先入文本「{lead}」含表演触发词『{w}』(P8:触发词须留在本镜 `{{}}` 里)"
+            for w in (_perf_words(base, ep, sid, spk) if spk else []) if w and w in lead]
+
+
+def _recorded_splits(base: Path, ep: str, gid: str | None, cache: dict) -> dict[str, dict]:
+    """组 prompt 里上次 sync --write 记下的 native_leads[](按 shot_id);读不到 / 坏 = {}。"""
+    if gid not in cache:
+        try:
+            pj = read(Path(base) / "assets" / "prompts" / ep / f"{gid}.json", {}) if gid else {}
+        except (OSError, ValueError):
+            pj = {}
+        rows = pj.get("native_leads") if isinstance(pj, dict) else None
+        cache[gid] = {str(r["shot_id"]): r for r in rows or [] if isinstance(r, dict) and r.get("shot_id")}
+    return cache[gid]
+
+
+def _kept_split(rec: dict | None, text: str, s_eff: float) -> tuple[str, str] | None:
+    """已写入记录的整句与现台词一致(忽略空白)、s 未变 → 沿用记录的先入 / 余句(切分规则改了也不漂移,#155);否则 None。"""
+    if not isinstance(rec, dict):
+        return None
+    lead, rest = rec.get("lead"), rec.get("rest")
+    if not (isinstance(lead, str) and isinstance(rest, str) and lead.strip() and rest.strip()):
+        return None
+    full = _norm(text)
+    if _norm(str(rec.get("full") or "")) != full or _norm(lead + rest) != full:
+        return None
+    rs = _f(rec.get("s"))
+    if rs is None or abs(rs - round(s_eff, 3)) > 1e-6:
+        return None
+    return lead, rest
+
 
 def _prereq(base: Path, ep: str, sl: dict, shots: dict, info: dict, sid: str, idx: int, ln: dict, kind_cache: dict) -> tuple[list[str], dict]:
     """P3–P8 逐条判;返回 (问题列表, 事实 {prev, prev_dur, s, lead, rest, trigger_candidates})。"""
@@ -189,9 +261,7 @@ def _prereq(base: Path, ep: str, sl: dict, shots: dict, info: dict, sid: str, id
     est = _f(ln.get("est_duration_s"))
     s = lead_seconds(pd, est)
     lead, rest = lead_split(line_text(ln), s, est)
-    for w in _perf_words(base, ep, sid, spk) if spk else []:
-        if w and w in lead:
-            errs.append(f"先入文本「{lead}」含表演触发词『{w}』(P8:触发词须留在本镜 `{{}}` 里)")
+    errs += _p8_errs(base, ep, sid, spk, lead)
     cands = []
     if not (ps.get("characters") or []):
         cands.append("N1")
@@ -204,11 +274,13 @@ def _prereq(base: Path, ep: str, sl: dict, shots: dict, info: dict, sid: str, id
 
 
 def collect(base: Path, ep: str, shot_list: dict | None = None) -> list[dict]:
-    """已标 native_lead 的句子(镜序):{shot_id, idx, group_id, speaker, text, lead, rest, s, prev, reason, source, issues[]}。"""
+    """已标 native_lead 的句子(镜序):{shot_id, idx, group_id, speaker, text, lead, rest, s, prev, reason, source, issues[]}。
+    先入 / 余句:组 prompt 已有 native_leads[] 记录且整句与 s 未变 → 沿用记录(切分规则改了,已同步的提示词也不漂移);否则按 lead_split 现算。"""
     base = Path(base)
     sl = shot_list if shot_list is not None else (read(base / "directing" / ep / "shot_list.json", {}) or {})
     shots, info = _timeline(sl)
     cache: dict = {}
+    recorded: dict = {}
     out = []
     for s in sl.get("shots") or []:
         if not isinstance(s, dict) or not s.get("shot_id"):
@@ -228,8 +300,13 @@ def collect(base: Path, ep: str, shot_list: dict | None = None) -> list[dict]:
                 errs.append(f"reason.trigger={trig or '缺'} 不在 {list(TRIGGERS)}")
             elif trig != "U" and facts.get("triggers") is not None and trig not in facts["triggers"]:
                 errs.append(f"reason.trigger={trig} 与前镜事实不符(可用:{facts['triggers'] or '无'})")
-            lead, rest = lead_split(line_text(ln), s_eff, facts.get("est"))
-            out.append({"shot_id": s["shot_id"], "idx": idx, "group_id": facts.get("group_id") or (info.get(s["shot_id"]) or {}).get("group_id"),
+            gid = facts.get("group_id") or (info.get(s["shot_id"]) or {}).get("group_id")
+            kept = _kept_split(_recorded_splits(base, ep, gid, recorded).get(s["shot_id"]), line_text(ln), s_eff)
+            lead, rest = kept or lead_split(line_text(ln), s_eff, facts.get("est"))
+            if "lead" in facts and lead != facts["lead"]:
+                # P8 按实际写进 prompt 的先入文本判(_prereq 按缺省 s 现算的可能不同)
+                errs = [e for e in errs if "(P8" not in e] + _p8_errs(base, ep, s["shot_id"], facts.get("speaker") or "", lead)
+            out.append({"shot_id": s["shot_id"], "idx": idx, "group_id": gid,
                         "speaker": facts.get("speaker") or _speaker(ln), "text": line_text(ln), "lead": lead, "rest": rest,
                         "s": round(s_eff, 3), "prev": nl["shot"], "reason": nl["reason"], "source": nl["source"], "issues": errs})
     return out
@@ -272,8 +349,8 @@ def suggest(base: Path, ep: str, shot_list: dict | None = None) -> list[dict]:
         errs, facts = _prereq(base, ep, sl, shots, info, s["shot_id"], 0, ln, cache)
         if errs or not facts.get("triggers"):
             continue
-        if not _SPLIT_RE.search(line_text(ln)):
-            continue       # 自动建议只给有句读可切的句子(按字数硬切会切在词中间);用户手标(U)不受此限
+        if punct_cut(line_text(ln)) is None:
+            continue       # 自动建议只给能在句读处切(首分句 ≤60%)的句子(按比例硬切会切在词 / 词组中间);用户手标(U)不受此限
         trig = facts["triggers"][0]
         prev = facts["prev"]
         ps = shots.get(prev) or {}

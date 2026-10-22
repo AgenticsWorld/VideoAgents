@@ -158,7 +158,7 @@ vo 的 speaker 必须是本集 cast 的人物编号(`placement_speaker_is_cast`)
 结论:模型守「不把说话人画进来」,但倾向把台词**前置**并在说话人镜内收尾,不肯拖过切点。J 顺着这个倾向成功;L 逆着它两次失败。
 **三期只开放 J**;L 型需求继续走一期(整句转画外后期合成,D1)/ 二期(底床延续)。提示词只写「从本镜起即进声」,不指望按秒卡点(B1 把整个前镜都压上了声音)。嗓音:两段中值基频 232 / 254 Hz,与石矶其它句 246–262 Hz 一致,李靖 130 Hz。
 
-**契约**:画内句 `dialogue_lines[].native_lead {shot: 同组前一镜, s ∈ (0,1.0], reason {trigger N1|N2|N3|U, evidence}, source directing|user}`——这句**仍是画内句**(照写 `{}`、照挂 audio_ref、照数 speakers_le_3、估时照旧)。先入文本 = 第一个句读前的分句(lead),余句 rest;自动建议只给有句读的句子(按字数硬切会切在词中间)。
+**契约**:画内句 `dialogue_lines[].native_lead {shot: 同组前一镜, s ∈ (0,1.0], reason {trigger N1|N2|N3|U, evidence}, source directing|user}`——这句**仍是画内句**(照写 `{}`、照挂 audio_ref、照数 speakers_le_3、估时照旧)。先入文本 = 第一个可用句读前的分句(lead,去尾部空白,≤ 全句 60% 字数),余句 rest。句读含逗号 / 顿号 / 分号、句末标点(中文 `。！？` 直接认,半角 `! ?` 后接空白或汉字也认;英文 `.` 须后接空白,省略号 `...` / `…`、小数点与 Mr. / Dr. / St. / vs. / etc. 等常见缩写不算)与破折号(`—` / `——` / `--`,两侧空白可有可无;#155)。没有可用句读时按 s / 估时比例切:按词计的句子(`time_cost.is_word_text`,拉丁文字等,与时间尺 #124 同口径)取最近的词边界,不切在词中间;汉字句仍按字。自动建议只给能在句读处切的句子(按比例硬切会切在词 / 词组中间)。组 prompt 已有 `native_leads[]` 记录、且记录的整句与 s 都和现在一致时,宿主沿用记录里的先入 / 余句,不按现行规则重算(切分规则改了,已同步的提示词也不漂移、H3V 指纹不变);新标或台词 / s 改了才按现行规则切。
 
 **硬前提(机检 `native_lead_valid`,`modules/native_lead.validate`,已接进 `check_generation_groups.py`)**:
 
