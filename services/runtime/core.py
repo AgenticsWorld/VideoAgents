@@ -16878,6 +16878,177 @@ async def api_projects_copy_status(project: str = "demo"):
     return COPY_JOBS.get(safe_slug(project)) or {"state": "idle"}
 
 
+# ---------------- 自动备份(版本管理页「自动备份」板块,2026-10-22) ----------------
+# 全局开关,默认关,存 state.json#auto_backup = {enabled, dir}。开启后每次签字(签字类确认答复「签字」;
+# 控制台弹窗、各预览页签字、飞书卡片都走 api_confirm_answer)在后台把该项目目录整份打成 zip 放进 dir,
+# 打包逻辑在 modules/project_backup.py。同一项目打包中又签了字 → 记一笔,打完再打一份(多次合并为一份)。
+AUTO_BACKUP_JOBS: dict = {}              # 项目名 → {running, pending, trigger, last}
+AUTO_BACKUP_LOCK = threading.Lock()
+
+
+def auto_backup_settings() -> dict:
+    saved = STATE.get("auto_backup")
+    saved = saved if isinstance(saved, dict) else {}
+    return {"enabled": bool(saved.get("enabled", False)), "dir": str(saved.get("dir") or "").strip()}
+
+
+def _auto_backup_dir_check(raw: str) -> str:
+    """校验备份目录:须为绝对路径(可 ~ 开头),不能落在项目数据目录里(会被列成项目、或把备份打进备份);
+    不存在就建,再试写一次。返回规范化后的路径;不合格抛 ServiceError(文案随界面语言)。"""
+    from modules import project_backup
+    zh = (ui_lang_code() or "zh") == "zh"
+    p = Path(raw).expanduser()
+    if not p.is_absolute():
+        raise ServiceError(400, f"备份目录须为绝对路径:{raw}" if zh
+                           else f"The backup folder must be an absolute path: {raw}")
+    p = p.resolve()
+    if project_backup.is_inside(p, PROJECTS_DIR):
+        raise ServiceError(400, f"备份目录不能放在项目数据目录({PROJECTS_DIR})里" if zh
+                           else f"The backup folder cannot be inside the projects folder ({PROJECTS_DIR})")
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+        probe = p / f".videoagents-write-test-{uuid.uuid4().hex[:8]}"
+        probe.write_bytes(b"")
+        probe.unlink()
+    except OSError as e:
+        raise ServiceError(400, f"备份目录无法写入:{p}({e.strerror or e})" if zh
+                           else f"Cannot write to the backup folder: {p} ({e.strerror or e})") from None
+    return str(p)
+
+
+def _auto_backup_worker(project: str):
+    from modules import project_backup
+    job = AUTO_BACKUP_JOBS[project]
+    while True:
+        cfg = auto_backup_settings()
+        trigger, started = job.get("trigger"), time.strftime("%Y-%m-%d %H:%M:%S")
+        if cfg["enabled"] and cfg["dir"]:                # 排队期间被关掉就不打了
+            try:
+                res = project_backup.zip_project(PROJECTS_DIR / project, Path(cfg["dir"]), project)
+                job["last"] = {"ok": True, **res, "trigger": trigger, "started_at": started,
+                               "finished_at": time.strftime("%Y-%m-%d %H:%M:%S")}
+            except Exception as e:  # noqa: BLE001
+                job["last"] = {"ok": False, "error": str(e)[:300], "trigger": trigger,
+                               "started_at": started, "finished_at": time.strftime("%Y-%m-%d %H:%M:%S")}
+                print(f"[auto_backup] {project} 备份失败:{e}", flush=True)
+                zh = (ui_lang_code() or "zh") == "zh"
+                notify_user(f"项目 {project} 自动备份失败:{e}" if zh
+                            else f"Auto backup of project {project} failed: {e}")
+        with AUTO_BACKUP_LOCK:
+            if job.get("pending"):
+                job["pending"] = False
+                continue
+            job["running"] = False
+            return
+
+
+def auto_backup_trigger(project: str, trigger: str = "") -> bool:
+    """签字后调用:开关开着就后台备份该项目;已在打包则记一笔待补。返回是否受理。"""
+    cfg = auto_backup_settings()
+    if not (cfg["enabled"] and cfg["dir"]) or not (PROJECTS_DIR / project).is_dir():
+        return False
+    with AUTO_BACKUP_LOCK:
+        job = AUTO_BACKUP_JOBS.setdefault(project, {"running": False, "pending": False, "last": None})
+        job["trigger"] = trigger
+        if job["running"]:
+            job["pending"] = True
+            return True
+        job["running"] = True
+        threading.Thread(target=_auto_backup_worker, args=(project,), daemon=True).start()
+    return True
+
+
+def _native_pick_dir(start_dir: Path, title: str) -> str | None:
+    """本机原生「选择文件夹」对话框(同 _post_native_pick_file 的口径:macOS osascript / Windows PowerShell /
+    Linux zenity|kdialog);取消返回 None,平台无对话框能力抛 ServiceError(501),前端提示手填路径。"""
+    start_dir = start_dir if start_dir.is_dir() else Path.home()
+    try:
+        if sys.platform == "darwin":
+            script = (
+                'tell application "System Events" to activate\n'
+                f'set f to choose folder with prompt {json.dumps(title, ensure_ascii=False)} '
+                f'default location (POSIX file {json.dumps(str(start_dir))})\n'
+                'POSIX path of f')
+            p = subprocess.run(["osascript", "-e", script], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               text=True, timeout=900)
+            if p.returncode != 0:
+                if "-128" in (p.stderr or "") or "canceled" in (p.stderr or "").lower():
+                    return None
+                raise ServiceError(500, f"文件夹对话框失败:{(p.stderr or '').strip()[-200:]}")
+            out = p.stdout.strip()                      # choose folder 的 POSIX path 带结尾 /
+            return (out.rstrip("/") or "/") if out else None
+        if os.name == "nt":
+            # 无主窗口的 FolderBrowserDialog 常被浏览器压在下面:挂一个置顶的隐藏 Form 当 owner
+            ps = (
+                "[Console]::OutputEncoding = [Text.Encoding]::UTF8; "
+                "Add-Type -AssemblyName System.Windows.Forms; "
+                "$o = New-Object System.Windows.Forms.Form -Property @{TopMost = $true}; "
+                "$d = New-Object System.Windows.Forms.FolderBrowserDialog; "
+                f"$d.Description = {json.dumps(title, ensure_ascii=False)}; "
+                f"$d.SelectedPath = {json.dumps(str(start_dir))}; "
+                "$d.ShowNewFolderButton = $true; "
+                "if ($d.ShowDialog($o) -eq 'OK') { Write-Output $d.SelectedPath }")
+            p = subprocess.run(["powershell", "-NoProfile", "-STA", "-Command", ps], stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, encoding="utf-8", errors="replace", timeout=900,
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            return p.stdout.strip() or None
+        if shutil.which("zenity"):
+            p = subprocess.run(["zenity", "--file-selection", "--directory", f"--title={title}",
+                                f"--filename={start_dir}/"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               text=True, timeout=900)
+            return p.stdout.strip() or None
+        if shutil.which("kdialog"):
+            p = subprocess.run(["kdialog", "--getexistingdirectory", str(start_dir), "--title", title],
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=900)
+            return p.stdout.strip() or None
+    except subprocess.TimeoutExpired:
+        return None
+    zh = (ui_lang_code() or "zh") == "zh"
+    raise ServiceError(501, "本机没有可用的文件夹选择对话框,请直接填写路径" if zh
+                       else "No folder picker is available on this computer; type the path instead")
+
+
+async def api_auto_backup_pick_dir(body: dict):
+    """版本管理页「📁 选择…」(浏览器版):在服务所在电脑上弹系统「选择文件夹」窗口,
+    从当前填的目录(不存在则主目录)开始。返回 {path} 或 {cancelled: true};只选不存,保存仍走 api_auto_backup_set。"""
+    raw = str(body.get("dir") or "").strip()
+    start = Path(raw).expanduser() if raw else Path.home()
+    zh = (ui_lang_code() or "zh") == "zh"
+    path = await asyncio.to_thread(_native_pick_dir, start, "选择备份目录" if zh else "Choose backup folder")
+    return {"path": path} if path else {"cancelled": True}
+
+
+async def api_auto_backup_get(project: str = ""):
+    out = auto_backup_settings()
+    proj = safe_slug(project) if project else ""
+    if proj and (PROJECTS_DIR / proj).is_dir():
+        from modules import project_backup
+        job = AUTO_BACKUP_JOBS.get(proj) or {}
+        rows = (await asyncio.to_thread(project_backup.list_backups, Path(out["dir"]), proj)) if out["dir"] else []
+        out.update({"project": proj, "running": bool(job.get("running")), "pending": bool(job.get("pending")),
+                    "last": job.get("last"), "count": len(rows), "recent": rows[:5]})
+    return out
+
+
+async def api_auto_backup_set(body: dict):
+    """版本管理页「自动备份」保存:enabled(布尔)/ dir(备份目录,空串=清空)均可选;
+    结果为开启时目录必填且须可写(每次保存都重新校验,目录被删 / 权限变了能当场发现)。"""
+    zh = (ui_lang_code() or "zh") == "zh"
+    cfg = auto_backup_settings()
+    if body.get("dir") is not None:
+        cfg["dir"] = str(body.get("dir") or "").strip()
+    if body.get("enabled") is not None:
+        cfg["enabled"] = bool(body.get("enabled"))
+    if cfg["enabled"] and not cfg["dir"]:
+        raise ServiceError(400, "开启自动备份前请先填写备份目录" if zh
+                           else "Enter a backup folder before turning on auto backup")
+    if cfg["dir"]:
+        cfg["dir"] = await asyncio.to_thread(_auto_backup_dir_check, cfg["dir"])
+    STATE["auto_backup"] = cfg
+    save_state(STATE)
+    return await api_auto_backup_get(str(body.get("project") or ""))
+
+
 async def api_projects_delete(body: dict):
     """删除整个项目目录(版本管理页「危险操作」):前端已两重确认,
     后端再校验一次 confirm 必须与项目名完全一致,防误调。"""
@@ -16889,6 +17060,8 @@ async def api_projects_delete(body: dict):
     job = COPY_JOBS.get(project)
     if job and job.get("state") == "running":
         raise ServiceError(409, "A copy job is in progress for this project; delete it after the job finishes")
+    if (AUTO_BACKUP_JOBS.get(project) or {}).get("running"):
+        raise ServiceError(409, "An auto backup of this project is in progress; delete it after the backup finishes")
     live = [r for r in RUNS.values()
             if r.get("project") == project
             and r.get("status") in ("queued", "running")]
@@ -17313,8 +17486,29 @@ async def api_confirm_answer(cid: str, body: dict):
             except Exception as e:  # noqa: BLE001
                 c["continuation_error"] = str(e)[:300]
                 print(f"[approval] 签字后唤醒总制片失败(审批已保留):{e}", flush=True)
+        if c.get("kind") == "sign" and c["answer"] == "签字":
+            _auto_backup_after_sign(c)
         HUB.publish({"type": "confirm_done", "id": cid, "answer": c["answer"]})
     return {"ok": True, "answer": c["answer"]}
+
+
+def _auto_backup_after_sign(c: dict) -> None:
+    """签字后自动备份(版本管理页开关):排到事件循环下一轮再起——各预览页签字接口在 api_confirm_answer
+    返回后还要同步写签字记录(H3P 还要清理版本文件),等它们写完再打包,备份里才有这次签字的结果。"""
+    proj = _approval_project(c)
+    if not proj or not auto_backup_settings()["enabled"]:
+        return
+    gate = str(c.get("gate_id") or "")
+    trigger = gate
+    if gate:
+        try:   # 闸门显示名(如「H3S 故事板确认 · ep01」),版本管理页「最近一次」显示触发来源
+            trigger = _gate_display_by_id(proj, gate) or gate
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        asyncio.get_running_loop().call_soon(auto_backup_trigger, proj, trigger)
+    except RuntimeError:
+        auto_backup_trigger(proj, trigger)
 
 
 _AUTO_USAGE = ("用法:/auto — 查看当前项目自动运行状态;"

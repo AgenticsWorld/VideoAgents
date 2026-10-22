@@ -919,6 +919,20 @@ ipcMain.handle('desktop:pick-files', async (event, options: unknown) => {
   const result = anchor ? await dialog.showOpenDialog(anchor, dialogOptions) : await dialog.showOpenDialog(dialogOptions)
   return result.canceled ? [] : result.filePaths
 })
+ipcMain.handle('desktop:pick-directory', async (event, options: unknown) => {
+  // 版本管理页「自动备份」选备份目录:本机原生「选择文件夹」对话框;连远程后端时目录在服务端,交页面转手填
+  if (process.env.VIDEOAGENTS_API_URL) throw new Error('远程服务时不能选择本机文件夹')
+  const opts = options && typeof options === 'object' ? options as {title?: unknown; defaultPath?: unknown} : {}
+  const title = typeof opts.title === 'string' ? opts.title.slice(0, 120) : '选择文件夹'
+  const anchor = BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getFocusedWindow() ?? window
+  const dialogOptions = {
+    title,
+    ...(typeof opts.defaultPath === 'string' && opts.defaultPath ? {defaultPath: opts.defaultPath} : {}),
+    properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'>
+  }
+  const result = anchor ? await dialog.showOpenDialog(anchor, dialogOptions) : await dialog.showOpenDialog(dialogOptions)
+  return result.canceled ? '' : (result.filePaths[0] ?? '')
+})
 ipcMain.handle('desktop:open-project-folder', async (_event, project: unknown) => {
   if (process.env.VIDEOAGENTS_API_URL) throw new Error('远程项目目录不能在本机打开')
   if (typeof project !== 'string' || !/^[A-Za-z0-9_-]+$/.test(project)) throw new Error('项目名称无效')

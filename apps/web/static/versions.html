@@ -44,6 +44,17 @@ button:disabled{opacity:.5;cursor:default}
 .copy-row input:focus{outline:none;border-color:var(--accent)}
 #copy-status{display:none;font-size:12px;margin-top:8px}
 #copy-status.show{display:block}
+.card.backup h3{font-size:13px;color:var(--accent)}
+.card.backup p{font-size:12px;color:var(--dim);margin-bottom:6px}
+.bk-head{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+.bk-head label{display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;user-select:none}
+.bk-head input{accent-color:var(--accent)}
+.card.backup .copy-row{margin-top:4px}
+#bk-status{font-size:12px;margin-top:8px;color:var(--dim);display:flex;flex-direction:column;gap:2px}
+#bk-status:empty{display:none}
+#bk-status .ok{color:var(--green)}
+#bk-status .err{color:var(--red)}
+#bk-status .run{color:var(--yellow)}
 .card.danger{border-color:#7f1d1d}
 .card.danger h3{font-size:13px;color:var(--red);margin-bottom:6px}
 .card.danger p{font-size:12px;color:var(--dim);margin-bottom:10px}
@@ -79,6 +90,20 @@ button.red:disabled{background:var(--panel2);border-color:var(--border);color:va
       <button id="copy-btn">复制项目</button>
     </div>
     <div id="copy-status"></div>
+  </div>
+  <div class="card backup" id="backup-card">
+    <div class="bk-head">
+      <h3>💾 自动备份</h3>
+      <label><input type="checkbox" id="bk-enabled">启用</label>
+    </div>
+    <p>开启后,每次签字都会把当前项目目录整份打成 zip 压缩包,放到下面的备份目录;文件名由项目名和时间戳组成,如 demo-20261022-153000.zip。设置对所有项目生效。</p>
+    <p>备份可用控制台顶栏项目下拉里的「› 导入项目…」还原。每份备份与项目目录差不多大,旧备份不会自动删除,请留意磁盘空间。</p>
+    <div class="copy-row">
+      <input id="bk-dir" placeholder="备份目录(绝对路径)" autocomplete="off" spellcheck="false">
+      <button id="bk-pick" style="display:none">📁 选择…</button>
+      <button id="bk-save">保存</button>
+    </div>
+    <div id="bk-status" data-no-i18n></div>
   </div>
   <div id="global-status"></div>
   <div class="card danger">
@@ -217,12 +242,96 @@ $('#del-ok').onclick=async()=>{
   }finally{btn.disabled=false;btn.textContent='确认删除'}
 };
 
+/* ---------- 自动备份(全局开关 + 备份目录;签字后服务端后台打 zip,见 core.auto_backup_trigger) ---------- */
+let BK_TIMER=null;
+function fmtSize(n){
+  n=+n||0;const u=['B','KB','MB','GB','TB'];let i=0;
+  while(n>=1024&&i<u.length-1){n/=1024;i++}
+  return (i?n.toFixed(n<10?2:1):n)+' '+u[i];
+}
+function fmtTime(sec){
+  const d=new Date(sec*1000),p=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function renderBackup(st,msg){
+  $('#bk-enabled').checked=!!st.enabled;
+  if(document.activeElement!==$('#bk-dir'))$('#bk-dir').value=st.dir||'';
+  const lines=[];
+  if(msg)lines.push(msg);
+  if(st.running)lines.push(`<span class="run">${esc(st.pending?t('⏳ 正在备份…(期间又有新的签字,完成后会再备份一份)'):t('⏳ 正在备份…'))}</span>`);
+  const L=st.last;
+  if(L&&L.ok){
+    let s=I18N.f('✓ 最近一次备份:{file} · {size} · {time}',{file:L.file,size:fmtSize(L.bytes),time:L.finished_at||''});
+    if(L.trigger)s+=' · '+I18N.f('触发:{gate}',{gate:L.trigger});
+    lines.push(`<span class="ok">${esc(s)}</span>`);
+    if(L.skipped)lines.push(esc(I18N.f('打包时有 {n} 个文件已被删除或无法读取,已跳过',{n:L.skipped})));
+  }else if(L){
+    lines.push(`<span class="err">${esc(I18N.f('✗ 最近一次备份失败({time}):{error}',{time:L.finished_at||'',error:L.error||''}))}</span>`);
+  }
+  if(st.dir&&Array.isArray(st.recent)){
+    const r=st.recent[0];
+    lines.push(esc(r?I18N.f('备份目录里共有本项目 {n} 份备份,最新:{file} · {size} · {time}',
+      {n:st.count,file:r.file,size:fmtSize(r.bytes),time:fmtTime(r.mtime)}):t('备份目录里还没有本项目的备份')));
+  }
+  if(!st.enabled&&!st.running)lines.push(esc(t('自动备份未开启')));
+  $('#bk-status').innerHTML=lines.map(x=>`<div>${x}</div>`).join('');
+  // 打包中每 2 秒刷新一次,打完停
+  clearTimeout(BK_TIMER);
+  if(st.running)BK_TIMER=setTimeout(()=>loadBackup(),2000);
+}
+async function loadBackup(msg){
+  try{renderBackup(await api('/api/v1/config/auto-backup?project='+encodeURIComponent(curProj())),msg)}
+  catch(e){$('#bk-status').innerHTML=`<div class="err">${esc(e.message)}</div>`}
+}
+async function saveBackup(){
+  const body={project:curProj(),enabled:$('#bk-enabled').checked,dir:$('#bk-dir').value.trim()};
+  $('#bk-save').disabled=$('#bk-enabled').disabled=true;
+  try{
+    const st=await api('/api/v1/config/auto-backup',body);
+    $('#bk-dir').value=st.dir||'';
+    renderBackup(st,`<span class="ok">${esc(t('✓ 已保存'))}</span>`);
+  }catch(e){
+    await loadBackup(`<span class="err">✗ ${esc(t('保存失败:'))}${esc(e.message)}</span>`);   // 开关 / 目录回到服务端的值
+  }finally{$('#bk-save').disabled=$('#bk-enabled').disabled=false}
+}
+$('#bk-enabled').onchange=saveBackup;
+$('#bk-save').onclick=saveBackup;
+$('#bk-dir').onkeydown=e=>{if(e.key==='Enter')saveBackup()};
+(()=>{   // 「📁 选择…」系统选择文件夹窗口:桌面客户端走 Electron 对话框;浏览器在本机访问时由服务端弹窗。
+  // 连远程服务 / 从别的电脑访问时,窗口会弹在服务所在的电脑上,不显示按钮,只能手填
+  const d=window.videoagentsDesktop;
+  const desk=!!(d&&typeof d.pickDirectory==='function'&&!d.remoteBackend);
+  const local=/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)&&!(d&&d.remoteBackend);
+  if(!desk&&!local)return;
+  const btn=$('#bk-pick');
+  btn.style.display='';
+  btn.onclick=async()=>{
+    const cur=$('#bk-dir').value.trim();
+    btn.disabled=true;
+    try{
+      let dir='';
+      if(desk){
+        dir=await d.pickDirectory({title:t('选择备份目录'),defaultPath:cur||undefined});
+      }else{
+        $('#bk-status').innerHTML=`<div>${esc(t('已弹出系统窗口,请在窗口里选择文件夹…'))}</div>`;
+        const j=await api('/api/v1/config/auto-backup/pick-dir',{dir:cur});
+        dir=j.path||'';
+      }
+      if(dir){$('#bk-dir').value=dir;await saveBackup()}
+      else await loadBackup();
+    }catch(e){
+      await loadBackup(`<span class="err">✗ ${esc(e.message)}</span>`);
+    }finally{btn.disabled=false}
+  };
+})();
+
 function showStatus(html){const g=$('#global-status');g.innerHTML=html;g.classList.add('show')}
 
 (async()=>{
   await initProjects();
   refreshDanger();
   refreshCopy();
+  loadBackup();
   // 页面打开时若已有整份复制在跑(如刷新页面),恢复轮询,完成后照常返回本项目控制台
   try{
     const st=await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/copy');

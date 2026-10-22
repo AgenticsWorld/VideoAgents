@@ -192,6 +192,23 @@ async def copy_project_status(project: str) -> dict[str, Any]:
     return await core.api_projects_copy_status(project)
 
 
+@api.get("/config/auto-backup", tags=["projects"])
+async def auto_backup_get(project: str = "") -> dict[str, Any]:
+    """版本管理页「自动备份」:全局开关 + 备份目录;带 project 时附该项目的打包状态与最近几份备份。"""
+    return await core.api_auto_backup_get(project)
+
+
+@api.post("/config/auto-backup", tags=["projects"])
+async def auto_backup_set(body: dict[str, Any]) -> dict[str, Any]:
+    return await core.api_auto_backup_set(body)
+
+
+@api.post("/config/auto-backup/pick-dir", tags=["projects"])
+async def auto_backup_pick_dir(body: dict[str, Any]) -> dict[str, Any]:
+    """在服务所在电脑上弹系统「选择文件夹」窗口,返回 {path} 或 {cancelled: true}(只选不存)。"""
+    return await core.api_auto_backup_pick_dir(body)
+
+
 @api.get("/rhythms", tags=["projects"])
 async def get_rhythms() -> dict[str, Any]:
     """叙事节奏目录(单集/跨集),供新建项目向导与创作定调弹窗展示。"""
