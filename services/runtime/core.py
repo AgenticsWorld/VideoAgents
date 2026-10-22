@@ -878,10 +878,12 @@ DEFAULT_GENCONFIG = {
                     "rh_instance_type": "standard"},
     },
     "music": {
-        # code(代码作曲,2026-10-20 起新装默认)= 不调音乐模型:Agent 写作曲脚本,genmedia music --script 在宿主采样乐器 /
+        # code(代码作曲,2026-10-20 起网页版新装默认)= 不调音乐模型:Agent 写作曲脚本,genmedia music --script 在宿主采样乐器 /
         # 合成器环境下渲染(modules/codevideo/audio.py);auto_fetch = 缺采样库时自动下载(lemo-opuscar release 包)。
-        # 已保存过配置的沿用保存值(不迁移)
-        "provider": "code",   # code | agentics | openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax | comfyui
+        # 桌面端新装默认 Agentics(2026-10-22 用户拍板;桌面端拉起服务时才设 VIDEOAGENTS_CLIENT_VERSION,
+        # 与 genmedia.MUSIC_DEFAULT_PROVIDER 同口径)。已保存过配置的沿用保存值(不迁移)
+        "provider": "agentics" if os.environ.get("VIDEOAGENTS_CLIENT_VERSION", "").strip() else "code",
+        # code | agentics | openrouter(Lyria 3 系列)| elevenlabs(Eleven Music)| minimax | comfyui
         "code": {"auto_fetch": True},
         # 默认 profile 2026-09-20 定为 minimax-music-3(此前为空 = 取服务目录首个);存量空值由
         # _migrate_genconfig 视为未选、回落到此默认
@@ -4481,6 +4483,29 @@ def is_stateless_agent(agent_id: str) -> bool:
     return bool(p and any(a["id"] == agent_id and a["stateless"] for a in p["agents"]))
 
 
+# 派单首行里的工单号(总制片惯例「执行工单 cv3-sec-grp0010(…)」):小写字母 + 数字开头、至少带一段「-」;
+# 前面不能紧挨字母数字 / - / . / /,免得把 DEF-ep01-… 这类缺陷号或路径中段认成工单号
+_RUN_TASK_TOKEN_RE = re.compile(r"(?<![\w\-./])([a-z]+\d+[a-z]?(?:-[\w.]+)+)", re.ASCII)
+_RUN_TASK_PATH_RE = re.compile(r"runs/([\w.\-]+)/workorder", re.ASCII)
+
+
+def run_task_id(message: str) -> str:
+    """派单消息对应的工单号:内联工单的 task_id 行 → 首行第一个工单号形状的词 → 首行里的 runs/<工单号>/workorder;
+    认不出回空。"""
+    tid = _wo_task_id(message)
+    if tid:
+        return tid
+    first = (message or "").lstrip().split("\n", 1)[0]
+    m = _RUN_TASK_TOKEN_RE.search(first) or _RUN_TASK_PATH_RE.search(first)
+    return m.group(1).rstrip(".") if m else ""
+
+
+def is_fanout_run(agent_id: str, message: str) -> bool:
+    """有状态 Agent 的扇出工单(project_types.FANOUT_TASK_PREFIXES,如 scene-coder 的 cv3-sec 每段一单)。"""
+    prefixes = project_types.FANOUT_TASK_PREFIXES.get(agent_id)
+    return bool(prefixes) and run_task_id(message).startswith(prefixes)
+
+
 def agent_run_limit(agent_id: str, is_stateless: bool | None = None) -> int:
     """Return the local fan-out limit, honoring provider-specific hard capacity.
 
@@ -4651,6 +4676,12 @@ async def execute_run(run: dict, message: str, model: str | None):
     run_timeout = run_timeout_setting() * (4 if is_dispatcher else 1)
     idle_timeout = 0 if is_dispatcher else idle_timeout_setting()
     is_stateless = is_stateless_agent(agent_id)
+    # 有状态 Agent 的扇出工单按无状态派(全新会话、不回存会话、同类单之间并行),串行锁另起一把:
+    # 不跟该 Agent 的有状态运行抢同一把锁(否则额度 1 / N 来回切换会把信号量换掉)
+    fanout = not is_stateless and is_fanout_run(agent_id, message)
+    if fanout:
+        is_stateless = True
+        run["fanout"] = True
     async with AsyncExitStack() as stack:
         # 无状态服务型 agent 每次全新会话,同 agent 并发受「并发数量」额度约束;
         # 其余额度恒为 1(串行保护会话)。调度器不占槽但同样串行(同一总制片会话)。
@@ -4659,7 +4690,7 @@ async def execute_run(run: dict, message: str, model: str | None):
         # 「排队中」的 run 会把全局并发额度全部占满,别的 agent(记忆圣经管理者等)明明有
         # 空闲工人槽也只能跟在后面排队
         limit = agent_run_limit(agent_id, is_stateless)
-        await stack.enter_async_context(agent_sem(agent_id, limit))
+        await stack.enter_async_context(agent_sem(agent_id + "#fanout" if fanout else agent_id, limit))
         # 调度器大部分时间在等子任务(--wait-all),不占工人槽;否则 N 个槽实际只剩 N-1 个干活
         if not is_dispatcher:
             await stack.enter_async_context(global_sem())

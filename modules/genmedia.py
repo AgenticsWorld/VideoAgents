@@ -8083,7 +8083,9 @@ def generate_tts(text: str, output: str, voice: str = "", speed: float | None = 
     return fn(cfg, text, output, voice, speed, instructions)
 
 
-MUSIC_DEFAULT_PROVIDER = "code"     # 新装默认:代码作曲(2026-10-20);已保存过配置的沿用保存值
+# 新装默认:网页版代码作曲(2026-10-20)、桌面端 Agentics(2026-10-22;桌面端拉起服务时才设 VIDEOAGENTS_CLIENT_VERSION,
+# 成员进程继承);与 core.DEFAULT_GENCONFIG 同口径,已保存过配置的沿用保存值
+MUSIC_DEFAULT_PROVIDER = "agentics" if os.environ.get("VIDEOAGENTS_CLIENT_VERSION", "").strip() else "code"
 
 
 def _music_provider(provider: str = "") -> str:

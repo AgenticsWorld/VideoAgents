@@ -303,6 +303,23 @@ def test_genconfig_defaults_and_validation(monkeypatch, tmp_path):
     assert "code" in core.DEFAULT_GENCONFIG["sfx"] and core.DEFAULT_GENCONFIG["sfx"]["provider"] == "code"
 
 
+@pytest.mark.parametrize("client_version, want", [("", "code"), ("1.0.40", "agentics")])
+def test_music_default_provider_desktop(tmp_path, client_version, want):
+    """桌面端(拉起服务时设 VIDEOAGENTS_CLIENT_VERSION)新装音乐默认 Agentics,网页版仍为代码作曲;
+    默认值在 import 时定,另起进程读。已保存的音乐渠道照旧优先,音效默认不随之变。"""
+    env = {**os.environ, "VIDEOAGENTS_DATA_DIR": str(tmp_path / "data"),
+           "VIDEOAGENTS_RUNTIME_DIR": str(tmp_path / "data" / ".videoagents"),
+           "VIDEOAGENTS_CLIENT_VERSION": client_version}
+    out = subprocess.run([sys.executable, "-c", (
+        "import json; from services.runtime import core; from modules import genmedia;"
+        "core.save_genconfig({'music': {'provider': 'minimax'}});"
+        "print(json.dumps([core.DEFAULT_GENCONFIG['music']['provider'], genmedia.MUSIC_DEFAULT_PROVIDER,"
+        " core.DEFAULT_GENCONFIG['sfx']['provider'], core.load_genconfig()['music']['provider']]))")],
+        cwd=ROOT, env=env, capture_output=True, text=True, timeout=120)
+    assert out.returncode == 0, out.stderr
+    assert json.loads(out.stdout.strip().splitlines()[-1]) == [want, want, "code", "minimax"]
+
+
 # ---------------------------------------------------------------- 端到端渲染(需 Chromium + ffmpeg)
 
 PAGE = """<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#000}</style></head>
