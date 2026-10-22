@@ -91,7 +91,7 @@ agent: 08-video-gen/image-generation
 instruction: |
   为第 1 集生成组 grp005(sh014–sh016)备齐参考锚点包:
   角色 CHAR-0003/CHAR-0007 各一张形象锚(复用整版三视图 sheet.png)、场景 SCN-0012 一张(复用概念图)、
-  道具 prop_001 道具图一张(复用 main_01.png);概念库全覆盖则 reuse-only 零新生成,
+  道具 PROP-0001 道具图一张(复用 main_01.png);概念库全覆盖则 reuse-only 零新生成,
   仅当组 prompt 需要而概念库缺的形象(按 <shot>.json image_prompt)才补生成候选并记 gap_reason。
   分辨率 2560x1440(16:9),总数 ≤5 张。
 ```

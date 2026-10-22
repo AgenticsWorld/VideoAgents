@@ -333,6 +333,7 @@ refs/
 | 生物(含坐骑本体) | `CRE-` + 数字(或 slug) | `CRE-0012` | `bible/creatures/index.json`(04-creatures/creature) | 是:`ACTOR_ID_PAT` 只认 `CRE-`;`is_creature_id` 另兼容存量 `cre_` |
 | 坐骑卡 | `mnt_` + slug | `mnt_bingjiao_01` | `bible/creatures/mount.json`(04-creatures/mount,单文件内部编号) | 否;跨文件一律引 `creature_ref` 指向的 `CRE-` |
 | 事件 | `ev` + 数字(以数字结尾) | `ev0042` | `story/events.json`(01-story/event) | 是:剧本 `[事件]` 位、事件取舍机检按 `ev…数字` 抓;`evt_slug` 抓不到 |
+| 道具 | `PROP-` + 数字 | `PROP-0017` | `bible/props.json`(06-art/prop);参考图目录 `assets/concepts/props/<道具 ID>/` | 是:故事板只收 `PROP-` 开头的道具引用;`prop_017` 抓不到 |
 | 服装 | `<人物 ID>_<场合>_<序号>` | `CHAR-0003_battle_02` | `bible/costumes.json`(06-art/costume) | 否(按键查) |
 | 地理节点 | `geo_` + 类别 + slug(`geo_region_` / `geo_mt_` / `geo_city_` …) | `geo_city_yunzhou` | `bible/geography.json`(02-worldbuilding/geography) | 否 |
 | 国家 / 势力 | `nation_` / `faction_` + slug | `faction_qingyun` | `bible/world.json`(02-worldbuilding/world) | 否 |

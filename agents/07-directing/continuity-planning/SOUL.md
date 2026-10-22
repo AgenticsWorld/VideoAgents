@@ -72,7 +72,7 @@ prompt 写完必跑 `python3 code/sync_continuity_refs.py --project <slug> --ep 
   "axis_violations": [{ "shots": ["sh021", "sh022"], "waiver": "导演阐述:混乱感,见 directing_plan §重点场次 S07" }],
   "lighting_chain": [{ "scene": "SCN-0012", "shots": ["sh014", "sh015"], "time_of_day": "深夜", "lighting_scheme_id": "LGT-0012-01", "key_light": "frame_left", "ok": true }],
   "costume_states": [{ "shot_id": "sh014", "CHAR-0003": { "outfit": "CHAR-0003_battle_02", "state": "左袖撕裂" } }],
-  "prop_states": [{ "shot_id": "sh014", "prop_017": "在 CHAR-0003 手中,出鞘" }],
+  "prop_states": [{ "shot_id": "sh014", "PROP-0017": "在 CHAR-0003 手中,出鞘" }],
   "group_transitions": [{
     "from_group": "grp004", "to_group": "grp005",
     "boundary_shots": ["sh013", "sh014"], "same_scene": true,

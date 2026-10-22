@@ -77,7 +77,7 @@ python3 modules/genmedia.py image --prompt "<按设定卡+style.json 组织的 p
 ```json
 {
   "props": [{
-    "id": "prop_017", "name": "青冥剑", "is_plot_prop": true,
+    "id": "PROP-0017", "name": "青冥剑", "is_plot_prop": true,
     "visual": "三尺青锋,剑格饕餮纹…(可直接进 prompt)",
     "scale": {
       "canonical_size": "全长约100cm(三尺剑),刃宽约4cm",
@@ -86,14 +86,14 @@ python3 modules/genmedia.py image --prompt "<按设定卡+style.json 组织的 p
     },
     "owners": [{ "character_id": "CHAR-0003", "from_chapter": 12 }],
     "source": "第12章", "inferred": false,
-    "concept_ref": "assets/concepts/props/prop_017/"
+    "concept_ref": "assets/concepts/props/PROP-0017/"
   }, {
-    "id": "prop_021", "name": "聘书", "is_plot_prop": true,
+    "id": "PROP-0021", "name": "聘书", "is_plot_prop": true,
     "visual": "…", "scale": { "…": "…" },
     "readable_face": {
       "face_desc": "正面=墨书条款、朱印与签名区(可读面)",
       "back_desc": "背面=素白麻纸,略透墨影",
-      "back_ref": "assets/concepts/props/prop_021/main_01.png"
+      "back_ref": "assets/concepts/props/PROP-0021/main_01.png"
     }
   }]
 }

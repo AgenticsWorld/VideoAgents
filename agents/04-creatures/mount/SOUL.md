@@ -48,7 +48,7 @@
     "id": "mnt_bingjiao_01", "creature_ref": "CRE-0012",
     "ownership": [{ "owner_ref": "CHAR-0001", "acquired_chapter": 216, "method": "契约",
                     "until_chapter": null }],
-    "tack": [{ "item": "玄铁骨鞍", "since_chapter": 220, "prop_ref": "prop_…",
+    "tack": [{ "item": "玄铁骨鞍", "since_chapter": 220, "prop_ref": "PROP-…",
                "look_note": "…", "inferred": true, "reason": "原文仅提『备鞍』,样式按兽体型推断" }],
     "performance": { "mode": "飞行", "speed_evidence": "ch.230 半日千里", "capacity": 2, "riding_pose": "驭立背脊" },
     "riding_scenes": [216, 230], "source": { "chapters": [216] }
