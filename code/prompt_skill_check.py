@@ -28,6 +28,7 @@ import sys
 from pathlib import Path
 
 from _common import REPO_ROOT, parse_args
+import user_skills
 
 CHECK = "prompt_skill_applied"
 NONE_REASONS = ("user_skipped", "no_match", "disabled", "missing")
@@ -147,9 +148,9 @@ def sd25_structure_errors(d: dict, name: str) -> list[str]:
 
 
 def skill_md_path(skill_id: str) -> Path:
-    """skill_id = "<agent_id>/<技能目录>" → agents/<agent_id>/skills/<目录>/SKILL.md。"""
-    agent_id, _, sdir = canon_skill_id(skill_id).rpartition("/")
-    return REPO_ROOT / "agents" / agent_id / "skills" / sdir / "SKILL.md"
+    """skill_id = "<agent_id>/<技能目录>" → SKILL.md:内置 agents/<agent_id>/skills/<目录>/ 优先,
+    其次「加载技能」装的用户目录 <数据目录>/skills/<agent_id>/<目录>/(modules/user_skills.py)。"""
+    return user_skills.skill_md_path(canon_skill_id(skill_id), REPO_ROOT)
 
 
 def sha256_of(path: Path) -> str:

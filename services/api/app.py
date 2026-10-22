@@ -1249,6 +1249,11 @@ async def skills_upload(request: Request, agent: str, filename: str = "") -> dic
     return await core.api_skills_upload(agent, await request.body(), filename)
 
 
+@api.delete("/config/skills", tags=["automation"])
+async def skills_delete(id: str) -> dict[str, Any]:
+    return await core.api_skills_delete(id)
+
+
 @api.get("/config/concurrency", tags=["automation"])
 async def agent_concurrency() -> dict[str, Any]:
     return await core.api_agent_concurrency_get()

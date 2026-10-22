@@ -682,6 +682,12 @@ PLUGINS_DIR = Path(os.environ.get(
     "VIDEOAGENTS_PLUGINS_DIR", DATA_DIR / "plugins"
 )).expanduser().resolve()
 PLUGIN_MANIFEST = "plugin.json"
+# 用户自装技能(「技能」弹窗「加载技能」的安装处):<数据目录>/skills/<agent_id>/<技能目录>/SKILL.md。
+# 内置技能 agents/…/skills/ 随安装包只读——桌面端在已签名 .app 内,换版即整包替换,往里写还会破坏签名。
+# 与 modules/user_skills.user_skills_dir() 同口径(成员调用的 code/ 机检按它解析)。
+USER_SKILLS_DIR = Path(os.environ.get(
+    "VIDEOAGENTS_SKILLS_DIR", DATA_DIR / "skills"
+)).expanduser().resolve()
 MAX_PLUGIN_UPLOAD = 50 * 1024 * 1024
 MAX_PLUGIN_EXTRACTED = 200 * 1024 * 1024
 MAX_PLUGIN_FILES = 5000
@@ -1755,53 +1761,68 @@ def _parse_skill_frontmatter(text: str) -> dict:
 
 _SKILLS_CACHE: tuple[float, list] = (0.0, [])
 _SKILLS_CACHE_TTL = 30.0
+_SKILLS_SHADOWED: list[dict] = []    # 上一次扫描里与内置同名、未生效的用户技能(弹窗标灰并允许删除)
+
+
+def _skill_entry(a: dict, sd: Path, source: str) -> dict:
+    f = sd / "SKILL.md"
+    try:
+        text = f.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        text = ""
+    fm = _parse_skill_frontmatter(text)
+    desc = fm.get("description", "")
+    if not desc:                      # 无 frontmatter:优先首条引用行,其次首个标题/正文
+        body = [x.strip() for x in text.splitlines() if x.strip() and not x.strip().startswith("---")]
+        quote = next((x for x in body if x.startswith(">")), "")
+        first = quote or (body[0] if body else "")
+        desc = re.sub(r"^SKILL\.md\s*[—\-]+\s*", "", first.lstrip("#>").strip())
+    sid = f"{a['id']}/{sd.name}"
+    act = SKILL_ACTIVATIONS.get(sid, {"kind": "generic"})
+    try:
+        rel = str(f.relative_to(ROOT))
+    except ValueError:                # 用户技能在数据目录:给绝对路径(Agent 按它读,ROOT / 绝对路径仍是它本身)
+        rel = str(f)
+    return {
+        "id": sid,
+        "agent_id": a["id"],
+        "agent_name": a["name"],
+        "category_name": a["category_name"],
+        "plugin": a.get("plugin"),
+        "dir": sd.name,
+        "name": fm.get("name") or sd.name,
+        "description": desc[:400],
+        "path": rel,
+        "source": source,
+        "kind": act.get("kind", "generic"),
+        "condition": act.get("condition", ""),
+    }
 
 
 def scan_agent_skills(refresh: bool = False) -> list[dict]:
-    """扫描全部 Agent(内置 + 已启用插件)的 skills/ 目录,返回不含开关状态的技能清单(带 TTL 缓存)。"""
-    global _SKILLS_CACHE
+    """扫描全部 Agent(内置 + 已启用插件)的技能,返回不含开关状态的技能清单(带 TTL 缓存)。
+    两处来源:随安装包的 <Agent 目录>/skills/(source=bundled)与用户自装的 USER_SKILLS_DIR/<agent_id>/
+    (source=user);同名时内置优先,用户那份记入 _SKILLS_SHADOWED、不进清单(id 必须唯一)。"""
+    global _SKILLS_CACHE, _SKILLS_SHADOWED
     if not refresh and time.time() < _SKILLS_CACHE[0]:
         return _SKILLS_CACHE[1]
     skills: list[dict] = []
+    shadowed: list[dict] = []
     for a in list_agents(refresh=refresh):
         d = agent_dir(a["id"])
-        if not d or not (d / "skills").is_dir():
+        if not d:
             continue
-        for sd in sorted((d / "skills").iterdir()):
-            f = sd / "SKILL.md"
-            if not sd.is_dir() or not f.is_file() or not _SKILL_DIR_RE.fullmatch(sd.name):
+        seen: set[str] = set()
+        for base, source in ((d / "skills", "bundled"), (USER_SKILLS_DIR / a["id"], "user")):
+            if not base.is_dir():
                 continue
-            try:
-                text = f.read_text(encoding="utf-8", errors="replace")
-            except Exception:
-                text = ""
-            fm = _parse_skill_frontmatter(text)
-            desc = fm.get("description", "")
-            if not desc:                      # 无 frontmatter:优先首条引用行,其次首个标题/正文
-                body = [x.strip() for x in text.splitlines() if x.strip() and not x.strip().startswith("---")]
-                quote = next((x for x in body if x.startswith(">")), "")
-                first = quote or (body[0] if body else "")
-                desc = re.sub(r"^SKILL\.md\s*[—\-]+\s*", "", first.lstrip("#>").strip())
-            sid = f"{a['id']}/{sd.name}"
-            act = SKILL_ACTIVATIONS.get(sid, {"kind": "generic"})
-            try:
-                rel = str(f.relative_to(ROOT))
-            except ValueError:
-                rel = str(f)
-            skills.append({
-                "id": sid,
-                "agent_id": a["id"],
-                "agent_name": a["name"],
-                "category_name": a["category_name"],
-                "plugin": a.get("plugin"),
-                "dir": sd.name,
-                "name": fm.get("name") or sd.name,
-                "description": desc[:400],
-                "path": rel,
-                "kind": act.get("kind", "generic"),
-                "condition": act.get("condition", ""),
-            })
+            for sd in sorted(base.iterdir()):
+                if not sd.is_dir() or not (sd / "SKILL.md").is_file() or not _SKILL_DIR_RE.fullmatch(sd.name):
+                    continue
+                (shadowed if sd.name in seen else skills).append(_skill_entry(a, sd, source))
+                seen.add(sd.name)
     _SKILLS_CACHE = (time.time() + _SKILLS_CACHE_TTL, skills)
+    _SKILLS_SHADOWED = shadowed
     return skills
 
 
@@ -19155,8 +19176,11 @@ async def api_agent_advanced_set(body: dict):
 
 
 async def api_skills_get(refresh: bool = False):
-    """Agent 技能清单(对话面板「技能」弹窗):自动扫描各 Agent skills/ 目录,返回清单 + 开关状态。"""
-    return {"skills": list_agent_skills(refresh=refresh),
+    """Agent 技能清单(对话面板「技能」弹窗):扫描各 Agent 的内置与用户自装技能,返回清单 + 开关状态;
+    skills_shadowed 为与内置同名、未生效的用户技能(弹窗标灰,可删除)。"""
+    skills = list_agent_skills(refresh=refresh)
+    return {"skills": skills,
+            "skills_shadowed": [dict(s) for s in _SKILLS_SHADOWED],
             "skills_disabled": sorted(skills_disabled_setting())}
 
 
@@ -19165,9 +19189,8 @@ async def api_skills_text(skill_id: str):
     s = next((x for x in scan_agent_skills() if x["id"] == skill_id), None)
     if not s:
         raise ServiceError(404, f"unknown skill id: {skill_id}")
-    d = agent_dir(s["agent_id"])
-    f = (d / "skills" / s["dir"] / "SKILL.md") if d else None
-    if not f or not f.is_file():
+    f = ROOT / s["path"]                 # 内置为 ROOT 相对路径,用户技能为数据目录下的绝对路径
+    if not f.is_file():
         raise ServiceError(404, f"SKILL.md not found: {skill_id}")
     try:
         text = f.read_text(encoding="utf-8", errors="replace")
@@ -19205,13 +19228,14 @@ async def api_skills_set(body: dict):
 
 
 async def api_skills_upload(agent_id: str, data: bytes, filename: str = ""):
-    """对话面板「技能」弹窗「加载技能」:上传技能包安装到该 Agent 的 skills/ 目录。
+    """对话面板「技能」弹窗「加载技能」:上传技能包,安装到用户技能目录 USER_SKILLS_DIR/<agent_id>/<技能目录>/
+    (数据目录下;不写随安装包的 agents/…/skills/,桌面端升级换包不丢、不破坏 .app 签名)。
     请求体即文件原始字节(与插件安装同口径,免 multipart 依赖),支持两种形态:
     - zip 包:根可以直接是技能内容(SKILL.md 在根),也可以套一层技能目录;技能目录名取内层
       目录名,根级则取 zip 文件名;解压前做路径穿越拦截;
     - 单个 SKILL.md 文件(.md 后缀或非 zip 魔数):技能目录名优先取 frontmatter 的 name,
-      其次取文件名主干(文件名恰为 SKILL.md 时必须有 frontmatter name),装成 skills/<name>/SKILL.md。
-    同名技能已存在则拒绝(先删除再装,避免新旧文件混杂)。"""
+      其次取文件名主干(文件名恰为 SKILL.md 时必须有 frontmatter name),装成 <name>/SKILL.md。
+    与内置技能同名、或已装过同名用户技能时拒绝(后者先在弹窗里删除再装,避免新旧文件混杂)。"""
     d = agent_dir(str(agent_id or ""))
     if not d:
         raise ServiceError(404, f"no such agent: {agent_id}")
@@ -19268,11 +19292,17 @@ async def api_skills_upload(agent_id: str, data: bytes, filename: str = ""):
         files.append(("SKILL.md", text.encode("utf-8")))
     if not name or not _SKILL_DIR_RE.fullmatch(name):
         raise ServiceError(400, f"非法技能目录名:{name!r}(仅限字母/数字/_-,根级 zip 请用规范文件名)")
-    (d / "skills").mkdir(exist_ok=True)
-    target = d / "skills" / name
+    zh = (ui_lang_code() or "zh") == "zh"
+    if (d / "skills" / name).exists():
+        raise ServiceError(409, f"技能 {name} 与本 Agent 的内置技能同名,请改名后再装" if zh else
+                           f"skill {name} has the same name as a built-in skill of this agent; rename it and retry")
+    base = USER_SKILLS_DIR / agent_id                        # agent_id 已经 agent_dir 的格式校验
+    target = base / name
     if target.exists():
-        raise ServiceError(409, f"技能 {name} 已存在;请先删除 {target} 再安装")
-    staging = d / "skills" / f".{name}.{uuid.uuid4().hex}.tmp"
+        raise ServiceError(409, f"技能 {name} 已装过;请先在列表里删除再装" if zh else
+                           f"skill {name} is already installed; delete it from the list first")
+    base.mkdir(parents=True, exist_ok=True)
+    staging = base / f".{name}.{uuid.uuid4().hex}.tmp"
     staging.mkdir()
     try:
         for rel, content in files:
@@ -19290,6 +19320,35 @@ async def api_skills_upload(agent_id: str, data: bytes, filename: str = ""):
     scan_agent_skills(refresh=True)
     return {"ok": True, "name": name, "agent_id": agent_id, "files": len(files),
             **await api_skills_get()}
+
+
+async def api_skills_delete(skill_id: str):
+    """技能弹窗「删除」:只删用户自装技能(USER_SKILLS_DIR 下,含与内置同名而未生效的那份);
+    内置技能随安装包提供,不能删。目标以扫描清单为准不收任意路径,删前再核对确在 USER_SKILLS_DIR 内。"""
+    sid = str(skill_id or "")
+    zh = (ui_lang_code() or "zh") == "zh"
+    listed = scan_agent_skills(refresh=True)
+    s = next((x for x in listed + _SKILLS_SHADOWED if x["id"] == sid and x.get("source") == "user"), None)
+    if not s:
+        if any(x["id"] == sid for x in listed):
+            raise ServiceError(400, f"技能 {sid} 是随安装包提供的内置技能,不能删除" if zh else
+                               f"skill {sid} is built in and cannot be deleted")
+        raise ServiceError(404, f"unknown skill id: {sid}")
+    root = USER_SKILLS_DIR.resolve()
+    target = USER_SKILLS_DIR / s["agent_id"] / s["dir"]
+    try:
+        target.parent.resolve().relative_to(root)
+    except ValueError as exc:
+        raise ServiceError(400, f"skill path escapes the user skills directory: {sid}") from exc
+    if target.is_symlink():
+        target.unlink()
+    else:
+        shutil.rmtree(target)
+    for p in (target.parent, target.parent.parent):          # 顺手清掉空的 <agent>/、<类别>/ 目录
+        if p != root and p.is_dir() and not any(p.iterdir()):
+            p.rmdir()
+    scan_agent_skills(refresh=True)
+    return {"ok": True, "id": sid, **await api_skills_get()}
 
 
 async def api_agent_concurrency_get():
