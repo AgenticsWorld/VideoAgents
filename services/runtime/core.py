@@ -18534,10 +18534,12 @@ def _whitebox_issue_question(proj: str, gate_id: str | None, question: str) -> s
         if not lines:
             return question
         if lang == "zh":
-            tail = "｜".join(lines) + ";请在「分镜设定」预览页组卡🧊白模面板逐条裁决;阻断级未清不能签字"
+            tail = ("｜".join(lines) + ";请在「分镜设定」预览页组卡🧊白模面板逐条裁决;阻断级未清不能签字"
+                    ";签字即接受未答复待决项的推荐方案,套用后不再重签")   # #158:签字时已接受的项套用即落地,不退回 g6w 重签
         else:
             tail = (" | ".join(lines) + "; decide each item in the 🧊 Whitebox panel of the group card on the "
-                    "Shot Setup preview page; blocking items must be cleared before sign-off")
+                    "Shot Setup preview page; blocking items must be cleared before sign-off. Signing accepts the "
+                    "recommended option for each unanswered item; applying them afterwards needs no re-sign.")
         return question[: max(40, 500 - len(tail) - 1)] + "\n" + tail
     except Exception as e:  # noqa: BLE001
         print(f"[whitebox_issues] 签字卡摘要失败:{e}", flush=True)

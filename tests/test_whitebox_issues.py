@@ -203,3 +203,22 @@ def test_waive_groups_batch(project):
     assert waive_groups(project, 'ep01', ['grp1', 'grp9'], True) == {'grp1': [ISSUE_A['issue_id'], ISSUE_B['issue_id']]}
     assert collect(project, 'ep01')['summary']['waived'] == 2
     assert waive_groups(project, 'ep01', ['grp9'], False) == {}
+
+
+def test_h3w_sign_card_says_signing_accepts_recommended_without_resign(project, monkeypatch):
+    """#158:H3W 签字卡末尾的待决项摘要写明「签字即接受未答复待决项的推荐方案,套用后不再重签」(中文 / 非中文一律英文);没有待决项时问题原样。"""
+    from services.runtime import core
+    monkeypatch.setattr(core, 'PROJECTS_DIR', project.parent)
+    question = '【H3W-白模确认】请审看 ep01 白模后签字'
+    monkeypatch.setattr(core, 'ui_lang_code', lambda cfg=None: 'zh')
+    assert core._whitebox_issue_question('demo', 'g6w-ep01', question) == question   # 无白模计划
+    write(project / 'directing/ep01/whitebox_plans/grp1.json', plan_with([ISSUE_A]))
+    zh = core._whitebox_issue_question('demo', 'g6w-ep01', question)
+    assert zh.startswith(question + '\n') and 'ep01 白模待决项:待处理 1(阻断 0)' in zh
+    assert zh.endswith('阻断级未清不能签字;签字即接受未答复待决项的推荐方案,套用后不再重签')
+    for lang in ('en', 'ja'):
+        monkeypatch.setattr(core, 'ui_lang_code', lambda cfg=None, lang=lang: lang)
+        text = core._whitebox_issue_question('demo', 'g6w-ep01', question)
+        assert text.endswith('blocking items must be cleared before sign-off. Signing accepts the recommended option '
+                             'for each unanswered item; applying them afterwards needs no re-sign.'), text
+        assert '签字即接受' not in text and len(text) <= 501
