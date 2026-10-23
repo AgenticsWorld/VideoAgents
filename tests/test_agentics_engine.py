@@ -201,7 +201,9 @@ def test_desktop_packaging_ships_vendor_pi():
     # 打包实测),必须以 node_modules 本身为源单列一条
     assert extra["backend/vendor/pi/node_modules"]["from"] == "../../vendor/pi/node_modules"
     main = (ROOT / "apps/desktop/src/main.ts").read_text(encoding="utf-8")
-    assert "VIDEOAGENTS_NODE: process.execPath" in main
+    # macOS 用 Electron Helper 当 Node 跑 pi(不进 Dock,273e691c),其余平台退回 process.execPath
+    assert "VIDEOAGENTS_NODE: agenticsNodeExecutable()" in main
+    assert "return existsSync(helper) ? helper : process.execPath" in main
     lock = (ROOT / "apps/desktop/runtime-requirements.lock").read_text()
     assert "deepagents" not in lock and "langgraph" not in lock          # 原 deepagents 栈已移出运行时
     assert not (ROOT / "modules/deepagents_runner.py").exists()
