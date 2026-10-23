@@ -45,6 +45,7 @@ from modules.entity_ids import extract_actor_id
 from modules.volc_openapi import signed_call as _volc_signed_call
 from modules import voice_library as _voice_library
 from modules import openverse as _openverse
+from modules import stock_images as _stock
 from modules import refusal_judge as _refusal_judge
 from services.runtime import rhythm as narrative_rhythm
 from services.runtime import project_types
@@ -378,6 +379,7 @@ REFS_README = """# refs/ — 用户参考目录
                 请在【参考文件】页给文件写注释说明用途,相关 Agent 按注释参考使用
 - `NOTES.md`    逐文件注释:哪个文件管什么、想用在哪(有则 Agent 必读)。
                 注释在【参考文件】页逐文件填写,自动写入本文件的标记块(机器可读版在 annotations.json)
+- `CREDITS.md`  从【参考文件】页「🔎 图库」导入的图的来源、作者与许可(自动生成;CC BY 图出现在成片 / 物料里时照此署名)
 
 规则:用户参考素材 > Agent 自行发挥;与文字设定冲突时 Agent 会上报你裁决;目录为空不影响流程。
 """
@@ -14682,12 +14684,15 @@ REF_CATEGORIES = ("style", "thumbnail", "characters", "scenes", "creatures", "pr
                   "audio",    # 讲述音频 / 音频母带(音频配画、数字人、混剪项目的主输入,2026-10-20)
                   "voices")   # 克隆声音样本(数字人「克隆声音」:每个说话人一段,code/dialogue_clone.py,2026-10-20)
 REF_FONT_EXTS = (".ttf", ".otf", ".ttc")      # 与花字引擎 modules/captions.py 扫描口径一致
-REF_SKIP_FILES = {"README.md", "NOTES.md", "annotations.json"}
+REF_SKIP_FILES = {"README.md", "NOTES.md", "CREDITS.md", "annotations.json"}
 AUDIO_EXTS = (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg")
 REF_VIDEO_EXTS = (".mp4", ".mov", ".webm", ".m4v", ".mkv")
 REF_NOTES_BEGIN = "<!-- BEGIN videoagents-refs-notes 本块由客户端「参考文件」页自动生成,勿手改;手写内容请放本块之外 -->"
 REF_NOTES_END = "<!-- END videoagents-refs-notes -->"
+REF_CREDITS_HEAD = "# refs/ 图库导入图的来源与许可"
 MAX_REF_UPLOAD = 100 * 1024 * 1024
+# 「🔎 图库」只往收图片的板块里加(modules/stock_images.py,2026-10-23)
+REF_STOCK_CATEGORIES = ("style", "thumbnail", "characters", "scenes", "creatures", "props", "other")
 
 
 def _load_ref_notes(refs: Path) -> dict:
@@ -14702,7 +14707,10 @@ def _write_ref_notes_md(refs: Path, notes: dict):
         v = notes[rel]
         note = str(v.get("note") if isinstance(v, dict) else v or "").strip()
         if note:
-            lines.append(f"- `{rel}`:" + note.replace("\n", "\n  "))
+            src = v.get("source") if isinstance(v, dict) else None
+            tail = (f"(图库:{src.get('site') or src.get('provider')} · {src.get('license_label') or src.get('license')})"
+                    if isinstance(src, dict) else "")
+            lines.append(f"- `{rel}`:" + note.replace("\n", "\n  ") + tail)
     block = REF_NOTES_BEGIN + "\n" + ("\n".join(lines) or "(暂无注释)") + "\n" + REF_NOTES_END
     p = refs / "NOTES.md"
     if p.is_file():
@@ -14716,6 +14724,31 @@ def _write_ref_notes_md(refs: Path, notes: dict):
     else:
         txt = "# refs/ 逐图注释(哪张图管什么、哪首曲子想用在哪)\n\n" + block + "\n"
     p.write_text(txt, encoding="utf-8")
+
+
+def _write_ref_credits_md(refs: Path, notes: dict):
+    """annotations.json 里带 source 的(图库导入)→ refs/CREDITS.md;一条都没有时删掉本页生成过的那份。"""
+    rows = []
+    for rel in sorted(notes):
+        v = notes[rel]
+        src = v.get("source") if isinstance(v, dict) else None
+        if not isinstance(src, dict) or not (refs / rel).is_file():
+            continue
+        title = f"「{src['title'][:80]}」" if src.get("title") else ""
+        who = f" by {src['author']}" if src.get("author") else ""
+        lic = src.get("license_label") or src.get("license") or ""
+        need = "(需署名)" if src.get("attribution_required") else "(免署名)"
+        rows.append(f"- `{rel}` — {title}{who} · {lic}{need} · {src.get('site') or src.get('provider')}"
+                    + (f" · {src['page_url']}" if src.get("page_url") else "")
+                    + (f"\n  署名:{src['attribution']}" if src.get("attribution_required") and src.get("attribution") else ""))
+    p = refs / "CREDITS.md"
+    if not rows:
+        if p.is_file() and p.read_text(encoding="utf-8").startswith(REF_CREDITS_HEAD):
+            p.unlink()
+        return
+    p.write_text(REF_CREDITS_HEAD + "\n\n本文件由「参考文件」页「🔎 图库」导入时自动生成,勿手改。"
+                 "标「需署名」的图(CC BY)若出现在成片、封面或宣传物料里,请按「署名」一行写进片尾或发布说明;"
+                 "只作参考、不出现在画面里的不用署名。\n\n" + "\n".join(rows) + "\n", encoding="utf-8")
 
 
 async def api_refs_list(project: str = "demo"):
@@ -14735,7 +14768,8 @@ async def api_refs_list(project: str = "demo"):
                 "is_video": ext in REF_VIDEO_EXTS,
                 "is_font": ext in REF_FONT_EXTS,
                 "size": st.st_size,
-                "note": str(v.get("note") if isinstance(v, dict) else v or "").strip()}
+                "note": str(v.get("note") if isinstance(v, dict) else v or "").strip(),
+                "source": v.get("source") if isinstance(v, dict) and isinstance(v.get("source"), dict) else None}
 
     def listing(d: Path, recursive: bool) -> list:
         if not d.is_dir():
@@ -14776,18 +14810,28 @@ async def api_refs_upload(data: bytes, project: str = "demo",
     if category in ("audio", "voices") and ext not in AUDIO_EXTS:
         raise ServiceError(400, ("讲述音频" if category == "audio" else "克隆声音") + "分类只接受 "
                            + " / ".join(AUDIO_EXTS) + " 音频文件")
+    p = _refs_store(base, category, subdir, stem, ext, data)
+    rel = p.relative_to(base / "refs").as_posix()
+    return {"ok": True, "project": base.name, "path": rel,
+            "url": f"/projects/{base.name}/refs/{rel}?v={int(p.stat().st_mtime)}"}
+
+
+def _ref_subdir(subdir: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]", "_", subdir or "").strip("._-")[:60]
+
+
+def _refs_store(base: Path, category: str, subdir: str, stem: str, ext: str, data: bytes) -> Path:
+    """写入 refs/<分类>[/<子目录>]/:文件名按工作流纪律清洗为 ASCII,同名自动加 _1、_2…;返回落盘路径。"""
     stem = re.sub(r"[^A-Za-z0-9._-]", "_", stem).strip("._-")
     stem = re.sub(r"_{2,}", "_", stem)[:80] or "ref"
-    sub = re.sub(r"[^A-Za-z0-9._-]", "_", subdir).strip("._-")[:60]
+    sub = _ref_subdir(subdir)
     d = (base / "refs" / category / sub) if sub else (base / "refs" / category)
     d.mkdir(parents=True, exist_ok=True)
     p, i = d / f"{stem}{ext}", 1
     while p.exists():
         p, i = d / f"{stem}_{i}{ext}", i + 1
     p.write_bytes(data)
-    rel = p.relative_to(base / "refs").as_posix()
-    return {"ok": True, "project": base.name, "path": rel,
-            "url": f"/projects/{base.name}/refs/{rel}?v={int(p.stat().st_mtime)}"}
+    return p
 
 
 async def api_refs_note(body: dict):
@@ -14803,9 +14847,9 @@ async def api_refs_note(body: dict):
         raise ServiceError(404, f"No such ref file: {rel}")
     note = str(body.get("note") or "").strip()
     notes = _load_ref_notes(refs)
-    if note:
-        notes[rel] = {"note": note,
-                      "updated": datetime.now().isoformat(timespec="seconds")}
+    cur = notes.get(rel) if isinstance(notes.get(rel), dict) else {}
+    if note or cur.get("source"):          # 图库导入的图清空注释时只清 note,来源记录(CREDITS.md 依据)留着
+        notes[rel] = {**cur, "note": note, "updated": datetime.now().isoformat(timespec="seconds")}
     else:
         notes.pop(rel, None)
     atomic_write_json(refs / "annotations.json", notes)
@@ -14833,7 +14877,118 @@ async def api_refs_delete(body: dict):
     if notes.pop(rel, None) is not None:
         atomic_write_json(refs / "annotations.json", notes)
         _write_ref_notes_md(refs, notes)
+        _write_ref_credits_md(refs, notes)
     return {"ok": True, "project": base.name, "path": rel}
+
+
+# ---------------- 参考文件页「🔎 图库」(modules/stock_images.py,2026-10-23) ----------------
+def _stock_lang():
+    _stock.set_lang(ui_lang_code() or "zh")
+
+
+def _stock_error(e: "_stock.StockError") -> ServiceError:
+    # 参数 / Key 不对 = 原状态码(4xx),限流 429,连不上或对方出错 = 502
+    status = e.status if 400 <= e.status < 500 else 502
+    return ServiceError(status, str(e)[:500])
+
+
+def _stock_openverse_creds() -> tuple[str, str]:
+    """沿用「生成模型」页音效 › Openverse 存的 Client ID / Secret(空 = 匿名)。"""
+    ov = ((load_genconfig().get("sfx") or {}).get("openverse") or {})
+    return str(ov.get("client_id") or "").strip(), str(ov.get("client_secret") or "").strip()
+
+
+async def api_stock_providers():
+    """图库弹窗的图源下拉:Openverse 免 Key;Pexels / Pixabay 有 Key(环境变量 / footageconfig.json)才可用。"""
+    return {"providers": _stock.providers(), "categories": list(REF_STOCK_CATEGORIES),
+            "max_side": _stock.MAX_SIDE}
+
+
+async def api_stock_search(body: dict):
+    """{provider, q, page?, orientation?, kind?} → 一页结果(服务端代理检索,结果缓存 24 小时)。"""
+    body = dict(body or {})
+    _stock_lang()
+    cid, secret = _stock_openverse_creds()
+    try:
+        page = int(body.get("page") or 1)
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        return await asyncio.to_thread(_stock.search, str(body.get("provider") or "openverse"),
+                                       str(body.get("q") or ""), page, str(body.get("orientation") or ""),
+                                       str(body.get("kind") or ""), cid, secret)
+    except _stock.StockError as e:
+        raise _stock_error(e) from e
+
+
+async def api_stock_translate(body: dict):
+    """检索词译成英文关键词(Openverse 用中文搜效果差):走 Agentics 引擎当前渠道的文本模型,每点一次调一次。"""
+    _stock_lang()
+    zh = (ui_lang_code() or "zh") == "zh"
+    try:
+        conn = resolve_deepagents()
+    except ServiceError as e:
+        raise ServiceError(400, (f"Agentics 引擎的文本模型不可用:{e.detail}" if zh
+                                 else f"The Agentics text model is unavailable: {e.detail}")) from e
+    try:
+        text = await asyncio.to_thread(_stock.translate_query, str((body or {}).get("text") or ""), conn)
+    except _stock.StockError as e:
+        err = _stock_error(e)
+        if err.status_code == 502:     # 连不上 / 模型报错:说清用的是哪个渠道、去哪换
+            ch = AGENTICS_CHANNEL_LABELS.get(conn.get("provider") or "", ("", ""))[0 if zh else 1]
+            err = ServiceError(502, err.detail + (f"(用的是 Agentics 引擎当前渠道「{ch}」,可在控制台顶栏或「🎨 生成模型」页换渠道)"
+                                                  if zh else f" (using the Agentics engine's current channel \"{ch}\"; "
+                                                  "switch it in the top bar or on the Generation Models page)"))
+        raise err from e
+    return {"text": text, "provider": conn.get("provider"), "model": conn.get("model")}
+
+
+async def api_refs_import(body: dict):
+    """图库里点选的一张图下载进 refs/<分类>[/<子目录>]/:{project, provider, id, category, subdir?, note?, query?}。
+    下载地址按 (provider, id) 从服务端检索结果 / 图库接口取,不收前端给的地址;长边超过 2560 等比缩小。
+    同一张图已在同一分类同一子目录里时不重复下载(existed=true)。来源记进 annotations.json 的 source,并重写 CREDITS.md。"""
+    body = dict(body or {})
+    base = _proj_base(body.get("project"))
+    refs = base / "refs"
+    category = str(body.get("category") or "")
+    zh = (ui_lang_code() or "zh") == "zh"
+    if category not in REF_STOCK_CATEGORIES:
+        raise ServiceError(400, (f"图库只能加入这些分类:{', '.join(REF_STOCK_CATEGORIES)}" if zh
+                                 else f"Gallery images can only go into: {', '.join(REF_STOCK_CATEGORIES)}"))
+    provider, iid = str(body.get("provider") or ""), str(body.get("id") or "").strip()
+    sub = _ref_subdir(str(body.get("subdir") or ""))
+    prefix = f"{category}/{sub}/" if sub else f"{category}/"
+    notes = _load_ref_notes(refs)
+    for rel, v in notes.items():
+        src = v.get("source") if isinstance(v, dict) else None
+        if (isinstance(src, dict) and src.get("provider") == provider and str(src.get("id")) == iid
+                and rel.startswith(prefix) and "/" not in rel[len(prefix):] and (refs / rel).is_file()):
+            return {"ok": True, "existed": True, "project": base.name, "path": rel,
+                    "url": f"/projects/{base.name}/refs/{rel}?v={int((refs / rel).stat().st_mtime)}"}
+    _stock_lang()
+    cid, secret = _stock_openverse_creds()
+    try:
+        it = await asyncio.to_thread(_stock.lookup, provider, iid, cid, secret)
+        data, ext = await asyncio.to_thread(_stock.fetch, it)
+    except _stock.StockError as e:
+        raise _stock_error(e) from e
+    short = iid.split("-")[0] if provider == "openverse" else iid      # Openverse 是 UUID,文件名取首段
+    p = _refs_store(base, category, sub, f"{provider}_{short}", ext, data)
+    rel = p.relative_to(refs).as_posix()
+    source = {k: it.get(k) for k in ("provider", "id", "title", "author", "author_url", "page_url", "site",
+                                     "license", "license_label", "license_url", "attribution",
+                                     "attribution_required")}
+    source["title"] = str(source.get("title") or "")[:200]
+    source.update(query=str(body.get("query") or "")[:100],
+                  imported=datetime.now().isoformat(timespec="seconds"))
+    notes = _load_ref_notes(refs)                 # 下载期间可能有别的写入:重读再合并
+    note = str(body.get("note") or "").strip()
+    notes[rel] = {"note": note, "updated": source["imported"], "source": source}
+    atomic_write_json(refs / "annotations.json", notes)
+    _write_ref_notes_md(refs, notes)
+    _write_ref_credits_md(refs, notes)
+    return {"ok": True, "existed": False, "project": base.name, "path": rel, "source": source,
+            "url": f"/projects/{base.name}/refs/{rel}?v={int(p.stat().st_mtime)}"}
 
 
 async def api_projconfig_get(project: str = "demo"):

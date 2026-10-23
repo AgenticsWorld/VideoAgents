@@ -7,6 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="/static/i18n/i18n.js"></script>
 <script src="/static/canvas-entry.js?v=20261010"></script>
+<script src="/static/stock-gallery.js?v=20261023"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -64,6 +65,8 @@ input[type=text],textarea{background:var(--panel2);color:var(--text);border:1px 
 .card .fnrow{display:flex;align-items:center;gap:6px;padding:6px 9px 0}
 .card .fn{font-size:11.5px;color:var(--dim);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:ui-monospace,Menlo,monospace}
 .card .cvbtn{background:var(--panel)}
+.card .srcrow{padding:2px 9px 0;font-size:11px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .srcrow a{color:var(--dim)}.card .srcrow a:hover{color:var(--accent)}.card .srcrow .by{color:var(--yellow)}
 .card .note-box{padding:5px 9px 9px;font-size:12.5px;display:flex;flex-direction:column;gap:6px;flex:1}
 .card .note-txt{white-space:pre-wrap;word-break:break-word;color:var(--text)}
 .card .note-txt.none{color:var(--dim);font-style:italic}
@@ -115,6 +118,7 @@ const CAT_META={
   '':['📂','根目录散图','散放在 refs/ 根目录的文件,一律视为整体风格参考'],
 };
 const SUBDIR_CATS=new Set(['characters','creatures','props']);
+const STOCK_CATS=['style','thumbnail','characters','scenes','creatures','props','other'];   // 「🔎 图库」能加入的板块(服务端 REF_STOCK_CATEGORIES)
 const CAT_ACCEPT={fonts:'.ttf,.otf,.ttc',audio:'.mp3,.wav,.flac,.m4a,.aac,.ogg',voices:'.mp3,.wav,.flac,.m4a,.aac,.ogg'};   // 分类专属的文件选择过滤(服务端同样校验)
 const CANVAS_EXT=/\.(png|jpe?g|webp)$/i;   // 画板只收这几种(modules/image_canvas.IMG_EXTS);gif / bmp / tif 不出按钮
 const fmtSize=n=>n>=1048576?(n/1048576).toFixed(1)+' MB':n>=1024?Math.round(n/1024)+' KB':n+' B';
@@ -125,6 +129,13 @@ function noteBoxHtml(f){
     :`<span class="note-txt none">${esc(t('(未添加注释)'))}</span>`;
   return `<div class="note-row"><button class="editbtn copybtn" title="${esc(t('复制在项目中的相对路径'))}">⧉</button><button class="editbtn notebtn" title="${esc(t('注释说明这张图/这首曲子的用途,保存进 refs/NOTES.md,相关 Agent 必读'))}">✏️ ${esc(t('注释'))}</button><button class="editbtn delbtn" title="${esc(t('删除该文件(注释一并移除,不可恢复)'))}">🗑</button></div>${txt}`;
 }
+/* 图库导入的图:来源 · 许可(CC BY 标黄:出现在成片里须署名,见 refs/CREDITS.md) */
+function srcHtml(s){
+  if(!s)return '';
+  const who=s.author?` · ${esc(s.author)}`:'';
+  const site=s.page_url?`<a href="${esc(s.page_url)}" target="_blank" rel="noopener">${esc(s.site||s.provider)}</a>`:esc(s.site||s.provider);
+  return `<div class="srcrow" data-no-i18n title="${esc((s.title||'')+(s.attribution?'\n'+s.attribution:''))}">📷 ${site}${who} · <span class="${s.attribution_required?'by':''}">${esc(s.license_label||s.license||'')}</span></div>`;
+}
 function cardHtml(f){
   const cv=f.is_image&&CANVAS_EXT.test(f.name)?CanvasEntry.btn({url:f.url,kind:'ref'}):'';
   let thumb;
@@ -134,7 +145,7 @@ function cardHtml(f){
   else if(f.is_font)thumb=`<div class="thumb font-thumb" data-font-url="${esc(f.url)}"><span class="fsample">${esc(t('花字 字体 示例'))}</span><span class="fsample latin">Aa Bb 0123</span></div>`;
   else thumb=`<div class="thumb"><span class="fico">📄</span></div>`;
   return `<figure class="card" data-path="${esc(f.path)}">${thumb}
-    <div class="fnrow"><div class="fn" title="${esc(f.path)} · ${fmtSize(f.size)}">${esc(f.name)}</div>${cv}</div>
+    <div class="fnrow"><div class="fn" title="${esc(f.path)} · ${fmtSize(f.size)}">${esc(f.name)}</div>${cv}</div>${srcHtml(f.source)}
     <div class="note-box">${noteBoxHtml(f)}</div></figure>`;
 }
 function render(){
@@ -145,8 +156,10 @@ function render(){
       const [ico,nm,desc]=CAT_META[c.key]||['📁',c.key,''];
       const sub=SUBDIR_CATS.has(c.key)
         ?`<input type="text" class="subdir" placeholder="${esc(t('子目录(可选)'))}" title="${esc(t('填写后上传到该子目录,如角色名(仅英文数字)'))}">`:'';
+      const stock=STOCK_CATS.includes(c.key)
+        ?`<button class="stockcat" data-cat="${esc(c.key)}" title="${esc(t('从免费图库搜图加入本板块'))}">🔎 ${esc(t('图库'))}</button>`:'';
       const up=c.key!==''
-        ?`${sub}<button class="upbtn primary" data-cat="${esc(c.key)}">📤 ${esc(t('上传'))}</button>`:'';
+        ?`${sub}${stock}<button class="upbtn primary" data-cat="${esc(c.key)}">📤 ${esc(t('上传'))}</button>`:'';
       return `<div class="cat" data-cat="${esc(c.key)}">
         <div class="cat-head"><h3>${ico} ${esc(t(nm))} <span class="key">${c.key?esc(c.key)+'/':'refs/'}</span><span class="cnt">${c.files.length}</span></h3>
           <span class="desc">${esc(t(desc))}</span>${up}</div>
@@ -296,6 +309,30 @@ document.addEventListener('click',async e=>{
   const old=b.textContent;
   b.textContent=ok?'✅':'❌';
   setTimeout(()=>{b.textContent=old},1200);
+});
+
+/* ---------- 「🔎 图库」:从各板块标题栏的 🔎 打开,目标板块就是该板块 ---------- */
+function openStock(target,subdir){
+  StockGallery.open({
+    project:proj(),target,subdir:subdir||'',
+    categories:STOCK_CATS.map(k=>({key:k,ico:CAT_META[k][0],name:CAT_META[k][1]})),
+    imported(){
+      const m={};
+      (DATA?.categories||[]).forEach(c=>c.files.forEach(f=>{
+        if(!f.source)return;
+        const k=f.source.provider+':'+f.source.id,cat=f.path.split('/')[0];
+        (m[k]=m[k]||[]).includes(cat)||m[k].push(cat);
+      }));
+      return m;
+    },
+    onAdded(){load()},
+  });
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.stockcat');
+  if(!b)return;
+  const sec=b.closest('.cat');
+  openStock(b.dataset.cat,sec.querySelector('.subdir')?.value.trim()||'');
 });
 
 /* ---------- 图片放大 ---------- */

@@ -294,6 +294,12 @@ async def delete_reference(project: str, body: dict[str, Any]) -> dict[str, Any]
     return await core.api_refs_delete(body)
 
 
+@api.post("/projects/{project}/references/import", tags=["artifacts"])
+async def import_reference(project: str, body: dict[str, Any]) -> dict[str, Any]:
+    """参考文件页「🔎 图库」:把选中的一张图下载进 refs/<分类>/。{provider, id, category, subdir?, note?, query?}"""
+    return _artifact_urls(await core.api_refs_import({**body, "project": project}), project)
+
+
 @api.post("/projects/{project}/script/{ep}/keypoints", tags=["artifacts"])
 async def script_keypoints(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
     from modules import script_keypoints as kp
@@ -1124,6 +1130,24 @@ async def fal_models(kind: str = "video", q: str = "", refresh: bool = False) ->
 async def openverse_search(body: dict[str, Any]) -> dict[str, Any]:
     """音效 › Openverse 标签页「搜索测试」:{q, license?, source?, client_id?, client_secret?},缺项用已保存的配置。"""
     return await core.api_openverse_search(body)
+
+
+@api.get("/stock/providers", tags=["providers"])
+async def stock_providers() -> dict[str, Any]:
+    """参考文件页「🔎 图库」的图源:Openverse 免 Key;Pexels / Pixabay 有 Key 才可用。"""
+    return await core.api_stock_providers()
+
+
+@api.post("/stock/search", tags=["providers"])
+async def stock_search(body: dict[str, Any]) -> dict[str, Any]:
+    """{provider, q, page?, orientation?, kind?} → 一页图片(服务端代理,结果缓存 24 小时)。"""
+    return await core.api_stock_search(body)
+
+
+@api.post("/stock/translate", tags=["providers"])
+async def stock_translate(body: dict[str, Any]) -> dict[str, Any]:
+    """{text} → 英文检索关键词(Agentics 引擎当前文本模型,每次调用计费按该渠道)。"""
+    return await core.api_stock_translate(body)
 
 
 # ---- 演示视频(code-video,2026-10-20;services/runtime/codevideo_api.py)----
