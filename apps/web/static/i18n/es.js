@@ -3434,6 +3434,7 @@ window.I18N_DICT = {
 "✗ 工具报错": "✗ Error de herramienta",
 "✗ 工具报错 · ": "✗ Error de herramienta · ",
 "✗ 报错 · ": "✗ Error · ",
+"🔁 请求失败,自动重试 ": "🔁 La solicitud falló, reintento automático ",
 
 // 场景图(2026-09-17 功能补译,2026-09-22):输出设置「场景图」下拉/说明 + 场景预览页「场景图(正向 / 反向)」板块
 "场景图": "Imágenes de escena",

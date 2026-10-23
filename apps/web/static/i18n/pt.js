@@ -3434,6 +3434,7 @@ window.I18N_DICT = {
 "✗ 工具报错": "✗ Erro na ferramenta",
 "✗ 工具报错 · ": "✗ Erro na ferramenta · ",
 "✗ 报错 · ": "✗ Erro · ",
+"🔁 请求失败,自动重试 ": "🔁 Falha na solicitação, nova tentativa automática ",
 
 // 场景图(2026-09-17 功能补译,2026-09-22):输出设置「场景图」下拉/说明 + 场景预览页「场景图(正向 / 反向)」板块
 "场景图": "Imagens de cena",

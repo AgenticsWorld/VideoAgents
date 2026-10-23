@@ -5307,6 +5307,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                         log_f.write(json.dumps(ev, ensure_ascii=False) + "\n")
                         handle_opencode_event(run, ev)
                     log_f.flush()
+                run.pop("_pi_request_error", None)
                 truncated = run.pop("_pi_truncated", None)
                 if truncated is not None:
                     # 末条回复被单次输出上限截断:pi 照常退出码 0,产物多半没写出,判失败不以 done 结单。
@@ -5757,9 +5758,24 @@ def handle_pi_event(run: dict, obj: dict):
             run["_pi_truncated"] = usage
         else:
             run.pop("_pi_truncated", None)
+        # 请求失败(Connection error. / 超时 / 5xx…)记错;pi 会自动重试(auto_retry_start,默认最多 3 次),
+        # 之后有回复正常返回即已恢复,清掉这条请求错误,免得已跑完的运行以 error 结单(2026-10-23
+        # 桌面端 13 次 Connection error. / Request timed out. 结单全是首次重试即成功)。只清这里记下的
+        # 那条,提示词被拒 / error 事件等其它来源的错误不动;重试用尽时末条仍是 error,照常判失败
         if message.get("stopReason") in ("error", "aborted"):
             reason = message.get("stopReason")
-            run["error"] = str(message.get("errorMessage") or f"pi request {reason}")[:500]
+            run["error"] = run["_pi_request_error"] = \
+                str(message.get("errorMessage") or f"pi request {reason}")[:500]
+        else:
+            request_error = run.pop("_pi_request_error", None)
+            if request_error and run.get("error") == request_error:
+                run.pop("error")
+        return
+    if event == "auto_retry_start":
+        # 网关 5xx 的 errorMessage 常是整页 HTML,进度行只留文字
+        err = " ".join(re.sub(r"<[^>]*>", " ", str(obj.get("errorMessage") or "")).split())[:120]
+        run_progress(run, f"🔁 请求失败,自动重试 {obj.get('attempt')}/{obj.get('maxAttempts')}"
+                          + (f" · {err}" if err else ""))
         return
     if event == "tool_execution_start":
         desc, fp = tool_summary(str(obj.get("toolName") or "?"), obj.get("args") or {})

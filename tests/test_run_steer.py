@@ -103,6 +103,13 @@ def agent(msg):
     out({"type": "agent_start"})
     log("user", msg)
     out({"type": "message_end", "message": {"role": "user", "content": [{"type": "text", "text": msg}]}})
+    if os.environ.get("FAKE_NET_ERR"):   # 首个请求连接中断,pi 自动重试后恢复
+        out({"type": "message_end", "message": {"role": "assistant", "content": [], "stopReason": "error",
+                                                "errorMessage": "Connection error."}})
+        out({"type": "agent_end", "willRetry": True})
+        out({"type": "auto_retry_start", "attempt": 1, "maxAttempts": 3, "delayMs": 2000,
+             "errorMessage": "Connection error."})
+        out({"type": "agent_start"})
     out({"type": "tool_execution_start", "toolName": "bash", "args": {"command": "sleep 1"}})
     if os.environ.get("FAKE_UI"):
         out({"type": "extension_ui_request", "id": "ui-1", "method": "confirm", "title": "ok?"})
@@ -389,6 +396,44 @@ def test_pi_truncation_overrides_recovered_request_error(rt, monkeypatch):
     _loop_run(core.execute_run(run, "TASK", None))
     assert run["status"] == "error" and run["error"].startswith("输出被截断")
     assert "AGENTICS_MAX_OUTPUT_TOKENS" in run["error"]
+
+
+@posix_only
+def test_pi_request_error_recovered_by_retry_run_done(rt, monkeypatch):
+    """中途一次请求 Connection error.、pi 自动重试后跑完:以 done 结单,不留请求错误。"""
+    monkeypatch.setattr(core, "resolve_cli_executable", lambda e: _script(rt.tmp, "pi", FAKE_PI))
+    monkeypatch.setenv("FAKE_TOOL_S", "0.1")
+    monkeypatch.setenv("FAKE_NET_ERR", "1")
+    run = _run("pi")
+    _loop_run(core.execute_run(run, "TASK", None))
+    assert run["status"] == "done", run.get("error")
+    assert run["result"] == "PIDONE" and "error" not in run and "_pi_request_error" not in run
+    assert {"type": "progress", "run_id": run["id"], "agent": AG,
+            "note": "🔁 请求失败,自动重试 1/3 · Connection error."} in rt.events
+
+
+def test_pi_request_error_cleared_only_after_success():
+    """请求错误:之后有回复正常返回才清;重试用尽(末条仍 error)保留;别处记的错误不清。"""
+    run = {"id": "r1", "agent": AG}
+    end = lambda stop, err=None: {"type": "message_end", "message": {   # noqa: E731
+        "role": "assistant", "content": [], "stopReason": stop, "errorMessage": err}}
+    core.handle_pi_event(run, end("error", "Connection error."))
+    core.handle_pi_event(run, {"type": "message_end", "message": {"role": "user", "content": []}})
+    assert run["error"] == "Connection error."           # 用户消息不算恢复
+    core.handle_pi_event(run, end("toolUse"))
+    assert "error" not in run and "_pi_request_error" not in run
+    for _ in range(4):                                   # 首次 + 3 次重试全失败
+        core.handle_pi_event(run, end("error", "500 Internal Server Error"))
+    core.handle_pi_event(run, {"type": "auto_retry_end", "success": False, "attempt": 3,
+                               "finalError": "500 Internal Server Error"})
+    assert run["error"] == "500 Internal Server Error"
+    core.handle_pi_event(run, end("aborted"))
+    assert run["error"] == "pi request aborted"
+    run = {"id": "r2", "agent": AG}
+    core.handle_pi_event(run, {"id": run_steer.PI_PROMPT_ID, "type": "response", "command": "prompt",
+                               "success": False, "error": "model unavailable"})
+    core.handle_pi_event(run, end("stop"))
+    assert run["error"] == "model unavailable"           # 提示词被拒不是请求错误,不清
 
 
 class _Stdin:
