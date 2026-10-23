@@ -307,6 +307,15 @@ def test_pending_steers_fold_into_prompt_at_spawn(rt, monkeypatch):
     assert run["status"] == "done" and rt.chats == []
 
 
+def test_spawn_file_not_found_appends_system_error(rt, monkeypatch):
+    """解析已过、起进程仍 FileNotFoundError(杀毒软件扫描等瞬态故障):报未安装并附系统原始错误。"""
+    monkeypatch.setattr(core, "resolve_cli_executable", lambda e: str(rt.tmp / "gone" / "claude"))
+    run = _run("claude")
+    _loop_run(core.execute_run(run, "TASK", None))
+    assert run["status"] == "error"
+    assert run["error"].startswith(core.cli_not_found_error("claude")) and "（系统返回：" in run["error"]
+
+
 # ---------------------------------------------------------------- pi(rpc)
 @posix_only
 def test_pi_rpc_steer_and_session_from_get_state(rt, monkeypatch):

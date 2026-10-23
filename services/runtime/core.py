@@ -84,12 +84,9 @@ PI_BIN = os.environ.get("PI_BIN", "pi")
 
 def _default_kimi_bin() -> str:
     # kimi 官方安装脚本默认装到 ~/.kimi-code/bin,该目录通常由交互式 shell 的 rc 文件
-    # 加进 PATH;从 IDE/launchd/bash 等环境启动本服务时 PATH 可能不含它,回退绝对路径
-    found = shutil.which("kimi")
-    if found:
-        return found
-    fallback = Path.home() / ".kimi-code" / "bin" / "kimi"
-    return str(fallback) if fallback.is_file() else "kimi"
+    # 加进 PATH;从 IDE/launchd/bash 等环境启动本服务时 PATH 可能不含它,按各家官方
+    # 默认安装位置(engine_setup.BIN_FALLBACKS_*,Windows 带 .exe)回退绝对路径
+    return shutil.which("kimi") or engine_setup.fallback_executable("kimi") or "kimi"
 
 
 KIMI_BIN = os.environ.get("KIMI_BIN") or _default_kimi_bin()
@@ -97,12 +94,8 @@ KIMI_BIN = os.environ.get("KIMI_BIN") or _default_kimi_bin()
 
 def _default_opencode_bin() -> str:
     # opencode 官方安装脚本默认装到 ~/.opencode/bin,同 kimi:从 IDE/launchd 等
-    # 非交互环境启动本服务时 PATH 可能不含该目录,回退绝对路径
-    found = shutil.which("opencode")
-    if found:
-        return found
-    fallback = Path.home() / ".opencode" / "bin" / "opencode"
-    return str(fallback) if fallback.is_file() else "opencode"
+    # 非交互环境启动本服务时 PATH 可能不含该目录,按官方默认安装位置回退绝对路径
+    return shutil.which("opencode") or engine_setup.fallback_executable("opencode") or "opencode"
 
 
 OPENCODE_BIN = os.environ.get("OPENCODE_BIN") or _default_opencode_bin()
@@ -110,15 +103,8 @@ OPENCODE_BIN = os.environ.get("OPENCODE_BIN") or _default_opencode_bin()
 
 def _default_grok_bin() -> str:
     # Grok Build CLI(grok.com/build)官方安装脚本装到 ~/.grok/bin 并在 ~/.local/bin 建
-    # 软链,同 kimi/opencode:非交互环境 PATH 可能不含这两个目录,回退绝对路径
-    found = shutil.which("grok")
-    if found:
-        return found
-    for fallback in (Path.home() / ".grok" / "bin" / "grok",
-                     Path.home() / ".local" / "bin" / "grok"):
-        if fallback.is_file():
-            return str(fallback)
-    return "grok"
+    # 软链,同 kimi/opencode:非交互环境 PATH 可能不含这两个目录,按官方默认安装位置回退
+    return shutil.which("grok") or engine_setup.fallback_executable("grok") or "grok"
 
 
 GROK_BIN = os.environ.get("GROK_BIN") or _default_grok_bin()
@@ -126,12 +112,8 @@ GROK_BIN = os.environ.get("GROK_BIN") or _default_grok_bin()
 
 def _default_agy_bin() -> str:
     # Antigravity CLI(antigravity.google)官方安装脚本装到 ~/.local/bin/agy,同 grok:
-    # 非交互环境 PATH 可能不含该目录,回退绝对路径
-    found = shutil.which("agy")
-    if found:
-        return found
-    fallback = Path.home() / ".local" / "bin" / "agy"
-    return str(fallback) if fallback.is_file() else "agy"
+    # 非交互环境 PATH 可能不含该目录,按官方默认安装位置回退绝对路径
+    return shutil.which("agy") or engine_setup.fallback_executable("antigravity") or "agy"
 
 
 AGY_BIN = os.environ.get("AGY_BIN") or _default_agy_bin()
@@ -5243,10 +5225,13 @@ async def execute_run(run: dict, message: str, model: str | None):
             if proc and proc.returncode is None:
                 _kill_proc_tree(proc)
             raise
-        except FileNotFoundError:
+        except FileNotFoundError as error:
             run["status"] = "error"
             if engine in CLI_BINS:
-                run["error"] = cli_not_found_error(engine)[:500]
+                # 解析已过、CreateProcess 仍报找不到:多为杀毒软件扫描/占用可执行文件
+                # 等瞬态故障,附原始系统错误便于与「真的没装」区分
+                run["error"] = (cli_not_found_error(engine)
+                                + f"（系统返回：{error.strerror or error}）")[:500]
             else:
                 run["error"] = agentics_error_text("missing")[:500]
             if proc:
