@@ -81,7 +81,8 @@ def test_preflight_reasons(core, vendor, monkeypatch):
     assert core.agentics_preflight()["error"].startswith("The built-in Agentics engine (pi) is missing")
 
 
-def test_launch_agentics_channel_writes_openrouter_compat_without_secret(core, vendor, tmp_path):
+def test_launch_agentics_channel_writes_openrouter_compat_without_secret(core, vendor, tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENTICS_MAX_OUTPUT_TOKENS", raising=False)
     da = {"provider": "agentics", "base_url": "https://api.agentics.world/wrapper/openrouter/api/v1",
           "api_key": "jwt-secret", "model": "anthropic/claude-sonnet-5"}
     home = tmp_path / "run1"
@@ -96,6 +97,7 @@ def test_launch_agentics_channel_writes_openrouter_compat_without_secret(core, v
     assert prov["apiKey"] == "$VIDEOAGENTS_LLM_API_KEY"
     m = prov["models"][0]
     assert m["id"] == da["model"] and m["reasoning"] is True and m["input"] == ["text"]
+    assert m["maxTokens"] == 65536 and m["contextWindow"] == 128000   # 云端渠道默认单次输出上限
     assert m["compat"]["thinkingFormat"] == "openrouter"
     assert m["compat"]["cacheControlFormat"] == "anthropic" and m["compat"]["supportsDeveloperRole"] is True
     on_disk = "".join(p.read_text() for p in home.iterdir())

@@ -2346,9 +2346,12 @@ def agentics_pi_launch(model: str, da: dict, home: Path, *, thinking: bool,
     pi 不发任何推理参数(=「思考深度:引擎默认」,沿用渠道自身默认)。"""
     provider = da["provider"]
     local = provider == "local"
+    # 单次输出上限:思考与正文共用,16384 曾整条耗在思考上、写文件前即被截断(2026-10-23
+    # deepseek-v4.1-flash 实测思考 1.6 万 token 仍未写完);65536 = 推荐文本模型里最小的输出上限
+    # (Gemini 3.1 Pro / 3.5 Flash),只按实际生成计费。pi 另按 contextWindow 减去输入量收窄
     entry = {"id": model, "name": model,
              "contextWindow": _env_int("AGENTICS_CONTEXT_WINDOW", 128_000),
-             "maxTokens": _env_int("AGENTICS_MAX_OUTPUT_TOKENS", 8_192 if local else 16_384),
+             "maxTokens": _env_int("AGENTICS_MAX_OUTPUT_TOKENS", 8_192 if local else 65_536),
              "reasoning": bool(thinking and not local),
              "input": ["text", "image"] if vision else ["text"]}
     if provider == "agentics":
@@ -5304,6 +5307,11 @@ async def execute_run(run: dict, message: str, model: str | None):
                         log_f.write(json.dumps(ev, ensure_ascii=False) + "\n")
                         handle_opencode_event(run, ev)
                     log_f.flush()
+                truncated = run.pop("_pi_truncated", None)
+                if truncated is not None:
+                    # 末条回复被单次输出上限截断:pi 照常退出码 0,产物多半没写出,判失败不以 done 结单。
+                    # 之前记的请求错误(如 pi 自动重试已恢复的 Connection error.)不是收尾原因,以截断为准
+                    run["error"] = pi_truncation_error(engine, truncated)
                 failed = ((proc.returncode != 0 and not run.get("result"))
                           or (engine in ("pi", "deepagents", "antigravity") and bool(run.get("error")))
                           or bool(run.get("_session_lost")))
@@ -5666,6 +5674,23 @@ def _pi_message_text(message: dict) -> str:
                    if isinstance(block, dict) and block.get("type") == "text")
 
 
+def pi_truncation_error(engine: str, usage: dict) -> str:
+    """末条回复被单次输出上限截断(stopReason=length)时的运行错误文案(界面语言中文出中文,其余出英文)。"""
+    zh = (ui_lang_code() or "zh") == "zh"
+    out, reasoning = int(usage.get("output") or 0), int(usage.get("reasoning") or 0)
+    if engine == "deepagents":
+        hint = ("可用环境变量 AGENTICS_MAX_OUTPUT_TOKENS 调高上限,或让成员分批写入" if zh else
+                "raise the cap with AGENTICS_MAX_OUTPUT_TOKENS, or have the agent write in smaller pieces")
+    else:
+        hint = ("上限取自 pi 自身的模型配置(maxTokens),或让成员分批写入" if zh else
+                "the cap comes from pi's own model settings (maxTokens); or have the agent write in smaller pieces")
+    if zh:
+        return (f"输出被截断:末条回复达到单次输出上限(stopReason=length,输出 {out} token,其中思考 "
+                f"{reasoning}),文件可能没有写出或没写完;{hint}")
+    return (f"Output truncated: the last reply hit the per-response output cap (stopReason=length, "
+            f"{out} output tokens, {reasoning} of them thinking), so files may be missing or incomplete; {hint}")
+
+
 def handle_pi_event(run: dict, obj: dict):
     """解析 pi --mode rpc 的 JSONL 输出:事件同 --mode json 的 JsonAgentSessionEvent,
     另有命令回执 response(插话的回执与送达确认见 run_steer.PiSteer)。"""
@@ -5726,6 +5751,12 @@ def handle_pi_event(run: dict, obj: dict):
         if not isinstance(total, (int, float)):
             total = sum(usage.get(k) or 0 for k in ("input", "output", "cacheRead", "cacheWrite"))
         run["tokens"] = (run.get("tokens") or 0) + int(total or 0)
+        # 截断的回复里没有可执行的工具调用时 pi 即正常收尾、退出码 0;记下末条回复是否截断,
+        # 收尾时据此判失败(之后又有回复则清掉:截断的工具调用 pi 会回错误结果让模型重来)
+        if message.get("stopReason") == "length":
+            run["_pi_truncated"] = usage
+        else:
+            run.pop("_pi_truncated", None)
         if message.get("stopReason") in ("error", "aborted"):
             reason = message.get("stopReason")
             run["error"] = str(message.get("errorMessage") or f"pi request {reason}")[:500]

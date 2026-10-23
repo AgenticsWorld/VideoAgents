@@ -118,8 +118,9 @@ def agent(msg):
         log("user", m)
         out({"type": "message_end", "message": {"role": "user", "content": [{"type": "text", "text": m}]}})
     text = "PIDONE" + "".join("|" + g for g in got)
+    stop = os.environ.get("FAKE_STOP", "stop")   # length = 末条回复被单次输出上限截断
     out({"type": "message_end", "message": {"role": "assistant", "content": [{"type": "text", "text": text}],
-                                            "usage": {"input": 10, "output": 2}, "stopReason": "stop"}})
+                                            "usage": {"input": 10, "output": 2, "reasoning": 1}, "stopReason": stop}})
     out({"type": "agent_end"})
     out({"type": "agent_settled"})
 while True:
@@ -342,6 +343,52 @@ def test_pi_rpc_steer_and_session_from_get_state(rt, monkeypatch):
     assert {"kind": "ui", "text": json.dumps({"type": "extension_ui_response", "id": "ui-1",
                                               "cancelled": True})} in log
     assert log[-1] == {"kind": "exit", "text": "eof"} and rt.chats == []
+
+
+@posix_only
+def test_pi_truncated_last_reply_fails_run(rt, monkeypatch):
+    """末条回复 stopReason=length:pi 退出码 0 也判失败,错误写明截断与用量。"""
+    monkeypatch.setattr(core, "resolve_cli_executable", lambda e: _script(rt.tmp, "pi", FAKE_PI))
+    monkeypatch.setenv("FAKE_TOOL_S", "0.1")
+    monkeypatch.setenv("FAKE_STOP", "length")
+    run = _run("pi")
+    _loop_run(core.execute_run(run, "TASK", None))
+    assert run["status"] == "error"
+    assert run["error"].startswith("输出被截断") and "stopReason=length" in run["error"]
+    assert "输出 2 token,其中思考 1" in run["error"] and "pi 自身的模型配置" in run["error"]
+    assert "_pi_truncated" not in run
+
+
+def test_pi_truncation_cleared_by_later_reply():
+    """截断后模型又回了一条(截断的工具调用被 pi 回错误结果后重来):不再算截断。"""
+    run = {"id": "r1", "agent": AG}
+    end = lambda stop: {"type": "message_end", "message": {   # noqa: E731
+        "role": "assistant", "content": [], "usage": {"output": 5}, "stopReason": stop}}
+    core.handle_pi_event(run, end("length"))
+    assert run["_pi_truncated"] == {"output": 5}
+    core.handle_pi_event(run, end("toolUse"))
+    assert "_pi_truncated" not in run
+    core.handle_pi_event(run, end("length"))
+    core.handle_pi_event(run, {"type": "message_end", "message": {"role": "user", "content": []}})
+    assert "_pi_truncated" in run                       # 用户消息不清
+    assert "error" not in run                           # 截断本身不在事件处理时记错,收尾再判
+
+
+@posix_only
+def test_pi_truncation_overrides_recovered_request_error(rt, monkeypatch):
+    """中途一次请求出错(pi 自动重试已恢复)、末条又被截断:错误以截断为准。"""
+    monkeypatch.setattr(core, "resolve_cli_executable", lambda e: _script(rt.tmp, "pi", FAKE_PI))
+    monkeypatch.setenv("FAKE_TOOL_S", "0.1")
+    monkeypatch.setenv("FAKE_STOP", "length")
+    run = _run("deepagents", error="Connection error.")
+    monkeypatch.setattr(core, "agentics_preflight", lambda model="": {
+        "da": {"provider": "agentics"}, "model": "m", "reason": "", "error": ""})
+    monkeypatch.setattr(core, "agentics_pi_command", lambda: [_script(rt.tmp, "pi", FAKE_PI)])
+    monkeypatch.setattr(core, "agentics_pi_launch", lambda *a, **k: (["--mode", "json"], {}))
+    monkeypatch.setattr(core, "AGENTICS_PI_HOME", rt.tmp / "agentics-pi")
+    _loop_run(core.execute_run(run, "TASK", None))
+    assert run["status"] == "error" and run["error"].startswith("输出被截断")
+    assert "AGENTICS_MAX_OUTPUT_TOKENS" in run["error"]
 
 
 class _Stdin:

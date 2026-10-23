@@ -128,12 +128,14 @@ removed when the run ends; sessions live in `agentics-pi/sessions/` and are resu
 `--session`. pi is started with `--no-extensions --no-skills --no-prompt-templates
 --no-context-files`, so a user's own `~/.pi/agent` setup never applies.
 
-Models are declared with a 128,000-token context window and a 16,384-token output cap
-(8,192 for the local channel); pi compacts the session before the window fills. Override them
-only when the model server allows the larger values:
+Models are declared with a 128,000-token context window and a 65,536-token output cap
+(8,192 for the local channel); pi compacts the session before the window fills. Thinking and
+the reply share the output cap, and pi lowers it further when the context is nearly full. A run
+whose last reply is cut off by the cap (`stopReason=length`) is marked as failed. Override the
+values only when the model server allows the larger ones:
 
 ```bash
-AGENTICS_CONTEXT_WINDOW=262144 AGENTICS_MAX_OUTPUT_TOKENS=32768 ./run.sh
+AGENTICS_CONTEXT_WINDOW=262144 AGENTICS_MAX_OUTPUT_TOKENS=131072 ./run.sh
 ```
 
 ## FFmpeg

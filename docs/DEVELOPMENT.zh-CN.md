@@ -119,11 +119,12 @@ python -m pip install -e ".[dev]"
 `agentics-pi/sessions/`，用 `--session` 续接。pi 带 `--no-extensions --no-skills --no-prompt-templates
 --no-context-files` 启动，用户自己的 `~/.pi/agent` 配置不会生效。
 
-模型按 128000 token 上下文、单次输出上限 16384 token（本地模型渠道 8192）声明，上下文将满前由 pi
-自动压缩会话。只有当模型服务确实支持更大的值时才覆盖：
+模型按 128000 token 上下文、单次输出上限 65536 token（本地模型渠道 8192）声明，上下文将满前由 pi
+自动压缩会话。单次输出上限由思考和正文共用，pi 还会按上下文余量收窄。末条回复被这个上限截断
+（`stopReason=length`）时，运行判为失败。只有当模型服务确实支持更大的值时才覆盖：
 
 ```bash
-AGENTICS_CONTEXT_WINDOW=262144 AGENTICS_MAX_OUTPUT_TOKENS=32768 ./run.sh
+AGENTICS_CONTEXT_WINDOW=262144 AGENTICS_MAX_OUTPUT_TOKENS=131072 ./run.sh
 ```
 
 ## FFmpeg
