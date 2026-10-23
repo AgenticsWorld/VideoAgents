@@ -307,7 +307,7 @@
   function fill(){
     var p=prefs();
     $('.sg-prov').innerHTML=(S.providers||[]).map(function(x){
-      return '<option value="'+esc(x.id)+'"'+(x.ready?'':' disabled')+'>'+esc(x.label+(x.ready?'':' '+T('(需 API Key,未配置)')))+'</option>'}).join('');
+      return '<option value="'+esc(x.id)+'"'+(x.ready?'':' disabled')+'>'+esc(x.label+(x.ready?'':' '+T('(需 API Key:⚙️ 设置 → 存储与图库)')))+'</option>'}).join('');
     var ready=(S.providers||[]).filter(function(x){return x.ready}).map(function(x){return x.id});
     $('.sg-prov').value=ready.indexOf(p.provider)>=0?p.provider:(ready[0]||'openverse');
     if(p.orientation!=null)$('.sg-ori').value=p.orientation;

@@ -42,7 +42,7 @@ python3 modules/genmedia.py upscale --source-task-id <任务id> --output <路径
 ```
 
 - `--prompt` 必须传**该组生成时的原始 video_prompt**(取本组 `meta/prompts.json` 记录),不要新写描述——Regenerate-2K 按原 prompt + 源视频重生成,换 prompt 会引入内容漂移。
-- 源视频 ≤45MB 时 base64 内联提交;更大时自动走「设置 → 文件托管」对象存储预签名 URL(未配置会报错提示)。
+- 源视频 ≤45MB 时 base64 内联提交;更大时自动走「设置 → 存储与图库」对象存储预签名 URL(未配置会报错提示)。
 - 输出文件名遵守 ASCII 红线与 grp/sh 三位零填充(工具提交前自动机检)。
 
 ## 输出后处理与自检

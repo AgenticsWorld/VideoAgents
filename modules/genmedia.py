@@ -25,7 +25,7 @@ CLI:
   ≤15s,单文件 ≤45MB),prompt 用「视频n/图片n」序号引用素材,指令写清改什么、
   其余保持不变(局部穿帮修复);与首尾帧互斥;输入视频秒数计费(含视频输入档单价)。
   方舟要求 reference_video 为公网 URL:参考视频自动上传对象存储换预签名 URL,
-  需先在 Web 控制台「设置 → 文件托管」配置渠道(火山 TOS/阿里 OSS/腾讯 COS/S3 兼容,
+  需先在 Web 控制台「设置 → 存储与图库」配置渠道(火山 TOS/阿里 OSS/腾讯 COS/S3 兼容,
   生效渠道=选中的标签页;各渠道 SDK 按需安装:tos/oss2/cos-python-sdk-v5/boto3)。
 
   python3 modules/genmedia.py reclaim [--task-id <UUID|cgt-xxxx>;Fal 任务可省略] --output out.mp4 \
@@ -1540,7 +1540,7 @@ def _storage_upload_url(path: str) -> str:
     """上传本地文件到对象存储,返回预签名 GET URL。
 
     方舟对 reference_video 硬性要求公网 URL(base64 内联被 400 拒绝)。渠道与密钥
-    在 Web 控制台「设置 → 文件托管」配置(genconfig.json storage,provider 为生效
+    在 Web 控制台「设置 → 存储与图库」配置(genconfig.json storage,provider 为生效
     渠道:tos/oss/cos/s3),AK/SK 为空时回退 STORAGE_ENV 对应环境变量。object key
     取文件内容 sha1,同文件重传幂等;桶保持私有,链接凭签名限时访问。
     """
@@ -1562,7 +1562,7 @@ def _storage_upload_url(path: str) -> str:
     bucket = c.get("bucket") or ""
     if not (ak and sk and bucket):
         raise RuntimeError(
-            f"reference_video 需公网 URL:请在 Web 控制台「设置 → 文件托管」的"
+            f"reference_video 需公网 URL:请在 Web 控制台「设置 → 存储与图库」的"
             f"「{provider}」标签页配置 bucket/access_key/secret_key"
             f"(AK/SK 也可用环境变量 {ak_env}/{sk_env})")
     key = ((c.get("prefix") or "genmedia-refs/")
@@ -8830,7 +8830,7 @@ def main():
     pvo.add_argument("--name", default="", help="配合 --add:加入账号后的名字(可选)")
 
     pup = sub.add_parser("upload", help="上传本地文件到对象存储并打印预签名 URL"
-                                        "(渠道按「设置 → 文件托管」;供需要公网 URL 的 API 使用)")
+                                        "(渠道按「设置 → 存储与图库」;供需要公网 URL 的 API 使用)")
     pup.add_argument("--input", required=True, help="本地文件路径")
 
     pm = sub.add_parser("music", help="生成音乐(BGM)")

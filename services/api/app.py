@@ -1112,7 +1112,7 @@ async def avatar_assets_status(body: dict[str, Any]) -> dict[str, Any]:
 
 @api.get("/avatar-assets/ready", tags=["avatar-assets"])
 async def avatar_assets_ready() -> dict[str, Any]:
-    """入库前置自检:文件托管配置 + 存储 SDK 可导入(方舟 CreateAsset 只收公网 URL)。"""
+    """入库前置自检:对象存储配置 + 存储 SDK 可导入(方舟 CreateAsset 只收公网 URL)。"""
     return await core.api_avatar_ready()
 
 
@@ -1136,6 +1136,12 @@ async def openverse_search(body: dict[str, Any]) -> dict[str, Any]:
 async def stock_providers() -> dict[str, Any]:
     """参考文件页「🔎 图库」的图源:Openverse 免 Key;Pexels / Pixabay 有 Key 才可用。"""
     return await core.api_stock_providers()
+
+
+@api.post("/stock/test", tags=["providers"])
+async def stock_test(body: dict[str, Any]) -> dict[str, Any]:
+    """「存储与图库」页图库 Key 测试:{provider: pexels|pixabay, api_key?} → {ok, total}(真搜一次,不缓存)。"""
+    return await core.api_stock_test(body)
 
 
 @api.post("/stock/search", tags=["providers"])

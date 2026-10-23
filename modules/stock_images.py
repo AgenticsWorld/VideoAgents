@@ -6,9 +6,9 @@
   anon_thumbnail 额度;匿名每页最多 20 条、最多翻到第 12 页(240 条),再往后 401。中文词只命中中文标题的条目,
   所以页面有「译成英文」按钮(translate_query,走 Agentics 引擎当前的文本模型)。必须带 Accept: application/json。
   「生成模型」页音效 › Openverse 填了 Client ID / Secret 时沿用其令牌(额度更高),没填即匿名。
-- pexels / pixabay:各要一个免费 API Key。本期不做 Key 配置界面,只读环境变量 PEXELS_API_KEY / PIXABAY_API_KEY
-  或素材库的 <数据目录>/.videoagents/footageconfig.json 的 pexels_api_key / pixabay_api_key(与 modules/footage.py 同口径);
-  没有 Key 时该图源列为不可用。Pexels 200 次/时、2 万次/月,locale=zh-CN 支持中文;Pixabay 100 次/60 秒,lang=zh 原生中文,
+- pexels / pixabay:各要一个免费 API Key,在「⚙️ 设置 → 存储与图库」填(genconfig.json 的 stock.<渠道>.api_key);
+  留空时依次读环境变量 PEXELS_API_KEY / PIXABAY_API_KEY、素材库的 <数据目录>/.videoagents/footageconfig.json
+  (pexels_api_key / pixabay_api_key,与 modules/footage.py 同口径)。没有 Key 时该图源列为不可用。Pexels 200 次/时、2 万次/月,locale=zh-CN 支持中文;Pixabay 100 次/60 秒,lang=zh 原生中文,
   条款要求检索结果缓存 24 小时、不得长期热链(用前先下载到本地),API 给的最大图 largeImageURL 长边 1280。
 
 许可:Openverse 只收 CC0 / 公有领域 / CC BY(BY-SA 会传染整片、NC / ND 不能商用或改编,一律不收,同音效口径);
@@ -36,6 +36,8 @@ DATA_DIR = Path(os.environ.get("VIDEOAGENTS_DATA_DIR", ROOT / "data")).expanduse
 RUNTIME_DIR = Path(os.environ.get("VIDEOAGENTS_RUNTIME_DIR", DATA_DIR / ".videoagents")).expanduser().resolve()
 CACHE_DIR = RUNTIME_DIR / "stock_images"
 FOOTAGE_CONFIG = DATA_DIR / ".videoagents" / "footageconfig.json"
+CONFIG_PATH = Path(os.environ.get("VIDEOAGENTS_CONFIG_PATH", RUNTIME_DIR / "genconfig.json")).expanduser().resolve()
+KEY_PAGE_ZH, KEY_PAGE_EN = "⚙️ 设置 → 存储与图库", "⚙️ Settings → Storage & Image Libraries"
 USER_AGENT = "VideoAgents/1.0 (+https://github.com/AgenticsWorld/VideoAgents; reference image search)"
 
 PROVIDERS = ("openverse", "pexels", "pixabay")
@@ -90,16 +92,27 @@ def has_cjk(text: str) -> bool:
 
 
 # ---------------------------------------------------------------- Key / 图源
+def _read_json(path: Path) -> dict:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def api_key(provider: str) -> str:
+    """「存储与图库」页填的 Key → 环境变量 → 素材库 footageconfig.json;都没有返回空串。"""
     if provider not in KEY_ENV:
         return ""
-    key = os.environ.get(KEY_ENV[provider]) or ""
-    if not key:
-        try:
-            key = str(json.loads(FOOTAGE_CONFIG.read_text(encoding="utf-8")).get(f"{provider}_api_key") or "")
-        except Exception:  # noqa: BLE001
-            key = ""
-    return key.strip()
+    page = ((_read_json(CONFIG_PATH).get("stock") or {}).get(provider) or {})
+    key = str(page.get("api_key") or "").strip() if isinstance(page, dict) else ""
+    return (key or os.environ.get(KEY_ENV[provider], "").strip()
+            or str(_read_json(FOOTAGE_CONFIG).get(f"{provider}_api_key") or "").strip())
+
+
+def _need_key(provider: str) -> StockError:
+    return StockError(_t(f"{PROVIDER_LABELS[provider]} 需要 API Key:在「{KEY_PAGE_ZH}」填写(免费申请)",
+                         f"{PROVIDER_LABELS[provider]} needs an API key: set it under {KEY_PAGE_EN} (free to get)"), 400)
 
 
 def providers() -> list[dict]:
@@ -144,8 +157,8 @@ def _get_json(provider: str, url: str, headers: dict | None = None) -> tuple[dic
                                     f"{PROVIDER_LABELS[provider]} rate limit reached ({limits}); "
                                     "try again later or switch source"), 429) from e
             if e.status in (401, 403) and provider in KEY_ENV:
-                raise StockError(_t(f"{PROVIDER_LABELS[provider]} 拒绝了 API Key(检查 {KEY_ENV[provider]})",
-                                    f"{PROVIDER_LABELS[provider]} rejected the API key (check {KEY_ENV[provider]})"),
+                raise StockError(_t(f"{PROVIDER_LABELS[provider]} 拒绝了 API Key(检查「{KEY_PAGE_ZH}」里填的 Key)",
+                                    f"{PROVIDER_LABELS[provider]} rejected the API key (check the key under {KEY_PAGE_EN})"),
                                  e.status) from e
             raise
     try:
@@ -294,8 +307,7 @@ def search(provider: str, q: str, page: int = 1, orientation: str = "", kind: st
     if provider == "openverse" and page > OPENVERSE_MAX_PAGE:
         raise StockError(_t("Openverse 匿名最多翻到第 12 页", "Openverse allows at most 12 pages anonymously"), 400)
     if provider in KEY_ENV and not api_key(provider):
-        raise StockError(_t(f"{PROVIDER_LABELS[provider]} 需要 API Key(环境变量 {KEY_ENV[provider]}),本期未配置",
-                            f"{PROVIDER_LABELS[provider]} needs an API key ({KEY_ENV[provider]}), not configured"), 400)
+        raise _need_key(provider)
     key = json.dumps([provider, q, page, orientation, kind], ensure_ascii=False)
     hit = _cache_get(key)
     if hit is not None:
@@ -333,14 +345,14 @@ def _search_openverse(q, page, orientation, kind, *, client_id="", client_secret
             "has_more": page < min(pages, OPENVERSE_MAX_PAGE), "rate": openverse._rate(hdrs)}
 
 
-def _search_pexels(q, page, orientation, kind, **_):
+def _search_pexels(q, page, orientation, kind, key="", **_):
     params = {"query": q, "page": page, "per_page": PAGE_SIZE["pexels"]}
     if orientation:
         params["orientation"] = {"horizontal": "landscape", "vertical": "portrait", "square": "square"}[orientation]
     if has_cjk(q):
         params["locale"] = "zh-CN"
     data, hdrs = _get_json("pexels", "https://api.pexels.com/v1/search?" + urllib.parse.urlencode(params),
-                           {"Authorization": api_key("pexels")})
+                           {"Authorization": key or api_key("pexels")})
     items = [x for x in (_from_pexels(p) for p in data.get("photos") or [] if isinstance(p, dict)) if x]
     low = {k.lower(): v for k, v in hdrs.items()}
     rate = {"monthly": {"limit": low.get("x-ratelimit-limit"), "available": low.get("x-ratelimit-remaining")}} \
@@ -349,8 +361,8 @@ def _search_pexels(q, page, orientation, kind, **_):
             "rate": rate}
 
 
-def _search_pixabay(q, page, orientation, kind, **_):
-    params = {"key": api_key("pixabay"), "q": q, "page": page, "per_page": PAGE_SIZE["pixabay"],
+def _search_pixabay(q, page, orientation, kind, key="", **_):
+    params = {"key": key or api_key("pixabay"), "q": q, "page": page, "per_page": PAGE_SIZE["pixabay"],
               "safesearch": "true", "image_type": kind or "all"}
     if orientation in ("horizontal", "vertical"):              # Pixabay 没有方图档
         params["orientation"] = orientation
@@ -364,6 +376,18 @@ def _search_pixabay(q, page, orientation, kind, **_):
         if low.get("x-ratelimit-remaining") else {}
     return {"total": int(data.get("total") or hits), "items": items,
             "has_more": page * PAGE_SIZE["pixabay"] < hits, "rate": rate}
+
+
+def test_key(provider: str, key: str = "") -> dict:
+    """「存储与图库」页的测试按钮:用表单里的 Key(空 = 已保存 / 环境变量的)真搜一次,不缓存 → {ok, total}。"""
+    if provider not in KEY_ENV:
+        raise StockError(_t(f"{provider} 不需要 API Key", f"{provider} does not use an API key"), 400)
+    key = (key or "").strip() or api_key(provider)
+    if not key:
+        raise _need_key(provider)
+    fn = _search_pexels if provider == "pexels" else _search_pixabay
+    data = fn("mountain", 1, "", "", key=key)
+    return {"ok": True, "provider": provider, "total": data["total"]}
 
 
 # ---------------------------------------------------------------- 取单条 / 下载
@@ -387,12 +411,12 @@ def lookup(provider: str, iid: str, client_id: str = "", client_secret: str = ""
         it = _from_openverse(data)
     elif provider == "pexels":
         if not api_key("pexels"):
-            raise StockError(_t("Pexels 需要 API Key", "Pexels needs an API key"), 400)
+            raise _need_key("pexels")
         data, _ = _get_json("pexels", f"https://api.pexels.com/v1/photos/{iid}", {"Authorization": api_key("pexels")})
         it = _from_pexels(data)
     else:
         if not api_key("pixabay"):
-            raise StockError(_t("Pixabay 需要 API Key", "Pixabay needs an API key"), 400)
+            raise _need_key("pixabay")
         data, _ = _get_json("pixabay", "https://pixabay.com/api/?" + urllib.parse.urlencode(
             {"key": api_key("pixabay"), "id": iid}))
         hits = data.get("hits") or []

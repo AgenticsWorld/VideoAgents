@@ -108,7 +108,7 @@ class _Ledger:
 # ---------------- 方舟素材资产 OpenAPI ----------------
 
 def _keys(conf: dict) -> tuple[str, str]:
-    """AK/SK:资产库页配置优先,留空回退文件托管 TOS 的 AK/SK 或环境变量(同 core._avatar_keys)。"""
+    """AK/SK:资产库页配置优先,留空回退「存储与图库」页对象存储 TOS 的 AK/SK 或环境变量(同 core._avatar_keys)。"""
     av = conf.get("avatar_assets") or {}
     ak = str(av.get("access_key") or "").strip()
     sk = str(av.get("secret_key") or "").strip()
@@ -320,7 +320,7 @@ def _fail(conf: dict, aid: str, dig: str, label: str, err: str, ledger_path: Pat
 def ensure_asset(path: str, kind: str, conf: dict, config_path: Path, ledger_path: Path,
                  upload, log) -> str | None:
     """确保一份续接素材已入库且 Active,返回 asset://<id>;回退原提交方式时返回 None(原因已 log)。
-    upload(path) → 公网 URL(genmedia._storage_upload_url,经「文件托管」对象存储预签名)。"""
+    upload(path) → 公网 URL(genmedia._storage_upload_url,经对象存储(设置 → 存储与图库)预签名)。"""
     p = Path(path)
     base = p.resolve().parents[3]
     prev = p.name[:-len(TAIL_VIDEO if kind == "Video" else TAIL_IMAGE)]

@@ -1083,10 +1083,13 @@ DEFAULT_GENCONFIG = {
                "endpoint": "", "region": "us-east-1",
                "bucket": "", "prefix": "genmedia-refs/", "url_expires": 86400},
     },
+    # 图库 API Key(设置 → 存储与图库,2026-10-23):参考文件页「🔎 图库」与素材库视频搜索共用;
+    # 留空时读环境变量 PEXELS_API_KEY / PIXABAY_API_KEY(modules/stock_images.api_key)。Openverse 免 Key 不在此列
+    "stock": {"pexels": {"api_key": ""}, "pixabay": {"api_key": ""}},
     # 虚拟人像资产库(设置 → 高级):火山方舟私域虚拟人像素材库。启用后人物概念图可
     # 一键入库,生成视频时已入库(Active)的参考图自动改用 asset://<id> 提交,规避
-    # Seedance 对含人脸参考图的审核拦截。AK/SK 为火山 IAM 密钥(留空回退文件托管
-    # TOS 的 AK/SK 或环境变量 TOS_ACCESS_KEY/TOS_SECRET_KEY);project_name 须与
+    # Seedance 对含人脸参考图的审核拦截。AK/SK 为火山 IAM 密钥(留空回退「存储与图库」页
+    # 对象存储 TOS 的 AK/SK 或环境变量 TOS_ACCESS_KEY/TOS_SECRET_KEY);project_name 须与
     # 视频生成所用方舟 ARK API Key 所属项目一致(默认 default);group_id 为首次
     # 上传时自动创建的素材组,记录后复用。auto_manage=全自动管理:开启且视频模型为
     # 火山引擎时,每集 video-generation 工单开跑前自动清空资产库(规避素材数量上限)
@@ -3752,7 +3755,7 @@ def build_role_prompt(agent_id: str, project: str,
         "`code/layout_map_bound_check.py`);**白模链同开(workflow.yaml whitebox_requested = 本开关)**:Phase 6 每集开头为本集用到且尚未建模的场景 scene-modeling(p6-scene-model)出 `bible/scenes/<sid>/whitebox.json`,Phase 6 whitebox-staging 写 `whitebox_plans/` 并用 `code/render_whitebox.py --compile-only` 只编译落盘供预览页审看(不做正式导出;交付前跑 `code/concat_whitebox.py` 出整集白模样片供签字前连续审看,用的是预览版组视频、不接线),**用户在闸门 g6w「H3W-白模确认」签字后**由 07-directing/whitebox-staging 接导出工单(p6-whitebox-export)用 `code/render_whitebox.py` 导出 `assets/whitebox/<ep>/<grp>/camera.mp4`(仅摄影机视角),导出完成后 p6-shot-plates(08-video-gen/shot-plates)跑 `code/render_shot_plates.py` 生成分镜背景图(按机位指纹入库复用、运镜分档出镜首/镜尾、长边 1920,自动 `code/sync_shot_plates.py --write` 接进组 refs,机检 shot_plate_bound,2026-09-09),"
         "导出即自动接成该组视频生成的参考视频(`code/sync_whitebox_refs.py --write`:组 prompt `video_refs`=camera.mp4 + `Shot 1:` 前固定段 `Whitebox reference:`(视频作用)/`Whitebox legend:`(颜色↔人物、眼睛鼻尖=朝向)+ Global constraints 禁白模外观句;"
         "**白模人物参考图规约(2026-09-09)**:组 refs 只准挂在本组白模摄影机视频里实际出现的人物/生物的参考图(宿主 appearing_cast 判定:presence/关键帧 visible/visible_actor_ids/画幅几何),镜头外在场、已离场、缺席/远程人物不挂图不绑定——sync_scene_cast 只为出现者补图,sync_whitebox_refs --write 把多余人物图移出并重排 [Image N],机检 whitebox_cast_ref/whitebox_ref_bound 按违规报,正文仍引用被移除图时须先改正文;"
-        "prompt 工位写完必跑两个 sync 的 `--write`(sync_whitebox_refs / sync_shot_plates),机检 whitebox_ref_bound / shot_plate_bound;video-generation 按 video_refs 顺序传 `--ref-video`,方舟/MiniMax 参考视频须公网 URL——「设置 → 文件托管」未配置即报错),video-generation 开跑前复核——以上 SOUL.md/WORKFLOW.md 标注 2026-08-19 / 2026-09-07 的条款全部生效。"
+        "prompt 工位写完必跑两个 sync 的 `--write`(sync_whitebox_refs / sync_shot_plates),机检 whitebox_ref_bound / shot_plate_bound;video-generation 按 video_refs 顺序传 `--ref-video`,方舟/MiniMax 参考视频须公网 URL——「设置 → 存储与图库」未配置即报错),video-generation 开跑前复核——以上 SOUL.md/WORKFLOW.md 标注 2026-08-19 / 2026-09-07 的条款全部生效。"
         f"**背景图模式(2026-09-22)= {PLATE_MODE_LABELS.get(plate_mode, plate_mode)}**(项目输出设置 output.plate_mode;场景级可在场景预览页「分镜背景图」板块覆盖,以 `render_shot_plates.py` 日志里各场景实际生效的模式为准):"
         "pano = 分镜背景图由场景全景按母图机位重投影后二次生成(锚点按白模机位自动规划,`render_scene_panos.py`);"
         "world = 用户在场景预览页自选锚点创建全景图 → 基于它生成世界模型(World Labs Marble)→ `render_shot_plates.py` 在世界模型里按母图机位截图作参考二次生成——"
@@ -15016,9 +15019,19 @@ def _stock_openverse_creds() -> tuple[str, str]:
 
 
 async def api_stock_providers():
-    """图库弹窗的图源下拉:Openverse 免 Key;Pexels / Pixabay 有 Key(环境变量 / footageconfig.json)才可用。"""
+    """图库弹窗的图源下拉:Openverse 免 Key;Pexels / Pixabay 有 Key(设置 → 存储与图库 / 环境变量 / footageconfig.json)才可用。"""
     return {"providers": _stock.providers(), "categories": list(REF_STOCK_CATEGORIES),
             "max_side": _stock.MAX_SIDE}
+
+
+async def api_stock_test(body: dict):
+    """「存储与图库」页图库 Key 的测试按钮:{provider, api_key?}(空 = 已保存的)真搜一次 → {ok, total}。"""
+    body = dict(body or {})
+    _stock_lang()
+    try:
+        return await asyncio.to_thread(_stock.test_key, str(body.get("provider") or ""), str(body.get("api_key") or ""))
+    except _stock.StockError as e:
+        raise _stock_error(e) from e
 
 
 async def api_stock_search(body: dict):
@@ -15447,7 +15460,7 @@ def _avatar_cfg() -> dict:
 
 
 def _avatar_keys(cfg: dict) -> tuple[str, str]:
-    """资产库 AK/SK:本页配置优先,留空回退文件托管 TOS 的 AK/SK 或环境变量。"""
+    """资产库 AK/SK:本页配置优先,留空回退「存储与图库」页对象存储 TOS 的 AK/SK 或环境变量。"""
     ak = str(cfg.get("access_key") or "").strip()
     sk = str(cfg.get("secret_key") or "").strip()
     if not (ak and sk):
@@ -15570,7 +15583,7 @@ async def _avatar_group_id(cfg: dict) -> str:
     return gid
 
 
-# 「文件托管」各渠道对应的 SDK 模块与 AK/SK 环境变量(与 genmedia.STORAGE_ENV 同口径)
+# 对象存储(设置 → 存储与图库)各渠道对应的 SDK 模块与 AK/SK 环境变量(与 genmedia.STORAGE_ENV 同口径)
 _STORAGE_SDK = {"tos": ("tos", "tos"), "oss": ("oss2", "oss2"),
                 "cos": ("qcloud_cos", "cos-python-sdk-v5"), "s3": ("boto3", "boto3")}
 _STORAGE_ENV = {"tos": ("TOS_ACCESS_KEY", "TOS_SECRET_KEY"),
@@ -15581,7 +15594,7 @@ _STORAGE_ENV = {"tos": ("TOS_ACCESS_KEY", "TOS_SECRET_KEY"),
 
 def _avatar_storage_check() -> dict:
     """人像入库前置自检:方舟 CreateAsset 只收公网 URL(data: base64 实测 400
-    「URL must be a valid HTTP or HTTPS URL」),本地图必须先经「文件托管」对象存储换
+    「URL must be a valid HTTP or HTTPS URL」),本地图必须先经对象存储(设置 → 存储与图库)换
     预签名 URL——检查生效渠道的 bucket/AK/SK 是否配齐、当前解释器能否导入该渠道 SDK
     (桌面捆绑运行时曾缺 tos,上传子进程静默失败被误报成 URL 无效)。
     返回 {ok, provider, bucket, configured, sdk_ok, sdk, detail}。"""
@@ -15599,10 +15612,10 @@ def _avatar_storage_check() -> dict:
            "configured": configured, "sdk_ok": sdk_ok, "sdk": pkg, "detail": ""}
     zh = (ui_lang_code() or "zh") == "zh"   # 文案随界面语言(2026-09-23),非中文一律英文
     if not configured:
-        out["detail"] = (f"文件托管「{provider}」未配齐 bucket/Access Key/Secret Key"
-                         "(⚙️ 设置 → 文件托管);方舟入库只收公网 URL,须先配置对象存储") if zh else (
-                        f"File hosting \u201c{provider}\u201d is missing bucket / Access Key / Secret Key "
-                        "(⚙️ Settings → File hosting). Ark only accepts public URLs, so object storage must be configured first")
+        out["detail"] = (f"对象存储「{provider}」未配齐 bucket/Access Key/Secret Key"
+                         "(⚙️ 设置 → 存储与图库);方舟入库只收公网 URL,须先配置对象存储") if zh else (
+                        f"Object storage \u201c{provider}\u201d is missing bucket / Access Key / Secret Key "
+                        "(⚙️ Settings → Storage & Image Libraries). Ark only accepts public URLs, so object storage must be configured first")
     elif not sdk_ok:
         out["detail"] = (f"当前 Python 运行时缺少 {provider} 存储 SDK(模块 {mod}):"
                          f"请执行 `{sys.executable} -m pip install {pkg}` 后重试") if zh else (
@@ -15615,12 +15628,12 @@ def _avatar_storage_check() -> dict:
 
 
 async def api_avatar_ready() -> dict:
-    """/avatars 页「使用前准备」就绪自检(文件托管配置 + SDK 可导入)。"""
+    """/avatars 页「使用前准备」就绪自检(对象存储配置 + SDK 可导入)。"""
     return await asyncio.to_thread(_avatar_storage_check)
 
 
 def _avatar_source_url(p: Path) -> str:
-    """本地图片 → CreateAsset 可访问的公网 URL:经「文件托管」对象存储出预签名 URL
+    """本地图片 → CreateAsset 可访问的公网 URL:经对象存储(设置 → 存储与图库)出预签名 URL
     (genmedia upload 子进程,与参考视频同链路)。不再回退 data: base64——方舟实测拒收,
     回退只会把真实原因(SDK 缺失/密钥错误)换成误导性的 URL 无效报错;失败直接带
     子进程 stderr 原文抛出。"""

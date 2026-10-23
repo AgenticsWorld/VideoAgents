@@ -52,6 +52,7 @@ def net(monkeypatch, tmp_path):
     """按 URL 应答的假网络;calls 记下每次请求的 URL。"""
     monkeypatch.setattr(st, "CACHE_DIR", tmp_path / "cache")
     monkeypatch.setattr(st, "FOOTAGE_CONFIG", tmp_path / "footageconfig.json")
+    monkeypatch.setattr(st, "CONFIG_PATH", tmp_path / "genconfig.json")
     monkeypatch.delenv("PEXELS_API_KEY", raising=False)
     monkeypatch.delenv("PIXABAY_API_KEY", raising=False)
     monkeypatch.setattr(st, "_ITEMS", {})
@@ -345,3 +346,44 @@ def test_wikimedia_items_use_wikimedia_thumbnails():
     small = st._from_openverse({"id": "x2", "url": url, "thumbnail": "https://api.openverse.org/t/", "width": 400,
                                 "license": "cc0"})
     assert small["thumb"] == "https://api.openverse.org/t/" and small["preview"] == url   # 原图不比缩略档宽就不改
+
+
+def test_key_from_settings_page_wins_and_is_shared_with_footage(net, monkeypatch, tmp_path):
+    routes, calls = net
+    monkeypatch.setenv("PEXELS_API_KEY", "env-key")
+    st.CONFIG_PATH.write_text(json.dumps({"stock": {"pexels": {"api_key": " page-key "}, "pixabay": {"api_key": ""}}}),
+                              encoding="utf-8")
+    st.FOOTAGE_CONFIG.write_text(json.dumps({"pixabay_api_key": "footage-key"}), encoding="utf-8")
+    assert st.api_key("pexels") == "page-key"                         # 「存储与图库」页 > 环境变量
+    assert st.api_key("pixabay") == "footage-key"                     # 页面留空 → 环境变量 → footageconfig
+    from modules import footage
+    monkeypatch.setattr(footage, "_GENCONFIG_PATH", st.CONFIG_PATH)
+    monkeypatch.setattr(footage, "_CONFIG_PATH", st.FOOTAGE_CONFIG)
+    assert footage._api_key("pexels") == "page-key" and footage._api_key("pixabay") == "footage-key"
+
+
+def test_test_key_uses_form_key_and_skips_cache(net):
+    routes, calls = net
+    seen = []
+
+    def pexels(req):
+        seen.append(req.headers.get("Authorization"))
+        return FakeResp(json.dumps({"total_results": 8000, "photos": []}).encode())
+
+    routes["https://api.pexels.com/v1/search?"] = pexels
+    with pytest.raises(st.StockError) as e:
+        st.test_key("pexels", "")                                        # 表单空、也没保存过
+    assert e.value.status == 400 and "存储与图库" in str(e.value)
+    assert st.test_key("pexels", " typed ") == {"ok": True, "provider": "pexels", "total": 8000}
+    assert st.test_key("pexels", "typed")["total"] == 8000 and seen == ["typed", "typed"]   # 不走缓存
+    assert not list(st.CACHE_DIR.glob("*.json")) if st.CACHE_DIR.exists() else True
+    with pytest.raises(st.StockError):
+        st.test_key("openverse", "x")
+
+    def denied(req):
+        raise st.StockError("HTTP 401: nope", 401)
+
+    routes["https://api.pexels.com/v1/search?"] = denied
+    with pytest.raises(st.StockError) as e:
+        st.test_key("pexels", "bad")
+    assert e.value.status == 401 and "拒绝了 API Key" in str(e.value)

@@ -52,7 +52,8 @@ Python:
   - youtube 检索标题含 Videohive/Envato/Nimia/CinemaStock/Motion Array/
     Storyblocks/Artgrid/Shutterstock/Pond5 的候选大概率是带水印预览片,
     结果标 watermark_risk=true 供 scout 降权,但不删除(仍由 curator 看帧定夺)。
-  - pexels/pixabay 需 API Key:环境变量 PEXELS_API_KEY / PIXABAY_API_KEY,
+  - pexels/pixabay 需 API Key:「⚙️ 设置 → 存储与图库」填的(与参考文件页图库共用),
+    留空时读环境变量 PEXELS_API_KEY / PIXABAY_API_KEY,
     或 data/.videoagents/footageconfig.json 的 pexels_api_key / pixabay_api_key。
   - fetch --section 自动前后各垫 --pad 秒(yt-dlp 区间下载切在关键帧,不垫会丢头尾);
     直链 URL(pexels/pixabay 的 .mp4)整文件下载,忽略 --section。
@@ -88,6 +89,8 @@ STOCK_WATERMARK_HINTS = ("videohive", "envato", "nimia", "cinemastock",
                          "shutterstock", "pond5", "istock", "getty")
 _CONFIG_PATH = Path(os.environ.get("VIDEOAGENTS_DATA_DIR",
                     Path(__file__).resolve().parents[1] / "data")) / ".videoagents" / "footageconfig.json"
+# 「⚙️ 设置 → 存储与图库」填的 Pexels / Pixabay Key(genconfig.json stock.<渠道>.api_key,与参考文件页图库共用)
+_GENCONFIG_PATH = Path(os.environ.get("VIDEOAGENTS_CONFIG_PATH", _CONFIG_PATH.with_name("genconfig.json")))
 
 
 class FootageError(RuntimeError):
@@ -136,12 +139,20 @@ def _config() -> dict:
         return {}
 
 
+def _page_key(provider: str) -> str:
+    try:
+        page = (json.loads(_GENCONFIG_PATH.read_text(encoding="utf-8")).get("stock") or {}).get(provider) or {}
+        return str(page.get("api_key") or "").strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _api_key(provider: str) -> str:
     env = {"pexels": "PEXELS_API_KEY", "pixabay": "PIXABAY_API_KEY"}[provider]
-    key = os.environ.get(env) or str(_config().get(f"{provider}_api_key") or "")
+    key = _page_key(provider) or os.environ.get(env) or str(_config().get(f"{provider}_api_key") or "")
     if not key:
         raise FootageError(
-            f"{provider} 需要 API Key:设环境变量 {env} 或写入 {_CONFIG_PATH}"
+            f"{provider} 需要 API Key:在「⚙️ 设置 → 存储与图库」填写,或设环境变量 {env} / 写入 {_CONFIG_PATH}"
             f" 的 {provider}_api_key 字段(免费申请:pexels.com/api / pixabay.com/api/docs)")
     return key
 
