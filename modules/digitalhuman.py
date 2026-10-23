@@ -348,8 +348,8 @@ def _comfy(image: str, audio: str, output: str, prompt: str,
 
 def _agentics(image: str, audio: str, output: str, prompt: str,
               seed: int | None, cfg: dict, job_path: str | None = None) -> str:
-    """Agentics 数字人 profile:人物图按 profile 映射走 first_frame 或 reference_images,
-    对白音频走 reference_audios;duration 仅在 profile 标记必填时按音频时长传入
+    """Agentics 数字人 profile:人物图走 avatar_image,对白音频走 driving_audios;
+    duration 仅在 profile 标记必填时按音频时长传入
     (InfiniteTalk 类模型按音频长度出片,不必填时交给服务端)。台账记录 task_id,
     中断后同一台账恢复即接着轮询同一任务,不会重复提交。"""
     task_id = _task_id(job_path, "agentics")
@@ -359,10 +359,7 @@ def _agentics(image: str, audio: str, output: str, prompt: str,
         return _write_output(data, output)
     profile = _agentics_profile("digital_human", cfg.get("profile_code") or "")
     schema = profile.get("token_schema") or {}
-    file_mappings = schema.get("files") if isinstance(schema, dict) else {}
-    file_mappings = file_mappings if isinstance(file_mappings, dict) else {}
-    image_token = "first_frame" if "first_frame" in file_mappings else "reference_images"
-    files = {image_token: [image], "reference_audios": [audio]}
+    files = {"avatar_image": [image], "driving_audios": [audio]}
     values: dict = {
         "prompt": prompt or "natural speaking, subtle head movement, steady camera",
         "seed": seed if seed is not None else random.randrange(1, 2**31),
@@ -370,7 +367,7 @@ def _agentics(image: str, audio: str, output: str, prompt: str,
     mappings = schema.get("parameters") if isinstance(schema, dict) else {}
     duration_mapping = (mappings or {}).get("duration") if isinstance(mappings, dict) else None
     if isinstance(duration_mapping, dict) and duration_mapping.get("required"):
-        values["duration"] = max(1, int(-(-probe_duration(audio) // 1)))
+        values["duration"] = probe_duration(audio)
     data = _agentics_generate(
         "digital_human", cfg, values, files, profile=profile,
         on_submit=lambda tid: _submitted(job_path, "agentics", tid))

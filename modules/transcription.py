@@ -21,6 +21,7 @@ import json
 import math
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Iterable
 
@@ -74,7 +75,8 @@ def load_model(model_name: str | None = None, device: str = "auto",
         from faster_whisper import WhisperModel  # type: ignore
     except ImportError as exc:
         raise RuntimeError(
-            "缺少 faster-whisper；请重新安装/升级 VideoAgents 宿主后再运行音频转文字"
+            f"当前 Python（{sys.executable}）无法导入 faster-whisper：{exc}；"
+            "请检查应用所选运行时及其依赖"
         ) from exc
     MODEL_ROOT.mkdir(parents=True, exist_ok=True)
     source = Path(model_name).expanduser()
@@ -651,12 +653,15 @@ def doctor(model_name: str | None = None, download: bool = False,
     model_name = resolve_model(model_name)
     try:
         import faster_whisper  # type: ignore
-    except ImportError:
+    except ImportError as exc:
         return {"ok": False, "dependency": "faster-whisper", "model": model_name,
+                "python_executable": sys.executable, "python_prefix": sys.prefix,
                 "cache_root": str(MODEL_ROOT),
-                "error": "缺少 faster-whisper，请重新安装/升级 VideoAgents 宿主"}
+                "error": f"当前 Python（{sys.executable}）无法导入 faster-whisper：{exc}；"
+                         "请检查应用所选运行时及其依赖"}
     MODEL_ROOT.mkdir(parents=True, exist_ok=True)
     result = {"ok": True, "dependency": getattr(faster_whisper, "__version__", "unknown"),
+              "python_executable": sys.executable, "python_prefix": sys.prefix,
               "model": model_name, "cache_root": str(MODEL_ROOT),
               "lightweight_diarization": "mfcc-pitch-kmeans",
               "cached_entries": sorted(path.name for path in MODEL_ROOT.iterdir())}

@@ -1122,10 +1122,27 @@ _AGENTICS_FIXED_FILES = {
     "music": {"reference_audios", "vocal_audio"},
     "tts": {"reference_audios"},
 }
-# 数字人 profile 与视频同一套固定字段/附件 token:人物图走 first_frame 或
-# reference_images(按 profile 实际映射),对白音频走 reference_audios
-_AGENTICS_FIXED_PARAMETERS["digital_human"] = _AGENTICS_FIXED_PARAMETERS["video"]
-_AGENTICS_FIXED_FILES["digital_human"] = _AGENTICS_FIXED_FILES["video"]
+# media_type=5 uses the service's DIGITAL_HUMAN.md contract, not video inputs.
+_AGENTICS_FIXED_PARAMETERS["digital_human"] = {
+    "avatar_id": ("string", 1, None), "text": ("string", 1, None),
+    "audio_id": ("string", 1, None), "voice_id": ("string", 1, None),
+    "language": ("string", 1, None), "speed": ("number", 0.1, None),
+    "pitch": ("number", None, None), "volume": ("number", 0, None),
+    "emotion": ("string", 1, None), "prompt": ("string", None, None),
+    "negative_prompt": ("string", None, None), "audio_mode": ("string", None, None),
+    "audio_start": ("number", 0, None), "audio_end": ("number", 0, None),
+    "duration": ("number", 0.1, None), "resolution": ("string", 1, None),
+    "aspect_ratio": ("string", 1, None), "width": ("integer", 64, None),
+    "height": ("integer", 64, None), "fps": ("number", 1, 120),
+    "seed": ("integer", None, None), "steps": ("integer", 1, None),
+    "guidance_scale": ("number", 0, None), "audio_strength": ("number", 0, None),
+    "audio_guidance_scale": ("number", 0, None), "mode": ("string", 1, None),
+    "background_color": ("string", 1, None), "output_format": ("string", 1, None),
+}
+_AGENTICS_FIXED_FILES["digital_human"] = {
+    "avatar_image", "avatar_video", "driving_audios", "dialogue_audio",
+    "speaker_masks", "reference_audios", "background_image", "background_video",
+}
 # 超分 profile(media_type=Scale,2026-09-25):固定字段=目标档位/宽高/放大倍数/种子/步数/fps,
 # prompt 可选(SeedVR2 类不需要);源视频只可能走 input_video / input_videos / reference_videos
 # 之一(按 profile 实际映射选第一个声明的附件位),客户端不猜其它 token
@@ -1176,7 +1193,8 @@ def _agentics_fixed_value(kind: str, name: str, value: object,
         raise RuntimeError(f"AgenticsLLM 参数 {name} 必须是 {expected}")
     if expected == "integer" and isinstance(value, float):
         value = int(value)
-    if expected == "string" and name in ("prompt", "text") and not value:
+    if (expected == "string" and name in ("prompt", "text") and not value
+            and not (kind == "digital_human" and name == "prompt")):
         raise RuntimeError(f"AgenticsLLM 参数 {name} 不能为空")
     if number_value and minimum is not None and value < minimum:
         raise RuntimeError(f"AgenticsLLM 参数 {name} 不能小于 {minimum}")
@@ -1204,7 +1222,8 @@ def _agentics_payload(profile: dict, values: dict,
     kind = _agentics_profile_kind(profile, schema)
     mappings = schema.get("parameters")
     file_mappings = schema.get("files") or {}
-    if not isinstance(mappings, dict) or not mappings or not isinstance(file_mappings, dict):
+    if (not isinstance(mappings, dict) or not isinstance(file_mappings, dict)
+            or (not mappings and not (kind == "digital_human" and file_mappings))):
         raise RuntimeError(f"AgenticsLLM profile {profile.get('profile_code')} 映射结构无效")
 
     parameters: dict = {}
@@ -1216,7 +1235,8 @@ def _agentics_payload(profile: dict, values: dict,
         if name not in _AGENTICS_FIXED_PARAMETERS[kind]:
             raise RuntimeError(f"AgenticsLLM profile 包含未知的 {kind} 参数:{name}")
         value = values.get(name)
-        if value is not None and not (isinstance(value, str) and not value):
+        allow_empty_prompt = kind == "digital_human" and name == "prompt"
+        if value is not None and (allow_empty_prompt or not (isinstance(value, str) and not value)):
             parameters[name] = _agentics_fixed_value(kind, name, value, mapping)
         elif mapping.get("required") and "default" not in mapping:
             missing.append(name)
