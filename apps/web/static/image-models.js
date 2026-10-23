@@ -29,15 +29,15 @@ openrouter:[   // 2026-10-10 对照 openrouter.ai/api/v1/images/models 在线目
   ['black-forest-labs/flux.2-flex','FLUX.2 Flex · FLUX 灵活版'],
   ['recraft/recraft-v4.1-pro','Recraft V4.1 Pro · 设计/排版/品牌风格'],
 ],
-volcengine:[
+volcengine:[   // 2026-10-23 对照方舟在线模型目录(v3 models 接口)刷新:5.0 / 5.0 Lite / 4.5 / 4.0-250828 属第十批下线
+               // (2026-09-24 停止新购、11-24 关停),移出清单;补 5.0 Flash 与 4.0 的官方迁移目标 4-0-20260415
   ['doubao-seedream-5-0-pro-260628','Seedream 5.0 Pro(最新,文/图生图/多参考图,出图≥1280×720)'],
-  ['doubao-seedream-5-0-260128','Seedream 5.0'],
-  ['doubao-seedream-5-0-lite-260128','Seedream 5.0 Lite'],
-  ['doubao-seedream-4-5-251128','Seedream 4.5(文/图生图/多图融合)'],
-  ['doubao-seedream-4-0-250828','Seedream 4.0(文/图生图)'],
+  ['doubao-seedream-5-0-flash-260915','Seedream 5.0 Flash(能力同 5.0 Pro,更快更便宜,出图≥1280×720)'],
+  ['doubao-seedream-4-0-20260415','Seedream 4.0(文/图生图)'],
 ],
-byteplus:[
+byteplus:[   // 2026-10-23 对照 BytePlus 在线模型目录:清单内模型均在售;补 5.0 Flash(同 Pro 带 dola- 前缀)
   ['dola-seedream-5-0-pro-260628','Seedream 5.0 Pro(最新,文/图生图/多参考图,出图≥1280×720)'],
+  ['dola-seedream-5-0-flash-260915','Seedream 5.0 Flash(能力同 5.0 Pro,更快更便宜,出图≥1280×720)'],
   ['seedream-5-0-260128','Seedream 5.0(文/图生图/多参考图/组图)'],
   ['seedream-5-0-lite-260128','Seedream 5.0 Lite(轻量版,推荐用于含人脸图片,默认Seedance过审)'],
   ['seedream-4-5-251128','Seedream 4.5(文/图生图/多图融合)'],

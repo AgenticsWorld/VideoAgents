@@ -273,3 +273,41 @@ def test_model_descriptions_are_translated_in_every_dictionary():
         text = path.read_text(encoding="utf-8")
         missing = [label for label in labels if f"\n{json.dumps(label, ensure_ascii=False)}: " not in text]
         assert not missing, (path.name, missing)
+
+
+# 2026-10-23 方舟第九 / 十批下线:1.5 Pro 已关停,其余停止新购、11-24 关停(火山 /api/v3/models 标 Shutdown / Retiring)
+VOLC_RETIRED = {"doubao-seedream-5-0-260128", "doubao-seedream-5-0-lite-260128", "doubao-seedream-4-5-251128",
+                "doubao-seedream-4-0-250828", "doubao-seedance-1-5-pro-251215", "doubao-seedance-1-0-pro-250528",
+                "doubao-seedance-1-0-pro-fast-251015"}
+
+
+# BytePlus 第四批下线:1.5 Pro 2026-09-15 起不能新建接入点、11-11 关停(其余清单内模型 10-23 均在售)
+BP_RETIRED = {"seedance-1-5-pro-251215"}
+
+
+@pytest.mark.parametrize("provider, page_const, retired, added", [
+    ("volcengine", "VOLC_MODELS", VOLC_RETIRED, {"doubao-seedream-5-0-flash-260915", "doubao-seedream-4-0-20260415"}),
+    ("byteplus", "BP_VIDEO_MODELS", BP_RETIRED, {"dola-seedream-5-0-flash-260915"}),
+])
+def test_ark_lists_drop_retired_models(provider, page_const, retired, added):
+    from services.runtime import core
+    html = (STATIC / "models.html").read_text(encoding="utf-8")
+    page_video = re.findall(r"\['([^']+)','", re.search(rf"const {page_const}=\[(.*?)\];", html, re.S).group(1))
+    core_video = [mid for mid, _ in core.VIDEO_MODEL_CATALOG[provider]]
+    image = [mid for mid, _ in model_lists()[provider]]
+    assert page_video == core_video and core_video[0] == core.DEFAULT_GENCONFIG["video"][provider]["model"]
+    assert core.DEFAULT_GENCONFIG["image"][provider]["model"] in image
+    assert not retired & set(page_video + image)
+    assert added <= set(image)
+
+
+def test_volcengine_new_seedream_models_have_size_limits():
+    flash = {"provider": "volcengine", "model": "doubao-seedream-5-0-flash-260915"}
+    v40 = {"provider": "volcengine", "model": "doubao-seedream-4-0-20260415"}
+    assert g.image_max_pixels(flash) == g.IMAGE_MAX_PIXELS_SEEDREAM_PRO                 # 文档口径同 5.0 Pro
+    assert g.image_max_pixels({"provider": "byteplus", "model": "dola-seedream-5-0-flash-260915"}) == g.IMAGE_MAX_PIXELS_SEEDREAM_PRO
+    assert g.image_size_limits(flash) == {"mode": "pixels", "max_pixels": g.IMAGE_MAX_PIXELS_SEEDREAM_PRO,
+                                          "min_pixels": g.ARK_SEEDREAM5_MIN_PIXELS, "multiple": 2, "basis": "doc"}
+    assert g.image_max_pixels(v40) == 4096 * 4096                                       # 8 位日期后缀
+    assert g.image_size_limits(v40)["basis"] == "measured"
+    assert g.image_max_pixels({"provider": "volcengine", "model": "doubao-seedream-4-0-2026041"}) is None

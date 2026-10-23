@@ -4120,9 +4120,12 @@ def image_ref_capacity(cfg: dict) -> int | None:
 # 单图像素面积上限(2026-10-06 火山 / BytePlus 两区逐个模型实测:请求 8192x8192 读拒收报文里的上限,拒收不计费):
 #   Seedream 5.0 Pro            → "image area must be at most 4624220 pixels"
 #   Seedream 5.0 / 5.0 Lite / 4.5 / 4.0 → "image size must be at most 16777216 pixels"(4096x4096)
+#   Seedream 4.0-20260415(4.0 下线后的迁移目标,2026-10-23 火山实测)同 4096x4096,下限 921600
+#   Seedream 5.0 Flash 两区账号都未开通、没实测:方舟教程写明 size 规则与 5.0 Pro 相同,按 Pro 取
 IMAGE_MAX_PIXELS_SEEDREAM_PRO = 4_624_220
 IMAGE_MAX_PIXELS_4K = 4096 * 4096
-_ARK_SEEDREAM_4K_RE = re.compile(r"seedream-(?:4-0|4-5|5-0(?:-lite)?)-\d{6}$")
+_ARK_SEEDREAM_4K_RE = re.compile(r"seedream-(?:4-0|4-5|5-0(?:-lite)?)-(?:\d{6}|\d{8})$")
+_ARK_SEEDREAM_PRO_SIZE = ("seedream-5-0-pro", "seedream-5-0-flash")
 
 
 def image_max_pixels(cfg: dict) -> int | None:
@@ -4134,7 +4137,7 @@ def image_max_pixels(cfg: dict) -> int | None:
     provider = cfg.get("provider")
     model = str(cfg.get("model") or "").strip().lower()
     if provider in ("volcengine", "byteplus"):
-        if "seedream-5-0-pro" in model:
+        if any(k in model for k in _ARK_SEEDREAM_PRO_SIZE):
             return IMAGE_MAX_PIXELS_SEEDREAM_PRO
         if _ARK_SEEDREAM_4K_RE.search(model):
             return IMAGE_MAX_PIXELS_4K
@@ -4166,7 +4169,8 @@ def image_size_limits(cfg: dict) -> dict:
         cap = image_max_pixels(cfg)
         # Seedream 5.x 出图下限 3,686,400 像素(2560x1440 当量;与故事板草图 sketch_size 同口径):小图编辑时请求按这个下限出,结果再对回底图尺寸
         lo = ARK_SEEDREAM5_MIN_PIXELS if "seedream-5" in model.lower() else 0
-        return {"mode": "pixels", "max_pixels": cap, "min_pixels": lo, "multiple": 2, "basis": "measured"} if cap else {"mode": "unknown"}
+        basis = "doc" if "seedream-5-0-flash" in model.lower() else "measured"
+        return {"mode": "pixels", "max_pixels": cap, "min_pixels": lo, "multiple": 2, "basis": basis} if cap else {"mode": "unknown"}
     if provider == "fal":
         family = _fal_image_family(model)
         if family == "seedream":

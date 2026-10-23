@@ -6094,16 +6094,14 @@ VIDEO_MODEL_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("doubao-seedance-2-0-260128", "Seedance 2.0(音画同生,最高 4K,参考 9 图/3 视频/3 音频)"),
         ("doubao-seedance-2-0-fast-260128", "Seedance 2.0 Fast(快速版,480p/720p)"),
         ("doubao-seedance-2-0-mini-260615", "Seedance 2.0 Mini(轻量版,480p/720p)"),
-        ("doubao-seedance-1-5-pro-251215", "Seedance 1.5 Pro(即将下线)"),
-        ("doubao-seedance-1-0-pro-250528", "Seedance 1.0 Pro(文/图生视频)"),
-        ("doubao-seedance-1-0-pro-fast-251015", "Seedance 1.0 Pro Fast(文/图生视频)"),
+        # 2026-10-23:1.5 Pro 已关停、1.0 Pro / 1.0 Pro Fast 第十批下线(11-24 关停),移出
     ],
     "byteplus": [
         ("dreamina-seedance-2-5-260628", "Seedance 2.5(单段 30s,参考 30 图/10 视频/10 音频,480p/720p)"),
         ("dreamina-seedance-2-0-260128", "Seedance 2.0(音画同生,最高 4K,参考 9 图/3 视频/3 音频)"),
         ("dreamina-seedance-2-0-fast-260128", "Seedance 2.0 Fast(快速版,480p/720p)"),
         ("dreamina-seedance-2-0-mini-260615", "Seedance 2.0 Mini(轻量版,480p/720p)"),
-        ("seedance-1-5-pro-251215", "Seedance 1.5 Pro"),
+        # 2026-10-23:1.5 Pro 第四批下线(09-15 起不能新建接入点、11-11 关停),移出
         ("seedance-1-0-pro-250528", "Seedance 1.0 Pro(文/图生视频)"),
         ("seedance-1-0-pro-fast-251015", "Seedance 1.0 Pro Fast(文/图生视频)"),
     ],
