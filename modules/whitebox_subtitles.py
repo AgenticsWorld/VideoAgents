@@ -40,7 +40,8 @@ def _read(p: Path):
 
 
 def find_font(size: int):
-    """字体:data/fonts/ 自带 > 系统中文字体 > PIL 默认。"""
+    """字体:data/fonts/ 自带 > 系统中文字体 > PIL 默认(按 size 缩放;没装中文字体的 Linux 上
+    以前退回固定小字号的位图字体,字幕版式按字号缩放 / 折行全部失效)。"""
     from PIL import ImageFont
     cands = [str(p) for p in sorted((ROOT / "data" / "fonts").glob("*")) if p.suffix.lower() in (".ttf", ".otf", ".ttc")]
     for f in cands + FONT_CANDIDATES:
@@ -49,7 +50,10 @@ def find_font(size: int):
                 return ImageFont.truetype(f, size)
             except Exception:
                 continue
-    return ImageFont.load_default()
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:  # Pillow < 10.1
+        return ImageFont.load_default()
 
 
 def wrap_text(draw, text: str, font, max_w: int) -> list[str]:

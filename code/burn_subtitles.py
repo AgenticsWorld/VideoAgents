@@ -194,7 +194,8 @@ class Layout:
                 size -= 1
         self.size = size
         self.font = _font(font_path, size)
-        self.font_desc = getattr(self.font, "path", None) or "PIL 默认字体"
+        path = getattr(self.font, "path", None)      # PIL 默认字体按字号加载时 path 是 BytesIO,不记
+        self.font_desc = path if isinstance(path, str) and path else "PIL 默认字体"
 
     def _char_h(self, size):
         l, t, r, b = _ref_box(_font(self.font_path, size))

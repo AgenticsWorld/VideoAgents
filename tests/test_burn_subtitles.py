@@ -71,7 +71,7 @@ def test_layout_within_subtitle_soul_limits(tmp_path, size):
 
 def test_overlong_cue_is_flagged_not_hidden(tmp_path):
     lay = bs.Layout(640, 360)
-    long = "很长的一句字幕" * 30
+    long = "很长的一句字幕" * 60      # 没装中文字体(CI)时缺字框比中文字窄,30 遍在 640 宽缩字号后正好 2 行
     _, metas = bs.build_track([{"start": 0.0, "end": 1.0, "text": long}], lay, 1.5, tmp_path / "s")
     assert metas[0][3]["lines"] > 2 and metas[0][3]["size"] < lay.size      # 先缩字号,仍超 2 行如实报告
 
