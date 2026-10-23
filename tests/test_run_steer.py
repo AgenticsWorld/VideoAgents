@@ -155,6 +155,9 @@ def rt(monkeypatch, tmp_path):
         d = tmp_path / name.lower()
         d.mkdir()
         monkeypatch.setattr(core, name, d)
+    # 起引擎前的项目快照 / rm 垫片都落在 tmp,不写进用户目录与真实运行时目录
+    monkeypatch.setenv("VIDEOAGENTS_SNAPSHOT_DIR", str(tmp_path / "snapshots"))
+    monkeypatch.setattr(core, "DELETE_GUARD_BIN_DIR", tmp_path / "delete-guard-bin")
     monkeypatch.setattr(core, "STATE", {"sessions": {}})
     monkeypatch.setattr(core, "save_state", lambda state: None)
     for name in ("RUNS", "RUN_TASKS", "RUN_PROCS", "RUN_STEER"):

@@ -155,6 +155,7 @@ def test_footage_spec_prepares_pi_only_for_analysis(core, vendor, monkeypatch):
     assert "agentics" not in spec and not (core.AGENTICS_PI_HOME / "footage").exists()
     spec = core.footage_engine_spec(prepare=True)
     assert spec["agentics"]["cmd"][:2] == core.agentics_pi_command()
+    assert spec["agentics"]["cmd"][-2:] == ["--tools", "read"]   # 只读图,没有 bash / write
     assert spec["agentics"]["env"]["VIDEOAGENTS_LLM_API_KEY"] == "k-secret"
     m = json.loads((core.AGENTICS_PI_HOME / "footage" / "models.json").read_text())
     assert m["providers"]["agentics"]["models"][0]["input"] == ["text", "image"]     # 看图

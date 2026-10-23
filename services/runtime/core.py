@@ -53,6 +53,8 @@ from services.runtime import engine_setup
 from services.runtime import opencode_cli
 from services.runtime import run_steer
 from services.runtime import dagcheck
+from services.runtime import delete_guard
+from services.runtime import project_snapshot
 
 # ---------------- 配置 ----------------
 ROOT = Path(__file__).resolve().parents[2]             # 工作区根目录
@@ -3119,6 +3121,118 @@ def with_host_python_path(env: dict[str, str]) -> dict[str, str]:
     return {**env, "PATH": os.pathsep.join([str(d), *rest])}
 
 
+# Agent 删除守卫(2026-10-23,起因见 delete_guard.py 文首:pi 把 @videoagents 手误写成 @videoAgents 后
+# 「清理重复目录」,rm -rf 掉整个桌面端数据目录)。派单时三处生效:受保护目录经环境变量交给引擎进程;
+# PATH 最前放 rm 垫片(所有引擎,登录 / 交互 shell 可能把 PATH 排回去,只算尽力而为);pi / Agentics
+# 另以 -e 加载 pi_delete_guard.mjs,工具调用前拦截字面删除、把路径纠正成真实大小写(pi 的 bash 工具是
+# 非登录 /bin/bash -c,PATH 垫片对它稳定生效)
+DELETE_GUARD_SCRIPT = Path(__file__).with_name("delete_guard.py")
+DELETE_GUARD_PI_EXTENSION = Path(__file__).with_name("pi_delete_guard.mjs")
+DELETE_GUARD_BIN_DIR = RUNTIME_DIR / "delete-guard" / "bin"
+_DELETE_GUARD_MARK = "VideoAgents 删除守卫"
+
+
+def delete_guard_roots() -> list[Path]:
+    """受保护目录(连同各级上级目录;各项目根另由 projects/ 的直接子目录规则覆盖):数据目录、运行时目录、
+    安装目录、宿主 Python、项目快照目录、用户主目录。"""
+    return [DATA_DIR, RUNTIME_DIR, PROJECTS_DIR, ROOT, Path(sys.prefix),
+            project_snapshot.store_dir(DATA_DIR), Path.home()]
+
+
+def _real_rm() -> str:
+    """PATH 上第一个不是本守卫垫片的 rm(服务若从别的实例的派单 shell 里起,PATH 上会带着那边的垫片)。"""
+    for p in (os.environ.get("PATH") or "").split(os.pathsep):
+        f = Path(p or ".") / "rm"
+        if p and f.is_file() and os.access(f, os.X_OK) and f.parent.resolve() != DELETE_GUARD_BIN_DIR.resolve():
+            try:
+                with f.open("rb") as fh:
+                    if _DELETE_GUARD_MARK.encode("utf-8") in fh.read(512):
+                        continue
+            except OSError:
+                continue
+            return str(f)
+    return "/bin/rm"
+
+
+def delete_guard_bin_dir() -> Path | None:
+    """rm 垫片目录:操作数里有目录时才起宿主解释器过 delete_guard.py,只删文件直接 exec 真 rm(批量删文件不变慢);
+    解释器或守卫脚本不在时同样直通真 rm(守卫故障不让 Agent 停工)。Windows 暂不放(Git Bash 跑 sh 垫片未实测,
+    powershell 工具的删除由 pi 扩展字面拦截)。目录写不了时返回 None,派单照常。"""
+    if os.name == "nt":
+        return None
+    exe = os.path.abspath(sys.executable or "")
+    q, script = shlex.quote, shlex.quote(str(DELETE_GUARD_SCRIPT))
+    text = ("#!/bin/sh\n"
+            f"# {_DELETE_GUARD_MARK}(core.delete_guard_bin_dir 自动生成,勿改):操作数里有目录时先过\n"
+            "# delete_guard.py,删数据 / 项目目录本身或其上级即整条拒绝;只删文件时直接交给真 rm\n"
+            f"real={q(_real_rm())}\n"
+            'for a in "$@"; do\n'
+            '  if [ -d "$a" ]; then\n'
+            f"    if [ -x {q(exe)} ] && [ -f {script} ]; then\n"
+            f'      exec {q(exe)} -I -S {script} rm "$real" "$@"\n'
+            "    fi\n"
+            "    break\n"
+            "  fi\n"
+            "done\n"
+            'exec "$real" "$@"\n')
+    d = DELETE_GUARD_BIN_DIR
+    f = d / "rm"
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+        if not (f.is_file() and f.read_text(encoding="utf-8") == text):
+            tmp = d / f".rm.{os.getpid()}.tmp"
+            tmp.write_text(text, encoding="utf-8")
+            tmp.chmod(0o755)
+            os.replace(tmp, f)
+    except OSError as e:
+        print(f"[delete-guard] 无法写 {d}:{e}", flush=True)
+        return None
+    return d
+
+
+def delete_guard_env(env: dict[str, str]) -> dict[str, str]:
+    """派单子进程环境加上删除守卫:受保护目录、项目容器、守卫脚本路径(pi 扩展用),rm 垫片排到 PATH 最前。"""
+    env = {**env,
+           delete_guard.ENV_ROOTS: os.pathsep.join(str(p) for p in delete_guard_roots()),
+           delete_guard.ENV_CONTAINERS: os.pathsep.join(
+               [str(PROJECTS_DIR), str(project_snapshot.store_dir(DATA_DIR))]),
+           "VIDEOAGENTS_GUARD_SCRIPT": str(DELETE_GUARD_SCRIPT)}
+    d = delete_guard_bin_dir()
+    if d is None:
+        return env
+    rest = [p for p in (env.get("PATH") or "").split(os.pathsep) if p and p != str(d)]
+    return {**env, "PATH": os.pathsep.join([str(d), *rest])}
+
+
+def delete_guard_pi_args() -> list[str]:
+    """pi / Agentics 命令行加载删除守卫扩展(文件不在则不加)。"""
+    return ["-e", str(DELETE_GUARD_PI_EXTENSION)] if DELETE_GUARD_PI_EXTENSION.is_file() else []
+
+
+SNAPSHOT_LOCKS: dict[str, asyncio.Lock] = {}
+
+
+async def snapshot_project_before_run(project: str) -> None:
+    """起引擎前给项目拍快照(project_snapshot:克隆到数据目录之外,距上次不足半小时不重拍)。
+    同项目并发派单共用一把锁,只拍一次;失败只记日志,不阻断派单。"""
+    if not project or not project_snapshot.enabled():
+        return
+    pdir = PROJECTS_DIR / project
+    if not pdir.is_dir():
+        return
+    async with SNAPSHOT_LOCKS.setdefault(project, asyncio.Lock()):
+        try:
+            res = await asyncio.to_thread(project_snapshot.take, pdir,
+                                          project_snapshot.store_dir(DATA_DIR) / project)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[snapshot] {project} 快照失败:{exc}", flush=True)
+            return
+    if res["status"] == "taken":
+        print(f"[snapshot] {project} → {res['path']}({res['method']},{res['seconds']}s)", flush=True)
+    elif res["status"] == "skipped":
+        print(f"[snapshot] {project} 跳过:{res['reason']}", flush=True)
+
+
 _OPENCODE_CACHE_WARNED = False
 
 
@@ -4884,7 +4998,8 @@ async def execute_run(run: dict, message: str, model: str | None):
             if engine == "deepagents":
                 # 内置 pi:与 pi 引擎同样的 RPC 模式,系统提示走文件。无状态 Agent 每单全新会话、
                 # 不 resume,--no-session 免得扇出工位每单留一个会话文件
-                base = _pi_rpc_args(da_cmd) + ["--append-system-prompt", str(system_prompt_file)]
+                base = (_pi_rpc_args(da_cmd) + delete_guard_pi_args()
+                        + ["--append-system-prompt", str(system_prompt_file)])
                 if sid:
                     return base + ["--session", sid]
                 return base + (["--no-session"] if is_stateless else [])
@@ -4970,7 +5085,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                 # pi 原生持久会话;--mode rpc:事件流同 json 模式,提示词与运行中插话都经 stdin
                 # 的 JSONL 命令送入(run_steer.PiSteer)。系统提示通过文件传入，既避免
                 # Windows 命令行长度限制，也让续接进程每轮恢复同一 Agent 身份。
-                base = [cli_executable, "--mode", "rpc", "--approve",
+                base = [cli_executable, "--mode", "rpc", "--approve", *delete_guard_pi_args(),
                         "--append-system-prompt", str(system_prompt_file)]
                 if model:
                     base += ["--model", model]
@@ -5011,6 +5126,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                # 兼容旧版媒体模块；值与 VIDEOAGENTS_PROJECT 始终一致，避免继承到旧项目。
                "WEBUI_PROJECT": run["project"]}
         env = with_host_python_path(env)   # 成员写 python3 时优先落到宿主解释器(host_python_bin_dir)
+        env = delete_guard_env(env)   # 删除守卫:受保护目录 + rm 垫片(见 delete_guard_env)
         if run.get("nsfw_route"):
             # NSFW 路由的 run:子进程 genmedia 图像/视频调用按备用渠道出图(modules/genmedia.py nsfw_route_reason)
             env["VIDEOAGENTS_NSFW"] = "1"
@@ -5031,6 +5147,7 @@ async def execute_run(run: dict, message: str, model: str | None):
                                                    model, thinking_effort, env, ROOT)
         if engine == "deepagents":   # Agentics(内置 pi):配置目录 / 渠道 Key / 当 Node 跑等
             env.update(pi_env)
+        await snapshot_project_before_run(run["project"])   # 起引擎前给项目拍快照(误删兜底)
 
         # Windows has a short process command-line limit. Agent role prompts can
         # exceed it, so pass Pi's prompt (and Claude's on Windows) through a UTF-8
@@ -20315,7 +20432,8 @@ def footage_engine_spec(prepare: bool = False) -> dict:
         elif prepare:
             args, env = agentics_pi_launch(pre["model"], pre["da"], AGENTICS_PI_HOME / "footage",
                                            thinking=False, vision=True)
-            spec["agentics"] = {"cmd": agentics_pi_command() + args, "env": env}
+            # 看图只需 read(pi 的 read 工具可读图片);不给 bash / write / edit,单轮分析动不了任何文件
+            spec["agentics"] = {"cmd": agentics_pi_command() + args + ["--tools", "read"], "env": env}
     return spec
 
 
