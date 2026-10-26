@@ -139,10 +139,10 @@ def test_deferred_init_dispatches_once_after_uploads(env):
     r = _create({"name": "dh", "project_type": "digital-human", "brief": "第一个说话人是主持人",
                  "defer_init": True})
     assert r["init"] == "pending" and env == []
-    asyncio.run(core.api_refs_upload(b"ID3fake", "dh", "audio", "", "podcast.mp3"))
-    asyncio.run(core.api_refs_upload(b"\x89PNG", "dh", "characters", "", "host.png"))
+    asyncio.run(core.api_refs_upload(b"ID3fake", "dh", "audio", "podcast.mp3"))
+    asyncio.run(core.api_refs_upload(b"\x89PNG", "dh", "characters", "host.png"))
     with pytest.raises(core.ServiceError):          # 讲述音频分类只收音频
-        asyncio.run(core.api_refs_upload(b"x", "dh", "audio", "", "notes.txt"))
+        asyncio.run(core.api_refs_upload(b"x", "dh", "audio", "notes.txt"))
     asyncio.run(core.api_projects_init("dh"))
     assert len(env) == 1
     msg = env[0]["message"]
@@ -161,9 +161,9 @@ def test_digital_human_voice_source(env):
         _create({"name": "bad", "project_type": "digital-human", "voice_source": "tts"})
     _create({"name": "cl", "project_type": "digital-human", "voice_source": "clone",
              "novel": "主持人:你好\n嘉宾:你好", "defer_init": True})
-    asyncio.run(core.api_refs_upload(b"ID3fake", "cl", "voices", "", "host.mp3"))
+    asyncio.run(core.api_refs_upload(b"ID3fake", "cl", "voices", "host.mp3"))
     with pytest.raises(core.ServiceError):
-        asyncio.run(core.api_refs_upload(b"x", "cl", "voices", "", "host.png"))
+        asyncio.run(core.api_refs_upload(b"x", "cl", "voices", "host.png"))
     asyncio.run(core.api_projects_init("cl"))
     msg = env[-1]["message"]
     assert "声音来源:克隆声音" in msg and "refs/voices/host.mp3" in msg and "台词稿:refs/text/transcript.txt" in msg

@@ -276,11 +276,10 @@ async def upload_reference(
     request: Request,
     category: str = "style",
     filename: str = "",
-    subdir: str = "",
 ) -> dict[str, Any]:
     data = await request.body()
     return _artifact_urls(
-        await core.api_refs_upload(data, project, category, subdir, filename), project
+        await core.api_refs_upload(data, project, category, filename), project
     )
 
 
@@ -296,7 +295,7 @@ async def delete_reference(project: str, body: dict[str, Any]) -> dict[str, Any]
 
 @api.post("/projects/{project}/references/import", tags=["artifacts"])
 async def import_reference(project: str, body: dict[str, Any]) -> dict[str, Any]:
-    """参考文件页「🔎 图库」:把选中的一张图下载进 refs/<分类>/。{provider, id, category, subdir?, note?, query?}"""
+    """参考文件页「🔎 图库」:把选中的一张图下载进 refs/<分类>/。{provider, id, category, note?, query?}"""
     return _artifact_urls(await core.api_refs_import({**body, "project": project}), project)
 
 

@@ -55,7 +55,7 @@ python3 modules/genmedia.py image \
 
 ## 用户参考图(优先注入)
 
-出图前先查 `refs/characters/<角色名或id>/`(模糊匹配)与 `refs/style/`:命中的角色参考图**必须**随整图生成经 `--ref` 注入(排在版式模板之后),并写入 prompts.json 的 `user_refs`;与 appearance 文字描述冲突时上报,不擅自取舍。约定见 WORKFLOW.md §2。
+出图前先查 `refs/characters/`(按 refs/NOTES.md 注释对到该角色,存量子目录 `<角色名或id>/` 按目录名;模糊匹配)与 `refs/style/`:命中的角色参考图**必须**随整图生成经 `--ref` 注入(排在版式模板之后),并写入 prompts.json 的 `user_refs`;与 appearance 文字描述冲突时上报,不擅自取舍。约定见 WORKFLOW.md §2。
 
 ## 输入
 

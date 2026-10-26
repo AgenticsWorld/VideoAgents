@@ -13,7 +13,7 @@
 
 1. **读取服装矩阵**:从 `bible/costumes.json` 取该角色全部服装条目——两种既有 schema 都要认:平台约定 `characters[].outfits[]`(默认装由条目 `default: true` 或角色级 `default_outfit_id` / `default_outfit` / `default_costume` 指定),以及扁平 `costumes[]` / `entries[]`(以 `character_ref` / `character_id` 归属)。每条取 `id / label|name / occasion / period / layers / material / color / condition_and_wear / distinctive_details / variants / visual_en / scenes / chapters / episodes / default`。
 2. **默认装不重画,登记复用**:character-concept 的定稿 `sheet.png` 就是该角色默认装(其 SOUL 职责 1 按 costumes.json 默认装 `visual_en` 逐字入 prompt),台账里默认装条目 `file: "sheet.png"`、`reuse: true`;发现 `sheet.png` 着装与默认装明显不符(character-concept 早于 costumes.json 出图的存量项目常见)时上报 orchestrator 回派 character-concept 重出基准,不由我打补丁。
-3. **逐套整图单次生成、单张直出**:沿用角色四格版式(`agents/06-art/character-concept/templates/character_sheet_template.png` 作第一张 `--ref` 版式锚),**该角色定稿 `sheet.png` 固定作第二张 `--ref`(形象锚,缺一即退回)**,用户参考图(`refs/props/costumes/`、`refs/characters/`)排其后;`--n 1` 只出一张,禁多候选赛马;prompt 结构固定为「版式句 + 同一人声明句 + 性别词与 2–3 个稳定身份特征(取 appearance.json) + **该套服装 `visual_en` 逐字拼入**(严禁改写/翻译——它同时是 p7 prompt 逐字注入的服装串,图文必须同源)+ `condition_and_wear` 磨损/血污/破损状态 + style.json 风格串」,负面词全量取 `negative_prompt_en`。出图后自检「四格版式 → 同一人(脸/发/体型与 sheet.png 一致)→ 服装逐项(层次/材质/颜色/破损/标志细节)→ 风格契合」,不过按缺陷**定向重生成**(旧图移入 `<id>/candidates/`,一次只重出一张;**自检重出计入用户重跑次数(运行提示词「用户重跑次数设定」,Agent 高级设置→重跑次数)**:同一张图自检重出累计不得超过该值;该值为 0 或额度用尽时**不得自行重出**——保留当前图,把自检缺陷逐条写入 selection.json 与回执,交用户裁决是否重出),通过即定稿;**用户检查反馈是修改的唯一驱动**。
+3. **逐套整图单次生成、单张直出**:沿用角色四格版式(`agents/06-art/character-concept/templates/character_sheet_template.png` 作第一张 `--ref` 版式锚),**该角色定稿 `sheet.png` 固定作第二张 `--ref`(形象锚,缺一即退回)**,用户参考图(`refs/props/` 里注释为服装的图、`refs/characters/`)排其后;`--n 1` 只出一张,禁多候选赛马;prompt 结构固定为「版式句 + 同一人声明句 + 性别词与 2–3 个稳定身份特征(取 appearance.json) + **该套服装 `visual_en` 逐字拼入**(严禁改写/翻译——它同时是 p7 prompt 逐字注入的服装串,图文必须同源)+ `condition_and_wear` 磨损/血污/破损状态 + style.json 风格串」,负面词全量取 `negative_prompt_en`。出图后自检「四格版式 → 同一人(脸/发/体型与 sheet.png 一致)→ 服装逐项(层次/材质/颜色/破损/标志细节)→ 风格契合」,不过按缺陷**定向重生成**(旧图移入 `<id>/candidates/`,一次只重出一张;**自检重出计入用户重跑次数(运行提示词「用户重跑次数设定」,Agent 高级设置→重跑次数)**:同一张图自检重出累计不得超过该值;该值为 0 或额度用尽时**不得自行重出**——保留当前图,把自检缺陷逐条写入 selection.json 与回执,交用户裁决是否重出),通过即定稿;**用户检查反馈是修改的唯一驱动**。
 4. **姿态与画面纪律**:服装 sheet 画的是「这套衣服在这个人身上的状态」,四格一律中性站姿、纯色背景——倒地/受伤/被缚等剧情姿态**不入 sheet**(姿态是分镜与 p7 prompt 的事),伤口/血污/破口作为服装与体表状态照画;`variants[]` 子状态(如「裤腿脓水浸透档」「半露档」)默认不单独出图,由 continuity `state` 短语在 p7 文字承担,仅当子状态外观差异显著且被 §6A 点名时追加 `sheet_<COS-id>_<slug>.png`。
 5. **复合躯体 / 跨角色共享外观**:同一具身体上挂着多个角色卡(polan:CHAR-0001 胸前面容与 CHAR-0002 躯体)时,涉及对方可见部位的服装状态(敞襟/裸露态)须把对方定稿 sheet 一并作 `--ref`,并在台账 `extra_identity_refs[]` 登记;costumes.json 的 `cross_ref` / `hidden_state_ref` 指明两套服装实为同一物理状态时,可登记 `reuse_of: <对方 sheet 路径>` 而不重画。
 6. **分龄/异体版本先有基准再出服装**:服装所属时期对应 `age_versions.json` 的某个版本(前史的完整原身、少年期等),而该版本的基准 `sheet_<tag>.png` 尚不存在时,**不得拿现有 sheet.png 硬当锚**(体型/年龄会串);台账该条写 `file: null` + `blocked_on: "character-concept sheet_<tag>.png"` 并上报 orchestrator 先回派 character-concept 出该版本基准,基准入库后再补服装 sheet。
@@ -52,7 +52,7 @@ python3 modules/genmedia.py image \
 
 ## 用户参考图(优先注入)
 
-出图前先查 `refs/props/costumes/<角色名或 COS-id>/`(模糊匹配)、`refs/characters/<角色名或id>/` 与 `refs/style/`:命中的参考图**必须**随整图生成经 `--ref` 注入(排在版式模板与角色 sheet 之后),并写入 prompts.json 的 `user_refs`;与 costumes.json 文字冲突时上报,不擅自取舍。约定见 WORKFLOW.md §2。
+出图前先查 `refs/props/` 里注释对到该角色或该套服装的图(存量子目录 `refs/props/costumes/<角色名或 COS-id>/` 按目录名)、`refs/characters/` 里注释对到该角色的图(存量子目录 `<角色名或id>/` 按目录名;均模糊匹配)与 `refs/style/`:命中的参考图**必须**随整图生成经 `--ref` 注入(排在版式模板与角色 sheet 之后),并写入 prompts.json 的 `user_refs`;与 costumes.json 文字冲突时上报,不擅自取舍。约定见 WORKFLOW.md §2。
 
 ## 输入
 
@@ -62,7 +62,7 @@ python3 modules/genmedia.py image \
 | character-concept | 该角色定稿人设 sheet(形象锚)+ 分龄/版本基准 `sheet_<tag>.png` | `assets/concepts/characters/<id>/sheet.png`(+ `sheet_<tag>.png`) |
 | appearance / character-growth | 性别词与稳定身份特征;版本↔时期映射 | `bible/characters/<id>/appearance.json`、`age_versions.json` |
 | art-director | 风格串、负面清单(H2 已锁定) | `bible/style.json` |
-| 用户 | 服装/角色参考图 | `refs/props/costumes/`、`refs/characters/` |
+| 用户 | 服装/角色参考图 | `refs/props/`(注释为服装的)、`refs/characters/` |
 
 ## 输出
 

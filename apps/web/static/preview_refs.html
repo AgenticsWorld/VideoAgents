@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="/static/i18n/i18n.js"></script>
 <script src="/static/canvas-entry.js?v=20261026"></script>
-<script src="/static/stock-gallery.js?v=20261023"></script>
+<script src="/static/stock-gallery.js?v=20261026"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -48,7 +48,6 @@ input[type=text],textarea{background:var(--panel2);color:var(--text);border:1px 
 .cat-head .key{color:var(--dim);font-size:12px;font-weight:400;font-family:ui-monospace,Menlo,monospace}
 .cat-head .cnt{color:var(--dim);font-size:11.5px;font-weight:400;border:1px solid var(--border);border-radius:9px;padding:0 7px}
 .cat-head .desc{color:var(--dim);font-size:12px;flex:1;min-width:120px}
-.cat-head input.subdir{width:150px;font-size:12px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;padding:14px}
 .grid .none{grid-column:1/-1;color:var(--dim);font-size:12.5px;text-align:center;padding:14px 0;border:1px dashed var(--border);border-radius:8px}
 /* 文件卡片 */
@@ -104,10 +103,10 @@ let DATA=null,UP_CAT=null;
 const CAT_META={
   style:['🎨','视觉风格','整体画风/渲染质感/色调/构图参考'],
   thumbnail:['🖼','封面','封面参考:他人爆款封面的构图/版式/文字风格范例'],
-  characters:['👤','角色','角色形象参考;填子目录(角色名或 id)可定向到该角色'],
+  characters:['👤','角色','角色形象参考;在注释里写明是哪个角色(角色名或 id)'],
   scenes:['🏔','场景','场景与世界观:建筑/地貌/氛围参考'],
-  creatures:['🐎','生物','生物/坐骑/异兽参考;填子目录(生物名或 id)可定向到该生物'],
-  props:['🗡','道具','道具/法宝参考;服装可填 costumes 子目录'],
+  creatures:['🐎','生物','生物/坐骑/异兽参考;在注释里写明是哪个生物(生物名或 id)'],
+  props:['🗡','道具','道具/法宝/服装参考;在注释里写明是哪件道具或服装'],
   audio:['🎙','讲述音频','音频配画 / 数字人 / 混剪项目的讲述音频(母带):原字节入册作成片声轨,不转码不剪裁'],
   voices:['🗣','克隆声音','数字人项目「克隆声音」的声音样本:每个说话人一段 5–30 秒、只有这一个人说话的干净录音,按它的音色合成台词;只上传本人或已获授权的声音'],
   music:['🎵','音频','希望使用的音频文件(背景音轨,BGM 候选,配乐 Agent 优先选用)'],
@@ -117,7 +116,6 @@ const CAT_META={
   other:['📎','其他','其他类型的参考文件,任意格式(PDF/表格/压缩包等);请添加注释说明用途,相关 Agent 按注释参考使用'],
   '':['📂','根目录散图','散放在 refs/ 根目录的文件,一律视为整体风格参考'],
 };
-const SUBDIR_CATS=new Set(['characters','creatures','props']);
 const STOCK_CATS=['style','thumbnail','characters','scenes','creatures','props','other'];   // 「🔎 图库」能加入的板块(服务端 REF_STOCK_CATEGORIES)
 const CAT_ACCEPT={fonts:'.ttf,.otf,.ttc',audio:'.mp3,.wav,.flac,.m4a,.aac,.ogg',voices:'.mp3,.wav,.flac,.m4a,.aac,.ogg'};   // 分类专属的文件选择过滤(服务端同样校验)
 const CANVAS_EXT=/\.(png|jpe?g|webp)$/i;   // 画板只收这几种(modules/image_canvas.IMG_EXTS);gif / bmp / tif 不出按钮
@@ -154,12 +152,10 @@ function render(){
   box.innerHTML=`<div class="pagenote">${esc(t('参考素材保存在项目 refs/ 目录,视觉/配乐 Agent 工作前必查、优先参考。给每个文件添加注释(哪张图管什么、哪首曲子想用在哪)会写入 refs/NOTES.md,相关 Agent 必读并按注释执行。也可拖拽文件到分类区域直接上传。'))}</div>`
     +cats.map(c=>{
       const [ico,nm,desc]=CAT_META[c.key]||['📁',c.key,''];
-      const sub=SUBDIR_CATS.has(c.key)
-        ?`<input type="text" class="subdir" placeholder="${esc(t('子目录(可选)'))}" title="${esc(t('填写后上传到该子目录,如角色名(仅英文数字)'))}">`:'';
       const stock=STOCK_CATS.includes(c.key)
         ?`<button class="stockcat" data-cat="${esc(c.key)}" title="${esc(t('从免费图库搜图加入本板块'))}">🔎 ${esc(t('图库'))}</button>`:'';
       const up=c.key!==''
-        ?`${sub}${stock}<button class="upbtn primary" data-cat="${esc(c.key)}">📤 ${esc(t('上传'))}</button>`:'';
+        ?`${stock}<button class="upbtn primary" data-cat="${esc(c.key)}">📤 ${esc(t('上传'))}</button>`:'';
       return `<div class="cat" data-cat="${esc(c.key)}">
         <div class="cat-head"><h3>${ico} ${esc(t(nm))} <span class="key">${c.key?esc(c.key)+'/':'refs/'}</span><span class="cnt">${c.files.length}</span></h3>
           <span class="desc">${esc(t(desc))}</span>${up}</div>
@@ -198,7 +194,7 @@ async function load(){
 }
 
 /* ---------- 上传:按钮选文件或拖拽到分类区域;请求体即文件字节 ---------- */
-async function upload(cat,sub,files,errBox){
+async function upload(cat,files,errBox){
   if(!files.length)return;
   errBox.textContent='';
   const btn=document.querySelector(`.upbtn[data-cat="${CSS.escape(cat)}"]`);
@@ -208,7 +204,7 @@ async function upload(cat,sub,files,errBox){
     let done=0;
     for(const f of files){
       if(btn)btn.textContent=I18N.f('上传中 {done}/{total}…',{done:done+1,total:files.length});
-      const q=new URLSearchParams({project:proj(),category:cat,subdir:sub||'',filename:f.name});
+      const q=new URLSearchParams({project:proj(),category:cat,filename:f.name});
       const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj())+'/references?'+q,{method:'POST',body:f});
       if(!r.ok)throw new Error((await r.json()).detail||r.status);
       done++;
@@ -229,8 +225,7 @@ $('#fileinp').onchange=()=>{
   $('#fileinp').value='';
   if(!files.length||UP_CAT===null)return;
   const sec=document.querySelector(`.cat[data-cat="${CSS.escape(UP_CAT)}"]`);
-  const sub=sec.querySelector('.subdir')?.value.trim()||'';
-  upload(UP_CAT,sub,files,sec.querySelector('.err'));
+  upload(UP_CAT,files,sec.querySelector('.err'));
 };
 document.addEventListener('dragover',e=>{
   const sec=e.target.closest?.('.cat');
@@ -245,9 +240,7 @@ document.addEventListener('drop',e=>{
   const sec=e.target.closest?.('.cat');
   if(!sec||sec.dataset.cat==='')return;
   e.preventDefault();sec.classList.remove('dragover');
-  const files=[...e.dataTransfer.files];
-  const sub=sec.querySelector('.subdir')?.value.trim()||'';
-  upload(sec.dataset.cat,sub,files,sec.querySelector('.err'));
+  upload(sec.dataset.cat,[...e.dataTransfer.files],sec.querySelector('.err'));
 });
 
 /* ---------- 逐文件注释:行内编辑,保存进 annotations.json + NOTES.md ---------- */
@@ -312,9 +305,9 @@ document.addEventListener('click',async e=>{
 });
 
 /* ---------- 「🔎 图库」:从各板块标题栏的 🔎 打开,目标板块就是该板块 ---------- */
-function openStock(target,subdir){
+function openStock(target){
   StockGallery.open({
-    project:proj(),target,subdir:subdir||'',
+    project:proj(),target,
     categories:STOCK_CATS.map(k=>({key:k,ico:CAT_META[k][0],name:CAT_META[k][1]})),
     imported(){
       const m={};
@@ -330,9 +323,7 @@ function openStock(target,subdir){
 }
 document.addEventListener('click',e=>{
   const b=e.target.closest('.stockcat');
-  if(!b)return;
-  const sec=b.closest('.cat');
-  openStock(b.dataset.cat,sec.querySelector('.subdir')?.value.trim()||'');
+  if(b)openStock(b.dataset.cat);
 });
 
 /* ---------- 图片放大 ---------- */

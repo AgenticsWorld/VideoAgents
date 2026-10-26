@@ -26,7 +26,7 @@
 
 ## 用户参考图(优先参考)
 
-设计前先查 `refs/props/costumes/` 与 `refs/characters/`:服装形制/材质/纹样优先对齐用户参考图,引用记入产物 `user_refs` 字段;与 culture/时代设定冲突时上报。约定见 WORKFLOW.md §2。
+设计前先查 `refs/props/` 里注释为服装的图(存量子目录 `refs/props/costumes/` 同)与 `refs/characters/`:服装形制/材质/纹样优先对齐用户参考图,引用记入产物 `user_refs` 字段;与 culture/时代设定冲突时上报。约定见 WORKFLOW.md §2。
 
 ## 输入
 

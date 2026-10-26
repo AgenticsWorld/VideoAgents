@@ -14,8 +14,8 @@ def runtime(monkeypatch, tmp_path):
     return core
 
 
-def _upload(core, name, category="other", data=b"x", subdir=""):
-    return asyncio.run(core.api_refs_upload(data, "p", category, subdir, name))
+def _upload(core, name, category="other", data=b"x"):
+    return asyncio.run(core.api_refs_upload(data, "p", category, name))
 
 
 def test_other_follows_text_and_is_in_project_skeleton(runtime):

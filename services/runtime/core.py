@@ -367,10 +367,10 @@ REFS_README = """# refs/ — 用户参考目录
 **推荐用 Web 客户端【项目预览 → 参考文件】页上传与管理**:按分类预览、上传文件,并给每个文件添加注释说明用途。
 
 - `style/`      整体视觉风格:画风/渲染质感/色调/构图
-- `characters/` 角色形象;按角色建子目录(如 characters/linzhao/)可定向到该角色
+- `characters/` 角色形象;在【参考文件】页注释里写明是哪个角色(角色名或 id)
 - `scenes/`     场景与世界观:建筑/地貌/氛围
-- `creatures/`  生物/坐骑/异兽形象;按生物建子目录(如 creatures/baima/)可定向到该生物
-- `props/`      道具/法宝;服装放 props/costumes/
+- `creatures/`  生物/坐骑/异兽形象;在注释里写明是哪个生物(生物名或 id)
+- `props/`      道具/法宝/服装;在注释里写明是哪件道具或服装
 - `music/`      希望使用的音频文件(背景音轨,BGM 候选,mp3/wav/flac 等);配乐 Agent 优先选用,并自动判断用在视频的合适位置
 - `video/`      参考视频:动作/运镜/节奏/转场范例(mp4/mov/webm),视频生成 Agent 优先参考(支持时经 --ref-video 注入)
 - `thumbnail/`  封面参考:他人爆款封面/构图/版式范例
@@ -15043,10 +15043,9 @@ async def api_refs_list(project: str = "demo"):
 
 
 async def api_refs_upload(data: bytes, project: str = "demo",
-                          category: str = "style", subdir: str = "",
-                          filename: str = "ref"):
-    """参考文件页上传:请求体即文件原始字节(避免 multipart 依赖)。
-    文件名按工作流纪律清洗为 ASCII;subdir 用于 characters/<角色>、creatures/<生物>、props/costumes 等定向子目录。"""
+                          category: str = "style", filename: str = "ref"):
+    """参考文件页上传:请求体即文件原始字节(避免 multipart 依赖),落 refs/<分类>/,文件名按工作流纪律清洗为 ASCII。
+    不再建子目录(2026-10-26):图对应哪个角色 / 生物 / 道具由注释说明。"""
     base = _proj_base(project)
     if category not in REF_CATEGORIES:
         raise ServiceError(400, f"category must be one of {REF_CATEGORIES}")
@@ -15061,22 +15060,17 @@ async def api_refs_upload(data: bytes, project: str = "demo",
     if category in ("audio", "voices") and ext not in AUDIO_EXTS:
         raise ServiceError(400, ("讲述音频" if category == "audio" else "克隆声音") + "分类只接受 "
                            + " / ".join(AUDIO_EXTS) + " 音频文件")
-    p = _refs_store(base, category, subdir, stem, ext, data)
+    p = _refs_store(base, category, stem, ext, data)
     rel = p.relative_to(base / "refs").as_posix()
     return {"ok": True, "project": base.name, "path": rel,
             "url": f"/projects/{base.name}/refs/{rel}?v={int(p.stat().st_mtime)}"}
 
 
-def _ref_subdir(subdir: str) -> str:
-    return re.sub(r"[^A-Za-z0-9._-]", "_", subdir or "").strip("._-")[:60]
-
-
-def _refs_store(base: Path, category: str, subdir: str, stem: str, ext: str, data: bytes) -> Path:
-    """写入 refs/<分类>[/<子目录>]/:文件名按工作流纪律清洗为 ASCII,同名自动加 _1、_2…;返回落盘路径。"""
+def _refs_store(base: Path, category: str, stem: str, ext: str, data: bytes) -> Path:
+    """写入 refs/<分类>/:文件名按工作流纪律清洗为 ASCII,同名自动加 _1、_2…;返回落盘路径。"""
     stem = re.sub(r"[^A-Za-z0-9._-]", "_", stem).strip("._-")
     stem = re.sub(r"_{2,}", "_", stem)[:80] or "ref"
-    sub = _ref_subdir(subdir)
-    d = (base / "refs" / category / sub) if sub else (base / "refs" / category)
+    d = base / "refs" / category
     d.mkdir(parents=True, exist_ok=True)
     p, i = d / f"{stem}{ext}", 1
     while p.exists():
@@ -15205,9 +15199,9 @@ async def api_stock_translate(body: dict):
 
 
 async def api_refs_import(body: dict):
-    """图库里点选的一张图下载进 refs/<分类>[/<子目录>]/:{project, provider, id, category, subdir?, note?, query?}。
+    """图库里点选的一张图下载进 refs/<分类>/:{project, provider, id, category, note?, query?}。
     下载地址按 (provider, id) 从服务端检索结果 / 图库接口取,不收前端给的地址;长边超过 2560 等比缩小。
-    同一张图已在同一分类同一子目录里时不重复下载(existed=true)。来源记进 annotations.json 的 source,并重写 CREDITS.md。"""
+    同一张图已在同一分类里(含存量子目录)时不重复下载(existed=true)。来源记进 annotations.json 的 source,并重写 CREDITS.md。"""
     body = dict(body or {})
     base = _proj_base(body.get("project"))
     refs = base / "refs"
@@ -15217,13 +15211,11 @@ async def api_refs_import(body: dict):
         raise ServiceError(400, (f"图库只能加入这些分类:{', '.join(REF_STOCK_CATEGORIES)}" if zh
                                  else f"Gallery images can only go into: {', '.join(REF_STOCK_CATEGORIES)}"))
     provider, iid = str(body.get("provider") or ""), str(body.get("id") or "").strip()
-    sub = _ref_subdir(str(body.get("subdir") or ""))
-    prefix = f"{category}/{sub}/" if sub else f"{category}/"
     notes = _load_ref_notes(refs)
     for rel, v in notes.items():
         src = v.get("source") if isinstance(v, dict) else None
         if (isinstance(src, dict) and src.get("provider") == provider and str(src.get("id")) == iid
-                and rel.startswith(prefix) and "/" not in rel[len(prefix):] and (refs / rel).is_file()):
+                and rel.startswith(f"{category}/") and (refs / rel).is_file()):
             return {"ok": True, "existed": True, "project": base.name, "path": rel,
                     "url": f"/projects/{base.name}/refs/{rel}?v={int((refs / rel).stat().st_mtime)}"}
     _stock_lang()
@@ -15234,7 +15226,7 @@ async def api_refs_import(body: dict):
     except _stock.StockError as e:
         raise _stock_error(e) from e
     short = iid.split("-")[0] if provider == "openverse" else iid      # Openverse 是 UUID,文件名取首段
-    p = _refs_store(base, category, sub, f"{provider}_{short}", ext, data)
+    p = _refs_store(base, category, f"{provider}_{short}", ext, data)
     rel = p.relative_to(refs).as_posix()
     source = {k: it.get(k) for k in ("provider", "id", "title", "author", "author_url", "page_url", "site",
                                      "license", "license_label", "license_url", "attribution",

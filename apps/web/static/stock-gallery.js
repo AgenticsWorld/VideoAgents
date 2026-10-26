@@ -7,7 +7,7 @@
  *        imported() → {"<provider>:<id>": [板块 key…]} 已在参考文件里的图(卡片打 ✓);
  *        onAdded(res) 每加入一张后回调(页面据此刷新列表)。
  * 两种加法:卡片底部板块图标「点哪个进哪个」;勾选多张后底栏「加入参考文件」统一加进目标板块。
- * 子目录 / 注释只用于目标板块(图标点的板块与目标板块相同时也用上)。
+ * 注释只用于目标板块(图标点的板块与目标板块相同时也用上)。
  */
 (function(){
   'use strict';
@@ -15,7 +15,6 @@
   var F=function(s,p){return window.I18N&&I18N.f?I18N.f(s,p):String(s).replace(/\{(\w+)\}/g,function(m,k){return k in p?p[k]:m})};
   var esc=function(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})};
   var CJK=/[぀-ヿ㐀-鿿가-힯]/;
-  var SUBDIR_CATS={characters:1,creatures:1,props:1};
   var PREF_KEY='stock_gallery_prefs';
 
   var st=document.createElement('style');
@@ -49,7 +48,7 @@
     '.sg-meta .by{color:var(--yellow,#fbbf24)}',
     '.sg-more{text-align:center;padding:14px 0 4px}',
     '.sg-foot{border-top:1px solid var(--border,#2a3040);padding:10px 14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px}',
-    '.sg-foot input.sg-sub{width:140px}.sg-foot input.sg-note{flex:1;min-width:160px}',
+    '.sg-foot input.sg-note{flex:1;min-width:160px}',
     '.sg-credit{flex-basis:100%;color:var(--dim,#8b93a7);font-size:11.5px}',
     '.sg-view{position:fixed;inset:0;z-index:95;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;gap:16px;padding:20px}',
     '.sg-view.on{display:flex}',
@@ -93,7 +92,6 @@
       +'<div class="sg-status"></div>'
       +'<div class="sg-body"><div class="sg-grid" data-no-i18n></div><div class="sg-more" style="display:none"><button type="button" class="sg-morebtn">'+esc(T('加载更多'))+'</button></div></div>'
       +'<div class="sg-foot"><span class="sg-cnt"></span><select class="sg-target" title="'+esc(T('目标板块'))+'"></select>'
-      +'<input type="text" class="sg-sub" placeholder="'+esc(T('子目录(可选)'))+'" title="'+esc(T('只对目标板块生效;角色 / 生物 / 道具可填角色名、生物名或 costumes(仅英文数字)'))+'">'
       +'<input type="text" class="sg-note" placeholder="'+esc(T('注释(可选,写进 refs/NOTES.md,Agent 必读)'))+'" title="'+esc(T('只对目标板块生效'))+'">'
       +'<button type="button" class="sg-add primary" disabled>'+esc(T('加入参考文件'))+'</button>'
       +'<div class="sg-credit"></div></div></div>'
@@ -110,8 +108,6 @@
     $('.sg-prov').onchange=function(){savePrefs();syncProv();if(S.q)search(1)};
     $('.sg-ori').onchange=function(){savePrefs();if(S.q)search(1)};
     $('.sg-kind').onchange=function(){savePrefs();if(S.q)search(1)};
-    $('.sg-target').onchange=function(){syncTarget();renderCards()};
-    $('.sg-sub').addEventListener('input',renderQuickTitles);
     $('.sg-add').onclick=addSelected;
     $('.sg-grid').addEventListener('click',onGrid);
     // 缩略图加载失败(Openverse /thumb/ 对部分来源回 424 JSON,浏览器按 ORB 拦掉):换备用地址一次,再失败显示占位
@@ -142,25 +138,14 @@
       +esc(p==='openverse'?T('只收 CC0 / 公有领域 / CC BY;CC BY 图出现在成片里时须署名,来源记在 refs/CREDITS.md')
         :p==='pexels'?T('Pexels License:可商用、不必署名'):T('Pixabay Content License:可商用、不必署名;含商标的图不能商用'));
   }
-  function syncTarget(){
-    var k=$('.sg-target').value;
-    $('.sg-sub').style.display=SUBDIR_CATS[k]?'':'none';
-  }
   function syncCount(){
     var n=Object.keys(S.sel).length;
     $('.sg-cnt').textContent=n?F('已选 {n} 张 →',{n:n}):T('勾选多张后可一起加入 →');
     $('.sg-add').disabled=!n||S.busy;
   }
 
-  function subFor(k){return k===$('.sg-target').value&&SUBDIR_CATS[k]?$('.sg-sub').value.trim():''}
   function noteFor(k){return k===$('.sg-target').value?$('.sg-note').value.trim():''}
-  function quickTitle(k){
-    var sub=subFor(k);
-    return F('加入「{cat}」',{cat:catName(k)+(sub?'/'+sub:'')});
-  }
-  function renderQuickTitles(){
-    root.querySelectorAll('button[data-cat]').forEach(function(b){b.title=quickTitle(b.dataset.cat)});
-  }
+  function quickTitle(k){return F('加入「{cat}」',{cat:catName(k)})}
   function doneCats(it){
     var k=keyOf(it),m=(S.opts.imported&&S.opts.imported())||{},out={};
     (m[k]||[]).forEach(function(c){out[c]=1});
@@ -250,10 +235,9 @@
   function addOne(it,catKey,btn){
     if(!it)return Promise.resolve(false);
     if(btn)btn.disabled=true;
-    var sub=subFor(catKey);
-    status(F('正在下载到「{cat}」…',{cat:catName(catKey)+(sub?'/'+sub:'')}));
+    status(F('正在下载到「{cat}」…',{cat:catName(catKey)}));
     return api('/api/v1/projects/'+encodeURIComponent(S.opts.project)+'/references/import',
-      {provider:it.provider,id:it.id,category:catKey,subdir:sub,note:noteFor(catKey),query:S.q})
+      {provider:it.provider,id:it.id,category:catKey,note:noteFor(catKey),query:S.q})
       .then(function(d){
         var k=keyOf(it);(S.done[k]=S.done[k]||{})[catKey]=1;
         var i=S.results.indexOf(it);if(i>=0)refreshCard(i);
@@ -319,8 +303,6 @@
     S.opts=opts||{};
     $('.sg-target').innerHTML=(S.opts.categories||[]).map(function(c){return '<option value="'+esc(c.key)+'">'+c.ico+' '+esc(T(c.name))+'</option>'}).join('');
     if(S.opts.target&&cat(S.opts.target))$('.sg-target').value=S.opts.target;
-    if(S.opts.subdir!=null)$('.sg-sub').value=S.opts.subdir;
-    syncTarget();
     root.classList.add('on');
     renderCards();
     syncTr();

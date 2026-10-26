@@ -242,17 +242,17 @@ def test_import_writes_file_source_notes_and_credits(runtime):
     core, refs, calls = runtime
     asyncio.run(core.api_stock_search({"provider": "openverse", "q": "ding"}))
     by, cc0 = OV_RESULTS[0]["id"], OV_RESULTS[1]["id"]
-    r = _imp(core, id=by, category="props", subdir="ding!", note="鼎的形制参考", query="ding")
-    assert r["path"] == "props/ding/openverse_aaaa1111.jpg" and not r["existed"]
+    r = _imp(core, id=by, category="props", note="鼎的形制参考", query="ding")
+    assert r["path"] == "props/openverse_aaaa1111.jpg" and not r["existed"]
     assert Image.open(refs / r["path"]).size == (2560, 1920)
     ann = json.loads((refs / "annotations.json").read_text(encoding="utf-8"))[r["path"]]
     assert ann["note"] == "鼎的形制参考" and ann["source"]["license"] == "by" and ann["source"]["query"] == "ding"
-    assert "- `props/ding/openverse_aaaa1111.jpg`:鼎的形制参考(图库:Wikimedia Commons · CC BY 2.0)" \
+    assert "- `props/openverse_aaaa1111.jpg`:鼎的形制参考(图库:Wikimedia Commons · CC BY 2.0)" \
         in (refs / "NOTES.md").read_text(encoding="utf-8")
     credits = (refs / "CREDITS.md").read_text(encoding="utf-8")
     assert "CC BY 2.0(需署名)" in credits and "署名:\"Bronze Ding\" by Gary" in credits
 
-    again = _imp(core, id=by, category="props", subdir="ding")
+    again = _imp(core, id=by, category="props", subdir="ding")     # 旧页面带来的 subdir 不再生效
     assert again["existed"] and again["path"] == r["path"]
     n_downloads = sum(u.endswith("ding.jpg") for u in calls)
     style = _imp(core, id=by, category="style")                      # 别的板块照常加一份
@@ -264,7 +264,21 @@ def test_import_writes_file_source_notes_and_credits(runtime):
 
     files = {f["path"]: f for c in asyncio.run(core.api_refs_list("p"))["categories"] for f in c["files"]}
     assert "CREDITS.md" not in files and files[plain["path"]]["source"]["site"] == "Flickr"
-    assert files["props/ding/openverse_aaaa1111.jpg"]["note"] == "鼎的形制参考"
+    assert files["props/openverse_aaaa1111.jpg"]["note"] == "鼎的形制参考"
+
+
+def test_import_dedupes_against_legacy_subdir(runtime):
+    core, refs, calls = runtime
+    asyncio.run(core.api_stock_search({"provider": "openverse", "q": "ding"}))
+    by = OV_RESULTS[0]["id"]
+    (refs / "props" / "ding").mkdir()                                  # 存量项目:改版前导入到子目录里的同一张图
+    (refs / "props" / "ding" / "openverse_aaaa1111.jpg").write_bytes(_img_bytes((64, 48)))
+    (refs / "annotations.json").write_text(json.dumps({"props/ding/openverse_aaaa1111.jpg": {
+        "note": "", "source": {"provider": "openverse", "id": by}}}), encoding="utf-8")
+    calls.clear()
+    r = _imp(core, id=by, category="props")
+    assert r["existed"] and r["path"] == "props/ding/openverse_aaaa1111.jpg" and not calls
+    assert not _imp(core, id=by, category="style")["existed"]          # 别的板块照常下载
 
 
 def test_note_edit_keeps_source_and_delete_updates_credits(runtime):
@@ -296,10 +310,10 @@ def test_import_falls_back_to_detail_lookup_and_validates(runtime):
 
     st._open = open_with_detail
     try:
-        r = _imp(core, id=detail["id"], category="characters", subdir="nezha")
+        r = _imp(core, id=detail["id"], category="characters")
     finally:
         st._open = st_open
-    assert r["path"] == "characters/nezha/openverse_bbbb2222.png" and calls[0].endswith(f"/images/{detail['id']}/")
+    assert r["path"] == "characters/openverse_bbbb2222.png" and calls[0].endswith(f"/images/{detail['id']}/")
     with pytest.raises(core.ServiceError) as e:
         _imp(core, id=detail["id"], category="music")                  # 只收图片板块
     assert e.value.status_code == 400
