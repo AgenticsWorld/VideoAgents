@@ -97,12 +97,13 @@ Python:
         / minimax(POST /v2/video_generation 异步任务,MiniMax-H3;分辨率仅 768P/2K
         两档,--resolution 项目档位自动就近映射;时长 [4,15] 整数秒;支持首尾帧/
         多参考图(≤9)/参考音视频;原生音画同生,不支持 --seed 与 --generate-audio off)
-        / fal(queue.fal.run 异步队列,托管 Seedance 2.0/2.5、MiniMax H3、Kling 3.0、Wan 3.0 等端点;
-        模型 ID 填家族前缀(bytedance/seedance-2.0、minimax/h3、fal-ai/kling-video/v3/pro、
+        / fal(queue.fal.run 异步队列,托管 Seedance 2.0/2.5、MiniMax H3、Kling 3.0/4.0、Wan 3.0 等端点;
+        模型 ID 填家族前缀(bytedance/seedance-2.0、minimax/h3、fal-ai/kling-video/v3/pro、kling/v4、
         alibaba/wan-3.0),按输入自动补 text-to-video / image-to-video / reference-to-video 任务段,
         填完整端点 ID 则原样使用;分辨率/时长/参考素材上限随家族与官方渠道同口径,
         Seedance/Kling 无 seed 入参;Wan 3.0 时长 [2,30] 整数秒、参考 10 图/5 视频/5 音频
-        (视频与音频各合计 ≤15s);环境变量兜底 FAL_KEY;清单以外的模型按 Fal 模型目录里该端点的参数表
+        (视频与音频各合计 ≤15s);Kling 4.0 时长 [3,30] 整数秒、720p/1080p、参考 10 图/5 视频
+        (合计 ≤30s,不收音频);环境变量兜底 FAL_KEY;清单以外的模型按 Fal 模型目录里该端点的参数表
         组请求体:只发它收的字段,时长/分辨率/画幅取它可选值里最接近的,同模型的端点按本次输入挑)
         / comfyui(本地/Comfy Cloud/RunningHub,需配置 API 格式工作流 JSON;
         RunningHub 用工作区保存的云端工作流,占位符约定与本地一致)
@@ -5210,6 +5211,21 @@ FAL_WAN_MAX_IMAGE_REFS = 10
 FAL_WAN_MAX_VIDEO_REFS = 5
 FAL_WAN_MAX_AUDIO_REFS = 5
 FAL_WAN_REF_TOTAL_S = 15.2   # 参考视频 / 参考音频各自合计硬限(同 Seedance 2.0 的 15s+容差口径)
+# Kling 4.0(kling/v4,官方 OpenAPI 2026-10-26 抄录):文生 / 图生 / 参考生三端点;duration [3,30] 整数秒
+# (默认 5),resolution 720p/1080p(默认 1080p),无 seed / generate_audio;文生 aspect_ratio 16:9|9:16|1:1|21:9,
+# 图生画幅随首帧(无该字段),参考生另有 auto;首尾帧字段 start_image_url/end_image_url;参考生 image_urls ≤10、
+# video_urls ≤5(每段 3-30s、合计 ≤30s,宽高均 ≥700px、长边 ≤4553、宽高比 0.4-2.5、23.9-60fps),不收参考音频;
+# 提示词用 @Image1 / @Video1 点名参考素材(elements / multi_prompt 本模块不用)
+FAL_KLING4_RESOLUTIONS = ("720p", "1080p")
+FAL_KLING4_RATIOS = ("16:9", "9:16", "1:1", "21:9")
+FAL_KLING4_MAX_IMAGE_REFS = 10
+FAL_KLING4_MAX_VIDEO_REFS = 5
+FAL_KLING4_REF_VIDEO_MIN_S = 3.0
+FAL_KLING4_REF_VIDEO_MAX_S = 30.05   # 单段与合计同一上限(30s + 平台容差)
+FAL_KLING4_REF_VIDEO_MIN_SIDE = 700
+FAL_KLING4_REF_VIDEO_MAX_SIDE = 4553
+FAL_KLING4_REF_VIDEO_FPS = (23.9, 60.05)
+KLING4_REF_VIDEO_CACHE_DIR = RUNTIME_DIR / "kling4_ref_videos"
 # MiniMax H3 Max Lip Sync(minimax/h3-max/lip-sync/image-to-video,官方 OpenAPI 2026-09-20 抄录):
 # 入参只有 image_url(宽高比 0.4-2.5)+ audio_url(≥5s;超 14.8s 平台自动截到前 14.8s,成片时长=音频时长)
 # + resolution 480P/768P/1080P/2K(默认 768P)+ enable_transcription + seed;没有 prompt / duration / aspect_ratio
@@ -5219,10 +5235,86 @@ FAL_LIPSYNC_MIN_AUDIO_S = 5.0
 FAL_LIPSYNC_MAX_AUDIO_S = 14.8
 
 
+def _is_fal_kling4(model: str) -> bool:
+    """Fal 托管的 Kling 4.0(kling/v4 及其 *-to-video 端点;fal-ai/kling-video/v4 写法一并认)。"""
+    return bool(re.match(r"(?:fal-ai/)?kling(?:-video)?/v4(?:/|$)", (model or "").strip().lower()))
+
+
+def _kling4_reference_tags(prompt: str) -> str:
+    """项目提示词的参考素材点名([Image N] / @Image N、[Video N] / @Video N)换成 Kling 4.0 文档写法 @Image1 / @Video1。"""
+    return re.sub(r"\[(image|video)\s*(\d+)\]|@\s*(image|video)\s*(\d+)",
+                  lambda m: f"@{(m.group(1) or m.group(3)).capitalize()}{m.group(2) or m.group(4)}",
+                  prompt or "", flags=re.IGNORECASE)
+
+
+def _kling4_prepare_ref_videos(paths: list) -> list[str]:
+    """Fal Kling 4.0 参考视频提交前预检 + 整理,返回可上传的文件路径(与输入同序)。
+    每段 3-30s、合计 ≤30s、宽高比 0.4-2.5 不合规直接报错(不计费);宽或高 <700px(白模 camera.mp4 为 960x540)
+    按短边 720 等比放大、长边 >4553 等比缩小、帧率不在 23.9-60 的转 24fps,用 ffmpeg 转 h264 mp4(音轨转 aac 保留);
+    结果按 (路径, mtime, size, 目标规格) 缓存在 RUNTIME_DIR/kling4_ref_videos,重试不重转。
+    ffprobe 测不出规格时跳过该段预检原样上传(交由 Fal 拒绝)。"""
+    probed, total = [], 0.0
+    for p in paths:
+        src = Path(str(p))
+        if not src.is_file():
+            raise RuntimeError(f"参考视频不存在: {p}")
+        meta, dur = _probe_video_meta(str(src)), _audio_duration_s(str(src))
+        if meta is None or dur is None:
+            print(f"[genmedia] 无法实测参考视频 {src.name} 的规格(ffprobe 不可用或文件损坏),"
+                  "跳过 Kling 4.0 预检原样上传", file=sys.stderr)
+        else:
+            if dur + 1e-6 < FAL_KLING4_REF_VIDEO_MIN_S or dur > FAL_KLING4_REF_VIDEO_MAX_S:
+                raise RuntimeError(f"Fal Kling 4.0 参考视频每段须 3-30 秒,{src.name} 实测 {dur:.2f}s")
+            w, h = meta["width"], meta["height"]
+            if not 0.4 <= w / max(h, 1) <= 2.5:
+                raise RuntimeError(f"Fal Kling 4.0 参考视频宽高比须在 0.4-2.5,{src.name} 为 {w}x{h}")
+            total += dur
+        probed.append((src, meta if dur is not None else None))
+    if total > FAL_KLING4_REF_VIDEO_MAX_S:
+        raise RuntimeError(f"Fal Kling 4.0 参考视频合计须 ≤30s,实测 {total:.1f}s;请先截短或减少段数")
+    out = []
+    for src, meta in probed:
+        if meta is None:
+            out.append(str(src))
+            continue
+        w, h, fps = meta["width"], meta["height"], meta["fps"]
+        scale = (720 / min(w, h) if min(w, h) < FAL_KLING4_REF_VIDEO_MIN_SIDE else
+                 FAL_KLING4_REF_VIDEO_MAX_SIDE / max(w, h) if max(w, h) > FAL_KLING4_REF_VIDEO_MAX_SIDE else 1.0)
+        nw, nh = (int(round(w * scale / 2)) * 2, int(round(h * scale / 2)) * 2) if scale != 1.0 else (w, h)
+        fix_fps = not FAL_KLING4_REF_VIDEO_FPS[0] <= fps <= FAL_KLING4_REF_VIDEO_FPS[1]
+        if (nw, nh) == (w, h) and not fix_fps:
+            out.append(str(src))
+            continue
+        st = src.stat()
+        digest = hashlib.sha1(f"{src.resolve()}|{st.st_mtime_ns}|{st.st_size}|{nw}x{nh}|{fix_fps}"
+                              .encode()).hexdigest()[:16]
+        dst = KLING4_REF_VIDEO_CACHE_DIR / f"{src.stem}-{digest}.mp4"
+        if not dst.is_file():
+            KLING4_REF_VIDEO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            vf = (["fps=24"] if fix_fps else []) + ([f"scale={nw}:{nh}:flags=lanczos"] if (nw, nh) != (w, h) else [])
+            tmp = dst.with_suffix(".part.mp4")
+            cmd = ["ffmpeg", "-v", "error", "-y", "-i", str(src), "-vf", ",".join(vf),
+                   "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p"]
+            cmd += ["-c:a", "aac", "-b:a", "128k"] if meta["has_audio"] else ["-an"]
+            cmd += ["-movflags", "+faststart", str(tmp)]
+            try:
+                subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=600)
+            except FileNotFoundError as exc:
+                raise RuntimeError("ffmpeg 不可用,无法把参考视频整理成 Fal Kling 4.0 要求的规格"
+                                   "(宽高均 ≥700px、23.9-60fps)") from exc
+            except subprocess.CalledProcessError as exc:
+                raise RuntimeError(f"参考视频 {src.name} 转码失败: {(exc.stderr or '')[-400:]}") from exc
+            tmp.replace(dst)
+        print(f"[genmedia] Fal Kling 4.0 参考视频须宽高均 ≥700px、23.9-60fps:{src.name}({w}x{h} {fps:g}fps)"
+              f"已转为 {nw}x{nh}{' 24fps' if fix_fps else ''} 后上传", file=sys.stderr)
+        out.append(str(dst))
+    return out
+
+
 def _fal_family(model: str) -> str:
-    """按模型 ID 识别请求体家族:seedance / h3(MiniMax H3 系列)/ kling / wan(阿里 Wan 3.0)/
-    generic(其它端点:先按 Fal 模型目录里该端点的参数表组请求体,见 _fal_catalog_video_body;目录里没有才按 fal
-    常见字段名 prompt/image_url/end_image_url/duration/resolution/aspect_ratio/seed 尽力映射)。"""
+    """按模型 ID 识别请求体家族:seedance / h3(MiniMax H3 系列)/ kling4(Kling 4.0)/ kling(Kling 3.0 等)/
+    wan(阿里 Wan 3.0)/ generic(其它端点:先按 Fal 模型目录里该端点的参数表组请求体,见 _fal_catalog_video_body;
+    目录里没有才按 fal 常见字段名 prompt/image_url/end_image_url/duration/resolution/aspect_ratio/seed 尽力映射)。"""
     m = (model or "").lower()
     if "seedance" in m:
         return "seedance"
@@ -5230,6 +5322,8 @@ def _fal_family(model: str) -> str:
         return "lipsync"
     if "minimax" in m and "h3" in m:
         return "h3"
+    if _is_fal_kling4(m):   # 须先于 kling:4.0 时长整数 3-30s、有分辨率、收参考素材,与 3.0 请求体不同
+        return "kling4"
     if "kling" in m:
         return "kling"
     if "wan-3" in m or "wan3" in m:   # 仅 Wan 3.x(Fal 上的 wan-2.x 端点字段不同,走 generic)
@@ -5455,10 +5549,55 @@ def _fal_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
                     body["reference_video_urls"] = [video_to_url(p) for p in video_refs]
                 if audio_refs:
                     body["reference_audio_urls"] = [to_url(p) for p in audio_refs]
+    elif family == "kling4":
+        if audio_refs:
+            raise RuntimeError("Fal Kling 4.0 不收参考音频(--audio-ref),参考模式只收参考图与参考视频")
+        if len(refs) > FAL_KLING4_MAX_IMAGE_REFS:
+            raise RuntimeError(f"Fal Kling 4.0 参考图最多 {FAL_KLING4_MAX_IMAGE_REFS} 张,收到 {len(refs)}")
+        if len(video_refs) > FAL_KLING4_MAX_VIDEO_REFS:
+            raise RuntimeError(f"Fal Kling 4.0 参考视频最多 {FAL_KLING4_MAX_VIDEO_REFS} 个,收到 {len(video_refs)}")
+        body["duration"] = _fal_int_duration(duration, 3, 30, 5, "Fal Kling 4.0")
+        if res:
+            if res in ("360p", "480p"):
+                print(f"[genmedia] Fal Kling 4.0 最低 720p,{res} 已就近映射为 720p", file=sys.stderr)
+                res = "720p"
+            elif res in ("2k", "4k"):
+                print(f"[genmedia] Fal Kling 4.0 最高 1080p,{res} 已压到 1080p", file=sys.stderr)
+                res = "1080p"
+            if res not in FAL_KLING4_RESOLUTIONS:
+                raise RuntimeError(f"Fal Kling 4.0 分辨率仅支持 {'/'.join(FAL_KLING4_RESOLUTIONS)},收到 {res}")
+            body["resolution"] = res
+        if gen_audio is not None:
+            print("[genmedia] Fal Kling 4.0 端点无 generate_audio 开关,--generate-audio 已忽略", file=sys.stderr)
+        if seed is not None:
+            print("[genmedia] Fal Kling 4.0 端点无 seed 入参,--seed 已忽略", file=sys.stderr)
+        if task == "image-to-video":
+            if aspect:
+                print(f"[genmedia] Fal Kling 4.0 首尾帧模式画幅随首帧,--aspect {aspect} 已忽略", file=sys.stderr)
+            body["start_image_url"] = to_url(first)
+            if last:
+                body["end_image_url"] = to_url(last)
+        elif task == "text-to-video":
+            if aspect:
+                if aspect not in FAL_KLING4_RATIOS:
+                    raise RuntimeError(f"Fal Kling 4.0 文生视频画幅仅支持 {'/'.join(FAL_KLING4_RATIOS)},收到 {aspect}")
+                body["aspect_ratio"] = aspect
+        else:
+            if aspect in FAL_KLING4_RATIOS:
+                body["aspect_ratio"] = aspect
+            elif aspect:
+                print(f"[genmedia] Fal Kling 4.0 不支持画幅 {aspect}(可选 {'/'.join(FAL_KLING4_RATIOS)}),"
+                      "按参考素材自适应(auto)", file=sys.stderr)
+                body["aspect_ratio"] = "auto"
+            body["prompt"] = _kling4_reference_tags(prompt)
+            if refs:
+                body["image_urls"] = [to_url(p) for p in refs]
+            if video_refs:
+                body["video_urls"] = [video_to_url(p) for p in _kling4_prepare_ref_videos(video_refs)]
     elif family == "kling":
         if task == "reference-to-video":
-            raise RuntimeError("Fal Kling 端点不支持参考素材(--ref/--ref-video/--audio-ref),"
-                               "请改用首尾帧模式或换 Seedance / MiniMax H3")
+            raise RuntimeError("Fal Kling 3.0 端点不支持参考素材(--ref/--ref-video/--audio-ref),"
+                               "请改用首尾帧模式,或换 Kling 4.0(kling/v4)/ Seedance / MiniMax H3")
         body["duration"] = str(_fal_int_duration(duration, 3, 15, 5, "Fal Kling"))
         if gen_audio is not None:
             body["generate_audio"] = bool(gen_audio)
@@ -5528,7 +5667,7 @@ def _fal_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
         # 未知端点:按 fal 通用字段名尽力映射,仅支持文生/首尾帧;参考素材不映射(字段名因端点而异)
         if task == "reference-to-video":
             raise RuntimeError(f"Fal 自定义端点 {model} 的参考素材字段未知,genmedia 仅对 Seedance /"
-                               " MiniMax H3 / Wan 3.0 支持 --ref/--ref-video/--audio-ref")
+                               " MiniMax H3 / Wan 3.0 / Kling 4.0 支持 --ref/--ref-video/--audio-ref")
         if duration:
             body["duration"] = _fal_int_duration(duration, 1, 60, 5, "Fal")
         if res:
@@ -7708,7 +7847,8 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
     video_refs——本地/Comfy Cloud/RunningHub 同一节点:≤9 图、≤3 段参考视频(24fps,每段 2-15s,
     提交前自动转码,有音轨则按编号配成 ref_video_audios)、≤3 段独立音频)
     渠道支持;refs 与 first/last_frame 互斥。fal 渠道:按输入自动选 text-/image-/
-    reference-to-video 端点,Kling 仅首尾帧,return_last_frame 从成片本地抽帧。minimax 渠道:分辨率仅 768P/2K 两档(项目档位自动就近
+    reference-to-video 端点,Kling 3.0 仅首尾帧,Kling 4.0 收参考图/参考视频(不收参考音频;宽高 <700px 的参考视频
+    提交前自动放大),return_last_frame 从成片本地抽帧。minimax 渠道:分辨率仅 768P/2K 两档(项目档位自动就近
     映射),时长 [4,15] 整数秒,原生音画同生(generate_audio=off 不生效),
     return_last_frame 从成片本地抽帧;video_refs 经对象存储预签名 URL 传入。
     video_refs 为 V2V 编辑/延长模式(Seedance 2.x):传待修改/待延长的原视频

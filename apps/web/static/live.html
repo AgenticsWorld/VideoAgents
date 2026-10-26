@@ -245,8 +245,8 @@ function fmtBytes(n){n=Number(n)||0;return n>1e9?(n/1e9).toFixed(2)+' GB':n>1e6?
 function fmtDur(s){s=Math.max(0,Number(s)||0);const m=Math.floor(s/60),sec=Math.floor(s%60);return String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0')}
 
 let STATE=null,POLL=null,SESSION_ID='',SETTINGS_FILLED=false,DIRECTOR_MODEL='minimax/h3-max/director',DIRECTOR_PREV_MODEL='',MODEL_CATALOGS={};
-const FAMILY=m=>{m=(m||'').toLowerCase();return m.includes('seedance')?(m.includes('2.5')||m.includes('2-5')?'seedance25':'seedance'):(m.includes('lip-sync')||m.includes('lipsync'))?'lipsync':(m.includes('minimax')&&m.includes('h3'))?'h3':m.includes('kling')?'kling':(m.includes('wan-3')||m.includes('wan3'))?'wan':'generic'};
-const DUR_RANGE={lipsync:[5,13],h3:[4,15],seedance:[4,15],seedance25:[4,30],kling:[3,15],wan:[2,30],generic:[3,30]};
+const FAMILY=m=>{m=(m||'').toLowerCase();return m.includes('seedance')?(m.includes('2.5')||m.includes('2-5')?'seedance25':'seedance'):(m.includes('lip-sync')||m.includes('lipsync'))?'lipsync':(m.includes('minimax')&&m.includes('h3'))?'h3':/^(?:fal-ai\/)?kling(?:-video)?\/v4(?:\/|$)/.test(m.trim())?'kling4':m.includes('kling')?'kling':(m.includes('wan-3')||m.includes('wan3'))?'wan':'generic'};
+const DUR_RANGE={lipsync:[5,13],h3:[4,15],seedance:[4,15],seedance25:[4,30],kling:[3,15],kling4:[3,30],wan:[2,30],generic:[3,30]};
 
 /* ---------- 设置表单 ---------- */
 const isDirector=()=>$('#link-mode').value==='director';

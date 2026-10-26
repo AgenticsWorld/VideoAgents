@@ -1931,6 +1931,7 @@ window.I18N_DICT = {
 "Seedance 2.5(Fal 托管;单段 4-30 秒,参考 30 图/10 视频/10 音频,480p/720p/1080p)": "Seedance 2.5 (auf Fal gehostet; einzelner Clip 4–30 s, Referenzen 30 Bilder/10 Videos/10 Audios, 480p/720p/1080p)",
 "Seedance 2.0(Fal 托管;音画同生,4-15 秒,参考 9 图/3 视频/3 音频,最高 4K)": "Seedance 2.0 (auf Fal gehostet; Audio-Video-Kogeneration, 4–15 s, Referenzen 9 Bilder/3 Videos/3 Audios, bis 4K)",
 "Wan 3.0(Fal 托管;文生/首尾帧/多模态参考,2-30 秒,参考 10 图/5 视频/5 音频(视频、音频各合计 ≤15s),480p/720p/1080p)": "Wan 3.0 (auf Fal gehostet; Text / Start-/Endframe / multimodale Referenzen, 2–30 s, Referenzen 10 Bilder/5 Videos/5 Audios (Videos und Audios jeweils insgesamt ≤15 s), 480p/720p/1080p)",
+"Kling 4.0(Fal 托管;文生/首尾帧/多模态参考,3-30 秒,参考 10 图/5 视频(视频合计 ≤30s),不收参考音频,720p/1080p)": "Kling 4.0 (auf Fal gehostet; Text / Start-/Endframe / multimodale Referenzen, 3–30 s, Referenzen 10 Bilder/5 Videos (Videos insgesamt ≤30 s), kein Referenz-Audio, 720p/1080p)",
 "MiniMax H3(Fal 托管;首尾帧/多模态参考,480P/768P/2K/4K,参考合计 ≤12 件)": "MiniMax H3 (auf Fal gehostet; Start-/Endframe oder multimodale Referenzen, 480P/768P/2K/4K, insgesamt ≤12 Referenzdateien)",
 "Seedream 5.0 Lite(Fal 托管;文/图生图/多参考图 ≤10,出图 2K–4K)": "Seedream 5.0 Lite (auf Fal gehostet; Text/Bild-zu-Bild, bis zu 10 Referenzbilder, Ausgabe 2K–4K)",
 "Seedream 4.5(Fal 托管;文/图生图/多图融合,参考图 ≤10)": "Seedream 4.5 (auf Fal gehostet; Text/Bild-zu-Bild, Mehrbild-Fusion, bis zu 10 Referenzbilder)",

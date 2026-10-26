@@ -96,6 +96,8 @@ def video_caps(model, provider, cfg=None):
         return 3, 15.
     if 'wan-3' in m or 'wan3' in m:
         return 5, 15.   # Fal alibaba/wan-3.0:参考视频 ≤5,合计 ≤15s
+    # Fal Kling 4.0(kling/v4)有意不列:它的参考视频每段须 ≥3s,尾段素材最长 3s(遇切点 / 黑场更短),
+    # 交上去会被拒,这类组按尾帧图片续接(白模 camera.mp4 走 whitebox_refs,不受影响)
     return None
 
 

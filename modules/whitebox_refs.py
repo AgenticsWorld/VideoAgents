@@ -359,6 +359,9 @@ def _model_caps(model: str):
         return {'max_ref_videos': 10, 'max_total_s': 30}
     if 'seedance-2' in m or 'seedance2' in m:
         return {'max_ref_videos': 3, 'max_total_s': 15}
+    if re.match(r'(?:fal-ai/)?kling(?:-video)?/v4(?:/|$)', m.strip()):
+        # Fal kling/v4:参考视频 ≤5,每段 3-30s、合计 ≤30s;宽高 <700px 的 camera.mp4(960x540)由 genmedia 提交前放大
+        return {'max_ref_videos': 5, 'max_total_s': 30}
     if 'turbo' in m and 'h3' in m or 'kling' in m or 'lip-sync' in m:
         return {'max_ref_videos': 0, 'max_total_s': 0}
     if 'minimax' in m and 'h3' in m:

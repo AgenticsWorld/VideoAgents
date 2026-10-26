@@ -788,7 +788,7 @@ def resolve_file(rel: str) -> Path:
 
 def allowed_link_modes(provider: str, model: str) -> tuple[str, ...]:
     """模型 → 可选衔接模式(页面 live.html 的 LINK_ALLOWED 与此同表,改一处须同步另一处)。
-    FastH3 仅文生;Kling / H3 Max Turbo 无 reference-to-video 端点;对口型只吃一张人物图。"""
+    FastH3 仅文生;Kling 3.0 等 / H3 Max Turbo 无 reference-to-video 端点(Kling 4.0 有);对口型只吃一张人物图。"""
     if provider == "comfyui":
         return ("none",)
     fam = _genmedia_family(model)
@@ -807,6 +807,8 @@ def _genmedia_family(model: str) -> str:
         return "lipsync"
     if "minimax" in m and "h3" in m:
         return "h3"
+    if re.match(r"(?:fal-ai/)?kling(?:-video)?/v4(?:/|$)", m.strip()):
+        return "kling4"   # Kling 4.0 有 reference-to-video 端点,衔接模式不受 Kling 3.0 的「仅首帧」限制
     if "kling" in m:
         return "kling"
     if "wan-3" in m or "wan3" in m:
@@ -1340,7 +1342,7 @@ def _job(sid: str) -> int:
     else:
         cfg = {"provider": "fal", "api_key": key, "model": sess["model"]}
         family = gm._fal_family(sess["model"])  # noqa: SLF001
-    # 仅首帧端点(无 reference-to-video):Kling 系列、MiniMax H3 Max Turbo——参考图不生效,
+    # 仅首帧端点(无 reference-to-video):Kling 3.0 等(Kling 4.0 是 kling4 家族,不在此列)、MiniMax H3 Max Turbo——参考图不生效,
     # 首轮用第 1 张参考图作首帧,之后每轮用上一段尾帧作首帧(link_mode 不起作用)
     first_only = family == "kling" or (family == "h3" and "turbo" in str(sess["model"]).lower())
     refs = _shrink_refs(d, list(sess.get("refs") or []))

@@ -1620,6 +1620,12 @@ def is_wan30(model: str) -> bool:
     return "wan-3.0" in m or "wan-3-0" in m or "wan3.0" in m or "wan-3" in m
 
 
+def is_fal_kling4(model: str) -> bool:
+    """Fal 托管的 Kling 4.0 判定(kling/v4 及其 *-to-video 端点;与 genmedia._is_fal_kling4 同口径)。
+    只认 Fal 的 ID 写法:RunningHub 的 kling-v4/omni-video 等端点上限不同(只收 1 段参考视频),按各自目录判。"""
+    return bool(re.match(r"(?:fal-ai/)?kling(?:-video)?/v4(?:/|$)", (model or "").strip().lower()))
+
+
 # 阿里 Wan 3.0 官方请求整理 skill(wan3-pe,2026-09-17):仅当生效视频模型为 Wan 3.0(Fal 托管
 # alibaba/wan-3.0 系列)时注入加载指令给 prompt agent;随仓库分发
 WAN30_PE_SKILL = "agents/08-video-gen/prompt/skills/wan3-pe/SKILL.md"
@@ -6351,6 +6357,7 @@ VIDEO_MODEL_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("bytedance/seedance-2.5", "Seedance 2.5(Fal 托管;单段 4-30 秒,参考 30 图/10 视频/10 音频,480p/720p/1080p)"),
         ("bytedance/seedance-2.0", "Seedance 2.0(Fal 托管;音画同生,4-15 秒,参考 9 图/3 视频/3 音频,最高 4K)"),
         ("alibaba/wan-3.0", "Wan 3.0(Fal 托管;文生/首尾帧/多模态参考,2-30 秒,参考 10 图/5 视频/5 音频(视频、音频各合计 ≤15s),480p/720p/1080p)"),
+        ("kling/v4", "Kling 4.0(Fal 托管;文生/首尾帧/多模态参考,3-30 秒,参考 10 图/5 视频(视频合计 ≤30s),不收参考音频,720p/1080p)"),
         ("fal-ai/kling-video/v3/pro", "Kling 3.0 Pro(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)"),
         ("fal-ai/kling-video/v3/standard", "Kling 3.0 Standard(Fal 托管;首尾帧,3-15 秒,原生音频,不支持参考素材)"),
     ],
@@ -6422,6 +6429,10 @@ def video_model_caps(model: str) -> dict | None:
         # Fal alibaba/wan-3.0 官方 OpenAPI(2026-09-10):参考图 ≤10、视频 ≤5(合计 ≤15s)、音频 ≤5(合计 ≤15s),单段 2-30s
         return {"max_ref_images": 10, "max_ref_videos": 5, "max_ref_audios": 5, "max_group_s": 30,
                 "max_ref_video_s": 15}
+    if is_fal_kling4(model):
+        # Fal kling/v4 官方 OpenAPI(2026-10-26):参考图 ≤10、参考视频 ≤5(每段 3-30s、合计 ≤30s)、不收参考音频,单段 3-30s
+        return {"max_ref_images": 10, "max_ref_videos": 5, "max_ref_audios": 0, "max_group_s": 30,
+                "max_ref_video_s": 30}
     return None
 
 
