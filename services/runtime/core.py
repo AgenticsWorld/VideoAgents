@@ -10788,9 +10788,10 @@ def _image_channels() -> list[dict]:
 # 四个资产预览页顶部的图像模型下拉;存 STATE.image_model_prefs[<kind>](空 provider = 跟随全局)。
 # 2026-09-12 场景预览页拆成两块:scenes=「🎨 图像模型」(概念图/分镜背景图/布局图/四方向图,全景除外),
 # panos=「🌐 全景模型」(2:1 场景全景),各自独立选渠道+模型,默认都跟随全局(互不回退)。
+# 2026-10-26 refs = 参考文件页顶部那块,管页内「✨ 生成」出图(待选图落 assets/refs_gen/)。
 # 出图侧:genmedia 按输出目录 assets/concepts/<kind>/ 自动套用(modules/genmedia.py image_pref_env,
 # scenes/<sid>/panos/ 下判为 panos),草图由 code/storyboard_sketch.py 显式传 --provider/--model。
-IMAGE_PREF_KINDS = ("sketch", "scenes", "panos", "characters", "creatures", "props")
+IMAGE_PREF_KINDS = ("sketch", "scenes", "panos", "characters", "creatures", "props", "refs")
 
 
 def image_model_pref(kind: str) -> dict:
@@ -14981,8 +14982,11 @@ def _write_ref_notes_md(refs: Path, notes: dict):
         note = str(v.get("note") if isinstance(v, dict) else v or "").strip()
         if note:
             src = v.get("source") if isinstance(v, dict) else None
+            gen = v.get("gen") if isinstance(v, dict) else None
             tail = (f"(图库:{src.get('site') or src.get('provider')} · {src.get('license_label') or src.get('license')})"
-                    if isinstance(src, dict) else "")
+                    if isinstance(src, dict) else
+                    f"(AI 生成:{' '.join(x for x in (gen.get('provider'), gen.get('model')) if x)})"
+                    if isinstance(gen, dict) else "")
             lines.append(f"- `{rel}`:" + note.replace("\n", "\n  ") + tail)
     block = REF_NOTES_BEGIN + "\n" + ("\n".join(lines) or "(暂无注释)") + "\n" + REF_NOTES_END
     p = refs / "NOTES.md"
@@ -15042,7 +15046,8 @@ async def api_refs_list(project: str = "demo"):
                 "is_font": ext in REF_FONT_EXTS,
                 "size": st.st_size,
                 "note": str(v.get("note") if isinstance(v, dict) else v or "").strip(),
-                "source": v.get("source") if isinstance(v, dict) and isinstance(v.get("source"), dict) else None}
+                "source": v.get("source") if isinstance(v, dict) and isinstance(v.get("source"), dict) else None,
+                "gen": v.get("gen") if isinstance(v, dict) and isinstance(v.get("gen"), dict) else None}
 
     def listing(d: Path, recursive: bool) -> list:
         if not d.is_dir():
@@ -15115,7 +15120,7 @@ async def api_refs_note(body: dict):
     note = str(body.get("note") or "").strip()
     notes = _load_ref_notes(refs)
     cur = notes.get(rel) if isinstance(notes.get(rel), dict) else {}
-    if note or cur.get("source"):          # 图库导入的图清空注释时只清 note,来源记录(CREDITS.md 依据)留着
+    if note or cur.get("source") or cur.get("gen"):   # 图库导入 / 页内生成的图清空注释时只清 note,来源 / 生成记录留着
         notes[rel] = {**cur, "note": note, "updated": datetime.now().isoformat(timespec="seconds")}
     else:
         notes.pop(rel, None)
@@ -15263,6 +15268,173 @@ async def api_refs_import(body: dict):
     _write_ref_notes_md(refs, notes)
     _write_ref_credits_md(refs, notes)
     return {"ok": True, "existed": False, "project": base.name, "path": rel, "source": source,
+            "url": f"/projects/{base.name}/refs/{rel}?v={int(p.stat().st_mtime)}"}
+
+
+# ---------------- 参考文件页「✨ 生成」(2026-10-26) ----------------
+# 页内写提示词(可从风格库带入风格提示词),按页面顶部「🎨 图像模型」(image_model_prefs.refs,空 = 跟随全局)出一张图;
+# 先落 assets/refs_gen/<任务号>.png 给用户看(genmedia 按这个目录套用 refs 的选择),点「加入参考」才复制进 refs/<板块>/,
+# 重新生成时丢掉上一张。任务只记在内存(服务重启即丢,页面提示重新生成);待选图与任务记录隔天清掉。
+REFGEN_DIR = "assets/refs_gen"
+REFGEN_ASPECTS = ("16:9", "9:16", "1:1", "4:3", "3:4")
+REFGEN_MAX_PROMPT = 4000
+REFGEN_KEEP_S = 86400
+REFGEN_JOBS: dict[str, dict] = {}
+
+
+def _refgen_engine() -> dict:
+    """本次出图用的渠道 / 模型,只作展示;真正套用在 genmedia(所选渠道没配置过时同样回落全局)。"""
+    pref = image_model_pref("refs")
+    img = load_genconfig().get("image") or {}
+    if pref["provider"] and isinstance(img.get(pref["provider"]), dict):
+        return pref
+    gmodel = comfy_global_mode(img.get("comfyui")) if img.get("provider") == "comfyui" else active_image_model()
+    return {"provider": str(img.get("provider") or ""), "model": gmodel or ""}
+
+
+def _refgen_view(base: Path, job: dict) -> dict:
+    out = {k: job.get(k) for k in ("id", "status", "category", "prompt", "aspect", "style", "provider", "model",
+                                   "error", "started", "finished", "adopted")}
+    f = base / job["file"] if job.get("file") else None
+    if f and f.is_file():
+        out["url"] = f"/projects/{base.name}/{job['file']}?v={int(f.stat().st_mtime)}"
+    return out
+
+
+def _refgen_error(text: str) -> str:
+    """genmedia 失败输出 → 一句给用户看的原因:优先取「生成失败:」那行,没有就取末尾几行。"""
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    for ln in reversed(lines):
+        if ln.startswith("生成失败:"):
+            return ln[len("生成失败:"):].strip()[:600]
+    return "\n".join(lines[-4:])[-600:]
+
+
+def _refgen_drop(base: Path, jid: str):
+    """丢掉一次生成:删待选图、删任务记录;还在跑的不动(跑完由 worker 落盘,隔天清)。"""
+    job = REFGEN_JOBS.get(jid)
+    if not job or job.get("project") != base.name or job.get("status") in ("queued", "running"):
+        return
+    if job.get("file"):
+        (base / job["file"]).unlink(missing_ok=True)
+    REFGEN_JOBS.pop(jid, None)
+
+
+def _refgen_prune(base: Path):
+    now = time.time()
+    for jid, job in list(REFGEN_JOBS.items()):
+        if job.get("status") not in ("queued", "running") and now - job.get("started", now) > REFGEN_KEEP_S:
+            REFGEN_JOBS.pop(jid, None)
+    d = base / REFGEN_DIR
+    if d.is_dir():
+        for f in d.iterdir():
+            try:
+                if f.is_file() and now - f.stat().st_mtime > REFGEN_KEEP_S:
+                    f.unlink()
+            except OSError:
+                pass
+
+
+def _refgen_worker(base: Path, jid: str):
+    job = REFGEN_JOBS[jid]
+    out = base / REFGEN_DIR / f"{jid}.png"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [sys.executable, str(ROOT / "modules" / "genmedia.py"), "image", "--prompt", job["prompt"],
+           "--output", str(out), "--aspect", job["aspect"]]
+    job["status"] = "running"
+    err = ""
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=IMAGE_SUBPROCESS_TIMEOUT, cwd=str(ROOT))
+        if r.returncode != 0 or not out.is_file():
+            err = _refgen_error(r.stderr or r.stdout) or f"genmedia exit {r.returncode}"
+    except subprocess.TimeoutExpired:
+        err = (f"超过 {IMAGE_SUBPROCESS_TIMEOUT // 60} 分钟没出图,已放弃" if (ui_lang_code() or "zh") == "zh"
+               else f"No image after {IMAGE_SUBPROCESS_TIMEOUT // 60} minutes; gave up")
+    except Exception as e:  # noqa: BLE001
+        err = str(e)[:600]
+    if err:
+        job.update(status="failed", error=err, finished=time.time())
+    else:
+        job.update(status="done", file=out.relative_to(base).as_posix(), finished=time.time())
+    HUB.publish({"type": "refgen", "project": base.name, "job": jid, "status": job["status"]})
+
+
+async def api_refgen_start(body: dict):
+    """{project, prompt, category, aspect?, style?: {id, name}, discard?: 上一次的任务号} → 任务(先 queued,后台出图)。"""
+    body = dict(body or {})
+    base = _proj_base(body.get("project"))
+    zh = (ui_lang_code() or "zh") == "zh"
+    prompt = str(body.get("prompt") or "").strip()
+    if not prompt:
+        raise ServiceError(400, "请先写提示词" if zh else "Write a prompt first")
+    if len(prompt) > REFGEN_MAX_PROMPT:
+        raise ServiceError(400, (f"提示词太长(超过 {REFGEN_MAX_PROMPT} 字)" if zh
+                                 else f"The prompt is too long (over {REFGEN_MAX_PROMPT} characters)"))
+    category = str(body.get("category") or "")
+    if category not in REF_STOCK_CATEGORIES:
+        raise ServiceError(400, (f"生成的图只能加入这些分类:{', '.join(REF_STOCK_CATEGORIES)}" if zh
+                                 else f"Generated images can only go into: {', '.join(REF_STOCK_CATEGORIES)}"))
+    aspect = str(body.get("aspect") or "16:9")
+    if aspect not in REFGEN_ASPECTS:
+        raise ServiceError(400, f"aspect must be one of {REFGEN_ASPECTS}")
+    st = body.get("style")
+    style = ({"id": str(st.get("id") or "")[:60], "name": str(st.get("name") or "")[:80]}
+             if isinstance(st, dict) and st.get("name") else None)
+    _refgen_drop(base, str(body.get("discard") or ""))
+    _refgen_prune(base)
+    jid = f"{datetime.now():%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:4]}"
+    job = REFGEN_JOBS[jid] = {"id": jid, "project": base.name, "status": "queued", "category": category,
+                              "prompt": prompt, "aspect": aspect, "style": style, **_refgen_engine(),
+                              "started": time.time(), "adopted": {}}
+    threading.Thread(target=_refgen_worker, args=(base, jid), daemon=True, name=f"refgen-{jid}").start()
+    return _refgen_view(base, job)
+
+
+async def api_refgen_status(project: str, jid: str):
+    base = _proj_base(project)
+    job = REFGEN_JOBS.get(jid)
+    if not job or job.get("project") != base.name:
+        zh = (ui_lang_code() or "zh") == "zh"
+        raise ServiceError(404, ("这次生成的记录已经不在了(服务重启过?),请重新生成" if zh
+                                 else "This generation is no longer on record (was the service restarted?). Generate again."))
+    return _refgen_view(base, job)
+
+
+async def api_refgen_adopt(body: dict):
+    """{project, job, category?} → 把这次生成的图复制进 refs/<分类>/(缺省 = 打开窗口的板块);同一张同一分类只加一次。
+    生成信息(提示词 / 渠道 / 模型 / 风格)记进 annotations.json 的 gen,卡片上显示,注释仍由用户写。"""
+    body = dict(body or {})
+    base = _proj_base(body.get("project"))
+    refs = base / "refs"
+    zh = (ui_lang_code() or "zh") == "zh"
+    job = REFGEN_JOBS.get(str(body.get("job") or ""))
+    if not job or job.get("project") != base.name:
+        raise ServiceError(404, ("这次生成的记录已经不在了(服务重启过?),请重新生成" if zh
+                                 else "This generation is no longer on record (was the service restarted?). Generate again."))
+    src = base / job["file"] if job.get("status") == "done" and job.get("file") else None
+    if not src or not src.is_file():
+        raise ServiceError(409, "这张图还没生成好,或已被清理" if zh else "The image is not ready yet, or has been cleaned up")
+    category = str(body.get("category") or job["category"])
+    if category not in REF_STOCK_CATEGORIES:
+        raise ServiceError(400, (f"生成的图只能加入这些分类:{', '.join(REF_STOCK_CATEGORIES)}" if zh
+                                 else f"Generated images can only go into: {', '.join(REF_STOCK_CATEGORIES)}"))
+    rel = job["adopted"].get(category)
+    if rel and (refs / rel).is_file():
+        return {"ok": True, "existed": True, "project": base.name, "path": rel,
+                "url": f"/projects/{base.name}/refs/{rel}?v={int((refs / rel).stat().st_mtime)}"}
+    data = src.read_bytes()
+    # genmedia 契约名是 .png,内容按渠道返回的编码原样存(可能是 JPEG / WebP):按文件头取扩展名
+    ext = next((v for k, v in _IMG_MAGIC.items() if data.startswith(k)), ".png")
+    p = _refs_store(base, category, f"gen_{job['id']}", ext, data)
+    rel = p.relative_to(refs).as_posix()
+    now = datetime.now().isoformat(timespec="seconds")
+    notes = _load_ref_notes(refs)
+    notes[rel] = {"note": "", "updated": now,
+                  "gen": {"prompt": job["prompt"], "provider": job.get("provider") or "", "model": job.get("model") or "",
+                          "aspect": job["aspect"], "style": (job.get("style") or {}).get("name") or "", "created": now}}
+    atomic_write_json(refs / "annotations.json", notes)
+    job["adopted"][category] = rel
+    return {"ok": True, "existed": False, "project": base.name, "path": rel,
             "url": f"/projects/{base.name}/refs/{rel}?v={int(p.stat().st_mtime)}"}
 
 

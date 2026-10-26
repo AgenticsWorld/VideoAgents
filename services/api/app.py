@@ -299,6 +299,23 @@ async def import_reference(project: str, body: dict[str, Any]) -> dict[str, Any]
     return _artifact_urls(await core.api_refs_import({**body, "project": project}), project)
 
 
+@api.post("/projects/{project}/references/generate", tags=["artifacts"])
+async def generate_reference(project: str, body: dict[str, Any]) -> dict[str, Any]:
+    """参考文件页「✨ 生成」:按页面顶部的图像模型出一张待选图。{prompt, category, aspect?, style?, discard?}"""
+    return _artifact_urls(await core.api_refgen_start({**body, "project": project}), project)
+
+
+@api.get("/projects/{project}/references/generate/{job}", tags=["artifacts"])
+async def generate_reference_status(project: str, job: str) -> dict[str, Any]:
+    return _artifact_urls(await core.api_refgen_status(project, job), project)
+
+
+@api.post("/projects/{project}/references/generate/{job}/adopt", tags=["artifacts"])
+async def adopt_generated_reference(project: str, job: str, body: dict[str, Any]) -> dict[str, Any]:
+    """把生成好的图加入 refs/<分类>/。{category?}"""
+    return _artifact_urls(await core.api_refgen_adopt({**body, "project": project, "job": job}), project)
+
+
 @api.post("/projects/{project}/script/{ep}/keypoints", tags=["artifacts"])
 async def script_keypoints(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
     from modules import script_keypoints as kp

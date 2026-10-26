@@ -4,7 +4,8 @@
 渠道与模型在 Web 客户端「生成服务」页配置(落盘 data/.videoagents/genconfig.json),
 本模块按配置自动路由到对应渠道;Agent 只管出 prompt 与产物路径,不挑模型。
 图像:输出落在 assets/concepts/<scenes|characters|creatures|props>/ 下时,自动套用控制台
-对应预览页顶部图像模型下拉选的渠道/模型(state.json image_model_prefs,空=跟随全局;场景页分「图像模型」「全景模型」);
+对应预览页顶部图像模型下拉选的渠道/模型(state.json image_model_prefs,空=跟随全局;场景页分「图像模型」「全景模型」;
+参考文件页「✨ 生成」的待选图落 assets/refs_gen/,套用该页的选择);
 `image --provider/--model` 显式指定优先。
 
 CLI:
@@ -634,20 +635,24 @@ def _nsfw_route_record(cfg: dict) -> dict:
 # 没有显式 --provider/--model(环境变量)时套用该类别的偏好;Key 仍取该渠道在 genconfig 的配置。
 # 2026-09-12 场景页拆两块:scenes=「🎨 图像模型」(概念图/分镜背景图/布局图/四方向图,全景除外),panos=「🌐 全景模型」
 # (assets/concepts/scenes/<sid>/panos/ 下的 2:1 全景);两者独立、默认都跟随全局,panos 空时不回退到 scenes。
-IMAGE_PREF_KINDS = ("sketch", "scenes", "panos", "characters", "creatures", "props")
+# 2026-10-26 参考文件页顶部也有一块(refs):页内「✨ 生成」出的图先落 assets/refs_gen/ 待用户挑,按它判类。
+IMAGE_PREF_KINDS = ("sketch", "scenes", "panos", "characters", "creatures", "props", "refs")
 _IMAGE_KIND_RE = re.compile(r"(?:^|/)assets/concepts/(scenes|characters|creatures|props)/")
 _IMAGE_PANO_RE = re.compile(r"(?:^|/)assets/concepts/scenes/[^/]+/panos/")
+_IMAGE_REFGEN_RE = re.compile(r"(?:^|/)assets/refs_gen/")
 STATE_PATH = Path(os.environ.get("VIDEOAGENTS_RUNTIME_DIR", DATA_DIR / ".videoagents")).expanduser().resolve() / "state.json"
 
 
 def image_kind_of_output(output: str | os.PathLike | None) -> str:
-    """按输出路径判定资产类别(scenes|panos|characters|creatures|props),不属于概念图目录返回空;
-    scenes/<sid>/panos/ 下的场景全景判为 panos(场景预览页「🌐 全景模型」)。"""
+    """按输出路径判定资产类别(scenes|panos|characters|creatures|props|refs),不属于这些目录返回空;
+    scenes/<sid>/panos/ 下的场景全景判为 panos(场景预览页「🌐 全景模型」),assets/refs_gen/ 判为 refs(参考文件页)。"""
     if not output:
         return ""
     posix = Path(output).as_posix()
     if _IMAGE_PANO_RE.search(posix):
         return "panos"
+    if _IMAGE_REFGEN_RE.search(posix):
+        return "refs"
     m = _IMAGE_KIND_RE.search(posix)
     return m.group(1) if m else ""
 

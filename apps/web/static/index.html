@@ -2526,7 +2526,7 @@ function rhythmCollect(prefix){
 /* ---------- 风格库弹窗(为设计风格字段挑选风格提示词) ---------- */
 let STYLE_LIB=null,STYLE_TARGET='#brief-style',STYLE_CAT='全部';
 // 风格库版本:静态文件不带 Cache-Control,浏览器会长期沿用旧的库 / 译文 / 封面(原地替换的封面同名);
-// 改了 styles/ 下任何文件都要改这个版本号
+// 改了 styles/ 下任何文件都要改这个版本号(画板 preview_canvas.html、参考文件页「✨ 生成」ref-generate.js 同步改)
 const STYLE_LIB_V='20261021';
 // 风格库多语言:styles/i18n/<lang>.json 按风格 id 存 {name,prompt} 译文;按当前界面语言合并为
 // s.tname/s.tprompt(缺译文回退中文原文),卡片显示与填入「画面风格」的内容都跟界面语言走

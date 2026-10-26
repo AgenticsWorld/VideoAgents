@@ -576,7 +576,7 @@ $('#rf-lib').onclick=async()=>{
 };
 /* 风格库:挑一种画风,把「整体改成这种风格」连同该风格的提示词写进整体说明。只是这次编辑的文字,项目设定的画面风格不动;
    发送时整体说明里还留着这段风格描述,就带上 style,服务端把提示词开头的「保持原图风格」换成「构图不动、按下文换风格」 */
-// 同 index.html 的 STYLE_LIB_V(静态文件不带 Cache-Control,改了 styles/ 下任何文件两处一起改)
+// 同 index.html 的 STYLE_LIB_V(静态文件不带 Cache-Control,改了 styles/ 下任何文件与 index.html、ref-generate.js 一起改)
 const STYLE_LIB_V='20261021';
 let STYLE_LIB=null, STY_CAT='全部', STY=null, STY_LINE='';
 async function loadStyleLib(){

@@ -787,11 +787,12 @@ def test_api_style_test_passes_through_to_work_order(runtime):
 
 
 def test_canvas_style_library_version_matches_console():
-    """画板与控制台读同一份风格库:两页的 STYLE_LIB_V 须一致(改了 styles/ 下任何文件两处一起改)。"""
+    """画板、参考文件页「✨ 生成」与控制台读同一份风格库:三处的 STYLE_LIB_V 须一致(改了 styles/ 下任何文件一起改)。"""
     import re
     static = Path(__file__).resolve().parents[1] / 'apps/web/static'
-    ver = lambda name: re.findall(r"const STYLE_LIB_V='([^']+)'", (static / name).read_text(encoding='utf-8'))   # noqa: E731
-    assert len(ver('index.html')) == 1 and ver('preview_canvas.html') == ver('index.html')
+    ver = lambda name: re.findall(r"(?:const|var) STYLE_LIB_V='([^']+)'", (static / name).read_text(encoding='utf-8'))   # noqa: E731
+    assert len(ver('index.html')) == 1
+    assert ver('preview_canvas.html') == ver('index.html') and ver('ref-generate.js') == ver('index.html')
 
 
 def test_api_transform_upscale_version_refs_limits(runtime, monkeypatch):
