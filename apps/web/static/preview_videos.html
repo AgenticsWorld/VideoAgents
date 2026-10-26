@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="/static/i18n/i18n.js"></script>
 <script src="/static/ep-picker.js?v=20260912"></script>
-<script src="/static/canvas-entry.js?v=20261010"></script>
+<script src="/static/canvas-entry.js?v=20261026"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -338,7 +338,8 @@ async function load(){
   history.replaceState(null,'','?project='+encodeURIComponent(proj)+(EP?'&ep='+encodeURIComponent(EP):''));
   SCROLL_HOLD=true;$('#content').innerHTML='<div class="empty">加载中…</div>';
   try{
-    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/videos'+(EP?'?ep='+encodeURIComponent(EP):''));
+    // no-store:后退回到本页(如从画板「<」返回)时浏览器会沿用缓存里的旧数据,图片 ?v=修改时间 跟着旧,看不到设为最终版后的新图
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/videos'+(EP?'?ep='+encodeURIComponent(EP):''),{cache:'no-store'});
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
     const d=await r.json();
     EP=d.ep||'';

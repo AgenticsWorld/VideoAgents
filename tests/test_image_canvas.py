@@ -865,6 +865,26 @@ def test_routes_page_and_agent_are_registered():
     assert core.AM_AGENT_TIERS[core.CANVAS_MOTION_AGENT] == 'low'
 
 
+def test_entry_pages_reload_fresh_data_after_canvas_back():
+    """画板「<」是 history.back:后退时浏览器沿用缓存里的旧预览数据(图片 ?v=修改时间 跟着旧),换了最终版也看不到新图。
+    带入口按钮的页面取数据一律 no-store;从往返缓存原样还原时由 canvas-entry.js 整页重载。"""
+    import re
+    static = Path(__file__).resolve().parents[1] / 'apps/web/static'
+    entry = (static / 'canvas-entry.js').read_text(encoding='utf-8')
+    assert "addEventListener('pageshow',function(e){if(e.persisted)location.reload()})" in entry
+    data_api = {'preview_props.html': '/previews/props', 'preview_characters.html': '/previews/characters',
+                'preview_creatures.html': '/previews/creatures', 'preview_scenes.html': '/previews/scenes',
+                'preview_board.html': '/previews/board', 'preview_videos.html': '/previews/videos', 'preview_refs.html': '/references'}
+    pages = sorted(p.name for p in static.glob('*.html') if '/static/canvas-entry.js' in p.read_text(encoding='utf-8'))
+    assert pages == sorted(data_api)
+    for name, api in data_api.items():
+        src = (static / name).read_text(encoding='utf-8')
+        body = src[src.index('async function load('):]
+        body = body[:body.index('\n}\n')]                          # 页面加载时跑的 load()(场景页 reloadKeep 是页内操作后的刷新,不走后退)
+        calls = re.findall(r"fetch\(([^;]*%s[^;]*)\);" % re.escape(api), body)
+        assert calls and all("{cache:'no-store'}" in c for c in calls), (name, calls)
+
+
 # ---------------------------------------------------------------- 动图(以某个版本为首帧生成视频)
 def motion_payload(**over):
     p = {'parent': 'v000', 'text': '她转头微笑,镜头缓推', 'duration': 15, 'resolution': '480p', 'audio': False, 'mode': 'direct', 'preview': False}

@@ -11,7 +11,7 @@
 <script src="/static/preview-stickbar.js?v=20260913" defer></script>
 <script src="/static/preview-nav.js?v=20260913" defer></script>
 <script src="/static/edit-popup.js?v=20260927a-reviser"></script>
-<script src="/static/canvas-entry.js?v=20261010"></script>
+<script src="/static/canvas-entry.js?v=20261026"></script>
 <script src="/static/mini-md.js?v=20260911"></script>
 <script src="/static/image-models.js?v=20261023b"></script>
 <script src="/static/image-model-picker.js?v=20260912"></script>
@@ -791,7 +791,8 @@ async function load(keep){
   history.replaceState(null,'','?project='+encodeURIComponent(proj)+(EP?'&ep='+encodeURIComponent(EP):''));
   SCROLL_HOLD=true;if(!keep)$('#content').innerHTML='<div class="empty">加载中…</div>';
   try{
-    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/board'+(EP?'?ep='+encodeURIComponent(EP):''));
+    // no-store:后退回到本页(如从画板「<」返回)时浏览器会沿用缓存里的旧数据,图片 ?v=修改时间 跟着旧,看不到设为最终版后的新图
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/board'+(EP?'?ep='+encodeURIComponent(EP):''),{cache:'no-store'});
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
     const d=await r.json();
     EP=d.ep||'';

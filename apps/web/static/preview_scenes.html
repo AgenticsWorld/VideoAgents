@@ -10,7 +10,7 @@
 <script src="/static/i18n/i18n.js"></script>
 <script src="/static/jump-anchor.js?v=20260915"></script>
 <script src="/static/edit-popup.js?v=20261009-hint"></script>
-<script src="/static/canvas-entry.js?v=20261010"></script>
+<script src="/static/canvas-entry.js?v=20261026"></script>
 <script src="/static/image-models.js?v=20261023b"></script>
 <script src="/static/image-model-picker.js?v=20260912"></script>
 <script src="/static/ep-filter.js?v=20260917"></script>
@@ -1136,7 +1136,8 @@ async function load(){
   $('#detail').innerHTML='<div class="empty">加载中…</div>';
   const epf=EpFilter.load(proj);   // 分集过滤数据与主数据并行取(不会 reject)
   try{
-    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/scenes');
+    // no-store:后退回到本页(如从画板「<」返回)时浏览器会沿用缓存里的旧数据,图片 ?v=修改时间 跟着旧,看不到设为最终版后的新图
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/scenes',{cache:'no-store'});
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
     const d=await r.json();DATA=d.scenes;WB_ON=d.whitebox_enabled===true;SP_MODE=d.scene_plates_mode||'auto';FORMAT=d.format||null;PLATE_MODE=d.plate_mode||'grid';WORLD_PROVIDER=d.world_provider||'marble';
   }catch(e){$('#items').innerHTML='';$('#detail').innerHTML=`<div class="empty">加载失败:${esc(e.message)}</div>`;return}

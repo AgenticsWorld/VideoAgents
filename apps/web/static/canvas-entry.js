@@ -7,7 +7,9 @@
  *        kind  = scene | plate | character | costume | creature | prop | sketch | cover(页面显示与设定归属用;怎么落最终版由服务端按路径判);
  *        label = 对象名(画板标题、发给修改师的修改单里用);oid = 对象编号(服装号等路径里判不出的);
  *        project 缺省取页面的 #project 输入框,再退回 localStorage。
- * 点击在当前窗口跳到画板(桌面端不允许开新窗口),画板页左上角「<」返回原页面。
+ * 点击在当前窗口跳到画板(桌面端不允许开新窗口),画板页左上角「<」返回原页面(history.back)。
+ * 返回后要显示设为最终版后的新图:引入本脚本的页面,取数据的 fetch 须带 {cache:'no-store'}——后退时页面虽重新执行,
+ * 浏览器会沿用缓存里的旧响应,图片 ?v=修改时间 跟着旧;页面从往返缓存(bfcache)原样还原时由下面的 pageshow 整页重载。
  */
 (function(){
   'use strict';
@@ -54,6 +56,8 @@
     var to=href({file:d.cvFile,kind:d.cvKind,label:d.cvLabel,oid:d.cvOid,project:d.cvProject});
     if(to)location.href=to;
   },true);
+  // 从往返缓存原样还原(DOM 与已载入的图都是离开时的):重载一次,重新取数据
+  window.addEventListener('pageshow',function(e){if(e.persisted)location.reload()});
 
   window.CanvasEntry={btn:btn,href:href,relOf:relOf};
 })();

@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="/static/i18n/i18n.js"></script>
 <script src="/static/edit-popup.js?v=20260927a-reviser"></script>
-<script src="/static/canvas-entry.js?v=20261010"></script>
+<script src="/static/canvas-entry.js?v=20261026"></script>
 <script src="/static/image-models.js?v=20261023b"></script>
 <script src="/static/image-model-picker.js?v=20260912"></script>
 <script src="/static/ep-filter.js?v=20260917"></script>
@@ -396,7 +396,8 @@ async function load(){
   // 虚拟人像资产库是否启用(未启用则不渲染入库按钮;查询失败按未启用处理);同样与主数据并行取
   const avf=postJson('/api/v1/avatar-assets/status',{project:proj,refs:[]}).then(d=>!!d.enabled,()=>false);
   try{
-    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/characters');
+    // no-store:后退回到本页(如从画板「<」返回)时浏览器会沿用缓存里的旧数据,图片 ?v=修改时间 跟着旧,看不到设为最终版后的新图
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/previews/characters',{cache:'no-store'});
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
     DATA=(await r.json()).characters;
   }catch(e){$('#items').innerHTML='';$('#detail').innerHTML=`<div class="empty">加载失败:${esc(e.message)}</div>`;return}
