@@ -1387,11 +1387,12 @@ function buildDeepagents(){
 
 /* ---------- 审核模型(2026-10-20,NSFW 模式的拒绝判定):TypeSafe 决策模型 Jev,走 Decisions API;
    渠道 Agentics(桌面端账号,默认;2026-10-22 起支持该接口)/ OpenRouter(API Key)。
-   模型清单与 modules/refusal_judge.MODELS 一致,只能选清单里的 ---------- */
+   模型清单与 modules/refusal_judge.MODELS 一致,只能选清单里的;默认同 refusal_judge.DEFAULT(2026-10-26 起 1.14) ---------- */
 const MOD_TABS={agentics:'Agentics',openrouter:'OpenRouter'};
 const MOD_IDS={agentics:'agentics',openrouter:'or'};   // 各面板元素 id 段:mod-agentics-* / mod-or-*
 const MOD_MODELS=[['typesafe/jev-1.13','Jev 1.13(TypeSafe)· 决策模型,直接给出各类别的概率'],
   ['typesafe/jev-1.14','Jev 1.14(TypeSafe)· 决策模型,直接给出各类别的概率']];
+const MOD_DEFAULT='typesafe/jev-1.14';
 function buildModeration(){
   const modelRow=p=>{
     const r=el('div',{className:'row'});
@@ -1430,7 +1431,7 @@ function loadModerationForm(){
   const m=CFG.moderation||{};
   Object.keys(MOD_TABS).forEach(p=>{
     const v=(m[p]||{}).model,sel=$(`#mod-${MOD_IDS[p]}-model`);
-    if(v&&[...sel.options].some(o=>o.value===v))sel.value=v;
+    sel.value=v&&[...sel.options].some(o=>o.value===v)?v:MOD_DEFAULT;
   });
   $('#mod-or-key').value=(m.openrouter||{}).api_key||'';
   chanSet('mod',MOD_TABS[m.provider]?m.provider:'agentics');

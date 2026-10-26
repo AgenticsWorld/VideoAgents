@@ -224,7 +224,7 @@ def test_refusal_judge_classify_posts_decisions_api(monkeypatch):
 
 
 def test_moderation_config_gates_judge_switch(monkeypatch):
-    """OpenRouter 渠道:没填 Key 时拒绝打开 judge;只认清单里的模型;首版存下的 jev-router 回落 jev-1.13。"""
+    """OpenRouter 渠道:没填 Key 时拒绝打开 judge;只认清单里的模型;首版存下的 jev-router 回落默认 jev-1.14。"""
     from services.runtime import core
     monkeypatch.setattr(core, "ui_lang_code", lambda cfg=None: "zh")
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
@@ -232,8 +232,8 @@ def test_moderation_config_gates_judge_switch(monkeypatch):
                           "openrouter": {"api_key": "", "model": "typesafe/jev-router"}}}
     core._migrate_genconfig(old)
     gc = core._merge(core.DEFAULT_GENCONFIG, old)
-    assert gc["moderation"] == {"provider": "openrouter", "agentics": {"model": "typesafe/jev-1.13"},
-                                "openrouter": {"api_key": "", "model": "typesafe/jev-1.13"}}
+    assert gc["moderation"] == {"provider": "openrouter", "agentics": {"model": "typesafe/jev-1.14"},
+                                "openrouter": {"api_key": "", "model": "typesafe/jev-1.14"}}
     monkeypatch.setattr(core, "load_genconfig", lambda: gc)
     monkeypatch.setattr(core, "video_provider_options", lambda cfg=None: [])
     monkeypatch.setattr(core, "_image_channels", lambda: [])
@@ -247,15 +247,19 @@ def test_moderation_config_gates_judge_switch(monkeypatch):
     assert e.value.status_code == 400 and "审核模型" in e.value.detail and not saved
     gc["moderation"]["openrouter"]["api_key"] = "sk-or"
     assert core.resolve_moderation() == {"provider": "openrouter", "url": "https://openrouter.ai/api/alpha/decisions",
-                                         "api_key": "sk-or", "model": "typesafe/jev-1.13"}
+                                         "api_key": "sk-or", "model": "typesafe/jev-1.14"}
     d = asyncio.run(core.api_nsfw_set({"judge": True}))
     assert d["judge"] is True and d["judge_model"]["ready"] is True and saved[-1]["judge"] is True
     assert asyncio.run(core.api_nsfw_set({"judge": False}))["judge"] is False     # 关闭不需要审核模型可用
-    gc["moderation"]["openrouter"]["model"] = "typesafe/jev-1.14"
-    assert core.resolve_moderation()["model"] == "typesafe/jev-1.14"               # 2026-10-21 加入清单
-    keep = {"moderation": {"openrouter": {"api_key": "", "model": "typesafe/jev-1.14"}}}
+    gc["moderation"]["openrouter"]["model"] = "typesafe/jev-1.13"
+    assert core.resolve_moderation()["model"] == "typesafe/jev-1.13"               # 1.13 仍可选
+    keep = {"moderation": {"openrouter": {"api_key": "", "model": "typesafe/jev-1.13"}}}
     core._migrate_genconfig(keep)
-    assert keep["moderation"]["openrouter"]["model"] == "typesafe/jev-1.14"        # 迁移不把 1.14 改回 1.13
+    assert keep["moderation"]["openrouter"]["model"] == "typesafe/jev-1.13"        # 默认改 1.14 不动已存的 1.13
+    assert core.DEFAULT_GENCONFIG["moderation"]["agentics"]["model"] == "typesafe/jev-1.14"   # 2026-10-26 默认 1.14
+    assert core.DEFAULT_GENCONFIG["moderation"]["openrouter"]["model"] == "typesafe/jev-1.14"
+    gc["moderation"]["openrouter"]["model"] = ""
+    assert core.resolve_moderation()["model"] == "typesafe/jev-1.14"               # 没存模型按默认
     gc["moderation"]["openrouter"]["model"] = "typesafe/jev-router"
     assert core.moderation_status()["ready"] is False                              # 只认清单里的模型
     gc["moderation"]["openrouter"].update(api_key="", model="typesafe/jev-1.13")

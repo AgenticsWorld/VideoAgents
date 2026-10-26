@@ -1064,8 +1064,8 @@ DEFAULT_GENCONFIG = {
     # 模型清单见 modules/refusal_judge.MODELS
     "moderation": {
         "provider": "agentics",   # agentics | openrouter
-        "agentics": {"model": "typesafe/jev-1.13"},
-        "openrouter": {"api_key": "", "model": "typesafe/jev-1.13"},
+        "agentics": {"model": "typesafe/jev-1.14"},   # 2026-10-26 默认 1.13 → 1.14(_refusal_judge.DEFAULT)
+        "openrouter": {"api_key": "", "model": "typesafe/jev-1.14"},
     },
     # 文件管理(设置页「文件管理」):对象存储托管,V2V 参考视频经预签名 URL 传给
     # 方舟(reference_video 硬性要求公网 URL,base64 内联被拒);生效渠道=选中标签页
@@ -1379,7 +1379,7 @@ def _migrate_genconfig(config: dict) -> None:
     MiniMax/RunningHub 单一 Key 拆分为按接口区域/站点分别保存)。"""
     mod = config.get("moderation")
     if isinstance(mod, dict):
-        # 审核模型首版(2ec795b)的路由模型 jev-router 已不在清单,回落 jev-1.13。7e53ca2–2026-10-22 只有 OpenRouter
+        # 审核模型首版(2ec795b)的路由模型 jev-router 已不在清单,回落默认模型(2026-10-26 起 jev-1.14)。7e53ca2–2026-10-22 只有 OpenRouter
         # 渠道,那时存下的配置没有 agentics 段:没填过 OpenRouter Key(环境变量也没有)的跟新默认改走 Agentics
         # (沿用选过的模型),填了 Key 的留在 OpenRouter。新版保存时总带 agentics 段,此后按用户所选,不再改
         orc = mod.get("openrouter") if isinstance(mod.get("openrouter"), dict) else {}
@@ -1390,7 +1390,7 @@ def _migrate_genconfig(config: dict) -> None:
                 mod["agentics"] = {"model": orc["model"]}
         for sub in (mod.get("agentics"), mod.get("openrouter")):
             if isinstance(sub, dict) and sub.get("model") not in _refusal_judge.MODELS:
-                sub["model"] = _refusal_judge.MODELS[0]
+                sub["model"] = _refusal_judge.DEFAULT
     for kind in ("image", "video", "music", "tts", "digital_human", "upscale"):
         section = config.get(kind, {})
         if not isinstance(section, dict):
@@ -2459,7 +2459,7 @@ def resolve_moderation(cfg: dict | None = None) -> dict:
     m = (cfg or load_genconfig()).get("moderation") or {}
     provider = _moderation_provider(m)
     sub = m.get(provider) or {}
-    model = str(sub.get("model") or "").strip() or _refusal_judge.MODELS[0]
+    model = str(sub.get("model") or "").strip() or _refusal_judge.DEFAULT
     zh = (ui_lang_code() or "zh") == "zh"
     if model not in _refusal_judge.MODELS:
         raise ServiceError(400, f"审核模型不支持 {model}" if zh else f"Unsupported moderation model: {model}")
@@ -2487,7 +2487,7 @@ def moderation_status(cfg: dict | None = None) -> dict:
         r = resolve_moderation(cfg)
     except ServiceError as e:
         return {"ready": False, "provider": provider,
-                "model": str((m.get(provider) or {}).get("model") or _refusal_judge.MODELS[0]), "error": e.detail}
+                "model": str((m.get(provider) or {}).get("model") or _refusal_judge.DEFAULT), "error": e.detail}
     return {"ready": True, "provider": r["provider"], "model": r["model"]}
 
 
@@ -14690,7 +14690,7 @@ async def api_genconfig_set(body: dict):
             pc["vision"] = pc.get("vision") is not False
     for prov, pc in (cfg.get("moderation") or {}).items():
         if isinstance(pc, dict):
-            pc["model"] = str(pc.get("model") or "").strip() or _refusal_judge.MODELS[0]
+            pc["model"] = str(pc.get("model") or "").strip() or _refusal_judge.DEFAULT
             if pc["model"] not in _refusal_judge.MODELS:
                 raise ServiceError(400, f"moderation.{prov}.model must be one of {list(_refusal_judge.MODELS)}")
     sfx_ov = (cfg.get("sfx") or {}).get("openverse") or {}

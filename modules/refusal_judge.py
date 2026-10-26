@@ -5,7 +5,7 @@
 宿主先按运行形态零成本预筛(正常结束、回复不长、没交产物,见 core._refusal_judge_gate),筛中的才调本模块
 把 Agent 最后的回复交给审核模型判一次。
 
-- 审核模型是 TypeSafe 的决策模型 Jev(typesafe/jev-1.13),走 Decisions API(POST {渠道根}/api/alpha/decisions):
+- 审核模型是 TypeSafe 的决策模型 Jev(默认 typesafe/jev-1.14),走 Decisions API(POST {渠道根}/api/alpha/decisions):
   不生成文字,对「state + 带类别说明的 choice 题」直接给出各类别概率。只有 policy(因内容 / 安全 / 政策拒绝)算拒绝。
 - 只给回复正文末尾 TAIL 字,不给原始请求与图片。
 - 2026-10-20 实测(用户拍板换掉路由聊天模型 typesafe/jev-router):原工单 4542f699e746 的拒绝判 policy(概率 1),
@@ -13,6 +13,7 @@
 - 2026-10-21 按用户要求加入 typesafe/jev-1.14(2026-10-14 发布,快照 jev-1.14-20261014),默认仍是 jev-1.13。
 - 2026-10-22 Agentics 支持了 Decisions API(jev-1.13 / jev-1.14):渠道加回 Agentics 并作默认,地址是桌面端账号的
   OpenRouter wrapper + PATH(core.resolve_moderation 拼);OpenRouter 渠道仍是 URL。请求体与返回格式两渠道相同。
+- 2026-10-26 按用户要求默认改为 jev-1.14(DEFAULT;新装与没存过模型的配置、清单外模型回落都用它),已存下 jev-1.13 的配置不改。
 """
 from __future__ import annotations
 
@@ -22,6 +23,7 @@ import urllib.error
 import urllib.request
 
 MODELS = ("typesafe/jev-1.13", "typesafe/jev-1.14")
+DEFAULT = "typesafe/jev-1.14"
 PATH = "/api/alpha/decisions"
 URL = "https://openrouter.ai" + PATH
 KINDS = ("policy", "missing_input", "clarification", "done", "other")
