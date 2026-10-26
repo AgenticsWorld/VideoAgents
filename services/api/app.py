@@ -299,6 +299,12 @@ async def import_reference(project: str, body: dict[str, Any]) -> dict[str, Any]
     return _artifact_urls(await core.api_refs_import({**body, "project": project}), project)
 
 
+@api.post("/projects/{project}/references/footage-frame", tags=["artifacts"])
+async def footage_frame_reference(project: str, body: dict[str, Any]) -> dict[str, Any]:
+    """参考文件页「🎞 素材库」:把素材项目原片某一时刻的画面截进 refs/<分类>/。{footage, t, category}"""
+    return _artifact_urls(await core.api_refs_footage_frame({**body, "project": project}), project)
+
+
 @api.post("/projects/{project}/references/generate", tags=["artifacts"])
 async def generate_reference(project: str, body: dict[str, Any]) -> dict[str, Any]:
     """参考文件页「✨ 生成」:按页面顶部的图像模型出一张待选图。{prompt, category, aspect?, style?, discard?}"""

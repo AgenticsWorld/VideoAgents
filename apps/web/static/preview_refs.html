@@ -11,6 +11,7 @@
 <script src="/static/image-models.js?v=20261023b"></script>
 <script src="/static/image-model-picker.js?v=20260912"></script>
 <script src="/static/ref-generate.js?v=20261026"></script>
+<script src="/static/footage-frame.js?v=20261026"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -120,7 +121,7 @@ const CAT_META={
   other:['📎','其他','其他类型的参考文件,任意格式(PDF/表格/压缩包等);请添加注释说明用途,相关 Agent 按注释参考使用'],
   '':['📂','根目录散图','散放在 refs/ 根目录的文件,一律视为整体风格参考'],
 };
-const STOCK_CATS=['style','thumbnail','characters','scenes','creatures','props','other'];   // 「✨ 生成」「🔎 图库」能加入的板块(服务端 REF_STOCK_CATEGORIES)
+const STOCK_CATS=['style','thumbnail','characters','scenes','creatures','props','other'];   // 「✨ 生成」「🎞 素材库」「🔎 图库」能加入的板块(服务端 REF_STOCK_CATEGORIES)
 const CAT_ACCEPT={fonts:'.ttf,.otf,.ttc',audio:'.mp3,.wav,.flac,.m4a,.aac,.ogg',voices:'.mp3,.wav,.flac,.m4a,.aac,.ogg'};   // 分类专属的文件选择过滤(服务端同样校验)
 const CANVAS_EXT=/\.(png|jpe?g|webp)$/i;   // 画板只收这几种(modules/image_canvas.IMG_EXTS);gif / bmp / tif 不出按钮
 const fmtSize=n=>n>=1048576?(n/1048576).toFixed(1)+' MB':n>=1024?Math.round(n/1024)+' KB':n+' B';
@@ -143,6 +144,12 @@ function genHtml(g){
   if(!g)return '';
   return `<div class="srcrow" data-no-i18n title="${esc((g.style?'🎨 '+g.style+'\n':'')+(g.prompt||''))}">✨ ${esc(t('AI 生成'))}${g.provider?' · '+esc(RefGenerate.engine(g)):''}</div>`;
 }
+/* 「🎞 素材库」截的图:素材项目 · 时间点 */
+function footageHtml(fo){
+  if(!fo)return '';
+  const tt=Number(fo.t)||0,m=Math.floor(tt/60),sec=(tt-m*60).toFixed(2).padStart(5,'0');
+  return `<div class="srcrow" data-no-i18n title="${esc((fo.title||fo.project)+(fo.source?'\n'+fo.source:''))}">🎞 ${esc(t('素材库'))} · ${esc(fo.title||fo.project)} · ${String(m).padStart(2,'0')}:${sec}</div>`;
+}
 function cardHtml(f){
   const cv=f.is_image&&CANVAS_EXT.test(f.name)?CanvasEntry.btn({url:f.url,kind:'ref'}):'';
   let thumb;
@@ -152,7 +159,7 @@ function cardHtml(f){
   else if(f.is_font)thumb=`<div class="thumb font-thumb" data-font-url="${esc(f.url)}"><span class="fsample">${esc(t('花字 字体 示例'))}</span><span class="fsample latin">Aa Bb 0123</span></div>`;
   else thumb=`<div class="thumb"><span class="fico">📄</span></div>`;
   return `<figure class="card" data-path="${esc(f.path)}">${thumb}
-    <div class="fnrow"><div class="fn" title="${esc(f.path)} · ${fmtSize(f.size)}">${esc(f.name)}</div>${cv}</div>${srcHtml(f.source)}${genHtml(f.gen)}
+    <div class="fnrow"><div class="fn" title="${esc(f.path)} · ${fmtSize(f.size)}">${esc(f.name)}</div>${cv}</div>${srcHtml(f.source)}${genHtml(f.gen)}${footageHtml(f.footage)}
     <div class="note-box">${noteBoxHtml(f)}</div></figure>`;
 }
 function render(){
@@ -163,6 +170,7 @@ function render(){
       const [ico,nm,desc]=CAT_META[c.key]||['📁',c.key,''];
       const stock=STOCK_CATS.includes(c.key)
         ?`<button class="gencat" data-cat="${esc(c.key)}" title="${esc(t('用 AI 生成一张图加入本板块(图像模型在页面顶部选)'))}">✨ ${esc(t('生成'))}</button>`
+          +`<button class="footcat" data-cat="${esc(c.key)}" title="${esc(t('从素材库的视频里截一帧加入本板块'))}">🎞 ${esc(t('素材库'))}</button>`
           +`<button class="stockcat" data-cat="${esc(c.key)}" title="${esc(t('从免费图库搜图加入本板块'))}">🔎 ${esc(t('图库'))}</button>`:'';
       const up=c.key!==''
         ?`${stock}<button class="upbtn primary" data-cat="${esc(c.key)}">📤 ${esc(t('上传'))}</button>`:'';
@@ -342,6 +350,14 @@ document.addEventListener('click',e=>{
   if(!b)return;
   const [ico,nm]=CAT_META[b.dataset.cat]||['',b.dataset.cat];
   RefGenerate.open({project:proj(),target:b.dataset.cat,ico,catName:nm,onAdded(){load()}});
+});
+
+/* ---------- 「🎞 素材库」:选素材项目、播原片找画面,截图加入该板块 ---------- */
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.footcat');
+  if(!b)return;
+  const [ico,nm]=CAT_META[b.dataset.cat]||['',b.dataset.cat];
+  FootageFrame.open({project:proj(),target:b.dataset.cat,ico,catName:nm,onAdded(){load()}});
 });
 
 /* ---------- 图片放大 ---------- */

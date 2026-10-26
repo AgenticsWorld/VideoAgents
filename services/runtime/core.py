@@ -14983,10 +14983,13 @@ def _write_ref_notes_md(refs: Path, notes: dict):
         if note:
             src = v.get("source") if isinstance(v, dict) else None
             gen = v.get("gen") if isinstance(v, dict) else None
+            fo = v.get("footage") if isinstance(v, dict) else None
             tail = (f"(图库:{src.get('site') or src.get('provider')} · {src.get('license_label') or src.get('license')})"
                     if isinstance(src, dict) else
                     f"(AI 生成:{' '.join(x for x in (gen.get('provider'), gen.get('model')) if x)})"
-                    if isinstance(gen, dict) else "")
+                    if isinstance(gen, dict) else
+                    f"(素材库截图:{fo.get('title') or fo.get('project')} @ {_fmt_ts(float(fo.get('t') or 0))})"
+                    if isinstance(fo, dict) else "")
             lines.append(f"- `{rel}`:" + note.replace("\n", "\n  ") + tail)
     block = REF_NOTES_BEGIN + "\n" + ("\n".join(lines) or "(暂无注释)") + "\n" + REF_NOTES_END
     p = refs / "NOTES.md"
@@ -15047,7 +15050,8 @@ async def api_refs_list(project: str = "demo"):
                 "size": st.st_size,
                 "note": str(v.get("note") if isinstance(v, dict) else v or "").strip(),
                 "source": v.get("source") if isinstance(v, dict) and isinstance(v.get("source"), dict) else None,
-                "gen": v.get("gen") if isinstance(v, dict) and isinstance(v.get("gen"), dict) else None}
+                "gen": v.get("gen") if isinstance(v, dict) and isinstance(v.get("gen"), dict) else None,
+                "footage": v.get("footage") if isinstance(v, dict) and isinstance(v.get("footage"), dict) else None}
 
     def listing(d: Path, recursive: bool) -> list:
         if not d.is_dir():
@@ -15120,7 +15124,7 @@ async def api_refs_note(body: dict):
     note = str(body.get("note") or "").strip()
     notes = _load_ref_notes(refs)
     cur = notes.get(rel) if isinstance(notes.get(rel), dict) else {}
-    if note or cur.get("source") or cur.get("gen"):   # 图库导入 / 页内生成的图清空注释时只清 note,来源 / 生成记录留着
+    if note or cur.get("source") or cur.get("gen") or cur.get("footage"):   # 图库导入 / 页内生成 / 素材库截图清空注释时只清 note,来源记录留着
         notes[rel] = {**cur, "note": note, "updated": datetime.now().isoformat(timespec="seconds")}
     else:
         notes.pop(rel, None)
@@ -15435,6 +15439,84 @@ async def api_refgen_adopt(body: dict):
     atomic_write_json(refs / "annotations.json", notes)
     job["adopted"][category] = rel
     return {"ok": True, "existed": False, "project": base.name, "path": rel,
+            "url": f"/projects/{base.name}/refs/{rel}?v={int(p.stat().st_mtime)}"}
+
+
+# ---------------- 参考文件页「🎞 素材库」截图(2026-10-26) ----------------
+# 弹窗里选素材库(data/footage)的一个项目,播原片、拖到想要的画面,把当前帧截进 refs/<板块>/。
+# 截图在服务端用 ffmpeg 从原片取(不用浏览器画布):浏览器播不了原片改放 480p 代理时截出来的仍是原片分辨率;
+# 长边超过 2560 等比缩小(同图库导入)。时间按原片帧率对齐到页面正在显示的那一帧。
+REF_FRAME_MAX_SIDE = 2560
+
+
+def _fmt_ts(t: float) -> str:
+    m, sec = divmod(max(0.0, t), 60)
+    return f"{int(m):02d}:{sec:06.3f}"
+
+
+def _footage_frame_seek(t: float, fps: float) -> tuple[float, int]:
+    """页面 currentTime → (ffmpeg -ss 位置, 帧号)。浏览器显示的是 pts ≤ t 的最后一帧,ffmpeg 精确 seek 取 pts ≥ ss 的第一帧,
+    所以 ss 取该帧与前一帧的中点;读不到帧率时按 t 原样截(帧号 -1)。"""
+    if fps <= 0:
+        return max(0.0, t), -1
+    idx = max(0, math.floor(t * fps + 1e-3))
+    return (max(0.0, (idx - 0.5) / fps) if idx else 0.0), idx
+
+
+async def api_refs_footage_frame(body: dict):
+    """{project, footage, t, category} → 把素材项目原片第 t 秒那一帧存进 refs/<分类>/footage_<素材项目>_<帧号>.jpg。
+    同一帧同一分类只存一次;来源记进 annotations.json 的 footage,卡片上显示,注释仍由用户写。"""
+    body = dict(body or {})
+    base = _proj_base(body.get("project"))
+    refs = base / "refs"
+    zh = (ui_lang_code() or "zh") == "zh"
+    category = str(body.get("category") or "")
+    if category not in REF_STOCK_CATEGORIES:
+        raise ServiceError(400, (f"截图只能加入这些分类:{', '.join(REF_STOCK_CATEGORIES)}" if zh
+                                 else f"Frames can only go into: {', '.join(REF_STOCK_CATEGORIES)}"))
+    name = str(body.get("footage") or "")
+    proj = _footage_call(lambda lib: lib.load_project(name))
+    src_meta = proj.get("source") or {}
+    if not src_meta.get("file"):
+        raise ServiceError(400, "这个素材项目还没有原片视频" if zh else "This footage project has no source video yet")
+    src = _footage_call(lambda lib: lib.resolve_file(name, src_meta["file"]))
+    try:
+        t = float(body.get("t"))
+    except (TypeError, ValueError):
+        raise ServiceError(400, "t must be a number of seconds") from None
+    fps, dur = float(src_meta.get("fps") or 0), float(src_meta.get("duration_s") or 0)
+    if not math.isfinite(t) or t < 0 or (dur and t > dur + 0.5):
+        raise ServiceError(400, (f"时间点超出视频范围(0–{dur:.1f}s)" if zh else f"Time is outside the video (0–{dur:.1f}s)"))
+    ss, idx = _footage_frame_seek(t, fps)
+    tag = f"f{idx:06d}" if idx >= 0 else f"t{int(round(t * 1000)):08d}"
+    title = str(proj.get("title") or src_meta.get("title") or src_meta.get("filename") or name)
+    notes = _load_ref_notes(refs)
+    for rel, v in notes.items():
+        fo = v.get("footage") if isinstance(v, dict) else None
+        if (isinstance(fo, dict) and fo.get("project") == name and fo.get("tag") == tag
+                and rel.startswith(f"{category}/") and (refs / rel).is_file()):
+            return {"ok": True, "existed": True, "project": base.name, "path": rel,
+                    "url": f"/projects/{base.name}/refs/{rel}?v={int((refs / rel).stat().st_mtime)}"}
+    if not shutil.which("ffmpeg"):
+        raise ServiceError(500, "没找到 ffmpeg,截不了图" if zh else "ffmpeg was not found; cannot grab the frame")
+    side = REF_FRAME_MAX_SIDE
+    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-ss", f"{ss:.4f}", "-i", str(src), "-frames:v", "1",
+           "-vf", f"scale=w='min({side},iw)':h='min({side},ih)':force_original_aspect_ratio=decrease",
+           "-q:v", "2", "-f", "image2", "-c:v", "mjpeg", "pipe:1"]
+    r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, timeout=120)
+    if r.returncode != 0 or not r.stdout.startswith(b"\xff\xd8"):
+        err = (r.stderr or b"").decode("utf-8", "replace").strip()[-300:]
+        raise ServiceError(500, (f"截图失败:{err or '没截到画面'}" if zh else f"Frame grab failed: {err or 'no frame'}"))
+    p = _refs_store(base, category, f"footage_{name}_{tag}", ".jpg", r.stdout)
+    rel = p.relative_to(refs).as_posix()
+    now = datetime.now().isoformat(timespec="seconds")
+    notes = _load_ref_notes(refs)
+    notes[rel] = {"note": "", "updated": now,
+                  "footage": {"project": name, "title": title[:200], "t": round(idx / fps if idx >= 0 else t, 3),
+                              "tag": tag, "frame": idx, "source": str(src_meta.get("url") or src_meta.get("filename") or ""),
+                              "created": now}}
+    atomic_write_json(refs / "annotations.json", notes)
+    return {"ok": True, "existed": False, "project": base.name, "path": rel, "frame": idx, "t": round(t, 3),
             "url": f"/projects/{base.name}/refs/{rel}?v={int(p.stat().st_mtime)}"}
 
 

@@ -201,6 +201,10 @@ def list_projects() -> list[dict]:
         _reap(d.name)
         proj = _read_json(pj, {})
         src = proj.get("source") or {}
+        rel = src.get("file") or ""
+        # 列表缩略图取第一张分镜缩略图(参考文件页「🎞 素材库」选项目用);has_source = 原片还在,能播能截图
+        thumbs = sorted(f for f in (d / "clips").glob("*.jpg") if not f.name.endswith(".sheet.jpg")) \
+            if (d / "clips").is_dir() else []
         out.append({"name": d.name, "title": str(proj.get("title") or ""),
                     "tags": parse_tags(proj.get("tags") or []),
                     "created_at": proj.get("created_at", ""),
@@ -211,7 +215,10 @@ def list_projects() -> list[dict]:
                     "running": _job_running(d.name),
                     "source": {"type": src.get("type", ""), "title": src.get("title", ""),
                                "url": src.get("url", ""), "filename": src.get("filename", ""),
-                               "duration_s": src.get("duration_s", 0)}})
+                               "duration_s": src.get("duration_s", 0),
+                               "width": src.get("width", 0), "height": src.get("height", 0)},
+                    "has_source": bool(rel) and (d / rel).is_file(),
+                    "thumb": thumbs[0].relative_to(d).as_posix() if thumbs else ""})
     out.sort(key=lambda p: p.get("created_at") or "", reverse=True)
     return out
 
