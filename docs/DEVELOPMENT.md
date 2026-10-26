@@ -120,8 +120,9 @@ pinned in `vendor/pi/package.json` and `vendor/pi/package-lock.json`; it is sepa
   `VIDEOAGENTS_NODE` can point at another Node). `make desktop-dev` does this automatically.
 
 The language model comes from 🎨 Generation Models → Language Model/Agentics: Agentics (the
-signed-in desktop account), a local OpenAI-compatible endpoint, and — hidden unless already
-active — a cloud endpoint or OpenRouter. Each run gets its own pi configuration directory under
+signed-in desktop account), a local OpenAI-compatible endpoint, a cloud endpoint (any
+OpenAI-compatible provider; the Base URL, API key and model have no defaults and must be filled
+in by the user), and — hidden unless already active — OpenRouter. Each run gets its own pi configuration directory under
 `<data>/.videoagents/agentics-pi/runs/` with a `models.json` for the active channel (the API key
 is referenced as `$VIDEOAGENTS_LLM_API_KEY` and passed only through the environment) and is
 removed when the run ends; sessions live in `agentics-pi/sessions/` and are resumed with

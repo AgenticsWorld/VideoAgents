@@ -112,8 +112,9 @@ python -m pip install -e ".[dev]"
 - **源码运行**：先执行一次 `make install-pi`（需要 PATH 上有 Node.js 22.19 或更新版本；也可用
   `VIDEOAGENTS_NODE` 指定 Node）。`make desktop-dev` 会自动执行这一步。
 
-语言模型取自 🎨 生成模型 →「语言模型/Agentics」：Agentics（已登录的桌面端账号）、本地 OpenAI 兼容端点，
-以及默认隐藏（已是生效渠道时才显示）的云端模型与 OpenRouter。每次运行在
+语言模型取自 🎨 生成模型 →「语言模型/Agentics」：Agentics（已登录的桌面端账号）、本地 OpenAI 兼容端点、
+云端模型（任意 OpenAI 兼容服务商，Base URL、API Key、模型都没有默认值，须用户自填），以及默认隐藏
+（已是生效渠道时才显示）的 OpenRouter。每次运行在
 `<数据目录>/.videoagents/agentics-pi/runs/` 下建一个独立的 pi 配置目录，按生效渠道写 `models.json`
 （API Key 只写成 `$VIDEOAGENTS_LLM_API_KEY`，真值经环境变量传入），运行结束即删除；会话存在
 `agentics-pi/sessions/`，用 `--session` 续接。pi 带 `--no-extensions --no-skills --no-prompt-templates

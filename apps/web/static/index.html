@@ -1324,7 +1324,7 @@ const MODEL_OPTIONS={
   antigravity:[[SMART,'智能分配'],...AGY_STATIC,['','默认(CLI配置)'],['__custom','自定义…']],
   deepagents:[['agentics','Agentics'],['local','本地模型'],['cloud','云端模型'],['openrouter','OpenRouter']],   // agentics 引擎(内置 pi)。第一层=生效渠道开关(存 genconfig);第二层 #da-model=该渠道模型,同样即选即存;API Key/端点在 🎨 生成模型 页「语言模型/Agentics」配置
 };
-// 云端模型 / OpenRouter 渠道 2026-10-22 起隐藏(仍是生效渠道时照常列出,与 🎨 生成模型 页标签一致)
+// 云端模型 / OpenRouter 渠道 2026-10-22 起不列(仍是生效渠道时照常列出);🎨 生成模型 页的云端模型标签 2026-10-26 已恢复显示,顶栏未跟
 const DA_HIDDEN=['cloud','openrouter'];
 function daChannelOptions(){return MODEL_OPTIONS.deepagents.filter(([v])=>!DA_HIDDEN.includes(v)||v===DA_PROVIDER)}
 let DA_PROVIDER='agentics';   // deepagents 生效渠道缓存(服务端 genconfig 为准,syncDaProvider/切引擎时同步)
@@ -2139,12 +2139,12 @@ $('#np-skip').onclick=async()=>{   // 后续步骤按当前值(未改即默认)�
 const busyAgents=()=>new Set(Object.values(RUNS).filter(r=>r.project===curProj()&&['queued','running'].includes(r.status)).map(r=>r.agent));
 
 /* ---------- agentics(engine id deepagents,内置 pi)渠道/模型两层下拉 ----------
-   第一层 #model = 生效渠道(Agentics/本地模型;云端模型/OpenRouter 已隐藏,仍生效时照常列出),第二层 #da-model = 该渠道的具体模型;
+   第一层 #model = 生效渠道(Agentics/本地模型;云端模型/OpenRouter 不列,是生效渠道时照常列出),第二层 #da-model = 该渠道的具体模型;
    两层都即选即写回 genconfig.deepagents,与 🎨 生成模型 页「语言模型/Agentics」共用同一份配置(端点/API Key 仍在该页配)。
    模型清单按渠道拉取:Agentics→/providers/agentics/models?modality=text;OpenRouter→/providers/openrouter/models?modality=text
-   (text-models.js 推荐置顶);本地/云端→/providers/deepagents/models?provider=…(端点 /models,云端拉不到用内置 DeepSeek 清单)。 */
+   (text-models.js 推荐置顶);本地/云端→/providers/deepagents/models?provider=…(端点 /models;拉不到只列已保存模型)。 */
 const DA_PROVIDERS=['agentics','local','cloud','openrouter'];
-const TEXT_LISTS=window.TEXT_MODEL_LISTS||{openrouter:[],cloud:[]};
+const TEXT_LISTS=window.TEXT_MODEL_LISTS||{openrouter:[]};
 let DA_CFG={};              // 服务端 genconfig.deepagents 副本(syncDaSelect 更新)
 const DA_LISTS={};          // 各渠道已拉取的模型清单 [[id,label],...](本页生命周期内缓存;回到页面时清空重拉)
 const DA_LIST_ERR={};       // 各渠道清单拉取错误(显示在第二层下拉 title)
@@ -2204,13 +2204,11 @@ async function loadDaModels(p,refresh=false){
     }else{
       const r=await api('/api/v1/providers/deepagents/models?provider='+p);
       list=(r.models||[]).map(id=>[id,id]);
-      if(p==='cloud'&&!list.length)list=TEXT_LISTS.cloud;
     }
     DA_LIST_ERR[p]='';
   }catch(e){
     DA_LIST_ERR[p]=e.message||String(e);
     if(p==='openrouter')list=TEXT_LISTS.openrouter.map(([v,l])=>[v,'⭐ '+t(l)]);
-    else if(p==='cloud')list=TEXT_LISTS.cloud;
   }
   if(seq!==DA_SEQ[p])return;
   if(list)DA_LISTS[p]=list;

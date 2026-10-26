@@ -70,6 +70,9 @@ def test_preflight_reasons(core, vendor, monkeypatch):
     _channel(core, monkeypatch, "cloud", api_key="")
     pre = core.agentics_preflight()
     assert pre["reason"] == "key" and "云端模型" in pre["error"]
+    _channel(core, monkeypatch, "cloud", base_url="")                    # 云端渠道没有默认端点
+    pre = core.agentics_preflight()
+    assert pre["reason"] == "url" and "Base URL" in pre["error"] and "云端模型" in pre["error"]
     _channel(core, monkeypatch, "local", model="")
     assert core.agentics_preflight()["reason"] == "model"
 

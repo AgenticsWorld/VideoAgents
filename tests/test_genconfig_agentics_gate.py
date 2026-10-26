@@ -71,3 +71,20 @@ def test_switching_other_kind_to_agentics_is_checked(cfg_file):
     with pytest.raises(core.ServiceError) as ei:
         _save({"video": {"provider": "agentics"}, "ui_language": "ja"})
     assert ei.value.status_code == 401
+
+
+def test_cloud_channel_has_no_default_endpoint_or_model(cfg_file):
+    """云端模型渠道(2026-10-26 恢复显示)没有默认端点 / 模型;旧版存下的 DeepSeek 默认值没填过 Key 就清掉,填了 Key 的不动。"""
+    cl = core.load_genconfig()["deepagents"]["cloud"]
+    assert (cl["base_url"], cl["api_key"], cl["model"], cl["custom_model"]) == ("", "", "", "")
+    cfg_file.write_text(json.dumps({"deepagents": {"provider": "cloud", "cloud": {
+        "base_url": "https://api.deepseek.com", "api_key": "", "model": "deepseek-v4-flash", "custom_model": ""}}}))
+    da = core.resolve_deepagents()
+    assert da["provider"] == "cloud" and da["base_url"] == "" and da["model"] == ""   # 不再回落 DeepSeek
+    used = {"base_url": "https://api.deepseek.com/", "api_key": "sk-x", "model": "deepseek-v4-flash", "custom_model": ""}
+    cfg_file.write_text(json.dumps({"deepagents": {"provider": "cloud", "cloud": used}}))
+    assert core.load_genconfig()["deepagents"]["cloud"] == {**used, "vision": True}
+    typed = {"base_url": "https://api.example.test/v1", "api_key": "", "model": "deepseek-v4-pro",
+             "custom_model": "deepseek-v4-pro"}                                        # 手填(自定义)的模型不算旧默认
+    cfg_file.write_text(json.dumps({"deepagents": {"provider": "cloud", "cloud": typed}}))
+    assert core.load_genconfig()["deepagents"]["cloud"] == {**typed, "vision": True}

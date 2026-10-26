@@ -1045,16 +1045,16 @@ DEFAULT_GENCONFIG = {
     },
     # 语言模型(生成模型页「语言模型/Agentics」,agentics 引擎 = 内置 pi 的 LLM 端点;键名沿用 deepagents):
     # agentics=已登录桌面端账号的 AgenticsLLM;local=OpenAI 兼容本地端点(LM Studio/Ollama/vLLM…);
-    # cloud=OpenAI 兼容云端端点(默认 DeepSeek 官方 API,可换任意兼容服务商);
-    # openrouter=OpenRouter 云端(base_url 固定 https://openrouter.ai/api/v1)。cloud/openrouter 界面上默认隐藏。
+    # cloud=OpenAI 兼容云端端点(任意兼容服务商;2026-10-26 起没有默认端点 / 模型,由用户自填);
+    # openrouter=OpenRouter 云端(base_url 固定 https://openrouter.ai/api/v1)。openrouter 界面上默认隐藏。
     # vision:本地 / 云端模型能否看图(页面「图片输入」勾选,默认勾);agentics / openrouter 按 OpenRouter 目录判(agentics_vision)
     "deepagents": {
         "provider": "agentics",   # agentics | local | cloud | openrouter
         "agentics": {"model": "deepseek/deepseek-v4.1-flash-1017", "custom_model": ""},
         "local": {"base_url": "http://127.0.0.1:1234/v1",
                   "api_key": "lm-studio", "model": "", "vision": True},
-        "cloud": {"base_url": "https://api.deepseek.com",
-                  "api_key": "", "model": "deepseek-v4-flash",
+        "cloud": {"base_url": "",
+                  "api_key": "", "model": "",
                   "custom_model": "", "vision": True},
         "openrouter": {"api_key": "", "model": "anthropic/claude-sonnet-5",
                        "custom_model": ""},
@@ -1490,6 +1490,15 @@ def _migrate_genconfig(config: dict) -> None:
         aa = da["agentics"]
         if not str(aa.get("model") or "").strip() and not str(aa.get("custom_model") or "").strip():
             aa.pop("model", None)
+    dc = da.get("cloud") if isinstance(da, dict) else None
+    if isinstance(dc, dict) and not str(dc.get("api_key") or "").strip():
+        # 云端渠道 2026-10-26 前默认 DeepSeek 官方端点 + deepseek-v4-flash,页面保存时整份落盘;没填过 Key 的
+        # (没 Key 这条渠道跑不起来,等于没用过)把这两项旧默认清掉,跟新版一样留空待用户自填;填了 Key 的不动
+        if str(dc.get("base_url") or "").strip().rstrip("/") == "https://api.deepseek.com":
+            dc["base_url"] = ""
+        if (dc.get("model") in ("deepseek-v4-flash", "deepseek-v4-pro")
+                and not str(dc.get("custom_model") or "").strip()):
+            dc["model"] = ""
     if (isinstance(da, dict) and os.environ.get("VIDEOAGENTS_USER_JWT")
             and da.get("provider") == "openrouter"
             and not str((da.get("openrouter") or {}).get("api_key")
@@ -2186,7 +2195,6 @@ def is_runninghub_video_active(cfg: dict | None = None) -> bool:
 
 
 DEEPAGENTS_OPENROUTER_URL = "https://openrouter.ai/api/v1"
-DEEPAGENTS_CLOUD_URL = "https://api.deepseek.com"
 DESKTOP_OPENROUTER_WRAPPERS = {
     "https://api.agentics.world/wrapper/openrouter",
     "https://devapi.agentics.world/wrapper/openrouter",
@@ -2250,7 +2258,7 @@ def resolve_deepagents(cfg: dict | None = None) -> dict:
     if (da.get("provider") or "local") == "cloud":
         c = da.get("cloud") or {}
         return {"provider": "cloud",
-                "base_url": c.get("base_url") or DEEPAGENTS_CLOUD_URL,
+                "base_url": c.get("base_url") or "",
                 "api_key": c.get("api_key") or "",
                 "model": c.get("model") or c.get("custom_model") or "",
                 "vision": c.get("vision") is not False}
@@ -2281,6 +2289,11 @@ def agentics_error_text(reason: str, provider: str = "", detail: str = "") -> st
                 "The Agentics engine needs a signed-in VideoAgents account: sign in from Settings → Account "
                 "in the desktop app and you can start right away, or switch 🎨 Generation Models → "
                 "Language Model/Agentics to a local model.")
+    if reason == "url":
+        return (f"Agentics 引擎当前生效渠道为{label},但未配置 Base URL:请在 🎨 生成模型 页"
+                f"「语言模型/Agentics → {label}」填写" if zh else
+                f"The Agentics engine uses the {label} channel but no Base URL is set: fill it in under "
+                f"🎨 Generation Models → Language Model/Agentics → {label}.")
     if reason == "key":
         return (f"Agentics 引擎当前生效渠道为{label},但未配置 API Key:请在 🎨 生成模型 页"
                 f"「语言模型/Agentics → {label}」填写" if zh else
@@ -2296,7 +2309,8 @@ def agentics_error_text(reason: str, provider: str = "", detail: str = "") -> st
 def agentics_preflight(requested_model: str = "") -> dict:
     """Agentics 引擎启动前检查:{da(生效渠道连接), model(实际模型 ID), reason, error}。
     reason 为空即可启动;否则 missing(内置 pi 不在)/ login(Agentics 渠道未登录)/
-    key(OpenRouter、云端渠道缺 Key)/ model(没选模型)/ service(Agentics 服务地址不可用)。"""
+    url(云端渠道没填 Base URL)/ key(OpenRouter、云端渠道缺 Key)/ model(没选模型)/
+    service(Agentics 服务地址不可用)。"""
     reason, detail = "", ""
     try:
         da = resolve_deepagents()
@@ -2312,6 +2326,8 @@ def agentics_preflight(requested_model: str = "") -> dict:
     elif not reason:
         if da["provider"] == "agentics" and not da["api_key"]:
             reason = "login"
+        elif da["provider"] == "cloud" and not da["base_url"]:
+            reason = "url"
         elif da["provider"] in ("openrouter", "cloud") and not da["api_key"]:
             reason = "key"
         elif not model:

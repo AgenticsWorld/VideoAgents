@@ -139,14 +139,14 @@ button:disabled{opacity:.5;cursor:default}
     <div class="panel" id="panel-text-cloud">
       <div class="row">
         <label>Base URL</label>
-        <input type="text" id="dc-url" placeholder="https://api.deepseek.com">
+        <input type="text" id="dc-url" placeholder="服务商的 OpenAI 兼容端点地址(须手填)">
         <button id="dc-test">测试连接</button>
       </div>
       <div class="status" id="dc-status"></div>
       <div class="row" id="dc-key-row"></div>
       <div class="row" id="dc-model-row"></div>
       <div class="row"><label>图片输入</label><label class="chk"><input type="checkbox" id="dc-vision" checked> 模型支持看图(不支持时取消勾选,否则成员读图时请求可能出错)</label></div>
-      <div class="hint">所有 OpenAI 兼容 API 均可使用(默认 DeepSeek 官方端点):换 Base URL / API Key / 模型 ID 即可接入其他服务商;「测试连接」会列出端点上可用的模型</div>
+      <div class="hint">所有 OpenAI 兼容 API 均可使用:Base URL、API Key、模型 ID 都没有默认值,须自行填写;「测试连接」会列出端点上可用的模型</div>
     </div>
     <div id="panel-text-openrouter"></div>
   </div>
@@ -440,8 +440,8 @@ const SECTIONS={
   tts:{providers:['agentics','openrouter','volcengine','elevenlabs','minimax','comfyui']},
 };
 /* 界面隐藏的渠道标签(面板仍构建、配置照常读写;已生效的渠道仍显示,免得选中项看不见;生效渠道下拉同理) */
-// 隐藏的渠道标签:仍是生效渠道时照常显示(见 chanView)。语言模型的云端模型 / OpenRouter 2026-10-22 起隐藏
-const HIDDEN_TABS={image:['minimax'],video:['minimax'],text:['cloud','openrouter']};
+// 隐藏的渠道标签:仍是生效渠道时照常显示(见 chanView)。语言模型的 OpenRouter 2026-10-22 起隐藏(云端模型同日隐藏,2026-10-26 恢复)
+const HIDDEN_TABS={image:['minimax'],video:['minimax'],text:['openrouter']};
 /* Eleven Music(POST /v1/music):BGM 配乐渠道,时长可指定(3–600s)或模型自定 */
 const EL_MUSIC_MODELS=[
   ['music_v1','Eleven Music v1(官方默认)'],
@@ -1354,8 +1354,6 @@ async function showWfDoc(sel,custom){
 
 /* ---------- 语言模型/Agentics(agentics 引擎 = 内置 pi;配置键沿用 deepagents):AgenticsLLM / 本地/云端 OpenAI 兼容端点 / OpenRouter ---------- */
 const TEXT_TABS={agentics:'Agentics',local:'本地模型',cloud:'云端模型',openrouter:'OpenRouter'};
-/* 云端渠道默认模型(DeepSeek 官方端点;测试连接后替换为端点实际列表) */
-const CLOUD_MODELS=TEXT_MODEL_LISTS.cloud;   // 见 text-models.js
 function wireDaTest(prefix,savedModel){
   $(`#${prefix}-test`).onclick=async()=>{
     const st=$(`#${prefix}-status`);st.className='status';st.textContent='连接中…';
@@ -1363,8 +1361,9 @@ function wireDaTest(prefix,savedModel){
       api_key:$(`#${prefix}-key`).value.trim()}).catch(e=>({ok:false,error:e.message}));
     if(r.ok){
       st.className='status ok';st.textContent=I18N.f('✓ 已连接 · {n} 个模型',{n:r.models.length});
+      // 没存过模型时按表单当前所选(选「自定义…」取手填值),不能把「自定义…」本身的值当模型 ID
       fillSelect($(`#${prefix}-model`),r.models.map(m=>[m,m]),
-                 savedModel()||$(`#${prefix}-model`).value,'');
+                 savedModel()||pickModel(`#${prefix}-model`,`#${prefix}-custom`).model,'');
       autoSave();
     }else{st.className='status err';st.textContent='✗ '+(r.error||t('连接失败'))}
   };
@@ -1374,7 +1373,7 @@ function buildDeepagents(){
   $('#da-key-row').replaceWith(keyRow('da-key','lm-studio(本地端点可随意填)'));
   $('#da-model-row').replaceWith(modelRow('da-model','da-custom'));
   $('#da-model').parentElement.querySelector('label').textContent='默认模型';
-  $('#dc-key-row').replaceWith(keyRow('dc-key','sk-…(DeepSeek 开放平台创建;其他 OpenAI 兼容服务商 Key 亦可)'));
+  $('#dc-key-row').replaceWith(keyRow('dc-key','服务商的 API Key(须手填)'));
   $('#dc-model-row').replaceWith(modelRow('dc-model','dc-custom'));
   $('#dc-model').parentElement.querySelector('label').textContent='默认模型';
   wireDaTest('da',()=>CFG.deepagents?.local?.model);
@@ -1991,9 +1990,10 @@ function loadDeepagentsForm(){
   $('#da-key').value=lo.api_key||'';
   fillSelect($('#da-model'),lo.model?[[lo.model,lo.model]]:[],lo.model,'');
   $('#da-vision').checked=lo.vision!==false;
-  $('#dc-url').value=cl.base_url||'https://api.deepseek.com';
+  // 云端渠道没有默认端点 / 模型(2026-10-26):Base URL、Key、模型都由用户自填,模型可经「测试连接」从端点列表选
+  $('#dc-url').value=cl.base_url||'';
   $('#dc-key').value=cl.api_key||'';
-  fillSelect($('#dc-model'),CLOUD_MODELS,cl.model||CLOUD_MODELS[0][0],cl.custom_model);
+  fillSelect($('#dc-model'),cl.model&&!cl.custom_model?[[cl.model,cl.model]]:[],cl.model,cl.custom_model);
   $('#dc-vision').checked=cl.vision!==false;
   $('#text-or-key').value=or.api_key||'';
   fillSelect($('#text-or-model'),
