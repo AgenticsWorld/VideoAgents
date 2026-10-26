@@ -4757,6 +4757,8 @@ window.I18N_DICT = {
 "轨迹渲染视图数": "Orbit render views",
 "3DGS 训练步数": "3DGS training steps",
 "FP8 量化(Windows 暂不推荐,见部署文档)": "FP8 quantization (not recommended on Windows yet; see the deployment guide)",
+"图片输入": "Image input",
+"模型支持看图(不支持时取消勾选,否则成员读图时请求可能出错)": "The model can read images (untick if it can't, otherwise requests may fail when an agent reads an image)",
 "本地算力生成(不耗 credits):场景全景 → GPU 主机 worker(HunyuanWorld-1.0 分层重建 + 3DGS 训练),约 20–40 分钟;worker 部署参考 ": "Generates on your own GPU (no credits used): scene panorama → GPU host worker (HunyuanWorld-1.0 layered reconstruction + 3DGS training), about 20–40 minutes. Worker deployment guide: ",
 "(默认 Windows + 3090 24G)。": " (default: Windows + RTX 3090 24 GB).",
 "✓ worker 在线 · {gpu} · {busy}": "✓ Worker online · {gpu} · {busy}",

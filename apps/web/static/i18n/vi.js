@@ -4765,6 +4765,8 @@ window.I18N_DICT = {
 "轨迹渲染视图数": "Số góc nhìn render quỹ đạo",
 "3DGS 训练步数": "Số bước huấn luyện 3DGS",
 "FP8 量化(Windows 暂不推荐,见部署文档)": "Lượng tử hóa FP8 (hiện chưa khuyến nghị trên Windows, xem hướng dẫn triển khai)",
+"图片输入": "Đầu vào hình ảnh",
+"模型支持看图(不支持时取消勾选,否则成员读图时请求可能出错)": "Mô hình đọc được hình ảnh (bỏ chọn nếu mô hình không hỗ trợ, nếu không thì yêu cầu có thể lỗi khi tác tử đọc ảnh)",
 "本地算力生成(不耗 credits):场景全景 → GPU 主机 worker(HunyuanWorld-1.0 分层重建 + 3DGS 训练),约 20–40 分钟;worker 部署参考 ": "Tạo bằng GPU riêng (không tốn credits): ảnh toàn cảnh của cảnh → worker trên máy GPU (dựng lại phân lớp HunyuanWorld-1.0 + huấn luyện 3DGS), khoảng 20–40 phút; hướng dẫn triển khai worker: ",
 "(默认 Windows + 3090 24G)。": " (mặc định: Windows + RTX 3090 24 GB).",
 "✓ worker 在线 · {gpu} · {busy}": "✓ Worker trực tuyến · {gpu} · {busy}",

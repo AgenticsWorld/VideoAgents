@@ -391,11 +391,34 @@ def test_pi_truncation_overrides_recovered_request_error(rt, monkeypatch):
     monkeypatch.setattr(core, "agentics_preflight", lambda model="": {
         "da": {"provider": "agentics"}, "model": "m", "reason": "", "error": ""})
     monkeypatch.setattr(core, "agentics_pi_command", lambda: [_script(rt.tmp, "pi", FAKE_PI)])
+    monkeypatch.setattr(core, "agentics_vision", lambda da, model: False)
     monkeypatch.setattr(core, "agentics_pi_launch", lambda *a, **k: (["--mode", "json"], {}))
     monkeypatch.setattr(core, "AGENTICS_PI_HOME", rt.tmp / "agentics-pi")
     _loop_run(core.execute_run(run, "TASK", None))
     assert run["status"] == "error" and run["error"].startswith("输出被截断")
     assert "AGENTICS_MAX_OUTPUT_TOKENS" in run["error"]
+
+
+@posix_only
+def test_agentics_run_declares_vision_from_channel(rt, monkeypatch):
+    """Agentics 派单按 agentics_vision 判定把 vision 传给 agentics_pi_launch(2026-10-26 前派单一律纯文本,
+    pi 读图只回「Current model does not support images」)。"""
+    monkeypatch.setattr(core, "resolve_cli_executable", lambda e: _script(rt.tmp, "pi", FAKE_PI))
+    monkeypatch.setenv("FAKE_TOOL_S", "0.1")
+    da = {"provider": "agentics", "base_url": "https://x/api/v1", "api_key": "jwt", "model": "deepseek/v"}
+    monkeypatch.setattr(core, "agentics_preflight", lambda model="": {
+        "da": da, "model": "deepseek/v", "reason": "", "error": ""})
+    monkeypatch.setattr(core, "agentics_pi_command", lambda: [_script(rt.tmp, "pi", FAKE_PI)])
+    asked, launched = [], []
+    monkeypatch.setattr(core, "agentics_vision", lambda d, model: asked.append((d, model)) or True)
+    monkeypatch.setattr(core, "agentics_pi_launch",
+                        lambda *a, **k: launched.append(k) or (["--mode", "json"], {}))
+    monkeypatch.setattr(core, "AGENTICS_PI_HOME", rt.tmp / "agentics-pi")
+    run = _run("deepagents")
+    _loop_run(core.execute_run(run, "TASK", None))
+    assert run["status"] == "done"
+    assert asked == [(da, "deepseek/v")]
+    assert launched and launched[0]["vision"] is True
 
 
 @posix_only

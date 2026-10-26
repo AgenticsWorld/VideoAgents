@@ -127,6 +127,10 @@ python -m pip install -e ".[dev]"
 AGENTICS_CONTEXT_WINDOW=262144 AGENTICS_MAX_OUTPUT_TOKENS=131072 ./run.sh
 ```
 
+模型能看图时按图片输入声明（`"input": ["text", "image"]`）：Agentics 与 OpenRouter 渠道按 OpenRouter 模型目录的
+`architecture.input_modalities` 判断，本地与云端渠道按该页的「图片输入」勾选（默认勾）。不这样声明，成员读到的图片会被
+pi 整张丢掉。
+
 ## FFmpeg
 
 FFmpeg 需要通过操作系统包管理器单独安装。

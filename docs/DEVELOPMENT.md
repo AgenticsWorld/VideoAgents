@@ -138,6 +138,11 @@ values only when the model server allows the larger ones:
 AGENTICS_CONTEXT_WINDOW=262144 AGENTICS_MAX_OUTPUT_TOKENS=131072 ./run.sh
 ```
 
+A model is declared with image input (`"input": ["text", "image"]`) when it can take images: for
+the Agentics and OpenRouter channels this follows `architecture.input_modalities` in OpenRouter's model
+catalog, and for the local and cloud channels the 图片输入 checkbox on that page (ticked by default).
+Without it, pi drops every image an agent reads.
+
 ## FFmpeg
 
 FFmpeg must be installed separately with your operating system's package

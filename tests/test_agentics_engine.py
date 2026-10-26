@@ -126,6 +126,58 @@ def test_launch_local_and_cloud_channels(core, vendor, tmp_path, monkeypatch):
     assert args[-3:] == ["cloud", "--model", "deepseek-v4-flash"]
 
 
+def test_vision_follows_openrouter_catalog_and_channel_checkbox(core, monkeypatch):
+    """Agentics / OpenRouter 渠道按 OpenRouter 目录的 input_modalities 判能否看图;本地 / 云端按页面勾选(默认勾)。"""
+    monkeypatch.setattr(core, "_OPENROUTER_INPUTS", {})
+    catalog = {"data": [
+        {"id": "deepseek/deepseek-v4.1-flash-1017", "architecture": {"input_modalities": ["text", "image"]}},
+        {"id": "deepseek/deepseek-v4-pro", "architecture": {"input_modalities": ["text"]}},
+        {"id": "google/gemini-3.5-flash", "architecture": {"input_modalities": ["text", "image", "file"]}},
+        {"id": "x/no-arch"},
+    ]}
+    calls = []
+
+    def fake_get(url, headers=None, timeout=20):
+        calls.append((url, (headers or {}).get("Authorization"), timeout))
+        if "agentics" in url:
+            raise core.urllib.error.HTTPError(url, 403, "Forbidden", {}, None)
+        return catalog
+    monkeypatch.setattr(core, "_http_get_json", fake_get)
+    ag = {"provider": "agentics", "base_url": "https://api.agentics.world/wrapper/openrouter/api/v1",
+          "api_key": "jwt", "model": ""}
+    assert core.agentics_vision(ag, "deepseek/deepseek-v4.1-flash-1017") is True
+    # 先走渠道端点(与模型请求同一条网络路径),包装端点不放行 /models 时退回公开目录
+    assert calls == [("https://api.agentics.world/wrapper/openrouter/api/v1/models", "Bearer jwt", 8),
+                     ("https://openrouter.ai/api/v1/models", None, 8)]
+    assert core.agentics_vision(ag, "deepseek/deepseek-v4-pro") is False
+    assert core.agentics_vision(ag, "google/gemini-3.5-flash:batch") is True       # 变体后缀按基础 ID
+    assert core.agentics_vision(ag, "x/no-arch") is False
+    assert core.agentics_vision(ag, "unknown/model") is False
+    assert len(calls) == 2                                                          # 10 分钟内复用
+
+    stale = core._OPENROUTER_INPUTS["table"][1]
+    core._OPENROUTER_INPUTS["table"] = (0, stale)
+
+    def offline(*a, **k):
+        raise OSError("offline")
+    monkeypatch.setattr(core, "_http_get_json", offline)
+    assert core.agentics_vision(ag, "deepseek/deepseek-v4.1-flash-1017") is True   # 拉取失败:沿用上次目录
+    monkeypatch.setattr(core, "_OPENROUTER_INPUTS", {})
+    assert core.agentics_vision(ag, "deepseek/deepseek-v4.1-flash-1017") is False  # 从没拉到过:按纯文本
+
+    calls.clear()
+    monkeypatch.setattr(core, "_http_get_json", fake_get)
+    orr = {"provider": "openrouter", "base_url": "https://openrouter.ai/api/v1", "api_key": "sk-or", "model": ""}
+    assert core.agentics_vision(orr, "deepseek/deepseek-v4.1-flash-1017") is True
+    assert calls == [("https://openrouter.ai/api/v1/models", "Bearer sk-or", 8)]   # 已是 openrouter.ai 不重复查
+
+    assert core.agentics_vision({"provider": "local", "base_url": "http://127.0.0.1:1234/v1"}, "qwen3") is True
+    assert core.agentics_vision({"provider": "local", "vision": False}, "qwen3") is False
+    assert core.agentics_vision({"provider": "cloud", "vision": True}, "deepseek-v4-flash") is True
+    assert core.agentics_vision({"provider": "cloud", "vision": False}, "deepseek-v4-flash") is False
+    assert len(calls) == 1                                                          # 本地 / 云端不查目录
+
+
 def test_effort_args(core):
     assert core.engine_effort_args("deepagents", "high") == ["--thinking", "high"]
     assert core.engine_effort_args("deepagents", "high", local_endpoint=True) == []

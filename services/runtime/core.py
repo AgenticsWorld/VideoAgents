@@ -1046,15 +1046,16 @@ DEFAULT_GENCONFIG = {
     # 语言模型(生成模型页「语言模型/Agentics」,agentics 引擎 = 内置 pi 的 LLM 端点;键名沿用 deepagents):
     # agentics=已登录桌面端账号的 AgenticsLLM;local=OpenAI 兼容本地端点(LM Studio/Ollama/vLLM…);
     # cloud=OpenAI 兼容云端端点(默认 DeepSeek 官方 API,可换任意兼容服务商);
-    # openrouter=OpenRouter 云端(base_url 固定 https://openrouter.ai/api/v1)。cloud/openrouter 界面上默认隐藏
+    # openrouter=OpenRouter 云端(base_url 固定 https://openrouter.ai/api/v1)。cloud/openrouter 界面上默认隐藏。
+    # vision:本地 / 云端模型能否看图(页面「图片输入」勾选,默认勾);agentics / openrouter 按 OpenRouter 目录判(agentics_vision)
     "deepagents": {
         "provider": "agentics",   # agentics | local | cloud | openrouter
         "agentics": {"model": "deepseek/deepseek-v4.1-flash-1017", "custom_model": ""},
         "local": {"base_url": "http://127.0.0.1:1234/v1",
-                  "api_key": "lm-studio", "model": ""},
+                  "api_key": "lm-studio", "model": "", "vision": True},
         "cloud": {"base_url": "https://api.deepseek.com",
                   "api_key": "", "model": "deepseek-v4-flash",
-                  "custom_model": ""},
+                  "custom_model": "", "vision": True},
         "openrouter": {"api_key": "", "model": "anthropic/claude-sonnet-5",
                        "custom_model": ""},
     },
@@ -2234,7 +2235,7 @@ def resolve_agentics_connection() -> dict:
 
 
 def resolve_deepagents(cfg: dict | None = None) -> dict:
-    """deepagents 配置 -> 生效渠道的 {provider, base_url, api_key, model}。"""
+    """deepagents 配置 -> 生效渠道的 {provider, base_url, api_key, model};本地 / 云端另带 vision(页面勾选)。"""
     da = (cfg or load_genconfig()).get("deepagents") or {}
     if (da.get("provider") or "local") == "agentics":
         a = da.get("agentics") or {}
@@ -2251,12 +2252,14 @@ def resolve_deepagents(cfg: dict | None = None) -> dict:
         return {"provider": "cloud",
                 "base_url": c.get("base_url") or DEEPAGENTS_CLOUD_URL,
                 "api_key": c.get("api_key") or "",
-                "model": c.get("model") or c.get("custom_model") or ""}
+                "model": c.get("model") or c.get("custom_model") or "",
+                "vision": c.get("vision") is not False}
     lo = da.get("local") or {}
     return {"provider": "local",
             "base_url": lo.get("base_url") or "http://127.0.0.1:1234/v1",
             "api_key": lo.get("api_key") or "lm-studio",
-            "model": lo.get("model") or ""}
+            "model": lo.get("model") or "",
+            "vision": lo.get("vision") is not False}
 
 
 AGENTICS_CHANNEL_LABELS = {"agentics": ("Agentics", "Agentics"), "local": ("本地模型", "Local model"),
@@ -2331,6 +2334,55 @@ def _windows_git_bash() -> bool:
             return True
     found = shutil.which("bash")
     return bool(found) and "system32" not in found.lower()
+
+
+_OPENROUTER_INPUTS: dict = {}   # "table" -> (ts, {模型 ID: input_modalities}),最近一次成功拉到的目录
+
+
+def openrouter_input_modalities(model: str, da: dict | None = None) -> list | None:
+    """OpenRouter 模型目录里该模型的输入模态(architecture.input_modalities)。先经渠道端点 da 的
+    <base_url>/models(Agentics 包装端点 / OpenRouter,与模型请求同一条网络路径),取不到再查公开的
+    openrouter.ai 目录;10 分钟内复用,两处都失败时沿用上次成功的目录。ID 带 :batch 这类变体后缀而目录
+    只有基础 ID 时按基础 ID 查;目录没拉到过或没有该模型返回 None。"""
+    cached = _OPENROUTER_INPUTS.get("table")
+    if not cached or time.time() - cached[0] >= _OPENROUTER_TTL:
+        sources = []
+        base = str((da or {}).get("base_url") or "").rstrip("/")
+        if base:
+            sources.append((base + "/models",
+                            {"Authorization": f"Bearer {da['api_key']}"} if da.get("api_key") else None))
+        if not base.startswith("https://openrouter.ai/"):
+            sources.append(("https://openrouter.ai/api/v1/models", None))
+        for url, headers in sources:
+            try:
+                data = _http_get_json(url, headers, 8)
+            except Exception as e:  # noqa: BLE001
+                print(f"[agentics] 模型目录 {url} 拉取失败:{str(e)[:200]}", file=sys.stderr)
+                continue
+            table = {m["id"]: list((m.get("architecture") or {}).get("input_modalities") or [])
+                     for m in (data.get("data") if isinstance(data, dict) else None) or []
+                     if isinstance(m, dict) and m.get("id")}
+            if table:
+                cached = _OPENROUTER_INPUTS["table"] = (time.time(), table)
+                break
+    model = str(model or "").strip()
+    if not cached or not model:
+        return None
+    table = cached[1]
+    found = table.get(model)
+    if found is None and ":" in model:
+        found = table.get(model.split(":", 1)[0])
+    return found
+
+
+def agentics_vision(da: dict, model: str) -> bool:
+    """Agentics 引擎本次运行是否把模型声明为可看图(pi models.json 的 input 带 image;不带时 pi 读图只回
+    「Current model does not support images」、图片不发给模型)。Agentics / OpenRouter 渠道按 OpenRouter
+    目录的 input_modalities 判,目录取不到或查无此模型按纯文本;本地 / 云端渠道按「语言模型/Agentics」页
+    该渠道的「图片输入」勾选(默认勾)。阻塞(可能联网),在线程里调。"""
+    if da.get("provider") in ("agentics", "openrouter"):
+        return "image" in (openrouter_input_modalities(model, da) or [])
+    return da.get("vision", True) is not False
 
 
 def agentics_pi_launch(model: str, da: dict, home: Path, *, thinking: bool,
@@ -4985,8 +5037,9 @@ async def execute_run(run: dict, message: str, model: str | None):
                 publish_run(run)
                 return
             pi_home = AGENTICS_PI_HOME / "runs" / run["id"]
+            vision = await asyncio.to_thread(agentics_vision, pre["da"], pre["model"])
             pi_args, pi_env = agentics_pi_launch(pre["model"], pre["da"], pi_home,
-                                                 thinking=bool(thinking_effort))
+                                                 thinking=bool(thinking_effort), vision=vision)
             da_cmd = (agentics_pi_command() + pi_args
                       + engine_effort_args("deepagents", thinking_effort,
                                            local_endpoint=pre["da"]["provider"] == "local"))
@@ -14631,6 +14684,10 @@ async def api_genconfig_set(body: dict):
         allowed = set(DEFAULT_GENCONFIG[kind]) - {"provider"}
         if cfg.get(kind, {}).get("provider") not in allowed:
             raise ServiceError(400, f"{kind}.provider must be one of {sorted(allowed)}")
+    for prov in ("local", "cloud"):      # 「图片输入」勾选:只存布尔,缺省 / 非 false 一律算勾上
+        pc = (cfg.get("deepagents") or {}).get(prov)
+        if isinstance(pc, dict):
+            pc["vision"] = pc.get("vision") is not False
     for prov, pc in (cfg.get("moderation") or {}).items():
         if isinstance(pc, dict):
             pc["model"] = str(pc.get("model") or "").strip() or _refusal_judge.MODELS[0]

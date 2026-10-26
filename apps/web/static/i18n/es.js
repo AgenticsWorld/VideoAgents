@@ -4767,6 +4767,8 @@ window.I18N_DICT = {
 "轨迹渲染视图数": "Vistas renderizadas en órbita",
 "3DGS 训练步数": "Pasos de entrenamiento 3DGS",
 "FP8 量化(Windows 暂不推荐,见部署文档)": "Cuantización FP8 (por ahora no recomendada en Windows; ver la guía de despliegue)",
+"图片输入": "Entrada de imágenes",
+"模型支持看图(不支持时取消勾选,否则成员读图时请求可能出错)": "El modelo puede leer imágenes (desmárcalo si no puede; si no, las solicitudes pueden fallar cuando un agente lea una imagen)",
 "本地算力生成(不耗 credits):场景全景 → GPU 主机 worker(HunyuanWorld-1.0 分层重建 + 3DGS 训练),约 20–40 分钟;worker 部署参考 ": "Generación con tu propia GPU (sin créditos): panorama de la escena → worker en el host GPU (reconstrucción por capas HunyuanWorld-1.0 + entrenamiento 3DGS), unos 20–40 minutos; guía de despliegue del worker: ",
 "(默认 Windows + 3090 24G)。": " (por defecto: Windows + RTX 3090 de 24 GB).",
 "✓ worker 在线 · {gpu} · {busy}": "✓ Worker en línea · {gpu} · {busy}",

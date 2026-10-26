@@ -38,6 +38,23 @@ def test_unrelated_saves_pass_with_default_agentics_and_no_login(cfg_file):
     assert saved["deepagents"]["provider"] == "agentics"                       # 原样保留,不偷改渠道
 
 
+def test_local_cloud_vision_checkbox_defaults_on_and_saves_bool(cfg_file):
+    """「语言模型/Agentics」本地 / 云端的「图片输入」勾选:没有这个键的存量配置算勾上,保存只存布尔。"""
+    cfg = core.load_genconfig()
+    assert cfg["deepagents"]["local"]["vision"] is True and cfg["deepagents"]["cloud"]["vision"] is True
+    cfg_file.write_text(json.dumps({"deepagents": {"provider": "local", "local": {"model": "qwen3"}}}))
+    assert core.resolve_deepagents()["vision"] is True                         # 升级前保存的配置
+    _save({"deepagents": {"local": {"vision": False}}})
+    saved = json.loads(cfg_file.read_text())["deepagents"]
+    assert saved["local"] == {**saved["local"], "model": "qwen3", "vision": False}
+    assert saved["cloud"]["vision"] is True
+    assert core.resolve_deepagents()["vision"] is False
+    _save({"deepagents": {"provider": "cloud", "local": {"vision": "yes"}, "cloud": {"vision": False}}})
+    saved = json.loads(cfg_file.read_text())["deepagents"]
+    assert saved["local"]["vision"] is True and saved["cloud"]["vision"] is False
+    assert core.resolve_deepagents()["vision"] is False
+
+
 def test_switching_to_agentics_still_requires_login(cfg_file, monkeypatch):
     _save({"deepagents": {"provider": "local"}})
     with pytest.raises(core.ServiceError) as ei:
