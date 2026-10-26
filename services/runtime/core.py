@@ -1232,7 +1232,8 @@ DEFAULT_GENCONFIG = {
     #   决定 prompt 工位(08-video-gen/prompt)写组级 video_prompt 时必须套用的官方提示词技能。
     #   mode=auto(默认):按真正跑视频生成的模型(video-generation 工位渠道覆盖优先)解析——
     #     Seedance 2.5→sd25-pe / Seedance 2.0 系列→sd20-pe / MiniMax H3(任意渠道)→
-    #     h3-pe / 阿里 Wan 3.0(Fal 托管)→wan3-pe,解析不到(ComfyUI 工作流无模型 id、新模型无对应技能)
+    #     h3-pe / 阿里 Wan 3.0(Fal 托管)→wan3-pe / Kling 4.0(Fal 托管 kling/v4)→kling4-pe,
+    #     解析不到(ComfyUI 工作流无模型 id、新模型无对应技能)
     #     = 无技能并提醒手选;
     #   mode=manual:skill_id 为用户从该工位已安装技能里指定的一项(与生效模型不匹配只告警不阻塞);
     #   mode=off:本项目不套用技能(回执 skill_applied.id=null, reason=user_skipped)。
@@ -1629,6 +1630,9 @@ def is_fal_kling4(model: str) -> bool:
 # 阿里 Wan 3.0 官方请求整理 skill(wan3-pe,2026-09-17):仅当生效视频模型为 Wan 3.0(Fal 托管
 # alibaba/wan-3.0 系列)时注入加载指令给 prompt agent;随仓库分发
 WAN30_PE_SKILL = "agents/08-video-gen/prompt/skills/wan3-pe/SKILL.md"
+# Kling 4.0 提示词优化 skill(kling4-pe,2026-10-26,按可灵官方 Kling 4.0 User Guide 与 Fal kling/v4 参数表整理,
+# 非官方发布的 skill 文件):仅当生效视频模型为 Fal 托管的 Kling 4.0(is_fal_kling4)时注入加载指令给 prompt agent
+KLING4_PE_SKILL = "agents/08-video-gen/prompt/skills/kling4-pe/SKILL.md"
 
 
 def is_minimax_h3_active(cfg: dict | None = None) -> bool:
@@ -1717,6 +1721,8 @@ SKILL_ACTIVATIONS: dict[str, dict] = {
         "kind": "conditional", "condition": "生效视频模型/工作流名含 minimax 与 h3(任意渠道)"},
     "08-video-gen/prompt/wan3-pe": {
         "kind": "conditional", "condition": "生效视频模型为阿里 Wan 3.0(Fal 托管 alibaba/wan-3.0 系列)"},
+    "08-video-gen/prompt/kling4-pe": {
+        "kind": "conditional", "condition": "生效视频模型为 Kling 4.0(Fal 托管 kling/v4)"},
     "08-video-gen/prompt/performance-direction": {
         "kind": "soul", "condition": "组 audio_plan 为 dialogue 或所属场次为情绪峰值场(SOUL.md 引用,引擎无关)"},
     "08-video-gen/prompt/fight-choreography": {
@@ -2040,6 +2046,7 @@ PROMPT_SKILL_SD25 = f"{PROMPT_AGENT_ID}/sd25-pe"
 PROMPT_SKILL_SD20 = f"{PROMPT_AGENT_ID}/sd20-pe"
 PROMPT_SKILL_H3 = f"{PROMPT_AGENT_ID}/h3-pe"
 PROMPT_SKILL_WAN30 = f"{PROMPT_AGENT_ID}/wan3-pe"
+PROMPT_SKILL_KLING4 = f"{PROMPT_AGENT_ID}/kling4-pe"
 # 2026-09-17 改名:sd20-prompt-writing→sd20-pe、h3-prompt-writing→h3-pe(与 sd25-pe/wan3-pe 同一命名口径)。
 # 存量项目 settings.json / episode.json 里手选或快照的旧 id 一律按新 id 解释,不要求用户重选
 LEGACY_PROMPT_SKILL_IDS = {
@@ -2097,6 +2104,8 @@ def auto_prompt_skill_for_model(model: str) -> str:
         return PROMPT_SKILL_SD20
     if is_wan30(model):
         return PROMPT_SKILL_WAN30
+    if is_fal_kling4(model):
+        return PROMPT_SKILL_KLING4
     return ""
 
 
@@ -2566,7 +2575,7 @@ def _validate_transitions(t: dict) -> dict:
         raise ServiceError(400, f"Invalid transitions settings: {ex}") from None
 
 
-SHOT_GROUP_PRESETS = ("sd20", "sd25", "mmh3", "wan30")   # 与 index.html SG_PRESETS 同步
+SHOT_GROUP_PRESETS = ("sd20", "sd25", "mmh3", "wan30", "kling4")   # 与 index.html SG_PRESETS 同步
 
 
 def _validate_shot_group(g: dict):
@@ -2580,7 +2589,7 @@ def _validate_shot_group(g: dict):
     except (TypeError, ValueError, AssertionError):
         raise ServiceError(400, "Invalid shot_group settings: max_group_s must be 4-30; "
                                 "max_ref_images 0-30; max_ref_videos 0-10; max_ref_audios 0-10") from None
-    # preset:界面点选的模型预设 key(sd20/sd25/mmh3/wan30),仅用于还原按钮高亮——数值相同的预设
+    # preset:界面点选的模型预设 key(sd20/sd25/mmh3/wan30/kling4),仅用于还原按钮高亮——数值相同的预设
     # (Seedance 2.0 与 MiniMax H3)靠它区分;空串/缺省=未点选
     if g.get("preset") not in (None, "", *SHOT_GROUP_PRESETS):
         raise ServiceError(400, f"shot_group.preset must be one of {SHOT_GROUP_PRESETS} or empty")
@@ -4263,7 +4272,20 @@ def build_role_prompt(agent_id: str, project: str,
 - **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]`/`[Audio N]` 引用)、SOUL.md 机检清单、上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律保持不动——skill 的情节节点按团队 `Shot N:` 顺序落地,不得以 skill 模板为由拆掉团队锚点结构;skill「只整理不丰富」的原则在本岗对应「只按 shot_list/blocking 既定内容写,不自行加戏」
 - skill 的「参数分离」原则与本仓库一致:画幅/时长/分辨率/帧率由 genmedia 命令行参数传递,不写进 prompt 正文
 - **镜次时长(2026-09-23)**:shot_list 每镜 duration_s 一律按官方 `镜头N xx-xx秒` 口径写成连续整数秒时间段,标在各段第一镜的 Shot 段头后(中文界面 `Shot 1: 0-3秒：`、亚秒快切合并段 `Shot 5: 8-10秒（Shot 5–Shot 8）：`;非中文界面 `0-3s:`),自 0 起、首尾相接、末段止于 round(total_duration_s);写完 prompt 后必跑 `python3 code/sync_shot_timing.py --project {project} --ep epNN --write` 由宿主机器写入/校正,机检 `shot_timing_bound`"""
-    if psk_id and psk_id not in (PROMPT_SKILL_SD25, PROMPT_SKILL_SD20, PROMPT_SKILL_H3, PROMPT_SKILL_WAN30):
+    if psk_id == PROMPT_SKILL_KLING4:
+        p += f"""
+
+## Kling 4.0 提示词优化 Skill(项目「提示词技能」设定:{psk_how},当前已生效)
+当前项目的视频生成模型是 Kling 4.0(Fal 托管 kling/v4)。撰写或优化组级 video_prompt 前,**先阅读提示词优化技能并按其方法执行**:
+- Skill 文件:{KLING4_PE_SKILL}(kling4-pe,按可灵官方《Kling 4.0 User Guide》与 Fal 端点参数表整理,已随仓库安装,直接 Read 全文)
+- 应用其中的:官方结构(素材职责 → 整体设定 → 带时间戳的事件序列 → 声音)、每份参考图 / 参考视频写明职责与保留范围(只给编号不写职责 = 模型自行推断)、描述具体可见的光线材质颜色而非抽象词、否定句只留团队必带项与无字幕 / 无背景音乐、对白前写说话人 + 语言 + 嗓音且多人不重叠、数量锁定写进 `Global constraints:`、一镜到底的组明写不切镜(多镜头默认开启)
+- **参考音频:Fal Kling 4.0 不收**——本组 audio_refs 一律留空(genmedia 遇到 --audio-ref 直接报错);对白组 audioref_bound「每个说话角色挂 voiceprint」对本模型不适用,在回执 notes 写明,嗓音一致靠台词前的嗓音描述(同一角色各组逐字一致)
+- 素材编号与台词记号:正文照团队约定写 `[Image N]` / `@Image N` / `[Video N]`(1-based,与 refs / video_refs 顺序一致)与 `{{台词}}`,genmedia 提交时自动改写成官方的 `@Image1` / `@Video1` 与引号台词,本岗不要自己改写,也不要在 `{{}}` 外再加引号
+- **优先级边界(冲突时以本团队规范为准)**:结构锚点(`Overall visual style:`/`Shot N:`/`Global constraints:`/`[Image N]` 引用)、宿主固定段(Whitebox reference / Scene presence / Shot plates / 时间段标签)、SOUL.md 机检清单、上游逐字拼入片段(风格串/光照 prompt_fragment_en/站位 space_fragment_en/道具 prompt_token)与冻结版台词一律保持不动——skill 的官方段落按团队锚点落地(对照表见 skill 第四节),不得以 skill 模板为由拆掉团队锚点结构
+- 参数分离与本仓库一致:画幅/时长/分辨率由 genmedia 命令行参数传递,不写进 prompt 正文
+- **镜次时长**:shot_list 每镜 duration_s 按官方「0–X s」事件序列写成连续整数秒时间段,标在各段第一镜的 Shot 段头后(中文界面 `Shot 1: 0-3秒：`、亚秒快切合并段 `Shot 5: 8-10秒（Shot 5–Shot 8）：`;非中文界面 `0-3s:`),自 0 起、首尾相接、末段止于 round(total_duration_s);写完 prompt 后必跑 `python3 code/sync_shot_timing.py --project {project} --ep epNN --write` 由宿主机器写入/校正,机检 `shot_timing_bound`"""
+    if psk_id and psk_id not in (PROMPT_SKILL_SD25, PROMPT_SKILL_SD20, PROMPT_SKILL_H3, PROMPT_SKILL_WAN30,
+                                 PROMPT_SKILL_KLING4):
         p += f"""
 
 ## 提示词技能 `{psk['dir']}`(项目「提示词技能」设定:{psk_how},当前已生效)
@@ -4291,7 +4313,7 @@ def build_role_prompt(agent_id: str, project: str,
 - 交付前必跑 `python3 {PROMPT_SKILL_CHECK} --project {project} --ep epNN`(机检 `prompt_skill_applied`:字段齐全、id 与项目快照一致、sha256 与当前 SKILL.md 一致、checklist 无 false;不过=不交付),结果写进回执
 - 生效技能为 sd25-pe(Seedance 2.5)时,同一脚本还会执行 `sd25_prompt_structure`:正文必须按 2.5 官方结构写(【人物】/【动作与声音】逐份素材职责、每个 Shot 段「使用：/不采用：」清单、【未采用素材】、【保持一致】;背景图【场景】槽位由 code/sync_shot_plates.py --write 写入),自述 checklist 不能替代结构;写完 prompt 后必跑一次 `python3 code/sync_shot_plates.py --project {project} --ep epNN --write` 再机检
 - 生效技能为 h3-pe(MiniMax H3)时同理执行 `h3_prompt_structure`:Ref2VA 六段依序齐全、subject_definitions 每张角色图 `<Subject N> … <Picture i>`、retention_analysis 逐份、台词 `<d>`、`<Audio N>` 绑 `(Sx)`;背景图 `<Picture N>` 构图锚与 `Plate anchor:` 句由 sync_shot_plates --write 写入
-- **镜次时长(shot_timing_bound,2026-09-23)**:写完 prompt 后另跑 `python3 code/sync_shot_timing.py --project {project} --ep epNN --write`——宿主按 shot_list 每镜 duration_s 与本组生效模型写法机器写入(Seedance 2.5 / Wan 3.0 连续整数秒时间段标在段首镜段头后;MiniMax H3 Shot k≥2 切点 `At MM:SS.mmm,`;Seedance 2.0 不写、剔除),再不带 --write 机检:标签齐全、连续不重叠、末段止于 round(total_duration_s)、Σ duration_s = total_duration_s;不过=不交付"""
+- **镜次时长(shot_timing_bound,2026-09-23)**:写完 prompt 后另跑 `python3 code/sync_shot_timing.py --project {project} --ep epNN --write`——宿主按 shot_list 每镜 duration_s 与本组生效模型写法机器写入(Seedance 2.5 / Wan 3.0 / Kling 4.0 连续整数秒时间段标在段首镜段头后;MiniMax H3 Shot k≥2 切点 `At MM:SS.mmm,`;Seedance 2.0 不写、剔除),再不带 --write 机检:标签齐全、连续不重叠、末段止于 round(total_duration_s)、Σ duration_s = total_duration_s;不过=不交付"""
     if agent_id == "08-video-gen/upscale":
         ups = upscale_settings()
         p += f"""
@@ -16668,15 +16690,19 @@ async def api_globalmodel_get():
 
 
 def video_family_for(*names: str) -> str:
-    """按模型 id / 名称 / 工作流名关键字归入「模型限制」预设口径(2026-10-09):sd25 / sd20 / mmh3 / wan30,
-    不命中返 ""。先小写、非字母数字一律折成 "-" 再按序匹配,先中先得。各渠道实际写法:
+    """按模型 id / 名称 / 工作流名关键字归入「模型限制」预设口径(2026-10-09):sd25 / sd20 / mmh3 / wan30 / kling4,
+    不命中返 ""。kling4 先按原样比对 Fal 的 ID 写法(is_fal_kling4:kling/v4[/…]、fal-ai/kling-video/v4[/…]);
+    其余先小写、非字母数字一律折成 "-" 再按序匹配,先中先得。各渠道实际写法:
       mmh3  名字同时含 minimax 与 h3(minimax/h3[-max]、MiniMax-H3、minimax/hailuo-h3/…、
             rhart-video/minimax-h3-oss/…、工作流节点 MiniMaxH3ReferenceToVideo),或 hailuo-3 / hailuo-h3
             (OpenRouter minimax/hailuo-3[-max] 不含 h3 字样)
       sd25  seedance-2.5 各写法(doubao-/dreamina-seedance-2-5-…、bytedance/seedance-2.5[-global]-token/…)
       sd20  其余 seedance-2.x(含 fast/mini/global),及 RunningHub 给 Seedance 2.0 起的别名 sparkvideo-2.0
       wan30 wan-3.x(alibaba/wan-3.0[-prime]/…)
-    Seedance 1.x、Hailuo 2.3、Wan 2.x、Kling、Veo、Vidu、PixVerse、LTX 等不命中。"""
+      kling4 Fal 托管 Kling 4.0(RunningHub 的 kling-v4/omni-video 只收 1 段参考视频,上限与预设不符,不命中)
+    Seedance 1.x、Hailuo 2.3、Wan 2.x、Kling 3.0 及以前、Veo、Vidu、PixVerse、LTX 等不命中。"""
+    if any(is_fal_kling4(n) for n in names if n):
+        return "kling4"
     t = re.sub(r"[^a-z0-9]+", "-", " ".join(n for n in names if n).lower())
     if ("minimax" in t and "h3" in t) or re.search(r"hailuo-?h?3(?![0-9])", t):
         return "mmh3"

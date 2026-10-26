@@ -47,6 +47,8 @@ def test_apply_segments_zh_is_idempotent_and_passes_check():
     assert st.strip_tags(out, False) == SD25
     assert st.check_prompt(out, durs, total, st.KIND_SD25, 'g') == ([], [])
     assert st.check_prompt(out, durs, total, st.KIND_WAN3, 'g') == ([], [])
+    assert st.check_prompt(out, durs, total, st.KIND_KLING4, 'g') == ([], [])      # Kling 4.0 同一切段口径
+    assert st.apply_prompt(SD25, durs, total, st.KIND_KLING4, True) == out
     # 英文界面
     en = st.apply_prompt(SD25, durs, total, st.KIND_WAN3, False)
     assert 'Shot 1: 0-2s: 场景激活' in en and 'Shot 3: 4-5s (Shot 3–Shot 4): 场景激活' in en
@@ -122,4 +124,9 @@ def test_model_kind_detection():
     assert st.model_kind('MiniMax-Hailuo-H3') == st.KIND_H3 and st.model_kind('08-video-gen/prompt/h3-pe') == st.KIND_H3
     assert st.model_kind('alibaba/wan-3.0/reference-to-video') == st.KIND_WAN3
     assert st.model_kind('08-video-gen/prompt/wan3-pe') == st.KIND_WAN3
+    assert st.model_kind('kling/v4') == st.KIND_KLING4
+    assert st.model_kind('kling/v4/reference-to-video') == st.KIND_KLING4
+    assert st.model_kind('08-video-gen/prompt/kling4-pe') == st.KIND_KLING4
+    assert st.model_kind('kling-v4/omni-video') == ''                        # RunningHub 端点不归 Fal Kling 4.0
+    assert st.model_kind('fal-ai/kling-video/v3/pro') == ''
     assert st.model_kind('kling-v2') == '' and st.model_kind('') == ''

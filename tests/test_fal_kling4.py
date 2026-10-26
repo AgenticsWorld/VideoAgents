@@ -75,6 +75,8 @@ def test_reference_mode_images_tags_and_limits():
     assert b["image_urls"] == ["URL:a.png", "URL:b.png"] and "video_urls" not in b
     assert b["aspect_ratio"] == "auto"                                                 # 不支持的画幅按素材自适应
     assert b["prompt"] == "@Image1 走向 @Image2,镜头参考 @Video1;@Image10 不动"
+    said = body(refs=["a.png"], prompt='塔尔用低沉的中文说：{雪化了是清的。} 阿雅答“{嗯。}”,又说 "{走吧}"。')[1]["prompt"]
+    assert said == '塔尔用低沉的中文说：“雪化了是清的。” 阿雅答“嗯。”,又说 “走吧”。'      # 团队 {} 台词 → 官方引号
     assert body(refs=["a.png"], aspect="21:9")[1]["aspect_ratio"] == "21:9"
     assert body(refs=["a.png"] * 10)[1]["image_urls"] == ["URL:a.png"] * 10
     with pytest.raises(RuntimeError, match="参考图最多 10 张"):
@@ -133,7 +135,11 @@ def test_core_catalog_caps_and_page_lists():
     assert core.video_model_caps("kling/v4/reference-to-video") == caps
     assert core.video_model_caps("kling-v4/omni-video") is None                       # RunningHub 端点按其目录判
     assert core.video_model_caps("fal-ai/kling-video/v3/pro") is None
-    assert core.video_family_for("kling/v4") == ""                                     # 不归入任何「模型限制」预设
+    assert core.video_family_for("kling/v4") == "kling4"                               # 「模型限制」Kling 4.0 预设
+    assert core.video_family_for("kling-v4/omni-video") == ""
+    assert core.auto_prompt_skill_for_model("kling/v4") == core.PROMPT_SKILL_KLING4
+    assert core.auto_prompt_skill_for_model("kling-v4/omni-video") == ""
+    assert "kling4" in core.SHOT_GROUP_PRESETS
 
     html = (ROOT / "apps/web/static/models.html").read_text(encoding="utf-8")
     page = re.findall(r"\['([^']+)','([^']+)'\]", re.search(r"const FAL_VIDEO_MODELS=\[(.*?)\];", html, re.S).group(1))
@@ -152,3 +158,44 @@ def test_whitebox_continuity_and_live_caps():
     assert live_stream.allowed_link_modes("fal", "fal-ai/kling-video/v3/pro") == ("first_frame", "none", "director")
     live = (ROOT / "apps/web/static/live.html").read_text(encoding="utf-8")
     assert "kling4:[3,30]" in live
+
+
+def test_model_limit_preset_matches_caps():
+    """「模型限制」Kling 4.0 预设(设置弹窗与新建向导)与 core.video_model_caps 同口径,两处按钮都有。"""
+    from services.runtime import core
+    html = (ROOT / "apps/web/static/index.html").read_text(encoding="utf-8")
+    preset = re.search(r"\n\s*kling4:\{([^}]*)\}", html).group(1)
+    vals = {k: int(v) for k, v in re.findall(r"(\w+):(\d+)", preset)}
+    caps = core.video_model_caps("kling/v4")
+    assert vals == {k: caps[k] for k in ("max_group_s", "max_ref_images", "max_ref_videos", "max_ref_audios")}
+    assert html.count('data-preset="kling4">Kling 4.0</button>') == 2
+    assert "kling4:'Kling 4.0'" in html
+
+
+def test_kling4_prompt_skill_wired():
+    """kling4-pe 随仓库安装、注册为条件技能,prompt 工位系统提示词注入加载指令与不收参考音频的说明。"""
+    from services.runtime import core
+    skill = ROOT / core.KLING4_PE_SKILL
+    text = skill.read_text(encoding="utf-8")
+    assert text.startswith("---\nname: kling4-pe\n")
+    assert core._parse_skill_frontmatter(text)["name"] == "kling4-pe"
+    assert core.SKILL_ACTIVATIONS["08-video-gen/prompt/kling4-pe"]["kind"] == "conditional"
+    soul = (ROOT / "agents/08-video-gen/prompt/SOUL.md").read_text(encoding="utf-8")
+    assert "skills/kling4-pe/SKILL.md" in soul
+
+
+def test_prompt_agent_contract_injects_kling4_skill(tmp_path, monkeypatch):
+    """生效视频模型为 Fal kling/v4 时,prompt 工位系统提示词按 auto 解析出 kling4-pe 并注入加载指令。"""
+    from services.runtime import core
+    cfg = tmp_path / "genconfig.json"
+    cfg.write_text(json.dumps({"video": {"provider": "fal", "fal": {"model": "kling/v4"}}}), encoding="utf-8")
+    monkeypatch.setattr(core, "GENCONFIG_PATH", cfg)
+    monkeypatch.delenv("VIDEOAGENTS_USER_JWT", raising=False)
+    monkeypatch.setattr(core, "PROJECTS_DIR", tmp_path / "projects")
+    (tmp_path / "projects" / "demo").mkdir(parents=True)
+    (tmp_path / "projects" / "demo" / "settings.json").write_text("{}", encoding="utf-8")
+    assert core.resolve_prompt_skill("demo")["skill_id"] == core.PROMPT_SKILL_KLING4
+    p = core.build_role_prompt(core.PROMPT_AGENT_ID, "demo")
+    assert p.count("## Kling 4.0 提示词优化 Skill") == 1 and core.KLING4_PE_SKILL in p
+    assert "`{台词}`" in p and "audio_refs 一律留空" in p
+    assert "## 提示词技能 `kling4-pe`" not in p                                        # 不再落到通用技能段

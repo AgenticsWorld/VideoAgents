@@ -5240,11 +5240,13 @@ def _is_fal_kling4(model: str) -> bool:
     return bool(re.match(r"(?:fal-ai/)?kling(?:-video)?/v4(?:/|$)", (model or "").strip().lower()))
 
 
-def _kling4_reference_tags(prompt: str) -> str:
-    """项目提示词的参考素材点名([Image N] / @Image N、[Video N] / @Video N)换成 Kling 4.0 文档写法 @Image1 / @Video1。"""
-    return re.sub(r"\[(image|video)\s*(\d+)\]|@\s*(image|video)\s*(\d+)",
+def _kling4_prompt(prompt: str) -> str:
+    """项目提示词换成 Kling 4.0 文档写法:参考素材点名([Image N] / @Image N、[Video N] / @Video N)→ @Image1 / @Video1;
+    团队 `{台词}` 记号 → 引号“台词”(官方:对白写在引号里),`{}` 外已套的引号不重复。"""
+    text = re.sub(r"\[(image|video)\s*(\d+)\]|@\s*(image|video)\s*(\d+)",
                   lambda m: f"@{(m.group(1) or m.group(3)).capitalize()}{m.group(2) or m.group(4)}",
                   prompt or "", flags=re.IGNORECASE)
+    return re.sub(r"[“\"]?\{([^{}\n]+)\}[”\"]?", r"“\1”", text)
 
 
 def _kling4_prepare_ref_videos(paths: list) -> list[str]:
@@ -5589,7 +5591,7 @@ def _fal_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
                 print(f"[genmedia] Fal Kling 4.0 不支持画幅 {aspect}(可选 {'/'.join(FAL_KLING4_RATIOS)}),"
                       "按参考素材自适应(auto)", file=sys.stderr)
                 body["aspect_ratio"] = "auto"
-            body["prompt"] = _kling4_reference_tags(prompt)
+            body["prompt"] = _kling4_prompt(prompt)
             if refs:
                 body["image_urls"] = [to_url(p) for p in refs]
             if video_refs:

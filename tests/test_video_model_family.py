@@ -1,4 +1,4 @@
-"""新建向导「模型限制」默认预设:按生效视频模型的 id / 名称 / 工作流名关键字归入 sd25|sd20|mmh3|wan30。
+"""新建向导「模型限制」默认预设:按生效视频模型的 id / 名称 / 工作流名关键字归入 sd25|sd20|mmh3|wan30|kling4。
 
 模型名取自各渠道实际目录(火山/BytePlus/Fal/MiniMax/OpenRouter/RH 模型 API/ComfyUI 工作流);
 不命中的模型由前端保留默认 MiniMax H3 并提示核对。
@@ -41,6 +41,12 @@ from services.runtime import core
     # Wan 3.0
     (["alibaba/wan-3.0"], "wan30"),
     (["alibaba/wan-3.0-prime/reference-to-video"], "wan30"),
+    # Kling 4.0:只认 Fal 的 ID 写法(RunningHub kling-v4/omni-video 只收 1 段参考视频,与预设上限不符)
+    (["kling/v4"], "kling4"),
+    (["kling/v4/reference-to-video", "Kling 4.0"], "kling4"),
+    (["fal-ai/kling-video/v4"], "kling4"),
+    (["kling-v4/omni-video"], ""),
+    (["Kling 4.0"], ""),
     # 不命中
     (["doubao-seedance-1-5-pro-251215"], ""),
     (["seedance-1-0-pro-fast-251015"], ""),
@@ -60,7 +66,8 @@ def test_video_family_for(names, family):
 
 def test_every_catalog_model_is_classified_as_its_label_says():
     """目录里每个模型按 id 判出的口径与其中文标签一致(防目录新增写法漏判/误判)。"""
-    expect = {"Seedance 2.5": "sd25", "Seedance 2.0": "sd20", "MiniMax H3": "mmh3", "Wan 3.0": "wan30"}
+    expect = {"Seedance 2.5": "sd25", "Seedance 2.0": "sd20", "MiniMax H3": "mmh3", "Wan 3.0": "wan30",
+              "Kling 4.0": "kling4"}
     for prov, rows in core.VIDEO_MODEL_CATALOG.items():
         for mid, label in rows:
             want = next((f for k, f in expect.items() if label.startswith(k)), "")
@@ -88,6 +95,7 @@ def test_api_reports_family_per_provider(cfg_file):
     assert _video(cfg_file, "openrouter", model="minimax/hailuo-3")["family"] == "mmh3"
     assert _video(cfg_file, "rhapi", model="rhart-video/sparkvideo-2.0/multimodal-video")["family"] == "sd20"
     assert _video(cfg_file, "fal", model="minimax/h3", custom_model="alibaba/wan-3.0")["family"] == "wan30"
+    assert _video(cfg_file, "fal", model="kling/v4")["family"] == "kling4"
     r = _video(cfg_file, "openrouter", model="google/veo-3.1")
     assert r["family"] == "" and r["model"] == "google/veo-3.1"
 

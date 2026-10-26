@@ -2,7 +2,7 @@
 """镜次时长机检 / 回写(shot_timing_bound,2026-09-23)。
 
 把 directing/<ep>/shot_list.json 的逐镜 duration_s 按本组生效视频模型的官方写法写进组级 video_prompt(modules/shot_timing.py):
-  Seedance 2.5 / Wan 3.0 → 连续整数秒时间段,写在每段第一镜的 `Shot N:` 段头后(`0-2秒：` / `8-10秒（Shot 5–Shot 8）：`;
+  Seedance 2.5 / Wan 3.0 / Kling 4.0 → 连续整数秒时间段,写在每段第一镜的 `Shot N:` 段头后(`0-2秒：` / `8-10秒（Shot 5–Shot 8）：`;
                             非中文界面 `0-2s:` / `8-10s (Shot 5–Shot 8):`),亚秒快切的相邻镜并段;
   MiniMax H3            → Shot k(k≥2)段头后写切点 `At MM:SS.mmm,` = 前 k-1 镜累计时长,首镜不写;
   Seedance 2.0          → 官方指南「精确时间段支持不稳定」,不写;存量标签剔除;

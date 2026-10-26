@@ -605,7 +605,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
       </div>
     </div>
     <div class="np-step" data-step="model" style="display:none">
-      <div class="row"><label>默认值</label><div class="sg-presets" data-sg-presets="npsg"><button type="button" data-preset="sd20">Seedance 2.0</button><button type="button" data-preset="sd25">Seedance 2.5</button><button type="button" data-preset="mmh3">MiniMax H3</button><button type="button" data-preset="wan30">Wan 3.0</button></div></div>
+      <div class="row"><label>默认值</label><div class="sg-presets" data-sg-presets="npsg"><button type="button" data-preset="sd20">Seedance 2.0</button><button type="button" data-preset="sd25">Seedance 2.5</button><button type="button" data-preset="mmh3">MiniMax H3</button><button type="button" data-preset="wan30">Wan 3.0</button><button type="button" data-preset="kling4">Kling 4.0</button></div></div>
       <div class="note" id="npsg-model-hint" style="display:none;color:#e8a33d"></div>
       <div class="row"><label>最大分镜组时长(秒)</label><input type="number" id="npsg-maxs" min="4" max="30" step="1" value="30"></div>
       <div class="row"><label>最大参考图数量</label><input type="number" id="npsg-imgs" min="0" max="30" step="1" value="30"></div>
@@ -895,14 +895,14 @@ a.hdr-icon:hover{border-color:var(--accent)}
 <div id="sg-modal" class="modal">
   <div class="box">
     <h3>🎬 模型限制 — <span id="sg-proj" style="color:var(--accent)"></span></h3>
-    <div class="row"><label>默认值</label><div class="sg-presets" data-sg-presets="sg"><button type="button" data-preset="sd20">Seedance 2.0</button><button type="button" data-preset="sd25">Seedance 2.5</button><button type="button" data-preset="mmh3">MiniMax H3</button><button type="button" data-preset="wan30">Wan 3.0</button></div></div>
+    <div class="row"><label>默认值</label><div class="sg-presets" data-sg-presets="sg"><button type="button" data-preset="sd20">Seedance 2.0</button><button type="button" data-preset="sd25">Seedance 2.5</button><button type="button" data-preset="mmh3">MiniMax H3</button><button type="button" data-preset="wan30">Wan 3.0</button><button type="button" data-preset="kling4">Kling 4.0</button></div></div>
     <div class="row"><label>最大分镜组时长(秒)</label><input type="number" id="sg-maxs" min="4" max="30" step="1" placeholder="15"></div>
     <div class="row"><label>最大参考图数量</label><input type="number" id="sg-imgs" min="0" max="30" step="1" placeholder="9"></div>
     <div class="row"><label>最大参考视频数量</label><input type="number" id="sg-vids" min="0" max="10" step="1" placeholder="3"></div>
     <div class="row"><label>最大参考音频数量</label><input type="number" id="sg-auds" min="0" max="10" step="1" placeholder="3"></div>
     <div class="row"><label>提示词技能</label><select id="sg-skill" class="ps-select" style="flex:1"></select>
       <button type="button" class="info-btn" data-info="sg-info-skill" title="说明">i</button></div>
-    <div class="note info-note" id="sg-info-skill">视频提示词技能:Prompt 工程师写组级视频提示词时必须套用的官方提示词技能。自动=按真正跑视频生成的模型解析(Seedance 2.5→sd25-pe,Seedance 2.0 系列→sd20-pe,MiniMax H3→h3-pe,Wan 3.0→wan3-pe);解析不到时可手选或跳过。H3A 分镜签字时会再次确认并冻结</div>
+    <div class="note info-note" id="sg-info-skill">视频提示词技能:Prompt 工程师写组级视频提示词时必须套用的官方提示词技能。自动=按真正跑视频生成的模型解析(Seedance 2.5→sd25-pe,Seedance 2.0 系列→sd20-pe,MiniMax H3→h3-pe,Wan 3.0→wan3-pe,Kling 4.0(Fal)→kling4-pe);解析不到时可手选或跳过。H3A 分镜签字时会再次确认并冻结</div>
     <div class="note ps-hint" id="sg-skill-hint" style="display:none"></div>
     <div class="note">约束每个生成组(generation group)的总时长与参考素材数量上限。这些数值需要与所选视频生成模型的能力对应(Seedance 2.0 系列:组时长 ≤15s、参考图 ≤9、参考视频 ≤3、参考音频 ≤3;Seedance 2.5:组时长 ≤30s、参考图 ≤30、参考视频 ≤10、参考音频 ≤10),如果不清楚建议不要修改。<b>仅对当前项目生效</b>,保存后对之后派发的任务生效</div>
     <div class="err" id="sg-err"></div>
@@ -2711,6 +2711,7 @@ const SG_PRESETS={
   sd25:{max_group_s:30,max_ref_images:30,max_ref_videos:10,max_ref_audios:10},  // Seedance 2.5
   mmh3:{max_group_s:15,max_ref_images:9,max_ref_videos:3,max_ref_audios:3},    // MiniMax Hailuo 3(2026-09-07:参考视频/音频各 3)
   wan30:{max_group_s:30,max_ref_images:10,max_ref_videos:5,max_ref_audios:5},   // 阿里 Wan 3.0(Fal 托管;2026-09-11,与 core.video_model_caps 同口径:2-30s,参考 10 图/5 视频/5 音频)
+  kling4:{max_group_s:30,max_ref_images:10,max_ref_videos:5,max_ref_audios:0},  // Kling 4.0(Fal 托管 kling/v4;2026-10-26,与 core.video_model_caps 同口径:3-30s,参考 10 图/5 视频,不收参考音频)
 };
 const SG_FIELDS={max_group_s:'maxs',max_ref_images:'imgs',max_ref_videos:'vids',max_ref_audios:'auds'};
 const SG_PICKED={};   // pfx → 用户显式点选的预设 key(null=未点选/已被手动改值打破)
@@ -2727,12 +2728,12 @@ function sgSyncPreset(pfx){   // 按点选/当前值高亮预设按钮(同一时
   if(pfx==='npsg')npsgModelHint();
 }
 // 新建向导「模型限制」步(2026-10-09 改):默认预设跟随「生成模型」页当前生效视频模型(GET /config/video-model,
-// video-generation 工位口径;服务端 core.video_family_for 按模型 id/名称/工作流名关键字归入 sd25|sd20|mmh3|wan30),
+// video-generation 工位口径;服务端 core.video_family_for 按模型 id/名称/工作流名关键字归入 sd25|sd20|mmh3|wan30|kling4),
 // 打开向导时自动选中;归不进预设口径时保留默认 MiniMax H3 并黄字提示核对。用户在此步点选/改值后不再被覆盖,
 // 所选与生效模型不一致时黄字提示,只提示不拦下一步
-let NP_VIDEO_MODEL=null;   // {provider,model,label,family:sd20|sd25|mmh3|wan30|''};openNpModal 时拉取
+let NP_VIDEO_MODEL=null;   // {provider,model,label,family:sd20|sd25|mmh3|wan30|kling4|''};openNpModal 时拉取
 let NP_VM_REQ=0,NP_SG_TOUCHED=false;   // 防迟到响应覆盖新一次打开;用户动过模型限制步后不再自动套用
-const SG_PRESET_NAMES={sd20:'Seedance 2.0',sd25:'Seedance 2.5',mmh3:'MiniMax H3',wan30:'Wan 3.0'};
+const SG_PRESET_NAMES={sd20:'Seedance 2.0',sd25:'Seedance 2.5',mmh3:'MiniMax H3',wan30:'Wan 3.0',kling4:'Kling 4.0'};
 function npsgFromVideoModel(){
   const fam=NP_VIDEO_MODEL&&NP_VIDEO_MODEL.family;
   if(SG_PRESETS[fam]&&!NP_SG_TOUCHED)sgApplyPreset('npsg',fam);   // 同时按模型联动白模开关

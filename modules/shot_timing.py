@@ -3,7 +3,8 @@
 背景:出片时只把组 total_duration_s 作 `--duration` 传给 genmedia,正文各 `Shot N:` 段从不带时长,模型自行分配组内节奏。
 各官方提示词技能(agents/08-video-gen/prompt/skills/<模型>-pe)对「时间」的口径不同,本模块按组生效模型分四种写法:
 
-  * Seedance 2.5(sd25)/ Wan 3.0(wan3)——**连续整数秒时间段**(官方 `0-5秒：…；5-10秒：…` / `镜头N xx-xx秒`):
+  * Seedance 2.5(sd25)/ Wan 3.0(wan3)/ Kling 4.0(kling4,Fal 托管 kling/v4)——**连续整数秒时间段**
+    (官方 `0-5秒：…；5-10秒：…` / `镜头N xx-xx秒` / Kling `0–X s: … X–Y s: …`):
     时间段是「事件预算」不是帧级剪辑点,官方明说不能精确到 0.5 秒,事件过密应减段不细分。故按 shot_list 累计边界四舍五入
     到整数秒切段,亚秒级快切的相邻几镜并成一段;每段的标签写在该段**第一镜**的 `Shot N:` 段头之后:
       中文界面  `Shot 1: 0-2秒：…`            合并段 `Shot 5: 8-10秒（Shot 5–Shot 8）：…`
@@ -31,9 +32,10 @@ from pathlib import Path
 
 from modules.whitebox import component, read
 
-KIND_SD25, KIND_SD20, KIND_H3, KIND_WAN3 = 'sd25', 'sd20', 'h3', 'wan3'
-SEGMENT_KINDS = (KIND_SD25, KIND_WAN3)
-KIND_LABEL = {KIND_SD25: 'Seedance 2.5', KIND_SD20: 'Seedance 2.0', KIND_H3: 'MiniMax H3', KIND_WAN3: 'Wan 3.0'}
+KIND_SD25, KIND_SD20, KIND_H3, KIND_WAN3, KIND_KLING4 = 'sd25', 'sd20', 'h3', 'wan3', 'kling4'
+SEGMENT_KINDS = (KIND_SD25, KIND_WAN3, KIND_KLING4)
+KIND_LABEL = {KIND_SD25: 'Seedance 2.5', KIND_SD20: 'Seedance 2.0', KIND_H3: 'MiniMax H3', KIND_WAN3: 'Wan 3.0',
+              KIND_KLING4: 'Kling 4.0'}
 
 CUM_TOL = 0.06        # H3 切点与累计时长允许误差(秒)
 TOTAL_TOL = 0.5       # 组 total_duration_s 与 Σ duration_s 允许误差
@@ -51,7 +53,7 @@ _TAIL_LABELS = ('Global constraints:', 'overall_soundscape:', 'non_diegetic_musi
 
 # ---------------------------------------------------------------- 生效模型
 def model_kind(text) -> str:
-    """模型 id / 技能 id / 工作流名 → 四种写法之一('' = 未知)。"""
+    """模型 id / 技能 id / 工作流名 → 各写法之一('' = 未知);Kling 4.0 只认 Fal 的 ID 写法(同 core.is_fal_kling4)。"""
     t = str(text or '').lower()
     if not t:
         return ''
@@ -63,6 +65,8 @@ def model_kind(text) -> str:
         return KIND_SD20
     if re.search(r'wan[-_ .]?3(?:[-_.]0)?(?![\d])', t) or t.endswith('/wan3-pe'):
         return KIND_WAN3
+    if re.match(r'(?:fal-ai/)?kling(?:-video)?/v4(?:/|$)', t.strip()) or t.endswith('/kling4-pe'):
+        return KIND_KLING4
     return ''
 
 
@@ -292,7 +296,7 @@ def check_prompt(vp: str, durations, total, kind: str, gid: str) -> tuple[list[s
                 errs.append(f'{gid}: Shot {k} 切点 {t:.3f}s 不小于组总时长 {total}s')
             prev = t
         return errs, warns
-    # Seedance 2.5 / Wan 3.0:时间段
+    # Seedance 2.5 / Wan 3.0 / Kling 4.0:时间段
     found = []
     for k in range(1, n + 1):
         ms = list(TAG_RE.finditer(bodies[k]))
