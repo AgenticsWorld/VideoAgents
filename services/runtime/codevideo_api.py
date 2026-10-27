@@ -1,4 +1,4 @@
-"""演示视频(code-video,2026-10-20)的服务端接口实现;路由在 services/api/app.py。
+"""动效短片(code-video,2026-10-20)的服务端接口实现;路由在 services/api/app.py。
 
 - 「生成模型」页代码作曲 / 代码音效标签页:采样库与 HDRI 包状态 / 后台下载 / 删除,内置示范脚本试听
 - 「🖥️ 代码预览」页(/preview/code):片子状态(时间轴、各段渲染新鲜度、混音 / 成片)、后台按段渲染任务、注释与提交修改师
@@ -113,7 +113,7 @@ def _base(project: str) -> Path:
     base = core._proj_base(project)
     blk = CV.project_block(base)
     if blk.get("type") != "code-video":
-        _err(400, "Not a code-video (演示视频) project")
+        _err(400, "Not a code-video (动效短片) project")
     return base
 
 
@@ -297,7 +297,7 @@ async def notes_submit(project: str, body: dict) -> dict:
         lines.append(f"{i}. [{where}]\n   " + ("注释:" if zh else "Note: ") + n["text"].replace("\n", "\n   "))
     rel = f"data/projects/{base.name}/{CV.NS}"
     if zh:
-        head = (f"以下是用户在「🖥️ 代码预览」页对演示视频 {base.name} 写的全部注释(共 {len(notes)} 条),一次性交给你改。"
+        head = (f"以下是用户在「🖥️ 代码预览」页对动效短片 {base.name} 写的全部注释(共 {len(notes)} 条),一次性交给你改。"
                 f"画面是 {rel}/ 下的网页代码(index.html / main.js / js/ / sections/<段 id>.js,页面契约见 agents/workflows/codevideo.md),"
                 f"时间轴是 {rel}/timeline.json。逐条改代码(只动需要改的段,段专属改动放 sections/<段 id>.js,这样只重渲这一段);"
                 f"改了时长 / 段落要同步 timeline.json 并跑 `python3 code/codevideo.py sync --project {base.name}`。"
@@ -325,7 +325,7 @@ async def notes_submit(project: str, body: dict) -> dict:
 
 
 async def board_notes_submit(base: Path, ep: str, body: dict) -> dict:
-    """故事板页「📨 提交注释」在演示视频项目里的走法:storyboard.json 是 codevideo.py sync 从 timeline.json 生成的,
+    """故事板页「📨 提交注释」在动效短片项目里的走法:storyboard.json 是 codevideo.py sync 从 timeline.json 生成的,
     改它没用;把故事板注释按键(整集 * / 场次 S010 / 镜 S010-02)换算成时刻并进代码预览注释,一起发修改师改代码。"""
     from modules import storyboard_board as sbb
     from modules.codevideo import timeline as TL
@@ -361,7 +361,7 @@ async def board_notes_submit(base: Path, ep: str, body: dict) -> dict:
 
 
 async def grp_notes_submit(base: Path, ep: str, body: dict) -> dict:
-    """分镜预览页「📨 提交注释」在演示视频项目里的走法:组 = 段,组注释(assets/notes/<ep>/<grp>.json)换算成段起点时刻
+    """分镜预览页「📨 提交注释」在动效短片项目里的走法:组 = 段,组注释(assets/notes/<ep>/<grp>.json)换算成段起点时刻
     并进代码预览注释,发修改师改代码;提交后删掉组注释文件。"""
     from modules.codevideo import timeline as TL
     ndir = base / "assets" / "notes" / ep

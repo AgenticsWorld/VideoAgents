@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""从 lemo-opuscar(MIT,github.com/lemomo-ai/lemo-opuscar)同步「演示视频」项目类型用到的上游文件。
+"""从 lemo-opuscar(MIT,github.com/lemomo-ai/lemo-opuscar)同步「动效短片」项目类型用到的上游文件。
 
 用法:python3 scripts/sync_lemo_opuscar.py [--src <lemo-opuscar 克隆>] [--check]
 

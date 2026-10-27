@@ -1178,7 +1178,7 @@ async def stock_translate(body: dict[str, Any]) -> dict[str, Any]:
     return await core.api_stock_translate(body)
 
 
-# ---- 演示视频(code-video,2026-10-20;services/runtime/codevideo_api.py)----
+# ---- 动效短片(code-video,2026-10-20;services/runtime/codevideo_api.py)----
 @api.get("/codevideo/packs", tags=["providers"])
 async def codevideo_packs() -> dict[str, Any]:
     """「生成模型」页代码作曲 / 代码音效:采样库与 HDRI 包状态(含下载进度)。"""

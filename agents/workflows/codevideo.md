@@ -1,4 +1,4 @@
-# 🖥️ 演示视频(项目类型 `code-video`)
+# 🖥️ 动效短片(项目类型 `code-video`)
 
 **不用视频生成模型,让语言模型写代码出片。** 片子是一个网页:`codevideo/index.html` 里的
 `window.render(t)` 按时间画出任意一帧(Canvas 2D / WebGL / three.js),宿主用无头浏览器逐帧截图、
@@ -26,7 +26,7 @@ ffmpeg 编码;旁白走 TTS(旁白声线卡),配乐由 Agent 写作曲脚本用�
 
 与其它项目类型的差异:
 
-| | 影视剧 film | 音频配画 audio-to-video | 演示视频 code-video |
+| | 影视剧 film | 音频配画 audio-to-video | 动效短片 code-video |
 |---|---|---|---|
 | 画面来源 | 视频生成模型 | 视频生成模型 | **语言模型写的网页,逐帧截图** |
 | 声音来源 | 模型原生 + TTS + 音乐模型 | 用户母带 | TTS 旁白 + **代码作曲**(或音乐模型 / 曲库,自动对拍)+ **程序化拟音** |
@@ -197,7 +197,7 @@ python3 modules/genmedia.py music --provider code --prompt "<英文一句描述>
 `<输出>.credits.json`(用到的乐器署名行,CREDITS 必收)。
 
 **代码音效**:`python3 modules/genmedia.py sfx --provider code --prompt "…" --output x.wav --script fx.py [--duration] [--loop]`,
-契约同上(`CODE_AUDIO_LOOP=1` 表示要无缝循环)。演示视频的拟音一般直接写在 mix.py 里,不单独出文件。
+契约同上(`CODE_AUDIO_LOOP=1` 表示要无缝循环)。动效短片的拟音一般直接写在 mix.py 里,不单独出文件。
 
 **混音**:`codevideo/mix.py` 由 `codevideo.py mix` 运行。环境变量 `CODE_AUDIO_OUT` = `codevideo/out/mix.wav`、
 `CODEVIDEO_STEMS` = `codevideo/out/stems/`、`CODEVIDEO_FILM` = `codevideo/`。必须写 mix.wav(≥ 片长);应写
@@ -270,7 +270,7 @@ lemo-opuscar 的《OPUSCAR 98》用 98 种风格给 98 部最佳影片各画了�
 
 ## 团队
 
-**新增 4 个**(类别 `18-code-video`「演示视频」)+ 1 个 QA,另复用 `09-audio/narrator`、`00-orchestration/reviser`:
+**新增 4 个**(类别 `18-code-video`「动效短片」)+ 1 个 QA,另复用 `09-audio/narrator`、`00-orchestration/reviser`:
 
 | Agent | 职责 | 主要产物 |
 |---|---|---|

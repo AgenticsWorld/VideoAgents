@@ -1,4 +1,4 @@
-"""演示视频的声音:代码作曲 / 代码音效 / 混音脚本在宿主库环境下运行,旁白逐句 TTS,成片两遍 loudnorm。
+"""动效短片的声音:代码作曲 / 代码音效 / 混音脚本在宿主库环境下运行,旁白逐句 TTS,成片两遍 loudnorm。
 
 脚本环境(run_script):LIB = modules/codevideo/lib(脚本里 `sys.path.insert(0, LIB)` 后 `from core.audio import sampler as S`、
 `from core.audio import sfx`,与上游片子工程写法一致);CODE_AUDIO_OUT = 必须写出的 wav;CODE_AUDIO_DURATION = 目标秒数(可无);
@@ -345,7 +345,7 @@ def write_build_sh(base: Path):
     p = base / NS / "build.sh"
     p.write_text(
         "#!/bin/sh\n"
-        f"# 一键重建《{base.name}》:事件 → 旁白 → 配乐 → 按段渲染 → 混音 → 成片(VideoAgents 演示视频项目类型)\n"
+        f"# 一键重建《{base.name}》:事件 → 旁白 → 配乐 → 按段渲染 → 混音 → 成片(VideoAgents 动效短片项目类型)\n"
         "# 在 VideoAgents 仓库根目录(或设 VIDEOAGENTS_ROOT)运行:sh data/projects/<项目>/codevideo/build.sh\n"
         "set -e\n"
         'HERE=$(cd "$(dirname "$0")" && pwd)\n'

@@ -1,4 +1,4 @@
-"""演示视频页面的本机静态服务(ES module 不能走 file://)。
+"""动效短片页面的本机静态服务(ES module 不能走 file://)。
 
 两种用法:
 - 渲染(render.py / checks.py):`FilmServer(film=<项目>/codevideo)`,临时端口,只服务这一部片,/@film/ = 片子目录;

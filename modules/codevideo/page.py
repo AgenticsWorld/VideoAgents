@@ -1,4 +1,4 @@
-"""用 Playwright(异步)打开演示视频页面:等 window.READY,页面报错 / 必需文件 404 即停(免得渲出坏片)。
+"""用 Playwright(异步)打开动效短片页面:等 window.READY,页面报错 / 必需文件 404 即停(免得渲出坏片)。
 
 浏览器参数沿用上游:macOS 显式用 Metal 做 WebGL(swiftshader 软渲染对 3D/着色器页面慢数倍),
 CODEVIDEO_ANGLE=metal|gl|vulkan|swiftshader|default 可改;VIDEOAGENTS_CHROMIUM 指定可执行文件(与白模导出同口径)。

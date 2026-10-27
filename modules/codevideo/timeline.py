@@ -1,4 +1,4 @@
-"""codevideo/timeline.json:演示视频的唯一事实源(段 / 镜 / 击点 / 台词时点),schema codevideo_timeline/1。
+"""codevideo/timeline.json:动效短片的唯一事实源(段 / 镜 / 击点 / 台词时点),schema codevideo_timeline/1。
 
 段 = 现有页面里的「场次」与「生成组」:第 i 段 → 场次号 S{i*10:03d}、组号 grp{i*10:04d};全片第 j 镜 → sh{j*10:04d}
 (与新建项目的插入位编号制一致)。帧边界累计取整:frame(t) = round(t*fps),段帧数 = frame(t1) − frame(t0),

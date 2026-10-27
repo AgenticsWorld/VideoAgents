@@ -1,4 +1,4 @@
-# codevideo.yaml — 演示视频流水线 DAG(项目类型 code-video;机器可读)
+# codevideo.yaml — 动效短片流水线 DAG(项目类型 code-video;机器可读)
 # 与 agents/workflow.yaml 同构;项目类型机制见 agents/WORKFLOW.md §11,并入/跳过规则沿用 §10.3。
 # 节点 id 前缀 cv/gc,不与主流程 p*/g*、音频配画 av*/ga*、混剪 mx*/gm*、数字人 dh* 冲突;
 # 人工签字点 CVH1(故事板,可关)/ CVH2(成片),不与主流程 H1–H5/H3S/H3A/H3V/H3B/H3P、AVH*、MH* 冲突。

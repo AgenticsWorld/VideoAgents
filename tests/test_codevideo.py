@@ -1,4 +1,4 @@
-"""演示视频(项目类型 code-video,2026-10-20):lemo-opuscar 页面契约 + 宿主渲染工具链 + 项目类型接入 + 代码作曲 / 代码音效。"""
+"""动效短片(项目类型 code-video,2026-10-20):lemo-opuscar 页面契约 + 宿主渲染工具链 + 项目类型接入 + 代码作曲 / 代码音效。"""
 import asyncio
 import json
 import os
@@ -651,7 +651,7 @@ def test_beats_check_honours_off_and_kept(tmp_path):
 
 
 def test_code_video_agents_default_to_high_tier():
-    """演示视频新增的 4 个创作成员智能分配默认高档;终审 11-qa/code-video-qa 随审核类低档(2026-10-21 用户要求)。"""
+    """动效短片新增的 4 个创作成员智能分配默认高档;终审 11-qa/code-video-qa 随审核类低档(2026-10-21 用户要求)。"""
     members = ["18-code-video/film-director", "18-code-video/scene-coder", "18-code-video/code-composer",
                "18-code-video/sound-designer"]
     for aid in members:
@@ -660,3 +660,24 @@ def test_code_video_agents_default_to_high_tier():
             assert core.default_agent_model(aid, mode) == core.AM_MODE_MODELS[mode]["high"] | {}, (aid, mode)
     for aid in ("11-qa/code-video-qa", "11-qa/visual-qa"):
         assert core.default_agent_model(aid, "smart_claude")["model"] == core.AM_MODE_MODELS["smart_claude"]["low"]["model"], aid
+
+
+def test_type_display_name_is_motion_short():
+    """类型显示名「演示视频」改为「动效短片」(2026-10-27 用户要求):注册表、向导卡片、团队分组与 11 份词典都换新名,
+    类型 id code-video 不变;界面页面与词典里不再留旧名。"""
+    assert project_types.label("code-video") == "动效短片"
+    assert core.CATEGORY_NAMES["18-code-video"] == "动效短片"
+    html = (ROOT / "apps/web/static/index.html").read_text(encoding="utf-8")
+    assert 'data-type="code-video"><span class="np-type-ico">🖥️</span><span class="np-type-nm">动效短片</span>' in html
+    static = ROOT / "apps/web/static"
+    for p in [*static.glob("*.html"), *(static / "i18n").glob("*.js")]:
+        assert "演示视频" not in p.read_text(encoding="utf-8"), p.name
+    keys = ("动效短片", "cat·动效短片", "agent·动效短片终审官")
+    for p in (static / "i18n").glob("*.js"):
+        if p.name == "i18n.js":
+            continue
+        txt = p.read_text(encoding="utf-8")
+        for k in keys:
+            assert f'"{k}": "' in txt, (p.name, k)
+    en = (static / "i18n/en.js").read_text(encoding="utf-8")
+    assert '"动效短片": "Motion graphics"' in en and "demo video" not in en.lower()

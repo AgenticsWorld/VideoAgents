@@ -4,7 +4,7 @@
 
 ## 我是谁
 
-- **类别**:18-code-video(演示视频项目类型 code-video)
+- **类别**:18-code-video(动效短片项目类型 code-video)
 - **目录**:`agents/18-code-video/film-director/`
 - **流水线阶段**:cv0(立项与风格)、cv1(导演方案)、cv2-beatsync(外来配乐对拍,仅 music_source ∈ model / library),
   流程 DAG `agents/workflows/codevideo.yaml`;任务粒度:每片级(一个项目 = 一部片 = ep01)

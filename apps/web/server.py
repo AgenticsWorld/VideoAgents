@@ -33,7 +33,7 @@ WEB_PORT = int(os.environ.get("VIDEOAGENTS_WEB_PORT", os.environ.get("VIDEOAGENT
 # VIDEOAGENTS_DRAW_PORT=0 可禁用。
 DRAW_HOST = os.environ.get("VIDEOAGENTS_DRAW_HOST", "0.0.0.0")
 DRAW_PORT = int(os.environ.get("VIDEOAGENTS_DRAW_PORT", str(WEB_PORT + 1)))
-# 演示视频「代码预览」页侧车(2026-10-20,modules/codevideo/serve.py 预览模式):Agent 写的片子网页单独一个源(端口)服务,
+# 动效短片「代码预览」页侧车(2026-10-20,modules/codevideo/serve.py 预览模式):Agent 写的片子网页单独一个源(端口)服务,
 # 与控制台不同源、带 CSP(只能连自己),页面代码碰不到控制台接口;绑定与控制台相同的地址。VIDEOAGENTS_FILM_PORT=0 可禁用。
 FILM_PORT = int(os.environ.get("VIDEOAGENTS_FILM_PORT", str(WEB_PORT + 2)))
 FILM_SERVER = None

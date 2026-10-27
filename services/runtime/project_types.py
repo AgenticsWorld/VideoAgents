@@ -4,7 +4,7 @@
 - audio-to-video(音频配画):讲述音频 + 文稿 → 按音频生成画面,agents/workflows/audiovideo.yaml
 - digital-human(数字人):音频母带 + 人物图片 → 说话人口型视频,agents/workflows/digitalhuman.yaml
 - mashup(混剪):文稿 + 本地素材库(+ 可选讲述音频)→ 素材库切片配画,agents/workflows/mashup.yaml
-- code-video(演示视频,2026-10-20):主题 / 文稿 + 风格(lemo-opuscar 43 种)→ 语言模型写网页逐帧渲染出片,
+- code-video(动效短片,2026-10-20):主题 / 文稿 + 风格(lemo-opuscar 43 种)→ 语言模型写网页逐帧渲染出片,
   不用视频生成模型,agents/workflows/codevideo.yaml(宿主工具链 modules/codevideo/ + code/codevideo.py)
 
 后三种原是 VideoAgents-Plugins 仓库的同名插件,2026-10-20 并入主程序:成员 SOUL 进 agents/<类别>/,
@@ -56,7 +56,7 @@ TYPES: dict[str, dict] = {
                   "没有音频时按 DAG 头部「音频可选」条款先派 09-audio/narrator 按文稿 TTS 合成母带",
     },
     "code-video": {
-        "label": "演示视频", "icon": "🖥️", "workflow": "agents/workflows/codevideo.yaml",
+        "label": "动效短片", "icon": "🖥️", "workflow": "agents/workflows/codevideo.yaml",
         "doc": "agents/workflows/codevideo.md",
         "categories": ("18-code-video",), "agents": ("11-qa/code-video-qa",),
         "outputs_ns": "codevideo", "first_node": "cv0-ingest", "gates": "CVH1 故事板(project.storyboard_review=false 时跳过)、CVH2 成片",
@@ -84,7 +84,7 @@ INTEGRATED_PLUGINS = frozenset(t for t in TYPES if t != DEFAULT)
 # 按台词稿逐句用 refs/voices/ 里的样本克隆合成母带(dh0-voice,code/dialogue_clone.py)
 VOICE_SOURCES = ("recording", "clone")
 
-# 演示视频的项目设置(2026-10-20,建项目时写定):code_style = 风格 slug(lemo-opuscar 风格库);storyboard_review = 先审故事板
+# 动效短片的项目设置(2026-10-20,建项目时写定):code_style = 风格 slug(lemo-opuscar 风格库);storyboard_review = 先审故事板
 # (默认开,CVH1);narration / subtitles = 旁白 / 字幕;length_s = 目标片长;fps;music_source = code(代码作曲,默认)
 # | model(按「生成模型」页音乐设置生成)| library(从项目音乐库 / 用户音乐选曲;三期 2026-10-20)。后两种是外来音乐:
 # 宿主 codevideo.py music-fit 适配到片长并测节拍网格,cv2-beatsync 把时间轴对到拍上。画幅 / 语言 / 成片分辨率沿用 output 段
@@ -128,7 +128,7 @@ def resolve(saved, project_dir: Path) -> dict:
 
 
 def code_video_settings(block, strict: bool = True) -> dict:
-    """演示视频设置规范化;strict 时非法值抛 ValueError(建项目接口转 400),否则回落默认。"""
+    """动效短片设置规范化;strict 时非法值抛 ValueError(建项目接口转 400),否则回落默认。"""
     block = block if isinstance(block, dict) else {}
     out = dict(CODE_VIDEO_DEFAULTS)
 
@@ -244,7 +244,7 @@ def orchestrator_section(block: dict, proj_rel: str, agent_ids) -> str:
     if tid == "code-video":
         cv = code_video_settings(block, strict=False)
         lines.append(
-            f"- 演示视频设置(settings.json#project,建项目时写定):风格 `{cv['code_style'] or '(未选)'}`"
+            f"- 动效短片设置(settings.json#project,建项目时写定):风格 `{cv['code_style'] or '(未选)'}`"
             + ("(轻量风格:OPUSCAR 98 的一段风格提示,没有完整 STYLE.md 与样片;cv0 锁定时宿主生成 codevideo/style/STYLE.md,"
                "导演须在 TREATMENT.md「风格补全」一节补齐提示没写到的部分)" if str(cv["code_style"]).startswith("o98-")
                else f"(agents/workflows/codevideo/styles/{cv['code_style'] or '<slug>'}/STYLE.md)")

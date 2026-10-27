@@ -1565,7 +1565,7 @@ function buildSfxPanels(){
     +'<a href="https://fal.ai/dashboard/keys" target="_blank">fal.ai 控制台「API Keys」</a>'
     +' 创建,留空沿用图像 / 视频段已填的 Fal Key。'));
   const cp=$('#panel-sfx-code');
-  cp.appendChild(el('div',{className:'hint'},t('不检索也不调模型:Agent 写音效脚本,宿主用程序合成(点击、嗖声、闷响、纸张、环境底噪……),每个声音可以落在画面事件的那一帧;不计费。适合演示视频与动态图形,写实拟音仍建议用 Openverse 或 AI 生成。')));
+  cp.appendChild(el('div',{className:'hint'},t('不检索也不调模型:Agent 写音效脚本,宿主用程序合成(点击、嗖声、闷响、纸张、环境底噪……),每个声音可以落在画面事件的那一帧;不计费。适合动效短片,写实拟音仍建议用 Openverse 或 AI 生成。')));
   cp.appendChild(codeDemoRow('sfx'));
 }
 function sfxSecs(v){return v==null?'?':(v<10?v.toFixed(1):String(Math.round(v)))+' s'}
@@ -1607,7 +1607,7 @@ const CODE_PACK_LABELS={'instruments-vsco2ce':'VSCO 2 CE · 管弦乐(CC0)','ins
   'instruments-freepats':'FreePats · 通用音色与鼓组(CC0 / 鼓组 CC BY)','instruments-karoryfer':'Karoryfer · 木管 / 铜管 / 特色乐器(CC0)',
   'instruments-salamander':'Salamander 三角钢琴(CC BY,片尾须署名)'};
 function buildCodeMusicPanel(d){
-  d.appendChild(el('div',{className:'hint'},t('不调用音乐模型:Agent(语言模型)按配乐需求写作曲脚本,宿主用采样乐器与合成器渲染成音频;不计费,节拍能与画面逐帧对齐。演示视频项目默认用它。')));
+  d.appendChild(el('div',{className:'hint'},t('不调用音乐模型:Agent(语言模型)按配乐需求写作曲脚本,宿主用采样乐器与合成器渲染成音频;不计费,节拍能与画面逐帧对齐。动效短片项目默认用它。')));
   const ar=el('div',{className:'row'});
   ar.appendChild(el('label',{},t('自动下载')));
   const cb=el('input',{type:'checkbox',id:'music-code-autofetch',checked:true});cb.style.flex='none';

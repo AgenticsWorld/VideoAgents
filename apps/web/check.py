@@ -52,7 +52,7 @@ def main() -> None:
         bad = [k for k in ids if not (tr.get(k, {}).get("name") and tr.get(k, {}).get("prompt"))]
         if set(tr) != ids or bad:
             raise SystemExit(f"Style library translation styles/i18n/{lang}.json does not cover all styles")
-    # 演示视频风格画廊(2026-10-20):43 张封面 + 每种界面语言(英文除外;中文只取用途标签)一份 styles/code/i18n/<lang>.json
+    # 动效短片风格画廊(2026-10-20):43 张封面 + 每种界面语言(英文除外;中文只取用途标签)一份 styles/code/i18n/<lang>.json
     code = json.loads((STATIC / "styles" / "code" / "code_styles.json").read_text(encoding="utf-8"))
     slugs = {s["slug"] for s in code["styles"]}
     if len(slugs) != 43 or any(not (STATIC / "styles" / "code" / s["frame"]).is_file() for s in code["styles"]):

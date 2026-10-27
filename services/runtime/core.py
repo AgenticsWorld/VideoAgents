@@ -315,7 +315,7 @@ CATEGORY_NAMES = {
     # 项目类型专属团队(2026-10-20 由同名插件并入,services/runtime/project_types.py);
     # 编号沿用插件时期的 15/16/17,13/14 留给衍生小说/双书融合插件
     "15-audio-video": "音频配画", "16-mashup": "混剪", "17-digital-human": "数字人",
-    "18-code-video": "演示视频",      # 2026-10-20 新增项目类型(不用视频模型,语言模型写网页逐帧渲染)
+    "18-code-video": "动效短片",      # 2026-10-20 新增项目类型(不用视频模型,语言模型写网页逐帧渲染)
 }
 
 # ---------------- 修改师(00-orchestration/reviser):预览页「✏️ 修改」的默认收件人 ----------------
@@ -350,7 +350,7 @@ REVISION_KIND_AGENTS: dict[str, list[str]] = {
     # 分镜预览页「过场卡」✏️ 反馈(2026-09-24):组边界过场设计(shot_list transition_in / directing/epNN/transition_design.json);
     # 2026-09-26 二期工位 07-directing/transition-design 代行为主(宿主 CLI transition_design.py design/card),shot-planning / transition 附规约
     "transition":      ["07-directing/transition-design", "07-directing/shot-planning", "10-editing/transition"],
-    # 演示视频「代码预览」页 📨 提交注释(2026-10-20):画面是 codevideo/ 下的网页代码,改完由宿主 codevideo.py 按段重渲
+    # 动效短片「代码预览」页 📨 提交注释(2026-10-20):画面是 codevideo/ 下的网页代码,改完由宿主 codevideo.py 按段重渲
     "codevideo":       ["18-code-video/scene-coder", "18-code-video/film-director"],
 }
 REVISION_SOUL_MAX_CHARS = 60_000      # 单个代行工位 SOUL 附入提示词的截断上限
@@ -2744,7 +2744,7 @@ AM_CATEGORY_TIERS = {
     "12-publishing": "low",
     # 项目类型专属团队:新增成员一律默认高档(2026-10-21 用户要求;放在 11-qa 的终审随审核类低档)
     "15-audio-video": "high", "16-mashup": "high", "17-digital-human": "high",
-    "18-code-video": "high",          # 演示视频(2026-10-20):导演方案 / 写画面代码 / 代码作曲 / 混音全是创作型,用户要求默认高档
+    "18-code-video": "high",          # 动效短片(2026-10-20):导演方案 / 写画面代码 / 代码作曲 / 混音全是创作型,用户要求默认高档
 }
 AM_AGENT_TIERS = {                                      # 分类内的例外
     "00-orchestration/evaluation": "low",               # 评分
@@ -10975,7 +10975,7 @@ def _preview_board(project: str, ep: str):
                     used["characters"].add(ln["speaker"])
     data["assets"] = _asset_thumbs(base, catalog, used)
     data["sketches"] = _board_sketch_rows(base, ep, sbb.load_index(base, ep))
-    # 演示视频(2026-10-20):关键帧由 cv1-board 用真实绘制代码渲(codevideo.py board,provider=code),页面隐藏图像模型出草图入口
+    # 动效短片(2026-10-20):关键帧由 cv1-board 用真实绘制代码渲(codevideo.py board,provider=code),页面隐藏图像模型出草图入口
     data["project_type"] = (load_project_settings(base.name).get("project") or {}).get("type") or "film"
     data["jobs"] = {k.split("/", 2)[2]: v for k, v in BOARD_SKETCH_JOBS.items()
                     if k.startswith(f"{base.name}/{ep}/")}
@@ -12859,7 +12859,7 @@ def _post_audio_lanes(base: Path, ep: str, groups: list[dict], sfx: dict) -> dic
 
 
 def _code_video_audio_lanes(base: Path) -> dict:
-    """演示视频的后期页声音轨(2026-10-20):画面段无声;旁白 = codevideo/voices/<句>.wav 按 timeline lines 的时刻,
+    """动效短片的后期页声音轨(2026-10-20):画面段无声;旁白 = codevideo/voices/<句>.wav 按 timeline lines 的时刻,
     配乐 = 混音分轨 out/stems/music.wav(没混就用 music/score.wav)整条,音效 = events.json 的事件点(程序合成,
     声音在 out/stems/sfx.wav 里,只画点位不单独随播)。"""
     film = base / "codevideo"
@@ -13106,7 +13106,7 @@ def _post_transition_hold_resolve(base: Path, ep: str, plan: dict, r: dict) -> s
 
 
 def _post_code_video_guard(project: str, what: str):
-    """演示视频(code-video)的画面是网页代码逐帧渲染的:改画面 / 改时长要改代码后按段重渲(代码预览页注释 → 修改师),
+    """动效短片(code-video)的画面是网页代码逐帧渲染的:改画面 / 改时长要改代码后按段重渲(代码预览页注释 → 修改师),
     后期页只开放「音效与声音」处方。画面类处方与分镜剪辑在这里拦下。"""
     try:
         ptype = (load_project_settings(safe_slug(project)).get("project") or {}).get("type")
@@ -13114,9 +13114,9 @@ def _post_code_video_guard(project: str, what: str):
         return
     if ptype == "code-video":
         zh = _notes_submit_zh()
-        raise ServiceError(400, (f"演示视频的画面由代码渲染,{what}请到「🖥️ 代码预览」页对时刻写注释(修改师改代码后只重渲改动段);"
+        raise ServiceError(400, (f"动效短片的画面由代码渲染,{what}请到「🖥️ 代码预览」页对时刻写注释(修改师改代码后只重渲改动段);"
                                  "后期页只开放「音效与声音」处方") if zh else
-                           (f"Code-video pictures are rendered from code: for {what}, write a note on the Code Preview page "
+                           (f"Motion graphics pictures are rendered from code: for {what}, write a note on the Code Preview page "
                             "(the reviser edits the code and re-renders only the changed sections); the post page only allows sound recipes"))
 
 
@@ -17652,7 +17652,7 @@ async def api_projects_create(body: dict):
             raise ServiceError(400, f"voice_source must be one of {project_types.VOICE_SOURCES}")
         cfg["project"]["voice_source"] = vs
     if ptype == "code-video":
-        # 演示视频(2026-10-20):风格必选(lemo-opuscar 风格库 slug),其余设置缺省 = project_types.CODE_VIDEO_DEFAULTS
+        # 动效短片(2026-10-20):风格必选(lemo-opuscar 风格库 slug),其余设置缺省 = project_types.CODE_VIDEO_DEFAULTS
         try:
             cv = project_types.code_video_settings(body.get("code_video"), strict=True)
         except ValueError as e:
@@ -17696,15 +17696,15 @@ async def api_projects_create(body: dict):
 
 
 def _code_video_style_text(slug: str) -> str:
-    """演示视频项目 brief.md「设计风格」小节:风格名 + 风格规范文件路径(全文太长不贴,成员按路径读)。"""
+    """动效短片项目 brief.md「设计风格」小节:风格名 + 风格规范文件路径(全文太长不贴,成员按路径读)。"""
     from modules.codevideo import style_row
     row = style_row(slug) or {}
     if row.get("light"):
-        return (f"{row.get('cn') or slug} / {row.get('en') or slug}(演示视频轻量风格 `{slug}`:OPUSCAR 98 第 {row.get('no')} 部"
+        return (f"{row.get('cn') or slug} / {row.get('en') or slug}(动效短片轻量风格 `{slug}`:OPUSCAR 98 第 {row.get('no')} 部"
                 f"「{row.get('film_zh') or row.get('film')}」用的风格提示)。提示原文在 agents/workflows/codevideo/styles/opuscar98/"
                 "styles.json,立项锁定时生成 codevideo/style/STYLE.md;轻量风格只有一段提示,材质、字体、运动、镜头语法与声音调色板中"
                 "提示没写到的部分由导演在方案里补全;故事、结构、镜头与时长由本片自己导演")
-    return (f"{row.get('cn') or slug} / {row.get('en') or slug}(演示视频风格库 `{slug}`)。风格规范见 "
+    return (f"{row.get('cn') or slug} / {row.get('en') or slug}(动效短片风格库 `{slug}`)。风格规范见 "
             f"agents/workflows/codevideo/styles/{slug}/STYLE.md(立项后锁定副本在 codevideo/style/STYLE.md):"
             "全片的画面材质、色彩、字体、运动、镜头语法、声音调色板与媒介原生手法以它为准;故事、结构、镜头与时长由本片自己导演")
 

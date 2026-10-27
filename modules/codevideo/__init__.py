@@ -1,4 +1,4 @@
-"""演示视频(项目类型 code-video,2026-10-20)的宿主工具链:语言模型写网页、无头浏览器逐帧截图、ffmpeg 出片。
+"""动效短片(项目类型 code-video,2026-10-20)的宿主工具链:语言模型写网页、无头浏览器逐帧截图、ffmpeg 出片。
 
 管线与页面契约沿用 lemo-opuscar(MIT,github.com/lemomo-ai/lemo-opuscar;同步脚本 scripts/sync_lemo_opuscar.py):
 页面暴露 window.DUR / window.render(t) / window.READY(必需)、window.EV(音效事件)、window.TEXTS(t)(阅读时长自检)。

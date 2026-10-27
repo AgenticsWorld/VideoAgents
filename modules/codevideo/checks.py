@@ -1,4 +1,4 @@
-"""演示视频机检(code/codevideo.py check --stage …)。每项返回 {id, ok, detail};整组全 ok 才退出 0。
+"""动效短片机检(code/codevideo.py check --stage …)。每项返回 {id, ok, detail};整组全 ok 才退出 0。
 
 - contract  页面契约:READY / DUR / render 存在;同一 t 渲两次截图一致、乱序渲同帧一致(确定性);渲染时没有外网请求;页面无报错
 - timeline  timeline.json 合规(timeline.validate);window.DUR 与 dur 相差 ≤ 1 帧

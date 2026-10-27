@@ -34,7 +34,7 @@ License is retained in `apps/web/static/vendor/spark/LICENSE`. Upstream:
 https://github.com/sparkjsdev/spark. World generation itself calls the hosted World
 Labs Marble API (https://docs.worldlabs.ai/api) with the user's own API key.
 
-The 演示视频 (code-video) project type bundles files from Lemo-Opuscar
+The 动效短片 (code-video) project type bundles files from Lemo-Opuscar
 (https://github.com/lemomo-ai/lemo-opuscar, MIT, Copyright (c) 2026 LemoLab), pinned to the
 commit recorded in `modules/codevideo/lib/upstream.json` and synced by
 `scripts/sync_lemo_opuscar.py`: the page helpers and audio tools under `modules/codevideo/lib/core/`

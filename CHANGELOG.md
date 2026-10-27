@@ -4,6 +4,9 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+### Changed
+- **The 演示视频 project type is renamed 动效短片 (Motion graphics) (2026-10-27).** "演示视频" (demo video) suggested screen recordings or software walkthroughs, while the type makes code-drawn motion-graphics shorts in 43 styles for launches, explainers, data stories and brand films. The new name appears on the new-project wizard card, the console's team group and its final reviewer (动效短片终审官), the 代码预览 tooltip, the storyboard and post page notes, the 代码作曲 / 代码音效 hints on 生成模型, server messages, agent role notes, `agents/WORKFLOW.md` §11 and both READMEs. The other 10 interface languages follow (English "Motion graphics", Japanese モーション動画, Korean 모션 그래픽 영상, Russian Моушн-ролик, French "Motion design", and so on). Only the display name changes: the type id `code-video`, the `agents/18-code-video/` team, the `/preview/code` page and existing projects' `settings.json` stay as they are.
+
 ### Fixed
 - **故事板 page: a long shot-size label no longer stretches the 编号 column (2026-10-27).** The 编号 column did not allow line breaks, so a shot size (`size_hint`) written as a whole English sentence, such as "Medium shot of Zhizhi, framed from head to waist, both hands and …", or a long Chinese label, or a long size in a final shot-list line widened the column to fit the text on one line. The 内容 column was squeezed into a narrow strip and the row became very tall. The column now keeps its width (118 px, 90 px on narrow windows) and wraps the label inside its badge, breaking a word only when it is longer than the column. Short labels look the same as before. The print page already wrapped this column and is unchanged.
 

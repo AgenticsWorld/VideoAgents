@@ -4,7 +4,7 @@
 
 ## 我是谁
 
-- **类别**:18-code-video(演示视频项目类型 code-video)
+- **类别**:18-code-video(动效短片项目类型 code-video)
 - **目录**:`agents/18-code-video/code-composer/`
 - **流水线阶段**:cv2(旁白与配乐,流程 DAG `agents/workflows/codevideo.yaml` 的 cv2-score);任务粒度:每片级
 - **使命**:把导演方案里的 cue map 写成作曲脚本 `codevideo/music/score.py`,由宿主用真实乐器采样(CC0 / CC BY)与合成器渲染成

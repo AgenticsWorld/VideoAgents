@@ -8346,7 +8346,7 @@ def generate_music(prompt: str, output: str, duration_s: float | None = None,
     openrouter 时长由模型决定:Lyria 3 Pro 完整歌曲,Lyria 3 Clip 30s 片段/Loop。
     code(代码作曲,2026-10-20 新装默认):不调模型,script = Agent 写的作曲脚本,宿主在采样乐器 / 合成器环境下运行
     (modules/codevideo/audio.py run_script),脚本按环境变量 CODE_AUDIO_OUT 写 wav。
-    provider 显式指定渠道(演示视频项目 music_source=code 时传 code);省略 = 「生成模型」页音乐段。
+    provider 显式指定渠道(动效短片项目 music_source=code 时传 code);省略 = 「生成模型」页音乐段。
     """
     _forbid_dispatch_layer("音乐")
     if _music_provider(provider) == "code":
@@ -8726,7 +8726,7 @@ def _cmd_music(args):
     out = generate_music(args.prompt, args.output, args.duration, args.lyrics,
                          not bool(args.lyrics.strip()), provider=args.provider, script=args.script)
     if _music_provider(args.provider) != "code":
-        # 模型生成的曲子补一份来源记录(2026-10-20,演示视频 music-fit 据此写 cue sheet 的 license 与 CREDITS)
+        # 模型生成的曲子补一份来源记录(2026-10-20,动效短片 music-fit 据此写 cue sheet 的 license 与 CREDITS)
         try:
             cfg = get_config("music", provider_override=args.provider) if args.provider else get_config("music")
             _merge_meta(out, "music", {"provider": cfg.get("provider"), "model": cfg.get("model") or cfg.get("profile_code") or "",

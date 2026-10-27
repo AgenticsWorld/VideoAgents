@@ -4,7 +4,7 @@
 
 ## 我是谁
 
-- **类别**:18-code-video(演示视频项目类型 code-video)
+- **类别**:18-code-video(动效短片项目类型 code-video)
 - **目录**:`agents/18-code-video/scene-coder/`
 - **流水线阶段**:cv1(风格帧 cv1-look、故事板关键帧 cv1-board)、cv3(引擎 cv3-engine、逐段 cv3-sec、渲染 cv3-render;流程 DAG
   `agents/workflows/codevideo.yaml`);任务粒度:cv3-sec 每段级(按组扇出,1 段 = 1 组),其余每片级

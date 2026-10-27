@@ -170,7 +170,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 /* 新建向导第一步「项目类型」(2026-10-20):四张图标卡 + 选中类型的说明;.np-hide 由 npApplyType 按 data-np-types 加,
    用类而不是 style.display,免得与各行自身的显隐逻辑(白模/背景图模式等)互相覆盖 */
 .np-types{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
-/* 演示视频风格画廊(2026-10-20,apps/web/static/styles/code/code_styles.json,lemo-opuscar 43 风格) */
+/* 动效短片风格画廊(2026-10-20,apps/web/static/styles/code/code_styles.json,lemo-opuscar 43 风格) */
 #np-cs-cats{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 #np-cs-sets{display:flex;gap:6px}
 #np-cs-sets .style-chip{font-weight:600}
@@ -341,7 +341,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
   <a href="/preview/script" class="pv hdr-icon" title="剧本预览:剧情处理层产出的结构化拆解——场次/人物/对白/旁白/节奏/情绪/钩子,逐块提修改意见直发负责 Agent"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8.5L20 8.5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" fill="currentColor"/><path d="M14.5 3v5.5H20" fill="var(--panel2)"/><path d="M7.5 11.5h9M7.5 14.5h9M7.5 17.5h6" stroke="var(--panel2)" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg></a>
   <a href="/preview/board" class="pv hdr-icon" title="故事板:分镜层产出的逐场逐镜表(编号/内容/铅笔草图)+ 导演计划,草图可按便宜模型单独出图与修改"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" fill="currentColor"/><rect x="5.5" y="6.5" width="7" height="5" rx="1" fill="var(--panel2)"/><rect x="14" y="6.5" width="4.5" height="1.6" rx=".8" fill="var(--panel2)"/><rect x="14" y="9.9" width="4.5" height="1.6" rx=".8" fill="var(--panel2)"/><rect x="5.5" y="13.5" width="7" height="5" rx="1" fill="var(--panel2)"/><rect x="14" y="13.5" width="4.5" height="1.6" rx=".8" fill="var(--panel2)"/><rect x="14" y="16.9" width="4.5" height="1.6" rx=".8" fill="var(--panel2)"/></svg></a>
   <a href="/preview/storyboard" class="pv hdr-icon" title="分镜预览:每集分镜 + 关键帧 + 生成视频"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="currentColor"/><path d="M6.5 7.5h7M6.5 10h4.5" stroke="var(--panel2)" stroke-width="1.6" stroke-linecap="round" fill="none"/><rect x="3" y="16.5" width="8" height="4.5" rx="1.5" fill="currentColor"/><rect x="13" y="16.5" width="8" height="4.5" rx="1.5" fill="currentColor"/></svg></a>
-  <a href="/preview/code" id="pv-code" class="pv hdr-icon" style="display:none" title="代码预览:演示视频的片子网页实时拖动 / 播放、按段渲染、对时刻写注释发修改师"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2" fill="currentColor"/><path d="M9.5 8 7.5 10l2 2M14.5 8l2 2-2 2" stroke="var(--panel2)" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 20h6M12 16v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></a>
+  <a href="/preview/code" id="pv-code" class="pv hdr-icon" style="display:none" title="代码预览:动效短片的片子网页实时拖动 / 播放、按段渲染、对时刻写注释发修改师"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2" fill="currentColor"/><path d="M9.5 8 7.5 10l2 2M14.5 8l2 2-2 2" stroke="var(--panel2)" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 20h6M12 16v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></a>
   <a href="/preview/director" class="pv hdr-icon" title="导演台:在 3D 白模现场按分镜组逐对象写修改注释,批量提交给白模调度 Agent,按版本 A|B 比对"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2.5" fill="currentColor"/><path d="M9 3l3 3 3-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/><rect x="5.5" y="8.5" width="13" height="7" rx="1" fill="var(--panel2)"/><path d="M8 21h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></a>
   <a href="/preview/post" class="pv hdr-icon" title="后期处理:分镜组签字后的特效 / 包装 / 画面修补 / 光感 / 调色 / 音效调整,后期调整台账 + A|B 监视器 + 出成片(H3P 后期签字)"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" fill="currentColor"/><path d="M7 8v8M12 8v8M17 8v8" stroke="var(--panel2)" stroke-width="1.6" stroke-linecap="round" fill="none"/><rect x="5.4" y="12.5" width="3.2" height="2.4" rx=".6" fill="var(--panel2)"/><rect x="10.4" y="9" width="3.2" height="2.4" rx=".6" fill="var(--panel2)"/><rect x="15.4" y="11" width="3.2" height="2.4" rx=".6" fill="var(--panel2)"/></svg></a>
   <a href="/preview/videos" class="pv hdr-icon" title="成片发布:每集成片 final 视频 + 封面 thumbnail + 发布物料"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" fill="currentColor"/><path d="M10 8.5 16 12l-6 3.5z" fill="var(--panel2)"/></svg></a>
@@ -491,7 +491,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <button type="button" class="np-type" data-type="audio-to-video"><span class="np-type-ico">🎙️</span><span class="np-type-nm">音频配画</span></button>
         <button type="button" class="np-type" data-type="digital-human"><span class="np-type-ico">🧑‍💼</span><span class="np-type-nm">数字人</span></button>
         <button type="button" class="np-type" data-type="mashup"><span class="np-type-ico">✂️</span><span class="np-type-nm">混剪</span></button>
-        <button type="button" class="np-type" data-type="code-video"><span class="np-type-ico">🖥️</span><span class="np-type-nm">演示视频</span></button>
+        <button type="button" class="np-type" data-type="code-video"><span class="np-type-ico">🖥️</span><span class="np-type-nm">动效短片</span></button>
       </div>
       <div class="np-type-desc" data-np-types="film">
         <div>把小说改编成多集视频:剧情理解 → 世界观与角色 → 美术 → 剧本 → 分镜 → 视频生成 → 配音配乐 → 剪辑,关键节点停下来等你签字。</div>
@@ -541,7 +541,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
           <textarea id="np-style" style="flex:none;height:74px" placeholder="画面视觉风格的系统提示词:影像质感、色调、光影、构图……可从风格库选择或自行填写"></textarea>
         </div></div>
       <div class="note" data-np-types="film">创建后总制片将自动完成项目初始化:建目录、小说文本清洗与规范分章;内容定位、画面风格与叙事节奏会注入整个 workflow 每个成员的系统提示词,作为最高创作前提。初始化完成后总制片会提醒你从预览菜单的「参考文件」页上传参考素材。接下来几步完成项目初始设置(均有默认值,创建后可在 🎛️ 项目设置菜单随时修改)</div>
-      <div class="note" data-np-types="code-video">创建时把选中的素材放进项目的参考文件里(图片进「其他」、字体进「字体」、音频进「音乐」、视频进「视频」,可在「参考文件」页改分类和写注释)。只放你有权使用的 logo、照片、字体与录音。总制片核对后汇报,你回复开工它再按演示视频流程派单</div>
+      <div class="note" data-np-types="code-video">创建时把选中的素材放进项目的参考文件里(图片进「其他」、字体进「字体」、音频进「音乐」、视频进「视频」,可在「参考文件」页改分类和写注释)。只放你有权使用的 logo、照片、字体与录音。总制片核对后汇报,你回复开工它再按动效短片流程派单</div>
       <div class="note" data-np-types="audio-to-video digital-human mashup">创建时把选中的文件放进项目的参考文件里(没选的可之后在预览菜单「参考文件」页补传)。总制片会核对素材并汇报缺项;素材齐了你回复开工,它再按该类型的流程立项派单。旁白、片头片尾、白模等影视剧专用开关已按类型关闭</div>
     </div>
     <div class="np-step" data-step="codestyle" style="display:none">
@@ -1519,7 +1519,7 @@ async function loadProjType(){
   try{
     const c=await api('/api/v1/projects/'+encodeURIComponent(p)+'/config');
     if(p===curProj()){PROJ_TYPE=(c.project||{}).type||'film';renderAgents();
-      $('#pv-code').style.display=PROJ_TYPE==='code-video'?'':'none'}   // 代码预览只对演示视频项目显示
+      $('#pv-code').style.display=PROJ_TYPE==='code-video'?'':'none'}   // 代码预览只对动效短片项目显示
   }catch(e){}
 }
 function afterProjectSwitch(){
@@ -1779,7 +1779,7 @@ document.querySelectorAll('#np-modal .np-pick').forEach(b=>{
   b.onclick=()=>inp.click();
   inp.onchange=()=>{$('#'+inp.id+'-picked').textContent=npPickedText(inp.id)};
 });
-// 演示视频素材按扩展名落参考文件分类(可在「参考文件」页改):图片 → 其他、字体 → 字体、音频 → 音乐、视频 → 视频、文本 → 文本
+// 动效短片素材按扩展名落参考文件分类(可在「参考文件」页改):图片 → 其他、字体 → 字体、音频 → 音乐、视频 → 视频、文本 → 文本
 const NP_CV_CATS=[[/\.(ttf|otf|woff2?)$/i,'fonts'],[/\.(mp3|wav|flac|m4a|aac|ogg)$/i,'music'],[/\.(mp4|mov)$/i,'video'],[/\.(txt|md|pdf)$/i,'text']];
 function npFiles(){   // [{file,category}]:只收当前类型用得上的
   if(NP_TYPE==='film')return [];
@@ -1806,7 +1806,7 @@ async function npLoadLibs(){
       +`<span class="np-lib-meta">${esc(I18N.f('{n} 个分镜 · 已分析 {a}',{n:x.clip_count,a:x.analyzed_count||0}))}${nm!==x.name?' · '+esc(x.name):''}</span></label>`;
   }).join(''):`<div class="np-libs-empty">${esc(t('还没有可用的素材库:先在 设置 → 高级 → 素材库 导入源视频并完成分割'))}</div>`;
 }
-/* 演示视频配乐来源提示(三期):外来音乐会被适配到片长、测节拍、把画面时间轴对到拍上 */
+/* 动效短片配乐来源提示(三期):外来音乐会被适配到片长、测节拍、把画面时间轴对到拍上 */
 let NPCV_MUSIC_REQ=0;
 async function npcvMusicHint(){
   const v=$('#npcv-music').value,box=$('#npcv-music-hint'),req=++NPCV_MUSIC_REQ;
@@ -1820,7 +1820,7 @@ async function npcvMusicHint(){
   box.textContent=msg;box.style.display=msg?'':'none';
 }
 $('#npcv-music').onchange=npcvMusicHint;
-/* 演示视频风格画廊(2026-10-20):/static/styles/code/code_styles.json(scripts/sync_lemo_opuscar.py 生成)+ i18n/<lang>.json 译文 */
+/* 动效短片风格画廊(2026-10-20):/static/styles/code/code_styles.json(scripts/sync_lemo_opuscar.py 生成)+ i18n/<lang>.json 译文 */
 let NP_CS='',NP_CS_CAT='',NP_CS_SET='full',CODE_STYLES=null;
 async function codeStylesLoad(){
   if(CODE_STYLES)return CODE_STYLES;
@@ -2013,7 +2013,7 @@ function openNpModal(){
   $('#np-name').value='';$('#np-novel').value='';$('#np-brief').value='';$('#np-style').value='';
   $('#np-audio').value='';$('#np-images').value='';$('#np-voices').value='';$('#np-libs').innerHTML='';$('#np-cvfiles').value='';
   NP_CS='';NP_CS_CAT='';NP_CS_SET='full';$('#npcv-len').value=45;$('#npcv-fps').value='24';$('#npcv-narr').checked=true;$('#npcv-subs').checked=true;
-  $('#npcv-board').checked=true;$('#npcv-music').value='code';npcvMusicHint();   // 演示视频:先审故事板默认开、配乐默认代码作曲(2026-10-20 用户拍板)
+  $('#npcv-board').checked=true;$('#npcv-music').value='code';npcvMusicHint();   // 动效短片:先审故事板默认开、配乐默认代码作曲(2026-10-20 用户拍板)
   $('#np-voice-src').value='recording';
   npApplyType('film');   // 默认影视剧
   npResetDefaults();

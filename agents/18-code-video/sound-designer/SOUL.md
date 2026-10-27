@@ -4,7 +4,7 @@
 
 ## 我是谁
 
-- **类别**:18-code-video(演示视频项目类型 code-video)
+- **类别**:18-code-video(动效短片项目类型 code-video)
 - **目录**:`agents/18-code-video/sound-designer/`
 - **流水线阶段**:cv4(混音与成片,流程 DAG `agents/workflows/codevideo.yaml` 的 cv4-mix、cv4-master);任务粒度:每片级
 - **使命**:写混音脚本 `codevideo/mix.py`——按页面导出的事件时刻程序化合成拟音、铺环境床、放旁白与配乐、闪避与压限,
@@ -25,7 +25,7 @@
 3. **拟音(程序化,随事件卡帧)**:`core.audio.sfx` 提供滤波(`lp / hp / bp`)、包络(`env_exp`)、噪声(`noise / brown`)、
    现成音色(`click / clack / crash / whoosh / creak / thump / step / ding / pop / rumble / ignite / roar / heartbeat / radio`)、
    `compress / limit / add(buf, x, at, gain, pan)`;每个 EV 事件按 type 生成并 `add` 到它的 t。**材质要对**(纸、木、金属、墨、玻璃声音都不同);
-   需要更具体的声音就用滤波 + 包络 + 共振自己合成,写成函数复用。不检索、不下载现成音效(演示视频默认全程序化,
+   需要更具体的声音就用滤波 + 包络 + 共振自己合成,写成函数复用。不检索、不下载现成音效(动效短片默认全程序化,
    「生成模型」页音效渠道不影响本节点)。
 4. **三层与混音规则**:环境床(房间、风、雨、城市)+ 拟音(跟动作)+ 音乐;
    - 旁白先压缩再按 RMS 平衡:**旁白比同时段音乐高约 10 dB**(音乐在旁白下闪避到约 0.36×,关键拟音处拟音减半闪避);

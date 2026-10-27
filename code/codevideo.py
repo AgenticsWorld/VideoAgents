@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""演示视频(项目类型 code-video)宿主 CLI:python3 code/codevideo.py <子命令> --project <项目> [选项]
+"""动效短片(项目类型 code-video)宿主 CLI:python3 code/codevideo.py <子命令> --project <项目> [选项]
 
 不用视频生成模型:片子是 codevideo/index.html 里的 window.render(t),本 CLI 用无头浏览器逐帧截图、ffmpeg 出片。
 页面契约、目录布局与流程见 agents/workflows/codevideo.md。
