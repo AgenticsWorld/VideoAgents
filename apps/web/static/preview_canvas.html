@@ -125,6 +125,7 @@ dl.kv dd{min-width:0;word-break:break-all}
 #lightbox img{max-width:96vw;max-height:96vh;border-radius:6px}
 .empty{color:var(--dim);text-align:center;margin-top:40px}
 #side .imp{display:flex;width:100%;gap:6px}
+#side .imp[hidden]{display:none}
 #side .imp select,#side .imp input{flex:1;min-width:0;max-width:none}
 /* 风格库弹窗(整体说明 → 🎨 选择风格库;库与控制台「画面风格」的风格库是同一份) */
 .sty-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:8px 0}
@@ -273,29 +274,36 @@ dl.kv dd{min-width:0;word-break:break-all}
       <div class="sec"><h3>生成方式</h3>
         <label class="opt"><input type="radio" name="momode" value="ref" checked><span>参考图:用正在查看的图作参考图,按提示词生成</span></label>
         <label class="opt"><input type="radio" name="momode" value="frames"><span>首尾帧:正在查看的图作首帧,再选一个版本作尾帧</span></label>
+        <label class="opt"><input type="radio" name="momode" value="orbit"><span>360° 环绕:正在查看的图同时作首帧与尾帧,镜头绕主体转一圈回到原画面(图须是正方形)</span></label>
         <div class="mo-first" style="margin-top:6px"><img id="mo-first" alt=""><div class="hint" id="mo-first-t"></div></div>
         <div class="row" id="mo-ref2-row"><span class="hint">参考图 2</span><select id="mo-ref2" style="flex:1;min-width:0" title="可选:再选一个版本一起作为参考图(@Image 2),提示词里用 @Image 2 指它"></select></div>
         <div class="row" id="mo-last-row" hidden><span class="hint">尾帧</span><select id="mo-last" style="flex:1;min-width:0" title="视频结束在这个版本的画面,从首帧过渡过去"></select></div>
         <div class="hint warn" id="mo-frames-hint" hidden>需要支持首尾帧的视频模型:如火山 / BytePlus 的 Seedance、Fal 的 Kling、ComfyUI 的 H3 FL2VA 工作流;MiniMax-H3 Ref2VA 这类参考图工作流不收首尾帧</div>
+        <div class="hint warn" id="mo-sq" hidden><span id="mo-sq-t" data-no-i18n></span>
+          <div class="row" style="margin-top:6px"><button class="sm" id="mo-sq-crop" title="从图中间裁出最大的正方形,存为一个新版本">✂ 居中裁成正方形</button></div></div>
       </div>
       <div class="sec"><h3>视频模型</h3>
         <div class="imp" id="mo-pick"><select id="mo-prov" title="视频渠道"></select><select id="mo-model" title="视频模型" hidden></select></div>
+        <div class="imp" id="mo-orbit-pick" hidden><select id="mo-orbit" title="360° 环绕只能用这两个视频模型"></select></div>
         <div class="hint" id="mo-ch-hint" style="margin-top:4px"></div>
         <div class="hint warn" id="mo-nsfw" hidden></div>
       </div>
-      <div class="sec"><h3>视频参数</h3>
+      <div class="sec" id="mo-sec-orbit" hidden><h3>视频参数</h3>
+        <div class="hint">按 360 Orbit LoRA 的训练设置生成:768×768 · 3 秒 · 无声。提示词固定用 LoRA 的训练原句,直接发给视频模型,不经 Agent</div>
+      </div>
+      <div class="sec" id="mo-sec-params"><h3>视频参数</h3>
         <div class="row"><span class="hint">视频时长</span><input type="number" id="mo-dur" value="15" min="2" max="30" step="1"><span class="hint">秒</span>
           <span class="hint" style="margin-inline-start:12px">分辨率</span><select id="mo-res"><option value="480p" selected>480p</option><option value="720p">720p</option><option value="1080p">1080p</option></select></div>
         <label class="opt"><input type="checkbox" id="mo-audio" checked><span>同时生成声音(模型支持时;不勾是无声动图)</span></label>
         <div class="hint">各模型能出的时长与分辨率不同:超出范围时由渠道就近取或报错</div>
       </div>
-      <div class="sec"><h3>视频提示词<button class="sm" id="mo-gen" style="margin-inline-start:auto" title="让画板动图 Agent 看图写一段视频提示词填进下面(框里已经写的会作为想法交给它);写好后可以再改">🎲 让语言模型看图写一段</button></h3>
+      <div class="sec" id="mo-sec-prompt"><h3>视频提示词<button class="sm" id="mo-gen" style="margin-inline-start:auto" title="让画板动图 Agent 看图写一段视频提示词填进下面(框里已经写的会作为想法交给它);写好后可以再改">🎲 让语言模型看图写一段</button></h3>
         <textarea id="mo-txt" rows="5" placeholder="画面怎么动:谁做什么动作、镜头怎么运动(可用 @Image 1 指参考图);不勾「直接发送」时可以留空,交给 Agent 看图写"></textarea>
         <div id="mo-gen-st" hidden></div>
       </div>
       <div class="sec">
-        <label class="opt"><input type="checkbox" id="mo-direct" checked><span>直接发给视频模型,不经 Agent 整理</span></label>
-        <label class="opt"><input type="checkbox" id="mo-preview"><span>发送前先看提示词:确认或修改后再生成</span></label>
+        <div id="mo-opts"><label class="opt"><input type="checkbox" id="mo-direct" checked><span>直接发给视频模型,不经 Agent 整理</span></label>
+        <label class="opt"><input type="checkbox" id="mo-preview"><span>发送前先看提示词:确认或修改后再生成</span></label></div>
         <div class="row" style="margin-top:8px"><button class="pri" id="mo-send">生成动图</button><span class="hint" id="mo-hint"></span></div>
         <div class="err" id="mo-err"></div>
       </div>
@@ -669,7 +677,7 @@ function syncNsfw(){
     $(note).textContent=!on?'':img?F('🔞 图像改用 NSFW 备用渠道:{ch}',{ch:chDesc(img)}):t('🔞 没有配置 NSFW 备用图像渠道,按这里选的模型出图');
   });
   $('#mo-pick').style.opacity=vid?'.45':'';$('#mo-pick').style.pointerEvents=vid?'none':'';
-  $('#mo-nsfw').hidden=!on;
+  $('#mo-nsfw').hidden=!on||moMode()==='orbit';   // 360° 环绕只用那两个模型,🔞 不换渠道
   $('#mo-nsfw').textContent=!on?'':vid?F('🔞 视频改用 NSFW 备用渠道:{ch}',{ch:chDesc(vid)}):t('🔞 没有配置 NSFW 备用视频渠道,按这里选的模型生成');
 }
 // 🔞 相关的按钮 / 提示 / 标记只在 NSFW 模式开着时显示;控制台里开关(或换备用模型)后切回本页即重读状态,不用手动刷新
@@ -896,19 +904,48 @@ function renderMoPicker(){
     mod.value=MO_PICK.model&&ms.some(m=>m.id===MO_PICK.model&&m.configured!==false)?MO_PICK.model:ch.default_model;
     MO_PICK.model=mod.value;
   }
-  $('#mo-ch-hint').textContent=ch?t('★ = 该渠道在「生成模型」页保存的模型;这里的选择只用于本页,不改全局设置')
-    :t('按「🎨 生成模型」页当前的视频渠道与模型生成');
 }
 function saveMoPick(){try{localStorage.setItem(MO_KEY,JSON.stringify(MO_PICK))}catch(_){}}
 $('#mo-prov').onchange=()=>{MO_PICK={provider:$('#mo-prov').value,model:''};saveMoPick();renderMoPicker()};
 $('#mo-model').onchange=()=>{MO_PICK=Object.assign({},MO_PICK,{model:$('#mo-model').value});saveMoPick();renderMoPicker()};
+/* 360° 环绕:正在查看的图同时作首帧与尾帧(MiniMax-H3 FL2VA + 360 Orbit LoRA)。视频模型只有两个(服务端 video_models.orbit 给出能不能用),
+   选择记在本机;LoRA 按正方形图、3 秒、训练原句训练,图不是正方形就先裁;时长 / 分辨率 / 声音 / 提示词 / Agent 这些选项都收起来 */
+const MO_ORBIT_KEY='canvas_motion_orbit_model';
+const ORBIT_WHY={login:'(未登录)',profile:'(账号里没有这个模型)',comfy:'(未配置本地 ComfyUI)',workflow:'(缺少工作流模板)'};
+const orbitOpts=()=>((S&&S.video_models)||{}).orbit||[];
+const moSquare=v=>{
+  const o=((S&&S.motion_limits)||{}).orbit||{}, tol=typeof o.square_tol==='number'?o.square_tol:0.01;
+  return !!(v&&v.width&&v.height)&&Math.abs(v.width-v.height)<=Math.max(v.width,v.height)*tol;
+};
+function renderOrbitPicker(){
+  const os=orbitOpts(), sel=$('#mo-orbit'), sig=JSON.stringify([os,I18N.lang]);
+  if(sel.dataset.sig===sig)return;
+  let saved='';try{saved=localStorage.getItem(MO_ORBIT_KEY)||''}catch(_){}
+  const cur=sel.value||saved, ok=os.filter(o=>o.available).map(o=>o.provider+'|'+o.model);
+  sel.innerHTML=os.map(o=>`<option value="${esc(o.provider+'|'+o.model)}"${o.available?'':' disabled'} data-no-i18n>`
+    +`${esc(o.provider==='agentics'?'Agentics':t('本地模型'))} - ${esc(o.label)}${o.available?'':' '+esc(t(ORBIT_WHY[o.why]||''))}</option>`).join('');
+  sel.value=ok.includes(cur)?cur:(ok[0]||'');
+  sel.dataset.sig=sig;
+}
+$('#mo-orbit').onchange=()=>{try{localStorage.setItem(MO_ORBIT_KEY,$('#mo-orbit').value)}catch(_){}};
+$('#mo-sq-crop').onclick=()=>{
+  const v=ver(VIEW);if(!v)return;
+  const s=Math.min(v.width,v.height);
+  transform('crop',{x:Math.floor((v.width-s)/2)/v.width,y:Math.floor((v.height-s)/2)/v.height,w:s/v.width,h:s/v.height});
+};
 function renderMotion(){
   if(!S)return;
   const v=ver(VIEW)||{};
   if($('#mo-first').getAttribute('src')!==(v.thumb_url||''))$('#mo-first').src=v.thumb_url||'';
-  const frames=moMode()==='frames';
-  $('#mo-first-t').innerHTML=`<b data-no-i18n>${esc(frames?t('首帧'):'@Image 1')} · ${esc(v.id||'')}</b> · <span data-no-i18n>${v.width}×${v.height}</span><br>${esc(t('正在查看的版本;到「历史」里点「查看」可以换一张'))}`;
-  $('#mo-ref2-row').hidden=frames;$('#mo-last-row').hidden=!frames;$('#mo-frames-hint').hidden=!frames;
+  const mode=moMode(), frames=mode==='frames', orbit=mode==='orbit';
+  $('#mo-first-t').innerHTML=`<b data-no-i18n>${esc(orbit?t('首尾帧'):frames?t('首帧'):'@Image 1')} · ${esc(v.id||'')}</b> · <span data-no-i18n>${v.width}×${v.height}</span><br>${esc(t('正在查看的版本;到「历史」里点「查看」可以换一张'))}`;
+  $('#mo-ref2-row').hidden=mode!=='ref';$('#mo-last-row').hidden=!frames;$('#mo-frames-hint').hidden=!frames;
+  const sq=!orbit||moSquare(v);
+  $('#mo-sq').hidden=sq;
+  if(!sq)$('#mo-sq-t').textContent=F('当前版本 {w}×{h} 不是正方形:360° 环绕要正方形的图(1:1)。先裁成正方形,存成新版本后再生成',{w:v.width,h:v.height});
+  ['#mo-sec-params','#mo-sec-prompt','#mo-opts','#mo-pick'].forEach(s=>$(s).hidden=orbit);
+  $('#mo-sec-orbit').hidden=$('#mo-orbit-pick').hidden=!orbit;
+  if(orbit)renderOrbitPicker();
   $('#mo-txt').placeholder=frames?t('画面怎么从首帧变到尾帧:动作、镜头运动、节奏;不勾「直接发送」时可以留空,交给 Agent 看图写')
     :t('画面怎么动:谁做什么动作、镜头怎么运动(可用 @Image 1 指参考图);不勾「直接发送」时可以留空,交给 Agent 看图写');
   const opts=[...S.versions].reverse().filter(x=>x.id!==VIEW);
@@ -920,7 +957,12 @@ function renderMotion(){
     sel.value=opts.some(x=>x.id===cur)?cur:'';sel.dataset.sig=sig;
   });
   const lim=S.motion_limits;if(lim){$('#mo-dur').min=lim.min_s;$('#mo-dur').max=lim.max_s}
-  renderMoPicker();renderMotions();syncMoHint();
+  renderMoPicker();
+  const ch=!orbit&&((S.video_models||{}).channels||[]).find(c=>c.id===MO_PICK.provider);
+  $('#mo-ch-hint').textContent=orbit?t('360° 环绕只能用这两个视频模型:MiniMax-H3 首尾帧 + 360 Orbit LoRA')
+    :ch?t('★ = 该渠道在「生成模型」页保存的模型;这里的选择只用于本页,不改全局设置')
+    :t('按「🎨 生成模型」页当前的视频渠道与模型生成');
+  renderMotions();syncMoHint();
 }
 function renderMotions(){
   const ms=[...(S.motions||[])].reverse();
@@ -932,11 +974,12 @@ function renderMotions(){
     const a=m.actual||{}, dur=a.duration||m.duration;
     const b=[];
     if(m.image_mode==='frames')b.push(`<span class="badge">${esc(t('首尾帧'))}</span>`);
+    if(m.image_mode==='orbit')b.push(`<span class="badge">${esc(t('360° 环绕'))}</span>`);
     if(m.audio)b.push(`<span class="badge">${esc(t('有声音'))}</span>`);
     if(m.mode==='agent')b.push(`<span class="badge" title="${esc(t('提示词由画板动图 Agent 写'))}">Agent</span>`);
     if(m.nsfw&&nsfwMode().enabled)b.push(`<span class="badge warn" title="${esc(t('按 NSFW 模式的备用模型生成'))}">🔞</span>`);
     const meta=[[m.provider,m.model].filter(Boolean).join(' '),a.width?a.width+'×'+a.height:m.resolution,fmtSize(m.bytes||0),fmtTime(m.created_at),
-      m.image_mode==='frames'?m.parent+' → '+(m.last||'?'):'← '+[m.parent,m.ref2].filter(Boolean).join(' + ')].filter(Boolean).join(' · ');
+      m.image_mode==='orbit'?'⟳ '+m.parent:m.image_mode==='frames'?m.parent+' → '+(m.last||'?'):'← '+[m.parent,m.ref2].filter(Boolean).join(' + ')].filter(Boolean).join(' · ');
     return `<div class="mov"><div class="pv" data-play="${esc(m.id)}" title="${esc(t('点击播放'))}"><img src="${esc(m.poster_url||'')}" loading="lazy" alt="">`
       +`<span class="play">▶</span>${dur?`<span class="dur" data-no-i18n>${esc(String(Math.round(dur*10)/10))}s</span>`:''}</div>`
       +`<div><div class="t1"><span data-no-i18n>${esc(m.id)}</span>${b.join('')}</div><div class="t2" data-no-i18n>${esc(meta)}</div>`
@@ -998,6 +1041,7 @@ $('#motions').addEventListener('click',e=>{
 function syncMoHint(){
   const direct=$('#mo-direct').checked, txt=nsfwMode().text, agent=S&&S.motion_agent;
   const frames=moMode()==='frames';
+  if(moMode()==='orbit'){$('#mo-hint').textContent=t('提示词用 LoRA 的训练原句,直接发给视频模型');return}
   $('#mo-hint').textContent=(!direct&&S&&!agent?t('没有找到画板动图 Agent,只能直接发送')
       :direct?t(frames?'提示词原样发给视频模型':'提示词直接发给视频模型(没写 @Image 1 时开头补一句参考图说明)')
       :t(frames?'先由画板动图 Agent 看首尾帧整理提示词':'先由画板动图 Agent 看参考图整理提示词'))
@@ -1005,18 +1049,26 @@ function syncMoHint(){
     +(nsfwActive()&&direct&&MO_DIRECT_AUTO&&agent?' · '+t('🔞 已自动勾选,取消勾选则改经画板动图 Agent'):'');
 }
 $('#mo-direct').onchange=()=>{MO_DIRECT_AUTO=false;syncMoHint()};
-document.querySelectorAll('input[name=momode]').forEach(r=>r.onchange=()=>{$('#mo-err').textContent='';renderMotion()});
-const moBody=extra=>withFile(Object.assign({image_mode:moMode(),parent:VIEW,
-  ref2:moMode()==='ref'?$('#mo-ref2').value:'',last:moMode()==='frames'?$('#mo-last').value:'',text:$('#mo-txt').value.trim(),
-  provider:MO_PICK&&MO_PICK.provider||'',model:MO_PICK&&MO_PICK.provider?MO_PICK.model||'':'',
-  duration:+$('#mo-dur').value||0,resolution:$('#mo-res').value,audio:$('#mo-audio').checked,nsfw:nsfwActive()},extra));
+document.querySelectorAll('input[name=momode]').forEach(r=>r.onchange=()=>{$('#mo-err').textContent='';renderMotion();if(S)syncNsfw()});
+const moBody=extra=>{
+  if(moMode()==='orbit'){   // 360° 环绕:只带所选的那个视频模型,时长 / 提示词 / 声音由服务端按 LoRA 定,不走 🔞
+    const [provider,model]=($('#mo-orbit').value||'|').split('|');
+    return withFile(Object.assign({image_mode:'orbit',parent:VIEW,provider,model,mode:'direct'},extra));
+  }
+  return withFile(Object.assign({image_mode:moMode(),parent:VIEW,
+    ref2:moMode()==='ref'?$('#mo-ref2').value:'',last:moMode()==='frames'?$('#mo-last').value:'',text:$('#mo-txt').value.trim(),
+    provider:MO_PICK&&MO_PICK.provider||'',model:MO_PICK&&MO_PICK.provider?MO_PICK.model||'':'',
+    duration:+$('#mo-dur').value||0,resolution:$('#mo-res').value,audio:$('#mo-audio').checked,nsfw:nsfwActive()},extra));
+};
 $('#mo-send').onclick=async()=>{
   $('#mo-err').textContent='';
-  const direct=$('#mo-direct').checked||!S.motion_agent;
+  const orbit=moMode()==='orbit', direct=orbit||$('#mo-direct').checked||!S.motion_agent;
+  if(orbit&&!moSquare(ver(VIEW))){$('#mo-err').textContent=t('360° 环绕要正方形的图:先裁成正方形再生成');return}
+  if(orbit&&!$('#mo-orbit').value){$('#mo-err').textContent=t('没有能用的 360° 环绕视频模型:原因见下拉里的说明');return}
   if(moMode()==='frames'&&!$('#mo-last').value){$('#mo-err').textContent=t('首尾帧模式要选一个版本作尾帧');return}
-  if(direct&&!$('#mo-txt').value.trim()){$('#mo-err').textContent=t('直接发送要先写视频提示词(或取消勾选「直接发送」,交给 Agent 看图写)');return}
+  if(!orbit&&direct&&!$('#mo-txt').value.trim()){$('#mo-err').textContent=t('直接发送要先写视频提示词(或取消勾选「直接发送」,交给 Agent 看图写)');return}
   $('#mo-send').disabled=true;
-  try{apply(await api('/motion',moBody({mode:direct?'direct':'agent',preview:$('#mo-preview').checked})));toast(t('已发送'))}
+  try{apply(await api('/motion',moBody({mode:direct?'direct':'agent',preview:!orbit&&$('#mo-preview').checked})));toast(t('已发送'))}
   catch(err){$('#mo-err').textContent=err.message}
   finally{syncBusy()}
 };

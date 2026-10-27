@@ -63,8 +63,22 @@ MENTION_RE = re.compile(r'@\s*(?:图|ref|img|image)\s*(\d+)', re.I)
 #   ref(默认)  正在查看的版本作参考图 @Image 1(可再加一个版本作 @Image 2),走多参考图模式(genmedia refs);
 #               ComfyUI MiniMax-H3 Ref2VA 等参考生视频工作流只收这种。提示词里用 @Image N 指参考图(ComfyUI H3 边界转成 <Picture N>)
 #   frames      正在查看的版本作首帧、另选一个版本作尾帧(genmedia first_frame / last_frame),须配支持首尾帧的视频模型
+#   orbit       360° 环绕(2026-10-27):正在查看的版本同时作首帧与尾帧,配 360 Orbit LoRA 的 MiniMax-H3 FL2VA,镜头绕主体一圈回到原画面。
+#               只认 ORBIT_CHANNELS 两个视频模型;LoRA 只用正方形图、训练原句、3 秒训练过,所以图须是正方形,提示词 / 时长写死,
+#               不出声音、不经 Agent、不走 🔞 路由(comfy/video-minimax-h3-fl2va-360orbit-api.md)
 # 时长 / 分辨率由用户在页面上选,各渠道就近取或报错
-MOTION_IMAGE_MODES = ('ref', 'frames')
+MOTION_IMAGE_MODES = ('ref', 'frames', 'orbit')
+ORBIT_AGENTICS_PROFILE = 'minimax-h3-int8-360orbit'
+ORBIT_COMFY_WORKFLOW = 'comfy/video-minimax-h3-fl2va-360orbit-api.json'
+ORBIT_CHANNELS = (('agentics', ORBIT_AGENTICS_PROFILE), ('comfyui', 'local'))
+ORBIT_DURATION = 3                # 3 秒 = 73 帧,LoRA 的训练长度
+ORBIT_RESOLUTION = '720p'         # 只是记录用的档位:两条工作流都按 768×768 出
+ORBIT_SQUARE_TOL = 0.01           # 宽高差在长边 1% 以内算正方形(FL2VA 首帧拉伸、尾帧居中裁切,差这么点首尾仍接得上)
+ORBIT_PROMPT = ('One frozen instant. Only the camera moves. In a continuous 360 orbit. Preserve every person and object in exactly the '
+                'same world position, orientation, shape and pose throughout the shot. Airborne objects remain suspended at the captured '
+                'height and angle: no wobbling, shaking, spinning, drifting, falling or continued action. Keep faces, hands, clothing, '
+                'liquids and the background motionless while retaining their natural appearance. Camera parallax is the only source of '
+                'apparent movement. No cuts, zoom, morphing or added objects.')
 MOTION_DIR = 'motion'
 MOTION_RESOLUTIONS = ('480p', '720p', '1080p')
 MOTION_MIN_S, MOTION_MAX_S = 2, 30
@@ -1089,6 +1103,10 @@ def motion_aspect(w: int, h: int) -> str:
     return min(MOTION_ASPECTS, key=lambda a: abs(math.log(int(a.split(':')[0]) / int(a.split(':')[1])) - r))
 
 
+def is_square(w: int, h: int) -> bool:
+    return bool(w and h) and abs(w - h) <= max(w, h) * ORBIT_SQUARE_TOL
+
+
 def motion_template(text: str, n_refs: int) -> str:
     """直接发送的提示词:用户写的原话;没用 @Image N 点名参考图时,开头补一句参考图说明(多参考图模式下模型靠它把图和文字对上)。"""
     text = (text or '').strip()
@@ -1130,25 +1148,34 @@ def create_motion_job(base: Path, doc: Path, payload: dict, *, run_ended=None) -
     provider / model 空 = 跟随全局视频设置(宿主已校验 / 换成 NSFW 备用渠道)。
     直接发送:用户写的提示词发给视频模型(参考图模式没点名 @Image 1 时开头补一句参考图说明,motion_template;首尾帧模式原样);
     经 Agent:画板动图 Agent 看图(和用户的描述)写提示词,用户没写描述也行。
-    draft_only(「🎲 让语言模型写一段」)= 只让 Agent 看图写一段提示词填回页面,不出视频(走单独的提示词通道)。"""
+    draft_only(「🎲 让语言模型写一段」)= 只让 Agent 看图写一段提示词填回页面,不出视频(走单独的提示词通道)。
+    image_mode=orbit(360° 环绕):parent 须是正方形、provider / model 须是 ORBIT_CHANNELS 之一;提示词 / 时长 / 声音按 LoRA 写死,直接发送,不收 🔞。"""
     text = str(payload.get('text') or '').strip()[:MAX_TEXT]
     draft = bool(payload.get('draft_only'))
-    mode = 'direct' if payload.get('mode') == 'direct' and not draft else 'agent'
-    if mode == 'direct' and not text:
+    image_mode = str(payload.get('image_mode') or 'ref')
+    if image_mode not in MOTION_IMAGE_MODES:
+        raise CanvasError(f'生成方式只能是参考图、首尾帧或 360° 环绕,收到 {image_mode}',
+                          en=f'The mode must be reference image, first/last frames or 360° orbit, got {image_mode}')
+    orbit = image_mode == 'orbit'
+    if orbit:
+        if draft:
+            raise CanvasError('360° 环绕的提示词是固定的,不用让语言模型写', en='The 360° orbit prompt is fixed; there is nothing for the language model to write')
+        if (str(payload.get('provider') or ''), str(payload.get('model') or '')) not in ORBIT_CHANNELS:
+            raise CanvasError(f'360° 环绕只能用 Agentics 的 {ORBIT_AGENTICS_PROFILE},或本地 ComfyUI 的 {Path(ORBIT_COMFY_WORKFLOW).name}',
+                              en=f'360° orbit only runs on Agentics {ORBIT_AGENTICS_PROFILE} or local ComfyUI {Path(ORBIT_COMFY_WORKFLOW).name}')
+    mode = 'direct' if orbit or (payload.get('mode') == 'direct' and not draft) else 'agent'
+    if mode == 'direct' and not text and not orbit:
         raise CanvasError('直接发送要先写视频提示词(或取消勾选「直接发送」,交给 Agent 看图写)',
                           en='Write a video prompt before sending directly (or untick "send directly" and let the agent write one from the image)')
     try:
-        duration = int(round(float(payload.get('duration') or 0)))
+        duration = ORBIT_DURATION if orbit else int(round(float(payload.get('duration') or 0)))
     except (TypeError, ValueError):
         duration = 0
     if not MOTION_MIN_S <= duration <= MOTION_MAX_S:
         raise CanvasError(f'视频时长须在 {MOTION_MIN_S}–{MOTION_MAX_S} 秒之间', en=f'The video length must be {MOTION_MIN_S}–{MOTION_MAX_S} seconds')
-    resolution = str(payload.get('resolution') or '').strip().lower()
+    resolution = ORBIT_RESOLUTION if orbit else str(payload.get('resolution') or '').strip().lower()
     if resolution not in MOTION_RESOLUTIONS:
         raise CanvasError('分辨率只能是 ' + ' / '.join(MOTION_RESOLUTIONS), en='Resolution must be ' + ' / '.join(MOTION_RESOLUTIONS))
-    image_mode = str(payload.get('image_mode') or 'ref')
-    if image_mode not in MOTION_IMAGE_MODES:
-        raise CanvasError(f'生成方式只能是参考图或首尾帧,收到 {image_mode}', en=f'The mode must be reference image or first/last frames, got {image_mode}')
     lane = 'prompt_jobs' if draft else 'motion_jobs'
 
     def _do(h: dict):
@@ -1160,28 +1187,37 @@ def create_motion_job(base: Path, doc: Path, payload: dict, *, run_ended=None) -
             raise CanvasError(f"这张图有动图任务还在进行({busy['id']}),等它结束再发", 409,
                               en=f"A video job is still running on this image ({busy['id']}); wait for it to finish")
         parent = version_of(h, str(payload.get('parent') or h.get('final') or ''))
+        if orbit and not is_square(parent['width'], parent['height']):
+            raise CanvasError(f"360° 环绕要正方形的图:当前版本 {parent['id']} 是 {parent['width']}×{parent['height']}。"
+                              '先裁成正方形(1:1),存为新版本后再生成',
+                              en=f"360° orbit needs a square image: version {parent['id']} is {parent['width']}×{parent['height']}. "
+                                 'Crop it to a square (1:1) as a new version first')
         ref2 = version_of(h, str(payload['ref2'])) if payload.get('ref2') and image_mode == 'ref' else None
         last = version_of(h, str(payload['last'])) if payload.get('last') and image_mode == 'frames' else None
         if image_mode == 'frames' and not last:
             raise CanvasError('首尾帧模式要选一个版本作尾帧', en='First/last-frame mode needs a version picked as the last frame')
         if (ref2 or last) and (ref2 or last)['id'] == parent['id']:
             raise CanvasError('第二张图和正在查看的是同一个版本', en='The second image is the same version as the one being viewed')
-        preview = bool(payload.get('preview')) and not draft
+        preview = bool(payload.get('preview')) and not draft and not orbit
         status = 'drafting' if mode == 'agent' else ('awaiting_confirm' if preview else 'queued')
         job = _new_job(doc, h, {'op': 'motion_prompt' if draft else 'motion', 'status': status, 'parent': parent['id'], 'mode': mode,
-                                'preview': preview, 'text': text, 'provider': str(payload.get('provider') or ''), 'model': str(payload.get('model') or ''),
+                                'preview': preview, 'text': '' if orbit else text,
+                                'provider': str(payload.get('provider') or ''), 'model': str(payload.get('model') or ''),
                                 'duration': duration, 'resolution': resolution, 'aspect': motion_aspect(parent['width'], parent['height']),
-                                'audio': bool(payload.get('audio')), 'image_mode': image_mode,
+                                'audio': bool(payload.get('audio')) and not orbit, 'image_mode': image_mode,
                                 **({'ref2': ref2['id']} if ref2 else {}), **({'last': last['id']} if last else {}),
-                                **({'nsfw': True} if payload.get('nsfw') else {})})
+                                **({'nsfw': True} if payload.get('nsfw') and not orbit else {})})
         jd = _job_dir(doc, job['id'])
         rel = lambda p: p.relative_to(base).as_posix()   # noqa: E731
-        pick = [(parent, 'ref', 'ref1'), (ref2, 'ref', 'ref2')] if image_mode == 'ref' else [(parent, 'first', 'first'), (last, 'last', 'last')]
+        # 360° 环绕只存一张:出视频时按渠道决定它当首帧、尾帧还是参考图(orbit_inputs)
+        pick = ([(parent, 'ref', 'ref1'), (ref2, 'ref', 'ref2')] if image_mode == 'ref' else [(parent, 'first', 'first')] if orbit
+                else [(parent, 'first', 'first'), (last, 'last', 'last')])
         job['images'] = [{'n': n, 'role': role, 'version': v['id'], 'file': rel(_motion_ref_image(doc / v['file'], jd / stem))}
                          for n, (v, role, stem) in enumerate([x for x in pick if x[0]], 1)]
         job['parent_size'] = [parent['width'], parent['height']]
         if mode == 'direct':
-            job['template_prompt'] = motion_template(text, len(job['images'])) if image_mode == 'ref' else text
+            job['template_prompt'] = (ORBIT_PROMPT if orbit else motion_template(text, len(job['images'])) if image_mode == 'ref'
+                                      else text)
             if preview:
                 job['prompt'] = job['template_prompt']
         return save_job(doc, job)
@@ -1207,8 +1243,11 @@ def submit_motion_prompt(doc: Path, jid: str, prompt: str) -> dict:
 def motion_channel_problem(provider: str, model: str, image_mode: str) -> tuple[str, str] | None:
     """发送前的渠道预检:ComfyUI 视频工作流的类型决定它收参考图还是首尾帧,对不上时返回 (中文, 英文) 提示,免得排队几分钟才报错。
     MiniMax-H3 Ref2VA / Seedance 云端参考生视频模板只收参考图;LTX-2.5 两种都收;其余(基础图生视频模板)只收首尾帧。
-    其它渠道交给 genmedia 出视频时按模型报错;配置读不到也返回 None(同样留给出视频时报)。"""
+    其它渠道交给 genmedia 出视频时按模型报错;配置读不到也返回 None(同样留给出视频时报)。
+    360° 环绕的渠道是写死的两个(宿主另行校验),不在这里判。"""
     from modules import genmedia
+    if image_mode == 'orbit':
+        return None
     try:
         cfg = genmedia.get_config('video', provider, model) if provider else genmedia.get_config('video')
         if cfg.get('provider') != 'comfyui' or genmedia._comfy_configured_workflow(cfg) is None:   # 工作流读不到:不猜类型
@@ -1230,17 +1269,34 @@ def motion_channel_problem(provider: str, model: str, image_mode: str) -> tuple[
     return None
 
 
+def orbit_inputs(provider: str, model: str, image: str) -> tuple[list[str], str, str]:
+    """360° 环绕把同一张图交给视频模型的方式 → (refs, first, last)。ComfyUI 模板自己把 {{FIRST_FRAME}} 同时接首尾帧,只传首帧;
+    Agentics profile 按它声明的附件字段传:收首帧 / 尾帧的都给这张图,两个都不收才作参考图;一个都不收就报错(不偷偷出别的视频)。"""
+    if provider != 'agentics':
+        return [], image, ''
+    from modules import genmedia
+    files = (genmedia._agentics_profile('video', model).get('token_schema') or {}).get('files') or {}
+    first = image if 'first_frame' in files else ''
+    last = image if 'last_frame' in files else ''
+    refs = [image] if not (first or last) and 'reference_images' in files else []
+    if not (first or last or refs):
+        raise CanvasError(f'Agentics 视频模型 {model} 不收图片(没有首帧 / 尾帧 / 参考图字段),做不了 360° 环绕',
+                          en=f'Agentics video model {model} takes no image (no first-frame / last-frame / reference field), so it cannot do a 360° orbit')
+    return refs, first, last
+
+
 def _default_generate_video(prompt: str, output: str, refs: list[str], first: str, last: str, duration: int, resolution: str,
-                            aspect: str, audio: bool, provider: str, model: str) -> dict:
+                            aspect: str, audio: bool, provider: str, model: str, workflow: str = '', pin: bool = False) -> dict:
     """调 genmedia 出视频:参考图方式传 refs,首尾帧方式传 first / last(两者互斥);返回实际用的 {provider, model}
     (NSFW 路由换了渠道时取 meta.json 的记录)。
-    声音关时传 generate_audio=False;ComfyUI 工作流(H3 Ref2VA 固定出原生音频、基础工作流不收这个参数)关着时不传,按工作流本身。"""
+    声音关时传 generate_audio=False;ComfyUI 工作流(H3 Ref2VA 固定出原生音频、基础工作流不收这个参数)关着时不传,按工作流本身。
+    workflow = 这次改用的 ComfyUI 工作流模板,pin = 渠道钉死不让 NSFW 路由 / 兜底换掉(360° 环绕)。"""
     from modules import genmedia
     cfg = genmedia.get_config('video', provider, model) if provider else genmedia.get_config('video')
     eff = cfg.get('provider') or ''
     genmedia.generate_video(prompt, output, first_frame=first, last_frame=last, refs=refs or None, duration=duration, resolution=resolution, aspect=aspect,
                             generate_audio=audio if (audio or eff != 'comfyui') else None, provider=provider, model=model,
-                            resolution_gate=False)
+                            resolution_gate=False, workflow=workflow, pin_channel=pin)
     used = {'provider': eff, 'model': str(cfg.get('mode') if eff == 'comfyui' else cfg.get('model') or '')}
     try:
         route = json.loads(Path(output).with_suffix('.meta.json').read_text(encoding='utf-8')).get('nsfw_route') or {}
@@ -1304,15 +1360,20 @@ def run_motion(base: Path, doc: Path, jid: str, prompt: str, *, generate=None, p
         images = sorted(job['images'], key=lambda i: i['n'])
         by_role = {i['role']: str(base / i['file']) for i in images}
         refs = [str(base / i['file']) for i in images if i['role'] == 'ref']
+        first, last, extra = by_role.get('first', ''), by_role.get('last', ''), {}
+        if job.get('image_mode') == 'orbit':
+            refs, first, last = orbit_inputs(job.get('provider') or '', job.get('model') or '', str(base / images[0]['file']))
+            extra = {'workflow': ORBIT_COMFY_WORKFLOW if job.get('provider') == 'comfyui' else '', 'pin': True}
         out = jd / 'result.mp4'
         channel = ' '.join(x for x in (job.get('provider'), job.get('model')) if x) or '全局视频渠道'
-        what = (f"首帧 {job['parent']} → 尾帧 {job.get('last')}" if job.get('image_mode') == 'frames'
+        what = (f"360° 环绕 {job['parent']}" if job.get('image_mode') == 'orbit'
+                else f"首帧 {job['parent']} → 尾帧 {job.get('last')}" if job.get('image_mode') == 'frames'
                 else f"参考图 {job['parent']}" + (f" + {job['ref2']}" if job.get('ref2') else ''))
         log(f"[canvas] 动图 {job['source']} {what}:{channel},{job['duration']}s {job['resolution']} {job['aspect']}"
             + (',带声音' if job.get('audio') else ''))
-        used = (generate or _default_generate_video)(prompt, str(out), refs, by_role.get('first', ''), by_role.get('last', ''),
+        used = (generate or _default_generate_video)(prompt, str(out), refs, first, last,
                                                      job['duration'], job['resolution'], job['aspect'], bool(job.get('audio')),
-                                                     job.get('provider') or '', job.get('model') or '') or {}
+                                                     job.get('provider') or '', job.get('model') or '', **extra) or {}
         if not out.is_file() or not out.stat().st_size:
             raise CanvasError('视频模型没有返回视频文件', en='The video model returned no video file')
         actual = (probe or probe_video)(out)
@@ -1548,7 +1609,8 @@ def state(base: Path, doc: Path, h: dict, *, run_ended=None) -> dict:
             **lanes, 'motions': motions, 'provenance': provenance(base, h),
             'setting_kind': SETTING_KINDS.get(kind) or '', 'pref_kind': PREF_KINDS.get(kind) or '',
             'drift_warn': DRIFT_WARN, 'max_refs': MAX_REFS,
-            'motion_limits': {'min_s': MOTION_MIN_S, 'max_s': MOTION_MAX_S, 'resolutions': list(MOTION_RESOLUTIONS)}}
+            'motion_limits': {'min_s': MOTION_MIN_S, 'max_s': MOTION_MAX_S, 'resolutions': list(MOTION_RESOLUTIONS),
+                              'orbit': {'square_tol': ORBIT_SQUARE_TOL, 'duration': ORBIT_DURATION}}}
 
 
 def set_ui(doc: Path, label: str = '', oid: str = '') -> None:

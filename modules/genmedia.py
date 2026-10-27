@@ -7837,12 +7837,15 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
                    return_last_frame: str = "",
                    video_refs: list[str] | None = None,
                    ref_image_size: str = "", group: str = "",
-                   provider: str = "", model: str = "", resolution_gate: bool = True) -> str:
+                   provider: str = "", model: str = "", resolution_gate: bool = True,
+                   workflow: str = "", pin_channel: bool = False) -> str:
     """生成一段视频,返回保存的绝对路径。渠道/模型按 data/.videoagents/genconfig.json。
 
     provider/model:调用方显式指定渠道/模型(画板「动图」页按用户所选,2026-10-21),给了就不套集级/组级覆盖;
     Key 仍取该渠道在 genconfig 的配置,NSFW 路由照常。resolution_gate=False 跳过派单链路的分辨率闸门
     (_resolution_gate)——仅供分辨率由用户在页面上明确选定的宿主调用,Agent 工单一律走闸门。
+    workflow:本次改用的 ComfyUI 工作流模板(只限本地 / Comfy Cloud 运行方式,不改「生成模型」页的配置);
+    pin_channel=True 时渠道钉死,NSFW 路由与审核拒收兜底都不换渠道(画板 360° 环绕:只有那条工作流出得了,2026-10-27)。
 
     ref_image_size 仅 ComfyUI H3 Ref2VA 工作流支持:空=内置默认 match(参考图压到
     与输出同像素面积);max=短边 ≤2048 不压缩直进模型,人脸/身份保真更好但更慢更贵,
@@ -7869,7 +7872,12 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
     _forbid_dispatch_layer("视频")
     group = group or _group_from_output(output)
     base_cfg = get_config("video", provider, model) if provider else apply_group_video_override(get_config("video"), group)
-    cfg = apply_nsfw_route("video", base_cfg, group)
+    if workflow:
+        if base_cfg.get("provider") != "comfyui" or _comfy_is_rh(base_cfg):
+            raise RuntimeError(f"指定工作流模板 {workflow} 只能用于 ComfyUI 本地 / 云端运行方式,"
+                               f"当前是 {base_cfg.get('provider')} {base_cfg.get('mode') or ''}".rstrip())
+        base_cfg = dict(base_cfg, workflow=workflow)
+    cfg = base_cfg if pin_channel else apply_nsfw_route("video", base_cfg, group)
     if not resolution_gate:
         cfg = dict(cfg, _user_resolution=True)
     try:
@@ -7877,7 +7885,7 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
                                      seed, refs, audio_refs, generate_audio, return_last_frame, video_refs,
                                      ref_image_size)
     except Exception as e:      # noqa: BLE001
-        alt = nsfw_failover_cfg("video", cfg, e, group)
+        alt = None if pin_channel else nsfw_failover_cfg("video", cfg, e, group)
         if alt is None:
             raise
         cfg = dict(alt, _user_resolution=True) if not resolution_gate else alt

@@ -923,7 +923,8 @@ def test_motion_job_lanes_validation_and_frames(base):
     assert ic.create_edit_job(base, doc, edit_payload(refs=[], preview=False))['status'] == 'queued'   # 编辑不受动图影响
     st = ic.state(base, doc, ic.load_history(doc))
     assert (st['job']['op'], st['motion_job']['op'], st['prompt_job']['op']) == ('edit', 'motion', 'motion_prompt')
-    assert st['motion_limits'] == {'min_s': 2, 'max_s': 30, 'resolutions': ['480p', '720p', '1080p']}
+    assert st['motion_limits'] == {'min_s': 2, 'max_s': 30, 'resolutions': ['480p', '720p', '1080p'],
+                                   'orbit': {'square_tol': 0.01, 'duration': 3}}
     ic.set_job(doc, job['id'], status='cancelled')
     ic.transform(base, doc, 'v000', 'flip_h')
     with pytest.raises(ic.CanvasError):
@@ -1025,6 +1026,159 @@ def test_motion_frames_mode_job_run_and_record(base):
     assert (m['image_mode'], m['last'], m['parent']) == ('frames', 'v001', 'v000') and 'ref2' not in m
     j = ic.create_motion_job(base, doc, motion_payload(ref2='v001', last='v001'))       # 参考图方式忽略 last
     assert j['image_mode'] == 'ref' and j['ref2'] == 'v001' and 'last' not in j
+
+
+SQUARE = 'assets/concepts/props/P1/main_01.png'
+
+
+def test_motion_orbit_job_square_channel_and_run(base, monkeypatch):
+    """360° 环绕:图须是正方形(1% 容差)、渠道只认两个、不收「🎲 写一段」;时长 / 分辨率 / 声音 / 提示词按 LoRA 写死,直接发送、不带 🔞;
+    出视频时本地 ComfyUI 只传首帧并指定模板,Agentics 按 profile 的附件字段给首帧 / 尾帧 / 参考图,两个渠道都钉死不让 NSFW 换。"""
+    assert ic.is_square(300, 300) and ic.is_square(303, 300) and not ic.is_square(310, 300) and not ic.is_square(0, 0)
+    doc, _ = ic.open_doc(base, SHEET)                                                    # 320×180
+    orbit = dict(image_mode='orbit', provider='comfyui', model='local')
+    with pytest.raises(ic.CanvasError) as e:
+        ic.create_motion_job(base, doc, motion_payload(**orbit))
+    assert 'square' in e.value.text(zh=False) and '320×180' in e.value.text(zh=True)
+    put(base, SQUARE, jpeg((300, 300)))
+    doc, _ = ic.open_doc(base, SQUARE)
+    for bad in ({**orbit, 'provider': 'volcengine', 'model': 'doubao-seedance-2-0-260128'}, {**orbit, 'model': 'cloud'},
+                {**orbit, 'draft_only': True}):
+        with pytest.raises(ic.CanvasError):
+            ic.create_motion_job(base, doc, motion_payload(**bad))
+    job = ic.create_motion_job(base, doc, motion_payload(**orbit, text='', duration=15, resolution='1080p', audio=True,
+                                                         mode='agent', preview=True, nsfw=True, ref2='v000', last='v000'))
+    assert (job['status'], job['mode'], job['duration'], job['resolution'], job['aspect']) == ('queued', 'direct', 3, '720p', '1:1')
+    assert job['audio'] is False and job['preview'] is False and job['text'] == '' and 'nsfw' not in job and 'ref2' not in job and 'last' not in job
+    assert job['template_prompt'] == ic.ORBIT_PROMPT and [(i['n'], i['role'], i['version']) for i in job['images']] == [(1, 'first', 'v000')]
+    seen = []
+    gen = lambda *a, **kw: seen.append((a, kw)) or fake_video(*a)   # noqa: E731
+    m = ic.run_motion(base, doc, job['id'], job['template_prompt'], generate=gen, probe=lambda p: {}, log=QUIET)
+    (_, _, refs, first, last, duration, *_), kw = seen[-1]
+    assert refs == [] and first.endswith('first.jpg') and last == '' and duration == 3
+    assert kw == {'workflow': ic.ORBIT_COMFY_WORKFLOW, 'pin': True}
+    assert (m['image_mode'], m['prompt'], m['audio']) == ('orbit', ic.ORBIT_PROMPT, False) and 'last' not in m and 'ref2' not in m
+    files = {}
+    monkeypatch.setattr(genmedia, '_agentics_profile', lambda kind, code: {'profile_code': code, 'token_schema': {'files': dict(files)}})
+    img = str(base / job['images'][0]['file'])
+    for declared, want in ((('first_frame', 'last_frame'), ([], img, img)), (('first_frame',), ([], img, '')),
+                           (('reference_images',), ([img], '', '')), (('first_frame', 'reference_images'), ([], img, ''))):
+        files.clear()
+        files.update({k: {} for k in declared})
+        assert ic.orbit_inputs('agentics', ic.ORBIT_AGENTICS_PROFILE, img) == want, declared
+    assert ic.orbit_inputs('comfyui', 'local', img) == ([], img, '')
+    files.clear()
+    with pytest.raises(ic.CanvasError) as e:
+        ic.orbit_inputs('agentics', ic.ORBIT_AGENTICS_PROFILE, img)
+    assert 'takes no image' in e.value.text(zh=False)
+    files.update({'first_frame': {}, 'last_frame': {}})
+    job = ic.create_motion_job(base, doc, motion_payload(image_mode='orbit', provider='agentics', model=ic.ORBIT_AGENTICS_PROFILE))
+    ic.run_motion(base, doc, job['id'], job['template_prompt'], generate=gen, probe=lambda p: {}, log=QUIET)
+    (_, _, refs, first, last, *_rest), kw = seen[-1]
+    assert refs == [] and first.endswith('first.jpg') and last == first and kw == {'workflow': '', 'pin': True}
+    assert _rest[-2:] == ['agentics', ic.ORBIT_AGENTICS_PROFILE]
+    files.clear()                                                                       # profile 不收图:任务记失败,不出视频
+    job = ic.create_motion_job(base, doc, motion_payload(image_mode='orbit', provider='agentics', model=ic.ORBIT_AGENTICS_PROFILE))
+    n = len(seen)
+    with pytest.raises(ic.CanvasError):
+        ic.run_motion(base, doc, job['id'], job['template_prompt'], generate=gen, probe=lambda p: {}, log=QUIET)
+    assert len(seen) == n and ic.load_job(doc, job['id'])['status'] == 'failed'
+
+
+def test_orbit_prompt_and_local_comfy_template_agree():
+    """本地模板:提示词就是 ORBIT_PROMPT、同一个 {{FIRST_FRAME}} 同时接首尾帧、768×768、挂 LoRA、不解码音频;
+    不是 Ref2VA(走通用 ComfyUI 视频路径),3 秒按 24 fps 填成 73 帧。"""
+    raw = (genmedia.ROOT / ic.ORBIT_COMFY_WORKFLOW).read_text(encoding='utf-8')
+    wf = json.loads(raw)
+    node = next(n for n in wf.values() if n['class_type'] == 'MiniMaxH3ImageToVideo')['inputs']
+    assert node['prompt'] == ic.ORBIT_PROMPT and (node['width'], node['height']) == (768, 768)
+    assert node['first_frame'] == node['last_frame'] and wf[node['first_frame'][0]]['inputs']['image'] == '{{FIRST_FRAME}}'
+    types = [n['class_type'] for n in wf.values()]
+    assert 'LoraLoaderModelOnly' in types and 'VAEDecodeAudio' not in types and 'MiniMaxH3ReferenceToVideo' not in types
+    assert not genmedia._is_h3_ref2va_workflow({'provider': 'comfyui', 'mode': 'local', 'workflow': ic.ORBIT_COMFY_WORKFLOW})
+    filled = genmedia._comfy_fill_workflow(raw, {'FIRST_FRAME': 'in.png', 'SEED': 7, 'LTX_FRAMES': genmedia._comfy_ltx_video_frame_count(ic.ORBIT_DURATION)})
+    assert next(n for n in filled.values() if n['class_type'] == 'MiniMaxH3ImageToVideo')['inputs']['length'] == 73
+
+
+def test_generate_video_workflow_override_and_pinned_channel(monkeypatch):
+    """genmedia.generate_video(workflow=…, pin_channel=True):只在 ComfyUI 本地 / 云端换工作流模板;钉死时 NSFW 路由与审核拒收兜底都不换渠道。"""
+    cfgs = {'comfyui': {'provider': 'comfyui', 'mode': 'local', 'url': 'http://x/', 'workflow': 'comfy/other.json'}}
+    monkeypatch.setattr(genmedia, 'get_config', lambda kind, provider='', model='': dict(cfgs[provider]))
+    routed, seen = [], []
+    monkeypatch.setattr(genmedia, 'apply_nsfw_route', lambda kind, cfg, group='': routed.append('route') or cfg)
+    monkeypatch.setattr(genmedia, 'nsfw_failover_cfg', lambda kind, cfg, e, group='': routed.append('failover') or None)
+
+    def fake_with(cfg, *a):
+        seen.append(cfg)
+        raise RuntimeError('content moderation rejected')
+    monkeypatch.setattr(genmedia, '_generate_video_with', fake_with)
+    with pytest.raises(RuntimeError, match='moderation'):
+        genmedia.generate_video('p', '/tmp/x.mp4', first_frame='a.png', provider='comfyui', model='local',
+                                workflow=ic.ORBIT_COMFY_WORKFLOW, pin_channel=True)
+    assert seen[-1]['workflow'] == ic.ORBIT_COMFY_WORKFLOW and routed == []
+    with pytest.raises(RuntimeError, match='moderation'):
+        genmedia.generate_video('p', '/tmp/x.mp4', first_frame='a.png', provider='comfyui', model='local')
+    assert seen[-1]['workflow'] == 'comfy/other.json' and routed == ['route', 'failover']
+    cfgs['rh'] = {'provider': 'comfyui', 'mode': 'rh_ai', 'rh_workflow_id': '1'}
+    cfgs['volcengine'] = {'provider': 'volcengine', 'model': 'm', 'api_key': 'k'}
+    for provider in ('rh', 'volcengine'):
+        with pytest.raises(RuntimeError, match='只能用于 ComfyUI'):
+            genmedia.generate_video('p', '/tmp/x.mp4', provider=provider, model='x', workflow=ic.ORBIT_COMFY_WORKFLOW)
+
+
+def test_api_motion_orbit_options_and_validation(runtime, monkeypatch):
+    """接口:video_models.orbit 列两个模型及能不能用(未登录 / 账号没有 / 没配本地 ComfyUI);360° 环绕只收能用的那两个、图须正方形、
+    不预检工作流类型、不派 Agent、🔞 不换渠道。"""
+    core, base, spawned, chats = runtime
+    gc = {'image': {'provider': 'fal', 'fal': {'api_key': 'k', 'model': 'm'}},
+          'video': {'provider': 'volcengine', 'volcengine': {'api_key': 'k', 'model': 'doubao-seedance-2-0-260128'},
+                    'comfyui': {'mode': 'local', 'url': 'http://127.0.0.1:1/', 'workflow': 'comfy/video-minimax-h3-ref2va-api.json'}}}
+    monkeypatch.setattr(core, 'load_genconfig', lambda: gc)
+    monkeypatch.delenv('VIDEOAGENTS_USER_JWT', raising=False)
+    asked = []
+    monkeypatch.setattr(ic, 'motion_channel_problem', lambda provider, model, mode: asked.append(mode))
+    st = asyncio.run(core.api_canvas_get('p', SHEET))
+    assert st['video_models']['orbit'] == [
+        {'provider': 'agentics', 'model': 'minimax-h3-int8-360orbit', 'label': 'minimax-h3-int8-360orbit', 'available': False, 'why': 'login'},
+        {'provider': 'comfyui', 'model': 'local', 'label': 'video-minimax-h3-fl2va-360orbit-api.json', 'available': True, 'why': ''}]
+    assert st['motion_limits']['orbit'] == {'square_tol': 0.01, 'duration': 3}
+    local = {'file': SHEET, 'image_mode': 'orbit', 'provider': 'comfyui', 'model': 'local'}
+    with pytest.raises(core.ServiceError) as e:
+        asyncio.run(core.api_canvas_motion('p', local))                                     # 320×180 不是正方形
+    assert e.value.status_code == 400 and '正方形' in str(e.value.detail)
+    st = asyncio.run(core.api_canvas_transform('p', {'file': SHEET, 'version': 'v000', 'op': 'crop',
+                                                     'params': {'x': 70 / 320, 'y': 0, 'w': 180 / 320, 'h': 1}}))   # 页面「居中裁成正方形」
+    sq = next(v for v in st['versions'] if v['id'] == st['created'])
+    assert (sq['width'], sq['height']) == (180, 180)
+    st = asyncio.run(core.api_canvas_motion('p', {**local, 'parent': sq['id'], 'nsfw': True, 'mode': 'agent', 'text': 'x'}))
+    job = st['motion_job']
+    assert (job['provider'], job['model'], job['image_mode'], job['mode']) == ('comfyui', 'local', 'orbit', 'direct') and 'nsfw' not in job
+    assert spawned[-1][1:] == ('motion', ('--template',)) and not chats and asked == []
+    ic.set_job(ic.doc_dir_of(base, SHEET), job['id'], status='done')
+    for bad, needle in (({'provider': 'agentics', 'model': 'minimax-h3-int8-360orbit'}, '没有登录 Agentics'),
+                        ({'provider': 'volcengine', 'model': 'doubao-seedance-2-0-260128'}, '只能用'),
+                        ({'provider': 'comfyui', 'model': 'rh_ai'}, '只能用')):
+        with pytest.raises(core.ServiceError) as e:
+            asyncio.run(core.api_canvas_motion('p', {**local, 'parent': sq['id'], **bad}))
+        assert e.value.status_code == 400 and needle in str(e.value.detail), bad
+    monkeypatch.setenv('VIDEOAGENTS_USER_JWT', 'jwt')
+    profiles = [{'id': 'other', 'label': 'other'}]
+    monkeypatch.setattr(core, 'agentics_video_profiles', lambda: list(profiles))
+    agentics = {**local, 'parent': sq['id'], 'provider': 'agentics', 'model': 'minimax-h3-int8-360orbit'}
+    assert asyncio.run(core.api_canvas_get('p', SHEET))['video_models']['orbit'][0]['why'] == 'profile'
+    with pytest.raises(core.ServiceError) as e:
+        asyncio.run(core.api_canvas_motion('p', agentics))
+    assert '没有 minimax-h3-int8-360orbit' in str(e.value.detail)
+    profiles.append({'id': 'minimax-h3-int8-360orbit', 'label': 'H3 360 orbit'})
+    st = asyncio.run(core.api_canvas_motion('p', agentics))
+    assert (st['motion_job']['provider'], st['motion_job']['model']) == ('agentics', 'minimax-h3-int8-360orbit')
+    ic.set_job(ic.doc_dir_of(base, SHEET), st['motion_job']['id'], status='done')
+    gc['video']['comfyui'] = {'mode': 'local', 'url': ''}
+    opts = asyncio.run(core.api_canvas_get('p', SHEET))['video_models']['orbit']
+    assert opts[1]['why'] == 'comfy' and opts[0]['available']
+    with pytest.raises(core.ServiceError) as e:
+        asyncio.run(core.api_canvas_motion('p', {**local, 'parent': sq['id']}))
+    assert '本地 ComfyUI 没有配置服务地址' in str(e.value.detail)
 
 
 def test_motion_channel_problem_by_comfy_workflow_type(monkeypatch):

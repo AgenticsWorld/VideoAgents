@@ -8994,7 +8994,58 @@ def _canvas_video_models() -> dict:
     cfg = load_genconfig()
     gp = active_video_provider(cfg)
     gm = comfy_global_mode((cfg.get("video") or {}).get("comfyui")) if gp == "comfyui" else active_video_model(cfg)
-    return {"channels": video_provider_options(cfg), "global": {"provider": gp, "model": gm, "label": video_model_label(gm, gp)}}
+    channels = video_provider_options(cfg)
+    return {"channels": channels, "global": {"provider": gp, "model": gm, "label": video_model_label(gm, gp)},
+            "orbit": _canvas_orbit_options(channels)}
+
+
+def _canvas_orbit_options(channels: list[dict]) -> list[dict]:
+    """「动图」页 360° 环绕只认的两个视频模型(image_canvas.ORBIT_CHANNELS)及能不能用:[{provider, model, label, available, why}]。
+    Agentics 要桌面端已登录,且账号的视频 profile 目录里有它(目录拉不到 / 为空时不拦,出视频时再报);
+    本地 ComfyUI 要配了服务地址、模板文件在。why = 不能用的原因代号(login / profile / comfy / workflow),页面按代号出文案。"""
+    from modules import image_canvas as ic
+    by = {c["id"]: c for c in channels}
+    ag = by.get("agentics") or {}
+    ids = [m["id"] for m in ag.get("models") or []]
+    local = next((m for m in (by.get("comfyui") or {}).get("models") or [] if m["id"] == "local"), {})
+    out = []
+    for provider, model in ic.ORBIT_CHANNELS:
+        if provider == "agentics":
+            why = "login" if not ag.get("configured") else "profile" if ids and model not in ids else ""
+            label = model
+        else:
+            why = ("comfy" if not local.get("configured")
+                   else "workflow" if not (ROOT / ic.ORBIT_COMFY_WORKFLOW).is_file() else "")
+            label = Path(ic.ORBIT_COMFY_WORKFLOW).name
+        out.append({"provider": provider, "model": model, "label": label, "available": not why, "why": why})
+    return out
+
+
+_CANVAS_ORBIT_WHY = {
+    "login": ("没有登录 Agentics 账号(桌面端登录后才能用)", "Not signed in to Agentics (sign in from the desktop app first)"),
+    "profile": ("Agentics 账号的视频模型里没有 {model}", "The Agentics account has no video model {model}"),
+    "comfy": ("本地 ComfyUI 没有配置服务地址(「🎨 生成模型」页 ComfyUI 渠道)",
+              "Local ComfyUI has no server address (ComfyUI on the 🎨 Generation Models page)"),
+    "workflow": ("缺少工作流模板 {wf}", "The workflow template {wf} is missing"),
+}
+
+
+def _canvas_orbit_channel(body: dict) -> tuple[str, str]:
+    """360° 环绕选的视频模型:只能是 _canvas_orbit_options 里能用的那两个之一。"""
+    from modules import image_canvas as ic
+    provider = str((body or {}).get("provider") or "").strip()
+    model = str((body or {}).get("model") or "").strip()
+    zh = _canvas_zh()
+    opt = next((o for o in _canvas_orbit_options(video_provider_options(load_genconfig()))
+                if (o["provider"], o["model"]) == (provider, model)), None)
+    if not opt:
+        wf = Path(ic.ORBIT_COMFY_WORKFLOW).name
+        raise ServiceError(400, f"360° 环绕只能用 Agentics 的 {ic.ORBIT_AGENTICS_PROFILE},或本地 ComfyUI 的 {wf}" if zh
+                           else f"360° orbit only runs on Agentics {ic.ORBIT_AGENTICS_PROFILE} or local ComfyUI {wf}")
+    if not opt["available"]:
+        msg = _CANVAS_ORBIT_WHY[opt["why"]][0 if zh else 1].format(model=model, wf=ic.ORBIT_COMFY_WORKFLOW)
+        raise ServiceError(400, msg)
+    return provider, model
 
 
 def _canvas_video_channel(body: dict) -> tuple[str, str]:
@@ -9284,18 +9335,23 @@ async def api_canvas_motion(project: str, body: dict):
     ComfyUI 工作流类型和方式对不上时发送前就拒(image_canvas.motion_channel_problem)。
     直接发送 = 用户写的提示词给视频模型(参考图方式没点名 @Image 1 时宿主开头补一句参考图说明),宿主后台出;经 Agent = 派画板动图 Agent 看图写提示词(用户没写描述也行),
     它交了提示词宿主再出(_canvas_motion_after_run);preview = 先停在待确认。draft_only(「🎲 让语言模型写一段」)只写提示词填回页面。
-    provider 空 = 跟随全局视频渠道;nsfw = 工具栏 🔞:配了 NSFW 备用视频渠道时改用它,经 Agent 时派单带 nsfw,出视频子进程带 VIDEOAGENTS_NSFW=1。"""
+    provider 空 = 跟随全局视频渠道;nsfw = 工具栏 🔞:配了 NSFW 备用视频渠道时改用它,经 Agent 时派单带 nsfw,出视频子进程带 VIDEOAGENTS_NSFW=1。
+    image_mode = orbit(360° 环绕):视频模型只认 _canvas_orbit_options 那两个,不收 🔞、不经 Agent(提示词固定)。"""
     from modules import image_canvas as ic
     body = body or {}
     base, doc, _ = _canvas_open(project, body.get("file"), body.get("kind"))
-    nsfw, provider, model = _canvas_nsfw(body, *_canvas_video_channel(body), kind="video")
+    orbit = str(body.get("image_mode") or "") == "orbit"
+    if orbit:
+        (provider, model), nsfw = _canvas_orbit_channel(body), False
+    else:
+        nsfw, provider, model = _canvas_nsfw(body, *_canvas_video_channel(body), kind="video")
     draft = bool(body.get("draft_only"))
-    mode = "direct" if body.get("mode") == "direct" and not draft else "agent"
+    mode = "direct" if orbit or (body.get("mode") == "direct" and not draft) else "agent"
     if mode == "agent" and not agent_dir(CANVAS_MOTION_AGENT):
         raise ServiceError(404, f"Unknown agent: {CANVAS_MOTION_AGENT}")
     payload = {k: body.get(k) for k in ("image_mode", "parent", "ref2", "last", "text", "duration", "resolution", "audio", "preview")}
     payload.update({"provider": provider, "model": model, "mode": mode, "nsfw": nsfw, "draft_only": draft})
-    if not draft:
+    if not draft and not orbit:
         problem = await asyncio.to_thread(ic.motion_channel_problem, provider, model, str(body.get("image_mode") or "ref"))
         if problem:
             raise ServiceError(400, problem[0] if _canvas_zh() else problem[1])

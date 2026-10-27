@@ -127,6 +127,16 @@ assets/canvas/index.json    aliases:分镜背景图登记出去的 <key>_revN �
     (如火山 / BytePlus 的 Seedance、Fal 的 Kling、ComfyUI 的 H3 FL2VA 工作流);提示词原样发送,不补参考图说明。
   - **发送前预检**(`motion_channel_problem`):生效的视频渠道是 ComfyUI 时按工作流类型判——H3 Ref2VA / Seedance 云端参考生视频模板只收参考图,
     LTX-2.5 两种都收,其余(基础图生视频模板)只收首尾帧;对不上直接 400 说清该换方式还是换模型,不用排队几分钟才失败。其它渠道由 genmedia 出视频时按模型报错。
+  - **360° 环绕**(`orbit`,2026-10-27):正在查看的版本同时作首帧与尾帧,配 [360 Orbit LoRA](https://huggingface.co/pablodawson/MiniMax-H3-360-Orbit-LoRA)
+    的 MiniMax-H3 FL2VA 出一段时间定格、镜头绕主体一圈回到原画面的视频。LoRA 只用正方形、73 帧、一句固定提示词训练过,所以:
+    - 图须是正方形(宽高差在长边 1% 以内,`is_square`):不是就提示先裁,提示下方有「✂ 居中裁成正方形」(从中间裁出最大正方形,存为新版本,走 `transform crop`);服务端同样拒收。
+    - 视频模型只有两个(`ORBIT_CHANNELS`),页面换成单独的下拉:**Agentics - `minimax-h3-int8-360orbit`**(要桌面端已登录,账号视频 profile 目录里有它;
+      目录拉不到时不拦)、**本地模型 - `video-minimax-h3-fl2va-360orbit-api.json`**(ComfyUI 本地运行方式配了地址即可,工作流模板由宿主指定,
+      不改「生成模型」页的配置)。能不能用、为什么不能用由 `video_models.orbit` 给出(`_canvas_orbit_options`,原因代号 login / profile / comfy / workflow),选择记在本机浏览器。
+    - 时长 / 分辨率 / 声音 / 提示词 / 直接发送 / 先看提示词这些选项都收起:固定 3 秒、768×768(两条工作流写死)、无声,提示词固定用 LoRA 训练原句(`ORBIT_PROMPT`),
+      直接发送、不经 Agent、不收「🎲 写一段」;🔞 不换渠道(genmedia `pin_channel=True`:NSFW 路由与审核拒收兜底都不动渠道)。
+    - 出视频时同一张图怎么给模型(`orbit_inputs`):本地 ComfyUI 模板自己把 `{{FIRST_FRAME}}` 同时接首尾帧,只传首帧;Agentics 按 profile 声明的附件字段传——
+      收首帧 / 尾帧的都给这张图,两个都不收才作参考图,一个都不收就报错。
 
 - **视频模型**:渠道 / 模型两级下拉,清单同分镜预览顶部的集级渠道下拉(`video_provider_options`,未配 Key 的置灰,MiniMax 隐藏);默认「跟随全局」=「🎨 生成模型」页的视频设置。
   选择只在本页用,记在本机浏览器(所有图共用),不改全局设置。服务端只收已配置的渠道,模型须在该渠道清单里或就是「生成模型」页保存的那个(`_canvas_video_channel`)。
