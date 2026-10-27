@@ -2,6 +2,11 @@
 
 All notable public changes to VideoAgents are documented here.
 
+## [Unreleased]
+
+### Fixed
+- **故事板 page: a long shot-size label no longer stretches the 编号 column (2026-10-27).** The 编号 column did not allow line breaks, so a shot size (`size_hint`) written as a whole English sentence, such as "Medium shot of Zhizhi, framed from head to waist, both hands and …", or a long Chinese label, or a long size in a final shot-list line widened the column to fit the text on one line. The 内容 column was squeezed into a narrow strip and the row became very tall. The column now keeps its width (118 px, 90 px on narrow windows) and wraps the label inside its badge, breaking a word only when it is longer than the column. Short labels look the same as before. The print page already wrapped this column and is unchanged.
+
 ## [1.0.43] - 2026-10-26
 
 ### Added

@@ -126,9 +126,10 @@ table.sb th{background:var(--panel);color:var(--dim);font-weight:500;text-align:
 table.sb td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top}
 table.sb tr:last-child td{border-bottom:0}
 table.sb tr:hover td{background:rgba(108,158,248,.04)}
-td.no{width:118px;white-space:nowrap;color:var(--dim);font-size:12px;line-height:1.5}
+/* 编号列定宽 118px:景别(size_hint / 定稿 size)可能是整句英文或长中文,不能 nowrap 撑宽本列、挤窄内容列;按词换行,超长单词再截断 */
+td.no{width:118px;color:var(--dim);font-size:12px;line-height:1.5;overflow-wrap:anywhere}
 td.no b{color:var(--text);font-size:15px}
-td.no .badge{display:inline-block;border:1px solid var(--border);border-radius:4px;padding:0 5px;font-size:11px;color:var(--text);margin:2px 0}
+td.no .badge{display:inline-block;max-width:100%;border:1px solid var(--border);border-radius:4px;padding:0 5px;font-size:11px;line-height:1.45;color:var(--text);margin:2px 0}
 td.no .fin{color:var(--green)}
 td.no .fin.grp{color:var(--dim)}
 td.c{line-height:1.7}

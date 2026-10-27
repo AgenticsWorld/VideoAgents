@@ -443,3 +443,16 @@ def test_offscreen_pose_entries_stay_out_of_sketch_prompt(tmp_path):
     prompt, negative = sbb.build_prompt({"location": "庭院"}, empty, names)
     assert "Characters in frame" not in prompt and "Body poses" not in prompt
     assert sbb.SKETCH_NEGATIVE_PEOPLE_TAIL not in negative
+
+
+def test_board_page_shot_no_column_wraps_long_size_labels():
+    """编号列(2026-10-27):景别 size_hint / 定稿 size 可能是整句英文或长中文,td.no 不能 nowrap,否则撑宽本列、把内容列挤成一窄条。"""
+    import re
+    from pathlib import Path
+
+    html = (Path(__file__).resolve().parents[1] / "apps/web/static/preview_board.html").read_text(encoding="utf-8")
+    style = html.split("</style>", 1)[0]   # 页面样式;打印页 PRINT_CSS 在脚本里,另有 word-break
+    rule = re.search(r"\ntd\.no\{([^}]*)\}", style).group(1)
+    assert "nowrap" not in rule and "overflow-wrap:anywhere" in rule
+    badge = re.search(r"\ntd\.no \.badge\{([^}]*)\}", style).group(1)
+    assert "nowrap" not in badge and "max-width:100%" in badge
