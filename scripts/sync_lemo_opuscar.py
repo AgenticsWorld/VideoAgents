@@ -10,7 +10,8 @@
                                      页面里仍写 /node_modules/three/build/three.module.js 与 /node_modules/three/examples/jsm/…,
                                      静态服务映射到 vendor/three/three.module.js 与 vendor/three/jsm/(仓库 .gitignore 忽略 node_modules/、build/)
 - agents/workflows/codevideo/styles/<slug>/   各风格(上游 styleboard/catalog.json 全收)的 STYLE.md / DEMO.md / style.json(随包,Agent 必读)
-- apps/web/static/styles/code/       新建向导风格画廊:code_styles.json + frames/<slug>.webp
+- apps/web/static/styles/code/       新建向导风格画廊:code_styles.json(每个风格带 fps:样片的输出帧率,新建向导选风格时据此设项目帧率)
+                                     + frames/<slug>.webp
 - OPUSCAR 98 的 98 条风格提示(轻量风格,三期 2026-10-20):agents/workflows/codevideo/styles/opuscar98/styles.json
                                      (提示词 / 混合手法 / 渲染类型 / 参考作品 / 原片说明 + 宿主算的 3 个相近完整风格;不带 shots 与
                                      direction——那里写的是 OPUSCAR 98 的主角 Clawd)+ 画廊 opuscar98.json + frames98/<NN>.webp
@@ -200,6 +201,7 @@ def main() -> int:
                      "cat_en": c["cat_en"], "cat_cn": c["cat"], "film": c["film"],
                      "line": c["line"], "line_cn": c["line_cn"], "uses": c.get("uses") or [],
                      "dur": c.get("dur"), "frame": f"frames/{c['slug']}.webp", "dim": _dim(src, c["slug"]),
+                     "fps": _fps(src, c["slug"]),
                      "gallery": f"https://lemomo-ai.github.io/lemo-opuscar/#{c['slug']}"})
         jpg = src / "docs" / "frames" / f"{c['slug']}.jpg"
         h = sha256(jpg)
@@ -262,6 +264,8 @@ def main() -> int:
                 "files": files}
     w.text(LIB / "upstream.json", json.dumps(upstream, ensure_ascii=False, indent=1) + "\n")
 
+    odd = [f"{r['slug']} {r['fps']}" for r in rows if r["fps"] != 24]
+    print("帧率不是 24 的风格(新建向导选它时项目帧率随之改):" + "、".join(odd))
     label = "需要更新" if a.check else "已写入"
     print(f"lemo-opuscar {rev[:12]} · three {ver} · {len(slugs)} 个风格 · {label} {len(w.changed)} 个文件")
     for p in w.changed[:40]:
@@ -281,6 +285,29 @@ def _dim(src: Path, slug: str) -> str:
         if p.endswith((".js", ".mjs", ".html")) and _THREE_IMPORT.search((src / p).read_text(encoding="utf-8", errors="ignore")):
             return "3d"
     return "2d"
+
+
+# 风格的输出帧率(2026-10-28,上游 DIRECTOR §1「STYLE.md 写的帧率优先」):依次看 样片代码(--fps N / FPS = N / fps: N)→ DEMO.md
+# → STYLE.md 里出现的帧率,只认宿主支持的输出帧率,第一个恰好只有一个取值的来源算数,都没有就是 24。不只看 STYLE.md:
+# 它也写贴图 / 噪声 / 逐帧作画的节奏(backrooms「noise at tape rate (30 fps)」而成片 24,一拍二的 12 fps),样片实际渲染帧率最可靠
+OUTPUT_FPS = (24, 25, 30, 60)          # 与 modules/codevideo.FPS_CHOICES 一致
+_FPS_CODE = re.compile(r"--fps[ =](\d+)|\bFPS\s*=\s*(\d+)|\"fps\"\s*:\s*(\d+)|\bfps\s*[:=]\s*(\d+)")
+_FPS_TEXT = re.compile(r"(?<![\d.–-])(\d{2}) ?fps\b")
+
+
+def _fps(src: Path, slug: str) -> int:
+    code = set()
+    for p in tracked(src, f"styles/{slug}/demo"):
+        f = src / p
+        if p.endswith((".sh", ".mjs", ".js", ".json", ".py", ".html")) and f.stat().st_size < 400_000:
+            code |= {int(next(g for g in m.groups() if g)) for m in _FPS_CODE.finditer(f.read_text(encoding="utf-8", errors="ignore"))}
+    sources = [code] + [{int(x) for x in _FPS_TEXT.findall((src / "styles" / slug / name).read_text(encoding="utf-8"))}
+                        for name in ("DEMO.md", "STYLE.md")]
+    for found in sources:
+        rates = found & set(OUTPUT_FPS)
+        if len(rates) == 1:
+            return rates.pop()
+    return 24
 
 
 _STOP = set("a an the and or of in on at to for with from by into over under as is are be it its this that these those "

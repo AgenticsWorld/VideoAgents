@@ -66,6 +66,7 @@
    "dur": 59.5,
    "frame": "frames/caption-news.webp",
    "dim": "2d",
+   "fps": 30,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#caption-news"
   },
   {
@@ -86,6 +87,7 @@
    "dur": 54.6,
    "frame": "frames/newsreel.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#newsreel"
   },
   {
@@ -106,6 +108,7 @@
    "dur": 59.5,
    "frame": "frames/countdown.webp",
    "dim": "2d",
+   "fps": 30,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#countdown"
   },
   {
@@ -126,6 +129,7 @@
    "dur": 52.0,
    "frame": "frames/city-symphony.webp",
    "dim": "2d",
+   "fps": 30,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#city-symphony"
   },
   {
@@ -146,6 +150,7 @@
    "dur": 60.0,
    "frame": "frames/visual-investigation.webp",
    "dim": "2d",
+   "fps": 30,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#visual-investigation"
   },
   {
@@ -166,6 +171,7 @@
    "dur": 60.0,
    "frame": "frames/kino-montage.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#kino-montage"
   },
   {
@@ -186,6 +192,7 @@
    "dur": 54.4,
    "frame": "frames/telestrator.webp",
    "dim": "2d",
+   "fps": 30,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#telestrator"
   },
   {
@@ -206,6 +213,7 @@
    "dur": 53.5,
    "frame": "frames/news-package.webp",
    "dim": "2d",
+   "fps": 30,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#news-package"
   },
   {
@@ -226,6 +234,7 @@
    "dur": 37.8,
    "frame": "frames/satellite-briefing.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#satellite-briefing"
   },
   {
@@ -246,6 +255,7 @@
    "dur": 40.0,
    "frame": "frames/briefing-board.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#briefing-board"
   },
   {
@@ -266,6 +276,7 @@
    "dur": 40.0,
    "frame": "frames/lidar-survey.webp",
    "dim": "3d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#lidar-survey"
   },
   {
@@ -286,6 +297,7 @@
    "dur": 40.0,
    "frame": "frames/white-model.webp",
    "dim": "3d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#white-model"
   },
   {
@@ -306,6 +318,7 @@
    "dur": 39.4,
    "frame": "frames/data-physical.webp",
    "dim": "3d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#data-physical"
   },
   {
@@ -326,6 +339,7 @@
    "dur": 38.8,
    "frame": "frames/teardown.webp",
    "dim": "3d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#teardown"
   },
   {
@@ -346,6 +360,7 @@
    "dur": 39.5,
    "frame": "frames/microscope.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#microscope"
   },
   {
@@ -366,6 +381,7 @@
    "dur": 40.0,
    "frame": "frames/archive-lighttable.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#archive-lighttable"
   },
   {
@@ -386,6 +402,7 @@
    "dur": 52.0,
    "frame": "frames/crayon-book.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#crayon-book"
   },
   {
@@ -406,6 +423,7 @@
    "dur": 113.6,
    "frame": "frames/watercolor.webp",
    "dim": "2d",
+   "fps": 60,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#watercolor"
   },
   {
@@ -426,6 +444,7 @@
    "dur": 48.0,
    "frame": "frames/ink-wash.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#ink-wash"
   },
   {
@@ -446,6 +465,7 @@
    "dur": 39.7,
    "frame": "frames/impasto.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#impasto"
   },
   {
@@ -466,6 +486,7 @@
    "dur": 47.5,
    "frame": "frames/one-line.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#one-line"
   },
   {
@@ -486,6 +507,7 @@
    "dur": 111.0,
    "frame": "frames/whiteboard.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#whiteboard"
   },
   {
@@ -506,6 +528,7 @@
    "dur": 32.4,
    "frame": "frames/urban-sketch.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#urban-sketch"
   },
   {
@@ -526,6 +549,7 @@
    "dur": 54.4,
    "frame": "frames/shadow-puppet.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#shadow-puppet"
   },
   {
@@ -546,6 +570,7 @@
    "dur": 44.0,
    "frame": "frames/ukiyoe.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#ukiyoe"
   },
   {
@@ -566,6 +591,7 @@
    "dur": 49.0,
    "frame": "frames/papercut-red.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#papercut-red"
   },
   {
@@ -586,6 +612,7 @@
    "dur": 121.8,
    "frame": "frames/paper-lantern.webp",
    "dim": "3d",
+   "fps": 30,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#paper-lantern"
   },
   {
@@ -606,6 +633,7 @@
    "dur": 40.0,
    "frame": "frames/risograph.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#risograph"
   },
   {
@@ -626,6 +654,7 @@
    "dur": 30.0,
    "frame": "frames/halftone-dossier.webp",
    "dim": "2d",
+   "fps": 30,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#halftone-dossier"
   },
   {
@@ -646,6 +675,7 @@
    "dur": 58.5,
    "frame": "frames/woodcut.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#woodcut"
   },
   {
@@ -666,6 +696,7 @@
    "dur": 40.0,
    "frame": "frames/engraving.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#engraving"
   },
   {
@@ -686,6 +717,7 @@
    "dur": 38.4,
    "frame": "frames/silkscreen-poster.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#silkscreen-poster"
   },
   {
@@ -706,6 +738,7 @@
    "dur": 44.0,
    "frame": "frames/swiss-motion.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#swiss-motion"
   },
   {
@@ -726,6 +759,7 @@
    "dur": 44.1,
    "frame": "frames/spy-titles.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#spy-titles"
   },
   {
@@ -746,6 +780,7 @@
    "dur": 58.4,
    "frame": "frames/art-deco.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#art-deco"
   },
   {
@@ -766,6 +801,7 @@
    "dur": 46.7,
    "frame": "frames/blueprint.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#blueprint"
   },
   {
@@ -786,6 +822,7 @@
    "dur": 56.5,
    "frame": "frames/stained-glass.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#stained-glass"
   },
   {
@@ -806,6 +843,7 @@
    "dur": 163.6,
    "frame": "frames/pictogram-motion.webp",
    "dim": "2d",
+   "fps": 60,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#pictogram-motion"
   },
   {
@@ -826,6 +864,7 @@
    "dur": 59.8,
    "frame": "frames/ascii-crt.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#ascii-crt"
   },
   {
@@ -846,6 +885,7 @@
    "dur": 50.0,
    "frame": "frames/dataviz.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#dataviz"
   },
   {
@@ -866,6 +906,7 @@
    "dur": 58.8,
    "frame": "frames/iso-infographic.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#iso-infographic"
   },
   {
@@ -886,6 +927,7 @@
    "dur": 42.0,
    "frame": "frames/dark-keynote.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#dark-keynote"
   },
   {
@@ -906,6 +948,7 @@
    "dur": 59.4,
    "frame": "frames/living-screencast.webp",
    "dim": "2d",
+   "fps": 30,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#living-screencast"
   },
   {
@@ -926,6 +969,7 @@
    "dur": 39.0,
    "frame": "frames/hologram-hud.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#hologram-hud"
   },
   {
@@ -946,6 +990,7 @@
    "dur": 50.0,
    "frame": "frames/rubber-hose.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#rubber-hose"
   },
   {
@@ -966,6 +1011,7 @@
    "dur": 59.0,
    "frame": "frames/cel-anime-80s.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#cel-anime-80s"
   },
   {
@@ -986,6 +1032,7 @@
    "dur": 57.5,
    "frame": "frames/scifi-toon.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#scifi-toon"
   },
   {
@@ -1006,6 +1053,7 @@
    "dur": 40.0,
    "frame": "frames/midcentury-toon.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#midcentury-toon"
   },
   {
@@ -1026,6 +1074,7 @@
    "dur": 54.5,
    "frame": "frames/pixel-rpg.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#pixel-rpg"
   },
   {
@@ -1046,6 +1095,7 @@
    "dur": 76.5,
    "frame": "frames/hd-2d.webp",
    "dim": "3d",
+   "fps": 60,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#hd-2d"
   },
   {
@@ -1066,6 +1116,7 @@
    "dur": 59.8,
    "frame": "frames/microgame.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#microgame"
   },
   {
@@ -1086,6 +1137,7 @@
    "dur": 148.8,
    "frame": "frames/game-show.webp",
    "dim": "2d",
+   "fps": 30,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#game-show"
   },
   {
@@ -1106,6 +1158,7 @@
    "dur": 54.2,
    "frame": "frames/silent-film.webp",
    "dim": "2d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#silent-film"
   },
   {
@@ -1126,6 +1179,7 @@
    "dur": 59.7,
    "frame": "frames/backrooms.webp",
    "dim": "3d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#backrooms"
   },
   {
@@ -1146,6 +1200,7 @@
    "dur": 54.0,
    "frame": "frames/brick-toy.webp",
    "dim": "3d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#brick-toy"
   },
   {
@@ -1166,6 +1221,7 @@
    "dur": 133.0,
    "frame": "frames/paper-popup.webp",
    "dim": "3d",
+   "fps": 60,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#paper-popup"
   },
   {
@@ -1186,6 +1242,7 @@
    "dur": 38.0,
    "frame": "frames/tilt-shift.webp",
    "dim": "3d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#tilt-shift"
   },
   {
@@ -1206,6 +1263,7 @@
    "dur": 53.0,
    "frame": "frames/lowpoly-island.webp",
    "dim": "3d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#lowpoly-island"
   },
   {
@@ -1226,6 +1284,7 @@
    "dur": 32.0,
    "frame": "frames/glass-product.webp",
    "dim": "3d",
+   "fps": 24,
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#glass-product"
   }
  ]

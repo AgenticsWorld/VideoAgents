@@ -109,7 +109,7 @@ cv5 终审           code-video-qa:codevideo.py check --stage all + 人工级抽
 ```
 
 校验(`codevideo.py sync` / `check --stage timeline`):首段 t0 = 0、各段首尾相接、末段 t1 = dur;镜头落在所属段内且段内首尾相接
-覆盖;id 唯一且只用 `[A-Za-z0-9_-]`;fps ∈ {24, 25, 30};size 为偶数;dur ≤ 600。`poster_t` 选海报帧,`black_ok` 放行刻意的黑场。
+覆盖;id 唯一且只用 `[A-Za-z0-9_-]`;fps ∈ {24, 25, 30, 60};size 为偶数;dur ≤ 600。`poster_t` 选海报帧,`black_ok` 放行刻意的黑场。
 
 编号:第 i 段 → 场次号 `S{i*10:03d}`、组号 `grp{i*10:04d}`;全片第 j 镜 → `sh{j*10:04d}`。帧边界累计取整
 `round(t × fps)`,各段帧数相加恰等于整片帧数,拼接不丢不多。
@@ -277,8 +277,18 @@ AGENTS.md「Treatment first」例外、DIRECTOR §1、TECHNIQUE §1 / §11):
   下运行),DEMO.md 与样片其余代码仍等方案写成;
 - **实证影像类**:`codevideo/FACTS.md` 逐条记片中事实陈述的来源 URL 与原文引述,或产生它的测量;先方案后样片照旧。
 
-机检项 `material_sources_logged`(cv1-treatment、cv5-qa,只对这两类)。STYLE.md 里写的输出帧率(多为 30 fps)与项目设置的 fps 不一致时,
-仍以项目设置为准(timeline.json 的 fps 取项目设置),素材抽帧按项目 fps 做。
+机检项 `material_sources_logged`(cv1-treatment、cv5-qa,只对这两类)。素材抽帧按项目 fps 做。
+
+## 帧率跟风格(2026-10-28)
+
+上游 DIRECTOR §1:风格写了输出帧率时以风格为准。同步脚本给每个完整风格算 `fps` 写进画廊 `code_styles.json`——依次看样片代码
+(`--fps N` / `FPS = N` / `fps: N`)、DEMO.md、STYLE.md 里出现的帧率,只认 24 / 25 / 30 / 60,第一个恰好只有一个取值的来源算数,
+都没有就是 24(不只看 STYLE.md:它也写噪声、贴图、一拍二作画的节奏,如 backrooms 写「tape rate 30 fps」而成片 24)。413a6bd 时:
+30 fps = caption-news、countdown、city-symphony、visual-investigation、telestrator、news-package、paper-lantern、halftone-dossier、
+living-screencast、game-show;60 fps = watercolor、hd-2d、paper-popup、pictogram-motion;其余 24。轻量风格 24。
+
+新建向导选风格时把「帧率」设成该值(仍可手改,选 60 时提示渲染帧数是 24 的 2.5 倍);建项目接口没给 `fps` 时也取所选风格的帧率。
+项目 `fps` 定下后就是全片帧率:timeline.json 的 fps 取项目设置,渲染、成片、机检的「1 帧」容差都按它。
 
 ## 审片循环(lemo DIRECTOR §8 / §11)
 

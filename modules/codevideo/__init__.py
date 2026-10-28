@@ -39,7 +39,7 @@ INSTRUMENTS_DIR = MIRROR / "core" / "audio" / "instruments"
 
 NS = "codevideo"                          # 项目内过程件目录 = 一个 lemo 片子工程目录
 EP = "ep01"                               # 一个项目 = 一部片
-FPS_CHOICES = (24, 25, 30)
+FPS_CHOICES = (24, 25, 30, 60)            # 60:水彩 / HD-2D / 立体书 / 象形运动图形的样片帧率(2026-10-28)
 MAX_DUR_S = 600
 SHORT_SIDE = {"480p": 480, "720p": 720, "1080p": 1080, "2k": 1440, "4k": 2160}
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-]{0,47}$")
@@ -76,6 +76,13 @@ def material_first(slug: str) -> bool:
 @lru_cache(maxsize=1)
 def light_styles() -> dict:
     return json.loads(LIGHT_JSON.read_text(encoding="utf-8"))
+
+
+def style_fps(slug: str) -> int:
+    """风格的输出帧率(画廊 code_styles.json 的 fps,同步脚本按样片实际渲染帧率取);轻量风格与未知风格 24。"""
+    row = None if is_light(slug) else style_row(slug)
+    fps = (row or {}).get("fps")
+    return fps if fps in FPS_CHOICES else 24
 
 
 def light_ids() -> list[str]:

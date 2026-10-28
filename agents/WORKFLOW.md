@@ -1484,7 +1484,7 @@ plugins/<plugin-name>/
    (旁白声线卡),配乐默认代码作曲(`genmedia.py music --provider code --script`),拟音由混音脚本按页面事件程序化合成。导演方法与 59 个风格
    来自 lemo-opuscar(MIT,`scripts/sync_lemo_opuscar.py` 按固定 commit 同步:风格规范 `agents/workflows/codevideo/styles/`,页面库与音频工具
    `modules/codevideo/lib/`)。项目设置 `settings.json#project` = `code_style`(必选)、`storyboard_review`(默认开:cv1-board + CVH1)、
-   `narration`、`subtitles`、`length_s`、`fps`(24/25/30)、`music_source`(code 默认 / model / library);画幅、语言、成片分辨率沿用 output 段,
+   `narration`、`subtitles`、`length_s`、`fps`(24/25/30/60;新建向导选风格时自动设成该风格样片的帧率,可改)、`music_source`(code 默认 / model / library);画幅、语言、成片分辨率沿用 output 段,
    渲染尺寸由宿主按画幅 × 成片分辨率计算。一个项目 = 一部片 = ep01;`codevideo/timeline.json` 是唯一事实源,`codevideo.py sync` 写成
    `directing/ep01/` 的镜头表与故事板(段 = 场次 = 组),段片段进 `assets/clips/ep01/`,成片 `edit/ep01/final.mp4`,现有预览页照常显示。
    「代码预览」页(`/preview/code`)实时拖动 / 播放页面、按时刻写注释整批发修改师(kind=codevideo),改完只重渲改动段。

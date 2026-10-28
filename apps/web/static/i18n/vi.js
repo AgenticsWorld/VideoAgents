@@ -4660,6 +4660,8 @@ window.I18N_DICT = {
 "动效短片": "Đồ họa chuyển động",
 "不用视频生成模型:由语言模型按所选风格写一个网页动画,无头浏览器逐帧渲染出片,配旁白、代码作曲与程序音效。适合产品发布、讲解、数据叙事、品牌短片,30–60 秒最合适。": "Không dùng mô hình tạo video: mô hình ngôn ngữ viết một hoạt ảnh web theo phong cách đã chọn, trình duyệt headless render từng khung hình để xuất phim, kèm lời dẫn, nhạc soạn bằng mã và hiệu ứng âm thanh lập trình. Phù hợp cho ra mắt sản phẩm, video giải thích, kể chuyện bằng dữ liệu, phim ngắn thương hiệu; 30–60 giây là tốt nhất.",
 "需要:主题或文稿 + 从 59 种风格里选一种(logo、照片、字体、录音等素材可选)": "Cần có: chủ đề hoặc bản lời + chọn một trong 59 phong cách (logo, ảnh, phông chữ, bản ghi âm… là tùy chọn)",
+"已按所选风格设置,可改": "Đã đặt theo phong cách đã chọn; có thể đổi",
+"60 fps 的渲染帧数是 24 fps 的 2.5 倍,出片更慢": "60 fps phải kết xuất số khung hình gấp 2,5 lần 24 fps nên lâu hơn",
 "主题 / 文稿": "Chủ đề / bản lời",
 "素材(可选)": "Tư liệu (tùy chọn)",
 "创建时把选中的素材放进项目的参考文件里(图片进「其他」、字体进「字体」、音频进「音乐」、视频进「视频」,可在「参考文件」页改分类和写注释)。只放你有权使用的 logo、照片、字体与录音。总制片核对后汇报,你回复开工它再按动效短片流程派单": "Khi tạo, tư liệu đã chọn được đưa vào tệp tham chiếu của dự án (ảnh vào «Khác», phông chữ vào «Phông chữ», âm thanh vào «Nhạc», video vào «Video»; có thể đổi phân loại và viết chú thích ở trang «Tệp tham chiếu»). Chỉ đưa vào logo, ảnh, phông chữ và bản ghi âm bạn có quyền sử dụng. Giám đốc sản xuất kiểm tra rồi báo cáo; bạn trả lời bắt đầu thì nó giao việc theo quy trình video đồ họa chuyển động",

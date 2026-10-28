@@ -647,7 +647,8 @@ a.hdr-icon:hover{border-color:var(--accent)}
       <div class="row" data-np-types="code-video"><label>目标片长(秒)</label><input type="number" id="npcv-len" min="5" max="600" step="5" value="45" style="width:90px;flex:none">
         <span id="npcv-len-hint" style="color:var(--dim);font-size:12px">30–60 秒最合适;超过 2–3 分钟,制作时间与 token 消耗会成倍增加</span></div>
       <div class="row" data-np-types="code-video"><label>帧率</label>
-        <select id="npcv-fps" style="flex:none;width:100px"><option value="24">24 fps</option><option value="25">25 fps</option><option value="30">30 fps</option></select></div>
+        <select id="npcv-fps" style="flex:none;width:100px"><option value="24">24 fps</option><option value="25">25 fps</option><option value="30">30 fps</option><option value="60">60 fps</option></select>
+        <span id="npcv-fps-hint" style="color:var(--dim);font-size:12px"></span></div>
       <div class="row" data-np-types="code-video"><label>旁白</label><input type="checkbox" id="npcv-narr" style="flex:none" checked>
         <span style="color:var(--dim);font-size:12px">按「🎨 生成模型」页 TTS 设置合成旁白(旁白声线卡固定声线)</span></div>
       <div class="row" data-np-types="code-video"><label>字幕</label><input type="checkbox" id="npcv-subs" style="flex:none" checked>
@@ -1869,7 +1870,7 @@ async function npCsLoad(){
     d.innerHTML=`<img loading="lazy" src="/static/styles/code/${esc(s.frame)}" alt=""><span class="dim">${esc(light?s.render:(s.dim==='3d'?'3D':'2D'))}</span>`
       +(light?`<span class="light">${esc(t('轻量'))}</span>`:'')
       +`<div class="nm">${esc(s.tname)}</div><div class="uses">${esc(light?s.tfilm:(s.tuses||[]).join(' · '))}</div>`;
-    d.onclick=()=>{NP_CS=s.slug;$('#np-err').textContent='';npCsLoad()};grid.appendChild(d);
+    d.onclick=()=>{NP_CS=s.slug;$('#np-err').textContent='';npcvFpsFromStyle();npCsLoad()};grid.appendChild(d);
   });
   const cur=lib.styles.find(s=>s.slug===NP_CS),curL=lib.light.styles.find(s=>s.slug===NP_CS);
   $('#np-cs-picked').innerHTML=cur?`${esc(t('已选:'))}<b>${esc(cur.tname)}</b>(${esc(cur.tcat)})`
@@ -1878,6 +1879,17 @@ async function npCsLoad(){
     +`<div class="film">${esc((curL.tuses||[]).join(' · '))}</div><div class="film">${esc(t('轻量风格只有一段风格提示,没有完整规范与样片源码:材质、字体、镜头语法、声音等提示没写到的部分,导演会在方案里补全'))}</div>`
     :esc(t('从下面选一种风格(必选)'));
 }
+// 帧率跟风格(2026-10-28,上游「风格写的帧率优先」):选风格时把帧率设成该风格样片的输出帧率(code_styles.json 的 fps,
+// 同步脚本按样片实际渲染帧率取;轻量风格 24),之后仍可手改
+function npcvFpsFromStyle(){
+  const s=CODE_STYLES&&CODE_STYLES.styles.find(x=>x.slug===NP_CS);
+  $('#npcv-fps').value=String((s&&s.fps)||24);npcvFpsHint(true);
+}
+function npcvFpsHint(auto){
+  const sixty=$('#npcv-fps').value==='60';
+  $('#npcv-fps-hint').textContent=[auto&&NP_CS?t('已按所选风格设置,可改'):'',sixty?t('60 fps 的渲染帧数是 24 fps 的 2.5 倍,出片更慢'):''].filter(Boolean).join(' · ');
+}
+$('#npcv-fps').onchange=()=>npcvFpsHint(false);
 function npShowStep(n){
   const steps=npSteps(),key=steps[n-1];
   NP_STEP=n;
@@ -2012,7 +2024,7 @@ function openNpModal(){
   npInitOnce();
   $('#np-name').value='';$('#np-novel').value='';$('#np-brief').value='';$('#np-style').value='';
   $('#np-audio').value='';$('#np-images').value='';$('#np-voices').value='';$('#np-libs').innerHTML='';$('#np-cvfiles').value='';
-  NP_CS='';NP_CS_CAT='';NP_CS_SET='full';$('#npcv-len').value=45;$('#npcv-fps').value='24';$('#npcv-narr').checked=true;$('#npcv-subs').checked=true;
+  NP_CS='';NP_CS_CAT='';NP_CS_SET='full';$('#npcv-len').value=45;$('#npcv-fps').value='24';npcvFpsHint(false);$('#npcv-narr').checked=true;$('#npcv-subs').checked=true;
   $('#npcv-board').checked=true;$('#npcv-music').value='code';npcvMusicHint();   // 动效短片:先审故事板默认开、配乐默认代码作曲(2026-10-20 用户拍板)
   $('#np-voice-src').value='recording';
   npApplyType('film');   // 默认影视剧

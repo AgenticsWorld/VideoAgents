@@ -4660,6 +4660,8 @@ window.I18N_DICT = {
 "动效短片": "Motion graphics",
 "不用视频生成模型:由语言模型按所选风格写一个网页动画,无头浏览器逐帧渲染出片,配旁白、代码作曲与程序音效。适合产品发布、讲解、数据叙事、品牌短片,30–60 秒最合适。": "Tanpa model pembuat video: model bahasa menulis animasi web dengan gaya yang dipilih, browser headless merendernya bingkai demi bingkai, lalu ditambah narasi, musik yang dikomposisi dengan kode, dan efek suara prosedural. Cocok untuk peluncuran produk, video penjelasan, cerita data, dan film pendek merek; 30–60 detik paling ideal.",
 "需要:主题或文稿 + 从 59 种风格里选一种(logo、照片、字体、录音等素材可选)": "Yang diperlukan: topik atau naskah + satu dari 59 gaya (logo, foto, font, rekaman, dan materi lain opsional)",
+"已按所选风格设置,可改": "Diatur sesuai gaya yang dipilih; bisa diubah",
+"60 fps 的渲染帧数是 24 fps 的 2.5 倍,出片更慢": "60 fps merender 2,5 kali lebih banyak frame daripada 24 fps, jadi lebih lama",
 "主题 / 文稿": "Topik / naskah",
 "素材(可选)": "Materi (opsional)",
 "创建时把选中的素材放进项目的参考文件里(图片进「其他」、字体进「字体」、音频进「音乐」、视频进「视频」,可在「参考文件」页改分类和写注释)。只放你有权使用的 logo、照片、字体与录音。总制片核对后汇报,你回复开工它再按动效短片流程派单": "Saat dibuat, materi yang dipilih dimasukkan ke file referensi proyek (gambar ke «Lainnya», font ke «Font», audio ke «Musik», video ke «Video»; kategori dan catatan bisa diubah di halaman «File referensi»). Masukkan hanya logo, foto, font, dan rekaman yang berhak Anda gunakan. Produser Utama memeriksanya lalu melapor; balas untuk mulai, lalu ia membagikan tugas sesuai alur video motion graphics",

@@ -90,7 +90,7 @@ VOICE_SOURCES = ("recording", "clone")
 # 宿主 codevideo.py music-fit 适配到片长并测节拍网格,cv2-beatsync 把时间轴对到拍上。画幅 / 语言 / 成片分辨率沿用 output 段
 CODE_VIDEO_DEFAULTS = {"code_style": "", "storyboard_review": True, "narration": True, "subtitles": True,
                        "length_s": 45, "fps": 24, "music_source": "code"}
-CODE_VIDEO_FPS = (24, 25, 30)
+CODE_VIDEO_FPS = (24, 25, 30, 60)        # 与 modules/codevideo.FPS_CHOICES 一致;没给 fps 时取所选风格的帧率(2026-10-28)
 CODE_VIDEO_MUSIC = ("code", "model", "library")
 CODE_VIDEO_LENGTH = (5, 600)
 
@@ -138,9 +138,10 @@ def code_video_settings(block, strict: bool = True) -> dict:
 
     style = str(block.get("code_style") or "").strip()
     if style:
-        from modules.codevideo import style_ids
+        from modules.codevideo import style_fps, style_ids
         if style in style_ids():                  # 完整风格 59 个 + OPUSCAR 98 轻量风格 o98-01…98
             out["code_style"] = style
+            out["fps"] = style_fps(style)         # 上游「风格写的帧率优先」:默认跟风格,显式给了 fps 再按下面覆盖
         else:
             bad(f"code_style 不在风格库:{style}")
     for k in ("storyboard_review", "narration", "subtitles"):

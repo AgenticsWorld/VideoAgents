@@ -4662,6 +4662,8 @@ window.I18N_DICT = {
 "动效短片": "Motion graphics",
 "不用视频生成模型:由语言模型按所选风格写一个网页动画,无头浏览器逐帧渲染出片,配旁白、代码作曲与程序音效。适合产品发布、讲解、数据叙事、品牌短片,30–60 秒最合适。": "Sin modelo de generación de vídeo: un modelo de lenguaje escribe una animación web en el estilo elegido, un navegador sin interfaz la renderiza fotograma a fotograma y se le añaden narración, música compuesta por código y efectos de sonido procedurales. Ideal para lanzamientos de producto, vídeos explicativos, narrativa con datos y piezas de marca; lo mejor es entre 30 y 60 segundos.",
 "需要:主题或文稿 + 从 59 种风格里选一种(logo、照片、字体、录音等素材可选)": "Necesitas: un tema o guion + uno de los 59 estilos (logos, fotos, fuentes, grabaciones y otros materiales son opcionales)",
+"已按所选风格设置,可改": "Ajustado según el estilo elegido; puedes cambiarlo",
+"60 fps 的渲染帧数是 24 fps 的 2.5 倍,出片更慢": "A 60 fps se renderizan 2,5 veces más fotogramas que a 24 fps, así que tarda más",
 "主题 / 文稿": "Tema / guion",
 "素材(可选)": "Materiales (opcional)",
 "创建时把选中的素材放进项目的参考文件里(图片进「其他」、字体进「字体」、音频进「音乐」、视频进「视频」,可在「参考文件」页改分类和写注释)。只放你有权使用的 logo、照片、字体与录音。总制片核对后汇报,你回复开工它再按动效短片流程派单": "Los materiales seleccionados se guardan en los archivos de referencia del proyecto al crearlo (imágenes → «Otro», fuentes → «Fuente», audio → «Música», vídeo → «Vídeo»; puedes cambiar la categoría y añadir notas en la página «Archivos de referencia»). Añade solo logos, fotos, fuentes y grabaciones que tengas derecho a usar. El productor ejecutivo los revisa e informa; cuando respondas para empezar, repartirá el trabajo según el flujo de motion graphics",

@@ -4662,6 +4662,8 @@ window.I18N_DICT = {
 "动效短片": "Motion design",
 "不用视频生成模型:由语言模型按所选风格写一个网页动画,无头浏览器逐帧渲染出片,配旁白、代码作曲与程序音效。适合产品发布、讲解、数据叙事、品牌短片,30–60 秒最合适。": "Aucun modèle de génération vidéo : un modèle de langage écrit une animation web dans le style choisi, un navigateur headless la rend image par image, avec narration, musique composée par code et effets sonores procéduraux. Idéal pour les lancements de produit, les vidéos explicatives, le data storytelling et les courts films de marque ; 30 à 60 secondes, c'est l'idéal.",
 "需要:主题或文稿 + 从 59 种风格里选一种(logo、照片、字体、录音等素材可选)": "À fournir : un sujet ou un texte + un des 59 styles (logos, photos, polices, enregistrements et autres éléments facultatifs)",
+"已按所选风格设置,可改": "Réglé selon le style choisi ; modifiable",
+"60 fps 的渲染帧数是 24 fps 的 2.5 倍,出片更慢": "À 60 fps, il y a 2,5 fois plus d'images à rendre qu'à 24 fps : le film prend plus de temps",
 "主题 / 文稿": "Sujet / texte",
 "素材(可选)": "Éléments (facultatif)",
 "创建时把选中的素材放进项目的参考文件里(图片进「其他」、字体进「字体」、音频进「音乐」、视频进「视频」,可在「参考文件」页改分类和写注释)。只放你有权使用的 logo、照片、字体与录音。总制片核对后汇报,你回复开工它再按动效短片流程派单": "Les éléments sélectionnés sont placés dans les fichiers de référence du projet à sa création (images → « Autre », polices → « Police », audio → « Musique », vidéo → « Vidéo » ; vous pouvez changer la catégorie et ajouter des notes dans la page « Fichiers de référence »). N'ajoutez que des logos, photos, polices et enregistrements que vous avez le droit d'utiliser. Le producteur exécutif les vérifie et fait son rapport ; répondez pour lancer et il distribue le travail selon le flux motion design",

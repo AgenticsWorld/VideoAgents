@@ -87,7 +87,7 @@ def test_timeline_validate_and_frames():
 
 
 @pytest.mark.parametrize("patch,needle", [
-    ({"fps": 60}, "fps"),
+    ({"fps": 48}, "fps"),
     ({"size": [97, 54]}, "size"),
     ({"sections": [{"id": "a", "t0": 0, "t1": 0.4}, {"id": "b", "t0": 0.5, "t1": 1.0}]}, "不相接"),
     ({"sections": [{"id": "a", "t0": 0, "t1": 0.5}, {"id": "a", "t0": 0.5, "t1": 1.0}]}, "重复"),
@@ -180,7 +180,7 @@ def test_code_video_project_create_settings_brief_and_init(env):
         _create({"name": "cv0", "project_type": "code-video", "code_video": {}})
     assert e.value.status_code == 400 and "code_style" in e.value.detail
     with pytest.raises(core.ServiceError):
-        _create({"name": "cv0", "project_type": "code-video", "code_video": {"code_style": "blueprint", "fps": 60}})
+        _create({"name": "cv0", "project_type": "code-video", "code_video": {"code_style": "blueprint", "fps": 48}})
     with pytest.raises(core.ServiceError):
         _create({"name": "cv0", "project_type": "code-video", "code_video": {"code_style": "nope"}})
     assert not (core.PROJECTS_DIR / "cv0").exists()
@@ -494,6 +494,33 @@ def test_gallery_new_categories_dims_and_translations():
         txt = f.read_text(encoding="utf-8")
         if f.name != "i18n.js":
             assert '"有完整风格规范与样片的风格": "' in txt and "从 59 种风格里选一种" in txt and "43 种" not in txt, f.name
+
+
+def test_style_fps_follows_demo_output_rate(env):
+    """上游「风格写的帧率优先」(2026-10-28):画廊每个风格带样片输出帧率,建项目没给 fps 时取它,给了照用;60 可选。
+    STYLE.md 里的贴图 / 噪声 / 一拍二节奏不算(backrooms 写 tape rate 30 fps,成片 24)。"""
+    rows = {s["slug"]: s["fps"] for s in CV.gallery()["styles"]}
+    assert set(rows.values()) <= set(CV.FPS_CHOICES) and 60 in CV.FPS_CHOICES
+    assert {k for k, v in rows.items() if v == 60} == {"watercolor", "hd-2d", "paper-popup", "pictogram-motion"}
+    assert {k for k, v in rows.items() if v == 30} == {"caption-news", "countdown", "city-symphony", "visual-investigation",
+                                                         "telestrator", "news-package", "paper-lantern", "halftone-dossier",
+                                                         "living-screencast", "game-show"}
+    assert rows["backrooms"] == rows["silent-film"] == rows["cel-anime-80s"] == rows["midcentury-toon"] == 24
+    assert CV.style_fps("watercolor") == 60 and CV.style_fps("o98-01") == 24 and CV.style_fps("nope") == 24
+    assert project_types.CODE_VIDEO_FPS == CV.FPS_CHOICES
+    _create({"name": "cvf1", "project_type": "code-video", "code_video": {"code_style": "countdown"}})
+    _create({"name": "cvf2", "project_type": "code-video", "code_video": {"code_style": "watercolor", "fps": 24}})
+    _create({"name": "cvf3", "project_type": "code-video", "code_video": {"code_style": "blueprint", "fps": 60}})
+    _create({"name": "cvf4", "project_type": "code-video", "code_video": {"code_style": "o98-12"}})
+    got = {n: core.load_project_settings(n)["project"]["fps"] for n in ("cvf1", "cvf2", "cvf3", "cvf4")}
+    assert got == {"cvf1": 30, "cvf2": 24, "cvf3": 60, "cvf4": 24}
+    assert TL.validate(_tl(fps=60))["frames"] == 60
+    html = (ROOT / "apps/web/static/index.html").read_text(encoding="utf-8")
+    assert '<option value="60">60 fps</option>' in html and "npcvFpsFromStyle();npCsLoad()" in html
+    for f in (ROOT / "apps/web/static/i18n").glob("*.js"):
+        if f.name != "i18n.js":
+            txt = f.read_text(encoding="utf-8")
+            assert '"已按所选风格设置,可改": "' in txt and '"60 fps 的渲染帧数是 24 fps 的 2.5 倍,出片更慢": "' in txt, f.name
 
 
 def test_material_first_styles_get_tools_before_treatment(tmp_path, monkeypatch):

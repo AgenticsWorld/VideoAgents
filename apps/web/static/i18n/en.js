@@ -4652,6 +4652,8 @@ window.I18N_DICT = {
 "动效短片": "Motion graphics",
 "不用视频生成模型:由语言模型按所选风格写一个网页动画,无头浏览器逐帧渲染出片,配旁白、代码作曲与程序音效。适合产品发布、讲解、数据叙事、品牌短片,30–60 秒最合适。": "No video generation model: a language model writes a web animation in the chosen style, a headless browser renders it frame by frame, and it gets narration, code-composed music and procedural sound effects. Good for product launches, explainers, data stories and brand shorts; 30–60 seconds works best.",
 "需要:主题或文稿 + 从 59 种风格里选一种(logo、照片、字体、录音等素材可选)": "You provide: a topic or script + one of 59 styles (logos, photos, fonts, recordings and other assets are optional)",
+"已按所选风格设置,可改": "Set from the chosen style; you can change it",
+"60 fps 的渲染帧数是 24 fps 的 2.5 倍,出片更慢": "60 fps renders 2.5× as many frames as 24 fps, so the film takes longer",
 "主题 / 文稿": "Topic / script",
 "素材(可选)": "Assets (optional)",
 "创建时把选中的素材放进项目的参考文件里(图片进「其他」、字体进「字体」、音频进「音乐」、视频进「视频」,可在「参考文件」页改分类和写注释)。只放你有权使用的 logo、照片、字体与录音。总制片核对后汇报,你回复开工它再按动效短片流程派单": "The selected assets go into the project's reference files when it is created (images → “Other”, fonts → “Font”, audio → “Music”, video → “Video”; you can change the category and add notes on the Reference Files page). Only add logos, photos, fonts and recordings you have the right to use. The orchestrator checks them and reports back; reply to start and it dispatches the work following the motion graphics workflow",

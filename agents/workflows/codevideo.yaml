@@ -38,7 +38,8 @@
 #   - 主题 / 文稿:refs/text/transcript.txt(可空,主题写在 brief.md「内容定位」也可;两者至少一项)
 #   - 风格:settings.json#project.code_style(必选:完整风格 slug 59 个之一,或轻量风格 o98-01…o98-98)
 #   - 设置:settings.json#project = {storyboard_review(默认 true), narration(默认 true), subtitles(默认 true),
-#           length_s(默认 45), fps(24/25/30), music_source(code 默认 | model | library)};画幅 / 语言 / 成片分辨率沿用 output 段
+#           length_s(默认 45), fps(24/25/30/60,默认跟所选风格的帧率), music_source(code 默认 | model | library)};
+#           画幅 / 语言 / 成片分辨率沿用 output 段
 #   - 用户素材(可选):refs/ 各分类里的 logo、产品照、字体、录音、音乐;用户声明有权使用才进片,否则画替身
 #
 # 条件节点(orchestrator 按 settings.json#project 裁定,未派发的依赖视同满足,不 HOLD):

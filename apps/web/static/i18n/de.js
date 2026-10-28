@@ -4660,6 +4660,8 @@ window.I18N_DICT = {
 "动效短片": "Motion Graphics",
 "不用视频生成模型:由语言模型按所选风格写一个网页动画,无头浏览器逐帧渲染出片,配旁白、代码作曲与程序音效。适合产品发布、讲解、数据叙事、品牌短片,30–60 秒最合适。": "Kein Videogenerierungsmodell: Ein Sprachmodell schreibt im gewählten Stil eine Web-Animation, ein Headless-Browser rendert sie Bild für Bild, dazu kommen Erzählstimme, per Code komponierte Musik und prozedurale Soundeffekte. Geeignet für Produktlaunches, Erklärvideos, Data Storytelling und Marken-Kurzfilme; 30–60 Sekunden sind ideal.",
 "需要:主题或文稿 + 从 59 种风格里选一种(logo、照片、字体、录音等素材可选)": "Benötigt: ein Thema oder Skript + einer von 59 Stilen (Logos, Fotos, Schriften, Aufnahmen usw. sind optional)",
+"已按所选风格设置,可改": "Vom gewählten Stil übernommen; änderbar",
+"60 fps 的渲染帧数是 24 fps 的 2.5 倍,出片更慢": "60 fps rendert 2,5-mal so viele Bilder wie 24 fps, der Film dauert länger",
 "主题 / 文稿": "Thema / Skript",
 "素材(可选)": "Material (optional)",
 "创建时把选中的素材放进项目的参考文件里(图片进「其他」、字体进「字体」、音频进「音乐」、视频进「视频」,可在「参考文件」页改分类和写注释)。只放你有权使用的 logo、照片、字体与录音。总制片核对后汇报,你回复开工它再按动效短片流程派单": "Das gewählte Material wird beim Anlegen in die Referenzdateien des Projekts gelegt (Bilder → „Sonstiges“, Schriften → „Schriftart“, Audio → „Musik“, Video → „Video“; Kategorie und Notizen lassen sich auf der Seite „Referenzdateien“ ändern). Fügen Sie nur Logos, Fotos, Schriften und Aufnahmen hinzu, die Sie verwenden dürfen. Der Produzent prüft alles und meldet sich; antworten Sie mit „Start“, und er vergibt die Aufträge nach dem Motion-Graphics-Ablauf",
