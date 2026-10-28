@@ -10,8 +10,15 @@ Commands:
     python3 ytstudio_draft.py check-login [--new-tab | --tab-id ID]
     python3 ytstudio_draft.py upload --video V.mp4 --title-file t.txt \
         --desc-file d.txt [--thumbnail th.png] [--tags "a,b,c"] \
-        [--made-for-kids] [--stop-at visibility|details] [--new-tab | --tab-id ID]
+        [--made-for-kids] [--stop-at visibility|details] [--shorts] \
+        [--new-tab | --tab-id ID]
     python3 ytstudio_draft.py screenshot out.png [--tab-id ID]
+
+YouTube Shorts use the same upload dialog: Studio files a video as a Short
+when it is vertical or square and at most 3 minutes long, otherwise as a
+regular video. --shorts checks that with ffprobe BEFORE touching the
+browser and refuses (exit 2) a landscape or over-length file; without
+ffprobe it warns and carries on.
 
 Tab selection: every run prints "TAB_ID: <id>" for the tab it attached to.
 check-login / upload reuse an existing studio.youtube.com tab only when no
@@ -34,6 +41,8 @@ import argparse
 import base64
 import json
 import re
+import shutil
+import subprocess
 import sys
 import time
 
@@ -49,6 +58,10 @@ POLL = 3
 # Seconds a studio tab gets to answer the upload-dialog probe; a tab stuck
 # on a modal ("Leave site?") or otherwise unresponsive counts as busy.
 TAB_PROBE_TIMEOUT = 5.0
+# YouTube Shorts: vertical or square and at most 3 minutes; Shorts over 1
+# minute with any Content ID claim are blocked worldwide.
+SHORTS_MAX_S = 180.0
+SHORTS_CONTENT_ID_S = 60.0
 # Upload dialog deep link (studio.youtube.com/channel/<id>/videos/upload?d=ud).
 _UPLOAD_URL_RE = re.compile(r"[?&]d=ud(?:&|#|$)|/videos/upload")
 _UPLOAD_DIALOG_JS = """
@@ -448,6 +461,53 @@ def cmd_check_login(cdp: CDP) -> int:
     return 1
 
 
+def probe_video(path: str) -> dict | None:
+    """Display width/height (rotation applied) and duration via ffprobe;
+    None when ffprobe is missing or cannot read the file."""
+    exe = shutil.which("ffprobe")
+    if not exe:
+        return None
+    try:
+        out = subprocess.run(
+            [exe, "-v", "error", "-select_streams", "v:0", "-show_entries",
+             "stream=width,height:stream_tags=rotate:stream_side_data=rotation:format=duration",
+             "-of", "json", path], capture_output=True, text=True, timeout=30)
+        info = json.loads(out.stdout or "{}")
+        s = (info.get("streams") or [{}])[0]
+        w, h = int(s.get("width") or 0), int(s.get("height") or 0)
+        rot = (s.get("tags") or {}).get("rotate") or next(
+            (sd.get("rotation") for sd in s.get("side_data_list") or [] if "rotation" in sd), 0)
+        if int(float(rot or 0)) % 180:
+            w, h = h, w
+        dur = float((info.get("format") or {}).get("duration") or 0)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    return {"width": w, "height": h, "duration": dur} if w and h and dur > 0 else None
+
+
+def check_shorts(path: str) -> bool:
+    """--shorts gate, run before attaching to Chrome: False refuses the upload."""
+    m = probe_video(path)
+    if m is None:
+        print("[ytstudio] WARNING: could not verify Shorts eligibility (ffprobe missing or "
+              "unreadable file); Studio files it as a Short only if vertical/square and <= 3 min.")
+        return True
+    w, h, dur = m["width"], m["height"], m["duration"]
+    problems = ([] if w <= h else [f"landscape {w}x{h}"]) + \
+               ([] if dur <= SHORTS_MAX_S else [f"{dur:.1f}s > {SHORTS_MAX_S:g}s"])
+    if problems:
+        print(f"SHORTS_CHECK: FAIL {w}x{h} {dur:.1f}s ({'; '.join(problems)})")
+        print("Error: not eligible for YouTube Shorts (needs vertical or square, at most 3 minutes) — "
+              "it would be published as a regular video. Use a 9:16 package part instead.",
+              file=sys.stderr)
+        return False
+    print(f"SHORTS_CHECK: OK {w}x{h} {dur:.1f}s")
+    if dur > SHORTS_CONTENT_ID_S:
+        print("[ytstudio] WARNING: over 1 minute — a Short with any Content ID claim "
+              "is blocked worldwide; tell the user if third-party music is used.")
+    return True
+
+
 def cmd_upload(cdp: CDP, args) -> int:
     title = open(args.title_file, encoding="utf-8").read().strip()
     desc = open(args.desc_file, encoding="utf-8").read().strip()
@@ -647,6 +707,9 @@ def main(argv: list[str] | None = None) -> int:
                     help="Visibility to preselect on the last page — Studio remembers the "
                          "previous choice, so default to private to prevent accidental "
                          "public publishes; 'none' leaves it untouched")
+    up.add_argument("--shorts", action="store_true",
+                    help="YouTube Shorts channel: refuse (before opening Studio) a video "
+                         "that is landscape or longer than 3 minutes")
 
     shot = sub.add_parser("screenshot", parents=[tab_id_opt])
     shot.add_argument("output", help="PNG output path")
@@ -656,6 +719,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("screenshot captures an existing tab; use --tab-id, not --new-tab")
     if args.new_tab and args.tab_id:
         parser.error("--new-tab and --tab-id are mutually exclusive")
+    if args.cmd == "upload" and args.shorts and not check_shorts(args.video):
+        return 2
     cdp = CDP(args.host, args.port)
     try:
         # check-login / upload navigate the tab: never reuse one that still

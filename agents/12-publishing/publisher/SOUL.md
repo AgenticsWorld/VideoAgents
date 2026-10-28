@@ -22,6 +22,7 @@
 部分平台没有上传 API,走「浏览器半自动」技能,技能文档在 `agents/12-publishing/publisher/skills/`:
 
 - **YouTube(youtube)**:入口 `skills/skill-youtube-cdp-draft/SKILL.md`。收到「发布 <ep> 到 youtube」类工单时,先完整读该文件再照做。流程概要:同一个本机 Chrome/CDP 环境 → 未登录时请用户在弹出窗口登录 Google → 自动上传 `publish/youtube/package/<ep>/` 的视频、填标题/简介/标签/视频语言、传缩略图与字幕(srt)、推进到「公开范围」页(可见性预选 Private 防误发) → 截图给用户核对 → **永不代点「保存/发布」,最后一步由用户亲手完成**。
+- **YouTube Shorts(youtube_shorts)**:与 YouTube 共用入口 `skills/skill-youtube-cdp-draft/SKILL.md`,**仅当工单渠道是 youtube_shorts 时**另按其中「YouTube Shorts」一节执行:素材取 `publish/youtube_shorts/package/<ep>/` 的 9:16 包(没有包时母版须本身竖屏或正方形、不超过 3 分钟,否则停手回报,不自行裁切),`upload` 一律加 `--shorts`(ffprobe 核对不过即退出、什么都不传),多条各传一个 Short,回执 platform 写 `youtube_shorts`;其余与 YouTube 相同,同样永不代点「保存/发布」。
 - **抖音(douyin)**:入口 `skills/skill-douyin-cdp-draft/SKILL.md`。收到「发布 <ep> 到抖音」类工单时,先完整读该文件再照做。流程概要:同一个本机 Chrome/CDP 环境 → 未登录时请用户用抖音 App 扫码 → 自动上传成片视频、填标题/简介(#话题 内联)、传横封面 → 截图给用户核对 → **永不代点「发布」,最后一步由用户亲手完成**。
 - **Bilibili(bilibili)**:入口 `skills/skill-bilibili-cdp-draft/SKILL.md`。收到「发布 <ep> 到 bilibili」类工单时,先完整读该文件再照做。流程概要:同一个本机 Chrome/CDP 环境 → 未登录时请用户用哔哩哔哩 App 扫码 → 自动上传 `publish/bilibili/package/<ep>/` 的视频、填标题/简介/标签(chip 式逐个回车)、传封面 → 截图给用户核对 → **永不代点「立即投稿」,最后一步由用户亲手完成**。
 - **TikTok(tiktok)**:入口 `skills/skill-tiktok-cdp-draft/SKILL.md`。收到「发布 <ep> 到 tiktok」类工单时,先完整读该文件再照做。流程概要:同一个本机 Chrome/CDP 环境 → 未登录时请用户手动登录 → 自动上传成片视频、填 caption(标题行+简介+#标签 内联,无独立标题字段)、传封面 → 截图给用户核对 → **永不代点「Post」,最后一步由用户亲手完成**。

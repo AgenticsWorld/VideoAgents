@@ -81,7 +81,7 @@ VideoAgents 是一套开源、文件驱动的多 Agent 视频生产系统，用�
 | 🔍 **超分**         | FFmpeg · Agentics · 火山引擎 · MiniMax · ComfyUI                                                                   |
 | 🌍 **世界模型**     | World Labs                                                                                                         |
 | ☁️ **对象存储**     | 火山引擎 TOS · 阿里云 OSS · 腾讯云 COS · 任意 S3 兼容服务                                                          |
-| 📣 **发布平台**     | YouTube · Bilibili · TikTok · 抖音 · 小红书                                                                        |
+| 📣 **发布平台**     | YouTube · YouTube Shorts · Bilibili · TikTok · 抖音 · 小红书                                                       |
 | 📱 **手机消息**     | 微信 · 飞书 · WhatsApp                                                                                             |
 
 <sub>ComfyUI 工作流可在本地、Comfy Cloud 或 RunningHub 上运行。控制台界面支持 12 种语言。</sub>

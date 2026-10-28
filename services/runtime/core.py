@@ -1297,9 +1297,11 @@ CAPTION_AGENTS = {"10-editing/caption", "10-editing/edit",
 # 输出画幅预设:preset -> (比例, 名称);custom 走 aspect_custom(格式 宽:高)
 # 发布渠道:key -> (名称, 默认画幅);2026-10-07 起在「🎞️ 成片发布」页勾选(output.platforms,原「输出设置」发布平台多选已移走),
 # 只驱动 Phase 11 发布目标与 aspect_ratio.json 平台矩阵/thumbnail 每平台封面/subtitle 每平台字幕的清单(展示顺序即此顺序);
-# 小红书 2026-10-07 回到可选清单;默认画幅只供注入给 Agent 的平台说明用,界面不显示
+# 小红书 2026-10-07 回到可选清单;默认画幅只供注入给 Agent 的平台说明用,界面不显示;
+# YouTube Shorts 2026-10-28 新增为独立渠道(竖屏发布包,与 YouTube 共用上传技能,见 SHORTS_PLATFORM)
 OUTPUT_PLATFORMS = {
     "youtube": ("YouTube", "16:9"),
+    "youtube_shorts": ("YouTube Shorts", "9:16"),
     "bilibili": ("Bilibili", "16:9"),
     "tiktok": ("TikTok", "9:16"),
     "douyin": ("抖音", "9:16"),
@@ -1310,11 +1312,18 @@ OUTPUT_PLATFORMS = {
 PUBLISHER_ID = "12-publishing/publisher"
 PUBLISH_PLATFORM_SKILLS = {
     "youtube": "skill-youtube-cdp-draft",
+    "youtube_shorts": "skill-youtube-cdp-draft",
     "bilibili": "skill-bilibili-cdp-draft",
     "tiktok": "skill-tiktok-cdp-draft",
     "douyin": "skill-douyin-cdp-draft",
     "xiaohongshu": "skill-xhs-cdp-draft",
 }
+# YouTube Shorts 没有单独的上传入口:Studio 同一个上传对话框里「竖屏或正方形、不超过 3 分钟」的视频
+# 自动算 Shorts,否则按普通视频发布;超过 1 分钟且带任何 Content ID 声明的 Shorts 全球屏蔽
+# (YouTube 帮助中心 12779649 / 15424877)。成片发布页与派单前用 ffprobe 实测发布包或母版
+SHORTS_PLATFORM = "youtube_shorts"
+SHORTS_MAX_S = 180.0
+SHORTS_CONTENT_ID_S = 60.0
 # 发布回执 status → 成片发布页徽标(publisher SOUL 口径;其它值原样显示)
 PUBLISH_RECEIPT_STATUS = {
     "draft_ready_pending_human": "草稿已填好,待人工提交",
@@ -1733,7 +1742,7 @@ SKILL_ACTIVATIONS: dict[str, dict] = {
         "kind": "conditional", "condition": "视频渠道为 AgenticsLLM"},
     "09-audio/audio-transcription/audio-transcription": {"kind": "always"},
     "10-editing/caption/caption-styling": {"kind": "soul"},
-    "12-publishing/publisher/skill-youtube-cdp-draft": {"kind": "soul", "condition": "发布到 YouTube"},
+    "12-publishing/publisher/skill-youtube-cdp-draft": {"kind": "soul", "condition": "发布到 YouTube 或 YouTube Shorts"},
     "12-publishing/publisher/skill-douyin-cdp-draft": {"kind": "soul", "condition": "发布到抖音"},
     "12-publishing/publisher/skill-tiktok-cdp-draft": {"kind": "soul", "condition": "发布到 TikTok"},
     "12-publishing/publisher/skill-xhs-cdp-draft": {"kind": "soul", "condition": "发布到小红书"},
@@ -3976,7 +3985,12 @@ def build_role_prompt(agent_id: str, project: str,
         plat_line = (f"{plat_list} —— Phase 11 发布(platform-adapter/seo/metadata/publisher)**仅面向这些平台**;"
                      "aspect_ratio.json 平台矩阵、thumbnail 每平台封面、subtitle 每平台字幕以此清单为准。"
                      f"主生产画幅仍是上面的 {aspect}(母版按此原生生成)"
-                     + ("" if not cross else f";与母版画幅不同的平台【{cross}】由 platform-adapter 在发布期从母版裁/补适配,不重新生成视频(现架构单母版)"))
+                     + ("" if not cross else f";与母版画幅不同的平台【{cross}】由 platform-adapter 在发布期从母版裁/补适配,不重新生成视频(现架构单母版)")
+                     + ("" if SHORTS_PLATFORM not in [k for k, _, _ in platforms] else
+                        ";**YouTube Shorts 只认竖屏或正方形、单条不超过 3 分钟的视频**(否则 YouTube 按普通视频发布):"
+                        f"platform-adapter 出 9:16、每条 ≤ {int(SHORTS_MAX_S) - 1} 秒的 `publish/{SHORTS_PLATFORM}/package/<ep>/`,"
+                        "超长集按场次边界切成多条;thumbnail 出 9:16 封面;"
+                        "超过 1 分钟且被 Content ID 声明的 Shorts 会被全球屏蔽,用了第三方版权音乐时在 parts.json 对应条目注明"))
     else:   # 成片发布页一个渠道都没勾(2026-10-06 起允许;2026-10-07 选择入口由输出设置移到成片发布页)
         plat_line = ("未选(用户在「🎞️ 成片发布」页没有勾选任何发布渠道)—— **不做分平台发布**:"
                      f"aspect_ratio.json 只列母版一条({aspect}),thumbnail / subtitle 只按母版出一份,"
@@ -12403,6 +12417,18 @@ def _ep_publish_info(base: Path, ep: str):
     return info
 
 
+def _receipt_name_platform(name: str, ep: str) -> str | None:
+    """<ep>_<platform>*.json 命名的回执 → 渠道键(取能匹配的最长键,键后须接 . _ - 或结尾)。"""
+    low, pre = name.lower(), f"{ep}_".lower()
+    if not low.startswith(pre):
+        return None
+    rest = low[len(pre):]
+    for k in sorted(OUTPUT_PLATFORMS, key=len, reverse=True):
+        if rest.startswith(k) and (len(rest) == len(k) or rest[len(k)] in "._-"):
+            return k
+    return None
+
+
 def _ep_publish_receipt(base: Path, ep: str, platform: str) -> dict | None:
     """publish/receipts/ 里本集 × 本渠道的最新回执(publisher SOUL:每集 × 每平台一条;
     文件名不限,按内容 ep/platform 匹配,同时兼容 <ep>_<platform>*.json 命名)。"""
@@ -12414,8 +12440,10 @@ def _ep_publish_receipt(base: Path, ep: str, platform: str) -> dict | None:
         j = _read_json_safe(f)
         if not isinstance(j, dict):
             continue
-        hit = (str(j.get("ep") or "") == ep and str(j.get("platform") or "") == platform) or \
-            f.name.lower().startswith(f"{ep}_{platform}".lower())
+        jp = str(j.get("platform") or "")
+        # 文件名按最长渠道键认领:ep01_youtube_shorts_receipt.json 属于 youtube_shorts,不算 youtube 的回执
+        hit = (str(j.get("ep") or "") == ep and jp == platform) or \
+            (jp in ("", platform) and _receipt_name_platform(f.name, ep) == platform)
         if not hit:
             continue
         m = f.stat().st_mtime
@@ -12432,14 +12460,95 @@ def _ep_publish_receipt(base: Path, ep: str, platform: str) -> dict | None:
 
 def _ep_publish_package_dir(base: Path, ep: str, platform: str) -> Path | None:
     """本集 × 本渠道的发布包目录(platform-adapter 产物;项目级 publish/<platform>/package/<ep>/ 为规约,
-    兼容集级 publish/<ep>/<platform>/package/ 与单集项目 publish/<platform>/package/);含视频文件才算就绪。"""
-    cands = (base / "publish" / platform / "package" / ep,
-             base / "publish" / ep / platform / "package",
-             base / "publish" / platform / "package")
+    兼容集级 publish/<ep>/<platform>/package/ 与单集项目 publish/<platform>/package/);含视频文件才算就绪。
+    package/ 下有分集子目录时它不是单集布局,不能拿别集的包充数(与 _ep_publish_info 同口径)。"""
+    flat = base / "publish" / platform / "package"
+    cands = [base / "publish" / platform / "package" / ep,
+             base / "publish" / ep / platform / "package"]
+    if flat.is_dir() and not any(re.match(r"^ep\d+$", s.name, re.I) for s in flat.iterdir() if s.is_dir()):
+        cands.append(flat)
     for d in cands:
         if d.is_dir() and any(f.is_file() and f.suffix.lower() in VIDEO_EXTS for f in d.rglob("*")):
             return d
     return None
+
+
+def _ep_final_videos(edir: Path) -> list[str]:
+    """edit/<ep>/ 下的母版成片文件名(含 final / master 的视频,发布按钮的「有没有成片」判据)。"""
+    return sorted(f.name for f in edir.rglob("*") if f.is_file() and f.suffix.lower() in VIDEO_EXTS
+                  and ("final" in f.name.lower() or "master" in f.name.lower())) if edir.is_dir() else []
+
+
+_SHORTS_PROBE_CACHE: dict = {}
+
+
+def _shorts_probe(path: Path) -> dict | None:
+    """ffprobe 实测一条视频够不够 YouTube Shorts:显示宽 ≤ 高(竖屏或正方形,计旋转)且时长 ≤ SHORTS_MAX_S。
+    ffprobe 不可用 / 读不出返回 None(不拦);按路径 + mtime + 大小缓存。"""
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    key = (str(path), st.st_mtime_ns, st.st_size)
+    if key in _SHORTS_PROBE_CACHE:
+        return _SHORTS_PROBE_CACHE[key]
+    exe, res = shutil.which("ffprobe"), None
+    if exe:
+        try:
+            out = subprocess.run(
+                [exe, "-v", "error", "-select_streams", "v:0", "-show_entries",
+                 "stream=width,height:stream_tags=rotate:stream_side_data=rotation:format=duration",
+                 "-of", "json", str(path)], capture_output=True, text=True, timeout=20)
+            info = json.loads(out.stdout or "{}")
+            s = (info.get("streams") or [{}])[0]
+            w, h = int(s.get("width") or 0), int(s.get("height") or 0)
+            rot = (s.get("tags") or {}).get("rotate") or next(
+                (sd.get("rotation") for sd in s.get("side_data_list") or [] if "rotation" in sd), 0)
+            if int(float(rot or 0)) % 180:
+                w, h = h, w
+            dur = float((info.get("format") or {}).get("duration") or 0)
+            if w and h and dur > 0:
+                problems = ([] if w <= h else ["landscape"]) + ([] if dur <= SHORTS_MAX_S else ["too_long"])
+                res = {"width": w, "height": h, "duration": round(dur, 2), "ok": not problems, "problems": problems}
+        except Exception:  # noqa: BLE001  探测失败不拦发布,交给技能脚本 --shorts 再核
+            res = None
+    if len(_SHORTS_PROBE_CACHE) > 256:
+        _SHORTS_PROBE_CACHE.clear()
+    _SHORTS_PROBE_CACHE[key] = res
+    return res
+
+
+def _ep_shorts_check(base: Path, ep: str, pkg: Path | None, finals: list[str]) -> dict | None:
+    """YouTube Shorts 渠道要上传的视频是否都符合 Shorts:有发布包核包里每条视频,没有则核母版
+    (花字版 > 烧录版 > 其它 final,与派单降级口径一致)。没有可核的视频或 ffprobe 不可用返回 None。"""
+    if pkg is not None:
+        src, vids = "package", sorted(f for f in pkg.rglob("*") if f.is_file() and f.suffix.lower() in VIDEO_EXTS)
+    else:
+        rank = lambda n: (0 if "final_caption" in n else 1 if "final_sub" in n else 2, n)  # noqa: E731
+        src, vids = "master", [base / "edit" / ep / n for n in sorted(finals, key=rank)[:1]]
+    files = []
+    for v in vids:
+        r = _shorts_probe(v)
+        if r is None:
+            return None
+        files.append({"file": v.relative_to(base).as_posix(), **r})
+    if not files:
+        return None
+    return {"source": src, "ok": all(f["ok"] for f in files), "files": files,
+            "over_content_id": any(f["duration"] > SHORTS_CONTENT_ID_S for f in files)}
+
+
+def _shorts_refusal(chk: dict) -> str:
+    """不符合 Shorts 时拒派的说明(服务端文案:界面中文出中文,其它语言出英文)。"""
+    bad = [f for f in chk["files"] if not f["ok"]]
+    desc = ", ".join(f"{f['file']} {f['width']}x{f['height']} {f['duration']:g}s" for f in bad[:3])
+    if (ui_lang_code() or "zh") == "zh":
+        return (f"不符合 YouTube Shorts(需竖屏或正方形、不超过 3 分钟):{desc}。"
+                f"请先让平台适配(platform-adapter)出 9:16、每条 ≤ {int(SHORTS_MAX_S) - 1} 秒的发布包 "
+                f"publish/{SHORTS_PLATFORM}/package/<ep>/")
+    return (f"Not eligible for YouTube Shorts (needs vertical or square, up to 3 minutes): {desc}. "
+            f"Have platform-adapter build a 9:16 package with parts of at most {int(SHORTS_MAX_S) - 1} s "
+            f"in publish/{SHORTS_PLATFORM}/package/<ep>/ first")
 
 
 def _ep_publish_channels(base: Path, ep: str) -> list[dict]:
@@ -12452,17 +12561,24 @@ def _ep_publish_channels(base: Path, ep: str) -> list[dict]:
     rows = []
     for key, (name, aspect) in OUTPUT_PLATFORMS.items():
         pkg = _ep_publish_package_dir(base, ep, key)
-        rows.append({"key": key, "name": name, "aspect": aspect, "selected": key in sel,
-                     "skill": PUBLISH_PLATFORM_SKILLS.get(key),
-                     "package_ready": pkg is not None,
-                     "package_dir": pkg.relative_to(base).as_posix() if pkg else f"publish/{key}/package/{ep}",
-                     "receipt": _ep_publish_receipt(base, ep, key)})
+        row = {"key": key, "name": name, "aspect": aspect, "selected": key in sel,
+               "skill": PUBLISH_PLATFORM_SKILLS.get(key),
+               "package_ready": pkg is not None,
+               "package_dir": pkg.relative_to(base).as_posix() if pkg else f"publish/{key}/package/{ep}",
+               "receipt": _ep_publish_receipt(base, ep, key)}
+        if key == SHORTS_PLATFORM:
+            # 页面 t() 翻译 note;shorts 为发布包 / 母版的实测结论(None = 没有可核的视频或 ffprobe 不可用)
+            row["note"] = "单条 ≤ 3 分钟、竖屏或正方形才算 Shorts,否则按普通视频发布"
+            row["shorts"] = _ep_shorts_check(base, ep, pkg, _ep_final_videos(base / "edit" / ep))
+        rows.append(row)
     return rows
 
 
-def publish_dispatch_message(project: str, ep: str, platform: str, package_ready: bool, finals: list[str]) -> str:
+def publish_dispatch_message(project: str, ep: str, platform: str, package_ready: bool, finals: list[str],
+                             shorts: dict | None = None) -> str:
     """成片发布页「发布到 <渠道>」按钮的工单正文(发给 12-publishing/publisher):
-    先读该渠道技能文档,按发布包 / 母版口径取素材,preflight 留痕,停在平台发布页由用户亲手提交,回执落 publish/receipts/。"""
+    先读该渠道技能文档,按发布包 / 母版口径取素材,preflight 留痕,停在平台发布页由用户亲手提交,回执落 publish/receipts/。
+    YouTube Shorts 另写 Shorts 一节的口径与宿主实测结论(shorts = _ep_shorts_check 结果,None 为未能核对)。"""
     name, aspect = OUTPUT_PLATFORMS[platform]
     skill = PUBLISH_PLATFORM_SKILLS[platform]
     pkg = f"publish/{platform}/package/{ep}/"
@@ -12471,9 +12587,20 @@ def publish_dispatch_message(project: str, ep: str, platform: str, package_ready
            f"发布包 {pkg} 不存在(platform-adapter 未产包)——按技能文档的降级口径直接用母版成片:"
            + ("、".join(f"edit/{ep}/{f}" for f in finals) if finals else f"edit/{ep}/final.mp4")
            + f"(花字版 final_caption.mp4 存在时优先)+ edit/{ep}/thumbnail_*.png 封面;画幅与 {name} 默认 {aspect} 不同时不要自行裁切,原样上传并在回执注明未经 platform-adapter 适配")
+    extra = []
+    if platform == SHORTS_PLATFORM:
+        checked = ("宿主已用 ffprobe 核对要上传的视频均符合 Shorts:"
+                   + "、".join(f"{f['file']} {f['width']}×{f['height']} {f['duration']:g} 秒" for f in shorts["files"])
+                   if shorts else "宿主未能核对(没有 ffprobe 或读不出视频),以 upload --shorts 的核对为准")
+        extra = [f"- YouTube Shorts:与 YouTube 共用这份技能,按其中「YouTube Shorts」一节执行(upload 一律加 --shorts,"
+                 f"不符合竖屏或正方形、不超过 3 分钟即停手回报,不得改传横屏或超长视频);{checked}。"
+                 "发布包有多条时每条各传一个 Short(各加 --new-tab)。"
+                 + ("有视频超过 1 分钟:带任何 Content ID 版权声明的 Shorts 会被全球屏蔽,回报时提醒用户。"
+                    if shorts and shorts.get("over_content_id") else "")]
     return "\n".join([
         f"请把 {ep} 发布到 {name}({platform})。先完整读 agents/12-publishing/publisher/skills/{skill}/SKILL.md 再照做;本单来自成片发布页「发布」按钮,只处理这一个渠道。",
         f"- 素材:{src}。",
+        *extra,
         f"- 标题 / 简介 / 标签 / 元数据:取 publish/seo.json 与 publish/metadata.json 的本集({ep})条目(集级 publish/{ep}/ 下的同名文件优先);seo 的 picked 未定时按技能文档降级并在回执注明,不得自造标题。",
         "- preflight 按 SOUL 逐项核验并留痕(H5 签字 / 发布包 lint / seo picked / metadata 必填);缺项不是拒发理由时照技能文档降级,是拒发理由时停手回报。",
         "- 半自动红线:在本机 Chrome(专用 profile,CDP 9222)里填好草稿、截图给用户核对,停在平台发布页,永不代点「发布 / 投稿 / Post」,最后一步由用户亲手完成。",
@@ -12505,11 +12632,14 @@ async def api_publish_dispatch(project: str, ep: str, body: dict) -> dict:
     if not ep:
         raise ServiceError(400, "ep is required")
     base = _proj_base(project)
-    edir = base / "edit" / ep
-    finals = sorted(f.name for f in edir.rglob("*") if f.is_file() and f.suffix.lower() in VIDEO_EXTS
-                    and ("final" in f.name.lower() or "master" in f.name.lower())) if edir.is_dir() else []
+    finals = _ep_final_videos(base / "edit" / ep)
     if not finals:
         raise ServiceError(409, f"{ep} 还没有 final 成片(edit/{ep}/*final*.mp4),不能发布")
+    shorts = None
+    if platform == SHORTS_PLATFORM:
+        shorts = await asyncio.to_thread(_ep_shorts_check, base, ep, _ep_publish_package_dir(base, ep, platform), finals)
+        if shorts and not shorts["ok"]:     # 横屏 / 超过 3 分钟传上去就是普通视频:不派单
+            raise ServiceError(409, _shorts_refusal(shorts))
     cfg = load_project_settings(project)
     sel = (cfg.get("output") or {}).get("platforms")
     sel = list(sel) if isinstance(sel, list) else list(DEFAULT_GENCONFIG["output"]["platforms"])
@@ -12517,7 +12647,7 @@ async def api_publish_dispatch(project: str, ep: str, body: dict) -> dict:
         sel.append(platform)
         await api_projconfig_set({"project": project, "output": {"platforms": [k for k in OUTPUT_PLATFORMS if k in sel]}})
     pkg = _ep_publish_package_dir(base, ep, platform)
-    message = publish_dispatch_message(project, ep, platform, pkg is not None, finals)
+    message = publish_dispatch_message(project, ep, platform, pkg is not None, finals, shorts)
     run = await api_chat({"agent": PUBLISHER_ID, "message": message, "project": project, "source": "user"})
     return {"ok": True, "run_id": run.get("run_id"), "platform": platform, "ep": ep,
             "package_ready": pkg is not None, "message": message}

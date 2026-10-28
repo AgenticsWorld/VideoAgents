@@ -285,16 +285,26 @@ function channelsHtml(d){
     let st='';
     if(run)st=`<div class="ln warn"><span class="spin">⟳</span> ${esc(I18N.f('已派单给发布执行 Agent,运行中…(run {id})',{id:run}))} <a href="/?project=${encodeURIComponent(proj)}&run=${encodeURIComponent(run)}" target="_blank">${esc(t('查看运行'))}</a></div>`;
     else if(r)st=`<div class="ln ${/success|submitted/.test(r.status)?'ok':/fail/.test(r.status)?'err':'warn'}" title="${esc(r.file||'')}">🧾 ${esc(t(r.label||r.status))}${r.updated_at?' · '+esc(r.updated_at):''}${r.video_id?' · '+esc(r.video_id):''}</div>`;
+    // 渠道说明 + Shorts 实测(服务端 ffprobe 核发布包 / 母版:竖屏或正方形、≤ 3 分钟;不符合时不能派单)
+    const sh=c.shorts,shBad=!!(sh&&!sh.ok),shFix=t('请先让平台适配(platform-adapter)出 9:16、每条 ≤ 3 分钟的 Shorts 发布包');
     const pk=c.package_ready?`<div class="ln ok">📦 ${esc(t('发布包已就绪'))} <span style="color:var(--dim)">${esc(c.package_dir)}</span></div>`
-      :`<div class="ln">📦 ${esc(t('尚无发布包(将按母版成片直接上传)'))}</div>`;
-    const dis=!hasFinal||!!run;
-    const btn=`<button class="pub" data-pub="${esc(c.key)}"${dis?' disabled':''} title="${esc(hasFinal?I18N.f('把 {ep} 的发布工单派给发布执行 Agent(渠道:{name});未勾选的渠道会同时勾上',{ep:d.ep,name:t(c.name)}):t('该集还没有 final 成片,不能发布'))}">${run?'<span class="spin">⟳</span> '+esc(t('派单中…')):esc(I18N.f('发布到 {name}',{name:t(c.name)}))}</button>`;
+      :shBad?'':`<div class="ln">📦 ${esc(t('尚无发布包(将按母版成片直接上传)'))}</div>`;
+    let sl=c.note?`<div class="ln">${esc(t(c.note))}</div>`:'';
+    if(sh){
+      sl+=sh.ok?`<div class="ln ok">▮ ${esc(I18N.f('符合 Shorts:{n} 条视频均为竖屏或正方形、≤ 3 分钟',{n:sh.files.length}))}</div>`
+        :sh.files.filter(f=>!f.ok).map(f=>`<div class="ln err">✕ ${esc(I18N.f('{file}({w}×{h} · {dur})不符合 Shorts:需竖屏或正方形、≤ 3 分钟',{file:f.file,w:f.width,h:f.height,dur:chDur(f.duration)}))}</div>`).join('')
+          +`<div class="ln err">${esc(shFix)}</div>`;
+      if(sh.ok&&sh.over_content_id)sl+=`<div class="ln warn">⚠ ${esc(t('有视频超过 1 分钟:带任何 Content ID 版权声明的 Shorts 会被全球屏蔽'))}</div>`;
+    }
+    const dis=!hasFinal||!!run||shBad;
+    const btn=`<button class="pub" data-pub="${esc(c.key)}"${dis?' disabled':''} title="${esc(!hasFinal?t('该集还没有 final 成片,不能发布'):shBad?shFix:I18N.f('把 {ep} 的发布工单派给发布执行 Agent(渠道:{name});未勾选的渠道会同时勾上',{ep:d.ep,name:t(c.name)}))}">${run?'<span class="spin">⟳</span> '+esc(t('派单中…')):esc(I18N.f('发布到 {name}',{name:t(c.name)}))}</button>`;
     return `<div class="ch${c.selected?' on':''}" data-ch="${esc(c.key)}">
       <label class="hd"><input type="checkbox" data-sel="${esc(c.key)}"${c.selected?' checked':''}>${esc(c.name)}<span class="asp">${esc(c.aspect)}</span></label>
-      ${pk}${st}
+      ${sl}${pk}${st}
       <div class="act">${btn}</div></div>`;
   }).join('')+'</div>';
 }
+function chDur(s){s=Math.round(s||0);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
 function bindChannels(d){
   const proj=$('#project').value.trim()||'demo';
   document.querySelectorAll('#content input[data-sel]').forEach(cb=>cb.onchange=async()=>{

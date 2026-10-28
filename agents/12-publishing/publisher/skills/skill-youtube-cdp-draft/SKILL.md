@@ -3,8 +3,9 @@ name: youtube-cdp-draft
 description: |
   用「用户本机的 Google Chrome（专用自动化 profile + CDP 9222）」把一集成片视频 + 标题/简介/标签/缩略图填充成 YouTube Studio 的**上传草稿**，推进到「公开范围」页后停下，由用户人工选择可见性并点击「保存/发布」完成提交（本 skill 永不代点）。
   适用场景：收到「发布 <ep> 到 youtube」工单后，基于 data/projects/<slug>/publish/youtube/package/<ep>/ 的发布包（mp4 + thumbnail + srt）与 publish/seo.json、publish/metadata.json 的本集条目自动完成视频上传与 meta 信息填写、登录态检查、CDP 截图确认。
+  渠道 youtube_shorts（YouTube Shorts）也用本 skill，另按文末「YouTube Shorts」一节执行。
 metadata:
-  trigger: 发布某集成片到 YouTube（半自动，用户点最后一步保存/发布）
+  trigger: 发布某集成片到 YouTube 或 YouTube Shorts（半自动，用户点最后一步保存/发布）
   builds_on: skills/skill-xhs-cdp-draft（共用 launch_cdp_chrome.sh 与专用 Chrome profile）
 ---
 
@@ -106,6 +107,21 @@ python3 <skills>/skill-youtube-cdp-draft/scripts/ytstudio_draft.py screenshot /t
 告知用户：视频已上传、meta 已填好、停在「公开范围」页（默认私享），请在 Chrome 窗口里核对后**亲手选择可见性并点「保存/发布」**。
 - 任何情况下都不要代点保存/发布;用户口头说"确认"也不例外。
 - 用户点完后，把「所用视频/缩略图路径、最终标题/简介、草稿链接、截图路径、状态 `submitted_by_human`」写入回执 `publish/receipts/`。
+
+## YouTube Shorts（仅当工单渠道是 youtube_shorts 时）
+
+> 渠道是 youtube（普通 YouTube）时本节不适用，照上面流程即可。
+
+YouTube 没有单独的 Shorts 上传入口：同一个上传对话框里，**竖屏或正方形、不超过 3 分钟**的视频自动算 Shorts，否则按普通视频发布。所以流程同上，只换素材与几处口径：
+
+- **视频**：`publish/youtube_shorts/package/<ep>/` 的 9:16 包（文件名与条数以 parts.json 为准）。没有包时才用母版 `edit/<ep>/final*.mp4`（花字版优先），且母版必须本身是竖屏或正方形、不超过 3 分钟；**横屏或超长的母版不要上传、不要自行裁切**，停手回报「需要 platform-adapter 先出 Shorts 包」。宿主派单前已用 ffprobe 核过一次（工单里写了结论），不符合的不会派到这里。
+- **`upload` 一律加 `--shorts`**：脚本在打开浏览器前用 ffprobe 再核一次，输出 `SHORTS_CHECK: OK <宽>x<高> <秒>s`；`SHORTS_CHECK: FAIL` 时退出码 2、什么都没传，照上一条停手回报，不得去掉 `--shorts` 重跑。
+- **多条**：parts.json 有多条时每条各传一个 Short，每条 `upload` 加 `--new-tab`，按「多集连续上传」一节记 part → 标题 → TAB_ID；标题、简介按 seo.json 的 part 取。
+- **标题 / 简介 / 标签**：取 seo.json 中 `platform=youtube_shorts` 的本集条目；没有时用 `platform=youtube` 的条目，并在回执注明「借用 youtube 文案」。不需要在标题里加 `#Shorts`。元数据（made_for_kids 等）取 metadata.json 的 `platform_fields.youtube_shorts`，没有时用 `platform_fields.youtube`。
+- **缩略图**：Shorts 封面推荐 9:16（2160×3840，高至少 640 px）。依次找包里的封面 → `edit/<ep>/thumbnail_youtube_shorts_*.png` → 其它 9:16 平台封面（`thumbnail_tiktok_*` / `thumbnail_douyin_*` / `thumbnail_xiaohongshu_*`）；都没有就不传，由 YouTube 取帧。**不要拿 16:9 封面顶替。** 频道未验证（据报道，上传时设 Shorts 封面目前只开放给 YouTube 合作伙伴计划频道）时脚本会告警跳过，属正常。
+- **超过 1 分钟**：脚本会告警「带任何 Content ID 版权声明的 Shorts 会被全球屏蔽」。用了第三方版权音乐时，交还用户时要转告这句。
+- **回执**：`publish/receipts/<ep>_youtube_shorts_receipt.json`，`platform` 写 `youtube_shorts`（不要写 youtube，否则成片发布页会算到 YouTube 渠道上），多条时逐条记视频路径、标题与 TAB_ID，附 `SHORTS_CHECK` 输出。
+- 其余（登录、字幕、预选 Private、永不点保存 / 发布）与普通 YouTube 完全相同。Shorts 的上传对话框步骤目前按与普通视频相同处理（尚未真机验证）；若「下一步」点不下去，脚本会告警并把剩余步骤留给用户，照常截图交还。
 
 ## 必做约束
 

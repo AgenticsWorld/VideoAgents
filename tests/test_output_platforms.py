@@ -64,7 +64,7 @@ def test_webui_platform_lists():
     page = (ROOT / "apps" / "web" / "static" / "preview_videos.html").read_text(encoding="utf-8")
     assert "📡 发布渠道" in page and "/publish/channels" in page and "/dispatch" in page
     assert "xiaohongshu" not in page and "youtube" not in page   # 渠道清单只来自服务端 OUTPUT_PLATFORMS,页面不写死
-    assert list(core.OUTPUT_PLATFORMS) == ["youtube", "bilibili", "tiktok", "douyin", "xiaohongshu"]
+    assert list(core.OUTPUT_PLATFORMS) == ["youtube", "youtube_shorts", "bilibili", "tiktok", "douyin", "xiaohongshu"]
     assert set(core.PUBLISH_PLATFORM_SKILLS) == set(core.OUTPUT_PLATFORMS)
     for d in core.PUBLISH_PLATFORM_SKILLS.values():
         assert (ROOT / "agents" / "12-publishing" / "publisher" / "skills" / d / "SKILL.md").is_file(), d
@@ -142,6 +142,20 @@ def test_publish_channels_set_and_dispatch(tmp_path, monkeypatch):
     (pkg / "a.mp4").write_bytes(b"0")
     r = asyncio.run(core.api_publish_dispatch("p", "ep01", {"platform": "douyin"}))
     assert r["package_ready"] is True and "发布包 publish/douyin/package/ep01/ 已就绪" in sent[-1]["message"]
+
+
+def test_package_dir_not_borrowed_from_other_episode(tmp_path, monkeypatch):
+    """publish/<platform>/package/ 下有分集子目录时,别集没有包就是没有(曾把 ep03 的包算成 ep02 已就绪);
+    没有分集子目录的单集布局照旧认。"""
+    base = _proj(tmp_path, monkeypatch)
+    (base / "publish" / "douyin" / "package" / "ep03").mkdir(parents=True)
+    (base / "publish" / "douyin" / "package" / "ep03" / "a.mp4").write_bytes(b"0")
+    assert core._ep_publish_package_dir(base, "ep02", "douyin") is None
+    assert core._ep_publish_package_dir(base, "ep03", "douyin") == base / "publish" / "douyin" / "package" / "ep03"
+    flat = base / "publish" / "bilibili" / "package"
+    flat.mkdir(parents=True)
+    (flat / "b.mp4").write_bytes(b"0")
+    assert core._ep_publish_package_dir(base, "ep01", "bilibili") == flat
 
 
 def test_cinema_aspect_preset(tmp_path):
