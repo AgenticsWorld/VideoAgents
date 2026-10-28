@@ -429,3 +429,173 @@ def test_antigravity_install_location_and_login_line(home, monkeypatch):
     monkeypatch.setattr(es.shutil, "which", lambda name: None)
     assert es.install_plan("antigravity", windows=True)["display"] == \
         "irm https://antigravity.google/cli/install.ps1 | iex"
+
+
+# ---------------------------------------------------------------- kimi 模型列表
+# 假 kimi:`provider list --json` 读 state.json;`web --no-open --port N` 起本机 HTTP 服务、打印带
+# token 的地址,POST /api/v1/providers:refresh_oauth 把 upstream 里的新别名并进 models(模拟 kimi
+# 自己按官方目录改写 config.toml)。
+_FAKE_KIMI = r'''
+import json, os, sys, time, http.server
+here = os.path.dirname(os.path.abspath(__file__))
+state = os.path.join(here, "state.json")
+d = json.load(open(state))
+args = sys.argv[1:]
+if args[:3] == ["provider", "list", "--json"]:
+    print(json.dumps({"providers": d["providers"], "models": d["models"]}))
+elif args[:2] == ["web", "--no-open"]:
+    port = int(args[args.index("--port") + 1])
+    d.setdefault("webs", []).append(os.environ.get("KIMI_CODE_MODEL_CATALOG_REFRESH_ON_START"))
+    json.dump(d, open(state, "w"))
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            s = json.load(open(state))
+            time.sleep(s.get("delay") or 0)
+            if (self.path == "/api/v1/providers:refresh_oauth"
+                    and self.headers.get("Authorization") == "Bearer tok-1"
+                    and self.headers.get("Content-Type") == "application/json"):
+                failed = s.get("fail") or []
+                if not failed:
+                    s["models"].update(s.get("upstream") or {})
+                json.dump(s, open(state, "w"))
+                body = {"code": 0, "msg": "success", "data": {"changed": [], "unchanged": [], "failed": failed}}
+            else:
+                body = {"code": 50001, "msg": "Unsupported Media Type"}
+            raw = json.dumps(body).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+        def log_message(self, *a):
+            pass
+    srv = http.server.HTTPServer(("127.0.0.1", port), H)
+    print("  Kimi server ready  2.1.1", flush=True)
+    print(f"  Local:    http://127.0.0.1:{port}/#token=tok-1", flush=True)
+    srv.serve_forever()
+else:
+    sys.exit(2)
+'''
+
+_KIMI_OAUTH = {"managed:kimi-code": {"type": "kimi", "baseUrl": "https://api.kimi.com/coding/v1",
+                                     "apiKey": "", "oauth": {"storage": "file", "key": "oauth/kimi-code"}}}
+
+
+def _kimi_model(model: str, name: str) -> dict:
+    return {"provider": "managed:kimi-code", "model": model, "maxContextSize": 1048576, "displayName": name}
+
+
+def _fake_kimi(tmp_path: Path, state: dict) -> tuple[Path, Path]:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    exe = tmp_path / "kimi"
+    exe.write_text(f"#!{sys.executable}\n" + _FAKE_KIMI)
+    exe.chmod(exe.stat().st_mode | stat.S_IXUSR)
+    (tmp_path / "state.json").write_text(json.dumps(state))
+    return exe, tmp_path / "state.json"
+
+
+def _reset_kimi(monkeypatch, core, exe):
+    monkeypatch.setattr(core, "resolve_cli_executable", lambda e: str(exe) if e == "kimi" else None)
+    monkeypatch.setattr(core, "_KIMI_MODELS_CACHE", (0, []))
+    monkeypatch.setattr(core, "_KIMI_SYNC", {"at": 0.0, "error": "", "task": None})
+
+
+def test_parse_kimi_models():
+    from services.runtime import core
+    data = {"providers": _KIMI_OAUTH,
+            "models": {"kimi-code/k3": _kimi_model("k3", "K3"),
+                       "kimi-code/k3.1-pro": _kimi_model("k3.1-pro", "K3.1 Pro"),
+                       "my/raw": {"provider": "my", "model": "raw"}, "bad": "x"}}
+    assert core._parse_kimi_models(data) == [
+        {"id": "kimi-code/k3", "name": "K3", "provider": "managed:kimi-code", "model": "k3"},
+        {"id": "kimi-code/k3.1-pro", "name": "K3.1 Pro", "provider": "managed:kimi-code", "model": "k3.1-pro"},
+        {"id": "my/raw", "name": "my/raw", "provider": "my", "model": "raw"}]
+    assert core._kimi_has_oauth(data)
+    assert not core._kimi_has_oauth({"providers": {"my": {"type": "kimi", "apiKey": "sk"}}})
+    assert core._parse_kimi_models({}) == [] and not core._kimi_has_oauth({})
+
+
+@posix_only
+def test_api_kimi_models_syncs_official_catalog(tmp_path, monkeypatch):
+    from services.runtime import core
+    exe, state = _fake_kimi(tmp_path, {
+        "providers": _KIMI_OAUTH, "models": {"kimi-code/k3": _kimi_model("k3", "K3")},
+        "upstream": {"kimi-code/k3.1-pro": _kimi_model("k3.1-pro", "K3.1 Pro")}})
+    _reset_kimi(monkeypatch, core, exe)
+    r = asyncio.run(core.api_kimi_models())
+    assert [m["id"] for m in r["models"]] == ["kimi-code/k3", "kimi-code/k3.1-pro"]
+    assert r["models"][1]["name"] == "K3.1 Pro" and r["sync_error"] == "" and r["cached"] is False
+    assert r["sync_pending"] is False
+    assert json.loads(state.read_text())["webs"] == ["0"]          # 只走显式刷新,关掉启动刷新
+    assert asyncio.run(core.api_kimi_models())["cached"] is True
+    monkeypatch.setattr(core, "_KIMI_MODELS_CACHE", (0, []))       # 列表缓存过期,同步未满 6 小时:不再起 kimi web
+    asyncio.run(core.api_kimi_models())
+    assert len(json.loads(state.read_text())["webs"]) == 1
+    asyncio.run(core.api_kimi_models(refresh=True))                # 显式刷新照常同步
+    assert len(json.loads(state.read_text())["webs"]) == 2
+    monkeypatch.setattr(core, "_KIMI_MODELS_CACHE", (0, []))
+    monkeypatch.setattr(core, "_KIMI_SYNC", {"at": time.time() - core._KIMI_SYNC_TTL - 1, "error": "", "task": None})
+    asyncio.run(core.api_kimi_models())                            # 满 6 小时自动再同步
+    assert len(json.loads(state.read_text())["webs"]) == 3
+
+
+@posix_only
+def test_api_kimi_models_sync_failure_and_api_key_provider(tmp_path, monkeypatch):
+    from services.runtime import core
+    exe, state = _fake_kimi(tmp_path, {
+        "providers": _KIMI_OAUTH, "models": {"kimi-code/k3": _kimi_model("k3", "K3")},
+        "upstream": {"kimi-code/k3.1-pro": _kimi_model("k3.1-pro", "K3.1 Pro")},
+        "fail": [{"provider": "managed:kimi-code", "reason": "fetch failed"}]})
+    _reset_kimi(monkeypatch, core, exe)
+    r = asyncio.run(core.api_kimi_models())                        # 同步失败仍列出已有别名
+    assert [m["id"] for m in r["models"]] == ["kimi-code/k3"]
+    assert r["sync_error"] == "managed:kimi-code: fetch failed"
+    monkeypatch.setattr(core, "_KIMI_MODELS_CACHE", (0, []))
+    asyncio.run(core.api_kimi_models())                            # 10 分钟内不重试
+    assert len(json.loads(state.read_text())["webs"]) == 1
+    monkeypatch.setattr(core, "_KIMI_MODELS_CACHE", (0, []))
+    monkeypatch.setattr(core, "_KIMI_SYNC", {"at": time.time() - core._KIMI_SYNC_RETRY - 1,
+                                              "error": "managed:kimi-code: fetch failed", "task": None})
+    asyncio.run(core.api_kimi_models())
+    assert len(json.loads(state.read_text())["webs"]) == 2
+
+    exe2, state2 = _fake_kimi(tmp_path / "apikey", {               # 自配 API Key 渠道:不起 kimi web
+        "providers": {"my": {"type": "kimi", "apiKey": "sk-x"}},
+        "models": {"my/k3": {"provider": "my", "model": "k3"}}})
+    _reset_kimi(monkeypatch, core, exe2)
+    assert [m["id"] for m in asyncio.run(core.api_kimi_models())["models"]] == ["my/k3"]
+    assert "webs" not in json.loads(state2.read_text())
+
+    exe3, _ = _fake_kimi(tmp_path / "empty", {"providers": {}, "models": {}})
+    _reset_kimi(monkeypatch, core, exe3)
+    with pytest.raises(core.ServiceError) as ei:
+        asyncio.run(core.api_kimi_models())
+    assert ei.value.status_code == 502
+    monkeypatch.setattr(core, "resolve_cli_executable", lambda e: None)
+    monkeypatch.setattr(core, "_KIMI_MODELS_CACHE", (0, []))
+    with pytest.raises(core.ServiceError) as ei:
+        asyncio.run(core.api_kimi_models())
+    assert ei.value.status_code == 503
+
+
+@posix_only
+def test_api_kimi_models_slow_sync_continues_in_background(tmp_path, monkeypatch):
+    from services.runtime import core
+    exe, state = _fake_kimi(tmp_path, {
+        "providers": _KIMI_OAUTH, "models": {"kimi-code/k3": _kimi_model("k3", "K3")},
+        "upstream": {"kimi-code/k3.1-pro": _kimi_model("k3.1-pro", "K3.1 Pro")}, "delay": 1.5})
+    _reset_kimi(monkeypatch, core, exe)
+    monkeypatch.setattr(core, "_KIMI_SYNC_WAIT", 0.3)
+
+    async def scenario():
+        first = await core.api_kimi_models()                 # 超过等待上限:先返回现有别名
+        again = await core.api_kimi_models()                 # 同步还在跑:不再起第二个 kimi web
+        await core._KIMI_SYNC["task"]
+        return first, again, await core.api_kimi_models()    # 后台跑完:新别名出现
+    first, again, done = asyncio.run(scenario())
+    assert first["sync_pending"] is True and [m["id"] for m in first["models"]] == ["kimi-code/k3"]
+    assert again["sync_pending"] is True
+    assert done["sync_pending"] is False and done["cached"] is False
+    assert [m["id"] for m in done["models"]] == ["kimi-code/k3", "kimi-code/k3.1-pro"]
+    assert len(json.loads(state.read_text())["webs"]) == 1

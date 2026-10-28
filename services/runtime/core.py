@@ -17423,6 +17423,156 @@ async def api_antigravity_models(refresh: bool = False):
     return {"models": models, "cached": False}
 
 
+_KIMI_MODELS_CACHE: tuple[float, list[dict]] = (0, [])
+_KIMI_MODELS_TTL = 30
+# 官方目录同步:成功后 6 小时再同步(与 kimi web 自身定时刷新间隔一致),失败 10 分钟后重试;
+# 本机实测一次 2~7s 且偶发网络失败,下拉最多等 _KIMI_SYNC_WAIT 秒,没完成先返回现有别名,
+# 同步在后台跑完后清列表缓存,下次读取生效
+_KIMI_SYNC_TTL, _KIMI_SYNC_RETRY, _KIMI_SYNC_WAIT = 6 * 3600, 600, 6
+_KIMI_SYNC = {"at": 0.0, "error": "", "task": None}
+_KIMI_TOKEN_RE = re.compile(r"#token=([A-Za-z0-9._~-]+)")
+
+
+def _parse_kimi_models(data: dict) -> list[dict]:
+    """`kimi provider list --json` 的 models 表(实测 2.1.1):键是 `-m` 认的别名
+    (kimi-code/k3),值含 provider / model / displayName;顺序与 kimi 自己的选择器一致。"""
+    models = []
+    for alias, m in ((data or {}).get("models") or {}).items():
+        if alias and isinstance(m, dict):
+            models.append({"id": alias, "name": m.get("displayName") or alias,
+                           "provider": m.get("provider") or "", "model": m.get("model") or alias})
+    return models
+
+
+def _kimi_has_oauth(data: dict) -> bool:
+    p = ((data or {}).get("providers") or {}).get("managed:kimi-code")
+    return isinstance(p, dict) and bool(p.get("oauth"))
+
+
+async def _kimi_provider_list(executable: str) -> dict:
+    env = {**os.environ, "NO_COLOR": "1"}
+    proc = await asyncio.create_subprocess_exec(
+        executable, "provider", "list", "--json", cwd=ROOT, env=env,
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=20)
+    except asyncio.TimeoutError as exc:
+        proc.kill()
+        await proc.wait()
+        raise ServiceError(504, "读取 kimi 模型列表超时") from exc
+    output = stdout.decode("utf-8", "replace")
+    if proc.returncode != 0:
+        detail = stderr.decode("utf-8", "replace").strip() or output.strip()
+        raise ServiceError(502, f"读取 kimi 模型列表失败:{detail[:300]}")
+    try:
+        data = json.loads(output)
+    except ValueError as exc:
+        raise ServiceError(502, f"kimi 模型列表解析失败:{output.strip()[:300]}") from exc
+    return data if isinstance(data, dict) else {}
+
+
+async def _kimi_sync_catalog(executable: str) -> str:
+    """让 kimi CLI 按 Kimi Code 官方目录刷新本机模型别名(由 kimi 自己写 ~/.kimi-code/config.toml)。
+    `kimi -p` 不刷新、只认 config.toml 里已有的别名(新模型报「is not configured in config.toml」);
+    kimi 只在交互界面启动 / `/model` 与 `kimi web` 里刷新。这里临时起一个只绑 127.0.0.1 的
+    `kimi web --no-open`,调网页「刷新模型」同一个接口 POST /api/v1/providers:refresh_oauth
+    (凭证过期由 kimi 自己续),随即结束进程。返回空串=成功,否则为失败原因。"""
+    import socket
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    # 关掉启动时自动刷新:只走下面这次显式刷新(实测启动刷新偶发 fetch failed)
+    env = {**os.environ, "NO_COLOR": "1", "KIMI_CODE_MODEL_CATALOG_REFRESH_ON_START": "0"}
+    proc = await asyncio.create_subprocess_exec(
+        executable, "web", "--no-open", "--port", str(port), cwd=ROOT, env=env,
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+    seen: list[str] = []
+    try:
+        token = ""
+        deadline = time.time() + 15
+        while not token and time.time() < deadline:
+            try:
+                raw = await asyncio.wait_for(proc.stdout.readline(), max(0.1, deadline - time.time()))
+            except asyncio.TimeoutError:
+                break
+            if not raw:
+                break
+            line = _ANSI_ESCAPE_RE.sub("", raw.decode("utf-8", "replace"))
+            seen.append(_KIMI_TOKEN_RE.sub("#token=***", line.strip()))
+            m = _KIMI_TOKEN_RE.search(line)
+            token = m.group(1) if m else ""
+        if not token:
+            return "kimi web 未就绪:" + " ".join(x for x in seen if x)[-200:]
+        drain = asyncio.ensure_future(proc.stdout.read())   # 防止输出塞满管道
+        try:
+            res = await asyncio.to_thread(
+                _http_post_json, f"http://127.0.0.1:{port}/api/v1/providers:refresh_oauth", {},
+                {"Authorization": f"Bearer {token}"}, 30)
+        except Exception as exc:   # noqa: BLE001 — 同步失败不影响列出已有别名
+            return f"刷新请求失败:{exc}"
+        finally:
+            drain.cancel()
+        if not isinstance(res, dict) or res.get("code") != 0:
+            return f"刷新失败:{str((res or {}).get('msg') if isinstance(res, dict) else res)[:200]}"
+        failed = (res.get("data") or {}).get("failed") or []
+        return "; ".join(f"{f.get('provider')}: {f.get('reason')}" for f in failed)[:300]
+    finally:
+        if proc.returncode is None:
+            proc.terminate()
+            try:
+                await asyncio.wait_for(proc.wait(), 5)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.wait()
+
+
+async def _kimi_sync_run(executable: str):
+    global _KIMI_MODELS_CACHE
+    err = await _kimi_sync_catalog(executable)
+    _KIMI_SYNC.update(at=time.time(), error=err)
+    if err:
+        print(f"[kimi] 模型目录同步失败:{err}", file=sys.stderr)
+    _KIMI_MODELS_CACHE = (0, [])        # 后台跑完时下次读取重新列出
+
+
+async def api_kimi_models(refresh: bool = False):
+    """列出 kimi CLI 本机已配置的模型别名(`kimi provider list --json`,只有这些 `kimi -m` 跑得起来),
+    供语言模型选择器动态显示。用 Kimi Code 账号登录(managed:kimi-code)时,首次读取、此后每 6 小时
+    或 refresh=true 先让 kimi 按官方目录刷新一次(_kimi_sync_catalog),新模型随之出现;
+    同步超过 _KIMI_SYNC_WAIT 秒先返回现有别名(sync_pending),后台跑完下次读取生效。"""
+    global _KIMI_MODELS_CACHE
+    ts, cached = _KIMI_MODELS_CACHE
+    if ts and not refresh and time.time() - ts < _KIMI_MODELS_TTL:
+        return {"models": cached, "cached": True, "sync_error": _KIMI_SYNC["error"], "sync_pending": False}
+    executable = await asyncio.to_thread(resolve_cli_executable, "kimi")
+    if not executable:
+        raise ServiceError(503, cli_not_found_error("kimi"))
+    data = await _kimi_provider_list(executable)
+    pending = False
+    if _kimi_has_oauth(data):
+        task = _KIMI_SYNC["task"]
+        if task is None or task.done():
+            wait = _KIMI_SYNC_RETRY if _KIMI_SYNC["error"] else _KIMI_SYNC_TTL
+            task = None
+            if refresh or time.time() - _KIMI_SYNC["at"] >= wait:
+                task = _KIMI_SYNC["task"] = asyncio.ensure_future(_kimi_sync_run(executable))
+        if task is not None:
+            try:
+                await asyncio.wait_for(asyncio.shield(task), _KIMI_SYNC_WAIT)
+            except asyncio.TimeoutError:
+                pending = True
+            else:
+                if not _KIMI_SYNC["error"]:
+                    data = await _kimi_provider_list(executable)
+    models = _parse_kimi_models(data)
+    if not models:
+        raise ServiceError(502, "kimi 未返回可用模型(未登录请先执行 kimi login)")
+    _KIMI_MODELS_CACHE = (0 if pending else time.time(), models)
+    return {"models": models, "cached": False, "sync_error": _KIMI_SYNC["error"], "sync_pending": pending}
+
+
 async def api_soul(agent: str):
     d = agent_dir(safe_agent(agent))
     if not d:

@@ -1011,6 +1011,11 @@ async def codex_models(refresh: bool = False) -> dict[str, Any]:
     return await core.api_codex_models(refresh)
 
 
+@api.get("/engines/kimi/models", tags=["configuration"])
+async def kimi_models(refresh: bool = False) -> dict[str, Any]:
+    return await core.api_kimi_models(refresh)
+
+
 @api.get("/engines/opencode/models", tags=["configuration"])
 async def opencode_models(refresh: bool = False) -> dict[str, Any]:
     return await core.api_opencode_models(refresh)

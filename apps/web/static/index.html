@@ -1298,6 +1298,16 @@ const GROK_STATIC=[
   ['grok-4.6','Grok 4.6'],
   ['grok-4.5','Grok 4.5'],
 ];
+// kimi 静态兜底(动态列表 GET /engines/kimi/models 读不到时用;来源 `kimi provider list --json`,
+// 名称取 Kimi Code 官方目录 display_name;kimi -m 只认本机 config.toml 里已有的别名)
+const KIMI_STATIC=[
+  ['kimi-code/k3.1-pro','K3.1 Pro'],
+  ['kimi-code/k3.1-pro-highspeed','K3.1 Pro Highspeed 2x Usage Cost'],
+  ['kimi-code/k3','K3'],
+  ['kimi-code/k3-256k','K3-256k'],
+  ['kimi-code/kimi-for-coding','K2.8 Preview'],
+  ['kimi-code/kimi-for-coding-highspeed','K2.7 Code Highspeed'],
+];
 // antigravity 静态兜底(动态列表 GET /engines/antigravity/models 读不到时用;来源 `agy models`,
 // Google 账号登录凭证;推理档位写在模型 id 后缀里)
 const AGY_STATIC=[
@@ -1316,9 +1326,7 @@ const MODEL_OPTIONS={
           ['claude-opus-4-6','opus-4.6'],
           ['haiku','haiku'],['','默认(CLI配置)'],['__custom','自定义…']],
   codex:[[SMART,'智能分配'],...CODEX_STATIC,['__custom','自定义…']],
-  kimi:[[SMART,'智能分配'],['kimi-code/k3','K3'],['kimi-code/kimi-for-coding','K2.7 Coding'],
-        ['kimi-code/kimi-for-coding-highspeed','K2.7 Coding Highspeed'],
-        ['','默认(CLI配置)'],['__custom','自定义…']],
+  kimi:[[SMART,'智能分配'],...KIMI_STATIC,['','默认(CLI配置)'],['__custom','自定义…']],
   pi:[[SMART,'智能分配'],['','默认(CLI配置)'],['__custom','自定义…']],
   opencode:[[SMART,'智能分配'],...OPENCODE_STATIC,['','默认(CLI配置)'],['__custom','自定义…']],
   grok:[[SMART,'智能分配'],...GROK_STATIC,['','默认(CLI配置)'],['__custom','自定义…']],
@@ -1378,6 +1386,21 @@ async function loadCodexModelOptions(refresh=false){
     AM_MODEL_OPTIONS.codex=[['','默认'],...CODEX_STATIC,['__custom','自定义…']];
   }
 }
+let KIMI_MODEL_ERROR='',KIMI_SYNC_ERROR='';
+async function loadKimiModelOptions(refresh=false){
+  try{
+    const r=await api('/api/v1/engines/kimi/models'+(refresh?'?refresh=true':''));
+    const dynamic=(r.models||[]).map(m=>[m.id,m.name||m.id]);   // kimi 选择器同序
+    const list=dynamic.length?dynamic:KIMI_STATIC;
+    MODEL_OPTIONS.kimi=[[SMART,'智能分配'],...list,['','默认(CLI配置)'],['__custom','自定义…']];
+    AM_MODEL_OPTIONS.kimi=[['','默认(CLI配置)'],...list,['__custom','自定义…']];
+    KIMI_MODEL_ERROR='';KIMI_SYNC_ERROR=r.sync_error||'';
+  }catch(e){
+    KIMI_MODEL_ERROR=e.message||String(e);KIMI_SYNC_ERROR='';
+    MODEL_OPTIONS.kimi=[[SMART,'智能分配'],...KIMI_STATIC,['','默认(CLI配置)'],['__custom','自定义…']];
+    AM_MODEL_OPTIONS.kimi=[['','默认(CLI配置)'],...KIMI_STATIC,['__custom','自定义…']];
+  }
+}
 let GROK_MODEL_ERROR='';
 async function loadGrokModelOptions(refresh=false){
   try{
@@ -1413,6 +1436,7 @@ async function loadAgyModelOptions(refresh=false){
 }
 async function populateModels(engine,selected=null){
   if(engine==='codex')await loadCodexModelOptions();
+  if(engine==='kimi')await loadKimiModelOptions();
   if(engine==='pi')await loadPiModelOptions();
   if(engine==='opencode')await loadOpencodeModelOptions();
   if(engine==='grok')await loadGrokModelOptions();
@@ -1435,6 +1459,9 @@ async function populateModels(engine,selected=null){
     :engine==='pi'?(PI_MODEL_ERROR?'pi 模型列表读取失败:'+PI_MODEL_ERROR:'来自当前 pi 登录凭证的可用模型')
     :engine==='opencode'?(OPENCODE_MODEL_ERROR?'opencode 模型列表读取失败:'+OPENCODE_MODEL_ERROR:'来自当前 opencode 登录凭证的可用模型')
     :engine==='codex'?(CODEX_MODEL_ERROR?'codex 模型列表读取失败:'+CODEX_MODEL_ERROR:'来自 codex CLI 官方模型目录,随 CLI 版本自动更新')
+    :engine==='kimi'?(KIMI_MODEL_ERROR?'kimi 模型列表读取失败:'+KIMI_MODEL_ERROR
+      :KIMI_SYNC_ERROR?'kimi 官方模型目录同步失败:'+KIMI_SYNC_ERROR
+      :'来自 kimi CLI 本机已配置的模型,登录 Kimi Code 账号时每 6 小时按官方目录自动刷新')
     :engine==='grok'?(GROK_MODEL_ERROR?'grok 模型列表读取失败:'+GROK_MODEL_ERROR:'来自当前 grok 登录凭证的可用模型')
     :engine==='antigravity'?(AGY_MODEL_ERROR?'antigravity 模型列表读取失败:'+AGY_MODEL_ERROR:'来自当前 antigravity 登录凭证的可用模型'):'';
   $('#model-custom').style.display=sel.value==='__custom'?'':'none';
@@ -4052,10 +4079,7 @@ const AM_MODEL_OPTIONS={
           ['claude-opus-4-8','opus-4.8'],['claude-opus-4-7','opus-4.7'],
           ['claude-opus-4-6','opus-4.6'],['haiku','haiku'],['__custom','自定义…']],
   codex:[['','默认'],...CODEX_STATIC,['__custom','自定义…']],
-  kimi:[['','默认(CLI配置)'],['kimi-code/k3','K3'],
-        ['kimi-code/kimi-for-coding','K2.7 Coding'],
-        ['kimi-code/kimi-for-coding-highspeed','K2.7 Coding Highspeed'],
-        ['__custom','自定义…']],
+  kimi:[['','默认(CLI配置)'],...KIMI_STATIC,['__custom','自定义…']],
   pi:[['','默认(CLI配置)'],['__custom','自定义…']],
   opencode:[['','默认(CLI配置)'],...OPENCODE_STATIC,['__custom','自定义…']],
   grok:[['','默认(CLI配置)'],...GROK_STATIC,['__custom','自定义…']],
@@ -4083,6 +4107,7 @@ async function amPopulateModels(engine,selected){
   const sel=$('#am-model'),custom=$('#am-model-custom');
   if(!engine){sel.innerHTML='<option value="">跟随全局</option>';sel.disabled=true;custom.style.display='none';return}
   if(engine==='codex')await loadCodexModelOptions();
+  if(engine==='kimi')await loadKimiModelOptions();
   if(engine==='pi')await loadPiModelOptions();
   if(engine==='opencode')await loadOpencodeModelOptions();
   if(engine==='grok')await loadGrokModelOptions();
