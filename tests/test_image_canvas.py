@@ -107,6 +107,69 @@ def test_transform_makes_versions_and_keeps_jpeg_bytes(base):
             ic.transform(base, doc, 'v000', op, params)
 
 
+def test_rect_ratio_selection_crops_to_exact_ratio(tmp_path):
+    """画板页矩形选框的固定比例(preview_canvas.html 的 ratioInts / ratioRect,node 跑页面原函数):按图片像素算,
+    四边落在整像素上;比例约得成两个 ≤64 的整数时宽高是它们的整数倍,交给服务端裁剪正好是这个比例;拖向哪边、碰到边界都不越界。"""
+    import shutil
+    import subprocess
+    if not shutil.which('node'):
+        pytest.skip('Node unavailable')
+    src = (Path(__file__).resolve().parents[1] / 'apps/web/static/preview_canvas.html').read_text(encoding='utf-8')
+    fns = src[src.index('function ratioInts('):src.index('function syncRatio(')]
+    cases = [(1000, 800, 16 / 9, [.1, .1], [.9, .5]),          # 向右下:宽 800 盖住指针 → 800×450
+             (1000, 800, 16 / 9, [.5, .5], [0, 0]),            # 向左上:左边界只剩 500 → 496×279
+             (1013, 757, 9 / 16, [.2, .9], [.7, .05]),         # 向右上:上边界限高
+             (1013, 757, 1, [.3, .3], [.31, .9]),              # 指针在竖向更远:按高定边长
+             (1013, 757, 4 / 3, [.9, .2], [.1, .8]),
+             (1013, 757, 2.35, [.05, .1], [.95, .6]),          # 2.35:1 → 47:20
+             (1013, 757, 2.39, [.05, .1], [.95, .6]),          # 239:100 约不下:高按宽四舍五入
+             (1000, 800, 16 / 9, [0, 0], [.51, 0]),            # 宽 510 → 取最近的 16 的倍数 512,不是向下取 496
+             (1000, 800, 16 / 9, [1, .5], [1, .9])]            # 起点在右边缘向右拖:宽 0,页面不收
+    script = fns + f'''
+const out={json.dumps(cases)}.map(([W,H,r,a,p])=>ratioRect(a,p,W,H,r));
+const ints=[16/9,9/16,4/3,3/4,1,2.35,1.85,2.39,Math.PI].map(ratioInts);
+let bad=[];
+for(let i=0;i<3000;i++){{
+  const W=64+Math.floor(Math.random()*4000),H=64+Math.floor(Math.random()*4000);
+  const r=[1,4/3,3/4,16/9,9/16,2.35,2.39,0.8][i%8],pq=ratioInts(r);
+  const b=ratioRect([Math.random(),Math.random()],[Math.random(),Math.random()],W,H,r);
+  const px=[b.x*W,b.y*H,b.w*W,b.h*H];
+  if(px.some(v=>Math.abs(v-Math.round(v))>1e-6)||px[0]<-1e-6||px[1]<-1e-6||px[0]+px[2]>W+1e-6||px[1]+px[3]>H+1e-6
+     ||(pq&&Math.round(px[2])*pq[1]!==Math.round(px[3])*pq[0])||(!pq&&px[3]>0&&Math.abs(px[2]/r-px[3])>.5+1e-6))bad.push([W,H,r,b]);
+}}
+console.log(JSON.stringify({{out,ints,bad:bad.slice(0,3)}}));'''
+    res = json.loads(subprocess.check_output(['node', '-e', script], text=True))
+    assert res['ints'] == [[16, 9], [9, 16], [4, 3], [3, 4], [1, 1], [47, 20], [37, 20], None, None]
+    assert res['bad'] == []
+    px = [(round(b['x'] * W), round(b['y'] * H), round(b['w'] * W), round(b['h'] * H)) for (W, H, *_), b in zip(cases, res['out'])]
+    assert px[0] == (100, 80, 800, 450) and px[1] == (4, 121, 496, 279) and px[-2] == (0, 0, 512, 288) and px[-1][2] == 0
+    for size in {(W, H) for W, H, *_ in cases}:                                    # 交给服务端真裁:尺寸与页面算的一致
+        rel = f'refs/r{size[0]}x{size[1]}.jpg'
+        put(tmp_path, rel, jpeg(size))
+        doc, _ = ic.open_doc(tmp_path, rel)
+        for (W, H, r, *_), b, (_, _, w, h) in zip(cases, res['out'], px):
+            if (W, H) != size or not w:
+                continue
+            v = ic.transform(tmp_path, doc, 'v000', 'crop', b)
+            assert (v['width'], v['height']) == (w, h)
+            if r == 2.39:
+                assert abs(w / r - h) <= .5
+            else:
+                p, q = {16 / 9: (16, 9), 9 / 16: (9, 16), 1: (1, 1), 4 / 3: (4, 3), 2.35: (47, 20)}[r]
+                assert w * q == h * p
+
+
+def test_canvas_rect_ratio_controls():
+    """工具栏比例下拉紧挨「▭ 矩形」:自由 / 1:1 / 4:3 / 3:4 / 16:9 / 9:16 / 自定义(宽:高两个数字框);只对矩形生效,选择记在本机浏览器。"""
+    import re
+    src = (Path(__file__).resolve().parents[1] / 'apps/web/static/preview_canvas.html').read_text(encoding='utf-8')
+    sel = src[src.index('<select id="ratio"'):src.index('</select>', src.index('<select id="ratio"'))]
+    assert re.findall(r'<option value="([^"]+)"', sel) == ['free', '1:1', '4:3', '3:4', '16:9', '9:16', 'custom']
+    assert src.index('data-tool="rect"') < src.index('id="ratio"') < src.index('data-tool="ellipse"')
+    assert 'id="rt-w"' in src and 'id="rt-h"' in src and "RATIO_KEY='canvas_rect_ratio'" in src
+    assert "draft.shape==='rect'&&rectRatio()" in src and 'id="f-sel"' in src
+
+
 def test_png_with_alpha_stays_png_and_big_plain_png_becomes_jpeg():
     rgba = Image.new('RGBA', (64, 64), (10, 20, 30, 120))
     assert ic.encoding_of(ic.encode_image(rgba, 'JPEG')) == 'PNG'

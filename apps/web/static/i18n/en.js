@@ -5015,4 +5015,7 @@ window.I18N_DICT = {
 "这个项目没有原片视频": "This project has no source video",
 "截图中…": "Grabbing frame…",
 "从素材库的视频里截一帧加入本板块": "Grab a frame from a Footage Library video and add it to this section",
+"矩形选框的宽高比(按图片像素);选固定比例会切到「矩形」": "Aspect ratio of the rectangle selection (in image pixels); picking a fixed ratio switches to Rectangle",
+"自由比例": "Free ratio",
+"选区 {w}×{h}": "Selection {w}×{h}",
 };

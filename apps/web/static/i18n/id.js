@@ -5023,4 +5023,7 @@ window.I18N_DICT = {
 "这个项目没有原片视频": "Proyek ini tidak punya video asli",
 "截图中…": "Mengambil frame…",
 "从素材库的视频里截一帧加入本板块": "Ambil satu frame dari video Pustaka Footage dan tambahkan ke bagian ini",
+"矩形选框的宽高比(按图片像素);选固定比例会切到「矩形」": "Rasio aspek seleksi persegi panjang (dalam piksel gambar); memilih rasio tetap beralih ke “Persegi panjang”",
+"自由比例": "Rasio bebas",
+"选区 {w}×{h}": "Seleksi {w}×{h}",
 };

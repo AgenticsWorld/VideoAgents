@@ -48,6 +48,8 @@ main{flex:1;display:flex;min-height:0}
 #tools .sep{width:1px;height:18px;background:var(--border);margin:0 4px}
 #tools .lb{color:var(--dim);font-size:11.5px}
 #tools input[type=range]{width:80px}
+#tools input[type=number]{width:54px;padding:3px 6px}
+#tools input:invalid{border-color:var(--red)}
 #vp{flex:1;min-height:0;position:relative;overflow:hidden;background:repeating-conic-gradient(#191d27 0 25%,#141821 0 50%) 0 0/20px 20px}
 #cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
 #vp.t-pan #cv{cursor:grab}#vp.t-pan.drag #cv{cursor:grabbing}#vp.t-draw #cv{cursor:crosshair}
@@ -181,6 +183,11 @@ dl.kv dd{min-width:0;word-break:break-all}
       <span class="lb">圈选</span>
       <button data-tool="pan" class="on" title="拖动画面;滚轮缩放">✋ 移动</button>
       <button data-tool="rect" title="拖出一个矩形区域">▭ 矩形</button>
+      <select id="ratio" title="矩形选框的宽高比(按图片像素);选固定比例会切到「矩形」">
+        <option value="free">自由比例</option><option value="1:1">1:1</option><option value="4:3">4:3</option><option value="3:4">3:4</option>
+        <option value="16:9">16:9</option><option value="9:16">9:16</option><option value="custom">自定义…</option>
+      </select>
+      <span id="ratio-c" hidden><input type="number" id="rt-w" min="0.01" step="any" value="3" title="宽"><span class="lb">:</span><input type="number" id="rt-h" min="0.01" step="any" value="2" title="高"></span>
       <button data-tool="ellipse" title="拖出一个椭圆区域">◯ 椭圆</button>
       <button data-tool="lasso" title="沿着要改的东西画一圈">➰ 套索</button>
       <button data-tool="brush" title="涂抹要改的地方">🖌 画笔</button>
@@ -209,7 +216,7 @@ dl.kv dd{min-width:0;word-break:break-all}
       <button id="nsfw" hidden>🔞 NSFW</button>
     </div>
     <div id="vp" class="t-pan"><canvas id="cv"></canvas></div>
-    <div id="foot"><span id="f-ver"></span><div class="spacer"></div><span id="f-zoom" data-no-i18n></span></div>
+    <div id="foot"><span id="f-ver"></span><div class="spacer"></div><span id="f-sel" data-no-i18n></span><span id="f-zoom" data-no-i18n></span></div>
   </section>
   <aside id="side">
     <div id="tabs">
@@ -445,7 +452,48 @@ function draw(){
     ctx.textAlign='right';ctx.fillText(v.id,sx-6/T.s,6/T.s);ctx.textAlign='left';ctx.fillText(bv.id,sx+6/T.s,6/T.s);ctx.shadowBlur=0;
   }else ctx.drawImage(a,0,0,W,H);
   if(mode==='off'||!b){REGIONS.forEach((r,i)=>drawRegion(r,i,W,H));if(draft)drawRegion(draft,REGIONS.length,W,H)}
+  // 页脚:正在拖的矩形 / 椭圆,否则最后一个矩形(「裁剪到选区」用它)的像素尺寸,与服务端裁剪取整一致
+  const sr=draft&&draft.w!==undefined?draft:[...REGIONS].reverse().find(x=>x.shape==='rect');
+  $('#f-sel').textContent=sr?F('选区 {w}×{h}',{w:Math.round(Math.min(1,sr.x+sr.w)*W)-Math.round(sr.x*W),h:Math.round(Math.min(1,sr.y+sr.h)*H)-Math.round(sr.y*H)}):'';
 }
+/* 矩形选框的宽高比(工具栏比例下拉,记在本机浏览器、所有图共用):按图片像素算,不是 0..1 坐标。
+   拖动时取能盖住指针的较大框,再按图片边界收缩;四边落在整像素上(服务端裁剪按像素四舍五入,裁出来就是框的尺寸)。
+   比例能约成两个都不超过 64 的整数(16:9、4:3、2.35:1 → 47:20)时宽高取它们最接近指针的整数倍,裁出来正好是这个比例;否则高按宽四舍五入 */
+const RATIO_KEY='canvas_rect_ratio';
+function rectRatio(){
+  const v=$('#ratio').value;
+  if(v==='free')return null;
+  const [a,b]=v==='custom'?[+$('#rt-w').value,+$('#rt-h').value]:v.split(':').map(Number);
+  return a>0&&b>0&&isFinite(a/b)?a/b:null;
+}
+function ratioInts(r){
+  for(let q=1;q<=64;q++){const p=Math.round(r*q);if(p>=1&&p<=64&&Math.abs(p/q-r)<=r*1e-9)return [p,q]}
+  return null;
+}
+function ratioRect(a,p,W,H,r){
+  const AX=Math.round(a[0]*W), AY=Math.round(a[1]*H), dx=p[0]*W-AX, dy=p[1]*H-AY;
+  const mw=dx<0?AX:W-AX, mh=dy<0?AY:H-AY, pq=ratioInts(r);
+  const want=Math.max(Math.abs(dx),Math.abs(dy)*r);
+  let w, h;
+  if(pq){const k=Math.min(Math.round(want/pq[0]),Math.floor(mw/pq[0]),Math.floor(mh/pq[1]));w=k*pq[0];h=k*pq[1]}
+  else{w=Math.min(Math.round(want),mw,Math.floor(mh*r));h=Math.min(Math.round(w/r),mh)}
+  return {x:(dx<0?AX-w:AX)/W,y:(dy<0?AY-h:AY)/H,w:w/W,h:h/H};
+}
+function syncRatio(save){
+  $('#ratio-c').hidden=$('#ratio').value!=='custom';
+  if(save)try{localStorage.setItem(RATIO_KEY,JSON.stringify({v:$('#ratio').value,w:+$('#rt-w').value,h:+$('#rt-h').value}))}catch(_){}
+}
+(()=>{
+  let s=null;try{s=JSON.parse(localStorage.getItem(RATIO_KEY)||'null')}catch(_){}
+  if(s&&[...$('#ratio').options].some(o=>o.value===s.v)){$('#ratio').value=s.v;if(s.w>0)$('#rt-w').value=s.w;if(s.h>0)$('#rt-h').value=s.h}
+  syncRatio(false);
+})();
+$('#ratio').onchange=()=>{
+  syncRatio(true);
+  if($('#ratio').value!=='free'&&TOOL!=='rect')document.querySelector('#tools [data-tool=rect]').click();
+  if($('#ratio').value==='custom')$('#rt-w').focus();
+};
+$('#rt-w').oninput=$('#rt-h').oninput=()=>syncRatio(true);
 function pt(e){
   const r=cv.getBoundingClientRect(), v=ver(VIEW);
   return [Math.min(1,Math.max(0,((e.clientX-r.left)-T.x)/T.s/v.width)),Math.min(1,Math.max(0,((e.clientY-r.top)-T.y)/T.s/v.height))];
@@ -463,7 +511,9 @@ cv.addEventListener('pointermove',e=>{
   if(drag){T.x=drag.tx+e.clientX-drag.x;T.y=drag.ty+e.clientY-drag.y;fitted=false;draw();return}
   if(!draft)return;
   const p=pt(e);
-  if(draft.shape==='rect'||draft.shape==='ellipse'){draft.x=Math.min(draft.ax,p[0]);draft.y=Math.min(draft.ay,p[1]);draft.w=Math.abs(p[0]-draft.ax);draft.h=Math.abs(p[1]-draft.ay)}
+  const r=draft.shape==='rect'&&rectRatio(), v=ver(VIEW);
+  if(r)Object.assign(draft,ratioRect([draft.ax,draft.ay],p,v.width,v.height,r));
+  else if(draft.shape==='rect'||draft.shape==='ellipse'){draft.x=Math.min(draft.ax,p[0]);draft.y=Math.min(draft.ay,p[1]);draft.w=Math.abs(p[0]-draft.ax);draft.h=Math.abs(p[1]-draft.ay)}
   else{const q=draft.points[draft.points.length-1];if(Math.hypot((p[0]-q[0]),(p[1]-q[1]))>.002)draft.points.push(p)}
   draw();
 });

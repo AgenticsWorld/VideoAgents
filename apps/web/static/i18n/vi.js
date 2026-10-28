@@ -5023,4 +5023,7 @@ window.I18N_DICT = {
 "这个项目没有原片视频": "Dự án này không có video gốc",
 "截图中…": "Đang chụp…",
 "从素材库的视频里截一帧加入本板块": "Chụp một khung hình từ video trong Thư viện tư liệu và thêm vào mục này",
+"矩形选框的宽高比(按图片像素);选固定比例会切到「矩形」": "Tỉ lệ khung của vùng chọn chữ nhật (tính theo pixel ảnh); chọn tỉ lệ cố định sẽ chuyển sang “Chữ nhật”",
+"自由比例": "Tỉ lệ tự do",
+"选区 {w}×{h}": "Vùng chọn {w}×{h}",
 };

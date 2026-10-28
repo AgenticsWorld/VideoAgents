@@ -5025,4 +5025,7 @@ window.I18N_DICT = {
 "这个项目没有原片视频": "Este proyecto no tiene vídeo original",
 "截图中…": "Capturando…",
 "从素材库的视频里截一帧加入本板块": "Capturar un fotograma de un vídeo de la Biblioteca de material y añadirlo a esta sección",
+"矩形选框的宽高比(按图片像素);选固定比例会切到「矩形」": "Proporción de la selección rectangular (en píxeles de la imagen); elegir una proporción fija cambia a «Rectángulo»",
+"自由比例": "Proporción libre",
+"选区 {w}×{h}": "Selección {w}×{h}",
 };

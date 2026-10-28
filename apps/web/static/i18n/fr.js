@@ -5025,4 +5025,7 @@ window.I18N_DICT = {
 "这个项目没有原片视频": "Ce projet n'a pas de vidéo d'origine",
 "截图中…": "Capture en cours…",
 "从素材库的视频里截一帧加入本板块": "Capturer une image d'une vidéo de la bibliothèque de rushes et l'ajouter à cette section",
+"矩形选框的宽高比(按图片像素);选固定比例会切到「矩形」": "Proportions de la sélection rectangulaire (en pixels de l’image) ; choisir un ratio fixe passe à « Rectangle »",
+"自由比例": "Ratio libre",
+"选区 {w}×{h}": "Sélection {w}×{h}",
 };
