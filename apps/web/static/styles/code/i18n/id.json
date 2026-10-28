@@ -1,5 +1,7 @@
 {
  "_categories": {
+  "Edit & Documentary": "Penyuntingan & dokumenter",
+  "Evidence Films": "Film berbasis bukti",
   "Hand-drawn & Painting": "Gambar tangan & lukisan",
   "East Asian Traditions": "Tradisi Asia Timur",
   "Print & Printmaking": "Cetak & seni grafis",
@@ -9,6 +11,150 @@
   "Games": "Gim",
   "Cinema & Eras": "Sinema & era",
   "Materials & 3D": "Material & 3D"
+ },
+ "caption-news": {
+  "name": "Berita dengan teks",
+  "line": "Amerika kehilangan 1,3 juta koloni lebah, tetapi jumlahnya justru naik 6%: berita singkat yang tetap bisa dipahami tanpa suara.",
+  "uses": [
+   "Berita media sosial",
+   "Penjelasan laporan",
+   "Data singkat"
+  ]
+ },
+ "newsreel": {
+  "name": "Film berita 1920-an",
+  "line": "1926: koran-koran menyebut dansa Charleston akan merusak lutut warga Amerika; di piknik Ford sendiri, anak-anak tetap menarikannya.",
+  "uses": [
+   "Kisah sejarah",
+   "Tren & era",
+   "Peringatan"
+  ]
+ },
+ "countdown": {
+  "name": "Hitung mundur langsung, layar terbagi",
+  "line": "Menit terakhir peluncuran Artemis II tanpa potongan: satu kotak membuka menjadi sembilan, lalu semuanya menyatu menjadi satu saat mesin menyala.",
+  "uses": [
+   "Peluncuran",
+   "Hitung mundur",
+   "Acara langsung"
+  ]
+ },
+ "city-symphony": {
+  "name": "Simfoni time-lapse",
+  "line": "Sehari di New York dalam time-lapse: sungai cahaya, kisi yang mengikuti ketukan not seperenam belas, 1899 bersanding dengan hari ini.",
+  "uses": [
+   "Film kota",
+   "Montase musik",
+   "Pembuka"
+  ]
+ },
+ "visual-investigation": {
+  "name": "Investigasi visual",
+  "line": "Film berita, foto, kesaksian, dan hasil penyelidikan 1937 disatukan pada satu linimasa: lima sumber menunjuk ke titik yang sama.",
+  "uses": [
+   "Rekonstruksi",
+   "Cek fakta",
+   "Laporan insiden"
+  ]
+ },
+ "kino-montage": {
+  "name": "Montase konstruktivis",
+  "line": "Brosur Empire State tahun 1931 menyebut para pembangunnya; rekaman lokasi proyek dan foto-foto Hine menjawab: 2.500 orang sehari.",
+  "uses": [
+   "Sejarah industri",
+   "Tonggak sejarah",
+   "Kerja kolektif"
+  ]
+ },
+ "telestrator": {
+  "name": "Papan taktik olahraga",
+  "line": "Tertinggal 3–0 saat turun minum, Fenerbahçe mencetak tiga gol dalam 12 menit: bekukan gambar, coretan, layar terbagi, peta tembakan.",
+  "uses": [
+   "Analisis olahraga",
+   "Rangkuman laga",
+   "Kepelatihan"
+  ]
+ },
+ "news-package": {
+  "name": "Paket grafis berita TV",
+  "line": "Empat berita AI dalam sepekan dikemas dalam paket siaran lengkap: rundown, bilah judul, papan harga, kartu spesifikasi.",
+  "uses": [
+   "Rangkuman berita",
+   "Buletin",
+   "Kabar pasar"
+  ]
+ },
+ "satellite-briefing": {
+  "name": "Briefing satelit",
+  "line": "Sebuah satelit mengikuti peta menuju Laut Aral dan menemukan gurun; hanya bagian yang dibendung seseorang yang kembali.",
+  "uses": [
+   "Iklim",
+   "Penjelasan berita",
+   "Geografi"
+  ]
+ },
+ "briefing-board": {
+  "name": "Papan briefing teknik",
+  "line": "Empat jenis jembatan diuji di satu dinding briefing, dan kapal yang harus lewat di bawahnya yang menentukan pemenangnya.",
+  "uses": [
+   "Teknik",
+   "Perbandingan opsi",
+   "Briefing"
+  ]
+ },
+ "lidar-survey": {
+  "name": "Survei LiDAR",
+  "line": "Survei laser mengupas kanopi hutan di Connecticut dan menemukan 3,4 km tembok ladang lama.",
+  "uses": [
+   "Warisan budaya",
+   "Lingkungan",
+   "Survei lokasi"
+  ]
+ },
+ "white-model": {
+  "name": "Proyeksi pada maket putih",
+  "line": "Proyektor melukis maket putih Rotterdam lapis demi lapis, dari kekosongan tahun 1940 hingga menara-menara masa kini.",
+  "uses": [
+   "Perencanaan kota",
+   "Pameran",
+   "Data kota"
+  ]
+ },
+ "data-physical": {
+  "name": "Fisikalisasi data",
+  "line": "Dua belas tahun tenaga angin dan surya ditumpuk menjadi pelat nyata, melingkar spiral mengitari dial kayu walnut hingga surya menyalip.",
+  "uses": [
+   "Laporan tahunan",
+   "Presentasi investor",
+   "Data energi"
+  ]
+ },
+ "teardown": {
+  "name": "Bongkar tampilan terurai",
+  "line": "Separuh keyboard sumber terbuka terurai dalam satu putaran kamera hingga ke cipnya, lalu menutup kembali dengan dimensi aslinya.",
+  "uses": [
+   "Peluncuran perangkat keras",
+   "Halaman produk",
+   "Penjelasan spesifikasi"
+  ]
+ },
+ "microscope": {
+  "name": "Kisah di bawah mikroskop",
+  "line": "Satu gerakan tanpa putus dari preparat hati hingga satu inti sel; dua lingkaran, dihitung piksel demi piksel, berbeda 2,4 kali dalam warna biru.",
+  "uses": [
+   "Biomedis",
+   "Ilmu material",
+   "Sains perawatan kulit"
+  ]
+ },
+ "archive-lighttable": {
+  "name": "Meja cahaya arsip",
+  "line": "Telegram menyebut 57 detik; di bawah kaca pembesar, negatif kaca Wright bersaudara dan arsip menyebut 59.",
+  "uses": [
+   "Sejarah merek",
+   "Kisah arsip",
+   "Museum"
+  ]
  },
  "crayon-book": {
   "name": "Buku bergambar krayon",
@@ -84,7 +230,7 @@
  },
  "ukiyoe": {
   "name": "Ukiyo-e",
-  "line": "Seorang pengembara berjalan menuju gunung yang jauh; setiap bidikan adalah cetakan balok kayu, berakhir dengan ombak besar.",
+  "line": "Seorang pengembara berjalan menuju gunung yang jauh; setiap bidikan adalah cetakan balok kayu, ombak besar di puncak cerita, lalu gunung dan seluruh gulungan di akhir.",
   "uses": [
    "Wisata",
    "Budaya Jepang",
@@ -111,7 +257,7 @@
  },
  "risograph": {
   "name": "Cetak Risograph",
-  "line": "Bersepeda Minggu pagi menyusuri kota — toko roti, taman, tepi sungai — dalam dua tinta yang sedikit meleset.",
+  "line": "Bersepeda Minggu pagi menyusuri kota — toko roti, taman, tepi sungai — setiap persinggahan menambah satu tinta hingga tiga pelat yang sedikit meleset saling menimpa.",
   "uses": [
    "Merek indie",
    "Zine",
@@ -149,8 +295,8 @@
   "name": "Poster wisata sablon",
   "line": "Tiga poster jalur pendakian disablon satu warna demi satu warna, lalu didaki dalam satu bidikan panjang dari siang hingga senja.",
   "uses": [
-   "Panduan jalur & destinasi",
-   "Promosi wisata",
+   "Panduan destinasi",
+   "Pariwisata",
    "Poster acara"
   ]
  },
@@ -246,7 +392,7 @@
  },
  "living-screencast": {
   "name": "Screencast hidup",
-  "line": "Clawd, maskot piksel Claude Code, melompat keluar dari terminal ke aplikasi Claude dan memeragakan mode rencana, komentar diff, dan pemeriksaan mandiri dalam screencast satu kali ambil.",
+  "line": "Clawd melompat keluar dari terminal ke aplikasi Claude dan memeragakan mode rencana serta pemeriksaan mandiri dalam satu kali ambil.",
   "uses": [
    "Tutorial produk",
    "Peluncuran fitur",
@@ -255,11 +401,11 @@
  },
  "hologram-hud": {
   "name": "HUD hologram fiksi ilmiah",
-  "line": "Sebuah sepeda listrik dipindai menjadi hologram; kotak bidik mengunci baterai, motor, dan rem, lalu setiap spesifikasi bergulir ke nilainya.",
+  "line": "Sebuah sepeda listrik dipindai menjadi hologram; kotak bidik mengunci baterai, motor, dan rem.",
   "uses": [
-   "Pemaparan spesifikasi produk",
-   "Video peluncuran & crowdfunding",
-   "Layar pameran"
+   "Pemaparan spesifikasi",
+   "Video peluncuran",
+   "Pameran"
   ]
  },
  "rubber-hose": {
@@ -291,11 +437,11 @@
  },
  "midcentury-toon": {
   "name": "Kartun mid-century",
-  "line": "Robot penyedot debu disiapkan dalam tiga langkah, dikisahkan seperti film pelajaran tahun 1950-an: pasang dok, sambungkan aplikasi, tekan mulai.",
+  "line": "Robot penyedot debu disiapkan dalam tiga langkah, dikisahkan seperti film pelajaran tahun 1950-an.",
   "uses": [
-   "Panduan penyiapan produk",
-   "Penjelasan pusat bantuan",
-   "Langkah-langkah panduan"
+   "Panduan penyiapan",
+   "Pusat bantuan",
+   "Cara pakai"
   ]
  },
  "pixel-rpg": {

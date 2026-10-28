@@ -5,7 +5,7 @@
 ffmpeg 编码;旁白走 TTS(旁白声线卡),配乐由 Agent 写作曲脚本用采样乐器与合成器渲染,
 拟音按页面导出的事件时刻程序化合成,混音脚本出成片声轨,两遍 loudnorm 到 −14 LUFS。
 
-用户只给三样:**主题 / 文稿**、**风格**(新建向导画廊里选:43 种完整风格,或 98 种 OPUSCAR 98 轻量风格)、
+用户只给三样:**主题 / 文稿**、**风格**(新建向导画廊里选:59 种完整风格,或 98 种 OPUSCAR 98 轻量风格)、
 几项**设置**(片长、画幅、旁白、字幕、先审故事板、配乐来源:代码作曲 / 音乐模型 / 项目音乐库)。适合产品演示、讲解、发布片、品牌短片、知识科普、
 绘本 / 水墨 / 版画等风格化短片——30–60 秒最合适,超过两三分钟时间与 token 成倍增加。
 
@@ -15,14 +15,14 @@ ffmpeg 编码;旁白走 TTS(旁白声线卡),配乐由 Agent 写作曲脚本用�
 
 | 上游 | 本仓库 | 随包 |
 |---|---|---|
-| `styles/<slug>/STYLE.md` `DEMO.md` `style.json`(43 个) | `agents/workflows/codevideo/styles/<slug>/` | ✓ |
+| `styles/<slug>/STYLE.md` `DEMO.md` `style.json`(59 个) | `agents/workflows/codevideo/styles/<slug>/` | ✓ |
 | `core/lib.js` `core/three/post.js` `core/post/crt.js` `core/fonts/` | `modules/codevideo/lib/core/` | ✓ |
 | `core/audio/sampler.py` `sfx.py` `pluck.py` | `modules/codevideo/lib/core/audio/`(sampler 打了两处补丁:采样库目录可指定、缺 soxr 退回 scipy) | ✓ |
 | three.js r170 | `modules/codevideo/lib/vendor/three/`(页面里仍写 `/node_modules/three/…`) | ✓ |
 | 新建向导画廊封面与名称 | `apps/web/static/styles/code/` | ✓ |
 | `styleboard/opuscar98_styles.json`(98 条风格提示,三期) | `agents/workflows/codevideo/styles/opuscar98/styles.json`(不带分镜与导演说明——那是 OPUSCAR 98 的主角 Clawd;另加宿主算的 3 个相近完整风格)+ 画廊 `apps/web/static/styles/code/opuscar98.json`、`frames98/` | ✓ |
 | 采样乐器库(5 套,70–400 MB)、HDRI | 按需下载到 `data/.videoagents/codevideo/lemo/` | ✗ |
-| 样片源码与海报 | 写完 TREATMENT.md 后 `codevideo.py demo` 按需下载 | ✗ |
+| 样片源码与海报 | 写完 TREATMENT.md 后 `codevideo.py demo` 按需下载(剪辑与纪实类可先 `demo --tools` 只拉 `demo/tools/`) | ✗ |
 
 与其它项目类型的差异:
 
@@ -135,6 +135,8 @@ codevideo/                    ← 就是一个 lemo-opuscar 片子工程目录
   render.json                 按段渲染指纹台账(宿主写)
   notes.json                  代码预览页注释
   CREDITS build.sh            交付(build.sh 由 master 写)
+  tools/ raw/ SOURCES.jsonl SOURCES.md     仅剪辑与纪实 / 实证影像类:找素材工具(demo --tools)、原始素材、来源与许可登记
+  FACTS.md .venv/ node_modules/            仅实证影像类有 FACTS.md;STYLE.md 要额外包时的项目私有环境
 directing/ep01/shot_list.json storyboard.json   codevideo.py sync 生成(段 = 场次 = 组)
 assets/storyboard/ep01/       codevideo.py board:关键镜 <S010-01>.jpg + index.json(provider=code)+ board_sheet.jpg
 assets/clips/ep01/<grp>.mp4   codevideo.py render:每段一条无音轨片段 + .meta.json(boundary_map)+ .last_frame.png
@@ -150,6 +152,7 @@ edit/ep01/final.mp4 subtitles.srt poster.jpg    codevideo.py master
 | `doctor` | Chromium / WebGL / ffmpeg / Python 依赖 / 宿主库 / 风格库自检;退出 0 = 可用 | film-director(cv0) |
 | `style [--slug S]` | 锁定风格到 `codevideo/style/` | film-director(cv0) |
 | `demo [--slug S]` | 写完 TREATMENT.md 才能下载样片源码与海报;未写退出码 3。轻量风格没有样片,须 `--slug` 指定一个完整风格 | film-director / scene-coder |
+| `demo --tools` | 只给剪辑与纪实类风格:不等 TREATMENT.md,只拉锁定风格样片的 `demo/tools/` 复制进 `codevideo/tools/`(已有且内容不同的文件不覆盖);其它风格报错 | film-director |
 | `sync` | 校验 timeline.json → 写 directing/ep01/ | film-director |
 | `still T… [--range a:b:step] [--sheet] [--prefix p]` | 静帧到 `codevideo/stills/`,`--sheet` 拼联系表到 `codevideo/sheets/` | scene-coder、QA |
 | `board [--keys id,…]` | 关键镜真代码帧进故事板页 + 联系表 | scene-coder(cv1-board) |
@@ -234,7 +237,7 @@ cv2-score 回执要写出 confidence,film-director 据此决定段边界用 `bea
 
 lemo-opuscar 的《OPUSCAR 98》用 98 种风格给 98 部最佳影片各画了一段,每段公开了一条**可复用的风格提示**
 (中英各一段:画面、色值、镜头与转场规律、「避免」条款)。它们作为轻量风格进了新建向导画廊的第二组(id `o98-01` … `o98-98`,
-按 10 个章节筛选)。与 43 个完整风格的区别:
+按 10 个章节筛选)。与 59 个完整风格的区别:
 
 | | 完整风格 | 轻量风格 |
 |---|---|---|
@@ -248,6 +251,34 @@ lemo-opuscar 的《OPUSCAR 98》用 98 种风格给 98 部最佳影片各画了�
 **版权**:提示与参考里点名的电影、导演、作品只学语法——片中不得出现它们的角色、情节、镜头复刻、片名、logo 或配乐;
 不得使用 OPUSCAR 98 的角色(包括 Clawd);片子里不带 LemoLab / OPUSCAR 署名。上游的 shots / direction 字段写的是 Clawd 的表演,
 同步时整段不带。
+
+## 剪辑与纪实 / 实证影像(2026-10-28 同步)
+
+上游 2026-10-16 与 10-22 各加一类、各 8 个风格,完整风格 43 → 59,分类 9 → 11(画廊里排在最前):
+
+| 分类 | 风格 | 特点 |
+|---|---|---|
+| 剪辑与纪实 Edit & Documentary | caption-news 字幕新闻、newsreel 1920s 新闻影片、countdown 实时倒计时分屏、city-symphony 延时交响、visual-investigation 视觉调查、kino-montage 构成主义蒙太奇、telestrator 体育战术板、news-package 电视新闻包装 | 从真实档案影像、照片、文件剪出来;**素材在方案之前** |
+| 实证影像 Evidence Films | satellite-briefing 卫星简报、briefing-board 工程简报板、lidar-survey 点云测绘、white-model 白模投影、data-physical 数据实物化、teardown 产品拆解、microscope 显微叙事、archive-lighttable 档案灯台 | 用真实数据、扫描、影像、CAD 讲事实;**每个事实陈述要有出处** |
+
+判据是锁定风格 `codevideo/style/style.json` 的 `category_en`(宿主 `modules.codevideo.material_first` 同此判)。两类共同的规矩(上游
+AGENTS.md「Treatment first」例外、DIRECTOR §1、TECHNIQUE §1 / §11):
+
+- **用户素材优先**:refs/ 里用户交的素材、数据、扫描先用,不够再按 STYLE.md 列的公开来源找;
+- **许可**:只用 CC0 / CC BY / 公有领域(「no known restrictions」不算);CC BY-SA、ODbL、开源硬件许可等其它开放许可须用户同意(停下经
+  orchestrator 问);下了什么、从哪、什么许可、多大逐件记 `codevideo/SOURCES.md` 并在回执列出——上游「下载前先告诉用户」在本流程里
+  落成这份登记 + 回执,需要同意的许可才停下等用户;原始文件放 `codevideo/raw/`,体积按 STYLE.md 的预算;
+- **额外包**:STYLE.md「Extra packages」列的包(LiDAR 读取、玻片解码、CAD 导入、抠像模型…)装进 `codevideo/.venv/` 或
+  `codevideo/node_modules/`,不装进宿主 Python、不改 `modules/codevideo/lib/`;
+- **确定性**:视频素材先用 ffmpeg 抽成 JPEG 序列,页面按 `floor((t − t0) · fps)` 取帧(不直接播 `<video>`),机检 contract 照常卡;
+- **不生成插图**:STYLE.md 提到的生成插图(news-package 的 `gen_image.py`)不做,本类型不调图像生成模型;
+- **剪辑与纪实类**:写方案前 `codevideo.py demo --tools` 只拉样片的 `demo/tools/`(`footage.py` 搜 Internet Archive / Wikimedia Commons /
+  NASA、下载并把许可、作者、来源页记进 `SOURCES.jsonl`,`footage.py used` 记用了哪几秒,`footage.py md` 出 `SOURCES.md`;在 `codevideo/`
+  下运行),DEMO.md 与样片其余代码仍等方案写成;
+- **实证影像类**:`codevideo/FACTS.md` 逐条记片中事实陈述的来源 URL 与原文引述,或产生它的测量;先方案后样片照旧。
+
+机检项 `material_sources_logged`(cv1-treatment、cv5-qa,只对这两类)。STYLE.md 里写的输出帧率(多为 30 fps)与项目设置的 fps 不一致时,
+仍以项目设置为准(timeline.json 的 fps 取项目设置),素材抽帧按项目 fps 做。
 
 ## 审片循环(lemo DIRECTOR §8 / §11)
 
@@ -295,5 +326,7 @@ lemo-opuscar 的《OPUSCAR 98》用 98 种风格给 98 部最佳影片各画了�
 - 采样乐器库与 HDRI 按需下载(GitHub Release),离线环境只能用合成音色;
 - 节拍对齐只认均匀拍(单一速度、固定拍号);渐快渐慢、变拍子的曲子测出的网格会漂,cv2-beatsync 应对相应段落用 `off`;
 - 轻量风格没有完整规范与样片,成片质量更依赖导演的「风格补全」与引擎能力;相近完整风格只是按文本相似度推荐的技法参考;
+- 剪辑与纪实 / 实证影像类要联网找素材(Internet Archive、Wikimedia Commons、NASA、各国数据门户),离线环境只能用用户交的素材;
+  这两类的流程(找素材、许可登记、FACTS.md、私有环境装包)没有让 Agent 真跑过;
 - `pluck.py` 需要 numba,桌面端运行时不带;
 - 渲染速度取决于页面复杂度与 GPU:2D 页面在 Apple 芯片上约每秒 15–20 帧(1080×1920,2 个 worker 实测),3D 页面更慢。

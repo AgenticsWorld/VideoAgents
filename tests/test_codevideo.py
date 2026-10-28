@@ -43,7 +43,7 @@ def test_vendored_library_and_styles_match_manifest():
     sampler = (CV.LIB_DIR / "core" / "audio" / "sampler.py").read_text(encoding="utf-8")
     assert "CODEVIDEO_INSTRUMENTS" in sampler and "_auto_fetch" in sampler and "fetch.sh" not in sampler
     slugs = CV.style_slugs()
-    assert len(slugs) == 43 and len(set(slugs)) == 43
+    assert len(slugs) == 59 and len(set(slugs)) == 59                    # 2026-10-28 同步 413a6bd:43 + 实证影像 8 + 剪辑与纪实 8
     for s in slugs:
         for name in ("STYLE.md", "DEMO.md", "style.json"):
             assert (CV.STYLES_DIR / s / name).is_file(), (s, name)
@@ -458,6 +458,105 @@ def test_sheet_labels_use_cjk_font_and_pixel_truncation(tmp_path, monkeypatch):
     assert drawn[1][0] == labels[1]                            # 放得下原样
     assert drawn[2][0].endswith("…") and len(drawn[2][0]) > 20  # 英文按像素宽能放更多字,不是固定字符数
     assert R.fit_label(probe, "多行\n内容", drawn[0][1], 300) == "多行 内容"
+
+
+NEW_STYLES_1028 = {
+    "Edit & Documentary": ["caption-news", "newsreel", "countdown", "city-symphony", "visual-investigation", "kino-montage",
+                           "telestrator", "news-package"],
+    "Evidence Films": ["satellite-briefing", "briefing-board", "lidar-survey", "white-model", "data-physical", "teardown",
+                       "microscope", "archive-lighttable"]}
+
+
+def test_gallery_new_categories_dims_and_translations():
+    """2026-10-28 同步上游新增两类各 8 个风格:画廊分类排最前、每种界面语言有译文;2D / 3D 按样片是否 import three.js 判。"""
+    gal = CV.gallery()
+    assert [c["en"] for c in gal["categories"]][:2] == ["Edit & Documentary", "Evidence Films"] and len(gal["categories"]) == 11
+    rows = {s["slug"]: s for s in gal["styles"]}
+    for cat, slugs in NEW_STYLES_1028.items():
+        for slug in slugs:
+            assert rows[slug]["cat_en"] == cat and rows[slug]["cn"] and rows[slug]["line_cn"], slug
+            assert json.loads((CV.STYLES_DIR / slug / "style.json").read_text(encoding="utf-8"))["category_en"] == cat
+    dims = {k: v["dim"] for k, v in rows.items()}
+    assert {k for k, v in dims.items() if v == "3d"} >= {"tilt-shift", "brick-toy", "teardown", "lidar-survey", "white-model",
+                                                          "data-physical"}
+    assert dims["blueprint"] == dims["crayon-book"] == dims["countdown"] == dims["caption-news"] == "2d"   # 旧判据把「three」「no 3D」算成 3D
+    i18n = CV.GALLERY_JSON.parent / "i18n"
+    for f in i18n.glob("*.json"):
+        tr = json.loads(f.read_text(encoding="utf-8"))
+        assert list(tr["_categories"]) == [c["en"] for c in gal["categories"]], f.name
+        for slug in rows:
+            assert tr[slug]["name"] and tr[slug]["line"] and len(tr[slug]["uses"]) == 3, (f.name, slug)
+    zh = json.loads((i18n / "zh.json").read_text(encoding="utf-8"))
+    assert all(zh[k]["name"] == v["cn"] and zh[k]["line"] == v["line_cn"] for k, v in rows.items())
+    html = (ROOT / "apps/web/static/index.html").read_text(encoding="utf-8")
+    assert "从 59 种风格里选一种" in html and "43 种" not in html
+    for f in (ROOT / "apps/web/static/i18n").glob("*.js"):
+        txt = f.read_text(encoding="utf-8")
+        if f.name != "i18n.js":
+            assert '"有完整风格规范与样片的风格": "' in txt and "从 59 种风格里选一种" in txt and "43 种" not in txt, f.name
+
+
+def test_material_first_styles_get_tools_before_treatment(tmp_path, monkeypatch):
+    """剪辑与纪实类先有素材后写方案:写 TREATMENT.md 前 demo --tools 只拉样片 demo/tools/ 进 codevideo/tools/,
+    不放 DEMO.md、不拉样片其余代码;已改过的文件不覆盖;其它风格不给。"""
+    from modules.codevideo import fetch as FX
+    from modules.codevideo import project as P
+    assert all(CV.material_first(s) for s in NEW_STYLES_1028["Edit & Documentary"])
+    assert not any(CV.material_first(s) for s in [*NEW_STYLES_1028["Evidence Films"], "whiteboard", "o98-01", "nope"])
+    mirror = tmp_path / "mirror"
+    monkeypatch.setattr(P, "MIRROR", mirror)
+    calls = []
+
+    def fake_fetch(key, progress=None, prefix=""):
+        calls.append((key, prefix))
+        rows = [r for r in FX.file_set(key) if r["path"].startswith(prefix)]
+        for r in rows:
+            (mirror / r["path"]).parent.mkdir(parents=True, exist_ok=True)
+            (mirror / r["path"]).write_bytes(b"upstream " + r["path"].encode())
+        return {"key": key, "files": len(rows), "downloaded": len(rows), "cached": 0, "root": str(mirror)}
+    monkeypatch.setattr(FX, "fetch_files", fake_fetch)
+
+    def project(name, style):
+        base = tmp_path / name
+        (base / CV.NS).mkdir(parents=True)
+        (base / "settings.json").write_text(json.dumps({"project": {"type": "code-video", "code_style": style}}))
+        return base
+    base = project("km", "kino-montage")
+    with pytest.raises(P.DemoBeforeTreatment) as e:
+        P.demo(base)
+    assert "demo --tools" in str(e.value)
+    res = P.demo_tools(base)
+    tools = base / CV.NS / "tools"
+    want = sorted(r["path"].split("/demo/tools/", 1)[1] for r in FX.file_set("demo:kino-montage") if "/demo/tools/" in r["path"])
+    assert calls == [("demo:kino-montage", "styles/kino-montage/demo/tools/")]
+    assert "footage.py" in want and sorted(res["copied"]) == want and res["kept"] == []
+    assert sorted(p.relative_to(tools).as_posix() for p in tools.rglob("*") if p.is_file()) == want
+    assert not (base / CV.NS / "style" / "DEMO.md").exists() and not (base / CV.NS / "index.html").exists()
+    (tools / "footage.py").write_text("# 项目里改过")
+    res = P.demo_tools(base)
+    assert res["kept"] == ["footage.py"] and (tools / "footage.py").read_text() == "# 项目里改过"
+    for style in ("satellite-briefing", "whiteboard"):
+        with pytest.raises(CV.CodeVideoError) as e:
+            P.demo_tools(project(style, style))
+        assert "剪辑与纪实" in str(e.value)
+    with pytest.raises(P.DemoBeforeTreatment) as e:                                # 实证影像照旧先方案后样片
+        P.demo(tmp_path / "satellite-briefing")
+    assert "--tools" not in str(e.value)
+
+
+def test_fetch_files_prefix_filter(tmp_path, monkeypatch):
+    import hashlib
+    from modules.codevideo import fetch as FX
+    rows = []
+    for rel in ("styles/x/demo/tools/a.py", "styles/x/demo/index.html"):
+        data = rel.encode()
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_bytes(data)
+        rows.append({"path": rel, "size": len(data), "sha256": hashlib.sha256(data).hexdigest()})
+    monkeypatch.setattr(FX, "MIRROR", tmp_path)
+    monkeypatch.setattr(FX, "file_set", lambda key: rows)
+    assert FX.fetch_files("demo:x", prefix="styles/x/demo/tools/")["files"] == 1
+    assert FX.fetch_files("demo:x")["files"] == 2
 
 
 def test_demo_requires_treatment(tmp_path):

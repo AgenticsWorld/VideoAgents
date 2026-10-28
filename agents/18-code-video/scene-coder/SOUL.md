@@ -88,6 +88,10 @@
     渲染是长命令:**前台跑完**,不丢后台、不结单后声称「后台继续」。
 13. **用户素材**:brief.json 里声明有权使用的 logo / 照片 / 字体从 `refs/` 复制进 `codevideo/assets/` 再用(回执列出,进 CREDITS);
     没声明的一律画虚构替身。不调图像模型生成素材。
+    **仅当风格属于「剪辑与纪实」或「实证影像」(`codevideo/style/style.json` 的 `category_en` 为 `Edit & Documentary` / `Evidence Films`)时**:
+    画面用 film-director 备在 `codevideo/raw/` 的真实素材(来源与许可见 `codevideo/SOURCES.md`,没登记的不用);视频素材先按 STYLE.md 的缩放
+    上限与调色用 ffmpeg 抽成 JPEG 序列(样片 `demo/tools/` 的 prep 脚本就是这么做的),页面按 `floor((t − t0) · fps)` 取帧,不在页面里直接播
+    `<video>`(截图不确定,机检 `deterministic` 不过);STYLE.md「Extra packages」要的额外包装进 `codevideo/.venv/` 或 `codevideo/node_modules/`。
 14. **修改单(代码预览页注释 → 修改师代行时同此口径)**:按注释的时刻定位到段,改该段文件;改完只重渲受影响的段
     (`render --section <段id>`),回执写清改了哪些文件、哪些段过期。
 
@@ -96,7 +100,7 @@
 - 不改 `modules/codevideo/lib/`、`agents/workflows/codevideo/styles/`、`codevideo/style/`(宿主库与风格规范只读;要的技法复制进项目再改)。
 - 不改 timeline.json 的段 / 镜时间、不改 TREATMENT.md、不改旁白台词——归 `film-director`;时间不够画就上报,不私自挪。
 - 不写配乐与混音,不在页面里放声音(宿主截图不录音);声音全靠 EV 事件交给 sound-designer。
-- 不调任何视频 / 图像生成模型、不用库存视频素材;不做语音转写。
+- 不调任何视频 / 图像生成模型、不用库存视频素材(仅当风格属于「剪辑与纪实」或「实证影像」时,用 SOURCES.md 登记过的真实素材,见职责 13);不做语音转写。
 - 不写 LemoLab / Claude / Opus 署名,不复刻上游样片的片尾卡(代码注释里也不写)。
 - 不手写 `directing/ep01/` 与 `assets/clips/` 下的文件——只经 `codevideo.py sync / board / render` 产出。
 

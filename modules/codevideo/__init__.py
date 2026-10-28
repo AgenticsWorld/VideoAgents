@@ -60,8 +60,17 @@ def gallery() -> dict:
 
 
 def style_slugs() -> list[str]:
-    """完整风格(43 个,有 STYLE.md 与样片)。"""
+    """完整风格(上游画廊全收,2026-10-28 起 59 个;有 STYLE.md 与样片)。"""
     return [s["slug"] for s in gallery()["styles"]]
+
+
+# 先有素材后写方案的分类(上游 AGENTS.md「Treatment first」的例外,2026-10-22):这类风格从真实素材剪出来,
+# 写 TREATMENT.md 前就要用样片 demo/tools/ 里找素材、记来源的工具(footage.py 之类),见 project.demo_tools
+MATERIAL_FIRST_CATEGORIES = ("Edit & Documentary",)
+
+
+def material_first(slug: str) -> bool:
+    return not is_light(slug) and (style_row(slug) or {}).get("cat_en") in MATERIAL_FIRST_CATEGORIES
 
 
 @lru_cache(maxsize=1)

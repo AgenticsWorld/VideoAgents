@@ -1,5 +1,7 @@
 {
  "_categories": {
+  "Edit & Documentary": "Edição e documentário",
+  "Evidence Films": "Filmes de evidência",
   "Hand-drawn & Painting": "Desenho à mão e pintura",
   "East Asian Traditions": "Tradições do Leste Asiático",
   "Print & Printmaking": "Impressão e gravura",
@@ -9,6 +11,150 @@
   "Games": "Jogos",
   "Cinema & Eras": "Cinema e épocas",
   "Materials & 3D": "Materiais e 3D"
+ },
+ "caption-news": {
+  "name": "Notícia em legendas",
+  "line": "Os EUA perderam 1,3 milhão de colônias de abelhas, mas o total subiu 6%: uma notícia curta que funciona sem som.",
+  "uses": [
+   "Notícias para redes",
+   "Explicações de relatórios",
+   "Curtas de dados"
+  ]
+ },
+ "newsreel": {
+  "name": "Cinejornal dos anos 1920",
+  "line": "1926: os jornais dizem que o Charleston vai arruinar os joelhos da América; no piquenique da própria Ford, as crianças dançam mesmo assim.",
+  "uses": [
+   "Histórias do passado",
+   "Modismos e épocas",
+   "Aniversários"
+  ]
+ },
+ "countdown": {
+  "name": "Contagem regressiva ao vivo em tela dividida",
+  "line": "O último minuto do lançamento da Artemis II, sem cortes: uma tela se abre em nove, que se fundem em uma só na ignição.",
+  "uses": [
+   "Lançamentos",
+   "Contagens regressivas",
+   "Eventos ao vivo"
+  ]
+ },
+ "city-symphony": {
+  "name": "Sinfonia em time-lapse",
+  "line": "Um dia em Nova York em time-lapse: rios de luz, uma grade no ritmo das semicolcheias, 1899 ao lado de hoje.",
+  "uses": [
+   "Filmes de cidade",
+   "Montagens musicais",
+   "Aberturas"
+  ]
+ },
+ "visual-investigation": {
+  "name": "Investigação visual",
+  "line": "Cinejornal, fotos, depoimentos e o inquérito de 1937 num só relógio: cinco fontes apontam para o mesmo ponto.",
+  "uses": [
+   "Reconstituições",
+   "Checagem de fatos",
+   "Relatórios de incidentes"
+  ]
+ },
+ "kino-montage": {
+  "name": "Montagem construtivista",
+  "line": "O folheto de 1931 do Empire State dá crédito a seus construtores; o filme da obra e as fotos de Hine respondem: 2.500 por dia.",
+  "uses": [
+   "Histórias da indústria",
+   "Marcos",
+   "Esforço coletivo"
+  ]
+ },
+ "telestrator": {
+  "name": "Telestrator esportivo",
+  "line": "Perdendo por 3–0 no intervalo, o Fenerbahçe marcou três em 12 minutos: congelar, desenhar, tela dividida, mapa de finalizações.",
+  "uses": [
+   "Análise esportiva",
+   "Resumos de partidas",
+   "Treinamento"
+  ]
+ },
+ "news-package": {
+  "name": "Pacote gráfico de telejornal",
+  "line": "Quatro notícias de IA de uma semana num pacote completo de telejornal: escalada, tarja de manchete, painel de preços, ficha técnica.",
+  "uses": [
+   "Resumos de notícias",
+   "Boletins",
+   "Atualizações de mercado"
+  ]
+ },
+ "satellite-briefing": {
+  "name": "Briefing por satélite",
+  "line": "Um satélite segue o mapa até o mar de Aral e encontra um deserto; só voltou a parte que alguém represou.",
+  "uses": [
+   "Clima",
+   "Explicações de notícias",
+   "Geografia"
+  ]
+ },
+ "briefing-board": {
+  "name": "Painel de briefing de engenharia",
+  "line": "Quatro tipos de ponte são testados num único painel de briefing, e o navio que precisa passar por baixo escolhe o vencedor.",
+  "uses": [
+   "Engenharia",
+   "Comparação de opções",
+   "Briefings"
+  ]
+ },
+ "lidar-survey": {
+  "name": "Levantamento LiDAR",
+  "line": "Um levantamento a laser remove a copa de uma floresta de Connecticut e encontra 3,4 km de antigos muros de fazenda.",
+  "uses": [
+   "Patrimônio",
+   "Meio ambiente",
+   "Levantamentos de campo"
+  ]
+ },
+ "white-model": {
+  "name": "Projeção em maquete branca",
+  "line": "Um projetor pinta a maquete branca de Roterdã camada por camada, do vazio de 1940 às torres de hoje.",
+  "uses": [
+   "Planejamento urbano",
+   "Exposições",
+   "Dados urbanos"
+  ]
+ },
+ "data-physical": {
+  "name": "Fisicalização de dados",
+  "line": "Doze anos de energia eólica e solar empilhados em placas reais, em espiral ao redor de um mostrador de nogueira até a solar ultrapassar.",
+  "uses": [
+   "Relatórios anuais",
+   "Apresentações a investidores",
+   "Dados de energia"
+  ]
+ },
+ "teardown": {
+  "name": "Desmontagem em vista explodida",
+  "line": "Metade de um teclado open source se desmonta numa única órbita, até o chip, e depois se fecha com suas dimensões reais.",
+  "uses": [
+   "Lançamentos de hardware",
+   "Páginas de produto",
+   "Explicação de especificações"
+  ]
+ },
+ "microscope": {
+  "name": "História ao microscópio",
+  "line": "Um único movimento contínuo de uma lâmina de fígado até um só núcleo; dois círculos, contados pixel a pixel, diferem 2,4 vezes no azul.",
+  "uses": [
+   "Biomedicina",
+   "Ciência dos materiais",
+   "Ciência do skincare"
+  ]
+ },
+ "archive-lighttable": {
+  "name": "Mesa de luz de arquivo",
+  "line": "O telegrama dizia 57 segundos; sob a lupa, os negativos de vidro dos irmãos Wright e o arquivo dizem 59.",
+  "uses": [
+   "História da marca",
+   "Histórias de arquivo",
+   "Museus"
+  ]
  },
  "crayon-book": {
   "name": "Livro ilustrado em giz de cera",
@@ -84,7 +230,7 @@
  },
  "ukiyoe": {
   "name": "Ukiyo-e",
-  "line": "Um viajante caminha rumo a uma montanha distante; cada plano é uma xilogravura, terminando numa grande onda.",
+  "line": "Um viajante caminha rumo a uma montanha distante; cada plano é uma xilogravura, com uma grande onda no clímax e, no fim, a montanha e o rolo inteiro.",
   "uses": [
    "Viagem",
    "Cultura japonesa",
@@ -111,7 +257,7 @@
  },
  "risograph": {
   "name": "Impressão Risograph",
-  "line": "Um passeio de bicicleta numa manhã de domingo pela cidade — padaria, parque, beira-rio — em duas tintas fora de registro.",
+  "line": "Um passeio de bicicleta numa manhã de domingo pela cidade — padaria, parque, beira-rio — em que cada parada acrescenta uma tinta, até três matrizes fora de registro se sobreporem.",
   "uses": [
    "Marcas independentes",
    "Zines",
@@ -149,8 +295,8 @@
   "name": "Pôster de viagem em serigrafia",
   "line": "Três pôsteres de trilhas são serigrafados uma cor de cada vez e depois percorridos num longo plano-sequência, do meio-dia ao entardecer.",
   "uses": [
-   "Guias de trilhas e destinos",
-   "Promoção turística",
+   "Guias de destinos",
+   "Turismo",
    "Pôsteres de eventos"
   ]
  },
@@ -246,7 +392,7 @@
  },
  "living-screencast": {
   "name": "Screencast vivo",
-  "line": "Clawd, o mascote pixelado do Claude Code, salta do terminal para o app do Claude e encena o modo de planejamento, comentários em diffs e autoverificações num screencast sem cortes.",
+  "line": "Clawd salta do terminal para o app do Claude e encena o modo de planejamento e autoverificações sem cortes.",
   "uses": [
    "Tutoriais de produto",
    "Lançamentos de recursos",
@@ -255,11 +401,11 @@
  },
  "hologram-hud": {
   "name": "HUD holográfico de ficção científica",
-  "line": "Uma bicicleta elétrica é escaneada em holograma; caixas de mira travam na bateria, no motor e nos freios, e cada especificação rola até o valor certo.",
+  "line": "Uma bicicleta elétrica é escaneada em holograma; caixas de mira travam na bateria, no motor e nos freios.",
   "uses": [
    "Apresentação de especificações",
-   "Vídeos de lançamento e financiamento coletivo",
-   "Telas de feiras"
+   "Vídeos de lançamento",
+   "Feiras"
   ]
  },
  "rubber-hose": {
@@ -291,10 +437,10 @@
  },
  "midcentury-toon": {
   "name": "Desenho animado mid-century",
-  "line": "Um robô aspirador configurado em três passos, narrado como um filme educativo dos anos 1950: posicione a base, conecte o app, aperte iniciar.",
+  "line": "Um robô aspirador configurado em três passos, narrado como um filme educativo dos anos 1950.",
   "uses": [
    "Guias de configuração",
-   "Explicações da central de ajuda",
+   "Central de ajuda",
    "Passo a passo"
   ]
  },

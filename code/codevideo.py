@@ -10,6 +10,8 @@
                        轻量风格(o98-NN)按风格提示生成 STYLE.md / style.json;都记指纹
   demo [--slug S]      写完 TREATMENT.md 后按需下载本风格样片源码与海报(只读参考,打印路径);轻量风格没有样片,
                        须 --slug 指定一个完整风格(锁定时记了 3 个相近的)
+  demo --tools         剪辑与纪实类风格(先有素材后写方案):不等 TREATMENT.md,只拉样片 demo/tools/(footage.py 等)
+                       复制进 codevideo/tools/;DEMO.md 与样片其余代码仍等方案写成
   sync                 校验 codevideo/timeline.json → 写 directing/ep01/shot_list.json + storyboard.json
   still T [T…] [--range a:b:step] [--sheet] [--prefix p] [--out DIR]
                        渲静帧到 codevideo/stills/(--sheet 另拼联系表到 codevideo/sheets/)
@@ -94,7 +96,9 @@ def main(argv=None) -> int:
     d = p("doctor")                  # 与其它子命令一致接受 --project(自检不看项目,忽略)
     d.add_argument("--no-gl", action="store_true", help="不启动浏览器测 WebGL")
     p("style").add_argument("--slug", default="")
-    p("demo").add_argument("--slug", default="", help="轻量风格须指定一个完整风格拉它的样片学技法")
+    dm = p("demo")
+    dm.add_argument("--slug", default="", help="轻量风格须指定一个完整风格拉它的样片学技法")
+    dm.add_argument("--tools", action="store_true", help="剪辑与纪实类风格:写方案前只拉 demo/tools/ 进 codevideo/tools/")
     p("sync")
     s = p("still")
     s.add_argument("times", nargs="*")
@@ -179,6 +183,10 @@ def main(argv=None) -> int:
         base = project_base(a.project)
         if a.cmd == "style":
             _emit(P.lock_style(base, a.slug or None), a.json)
+        elif a.cmd == "demo" and a.tools:
+            if a.slug:
+                raise CodeVideoError("demo --tools 只拉本项目锁定风格的工具,不配 --slug")
+            _emit(P.demo_tools(base, lambda n, total: _log(f"  {n}/{total}")), a.json)
         elif a.cmd == "demo":
             try:
                 _emit(P.demo(base, lambda n, total: _log(f"  {n}/{total}"), slug=a.slug), a.json)

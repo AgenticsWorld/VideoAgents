@@ -1481,7 +1481,7 @@ plugins/<plugin-name>/
 8. **数字人克隆声音**:按任意样本零样本克隆只有 Agentics(Voice Clone 模型须收参考音频)、ComfyUI(Voice Clone 工作流)、火山 Doubao-音频生成 1.0 能做(`modules/genmedia.py tts --clone-from`),其余渠道直接报错,不退回音色库或声纹卡描述。
 9. **动效短片(2026-10-20,新增类型,不是由插件并入)**:不用任何视频 / 图像生成模型——画面是 `18-code-video/scene-coder` 写的网页
    (`codevideo/index.html` 的 `window.render(t)`),宿主 CLI `python3 code/codevideo.py` 用无头浏览器逐帧截图、ffmpeg 出片;旁白走 TTS
-   (旁白声线卡),配乐默认代码作曲(`genmedia.py music --provider code --script`),拟音由混音脚本按页面事件程序化合成。导演方法与 43 个风格
+   (旁白声线卡),配乐默认代码作曲(`genmedia.py music --provider code --script`),拟音由混音脚本按页面事件程序化合成。导演方法与 59 个风格
    来自 lemo-opuscar(MIT,`scripts/sync_lemo_opuscar.py` 按固定 commit 同步:风格规范 `agents/workflows/codevideo/styles/`,页面库与音频工具
    `modules/codevideo/lib/`)。项目设置 `settings.json#project` = `code_style`(必选)、`storyboard_review`(默认开:cv1-board + CVH1)、
    `narration`、`subtitles`、`length_s`、`fps`(24/25/30)、`music_source`(code 默认 / model / library);画幅、语言、成片分辨率沿用 output 段,
@@ -1491,7 +1491,10 @@ plugins/<plugin-name>/
    外来配乐(三期:`music_source` = model 音乐模型生成 / library 项目音乐库或用户音乐)由 `codevideo.py music-fit` 适配到片长并测出节拍网格
    `codevideo/music/beats.json`(同时写 cue sheet、同步项目音乐库),再由 film-director 在 cv2-beatsync 用 `codevideo.py snap` 把段边界对到强拍、
    切点与击点对到拍点(片长不变,机检 `check --stage beats`),cv3 画面在对拍之后开工;代码作曲时 cv2-beatsync 置 skipped。
-   风格除 43 个完整风格外还有 98 个**轻量风格**(`o98-01`…`o98-98`,OPUSCAR 98 每部片子的一段风格提示,`agents/workflows/codevideo/styles/opuscar98/`):
+   风格除 59 个完整风格外还有 98 个**轻量风格**(`o98-01`…`o98-98`,OPUSCAR 98 每部片子的一段风格提示,`agents/workflows/codevideo/styles/opuscar98/`):
    立项锁定时宿主按提示生成 `codevideo/style/STYLE.md`,提示没写到的部分由 film-director 在 TREATMENT.md「风格补全」一节补齐,
    没有自己的样片(`codevideo.py demo --slug <完整风格>` 拉相近风格的学技法)。
+   完整风格里「剪辑与纪实」「实证影像」两类(2026-10-28 同步,各 8 个)用真实素材 / 数据:剪辑与纪实类写方案前可 `codevideo.py demo --tools`
+   只拉样片的找素材工具;两类都把素材来源与许可记进 `codevideo/SOURCES.md`(只用 CC0 / CC BY / 公有领域,其它许可须用户同意),
+   实证影像类另写 `codevideo/FACTS.md`(见 `agents/workflows/codevideo.md`「剪辑与纪实 / 实证影像」)。
    不做语音转写核对;详见 `agents/workflows/codevideo.md`。

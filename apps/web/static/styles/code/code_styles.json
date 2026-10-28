@@ -1,7 +1,15 @@
 {
  "source": "https://github.com/lemomo-ai/lemo-opuscar",
- "rev": "fdc46d7f0e20cc953a71d56241a92d1b4cb7298e",
+ "rev": "413a6bd6d78ebd3bdd5abaec9538a26867f890df",
  "categories": [
+  {
+   "en": "Edit & Documentary",
+   "cn": "剪辑与纪实"
+  },
+  {
+   "en": "Evidence Films",
+   "cn": "实证影像"
+  },
   {
    "en": "Hand-drawn & Painting",
    "cn": "手绘与绘画"
@@ -41,6 +49,326 @@
  ],
  "styles": [
   {
+   "slug": "caption-news",
+   "num": "63",
+   "en": "Caption News",
+   "cn": "字幕新闻",
+   "cat_en": "Edit & Documentary",
+   "cat_cn": "剪辑与纪实",
+   "film": "The Bee Ledger",
+   "line": "America lost 1.3 million bee colonies, yet the count rose 6 %: a news short that works with the sound off.",
+   "line_cn": "美国一年死掉 130 万箱蜜蜂，总数却涨了 6%：静音也能看懂的新闻。",
+   "uses": [
+    "Social news",
+    "Report explainers",
+    "Data shorts"
+   ],
+   "dur": 59.5,
+   "frame": "frames/caption-news.webp",
+   "dim": "2d",
+   "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#caption-news"
+  },
+  {
+   "slug": "newsreel",
+   "num": "64",
+   "en": "1920s Newsreel",
+   "cn": "1920s 新闻影片",
+   "cat_en": "Edit & Documentary",
+   "cat_cn": "剪辑与纪实",
+   "film": "Knock-Knee Alert",
+   "line": "1926: the papers say the Charleston will ruin America's knees; at Ford's own picnic the kids dance it anyway.",
+   "line_cn": "1926 年报纸说查尔斯顿会跳坏膝盖，福特工人野餐会上的孩子照跳不误。",
+   "uses": [
+    "History stories",
+    "Fads & eras",
+    "Anniversaries"
+   ],
+   "dur": 54.6,
+   "frame": "frames/newsreel.webp",
+   "dim": "2d",
+   "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#newsreel"
+  },
+  {
+   "slug": "countdown",
+   "num": "65",
+   "en": "Live Countdown Split-screen",
+   "cn": "实时倒计时分屏",
+   "cat_en": "Edit & Documentary",
+   "cat_cn": "剪辑与纪实",
+   "film": "Counting Itself Down",
+   "line": "The last minute of the Artemis II launch, uncut: one cell opens to nine, and they merge into one at ignition.",
+   "line_cn": "阿尔忒弥斯二号发射的最后一分钟，一秒不剪：格子从 1 开到 9，点火合成 1。",
+   "uses": [
+    "Launches",
+    "Countdowns",
+    "Live events"
+   ],
+   "dur": 59.5,
+   "frame": "frames/countdown.webp",
+   "dim": "2d",
+   "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#countdown"
+  },
+  {
+   "slug": "city-symphony",
+   "num": "66",
+   "en": "Time-lapse Symphony",
+   "cn": "延时交响",
+   "cat_en": "Edit & Documentary",
+   "cat_cn": "剪辑与纪实",
+   "film": "One Day in New York",
+   "line": "One day in New York in time-lapse: rivers of light, a grid on the sixteenths, 1899 beside today.",
+   "line_cn": "纽约的一天：延时光河、踩着十六分音符的网格，1899 年和今天并排。",
+   "uses": [
+    "City films",
+    "Music montages",
+    "Openers"
+   ],
+   "dur": 52.0,
+   "frame": "frames/city-symphony.webp",
+   "dim": "2d",
+   "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#city-symphony"
+  },
+  {
+   "slug": "visual-investigation",
+   "num": "67",
+   "en": "Visual Investigation",
+   "cn": "视觉调查",
+   "cat_en": "Edit & Documentary",
+   "cat_cn": "剪辑与纪实",
+   "film": "The Hindenburg: Four Minutes, 32 Seconds",
+   "line": "Newsreel, photos, testimony and the 1937 inquiry on one clock: five sources point to the same spot.",
+   "line_cn": "新闻片、照片、证词和调查报告排上同一条时间轴，五路来源指向一处。",
+   "uses": [
+    "Reconstructions",
+    "Fact-checks",
+    "Incident reports"
+   ],
+   "dur": 60.0,
+   "frame": "frames/visual-investigation.webp",
+   "dim": "2d",
+   "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#visual-investigation"
+  },
+  {
+   "slug": "kino-montage",
+   "num": "68",
+   "en": "Constructivist Montage",
+   "cn": "构成主义蒙太奇",
+   "cat_en": "Edit & Documentary",
+   "cat_cn": "剪辑与纪实",
+   "film": "410 Days",
+   "line": "The Empire State's 1931 brochure credits its builders; the site film and Hine's photos answer: 2,500 a day.",
+   "line_cn": "帝国大厦的小册子写着建造者，工地实拍和老照片给出答案：每天 2,500 人。",
+   "uses": [
+    "Industry histories",
+    "Milestones",
+    "Collective effort"
+   ],
+   "dur": 60.0,
+   "frame": "frames/kino-montage.webp",
+   "dim": "2d",
+   "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#kino-montage"
+  },
+  {
+   "slug": "telestrator",
+   "num": "69",
+   "en": "Sports Telestrator",
+   "cn": "体育战术板",
+   "cat_en": "Edit & Documentary",
+   "cat_cn": "剪辑与纪实",
+   "film": "Freeze Frame",
+   "line": "Down 3–0 at half-time, Fenerbahçe scored three in 12 minutes: freeze, draw, split screen, shot map.",
+   "line_cn": "半场 0–3，费内巴切 12 分钟连进三球：冻住画面、画线、分屏、射门图。",
+   "uses": [
+    "Sports analysis",
+    "Match recaps",
+    "Coaching"
+   ],
+   "dur": 54.4,
+   "frame": "frames/telestrator.webp",
+   "dim": "2d",
+   "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#telestrator"
+  },
+  {
+   "slug": "news-package",
+   "num": "70",
+   "en": "Broadcast News Package",
+   "cn": "电视新闻包装",
+   "cat_en": "Edit & Documentary",
+   "cat_cn": "剪辑与纪实",
+   "film": "The Week in AI",
+   "line": "Four AI stories from one week in a full on-air package: rundown, headline strap, price board, spec card.",
+   "line_cn": "一周四条 AI 新闻，一整套电视台包装：串联单、标题条、翻牌价格表、规格卡。",
+   "uses": [
+    "News round-ups",
+    "Bulletins",
+    "Market updates"
+   ],
+   "dur": 53.5,
+   "frame": "frames/news-package.webp",
+   "dim": "2d",
+   "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#news-package"
+  },
+  {
+   "slug": "satellite-briefing",
+   "num": "55",
+   "en": "Satellite Briefing",
+   "cn": "卫星简报",
+   "cat_en": "Evidence Films",
+   "cat_cn": "实证影像",
+   "film": "The Map Still Says Sea",
+   "line": "A satellite follows the map to the Aral Sea and finds a desert; only the part someone dammed came back.",
+   "line_cn": "卫星照着地图去找咸海，找到的是沙漠；只有筑了坝的那一块回来了。",
+   "uses": [
+    "Climate",
+    "News explainers",
+    "Geography"
+   ],
+   "dur": 37.8,
+   "frame": "frames/satellite-briefing.webp",
+   "dim": "2d",
+   "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#satellite-briefing"
+  },
+  {
+   "slug": "briefing-board",
+   "num": "56",
+   "en": "Engineering Briefing Board",
+   "cn": "工程简报板",
+   "cat_en": "Evidence Films",
+   "cat_cn": "实证影像",
+   "film": "The Ship Decides",
+   "line": "Four bridge types are tested on one briefing wall, and the ship that must pass under picks the winner.",
+   "line_cn": "一条河要架桥，四种桥型在一面简报墙上逐个受检，拍板的是桥下要过的船。",
+   "uses": [
+    "Engineering",
+    "Option comparisons",
+    "Briefings"
+   ],
+   "dur": 40.0,
+   "frame": "frames/briefing-board.webp",
+   "dim": "2d",
+   "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#briefing-board"
+  },
+  {
+   "slug": "lidar-survey",
+   "num": "57",
+   "en": "LiDAR Survey",
+   "cn": "点云测绘",
+   "cat_en": "Evidence Films",
+   "cat_cn": "实证影像",
+   "film": "The Fields Under the Forest",
+   "line": "A laser survey strips the canopy off a Connecticut forest and finds 3.4 km of old farm walls.",
+   "line_cn": "激光点云剥掉一片森林的树冠，露出当年农田的石墙：3.4 公里。",
+   "uses": [
+    "Heritage",
+    "Environment",
+    "Site surveys"
+   ],
+   "dur": 40.0,
+   "frame": "frames/lidar-survey.webp",
+   "dim": "3d",
+   "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#lidar-survey"
+  },
+  {
+   "slug": "white-model",
+   "num": "58",
+   "en": "Projection on White Model",
+   "cn": "白模投影",
+   "cat_en": "Evidence Films",
+   "cat_cn": "实证影像",
+   "film": "How a Flattened City Grew Back",
+   "line": "A projector paints Rotterdam's white model layer by layer, from the 1940 gap to today's towers.",
+   "line_cn": "投影机把数据一层层刷上鹿特丹白模：从 1940 年的空洞到今天的塔楼。",
+   "uses": [
+    "Urban planning",
+    "Exhibitions",
+    "City data"
+   ],
+   "dur": 40.0,
+   "frame": "frames/white-model.webp",
+   "dim": "3d",
+   "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#white-model"
+  },
+  {
+   "slug": "data-physical",
+   "num": "59",
+   "en": "Data Physicalization",
+   "cn": "数据实物化",
+   "cat_en": "Evidence Films",
+   "cat_cn": "实证影像",
+   "film": "Two Spirals",
+   "line": "Twelve years of wind and solar stacked as real plates, spiralling round a walnut dial until solar overtakes.",
+   "line_cn": "十二年风电和太阳能装机叠成实物，绕表盘升成两条螺旋，2021 年太阳能反超。",
+   "uses": [
+    "Annual reports",
+    "Investor decks",
+    "Energy data"
+   ],
+   "dur": 39.4,
+   "frame": "frames/data-physical.webp",
+   "dim": "3d",
+   "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#data-physical"
+  },
+  {
+   "slug": "teardown",
+   "num": "60",
+   "en": "Exploded Teardown",
+   "cn": "产品拆解",
+   "cat_en": "Evidence Films",
+   "cat_cn": "实证影像",
+   "film": "21 Keys, Opened",
+   "line": "Half an open-source keyboard comes apart in one orbit, down to the chip, then closes with its real dimensions.",
+   "line_cn": "开源键盘的一半在一次环绕中逐层拆开，看到主控再合拢，标上真实尺寸。",
+   "uses": [
+    "Hardware launches",
+    "Product pages",
+    "Spec explainers"
+   ],
+   "dur": 38.8,
+   "frame": "frames/teardown.webp",
+   "dim": "3d",
+   "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#teardown"
+  },
+  {
+   "slug": "microscope",
+   "num": "61",
+   "en": "Microscope Story",
+   "cn": "显微叙事",
+   "cat_en": "Evidence Films",
+   "cat_cn": "实证影像",
+   "film": "Measured Blue",
+   "line": "One continuous move from a liver slide to a single nucleus; two circles, counted pixel by pixel, differ 2.4 times in blue.",
+   "line_cn": "一镜从肝组织玻片推到单个细胞核，两个圆逐像素数出 2.4 倍的蓝。",
+   "uses": [
+    "Biomedicine",
+    "Materials science",
+    "Skincare science"
+   ],
+   "dur": 39.5,
+   "frame": "frames/microscope.webp",
+   "dim": "2d",
+   "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#microscope"
+  },
+  {
+   "slug": "archive-lighttable",
+   "num": "62",
+   "en": "Archive Light Table",
+   "cn": "档案灯台",
+   "cat_en": "Evidence Films",
+   "cat_cn": "实证影像",
+   "film": "Two Seconds Short",
+   "line": "The telegram said 57 seconds; under a loupe, the Wrights' glass negatives and the archive say 59.",
+   "line_cn": "电报说最长飞了 57 秒；放大镜下，莱特兄弟的底片和档案说是 59 秒。",
+   "uses": [
+    "Brand history",
+    "Archive stories",
+    "Museums"
+   ],
+   "dur": 40.0,
+   "frame": "frames/archive-lighttable.webp",
+   "dim": "2d",
+   "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#archive-lighttable"
+  },
+  {
    "slug": "crayon-book",
    "num": "01",
    "en": "Crayon Picture Book",
@@ -57,7 +385,7 @@
    ],
    "dur": 52.0,
    "frame": "frames/crayon-book.webp",
-   "dim": "3d",
+   "dim": "2d",
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#crayon-book"
   },
   {
@@ -77,7 +405,7 @@
    ],
    "dur": 113.6,
    "frame": "frames/watercolor.webp",
-   "dim": "3d",
+   "dim": "2d",
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#watercolor"
   },
   {
@@ -207,9 +535,9 @@
    "cn": "浮世绘",
    "cat_en": "East Asian Traditions",
    "cat_cn": "东方传统",
-   "film": "A Journey Toward the Mountain",
-   "line": "A traveller walks toward a distant mountain; every shot is a woodblock print, ending in a great wave.",
-   "line_cn": "旅人走向远山，每个镜头都是一幅版画，最后迎来一道巨浪。",
+   "film": "Toward the Mountain",
+   "line": "A traveller walks toward a distant mountain; every shot is a woodblock print, a great wave at the climax, the mountain and the whole scroll at the end.",
+   "line_cn": "旅人走向远山，每个镜头都是一幅版画；巨浪是高潮，结尾是远山与整幅画轴拉远。",
    "uses": [
     "Travel",
     "Japanese culture",
@@ -217,7 +545,7 @@
    ],
    "dur": 44.0,
    "frame": "frames/ukiyoe.webp",
-   "dim": "3d",
+   "dim": "2d",
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#ukiyoe"
   },
   {
@@ -264,12 +592,12 @@
    "slug": "risograph",
    "num": "12",
    "en": "Risograph Print",
-   "cn": "Risograph 丝网印刷",
+   "cn": "Risograph 孔版印刷",
    "cat_en": "Print & Printmaking",
    "cat_cn": "印刷与版画",
    "film": "Sunday Ride",
-   "line": "A Sunday-morning bike ride through the city — bakery, park, riverside — in two misregistered inks.",
-   "line_cn": "周日早晨骑车穿过城市：面包店、公园、河边。",
+   "line": "A Sunday-morning bike ride through the city — bakery, park, riverside — each stop adding an ink until three misregistered plates overprint.",
+   "line_cn": "周日早晨骑车穿过城市：面包店、公园、河边，每到一处加一版油墨，最后三版套印。",
    "uses": [
     "Indie brands",
     "Zines",
@@ -277,7 +605,7 @@
    ],
    "dur": 40.0,
    "frame": "frames/risograph.webp",
-   "dim": "3d",
+   "dim": "2d",
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#risograph"
   },
   {
@@ -297,7 +625,7 @@
    ],
    "dur": 30.0,
    "frame": "frames/halftone-dossier.webp",
-   "dim": "3d",
+   "dim": "2d",
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#halftone-dossier"
   },
   {
@@ -317,7 +645,7 @@
    ],
    "dur": 58.5,
    "frame": "frames/woodcut.webp",
-   "dim": "3d",
+   "dim": "2d",
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#woodcut"
   },
   {
@@ -351,13 +679,13 @@
    "line": "Three trail posters are screen-printed one ink at a time, then climbed in one long take from noon to dusk.",
    "line_cn": "三条步道各一张丝印海报，一色一刮印出来，再沿山脊一镜到底从正午爬到黄昏。",
    "uses": [
-    "Trail & destination guides",
-    "Tourism promos",
+    "Destination guides",
+    "Tourism",
     "Event posters"
    ],
    "dur": 38.4,
    "frame": "frames/silkscreen-poster.webp",
-   "dim": "3d",
+   "dim": "2d",
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#silkscreen-poster"
   },
   {
@@ -377,7 +705,7 @@
    ],
    "dur": 44.0,
    "frame": "frames/swiss-motion.webp",
-   "dim": "3d",
+   "dim": "2d",
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#swiss-motion"
   },
   {
@@ -437,7 +765,7 @@
    ],
    "dur": 46.7,
    "frame": "frames/blueprint.webp",
-   "dim": "3d",
+   "dim": "2d",
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#blueprint"
   },
   {
@@ -477,7 +805,7 @@
    ],
    "dur": 163.6,
    "frame": "frames/pictogram-motion.webp",
-   "dim": "3d",
+   "dim": "2d",
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#pictogram-motion"
   },
   {
@@ -537,7 +865,7 @@
    ],
    "dur": 58.8,
    "frame": "frames/iso-infographic.webp",
-   "dim": "3d",
+   "dim": "2d",
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#iso-infographic"
   },
   {
@@ -557,7 +885,7 @@
    ],
    "dur": 42.0,
    "frame": "frames/dark-keynote.webp",
-   "dim": "3d",
+   "dim": "2d",
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#dark-keynote"
   },
   {
@@ -568,8 +896,8 @@
    "cat_en": "Information & Keynote",
    "cat_cn": "信息与发布",
    "film": "Clawd Moves In",
-   "line": "Clawd, the Claude Code pixel mascot, hops out of the terminal into the Claude app and acts out plan mode, diff comments and self-checks in a one-take screencast.",
-   "line_cn": "像素小人 Clawd 跳出终端、搬进 Claude 应用，在一镜到底的录屏里演示 Plan 模式、diff 评论和自检。",
+   "line": "Clawd hops out of the terminal into the Claude app and acts out plan mode and self-checks in one take.",
+   "line_cn": "像素小人 Clawd 搬进 Claude 应用，一镜到底演示 Plan 模式和自检。",
    "uses": [
     "Product tutorials",
     "Feature launches",
@@ -588,12 +916,12 @@
    "cat_en": "Information & Keynote",
    "cat_cn": "信息与发布",
    "film": "Volt · Spec Scan",
-   "line": "An e-bike is scanned into a hologram; target boxes lock onto the battery, motor and brakes, and each spec rolls into place.",
-   "line_cn": "一辆电助力车被扫描成全息线框，目标框依次锁定电池、电机、刹车，参数逐个滚到真值。",
+   "line": "An e-bike is scanned into a hologram; target boxes lock onto the battery, motor and brakes.",
+   "line_cn": "电助力车被扫描成全息线框，目标框依次锁定电池、电机、刹车。",
    "uses": [
-    "Product spec walkthroughs",
-    "Launch & crowdfunding videos",
-    "Trade-show screens"
+    "Spec walkthroughs",
+    "Launch videos",
+    "Trade shows"
    ],
    "dur": 39.0,
    "frame": "frames/hologram-hud.webp",
@@ -617,7 +945,7 @@
    ],
    "dur": 50.0,
    "frame": "frames/rubber-hose.webp",
-   "dim": "3d",
+   "dim": "2d",
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#rubber-hose"
   },
   {
@@ -668,16 +996,16 @@
    "cat_en": "Cartoon & Anime",
    "cat_cn": "卡通与动画",
    "film": "Meet Pip",
-   "line": "A robot vacuum set up in three steps, told like a 1950s classroom film: place the dock, connect the app, press start.",
-   "line_cn": "用 50 年代教育片的口吻，三步教你装好一台扫地机：放充电座、连 app、按开始。",
+   "line": "A robot vacuum set up in three steps, told like a 1950s classroom film.",
+   "line_cn": "用 50 年代教育片的口吻，三步教你装好一台扫地机。",
    "uses": [
-    "Product set-up guides",
-    "Help-centre explainers",
-    "How-to steps"
+    "Set-up guides",
+    "Help centres",
+    "How-to"
    ],
    "dur": 40.0,
    "frame": "frames/midcentury-toon.webp",
-   "dim": "3d",
+   "dim": "2d",
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#midcentury-toon"
   },
   {
@@ -697,7 +1025,7 @@
    ],
    "dur": 54.5,
    "frame": "frames/pixel-rpg.webp",
-   "dim": "3d",
+   "dim": "2d",
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#pixel-rpg"
   },
   {
@@ -724,7 +1052,7 @@
    "slug": "microgame",
    "num": "32",
    "en": "Microgame Frenzy",
-   "cn": "微游戏快闪（瓦里奥制造式）",
+   "cn": "微游戏快闪",
    "cat_en": "Games",
    "cat_cn": "游戏",
    "film": "Five-Second Astronaut",
@@ -737,7 +1065,7 @@
    ],
    "dur": 59.8,
    "frame": "frames/microgame.webp",
-   "dim": "3d",
+   "dim": "2d",
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#microgame"
   },
   {
@@ -757,7 +1085,7 @@
    ],
    "dur": 148.8,
    "frame": "frames/game-show.webp",
-   "dim": "3d",
+   "dim": "2d",
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#game-show"
   },
   {
@@ -777,7 +1105,7 @@
    ],
    "dur": 54.2,
    "frame": "frames/silent-film.webp",
-   "dim": "3d",
+   "dim": "2d",
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#silent-film"
   },
   {
@@ -857,7 +1185,7 @@
    ],
    "dur": 38.0,
    "frame": "frames/tilt-shift.webp",
-   "dim": "2d",
+   "dim": "3d",
    "gallery": "https://lemomo-ai.github.io/lemo-opuscar/#tilt-shift"
   },
   {

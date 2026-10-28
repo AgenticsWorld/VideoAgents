@@ -11,7 +11,7 @@
 # ① 不用任何视频生成模型、不用图像模型出画面。画面 = scene-coder 写的网页 codevideo/index.html
 #    (window.render(t) 按时间画出任意一帧),由宿主 CLI `python3 code/codevideo.py` 用无头浏览器逐帧截图、
 #    ffmpeg 编码;声音 = 旁白 TTS(旁白声线卡)+ 代码作曲(采样乐器 / 合成)+ 程序化拟音,混音脚本出成片声轨。
-#    导演与制作方法沿用 lemo-opuscar(MIT,github.com/lemomo-ai/lemo-opuscar),43 个完整风格的规范在
+#    导演与制作方法沿用 lemo-opuscar(MIT,github.com/lemomo-ai/lemo-opuscar),59 个完整风格的规范在
 #    agents/workflows/codevideo/styles/<slug>/STYLE.md,立项时锁定副本到 codevideo/style/。
 #    另有 98 个**轻量风格**(三期 2026-10-20,id o98-01…o98-98,OPUSCAR 98 每部片子用的一段风格提示,
 #    agents/workflows/codevideo/styles/opuscar98/styles.json):没有完整 STYLE.md 与样片源码,`codevideo.py style`
@@ -36,7 +36,7 @@
 #
 # 输入(新建向导收,总制片在初始化工单里核对):
 #   - 主题 / 文稿:refs/text/transcript.txt(可空,主题写在 brief.md「内容定位」也可;两者至少一项)
-#   - 风格:settings.json#project.code_style(必选:完整风格 slug 43 个之一,或轻量风格 o98-01…o98-98)
+#   - 风格:settings.json#project.code_style(必选:完整风格 slug 59 个之一,或轻量风格 o98-01…o98-98)
 #   - 设置:settings.json#project = {storyboard_review(默认 true), narration(默认 true), subtitles(默认 true),
 #           length_s(默认 45), fps(24/25/30), music_source(code 默认 | model | library)};画幅 / 语言 / 成片分辨率沿用 output 段
 #   - 用户素材(可选):refs/ 各分类里的 logo、产品照、字体、录音、音乐;用户声明有权使用才进片,否则画替身
@@ -158,6 +158,13 @@ phases:
         # ★先写方案、后看样片:写完 TREATMENT.md 之前不得跑 `codevideo.py demo`(宿主退出码 3);codevideo/style/DEMO.md
         #   与样片源码都是 demo 命令放出来的,方案没写成时根本不存在
         #   (样片只用来学技法,不能拿它的故事、结构、镜头、配乐、结尾);result.json 登记 demo_opened_after_treatment。
+        #   例外(仅当 codevideo/style/style.json 的 category_en = Edit & Documentary,剪辑与纪实,2026-10-28):素材在方案之前——
+        #   写方案前可跑 `python3 code/codevideo.py demo --project <slug> --tools`(只把样片 demo/tools/ 复制进 codevideo/tools/,不放 DEMO.md),
+        #   用 STYLE.md 点名的找素材、记来源工具(footage.py 等)先备素材;DEMO.md 与样片其余代码仍等 TREATMENT.md 写成。
+        # material_sources_logged(仅当 category_en ∈ Edit & Documentary / Evidence Films;其余风格不适用):用到的真实素材逐件记进
+        #   codevideo/SOURCES.md(什么、从哪、许可、大小;剪辑与纪实类用 footage.py md 生成),用户 refs/ 的素材优先;只用 CC0 / CC BY / 公有领域,
+        #   其它开放许可(CC BY-SA、ODbL…)停下经 orchestrator 问用户同意;Evidence Films 另写 codevideo/FACTS.md(每个事实陈述的来源 URL +
+        #   原文引述或测量);STYLE.md 要的额外包装进 codevideo/.venv/ 或 codevideo/node_modules/,不装进宿主环境。
         # treatment_sections_complete:TREATMENT.md 八项齐(三个候选结构与选择理由 / logline 与弧线 / 对标参考
         #   学什么不学什么 / 镜头表(景别·角度·运动·时长·为什么)/ 逐秒节拍 / cue map(速度·小节网格·每段配器·
         #   每个切点与击点落在第几拍)/ 声音设计表(每段 环境床·主要拟音·音乐状态)/ 字幕与标题设计);
@@ -171,7 +178,7 @@ phases:
         #   数字在 text 里写成阿拉伯数字、在 say 里写成读法(TTS 读法与字幕写法分开)。
         validation:
           auto: [treatment_sections_complete, style_supplement_written, cue_map_for_external_music, timeline_valid,
-                 directing_synced, lines_match_timeline, demo_opened_after_treatment, ascii_filename]
+                 directing_synced, lines_match_timeline, demo_opened_after_treatment, material_sources_logged, ascii_filename]
           rubric: creative_v1
       - id: cv1-look
         agent: 18-code-video/scene-coder
@@ -382,9 +389,11 @@ phases:
         # sound_table_verified、subtitles_clear_of_subject、user_assets_rights_checked(用户素材都有权利声明);
         # light_style_followed(仅轻量风格):成片守住风格提示里的不变量(色彩值、镜头 / 转场规律、「避免」条款)与 TREATMENT
         #   「风格补全」的取舍,全片一致;not_the_demo_again 对轻量风格不适用(没有样片),改为不与 lemo 的 OPUSCAR 98 原片同构。
+        # material_sources_logged(仅当 category_en ∈ Edit & Documentary / Evidence Films):画面与原声里的真实素材都在 SOURCES.md 有来源与
+        #   许可(CC0 / CC BY / 公有领域,或用户同意记录)且进了 CREDITS;Evidence Films 另核 FACTS.md 覆盖片中每个事实陈述。
         validation:
           auto: [check_all_pass, contact_sheets_reviewed, not_the_demo_again, sound_table_verified,
-                 subtitles_clear_of_subject, user_assets_rights_checked, light_style_followed]
+                 subtitles_clear_of_subject, user_assets_rights_checked, light_style_followed, material_sources_logged]
           rubric: analysis_v1
       - { id: gc2, gate: true, human: true, checkpoint: CVH2-成片签字, depends_on: [cv5-qa] }
         # 放行前必须:codevideo.py check --stage all 全 PASS、cv5-qa 报告 blocker = 0;

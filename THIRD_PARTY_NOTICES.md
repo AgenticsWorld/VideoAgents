@@ -39,7 +39,7 @@ The 动效短片 (code-video) project type bundles files from Lemo-Opuscar
 commit recorded in `modules/codevideo/lib/upstream.json` and synced by
 `scripts/sync_lemo_opuscar.py`: the page helpers and audio tools under `modules/codevideo/lib/core/`
 (`sampler.py` carries two marked VideoAgents patches: a configurable sample-library folder with
-optional automatic download, and a SciPy fallback when `soxr` is missing), the 43 style
+optional automatic download, and a SciPy fallback when `soxr` is missing), the 59 style
 specifications under `agents/workflows/codevideo/styles/`, and gallery frames re-encoded as WebP in
 `apps/web/static/styles/code/frames/`, plus the 98 style prompts of Lemo-Opuscar's OPUSCAR 98 film
 (`agents/workflows/codevideo/styles/opuscar98/styles.json`, offered as "light" styles; the per-film shot lists and
@@ -47,6 +47,12 @@ direction notes are not copied) with one frame per film re-encoded as WebP in
 `apps/web/static/styles/code/frames98/`, shown only as style previews (the character in those frames belongs to
 OPUSCAR 98 and is never carried into users' films). The license is retained in
 `modules/codevideo/lib/LICENSE.lemo-opuscar` and `agents/workflows/codevideo/styles/LICENSE.lemo-opuscar`.
+The gallery frames in `frames/` and `frames98/` are stills from Lemo-Opuscar's demo films and OPUSCAR 98,
+© LemoLab, licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/; source
+https://github.com/lemomo-ai/lemo-opuscar); they were resized to 640 px wide and re-encoded as WebP.
+Third-party material visible in some frames (archive footage, photographs, maps and data, chiefly in the
+Edit & Documentary and Evidence Films styles) keeps its own license, as listed in that style's demo
+`CREDITS` (and `SOURCES.md`, where present) in the upstream repository at the pinned commit.
 The four display fonts in `modules/codevideo/lib/core/fonts/` are OFL 1.1 subsets (details and the
 full license text in `modules/codevideo/lib/core/fonts/OFL.md`). The same project type bundles
 Three.js 0.170.0 (MIT; `build/three.module.js` and `examples/jsm` without the Draco, Basis,

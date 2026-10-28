@@ -152,9 +152,10 @@ def file_set(key: str) -> list[dict]:
     return rows
 
 
-def fetch_files(key: str, progress=None) -> dict:
+def fetch_files(key: str, progress=None, prefix: str = "") -> dict:
+    """按清单下载并校验 sha256;prefix 只取路径以它开头的文件(demo --tools 只拉 demo/tools/)。"""
     up = upstream()
-    rows = file_set(key)
+    rows = [r for r in file_set(key) if r["path"].startswith(prefix)]
     got = skipped = 0
     for row in rows:
         dst = MIRROR / row["path"]

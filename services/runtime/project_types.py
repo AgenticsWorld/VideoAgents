@@ -4,7 +4,7 @@
 - audio-to-video(音频配画):讲述音频 + 文稿 → 按音频生成画面,agents/workflows/audiovideo.yaml
 - digital-human(数字人):音频母带 + 人物图片 → 说话人口型视频,agents/workflows/digitalhuman.yaml
 - mashup(混剪):文稿 + 本地素材库(+ 可选讲述音频)→ 素材库切片配画,agents/workflows/mashup.yaml
-- code-video(动效短片,2026-10-20):主题 / 文稿 + 风格(lemo-opuscar 43 种)→ 语言模型写网页逐帧渲染出片,
+- code-video(动效短片,2026-10-20):主题 / 文稿 + 风格(lemo-opuscar 59 种)→ 语言模型写网页逐帧渲染出片,
   不用视频生成模型,agents/workflows/codevideo.yaml(宿主工具链 modules/codevideo/ + code/codevideo.py)
 
 后三种原是 VideoAgents-Plugins 仓库的同名插件,2026-10-20 并入主程序:成员 SOUL 进 agents/<类别>/,
@@ -139,7 +139,7 @@ def code_video_settings(block, strict: bool = True) -> dict:
     style = str(block.get("code_style") or "").strip()
     if style:
         from modules.codevideo import style_ids
-        if style in style_ids():                  # 完整风格 43 个 + OPUSCAR 98 轻量风格 o98-01…98
+        if style in style_ids():                  # 完整风格 59 个 + OPUSCAR 98 轻量风格 o98-01…98
             out["code_style"] = style
         else:
             bad(f"code_style 不在风格库:{style}")

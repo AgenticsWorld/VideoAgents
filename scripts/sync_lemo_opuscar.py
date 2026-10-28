@@ -9,7 +9,7 @@
 - modules/codevideo/lib/vendor/three/   three.js r170:build/three.module.js + examples/jsm(去掉 draco 等大件);
                                      页面里仍写 /node_modules/three/build/three.module.js 与 /node_modules/three/examples/jsm/…,
                                      静态服务映射到 vendor/three/three.module.js 与 vendor/three/jsm/(仓库 .gitignore 忽略 node_modules/、build/)
-- agents/workflows/codevideo/styles/<slug>/   43 个风格的 STYLE.md / DEMO.md / style.json(随包,Agent 必读)
+- agents/workflows/codevideo/styles/<slug>/   各风格(上游 styleboard/catalog.json 全收)的 STYLE.md / DEMO.md / style.json(随包,Agent 必读)
 - apps/web/static/styles/code/       新建向导风格画廊:code_styles.json + frames/<slug>.webp
 - OPUSCAR 98 的 98 条风格提示(轻量风格,三期 2026-10-20):agents/workflows/codevideo/styles/opuscar98/styles.json
                                      (提示词 / 混合手法 / 渲染类型 / 参考作品 / 原片说明 + 宿主算的 3 个相近完整风格;不带 shots 与
@@ -199,8 +199,7 @@ def main() -> int:
         rows.append({"slug": c["slug"], "num": c["num"], "en": c["en"], "cn": c["cn"],
                      "cat_en": c["cat_en"], "cat_cn": c["cat"], "film": c["film"],
                      "line": c["line"], "line_cn": c["line_cn"], "uses": c.get("uses") or [],
-                     "dur": c.get("dur"), "frame": f"frames/{c['slug']}.webp",
-                     "dim": "3d" if re.search(r"3D|three", (src / "styles" / c["slug"] / "STYLE.md").read_text(encoding="utf-8")[:3000]) else "2d",
+                     "dur": c.get("dur"), "frame": f"frames/{c['slug']}.webp", "dim": _dim(src, c["slug"]),
                      "gallery": f"https://lemomo-ai.github.io/lemo-opuscar/#{c['slug']}"})
         jpg = src / "docs" / "frames" / f"{c['slug']}.jpg"
         h = sha256(jpg)
@@ -270,6 +269,18 @@ def main() -> int:
     if len(w.changed) > 40:
         print(f"   … 另 {len(w.changed) - 40} 个")
     return 1 if (a.check and w.changed) else 0
+
+
+# 画廊的 2D / 3D 标记:样片代码 import 了 three.js 才算 3D。原先按 STYLE.md 前 3000 字搜「3D|three」,会把「two or three」
+# 「no 3D」也算进去(2026-10-28 改)
+_THREE_IMPORT = re.compile(r"""\b(?:from|import)\s*\(?\s*['"](?:three|three/[^'"]*|/node_modules/three/[^'"]*)['"]""")
+
+
+def _dim(src: Path, slug: str) -> str:
+    for p in tracked(src, f"styles/{slug}/demo"):
+        if p.endswith((".js", ".mjs", ".html")) and _THREE_IMPORT.search((src / p).read_text(encoding="utf-8", errors="ignore")):
+            return "3d"
+    return "2d"
 
 
 _STOP = set("a an the and or of in on at to for with from by into over under as is are be it its this that these those "

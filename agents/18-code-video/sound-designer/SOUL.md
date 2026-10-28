@@ -43,7 +43,9 @@
       取 code-composer 回执);配乐来源不论哪种,混音都用 `codevideo/music/score.wav`;
    ③ 3D 素材:用到的 Poly Haven HDRI / 模型(CC0,向 scene-coder 要清单);
    ④ 用户素材:按 `codevideo/brief.json` 的权利声明写「由用户提供,用户声明有权使用」;
-   ⑤ 旁白 TTS 渠道与模型(`genmedia.py info` 回显)。
+   ⑤ 旁白 TTS 渠道与模型(`genmedia.py info` 回显);
+   ⑥ **仅当 `codevideo/SOURCES.md` 存在时**(剪辑与纪实 / 实证影像类风格的真实素材):逐件写素材名、作者、来源页、许可与用了哪几秒,
+      混音里用到素材原声的同样列出。
    **不写 LemoLab / Claude / Opus 署名**(机检 `no_library_signoff`);拟音为代码合成,写一行说明即可。
 7. **出成片**:`python3 code/codevideo.py master --project <slug> [--grain N]`(像素 / 矢量 / 平面风格 0;胶片、纸张类按 STYLE.md 给 1–2)——
    拼段、两遍 loudnorm(−14 LUFS,真峰值 −1.2 dB)、按 `codevideo/cues.json` 写 `edit/ep01/subtitles.srt`、取海报、写 `codevideo/build.sh`;

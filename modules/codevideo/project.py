@@ -12,7 +12,8 @@ import time
 from pathlib import Path
 
 from . import (EP, INSTRUMENTS_DIR, LIB_DIR, MIRROR, NS, STYLES_DIR, VENDOR_THREE, CodeVideoError, ffmpeg, is_light,
-               light_styles, project_block, project_settings, render_size, style_ids, style_row, style_slugs, upstream)
+               light_styles, material_first, project_block, project_settings, render_size, style_ids, style_row, style_slugs,
+               upstream)
 
 STYLE_FILES = ("STYLE.md", "DEMO.md", "style.json")
 LOCK_COPY = ("STYLE.md", "style.json")      # 锁定时只放这两份;DEMO.md 由 demo 在 TREATMENT.md 写成后放出(先方案后样片)
@@ -180,15 +181,17 @@ def demo(base: Path, progress=None, slug: str = "") -> dict:
     完整风格默认拉本风格的;轻量风格没有样片,须用 slug 指定一个完整风格(锁定时记的相近风格优先)。"""
     from .fetch import fetch_files
     if not (base / NS / "TREATMENT.md").is_file():
+        hint = ("(剪辑与纪实类风格先有素材后写方案:找素材、记来源的工具用 `demo --tools` 先拉)"
+                if material_first(project_block(base).get("code_style") or "") else "")
         raise DemoBeforeTreatment("codevideo/TREATMENT.md 还没写:先写导演方案(三个候选结构与选择),再看样片——"
-                                  "样片只用来学技法,不能拿它的故事、结构、镜头与配乐")
+                                  "样片只用来学技法,不能拿它的故事、结构、镜头与配乐" + hint)
     lock = lock_style(base)
     target = slug or ("" if lock.get("light") else lock["slug"])
     if not target:
         raise CodeVideoError("轻量风格没有自己的样片:用 --slug 指定一个完整风格拉它的样片学技法,相近的有 "
                              + ("、".join(lock.get("related") or []) or "(无)"))
     if target not in style_slugs():
-        raise CodeVideoError(f"--slug 须是完整风格(43 个之一),收到 {target!r}")
+        raise CodeVideoError(f"--slug 须是完整风格({len(style_slugs())} 个之一),收到 {target!r}")
     if target == lock["slug"]:
         shutil.copyfile(STYLES_DIR / target / "DEMO.md", base / NS / "style" / "DEMO.md")
     res = fetch_files(f"demo:{target}", progress)
@@ -196,6 +199,34 @@ def demo(base: Path, progress=None, slug: str = "") -> dict:
     return {**res, "slug": target, "demo_dir": str(root / "demo"), "poster": str(root / "poster.jpg"),
             "demo_md": str(base / NS / "style" / "DEMO.md") if target == lock["slug"] else
             str(STYLES_DIR / target / "DEMO.md")}
+
+
+def demo_tools(base: Path, progress=None) -> dict:
+    """剪辑与纪实类风格(MATERIAL_FIRST_CATEGORIES)从真实素材剪出来,写方案前就要找素材:不等 TREATMENT.md,
+    只拉锁定风格样片里的 demo/tools/(footage.py 等找素材、记来源的工具,及同目录其余脚本),复制进 codevideo/tools/
+    在项目里跑(footage.py 把 SOURCES.jsonl / SOURCES.md 写在当前目录,从 codevideo/ 运行)。DEMO.md 与样片其余代码
+    仍要等方案写成后由 demo 放出;codevideo/tools/ 里已有且内容不同的文件不覆盖(kept)。"""
+    from .fetch import fetch_files, file_set
+    lock = lock_style(base)
+    slug = lock["slug"]
+    if not material_first(slug):
+        raise CodeVideoError(f"demo --tools 只给剪辑与纪实类风格用(先有素材后写方案);{slug} 照常先写 TREATMENT.md 再 demo")
+    key, prefix = f"demo:{slug}", f"styles/{slug}/demo/tools/"
+    res = fetch_files(key, progress, prefix=prefix)
+    dst = base / NS / "tools"
+    copied, kept = [], []
+    for row in file_set(key):
+        if not row["path"].startswith(prefix):
+            continue
+        rel, src = row["path"][len(prefix):], MIRROR / row["path"]
+        out = dst / rel
+        if out.is_file() and out.read_bytes() != src.read_bytes():
+            kept.append(rel)
+            continue
+        out.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, out)
+        copied.append(rel)
+    return {**res, "slug": slug, "tools_dir": str(dst), "copied": copied, "kept": kept}
 
 
 class DemoBeforeTreatment(CodeVideoError):

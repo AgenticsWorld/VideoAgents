@@ -1,5 +1,7 @@
 {
  "_categories": {
+  "Edit & Documentary": "Dựng phim & tư liệu",
+  "Evidence Films": "Phim bằng chứng",
   "Hand-drawn & Painting": "Vẽ tay & hội họa",
   "East Asian Traditions": "Truyền thống Đông Á",
   "Print & Printmaking": "In ấn & tranh in",
@@ -9,6 +11,150 @@
   "Games": "Trò chơi",
   "Cinema & Eras": "Điện ảnh & thời đại",
   "Materials & 3D": "Chất liệu & 3D"
+ },
+ "caption-news": {
+  "name": "Tin tức phụ đề",
+  "line": "Nước Mỹ mất 1,3 triệu đàn ong, vậy mà tổng số vẫn tăng 6%: một bản tin ngắn tắt tiếng vẫn hiểu.",
+  "uses": [
+   "Tin mạng xã hội",
+   "Giải thích báo cáo",
+   "Video ngắn dữ liệu"
+  ]
+ },
+ "newsreel": {
+  "name": "Phim thời sự thập niên 1920",
+  "line": "Năm 1926, báo chí nói điệu Charleston sẽ làm hỏng đầu gối nước Mỹ; vậy mà ngay tại buổi dã ngoại của chính hãng Ford, lũ trẻ vẫn cứ nhảy.",
+  "uses": [
+   "Chuyện lịch sử",
+   "Trào lưu & thời đại",
+   "Ngày kỷ niệm"
+  ]
+ },
+ "countdown": {
+  "name": "Đếm ngược trực tiếp chia màn hình",
+  "line": "Phút cuối cùng trước khi phóng Artemis II, không cắt: một ô mở thành chín ô, rồi hợp lại làm một khi đánh lửa.",
+  "uses": [
+   "Ra mắt",
+   "Đếm ngược",
+   "Sự kiện trực tiếp"
+  ]
+ },
+ "city-symphony": {
+  "name": "Giao hưởng time-lapse",
+  "line": "Một ngày ở New York qua time-lapse: những dòng sông ánh sáng, lưới hình nhịp theo nốt móc kép, năm 1899 bên cạnh hôm nay.",
+  "uses": [
+   "Phim thành phố",
+   "Montage âm nhạc",
+   "Đoạn mở đầu"
+  ]
+ },
+ "visual-investigation": {
+  "name": "Điều tra bằng hình ảnh",
+  "line": "Phim thời sự, ảnh chụp, lời khai và cuộc điều tra năm 1937 trên cùng một trục thời gian: năm nguồn cùng chỉ về một điểm.",
+  "uses": [
+   "Tái dựng sự kiện",
+   "Kiểm chứng thông tin",
+   "Báo cáo sự cố"
+  ]
+ },
+ "kino-montage": {
+  "name": "Montage kiến tạo",
+  "line": "Cuốn giới thiệu năm 1931 của Empire State ghi công những người xây dựng; thước phim công trường và ảnh của Hine trả lời: 2.500 người mỗi ngày.",
+  "uses": [
+   "Lịch sử ngành",
+   "Cột mốc",
+   "Nỗ lực tập thể"
+  ]
+ },
+ "telestrator": {
+  "name": "Bảng chiến thuật thể thao",
+  "line": "Bị dẫn 3–0 sau hiệp một, Fenerbahçe ghi ba bàn trong 12 phút: dừng hình, vẽ, chia màn hình, bản đồ dứt điểm.",
+  "uses": [
+   "Phân tích thể thao",
+   "Tóm tắt trận đấu",
+   "Huấn luyện"
+  ]
+ },
+ "news-package": {
+  "name": "Đồ họa bản tin truyền hình",
+  "line": "Bốn tin AI trong một tuần với trọn bộ đồ họa phát sóng: điểm tin, dải tít, bảng giá, thẻ thông số.",
+  "uses": [
+   "Điểm tin",
+   "Bản tin",
+   "Cập nhật thị trường"
+  ]
+ },
+ "satellite-briefing": {
+  "name": "Bản tin vệ tinh",
+  "line": "Vệ tinh lần theo bản đồ tìm biển Aral và chỉ thấy sa mạc; chỉ phần được ai đó đắp đập mới quay trở lại.",
+  "uses": [
+   "Khí hậu",
+   "Giải thích tin tức",
+   "Địa lý"
+  ]
+ },
+ "briefing-board": {
+  "name": "Bảng thuyết trình kỹ thuật",
+  "line": "Bốn kiểu cầu được kiểm tra trên cùng một bức tường thuyết trình, và con tàu phải đi qua bên dưới sẽ chọn ra phương án thắng.",
+  "uses": [
+   "Kỹ thuật",
+   "So sánh phương án",
+   "Thuyết trình"
+  ]
+ },
+ "lidar-survey": {
+  "name": "Khảo sát LiDAR",
+  "line": "Khảo sát laser lột bỏ tán cây của một khu rừng ở Connecticut và tìm thấy 3,4 km tường đá ruộng xưa.",
+  "uses": [
+   "Di sản",
+   "Môi trường",
+   "Khảo sát hiện trường"
+  ]
+ },
+ "white-model": {
+  "name": "Chiếu hình lên mô hình trắng",
+  "line": "Máy chiếu tô từng lớp lên mô hình trắng của Rotterdam, từ khoảng trống năm 1940 đến những tòa tháp ngày nay.",
+  "uses": [
+   "Quy hoạch đô thị",
+   "Triển lãm",
+   "Dữ liệu đô thị"
+  ]
+ },
+ "data-physical": {
+  "name": "Vật thể hóa dữ liệu",
+  "line": "Mười hai năm điện gió và điện mặt trời xếp chồng thành những tấm thật, xoắn quanh mặt đồng hồ gỗ óc chó cho đến khi điện mặt trời vượt lên.",
+  "uses": [
+   "Báo cáo thường niên",
+   "Tài liệu nhà đầu tư",
+   "Dữ liệu năng lượng"
+  ]
+ },
+ "teardown": {
+  "name": "Tháo rời tách lớp",
+  "line": "Một nửa bàn phím mã nguồn mở được tháo rời trong một vòng quay quanh, đến tận con chip, rồi khép lại kèm kích thước thực.",
+  "uses": [
+   "Ra mắt phần cứng",
+   "Trang sản phẩm",
+   "Giải thích thông số"
+  ]
+ },
+ "microscope": {
+  "name": "Câu chuyện qua kính hiển vi",
+  "line": "Một cú máy liền mạch từ tiêu bản gan đến một nhân tế bào; hai vòng tròn, đếm từng điểm ảnh, chênh nhau 2,4 lần về sắc xanh.",
+  "uses": [
+   "Y sinh học",
+   "Khoa học vật liệu",
+   "Khoa học chăm sóc da"
+  ]
+ },
+ "archive-lighttable": {
+  "name": "Bàn soi tư liệu lưu trữ",
+  "line": "Bức điện tín ghi 57 giây; dưới kính lúp, phim kính của anh em nhà Wright và tư liệu lưu trữ nói là 59.",
+  "uses": [
+   "Lịch sử thương hiệu",
+   "Chuyện tư liệu",
+   "Bảo tàng"
+  ]
  },
  "crayon-book": {
   "name": "Sách tranh sáp màu",
@@ -84,7 +230,7 @@
  },
  "ukiyoe": {
   "name": "Ukiyo-e",
-  "line": "Một lữ khách đi về phía ngọn núi xa; mỗi cảnh quay là một bức tranh khắc gỗ, kết thúc bằng một con sóng lớn.",
+  "line": "Một lữ khách đi về phía ngọn núi xa; mỗi cảnh quay là một bức tranh khắc gỗ, cao trào là một con sóng lớn, kết thúc bằng ngọn núi và toàn bộ cuộn tranh.",
   "uses": [
    "Du lịch",
    "Văn hóa Nhật Bản",
@@ -111,7 +257,7 @@
  },
  "risograph": {
   "name": "In Risograph",
-  "line": "Chuyến đạp xe sáng Chủ nhật qua thành phố — tiệm bánh, công viên, bờ sông — bằng hai màu mực in lệch.",
+  "line": "Chuyến đạp xe sáng Chủ nhật qua thành phố — tiệm bánh, công viên, bờ sông — mỗi điểm dừng thêm một màu mực, cho đến khi ba bản in lệch chồng lên nhau.",
   "uses": [
    "Thương hiệu độc lập",
    "Zine",
@@ -149,8 +295,8 @@
   "name": "Áp phích du lịch in lụa",
   "line": "Ba áp phích đường mòn được in lụa từng màu một, rồi được leo trong một cảnh quay dài từ trưa đến hoàng hôn.",
   "uses": [
-   "Hướng dẫn đường mòn & điểm đến",
-   "Quảng bá du lịch",
+   "Hướng dẫn điểm đến",
+   "Du lịch",
    "Áp phích sự kiện"
   ]
  },
@@ -246,7 +392,7 @@
  },
  "living-screencast": {
   "name": "Quay màn hình sống động",
-  "line": "Clawd, linh vật pixel của Claude Code, nhảy ra khỏi terminal vào ứng dụng Claude và diễn lại chế độ lập kế hoạch, bình luận diff và tự kiểm tra trong một video quay màn hình liền một mạch.",
+  "line": "Clawd nhảy ra khỏi terminal vào ứng dụng Claude và diễn lại chế độ lập kế hoạch cùng việc tự kiểm tra, liền một mạch.",
   "uses": [
    "Hướng dẫn sản phẩm",
    "Ra mắt tính năng",
@@ -255,11 +401,11 @@
  },
  "hologram-hud": {
   "name": "HUD hologram khoa học viễn tưởng",
-  "line": "Một chiếc xe đạp điện được quét thành hologram; khung ngắm lần lượt khóa vào pin, động cơ và phanh, rồi từng thông số cuộn về đúng giá trị.",
+  "line": "Một chiếc xe đạp điện được quét thành hologram; khung ngắm lần lượt khóa vào pin, động cơ và phanh.",
   "uses": [
-   "Giới thiệu thông số sản phẩm",
-   "Video ra mắt & gọi vốn cộng đồng",
-   "Màn hình hội chợ"
+   "Giới thiệu thông số",
+   "Video ra mắt",
+   "Hội chợ"
   ]
  },
  "rubber-hose": {
@@ -291,10 +437,10 @@
  },
  "midcentury-toon": {
   "name": "Hoạt hình mid-century",
-  "line": "Cài đặt robot hút bụi trong ba bước, kể như một phim giáo dục thập niên 1950: đặt đế sạc, kết nối ứng dụng, nhấn bắt đầu.",
+  "line": "Cài đặt robot hút bụi trong ba bước, kể như một phim giáo dục thập niên 1950.",
   "uses": [
-   "Hướng dẫn cài đặt sản phẩm",
-   "Giải thích trung tâm trợ giúp",
+   "Hướng dẫn cài đặt",
+   "Trung tâm trợ giúp",
    "Hướng dẫn từng bước"
   ]
  },

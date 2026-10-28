@@ -1,6 +1,6 @@
 {
- "source": "https://github.com/lemomo-ai/lemo-opuscar/blob/fdc46d7f0e20cc953a71d56241a92d1b4cb7298e/styleboard/opuscar98_styles.json",
- "rev": "fdc46d7f0e20cc953a71d56241a92d1b4cb7298e",
+ "source": "https://github.com/lemomo-ai/lemo-opuscar/blob/413a6bd6d78ebd3bdd5abaec9538a26867f890df/styleboard/opuscar98_styles.json",
+ "rev": "413a6bd6d78ebd3bdd5abaec9538a26867f890df",
  "title": "OPUSCAR 98 · 98 Years of Best Picture",
  "note": "One style per film. t0/dur: where the film sits in OPUSCAR 98 (seconds). render: 2D / 2.5D (3D models rendered into flat layers) / 3D; dim adds the tone (B&W, sepia). prompt_*: a reusable style prompt. shots: the cuts as they appear in the finished film.",
  "chapters": [
@@ -102,7 +102,7 @@
    "related": [
     "silent-film",
     "rubber-hose",
-    "hd-2d"
+    "shadow-puppet"
    ]
   },
   {
@@ -141,7 +141,7 @@
    "related": [
     "art-deco",
     "silkscreen-poster",
-    "hd-2d"
+    "pictogram-motion"
    ]
   },
   {
@@ -215,7 +215,7 @@
    "related": [
     "rubber-hose",
     "cel-anime-80s",
-    "ascii-crt"
+    "engraving"
    ]
   },
   {
@@ -252,7 +252,7 @@
    ],
    "related": [
     "brick-toy",
-    "hd-2d",
+    "art-deco",
     "impasto"
    ]
   },
@@ -290,7 +290,7 @@
    "related": [
     "art-deco",
     "stained-glass",
-    "rubber-hose"
+    "crayon-book"
    ]
   },
   {
@@ -328,8 +328,8 @@
    ],
    "related": [
     "rubber-hose",
-    "game-show",
-    "midcentury-toon"
+    "midcentury-toon",
+    "game-show"
    ]
   },
   {
@@ -405,8 +405,8 @@
    ],
    "related": [
     "pictogram-motion",
-    "brick-toy",
-    "shadow-puppet"
+    "shadow-puppet",
+    "brick-toy"
    ]
   },
   {
@@ -557,7 +557,7 @@
    "related": [
     "ink-wash",
     "stained-glass",
-    "crayon-book"
+    "briefing-board"
    ]
   },
   {
@@ -581,8 +581,8 @@
    ],
    "dim": "2D",
    "render": "2D",
-   "desc_en": "Opaque gouache in the 1941 poster's gold and green: solid colour masses, coal-black tips, Kyffin Williams' heavy dark hills and broken contours. It replaced a woodcut that repeated No. 3; the scene is the colliers walking home down the valley, singing.",
-   "desc_zh": "用 1941 年原海报金黄加绿配色的不透明水粉：扎实的色块、煤黑的渣山、Kyffin Williams 式厚重的深色山体和断续描边。原定的木刻和第 3 部重复，改成水粉；画的是矿工唱着歌走下山谷回家。",
+   "desc_en": "Opaque gouache in the 1941 poster's gold and green: solid colour masses, coal-black tips, Kyffin Williams' heavy dark hills and broken contours. Gouache keeps it apart from No. 3's woodcut; the scene is the colliers walking home down the valley, singing.",
+   "desc_zh": "用 1941 年原海报金黄加绿配色的不透明水粉：扎实的色块、煤黑的渣山、Kyffin Williams 式厚重的深色山体和断续描边。用水粉而不用木刻，和第 3 部区分开；画的是矿工唱着歌走下山谷回家。",
    "prompt_en": "Opaque gouache after Welsh painter Kyffin Williams. Directional strokes 1/80-1/40 of frame width, 2-5 times as long, ragged, fully covering; broken dark dashes outline buildings, walls and ridges; dark hills flecked with lighter green or slate knife marks. Palette: sky and light pale gold #F1C565 (not mustard), fields green #86A03F, darks coal #1D1B1E, far hills and water slate #48505E, small accents yellow #F6CF2F, other colours mixed from these; the hero the story centres on #D97757, at least 1/8 of frame height. Fields and sky light (~60%), hills and buildings dark. Warm grade under 10%, vignette, grain. Default low late-afternoon side light: fields lit, ridges rim-lit. From high ground in true perspective, a path leading the eye down; small repeated buildings (or walls, rocks) stepping along slopes. Motion: looping smoke or cloud, a lateral track. Avoid: watercolour transparency, vector fills, mud.",
    "prompt_zh": "仿威尔士画家 Kyffin Williams 的不透明水粉。方向性笔触宽为画幅宽 1/80–1/40，长是宽的 2–5 倍，边缘毛糙，完全覆盖；房子、墙、山脊用断续深色短线勾边；暗山上刮几笔亮绿或灰蓝。色板：天空和光淡金 #F1C565（别成芥末黄），田野绿 #86A03F，暗部煤黑 #1D1B1E，远山和水面灰蓝 #48505E，小点缀黄 #F6CF2F，其他颜色由这几色调出；故事围绕的那个主角用 #D97757，至少占画面高八分之一。田野和天空偏亮（约六成），山和房子偏暗。暖色调色不超过一成，暗角，颗粒。默认傍晚低角度侧光，田野受光，山脊有轮廓光。从高处真透视取景，一条路把视线引下去；小房子（或墙、石块）顺山坡一级级排开。动起来：烟或云循环飘动，横向跟拍。避免：水彩透明感、矢量平涂、发暗发脏。",
    "refs": [
@@ -668,7 +668,7 @@
    "related": [
     "rubber-hose",
     "hd-2d",
-    "silent-film"
+    "cel-anime-80s"
    ]
   },
   {
@@ -704,8 +704,8 @@
    ],
    "related": [
     "stained-glass",
-    "shadow-puppet",
-    "spy-titles"
+    "art-deco",
+    "shadow-puppet"
    ]
   },
   {
@@ -741,9 +741,9 @@
     "Flora Stacey"
    ],
    "related": [
-    "ascii-crt",
     "impasto",
-    "silent-film"
+    "ascii-crt",
+    "engraving"
    ]
   },
   {
@@ -782,7 +782,7 @@
    "related": [
     "silkscreen-poster",
     "risograph",
-    "impasto"
+    "paper-popup"
    ]
   },
   {
@@ -855,8 +855,8 @@
    ],
    "related": [
     "hd-2d",
-    "tilt-shift",
-    "brick-toy"
+    "brick-toy",
+    "tilt-shift"
    ]
   },
   {
@@ -931,8 +931,8 @@
    ],
    "related": [
     "scifi-toon",
-    "crayon-book",
-    "whiteboard"
+    "whiteboard",
+    "crayon-book"
    ]
   },
   {
@@ -1008,7 +1008,7 @@
    "related": [
     "spy-titles",
     "impasto",
-    "ukiyoe"
+    "art-deco"
    ]
   },
   {
@@ -1084,7 +1084,7 @@
    "related": [
     "urban-sketch",
     "watercolor",
-    "whiteboard"
+    "ink-wash"
    ]
   },
   {
@@ -1118,8 +1118,8 @@
     "Marty one-sheet (1955)"
    ],
    "related": [
-    "ascii-crt",
     "cel-anime-80s",
+    "ascii-crt",
     "rubber-hose"
    ]
   },
@@ -1158,8 +1158,8 @@
    ],
    "related": [
     "midcentury-toon",
-    "paper-popup",
-    "spy-titles"
+    "spy-titles",
+    "paper-popup"
    ]
   },
   {
@@ -1196,8 +1196,8 @@
    ],
    "related": [
     "blueprint",
-    "whiteboard",
-    "engraving"
+    "briefing-board",
+    "whiteboard"
    ]
   },
   {
@@ -1235,8 +1235,8 @@
     "1958 MGM poster"
    ],
    "related": [
-    "risograph",
     "spy-titles",
+    "risograph",
     "engraving"
    ]
   },
@@ -1274,8 +1274,8 @@
     "1959 MGM poster"
    ],
    "related": [
-    "tilt-shift",
     "impasto",
+    "tilt-shift",
     "lowpoly-island"
    ]
   },
@@ -1388,9 +1388,9 @@
     "Freddie Young (70mm cinematography)"
    ],
    "related": [
+    "urban-sketch",
     "tilt-shift",
-    "one-line",
-    "urban-sketch"
+    "woodcut"
    ]
   },
   {
@@ -1619,7 +1619,7 @@
    "related": [
     "silent-film",
     "paper-lantern",
-    "brick-toy"
+    "engraving"
    ]
   },
   {
@@ -1768,8 +1768,8 @@
    ],
    "related": [
     "impasto",
-    "stained-glass",
-    "art-deco"
+    "art-deco",
+    "stained-glass"
    ]
   },
   {
@@ -1807,7 +1807,7 @@
    "related": [
     "watercolor",
     "art-deco",
-    "one-line"
+    "ukiyoe"
    ]
   },
   {
@@ -1919,7 +1919,7 @@
    ],
    "related": [
     "cel-anime-80s",
-    "tilt-shift",
+    "city-symphony",
     "urban-sketch"
    ]
   },
@@ -1960,7 +1960,7 @@
    "related": [
     "crayon-book",
     "urban-sketch",
-    "whiteboard"
+    "engraving"
    ]
   },
   {
@@ -1996,8 +1996,8 @@
    ],
    "related": [
     "impasto",
-    "engraving",
-    "lowpoly-island"
+    "ink-wash",
+    "engraving"
    ]
   },
   {
@@ -2033,8 +2033,8 @@
    ],
    "related": [
     "crayon-book",
-    "game-show",
-    "stained-glass"
+    "stained-glass",
+    "game-show"
    ]
   },
   {
@@ -2144,8 +2144,8 @@
    ],
    "related": [
     "ukiyoe",
-    "woodcut",
-    "shadow-puppet"
+    "shadow-puppet",
+    "pictogram-motion"
    ]
   },
   {
@@ -2184,7 +2184,7 @@
    "related": [
     "rubber-hose",
     "cel-anime-80s",
-    "tilt-shift"
+    "briefing-board"
    ]
   },
   {
@@ -2262,8 +2262,8 @@
    ],
    "related": [
     "hd-2d",
-    "lowpoly-island",
-    "tilt-shift"
+    "lidar-survey",
+    "lowpoly-island"
    ]
   },
   {
@@ -2380,7 +2380,7 @@
    "related": [
     "hologram-hud",
     "ascii-crt",
-    "glass-product"
+    "art-deco"
    ]
   },
   {
@@ -2534,7 +2534,7 @@
    "related": [
     "impasto",
     "ukiyoe",
-    "crayon-book"
+    "watercolor"
    ]
   },
   {
@@ -2610,8 +2610,8 @@
    ],
    "related": [
     "paper-popup",
-    "tilt-shift",
-    "whiteboard"
+    "briefing-board",
+    "tilt-shift"
    ]
   },
   {
@@ -2651,7 +2651,7 @@
    "related": [
     "watercolor",
     "paper-popup",
-    "rubber-hose"
+    "crayon-book"
    ]
   },
   {
@@ -2877,8 +2877,8 @@
    ],
    "related": [
     "whiteboard",
-    "ascii-crt",
-    "watercolor"
+    "watercolor",
+    "ascii-crt"
    ]
   },
   {
@@ -2955,7 +2955,7 @@
    "related": [
     "impasto",
     "watercolor",
-    "hd-2d"
+    "crayon-book"
    ]
   },
   {
@@ -3102,8 +3102,8 @@
    ],
    "related": [
     "tilt-shift",
-    "lowpoly-island",
-    "cel-anime-80s"
+    "cel-anime-80s",
+    "lowpoly-island"
    ]
   },
   {
@@ -3138,7 +3138,7 @@
    ],
    "related": [
     "tilt-shift",
-    "glass-product",
+    "microgame",
     "lowpoly-island"
    ]
   },
@@ -3178,7 +3178,7 @@
    "related": [
     "blueprint",
     "midcentury-toon",
-    "hologram-hud"
+    "teardown"
    ]
   },
   {
@@ -3217,7 +3217,7 @@
    "related": [
     "impasto",
     "stained-glass",
-    "watercolor"
+    "lidar-survey"
    ]
   },
   {
@@ -3254,7 +3254,7 @@
    "related": [
     "silent-film",
     "rubber-hose",
-    "papercut-red"
+    "archive-lighttable"
    ]
   },
   {
@@ -3291,8 +3291,8 @@
     "Rodrigo Prieto (cinematography)"
    ],
    "related": [
-    "rubber-hose",
     "halftone-dossier",
+    "rubber-hose",
     "woodcut"
    ]
   },
@@ -3329,7 +3329,7 @@
    "related": [
     "rubber-hose",
     "engraving",
-    "hd-2d"
+    "papercut-red"
    ]
   },
   {
@@ -3404,8 +3404,8 @@
    ],
    "related": [
     "pictogram-motion",
-    "halftone-dossier",
-    "rubber-hose"
+    "countdown",
+    "archive-lighttable"
    ]
   },
   {
@@ -3515,9 +3515,9 @@
     "The Negro Motorist Green Book (1962)"
    ],
    "related": [
-    "engraving",
     "game-show",
-    "ukiyoe"
+    "ukiyoe",
+    "engraving"
    ]
   },
   {
@@ -3555,7 +3555,7 @@
    "related": [
     "iso-infographic",
     "tilt-shift",
-    "lowpoly-island"
+    "glass-product"
    ]
   },
   {
@@ -3626,7 +3626,7 @@
    "related": [
     "engraving",
     "watercolor",
-    "stained-glass"
+    "cel-anime-80s"
    ]
   },
   {
@@ -3663,7 +3663,7 @@
    "related": [
     "rubber-hose",
     "impasto",
-    "cel-anime-80s"
+    "backrooms"
    ]
   },
   {
@@ -3702,7 +3702,7 @@
    "related": [
     "rubber-hose",
     "engraving",
-    "hd-2d"
+    "halftone-dossier"
    ]
   },
   {
@@ -3737,8 +3737,8 @@
    ],
    "related": [
     "tilt-shift",
-    "hd-2d",
-    "glass-product"
+    "glass-product",
+    "hd-2d"
    ]
   },
   {

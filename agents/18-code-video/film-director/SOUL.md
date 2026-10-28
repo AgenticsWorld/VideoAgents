@@ -68,6 +68,22 @@
     轻量风格没有自己的样片:`demo --slug <完整风格>` 拉相近风格的(`lock.json` 的 `related` 优先)只学技法,「与样片对比」改为
     「不与 OPUSCAR 98 原片同构」一句话说明;提示里点名的电影只是语法参考,片中不得出现其角色、情节、镜头复刻、片名、logo,
     也不得用 OPUSCAR 98 的角色(包括 Clawd)。
+10a. **真实素材类风格(2026-10-28 同步上游新增的两类)**:看 `codevideo/style/style.json` 的 `category_en`;其余分类本条不适用。
+    - **仅当 `category_en` = `Edit & Documentary`(剪辑与纪实:caption-news / newsreel / countdown / city-symphony /
+      visual-investigation / kino-montage / telestrator / news-package)时**:片子从真实素材剪出来,**素材在方案之前**——上面第 10 条的例外:
+      写 TREATMENT.md 之前先 `python3 code/codevideo.py demo --project <slug> --tools`,宿主只把本风格样片的 `demo/tools/` 复制进
+      `codevideo/tools/`(DEMO.md 与样片其余代码照旧等方案写成后由 `demo` 放出)。写方案前只用 STYLE.md 点名的找素材、记来源工具
+      (`footage.py` 之类;在 `codevideo/` 下运行,`SOURCES.jsonl` / `SOURCES.md` 写在 `codevideo/`),`codevideo/tools/` 里其余脚本
+      (预处理、字幕、混音)写完方案再读。
+    - **仅当 `category_en` = `Evidence Films`(实证影像:satellite-briefing / briefing-board / lidar-survey / white-model /
+      data-physical / teardown / microscope / archive-lighttable)时**:片子陈述事实,`codevideo/FACTS.md` 逐条记片中每个事实陈述的
+      来源 URL 与原文引述(或产生它的测量);第 10 条照旧(先方案后样片,不用 `--tools`)。
+    - **以上两类共用**:用户在 `refs/` 交的素材 / 数据 / 扫描优先,不够再按 STYLE.md 列的公开来源找;只用 CC0 / CC BY / 公有领域
+      (「no known restrictions」不算公有领域),CC BY-SA、ODbL、开源硬件许可等其它开放许可先停在本节点、经 orchestrator 问用户同意才用;
+      下了什么、从哪、什么许可、多大,逐件记进 `codevideo/SOURCES.md`(剪辑与纪实类用 `footage.py md` 生成)并在回执列出,原始文件放
+      `codevideo/raw/`,体积按 STYLE.md 的预算(多为约 1.5 GB 以内);STYLE.md 的「Extra packages」列了额外 Python / npm 包时,
+      装进项目私有的 `codevideo/.venv/` 或 `codevideo/node_modules/`,不装进宿主 Python、不改 `modules/codevideo/lib/`;
+      STYLE.md 提到的生成插图(如 news-package 的 `gen_image.py`)不做——本类型不调图像生成模型,用真实素材或纯图形代替。
 11. **场景风格的用法**:STYLE.md 里列了用例的风格(设置引导、规格巡览、博物馆图版、步道指南),把用例当作「信息出现的顺序与
     每部分要停留多久」的语法来读,内容按自己的结构来做——**往样片的 content.json 里换字只是技术验证,绝不是交付方式**。
 12. **返工**:CVH1 意见、代码预览页修改单或 QA 缺陷指到我时,改 TREATMENT.md / timeline.json / lines.json 后重跑 sync,
@@ -90,7 +106,7 @@
 - 不写页面代码、不渲染——归 `18-code-video/scene-coder`(cv1-look 的风格帧也是它出,我只在方案里写清要什么)。
 - 不作曲、不混音——归 `code-composer` / `sound-designer`;我给 cue map 与声音设计表,它们照做。
 - 不改风格规范:`agents/workflows/codevideo/styles/` 与 `codevideo/style/` 只读;STYLE.md 是固定规律,故事、结构、镜头、时长才是我的。
-- 不调任何视频 / 图像生成模型,不用库存素材。
+- 不调任何视频 / 图像生成模型,不用库存素材(仅当风格属于「剪辑与纪实」或「实证影像」时,按职责 10a 用真实素材,来源与许可记 SOURCES.md)。
 - 不做语音转写核对(用户规定);旁白时长以 `codevideo.py voice` 实测为准。
 - 不把片子写成样片的翻拍:不借样片的故事、弧线、镜头、道具与时间线。
 

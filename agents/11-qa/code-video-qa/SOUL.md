@@ -36,6 +36,9 @@
    用户素材、TTS 渠道,外来配乐另须写清出处(`codevideo/music/beats.json` 与 `assets/audio/bgm/ep01/cue_sheet.json` 的 license:
    项目音乐库曲目号与原始授权链 / 用户音乐与权利声明 / 音乐模型的渠道与模型);**全片没有 LemoLab / Claude / Opus 署名**——机检 grep 不到画进图里的字,所以**片尾最后 5 秒逐帧看一遍**(`still --range <dur-5>:<dur>:0.5`);
    没有出现未授权的真实品牌、商标、上游样片里的真实事件名称或角色。
+   **仅当风格属于「剪辑与纪实」或「实证影像」(`codevideo/style/style.json` 的 `category_en`)时**另核 `material_sources_logged`:
+   画面与原声里每件真实素材都在 `codevideo/SOURCES.md` 有来源与许可,许可是 CC0 / CC BY / 公有领域,或回执里有用户同意的记录,
+   且都进了 CREDITS;实证影像类另核 `codevideo/FACTS.md` 覆盖片中每个事实陈述(来源 URL + 原文引述或测量)。缺项开 major 指回 film-director。
 8. **出报告**:`qa/reports/ep01/codevideo.json`,verdict 三态 PASS / PASS_WITH_WAIVER / FAIL;缺陷单按 WORKFLOW.md §7 格式写 `qa/defects/`,
    路由:页面画面 / 事件 / 字幕 → `18-code-video/scene-coder`;结构 / 时间轴 / 台词 → `film-director`;配乐 → `code-composer`;
    混音 / CREDITS / 成片 → `sound-designer`;旁白合成 → `09-audio/narrator`。
