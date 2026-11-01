@@ -1158,7 +1158,7 @@ DEFAULT_GENCONFIG = {
     #   (environment-concept 只出主视角图+变体,不写 blocking_map,prompt 场景锚挂概念图,相关机检跳过)
     "output": {"aspect_preset": "youtube", "aspect_custom": "", "language": "English",
                # sketch_style=故事板草图画风(2026-09-30,故事板页顶栏「画风」下拉):film 铅笔灰马克(默认)/ konte 铅笔彩铅
-               #   / ink 粗犷线稿 / digital 灰调重点色,
+               #   / ink 粗犷线稿 / digital 灰调重点色 / project 项目画风(2026-11-01,取 brief.md 画面风格;没填按 film),
                #   modules/storyboard_board.STYLE_PACKS;草图 CLI code/storyboard_sketch.py 按此出图(--style 可临时覆盖)
                "sketch_style": "film",
                "draft_resolution": "480p", "final_resolution": "480p",
@@ -10809,6 +10809,7 @@ async def api_script_notes_submit(project: str, ep: str, body: dict | None = Non
 # 台账 assets/storyboard/<ep>/index.json;草图修改由 07-directing/storyboard-sketch 处理,其余修改发总制片。
 BOARD_SKETCH_JOBS: dict[str, dict] = {}      # "<project>/<ep>/<scene>" -> {status, keys, done, failed, error, started_at};整集九宫格批量的 scene 段为 "*"
 BOARD_GRID_BATCH = 4                         # 整集批量:每 4 镜出一张 2×2 宫格图再切分(code/storyboard_sketch.py --grid --keys;2026-09-12 由 9/3×3 降下来)
+BOARD_SKETCH_PER = (BOARD_GRID_BATCH, 1)     # 整集批量「一次几张」(2026-11-01,标题行「出草图」右侧切换):4 = 2×2 宫格(默认),1 = 逐镜单张
 IMAGE_PROVIDERS = ("agentics", "openrouter", "volcengine", "byteplus", "fal", "minimax", "rhapi", "comfyui")
 _BOARD_REDRAW_RE = re.compile(r"\[草图\s+(ep[\w\-]*)/([\w\-]+)\]")
 
@@ -11525,16 +11526,18 @@ BOARD_ANIMATIC_JOBS: dict[str, dict] = {}     # "<project>/<ep>" -> {status, sta
 
 
 def _board_sketch_batch_worker(project: str, ep: str, jobkey: str, targets: list[tuple[str, int]],
-                               provider: str, model: str):
-    """后台线程(单集标题行「出草图」):待出的镜按集内顺序每 4 镜一批,每批调用一次宿主 CLI
-    `code/storyboard_sketch.py --grid --keys a,b,c`(一张 2×2 宫格图切成小图,台账由 CLI 写);每批结束发 SSE board_sketch。"""
+                               provider: str, model: str, per: int = BOARD_GRID_BATCH):
+    """后台线程(单集标题行「出草图」):待出的镜按集内顺序每 per 镜一批,每批调用一次宿主 CLI
+    `code/storyboard_sketch.py --grid --keys a,b,c`(一张 2×2 宫格图切成小图,台账由 CLI 写);每批结束发 SSE board_sketch。
+    per=1(「一次 1 张」)时每批只有一个键,CLI 对单镜批次走单张出图(台账 mode=single)。"""
     job = BOARD_SKETCH_JOBS[jobkey]
     from modules import storyboard_board as sbb
     base = _proj_base(project)
     keys = [k for k, _ in targets]
     orders = dict(targets)
-    for i in range(0, len(keys), BOARD_GRID_BATCH):
-        batch = keys[i:i + BOARD_GRID_BATCH]
+    step = per if per in BOARD_SKETCH_PER else BOARD_GRID_BATCH
+    for i in range(0, len(keys), step):
+        batch = keys[i:i + step]
         job["current"] = f"{batch[0]}…{batch[-1]}" if len(batch) > 1 else batch[0]
         cmd = [sys.executable, str(ROOT / "code" / "storyboard_sketch.py"), "--project", project, "--ep", ep,
                "--grid", "--keys", ",".join(batch)]
@@ -11861,7 +11864,8 @@ async def api_dialogue_tts_sync(project: str, ep: str, body: dict):
 
 
 async def api_board_sketch_start(project: str, ep: str, body: dict):
-    """故事板页「出草图」:{all:true} 整集九宫格批量(单集标题行按钮;已出的跳过,force 全重出;每 9 镜一张宫格图切分)、
+    """故事板页「出草图」:{all:true} 整集批量(单集标题行按钮;已出的跳过,force 全重出;per=4 默认每 4 镜一张 2×2 宫格图切分,
+    per=1 逐镜单张——标题行按钮右侧「一次 4 张 / 一次 1 张」切换,2026-11-01)、
     整场(scene,缺 order;逐镜单张)或单镜(scene+order,单张)。渠道/模型随请求(页面顶部所选),
     不传则按 CLI 缺省链(台账上次 → STATE.image_model_prefs.sketch → 全局图像渠道)。"""
     from modules import storyboard_board as sbb
@@ -11882,6 +11886,12 @@ async def api_board_sketch_start(project: str, ep: str, body: dict):
         raise ServiceError(404, f"directing/{ep}/storyboard.json not found")
     board = sbb.load_board(base, ep)
     if whole:
+        try:
+            per = int(body.get("per") or BOARD_GRID_BATCH)
+        except (TypeError, ValueError):
+            per = 0
+        if per not in BOARD_SKETCH_PER:
+            raise ServiceError(400, f"per must be one of {BOARD_SKETCH_PER}")
         jobkey = f"{base.name}/{ep}/*"
         if (BOARD_SKETCH_JOBS.get(jobkey) or {}).get("status") == "running":
             raise ServiceError(409, "episode sketches are already being generated; wait for it to finish")
@@ -11902,13 +11912,14 @@ async def api_board_sketch_start(project: str, ep: str, body: dict):
             sbb.update_index(base, ep, key, {"status": "queued", "error": "", "scene_no": key.rsplit("-", 1)[0], "order": o})
         BOARD_SKETCH_JOBS[jobkey] = {"status": "running", "keys": [k for k, _ in targets], "done": 0, "failed": 0,
                                      "total": len(targets), "current": "", "started_at": time.time(),
-                                     "provider": provider, "model": model, "mode": "grid"}
+                                     "provider": provider, "model": model, "per": per,
+                                     "mode": "grid" if per > 1 else "single"}
         threading.Thread(target=_board_sketch_batch_worker,
-                         args=(base.name, ep, jobkey, targets, provider, model), daemon=True).start()
+                         args=(base.name, ep, jobkey, targets, provider, model, per), daemon=True).start()
         HUB.publish({"type": "board_sketch", "project": base.name, "ep": ep, "scene": "*", "key": "",
                      "status": "running", "keys": [k for k, _ in targets]})
-        return {"ok": True, "queued": len(targets), "skipped": skipped, "job": jobkey,
-                "batches": -(-len(targets) // BOARD_GRID_BATCH)}
+        return {"ok": True, "queued": len(targets), "skipped": skipped, "job": jobkey, "per": per,
+                "batches": -(-len(targets) // per)}
     sc, shots = sbb.find_shot(board, scene, order)
     if sc is None:
         raise ServiceError(404, f"scene {scene} not in storyboard.json")
@@ -11940,11 +11951,21 @@ async def api_board_sketch_start(project: str, ep: str, body: dict):
     return {"ok": True, "queued": len(targets), "skipped": len(shots) - len(targets), "job": jobkey}
 
 
+def _board_project_style(base: Path) -> dict:
+    """「项目画风」可用性(故事板页画风下拉):创作定调 brief.md 画面风格是否已填、出草图时取哪份文字。"""
+    from modules import storyboard_board as sbb
+    info = sbb.project_style_info(base)
+    return {"available": bool(info["text"]), "source": info["source"], "brief_chars": info["brief_chars"],
+            "max_chars": sbb.PROJECT_STYLE_MAX, "preview": info["text"][:200]}
+
+
 async def api_board_sketch_style_get(project: str):
-    """故事板页顶栏「画风」(2026-09-30):项目 settings.json output.sketch_style,film(默认)/ konte。"""
+    """故事板页顶栏「画风」(2026-09-30):项目 settings.json output.sketch_style,film(默认)/ konte / ink / digital /
+    project(2026-11-01 项目画风;project_style 告诉页面创作定调里有没有画面风格)。"""
     from modules import storyboard_board as sbb
     base = _proj_base(project)
-    return {"project": base.name, "style": sbb.resolve_sketch_style(base), "styles": list(sbb.SKETCH_STYLES)}
+    return {"project": base.name, "style": sbb.resolve_sketch_style(base), "styles": list(sbb.SKETCH_STYLES),
+            "project_style": _board_project_style(base)}
 
 
 async def api_board_sketch_style_set(project: str, body: dict):
@@ -11954,6 +11975,11 @@ async def api_board_sketch_style_set(project: str, body: dict):
     style = str((body or {}).get("style") or "").strip().lower()
     if style not in sbb.SKETCH_STYLES:
         raise ServiceError(400, f"style must be one of {sbb.SKETCH_STYLES}")
+    if style == sbb.PROJECT_STYLE and not sbb.project_style_info(base)["text"]:
+        zh = (ui_lang_code() or "zh") == "zh"
+        raise ServiceError(400, "创作定调里还没有填写画面风格,无法使用「项目画风」(控制台 → 创作定调 → 画面风格)" if zh else
+                           "The Creative Brief has no visual style yet, so 「项目画风」 (project style) cannot be used "
+                           "(console → Creative Brief → visual style)")
     path = base / "settings.json"
     try:
         saved = json.loads(path.read_text())
@@ -11964,7 +11990,7 @@ async def api_board_sketch_style_set(project: str, body: dict):
         saved["output"] = {}
     saved["output"]["sketch_style"] = style
     atomic_write_json(path, saved)
-    return {"ok": True, "project": base.name, "style": style}
+    return {"ok": True, "project": base.name, "style": style, "project_style": _board_project_style(base)}
 
 
 def _project_media_tokens(base: Path):

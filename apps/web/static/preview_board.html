@@ -50,6 +50,7 @@ header select:hover{border-color:var(--accent)}
 header input{cursor:text;width:220px}
 .skm{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--dim);white-space:nowrap}
 .skm b{color:var(--text);font-weight:500}
+#sks.warn select{border-color:var(--yellow);color:var(--yellow)}
 #eps{display:flex;flex-wrap:wrap;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);flex:none}
 #eps button{flex:none;white-space:nowrap}
 #eps button.on{background:var(--accent);border-color:var(--accent);color:#0b1020;font-weight:600}
@@ -166,6 +167,7 @@ td.e .jumps{margin-right:6px;vertical-align:middle}
 .editbtn.sm{font-size:10.5px;padding:0 5px;opacity:.75}
 /* 用户注释(2026-09-15):🗒 按钮在 ✏️ 修改 后(2026-09-27 调换);有注释时按钮与正文都用黄色 */
 .editbtn.notebtn{margin-left:4px}
+.editbtn.sk-per{margin-left:4px}
 .editbtn.notebtn.has{color:var(--yellow);border-color:rgba(251,191,36,.55);opacity:1}
 td.c .ln.un .v{color:var(--yellow);white-space:pre-wrap}
 .scene .note.un{color:var(--yellow)}
@@ -213,7 +215,7 @@ td.c .ln.un .v{color:var(--yellow);white-space:pre-wrap}
   <h1>📋 故事板</h1>
   <div class="spacer"></div>
   <span class="skm" id="skm" title="草图用的图像渠道/模型(与全局「生成模型」设置分开,草图一般用便宜模型即可;空=跟随全局)"></span>
-  <span class="skm" id="sks" title="草图画风(按项目保存,只影响之后出的草图):铅笔灰马克 = 实拍电影分镜的铅笔+灰马克笔;铅笔彩铅 = 日式动画分镜的铅笔快线+竖向排线+少量茶色彩铅;粗犷线稿 = 好莱坞动作片的黑笔硬朗线+密集排线重黑;灰调重点色 = 平板速写的平涂灰调+一处重点色"><span>🎨 画风</span><select id="sks-sel"><option value="film">铅笔灰马克</option><option value="konte">铅笔彩铅</option><option value="ink">粗犷线稿</option><option value="digital">灰调重点色</option></select></span>
+  <span class="skm" id="sks" title="草图画风(按项目保存,只影响之后出的草图):铅笔灰马克 = 实拍电影分镜的铅笔+灰马克笔;铅笔彩铅 = 日式动画分镜的铅笔快线+竖向排线+少量茶色彩铅;粗犷线稿 = 好莱坞动作片的黑笔硬朗线+密集排线重黑;灰调重点色 = 平板速写的平涂灰调+一处重点色;项目画风 = 按控制台「创作定调」里的画面风格出草图(配色与质感跟项目一致,构图规则不变)"><span>🎨 画风</span><select id="sks-sel"><option value="film">铅笔灰马克</option><option value="konte">铅笔彩铅</option><option value="ink">粗犷线稿</option><option value="digital">灰调重点色</option><option value="project">项目画风</option></select></span>
   <input type="hidden" id="project">
   <select id="pvnav" title="切换预览页"></select>
   <button id="reload">刷新</button>
@@ -462,15 +464,28 @@ function mergeRedraw(server){
   return out;
 }
 
-/* 单集标题行「出草图」:整集宫格批量(每 4 镜一张 2×2 宫格图切成小图,2026-09-12 由 3×3 降下来;已出的跳过;Shift = 全部重出)。单镜「出图/重出」仍是单张。 */
+/* 单集标题行「出草图」:整集批量(已出的跳过;Shift = 全部重出)。单镜「出图/重出」仍是单张。
+   右侧「一次4张 / 一次1张」切换(2026-11-01,记在本机浏览器 board_sketch_per,默认 4):
+   4 = 每 4 镜一张 2×2 宫格图切成小图(2026-09-12 由 3×3 降下来);1 = 逐镜单张。 */
+const SK_PER_KEY='board_sketch_per';
+function skPer(){try{return localStorage.getItem(SK_PER_KEY)==='1'?1:4}catch(_){return 4}}
 function batchBtnHtml(){
   if(!LAST)return '';
   const all=[];(LAST.scenes||[]).forEach(sc=>sc.shots.forEach(s=>all.push(s.key)));
   const nDone=all.filter(k=>(SK[k]||{}).status==='done').length;
   const job=JOBS['*'],busy=job&&job.status==='running';
   const prog=busy?` ${job.done+job.failed}/${job.total||job.keys.length}`:'';
-  return `<button class="editbtn pri sk-gen" data-all="1" ${busy?'disabled':''} title="${esc(t('按当前草图模型按 2×2 宫格批量出草图:每 4 镜出一张 2×2 宫格图切成 4 张小图(已出的跳过);按住 Shift 点击 = 全部重出'))}">${busy?`<span class="spin">⏳</span> ${esc(t('生成中'))}${prog}${job.current?' · '+esc(job.current):''}`:(nDone>=all.length&&all.length?'↻ '+esc(t('重出草图')):'🖊 '+esc(I18N.f('出草图({n})',{n:all.length-nDone})))}</button>`;
+  const per=skPer();
+  const tip=per===1?t('按当前草图模型逐镜出草图:每镜单独出一张(已出的跳过);按住 Shift 点击 = 全部重出'):t('按当前草图模型按 2×2 宫格批量出草图:每 4 镜出一张 2×2 宫格图切成 4 张小图(已出的跳过);按住 Shift 点击 = 全部重出');
+  return `<button class="editbtn pri sk-gen" data-all="1" ${busy?'disabled':''} title="${esc(tip)}">${busy?`<span class="spin">⏳</span> ${esc(t('生成中'))}${prog}${job.current?' · '+esc(job.current):''}`:(nDone>=all.length&&all.length?'↻ '+esc(t('重出草图')):'🖊 '+esc(I18N.f('出草图({n})',{n:all.length-nDone})))}</button>`
+    +`<button class="editbtn sk-per" data-per="${per}" ${busy?'disabled':''} title="${esc(t('点击切换整集出草图的方式:一次4张 = 每 4 镜出一张 2×2 宫格图再切成 4 张(默认,调用次数少);一次1张 = 每镜单独出一张(每张画面更大,调用次数约为 4 倍);只影响之后点「出草图」'))}">⇄ ${esc(t(per===1?'一次1张':'一次4张'))}</button>`;
 }
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.sk-per');if(!b||b.disabled)return;
+  const next=skPer()===1?4:1;
+  try{localStorage.setItem(SK_PER_KEY,String(next))}catch(_){}
+  renderBatchBtn();
+});
 function renderBatchBtn(){const el=document.getElementById('skbatch');if(el&&LAST&&LAST.has_storyboard)el.innerHTML=batchBtnHtml()}
 
 function narrSummary(d){
@@ -644,7 +659,7 @@ document.addEventListener('click',async e=>{
   const b=e.target.closest('.sk-gen');if(!b||b.disabled||!LAST)return;
   const proj=$('#project').value.trim()||'demo',ep=LAST.ep;
   const whole=!!b.dataset.all;
-  const body=whole?{all:true,force:!!e.shiftKey}:{scene:b.dataset.scene,force:!!e.shiftKey||b.dataset.order!=null};
+  const body=whole?{all:true,force:!!e.shiftKey,per:skPer()}:{scene:b.dataset.scene,force:!!e.shiftKey||b.dataset.order!=null};
   if(!whole&&b.dataset.order!=null)body.order=+b.dataset.order;
   Object.assign(body,skmValue());
   b.disabled=true;
@@ -696,10 +711,24 @@ $('#sd').addEventListener('click',e=>{if(e.target.id==='sd'||e.target.closest('.
 const SKM=mountImageModelPicker({kind:'sketch',host:'#skm',label:'🖊 草图模型'});
 function skmValue(){return SKM.value()}
 
-/* ---------- 草图画风(2026-09-30,顶栏模型选择后面;按项目存 settings.json output.sketch_style,默认 film) ---------- */
+/* ---------- 草图画风(2026-09-30,顶栏模型选择后面;按项目存 settings.json output.sketch_style,默认 film) ----------
+   项目画风(2026-11-01):取创作定调 brief.md 的画面风格;没填时该项置灰,已选上的出图回落铅笔灰马克 */
 const SKS_API=()=>`/api/v1/projects/${encodeURIComponent($('#project').value.trim()||'demo')}/board-sketch-style`;
+function sksProjectTip(ps){
+  if(!ps||!ps.available)return t('创作定调里还没有填写画面风格(控制台 → 创作定调 → 画面风格);填写后才能选「项目画风」');
+  const src=ps.source==='bible'?I18N.f('画面风格超过 {n} 字,改用美术设定 bible/style.json 里同一画风的英文浓缩版(style_fragment_en)',{n:ps.max_chars})
+    :ps.source==='brief_cut'?I18N.f('画面风格超过 {n} 字,取前 {n} 字',{n:ps.max_chars}):t('取创作定调的画面风格原文');
+  return src+'\n'+(ps.preview||'')+((ps.preview||'').length>=200?'…':'');
+}
+function applyProjectStyle(ps,cur){
+  const o=$('#sks-sel').querySelector('option[value="project"]');if(!o)return;
+  o.disabled=!(ps&&ps.available);o.title=sksProjectTip(ps);
+  const warn=cur==='project'&&o.disabled;
+  $('#sks').classList.toggle('warn',warn);
+  $('#sks-sel').title=warn?t('创作定调里没有画面风格,出草图时按「铅笔灰马克」画'):'';
+}
 async function loadSketchStyle(){
-  try{const r=await fetch(SKS_API());if(r.ok){const j=await r.json();$('#sks-sel').value=j.style||'film'}}catch(_){}
+  try{const r=await fetch(SKS_API());if(r.ok){const j=await r.json();$('#sks-sel').value=j.style||'film';applyProjectStyle(j.project_style,j.style)}}catch(_){}
 }
 $('#sks-sel').addEventListener('change',async e=>{
   const style=e.target.value;
@@ -707,6 +736,7 @@ $('#sks-sel').addEventListener('change',async e=>{
     const r=await fetch(SKS_API(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({style})});
     const j=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(j.detail||j.error||r.status);
+    applyProjectStyle(j.project_style,style);
     JumpAnchor.toast(I18N.f('✅ 草图画风已切换为「{s}」,之后出的草图按此画风',{s:e.target.selectedOptions[0].textContent}));
   }catch(err){JumpAnchor.toast(t('画风保存失败:')+err.message);loadSketchStyle()}
 });

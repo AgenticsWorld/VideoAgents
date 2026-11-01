@@ -381,7 +381,7 @@ def test_sketch_style_packs_ink_digital():
         assert " no " not in head.lower() and " not " not in head.lower()
         grid, _ = sbb.build_grid_prompt([({"scene_no": "S01"}, shot), ({"scene_no": "S01"}, {})], {}, 2, 2, style=st)
         assert "strict 2x2 grid" in grid
-    assert set(sbb.SKETCH_STYLE_LABELS) == set(sbb.SKETCH_STYLES) == {"film", "konte", "ink", "digital"}
+    assert set(sbb.SKETCH_STYLE_LABELS) == set(sbb.SKETCH_STYLES) == {"film", "konte", "ink", "digital", "project"}
 
 
 def test_screen_direction_drops_motion_not_in_shot():

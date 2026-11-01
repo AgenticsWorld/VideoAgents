@@ -16,7 +16,9 @@ comfy/image-flux2-dev-fp8-i2i-api.json:多个 LoadImage 作条件输入、空 la
 没有时中文散文先剔除【】段落、时间码与交组等制作用语;本场轴线(axis_note / screen_direction_en)进提示词;
 --whitebox-layout 取白模摄影机视角首帧作构图底。
 画风(2026-09-30):项目 settings.json output.sketch_style(故事板页顶栏「画风」下拉)= film 铅笔灰马克(默认)/ konte 铅笔彩铅
-/ ink 粗犷线稿 / digital 灰调重点色(只用文字描述画风特征、不传风格参考图);--style 可临时覆盖;台账每镜记 style。
+/ ink 粗犷线稿 / digital 灰调重点色(只用文字描述画风特征、不传风格参考图)/ project 项目画风(2026-11-01:风格句取创作定调
+brief.md「画面风格」原文,超过 600 字改用 bible/style.json style_fragment_en,再没有截前 600 字;没填画面风格则按 film 出,
+打印 INFO);--style 可临时覆盖;台账每镜记 style(project 另记 style_source = brief / bible / brief_cut)。
 (缺省:台账里该镜上次用的 → 控制台故事板页保存的草图模型 state.json image_model_prefs.sketch → 全局图像渠道)。
 
 两种出图方式:
@@ -91,9 +93,32 @@ def _panel_of(args, rec: dict) -> str:
     return (getattr(args, "panel", "") or "").strip() or str(rec.get("panel_en") or "")
 
 
+def _style_info(args, root) -> tuple[str, str, str]:
+    """草图画风:--style 临时覆盖 → 项目 settings.json output.sketch_style(故事板页顶栏「画风」)→ film。
+    返回 (画风键, 项目画风文字, 来源);project 但创作定调没填画面风格时回落 film 并打印一次 INFO。本次运行内缓存。"""
+    got = getattr(args, "_style_resolved", None)
+    if got is None:
+        want = sbb.normalize_sketch_style(getattr(args, "style", "") or sbb.resolve_sketch_style(root))
+        got = sbb.resolve_style_text(root, want)
+        if want == sbb.PROJECT_STYLE and got[0] != want:
+            print("INFO 项目画风不可用:创作定调(brief.md)没有填写画面风格,按 film 铅笔灰马克出图")
+        args._style_resolved = got
+    return got
+
+
 def _style_of(args, root) -> str:
-    """草图画风:--style 临时覆盖 → 项目 settings.json output.sketch_style(故事板页顶栏「画风」)→ film。"""
-    return sbb.normalize_sketch_style(getattr(args, "style", "") or sbb.resolve_sketch_style(root))
+    return _style_info(args, root)[0]
+
+
+def _src_tag(args, root) -> str:
+    src = _style_info(args, root)[2]
+    return f"(source={src})" if src else ""
+
+
+def _style_fields(args, root) -> dict:
+    """台账里记的画风字段。"""
+    style, _, src = _style_info(args, root)
+    return {"style": style, "style_source": src or None}
 
 
 def _now() -> str:
@@ -150,18 +175,19 @@ def _sketch_one(root, ep, scene, shot, names, catalog, aspect, args, rec: dict) 
     ref_names = [names.get(c, c) for c in sbb.ref_cast_ids(root, shot, catalog, cast_cap)] if refs else []
     prompt, negative = sbb.build_prompt(scene, shot, names, note, with_refs=not text_only,
                                         plain_style=sbb.sketch_plain_style(eff_provider), ref_names=ref_names,
-                                        layout=layout is not None, whitebox_legend=wb_legend, style=_style_of(args, root))
+                                        layout=layout is not None, whitebox_legend=wb_legend, style=_style_of(args, root),
+                                        project_style=_style_info(args, root)[1])
     if layout is not None:
         refs = refs + [layout]
     if args.dry_run:
-        print(f"[dry-run] {key} via {eff_provider} model={eff_model or '-'} style={_style_of(args, root)} aspect={aspect} size={sbb.sketch_size(eff_provider, aspect)} → {rel}")
+        print(f"[dry-run] {key} via {eff_provider} model={eff_model or '-'} style={_style_of(args, root)}{_src_tag(args, root)} aspect={aspect} size={sbb.sketch_size(eff_provider, aspect)} → {rel}")
         print(f"  prompt: {prompt}")
         print(f"  refs: {', '.join(str(r) for r in refs) or (f'-({eff_provider} 纯文生图)' if text_only else '-')}")
         return True
     sbb.update_index(root, ep, key, {
         "status": "running", "error": "", "scene_no": scene["scene_no"], "order": shot["order"],
         "shot_id": shot.get("shot_id") or "", "prompt": prompt, "note": note, "panel_en": panel,
-        "style": _style_of(args, root),
+        **_style_fields(args, root),
         "mode": "hand_ai" if (layout is not None and wb_legend is None) else "single",
         "layout": (args.layout if (layout is not None and wb_legend is None) else None),
         "whitebox_layout": (_ref_rel(layout, root) if wb_legend is not None else None),
@@ -237,13 +263,14 @@ def _sketch_grid(root, ep, panels, names, catalog, aspect, args, index) -> int:
             refs = refs[:ref_cap - 1]
     text_only = ref_cap is not None and not refs
     prompt, negative = sbb.build_grid_prompt(panels, names, cols, rows, aspect, with_refs=not text_only,
-                                             whitebox_legend=wb_legend, style=_style_of(args, root))
+                                             whitebox_legend=wb_legend, style=_style_of(args, root),
+                                             project_style=_style_info(args, root)[1])
     if wb_layout is not None:
         refs = refs + [wb_layout]
     size = sbb.grid_size(eff_provider, aspect)
     grid_rel = f"{sbb.GRID_DIR_REL.format(ep=ep)}/{time.strftime('%Y%m%d-%H%M%S')}_{keys[0]}_{keys[-1]}.png"
     if args.dry_run:
-        print(f"[dry-run] grid {cols}x{rows} {', '.join(keys)} via {eff_provider} model={eff_model or '-'} style={_style_of(args, root)} aspect={aspect} size={size} → {grid_rel}")
+        print(f"[dry-run] grid {cols}x{rows} {', '.join(keys)} via {eff_provider} model={eff_model or '-'} style={_style_of(args, root)}{_src_tag(args, root)} aspect={aspect} size={size} → {grid_rel}")
         print(f"  prompt: {prompt}")
         print(f"  refs: {', '.join(str(r) for r in refs) or (f'-({eff_provider} 纯文生图)' if text_only else '-')}")
         return 0
@@ -252,7 +279,7 @@ def _sketch_grid(root, ep, panels, names, catalog, aspect, args, index) -> int:
         sbb.update_index(root, ep, sh["key"], {
             "status": "running", "error": "", "scene_no": sc["scene_no"], "order": sh["order"],
             "shot_id": sh.get("shot_id") or "", "prompt": prompt, "note": sh["_note"], "panel_en": sh["_panel"], "mode": "grid",
-            "style": _style_of(args, root),
+            **_style_fields(args, root),
             "whitebox_layout": (_ref_rel(wb_layout, root) if wb_layout is not None else None),
             "grid": dict(grid_meta, cell=k), "provider": eff_provider, "model": eff_model, "aspect": aspect,
             "refs": [_ref_rel(r, root) for r in refs], "started_at": _now()})
@@ -297,8 +324,8 @@ def main() -> int:
                         "覆盖分镜层 panel_en 并写台账 panel_en(空=沿用台账已有)")
         ap.add_argument("--clear-panel", action="store_true", help="清掉台账里该镜的 panel_en 覆盖后再出图")
         ap.add_argument("--style", default="", choices=["", *sbb.SKETCH_STYLES],
-                        help="草图画风 film 铅笔灰马克 / konte 铅笔彩铅 / ink 粗犷线稿 / digital 灰调重点色;"
-                        "缺省取项目 settings.json output.sketch_style")
+                        help="草图画风 film 铅笔灰马克 / konte 铅笔彩铅 / ink 粗犷线稿 / digital 灰调重点色 / "
+                        "project 项目画风(创作定调的画面风格,没填则按 film);缺省取项目 settings.json output.sketch_style")
         ap.add_argument("--whitebox-layout", action="store_true", help="已导出白模 camera.mp4 的镜取本镜首帧作构图底"
                         "(机位/焦段/人物画内位置按白模);没有则按文字出")
         ap.add_argument("--provider", default="", help="图像渠道(须已在「生成模型」页配置);缺省见文件头")

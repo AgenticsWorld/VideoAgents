@@ -87,7 +87,7 @@ SKETCH_TEXT_ONLY_TAIL = ("Characters are drawn from the text description alone (
 SKETCH_REFS_SENTENCE_PLAIN = (
     "The attached pictures are character design sheets: {who}. Each sheet shows one single person from several "
     "views; in the drawing that person appears exactly once, recognisable by the hairstyle, costume shape and "
-    "build of the sheet, drawn in the simplified storyboard manner described here, in the pose and framing "
+    "build of the sheet, drawn in the {manner} described here, in the pose and framing "
     "described here. The location is described in text only and is drawn as simple shapes."
 )
 SKETCH_STYLE_PROMPT_TEXT_ONLY = (
@@ -124,8 +124,8 @@ SKETCH_WHITEBOX_SENTENCE = (
     "One exception among the attached pictures: the last one is not a character design but a flat grey 3D blocking "
     "render of this exact camera setup{grid}. Keep its framing exactly — camera angle, camera height, lens, "
     "horizon position, where each figure stands in the frame and how big it is. The coloured mannequins are "
-    "placeholders for the characters{who}. Replace every mannequin with that character drawn in the storyboard "
-    "style, in the pose and action stated below, and turn the grey blocks into simple sketched environment "
+    "placeholders for the characters{who}. Replace every mannequin with that character drawn in the {manner}, "
+    "in the pose and action stated below, and turn the grey blocks into simple sketched environment "
     "shapes; its flat CG look is not the target."
 )
 HAND_DIR_REL = "assets/storyboard/{ep}/_hand"   # 手绘原稿存档(AI 加工的构图底;加工失败时回落为该镜草图)
@@ -186,8 +186,13 @@ GRID_NEGATIVE = ("color, colorful, photo, photorealistic, 3d render, cgi, painti
 # digital = 灰调重点色(2026-09-30):平板数字速写,深灰数字铅笔线 + 2–3 级平涂灰,人物简化(点眼、一笔嘴)但动作清楚,
 #           全图只有一处重点色落在本镜叙事关键物(道具/液体/火/血/光),其余灰阶;参考图里的运动箭头与手写字不让模型画。
 #   四种都只用文字描述画风特征,不写作者/工作室/片名,不传任何风格参考图(用户给的扫描页只作画风参考,不进 refs)。
-SKETCH_STYLES = ("film", "konte", "ink", "digital")
-SKETCH_STYLE_LABELS = {"film": "铅笔灰马克", "konte": "铅笔彩铅", "ink": "粗犷线稿", "digital": "灰调重点色"}
+# project = 项目画风(2026-11-01 用户要求「用项目 创作定调 中的画面风格 来出草图」):风格句取项目 brief.md「## 设计风格」小节
+#           (创作定调弹窗的「画面风格」框)原文,构图规则(人物优先、景别/机位/焦段、环境从简但空间准确)照旧,
+#           不再要求黑白、不压彩色/写实/3D;人物 sheet 本身就是项目画风,参考图句改为连配色一起保留。见 project_style_info。
+SKETCH_STYLES = ("film", "konte", "ink", "digital", "project")
+SKETCH_STYLE_LABELS = {"film": "铅笔灰马克", "konte": "铅笔彩铅", "ink": "粗犷线稿", "digital": "灰调重点色",
+                       "project": "项目画风"}
+PROJECT_STYLE = "project"
 DEFAULT_SKETCH_STYLE = "film"
 _KONTE_LOOK = (
     "soft graphite pencil on white paper, drawn by a veteran animation director: quick, lively, confident pencil "
@@ -361,6 +366,148 @@ def resolve_sketch_style(base: Path) -> str:
     """项目草图画风(settings.json output.sketch_style);缺省/非法 = film。"""
     cfg = _read_json(base / "settings.json") or {}
     return normalize_sketch_style((cfg.get("output") or {}).get("sketch_style"))
+
+
+# ---------------- 项目画风(2026-11-01) ----------------
+PROJECT_STYLE_MAX = 600            # brief「画面风格」进提示词的字数上限(超过改用 bible 英文浓缩版,再没有才截断)
+PROJECT_STYLE_FRAGMENT_MAX = 1000  # bible/style.json style_fragment_en 的字数上限(英文,同等信息量字数多)
+_BRIEF_H2 = re.compile(r"^##(?!#)[ \t]*(.*?)[ \t]*$", re.M)
+_BRIEF_KNOWN = ("主要构想", "设计风格", "叙事节奏")     # 与 services/runtime/core.py parse_brief_layout 同口径
+
+
+def brief_style_section(text: str) -> str:
+    """brief.md 的「## 设计风格」小节正文(= 创作定调弹窗「画面风格」框里的内容)。
+    与 core.parse_brief_layout 同口径:标题整行匹配;其后的未知 ## 小节并入本小节,直到下一个已知小节。"""
+    heads = list(_BRIEF_H2.finditer(text or ""))
+    for i, m in enumerate(heads):
+        if m.group(1) != "设计风格":
+            continue
+        end = len(text)
+        for n in heads[i + 1:]:
+            if n.group(1) in _BRIEF_KNOWN:
+                end = n.start()
+                break
+        return text[m.end():end].strip()
+    return ""
+
+
+def _style_plain_text(s: str) -> str:
+    """Markdown → 一段平文:去引用号 / 标题井号 / 列表符 / 粗斜体与代码标记,换行并成空格。"""
+    out = []
+    for ln in str(s or "").splitlines():
+        ln = re.sub(r"^\s*(?:>\s*)+", "", ln)
+        ln = re.sub(r"^\s*#{1,6}\s*", "", ln)
+        ln = re.sub(r"^\s*(?:[-*+]|\d+[.)])\s+", "", ln)
+        ln = ln.replace("**", "").replace("__", "").replace("`", "").strip()
+        if ln and not re.fullmatch(r"[-*_=|:\s]+", ln):      # 分隔线 / 表格分隔行
+            out.append(ln)
+    return re.sub(r"\s+", " ", " ".join(out)).strip()
+
+
+def project_style_info(base: Path) -> dict:
+    """项目画风文字(草图「项目画风」用):{text, source, brief_chars}。
+    source:brief = brief.md「画面风格」原文(≤PROJECT_STYLE_MAX 字);bible = 原文过长,改用美术设定 bible/style.json
+    style_fragment_en(同一画风的英文浓缩版);brief_cut = 原文过长且没有浓缩版,截取前 PROJECT_STYLE_MAX 字;
+    '' = 创作定调没填画面风格(text 为空,「项目画风」不可用)。"""
+    p = base / "brief.md"
+    try:
+        raw = p.read_text(encoding="utf-8") if p.is_file() else ""
+    except Exception:  # noqa: BLE001
+        raw = ""
+    brief = _style_plain_text(brief_style_section(raw))
+    if not brief:
+        return {"text": "", "source": "", "brief_chars": 0}
+    if len(brief) <= PROJECT_STYLE_MAX:
+        return {"text": brief, "source": "brief", "brief_chars": len(brief)}
+    frag = (_read_json(base / "bible" / "style.json") or {})
+    frag = frag.get("style_fragment_en") if isinstance(frag, dict) else ""
+    frag = _style_plain_text(frag) if isinstance(frag, str) else ""
+    if frag:
+        return {"text": _short(frag, PROJECT_STYLE_FRAGMENT_MAX), "source": "bible", "brief_chars": len(brief)}
+    return {"text": _short(brief, PROJECT_STYLE_MAX), "source": "brief_cut", "brief_chars": len(brief)}
+
+
+def resolve_style_text(base: Path, override: str = "") -> tuple[str, str, str]:
+    """本次出草图实际用的画风:(画风键, 项目画风文字, 来源)。override = CLI --style;
+    选了 project 但创作定调没填画面风格 → 回落 film(文字与来源为空)。"""
+    style = normalize_sketch_style(override or resolve_sketch_style(base))
+    if style != PROJECT_STYLE:
+        return style, "", ""
+    info = project_style_info(base)
+    if not info["text"]:
+        return DEFAULT_SKETCH_STYLE, "", ""
+    return style, info["text"], info["source"]
+
+
+PROJECT_LAYOUT_SENTENCE = (
+    "One exception among the attached pictures: the last one is not a character design but the director's own rough "
+    "hand-drawn layout for this shot. Keep its composition "
+    "exactly — framing, camera angle, where each figure sits in the frame, figure sizes and poses — and redraw it "
+    "cleanly in the project's visual style described above, with correct anatomy and readable faces; it is a "
+    "layout guide only, its wobbly line quality is not the target."
+)
+
+
+def project_style_pack(text: str) -> dict:
+    """项目画风包:风格句 = 「本项目的画面风格:<brief 原文>」+ 与其它画风相同的构图规则;不要求黑白、不压彩色/写实/3D,
+    负面词只留文字/格线/水印类。text 由 resolve_style_text 取(已去 Markdown、已封顶);为空时调用方应回落 film。"""
+    s = re.sub(r"\s+", " ", str(text or "")).strip().rstrip("。.;；,，、 ")
+    look = f"rendered in this project's own visual style — {s}"
+    grid_look = look.replace("{", "{{").replace("}", "}}")      # grid_head 还要 .format,原文里的花括号转义
+    figures = "correct figure size and body cropping for the stated shot size, clear eye lines and body gestures"
+    poses = "standing, sitting, kneeling, crouching, lying down, running, swinging a weapon, dodging…"
+    lighter = ("medium, palette, lighting and character design follow that style, while the rendering may stay lighter "
+               "than a finished shot; what matters is camera angle, figure scale, poses and expressions")
+    framing = ("The framing must show the camera angle, camera height and lens exactly as described (eye level, high "
+               "angle, low angle, over-the-shoulder, profile, from behind).")
+    neg = ("text, letters, handwriting, numbers, caption, subtitles, watermark, logo, signature, speech bubble, arrows, "
+           "comic panel grid, multiple panels, split screen, border, frame lines, cluttered environment")
+    return {
+        "head": (f"A storyboard frame for this production, {look}. It is a storyboard frame: {lighter}. "
+                 f"FIGURES FIRST: {figures}. Pose every figure exactly as stated ({poses}); the body state is as "
+                 "important as the face. ENVIRONMENT KEPT SIMPLE BUT SPATIALLY CORRECT: a clear horizon line and "
+                 "perspective that match the stated camera height and lens, big simple shapes for the main structures "
+                 "and any foreground framing element, depth staging readable at a glance; no small detail, no props "
+                 f"unless mentioned. {framing} A single frame, no panel borders, no text, no handwriting, no captions, "
+                 "no arrows, no speech bubbles, no watermark. "),
+        "refs": ("The attached images are the project's official character designs — keep each character's likeness, "
+                 "hairstyle, costume, colors and signature props, rendered in the project style above. The location is "
+                 "described in text only and is kept simple."),
+        "text_only": (f"One storyboard frame for this production filling the whole page, {look}. It is a single moment "
+                      "from a film, seen through the camera once, drawn as one picture; the rendering may stay lighter "
+                      f"than a finished shot. FIGURES FIRST: {figures}; each figure holds exactly the body position the "
+                      "shot describes. The environment is kept simple and spatially correct: a clear horizon line and "
+                      "perspective matching the stated camera height and lens, big simple shapes for structures and "
+                      "foreground framing. The framing shows the stated camera angle, camera height and lens. "
+                      + SKETCH_TEXT_ONLY_TAIL),
+        "negative": neg + SKETCH_NEGATIVE_PEOPLE_TAIL,
+        "grid_head": ("A storyboard page for this production: a strict {cols}x{rows} grid of {n} equal-size panels on one "
+                      "page, {cols} columns and {rows} rows, separated only by thin straight white gutters, panels read "
+                      "left to right, top to bottom, every panel filling its cell edge to edge with the same {aspect} "
+                      f"framing. Every panel is {grid_look}; {lighter}. FIGURES FIRST in every panel: {figures}; pose "
+                      "every figure exactly as that panel states (standing, sitting, kneeling, crouching, lying down, "
+                      "running, swinging, dodging…). ENVIRONMENT in every panel kept simple but spatially correct: horizon "
+                      "and perspective matching that panel's camera height and lens, big simple shapes, no small detail. "
+                      "Each panel must show its camera angle, height and lens exactly as described. No text, no "
+                      "handwriting, no numbers, no captions, no arrows, no speech bubbles, no watermark inside the "
+                      "panels. {refs}{blank}"),
+        "grid_refs": ("The attached images are the project's official character designs — keep each character's likeness, "
+                      "hairstyle, costume, colors and signature props consistent in every panel, rendered in the project "
+                      "style. Locations are described in text only and are kept simple."),
+        "grid_negative": ("text, letters, handwriting, numbers, caption, subtitles, watermark, logo, signature, speech "
+                          "bubble, arrows, uneven panels, overlapping panels, panels of different sizes, decorative border"),
+        "manner": "project's visual style",       # 参考图点名句 / 白模构图底句里「按什么画」
+        "layout": PROJECT_LAYOUT_SENTENCE,         # 手绘稿 AI 加工的构图底句
+        "accent": False,
+    }
+
+
+def style_pack(style: str, project_style: str = "") -> dict:
+    """画风键 → 画风包;project 用 project_style 文字现拼,文字为空回落 film。"""
+    st = normalize_sketch_style(style)
+    if st == PROJECT_STYLE:
+        return project_style_pack(project_style) if str(project_style or "").strip() else STYLE_PACKS[DEFAULT_SKETCH_STYLE]
+    return STYLE_PACKS[st]
 
 
 _REF_RE = re.compile(r"^(.+?)(?:/shots_draft)?/order:(\d+)(?:/split:[^/]+)?$")
@@ -1556,9 +1703,10 @@ def ref_cast_ids(base: Path, shot: dict, catalog: dict, limit: int | None = None
     return ids
 
 
-def ref_sentence_plain(ref_names: list[str]) -> str:
+def ref_sentence_plain(ref_names: list[str], manner: str | None = None) -> str:
+    """manner = 画风包的「按什么画」短语(项目画风包有;其余画风用默认的 simplified storyboard manner)。"""
     who = "; ".join(f"Picture {i} is {n}" for i, n in enumerate(ref_names, 1)) or "one sheet per character"
-    return SKETCH_REFS_SENTENCE_PLAIN.format(who=who)
+    return SKETCH_REFS_SENTENCE_PLAIN.format(who=who, manner=manner or "simplified storyboard manner")
 
 
 def sketch_single_only(provider: str) -> bool:
@@ -1566,10 +1714,10 @@ def sketch_single_only(provider: str) -> bool:
     return str(provider or "").strip().lower() in SINGLE_ONLY_SKETCH_PROVIDERS
 
 
-def whitebox_sentence(legend: list[tuple[str, str]], grid: str = "") -> str:
-    """白模构图底句:legend = [(人物名, 颜色英文名)];grid 为宫格说明(单张传空)。"""
+def whitebox_sentence(legend: list[tuple[str, str]], grid: str = "", manner: str | None = None) -> str:
+    """白模构图底句:legend = [(人物名, 颜色英文名)];grid 为宫格说明(单张传空);manner 同 ref_sentence_plain(缺省 storyboard style)。"""
     who = (": " + "; ".join(f"the {c} mannequin is {n}" for n, c in legend)) if legend else ""
-    return SKETCH_WHITEBOX_SENTENCE.format(who=who, grid=grid)
+    return SKETCH_WHITEBOX_SENTENCE.format(who=who, grid=grid, manner=manner or "storyboard style")
 
 
 def _shot_parts(shot: dict, names: dict, clip: dict | None = None, grid: bool = False) -> list[str]:
@@ -1620,21 +1768,23 @@ def _shot_parts(shot: dict, names: dict, clip: dict | None = None, grid: bool = 
 def build_prompt(scene: dict, shot: dict, names: dict, note: str = "", with_refs: bool = True,
                  plain_style: bool = False, ref_names: list[str] | None = None,
                  layout: bool = False, whitebox_legend: list[tuple[str, str]] | None = None,
-                 style: str = DEFAULT_SKETCH_STYLE) -> tuple[str, str]:
+                 style: str = DEFAULT_SKETCH_STYLE, project_style: str = "") -> tuple[str, str]:
     """单镜提示词:风格句 →(构图底句)→ 逐镜描述(_shot_parts:景别规则/机位+地平线/焦段/出场/姿态/画面/神态/群众)
     → 本场轴线 → 地点短提示 → 修改意见。
     with_refs=False(comfyui 纯文生图)时整句风格提示换成 SKETCH_STYLE_PROMPT_TEXT_ONLY(不列举姿态、无否定句、人物按文字画)。
-    layout=True:最后一张参考图是构图底——whitebox_legend 不为 None 时是白模机位首帧(彩色假人逐个点名),否则是手绘稿。"""
+    layout=True:最后一张参考图是构图底——whitebox_legend 不为 None 时是白模机位首帧(彩色假人逐个点名),否则是手绘稿。
+    style="project" 时 project_style 为项目画风文字(resolve_style_text 取);为空按 film。"""
     # plain_style(comfyui / agentics,2026-09-19)带参考图:正向风格句 + 逐张点名的参考图句,不用含否定句/姿态列举的 SKETCH_STYLE_PROMPT
-    pack = STYLE_PACKS[normalize_sketch_style(style)]      # 画风包(2026-09-30):film / konte
+    pack = style_pack(style, project_style)      # 画风包(2026-09-30 film / konte / ink / digital;2026-11-01 project)
     if not with_refs:
         parts = [pack["text_only"]]
     elif plain_style:
-        parts = [pack["text_only"][:-len(SKETCH_TEXT_ONLY_TAIL)] + ref_sentence_plain(ref_names or [])]
+        parts = [pack["text_only"][:-len(SKETCH_TEXT_ONLY_TAIL)] + ref_sentence_plain(ref_names or [], pack.get("manner"))]
     else:
         parts = [pack["head"] + pack["refs"]]
     if layout:      # 构图底是最后一张参考图(调用方保证已挂)
-        parts.append(whitebox_sentence(whitebox_legend) if whitebox_legend is not None else SKETCH_LAYOUT_SENTENCE)
+        parts.append(whitebox_sentence(whitebox_legend, manner=pack.get("manner")) if whitebox_legend is not None
+                     else pack.get("layout") or SKETCH_LAYOUT_SENTENCE)
     parts += _shot_parts(shot, names)
     if pack.get("accent"):
         parts.append(accent_sentence(shot))
@@ -1789,7 +1939,7 @@ _GRID_CLIPS = ({"content": 260, "action": 160, "sketch": 200, "note": 160, "pane
 def build_grid_prompt(panels: list[tuple[dict, dict]], names: dict, cols: int, rows: int, aspect: str = "16:9",
                       max_chars: int = GRID_PROMPT_MAX, with_refs: bool = True,
                       whitebox_legend: list[tuple[str, str]] | None = None,
-                      style: str = DEFAULT_SKETCH_STYLE) -> tuple[str, str]:
+                      style: str = DEFAULT_SKETCH_STYLE, project_style: str = "") -> tuple[str, str]:
     """宫格提示词:风格总句 +(白模构图底句)+ 各场地点短提示与轴线一次 + 逐格「Panel k (row r, col c)」逐镜描述(_shot_parts)。
     panels = [(scene, shot)],≤ cols*rows;格数不满时说明剩余格留白(切分时只取前 n 格)。
     总长超 max_chars 时按 _GRID_CLIPS 逐档收紧画面散文。
@@ -1798,13 +1948,13 @@ def build_grid_prompt(panels: list[tuple[dict, dict]], names: dict, cols: int, r
     n = len(panels)
     cells = cols * rows
     blank = f" The last {cells - n} cell(s) of the grid stay blank white." if n < cells else ""
-    pack = STYLE_PACKS[normalize_sketch_style(style)]
+    pack = style_pack(style, project_style)
     head = pack["grid_head"].format(cols=cols, rows=rows, n=cells, aspect=aspect or "16:9", blank=blank,
                                     refs=pack["grid_refs"] if with_refs else GRID_TEXT_ONLY_SENTENCE)
     if whitebox_legend is not None:
         head += " " + whitebox_sentence(whitebox_legend, grid=f", laid out as the same {cols}x{rows} grid with cells "
                                         "matching the panels one to one (a plain white cell has no blocking: draw that "
-                                        "panel from its text)")
+                                        "panel from its text)", manner=pack.get("manner"))
     prompt = ""
     for clip in _GRID_CLIPS:
         parts = [head]
