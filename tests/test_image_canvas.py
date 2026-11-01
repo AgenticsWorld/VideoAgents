@@ -1442,6 +1442,50 @@ def test_generate_video_explicit_channel_skips_overrides_and_resolution_gate(tmp
     assert sent[-1] == ('global-m', '480p')                                         # 默认仍走闸门
 
 
+def test_motion_list_copies_project_relative_path(base):
+    """「本图的动图」每段有「复制路径」:复制服务端 state 给的 file_rel(项目内相对路径 assets/canvas/<…>/motion/mNNN.mp4),
+    clipboard API 不可用时走 execCommand 兜底;没有 file_rel 的记录不出按钮。node 跑页面原函数 renderMotions / copyText / copyMotionPath。"""
+    import shutil
+    import subprocess
+    if not shutil.which('node'):
+        pytest.skip('Node unavailable')
+    doc, _ = ic.open_doc(base, SHEET)
+    job = ic.create_motion_job(base, doc, motion_payload())
+    ic.run_motion(base, doc, job['id'], 'She turns.', generate=fake_video,
+                  probe=lambda p: {'duration': 5.0, 'width': 864, 'height': 496, 'has_audio': False}, log=QUIET)
+    m = ic.state(base, doc, ic.load_history(doc))['motions'][0]
+    rel = m['file_rel']
+    assert rel.startswith('assets/canvas/') and rel.endswith('/motion/m001.mp4') and (base / rel).is_file()
+    src = (Path(__file__).resolve().parents[1] / 'apps/web/static/preview_canvas.html').read_text(encoding='utf-8')
+    fns = src[src.index('function renderMotions('):src.index('// 提示词 = 实际发给视频模型的那段')]
+    fns += src[src.index('async function copyText('):src.index('function playMotion(')]
+    rec = {**m, 'url': '/projects/p/' + rel, 'poster_url': ''}
+    script = fns + f'''
+const el={{dataset:{{}},innerHTML:'',textContent:''}};
+const $=()=>el, esc=s=>String(s), t=s=>s, F=(s,p)=>s.replace(/\\{{(\\w+)\\}}/g,(_,k)=>p[k]);
+const fmtSize=()=>'', fmtTime=()=>'', nsfwMode=()=>({{enabled:false}}), I18N={{lang:'zh'}}, MO_OPEN=new Set(), motionPromptHtml=()=>'';
+const toasts=[], toast=(m,bad)=>toasts.push([m,!!bad]);
+let S={{file:'refs/a.jpg',motions:[{json.dumps(rec)},{{id:'m002',url:'/x.mp4'}}]}};
+let clip=[], execOk=true, fallback=[];
+Object.defineProperty(globalThis,'navigator',{{value:{{clipboard:{{writeText:async x=>{{clip.push(x)}}}}}},configurable:true}});   // node 自带只读 navigator
+globalThis.document={{body:{{appendChild:ta=>fallback.push(ta.value)}},createElement:()=>({{style:{{}},select(){{}},remove(){{}}}}),execCommand:()=>execOk}};
+(async()=>{{
+  renderMotions();
+  const html=el.innerHTML;
+  await copyMotionPath('m001');
+  navigator.clipboard.writeText=async()=>{{throw new Error('insecure')}};
+  await copyMotionPath('m001');
+  execOk=false;await copyMotionPath('m001');
+  await copyMotionPath('m002');
+  console.log(JSON.stringify({{html,clip,fallback,toasts}}));
+}})();'''
+    res = json.loads(subprocess.check_output(['node', '-e', script], text=True))
+    assert res['html'].count('data-fcopy=') == 1 and 'data-fcopy="m001"' in res['html'] and '复制路径' in res['html']
+    assert res['clip'] == [rel] and res['fallback'] == [rel, rel]
+    assert res['toasts'] == [[f'已复制路径:{rel}', False], [f'已复制路径:{rel}', False], [f'复制失败,路径:{rel}', True]]
+    assert "[data-fcopy]');if(!d)return;" in src and 'd.dataset.fcopy)copyMotionPath(d.dataset.fcopy)' in src
+
+
 # ---------------------------------------------------------------- 界面词典
 def canvas_ui_strings() -> list[str]:
     """画板页与入口脚本里要进词典的文案:静态文本节点 / title / placeholder(data-no-i18n 之外),加脚本里带中文的单引号字面量

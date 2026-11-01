@@ -1038,6 +1038,7 @@ function renderMotions(){
       +(m.prompt?`<button class="sm" data-pcopy="${esc(m.id)}" title="${esc(t('把发给视频模型的提示词复制到剪贴板'))}">${esc(t('复制提示词'))}</button>`:'')
       +`<button class="sm" data-reuse="${esc(m.id)}" title="${esc(t('把这段的提示词填回上面的输入框,改一改再生成'))}">${esc(t('用这段提示词'))}</button>`
       +`<a class="btn" href="${esc(m.url)}" download="${esc((S.file.split('/').pop()||'image').replace(/\.[^.]+$/,'')+'_'+m.id+'.mp4')}">${esc(t('下载'))}</a>`
+      +(m.file_rel?`<button class="sm" data-fcopy="${esc(m.id)}" title="${esc(t('复制在项目中的相对路径'))}">${esc(t('复制路径'))}</button>`:'')
       +`<button class="sm" data-mdel="${esc(m.id)}">${esc(t('删除'))}</button></div></div></div>`;
   }).join(''):`<div class="hint">${esc(t('还没有动图:选好参数、写好(或让语言模型写)提示词后点「生成动图」'))}</div>`;
 }
@@ -1051,19 +1052,27 @@ function motionPromptHtml(m){
   return `<div class="t2"><span data-no-i18n>${esc(cut)}</span>`
     +(cut!==String(m.prompt).replace(/\s+/g,' ')?` <span class="lnk" data-ptoggle="${id}">${esc(t('展开全文'))}</span>`:'')+'</div>';
 }
-async function copyPrompt(id){
-  const m=(S.motions||[]).find(x=>x.id===id);if(!m||!m.prompt)return;
-  let ok=false;
-  try{await navigator.clipboard.writeText(m.prompt);ok=true}
+async function copyText(text){
+  try{await navigator.clipboard.writeText(text);return true}
   catch(_){                                   // http(局域网)下 clipboard API 不可用的兜底
     try{
       const ta=document.createElement('textarea');
-      ta.value=m.prompt;ta.style.cssText='position:fixed;opacity:0';
+      ta.value=text;ta.style.cssText='position:fixed;opacity:0';
       document.body.appendChild(ta);ta.select();
-      ok=document.execCommand('copy');ta.remove();
-    }catch(_e){ok=false}
+      const ok=document.execCommand('copy');ta.remove();return ok;
+    }catch(_e){return false}
   }
+}
+async function copyPrompt(id){
+  const m=(S.motions||[]).find(x=>x.id===id);if(!m||!m.prompt)return;
+  const ok=await copyText(m.prompt);
   toast(ok?F('已复制 {id} 的提示词',{id}):t('复制失败:请手动选中提示词复制'),!ok);
+}
+// 视频文件在项目中的相对路径(assets/canvas/<…>/motion/mNNN.mp4,服务端 state 给的 file_rel)
+async function copyMotionPath(id){
+  const m=(S.motions||[]).find(x=>x.id===id);if(!m||!m.file_rel)return;
+  const ok=await copyText(m.file_rel);
+  toast(F(ok?'已复制路径:{path}':'复制失败,路径:{path}',{path:m.file_rel}),!ok);
 }
 function playMotion(id){
   const m=(S.motions||[]).find(x=>x.id===id);if(!m)return;
@@ -1080,10 +1089,11 @@ function closeVbox(){
 $('#vbox').onclick=e=>{if(e.target.tagName!=='VIDEO'&&!e.target.closest('.cap-row'))closeVbox()};   // 点提示词(要选中复制)和复制按钮不关
 $('#vb-copy').onclick=()=>copyPrompt($('#vb-copy').dataset.id);
 $('#motions').addEventListener('click',e=>{
-  const d=e.target.closest('[data-play],[data-reuse],[data-mdel],[data-ptoggle],[data-pcopy]');if(!d)return;
+  const d=e.target.closest('[data-play],[data-reuse],[data-mdel],[data-ptoggle],[data-pcopy],[data-fcopy]');if(!d)return;
   if(d.dataset.play)playMotion(d.dataset.play);
   else if(d.dataset.ptoggle){const id=d.dataset.ptoggle;MO_OPEN.has(id)?MO_OPEN.delete(id):MO_OPEN.add(id);renderMotions()}
   else if(d.dataset.pcopy)copyPrompt(d.dataset.pcopy);
+  else if(d.dataset.fcopy)copyMotionPath(d.dataset.fcopy);
   else if(d.dataset.reuse){const m=(S.motions||[]).find(x=>x.id===d.dataset.reuse);if(m){$('#mo-txt').value=m.prompt||'';$('#mo-txt').focus()}}
   else if(d.dataset.mdel)modal(t('删除这段动图?'),`<div>${esc(F('{id} 会从列表里移除(文件挪进回收目录,不会真的删掉)',{id:d.dataset.mdel}))}</div>`,
     [{label:t('取消')},{label:t('删除'),warn:true,fn:async()=>{closeModal();try{apply(await api('/motion/delete',withFile({motion:d.dataset.mdel})))}catch(err){toast(err.message,true)}}}]);

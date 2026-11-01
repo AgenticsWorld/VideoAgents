@@ -4870,6 +4870,10 @@ window.I18N_DICT = {
 "展开全文": "Xem toàn bộ",
 "已复制 {id} 的提示词": "Đã sao chép prompt của {id}",
 "复制失败:请手动选中提示词复制": "Sao chép thất bại: hãy chọn prompt và sao chép thủ công",
+// 画板「动图」列表:复制视频在项目中的相对路径(2026-11-01)
+"复制路径": "Sao chép đường dẫn",
+"已复制路径:{path}": "Đã sao chép đường dẫn: {path}",
+"复制失败,路径:{path}": "Sao chép thất bại; đường dẫn: {path}",
 // 画板「动图」生成方式:参考图 / 首尾帧(2026-10-21)
 "生成方式": "Cách tạo",
 "参考图:用正在查看的图作参考图,按提示词生成": "Ảnh tham chiếu: dùng ảnh đang xem làm tham chiếu và tạo theo prompt",

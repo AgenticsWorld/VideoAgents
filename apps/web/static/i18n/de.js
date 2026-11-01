@@ -4870,6 +4870,10 @@ window.I18N_DICT = {
 "展开全文": "Ganzen Prompt zeigen",
 "已复制 {id} 的提示词": "Prompt von {id} kopiert",
 "复制失败:请手动选中提示词复制": "Kopieren fehlgeschlagen: Prompt bitte markieren und manuell kopieren",
+// 画板「动图」列表:复制视频在项目中的相对路径(2026-11-01)
+"复制路径": "Pfad kopieren",
+"已复制路径:{path}": "Pfad kopiert: {path}",
+"复制失败,路径:{path}": "Kopieren fehlgeschlagen; Pfad: {path}",
 // 画板「动图」生成方式:参考图 / 首尾帧(2026-10-21)
 "生成方式": "Modus",
 "参考图:用正在查看的图作参考图,按提示词生成": "Referenzbild: das angezeigte Bild als Referenz nutzen und nach dem Prompt generieren",

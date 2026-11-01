@@ -4870,6 +4870,10 @@ window.I18N_DICT = {
 "展开全文": "Tampilkan semua",
 "已复制 {id} 的提示词": "Prompt {id} disalin",
 "复制失败:请手动选中提示词复制": "Gagal menyalin: pilih prompt lalu salin secara manual",
+// 画板「动图」列表:复制视频在项目中的相对路径(2026-11-01)
+"复制路径": "Salin jalur",
+"已复制路径:{path}": "Jalur disalin: {path}",
+"复制失败,路径:{path}": "Gagal menyalin; jalur: {path}",
 // 画板「动图」生成方式:参考图 / 首尾帧(2026-10-21)
 "生成方式": "Mode",
 "参考图:用正在查看的图作参考图,按提示词生成": "Gambar referensi: pakai gambar yang sedang dilihat sebagai referensi dan buat sesuai prompt",

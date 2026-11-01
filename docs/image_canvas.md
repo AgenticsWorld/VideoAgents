@@ -162,6 +162,7 @@ assets/canvas/index.json    aliases:分镜背景图登记出去的 <key>_revN �
 - **列表**:「本图的动图」按新到旧列出,点封面在页面里播放;可「用这段提示词」填回输入框、下载、删除(`POST …/canvas/motion/delete`,挪进 trash,不真删)。
   每段显示**实际发给视频模型的提示词**(直接发送补的参考图说明、Agent 写的都在内):超过 110 字先截断,「展开全文」在只读框里看全、可选中,「收起」折回;
   「复制提示词」复制到剪贴板(http 局域网下 clipboard API 不可用时退回 execCommand,失败提示手动选中)。播放窗口里提示词下方同样有「复制提示词」,点提示词文字不会关窗口。
+  「复制路径」复制这段视频在项目中的相对路径(state 的 `file_rel`,如 `assets/canvas/<原图相对路径压平>.<sha8>/motion/m001.mp4`),同样有 execCommand 兜底,提示里带出路径。
 
 ## 设为最终版
 
