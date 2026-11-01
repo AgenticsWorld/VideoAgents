@@ -81,7 +81,7 @@ Bring your own engines and providers. Each modality is configured on its own, so
 | 🔍 **Upscale**          | FFmpeg · Agentics · Volcano Engine · MiniMax · ComfyUI                                                                          |
 | 🌍 **World model**      | World Labs                                                                                                                      |
 | ☁️ **Object storage**   | Volcano Engine TOS · Alibaba Cloud OSS · Tencent Cloud COS · any S3-compatible service                                          |
-| 📣 **Publishing**       | YouTube · YouTube Shorts · Bilibili · TikTok · Douyin · Xiaohongshu                                                             |
+| 📣 **Publishing**       | YouTube · YouTube Shorts · Bilibili · TikTok · Instagram · Douyin · Xiaohongshu                                                             |
 | 📱 **Mobile messaging** | WeChat · Feishu · WhatsApp                                                                                                      |
 
 <sub>ComfyUI workflows run locally, on Comfy Cloud or on RunningHub. The console is available in 12 languages.</sub>

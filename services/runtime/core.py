@@ -1298,12 +1298,14 @@ CAPTION_AGENTS = {"10-editing/caption", "10-editing/edit",
 # 发布渠道:key -> (名称, 默认画幅);2026-10-07 起在「🎞️ 成片发布」页勾选(output.platforms,原「输出设置」发布平台多选已移走),
 # 只驱动 Phase 11 发布目标与 aspect_ratio.json 平台矩阵/thumbnail 每平台封面/subtitle 每平台字幕的清单(展示顺序即此顺序);
 # 小红书 2026-10-07 回到可选清单;默认画幅只供注入给 Agent 的平台说明用,界面不显示;
-# YouTube Shorts 2026-10-28 新增为独立渠道(竖屏发布包,与 YouTube 共用上传技能,见 SHORTS_PLATFORM)
+# YouTube Shorts 2026-10-28 新增为独立渠道(竖屏发布包,与 YouTube 共用上传技能,见 SHORTS_PLATFORM);
+# Instagram 2026-11-01 新增(网页版 instagram.com 发视频一律是 Reels,见 INSTAGRAM_PLATFORM)
 OUTPUT_PLATFORMS = {
     "youtube": ("YouTube", "16:9"),
     "youtube_shorts": ("YouTube Shorts", "9:16"),
     "bilibili": ("Bilibili", "16:9"),
     "tiktok": ("TikTok", "9:16"),
+    "instagram": ("Instagram", "9:16"),
     "douyin": ("抖音", "9:16"),
     "xiaohongshu": ("小红书", "9:16"),
 }
@@ -1315,6 +1317,7 @@ PUBLISH_PLATFORM_SKILLS = {
     "youtube_shorts": "skill-youtube-cdp-draft",
     "bilibili": "skill-bilibili-cdp-draft",
     "tiktok": "skill-tiktok-cdp-draft",
+    "instagram": "skill-instagram-cdp-draft",
     "douyin": "skill-douyin-cdp-draft",
     "xiaohongshu": "skill-xhs-cdp-draft",
 }
@@ -1324,6 +1327,16 @@ PUBLISH_PLATFORM_SKILLS = {
 SHORTS_PLATFORM = "youtube_shorts"
 SHORTS_MAX_S = 180.0
 SHORTS_CONTENT_ID_S = 60.0
+# Instagram 网页版(instagram.com「创建」)发出的视频一律是 Reels;横屏照样能发但上下带黑边,超过 3 分钟的 Reels
+# 基本不推荐给非粉丝。这两条只提醒、不拦派单(与 Shorts 不同:横屏 / 超长仍是 Reels,不会变成别的发布形态)。
+# 网页版不收字幕文件(字幕须烧进画面);caption ≤ 2200 字符、#标签 ≤ 5 个(2025 年底起,超了发不出去)
+INSTAGRAM_PLATFORM = "instagram"
+INSTAGRAM_REACH_S = 180.0
+INSTAGRAM_CAPTION_MAX = 2200
+INSTAGRAM_HASHTAG_MAX = 5
+# Instagram「Add AI label」:写实的 AI 生成照片 / 视频须打标签。画面由视频 / 图像生成模型产出的项目类型加,
+# 动效短片(代码渲染)与混剪(素材库实拍)不加;派单工单写明,技能照工单
+INSTAGRAM_AI_LABEL_TYPES = frozenset({"film", "digital-human", "audio-to-video"})
 # 发布回执 status → 成片发布页徽标(publisher SOUL 口径;其它值原样显示)
 PUBLISH_RECEIPT_STATUS = {
     "draft_ready_pending_human": "草稿已填好,待人工提交",
@@ -1745,6 +1758,7 @@ SKILL_ACTIVATIONS: dict[str, dict] = {
     "12-publishing/publisher/skill-youtube-cdp-draft": {"kind": "soul", "condition": "发布到 YouTube 或 YouTube Shorts"},
     "12-publishing/publisher/skill-douyin-cdp-draft": {"kind": "soul", "condition": "发布到抖音"},
     "12-publishing/publisher/skill-tiktok-cdp-draft": {"kind": "soul", "condition": "发布到 TikTok"},
+    "12-publishing/publisher/skill-instagram-cdp-draft": {"kind": "soul", "condition": "发布到 Instagram"},
     "12-publishing/publisher/skill-xhs-cdp-draft": {"kind": "soul", "condition": "发布到小红书"},
     "12-publishing/publisher/skill-bilibili-cdp-draft": {"kind": "soul", "condition": "发布到 B 站"},
     "12-publishing/publisher/XiaohongshuSkills": {
@@ -3990,7 +4004,14 @@ def build_role_prompt(agent_id: str, project: str,
                         ";**YouTube Shorts 只认竖屏或正方形、单条不超过 3 分钟的视频**(否则 YouTube 按普通视频发布):"
                         f"platform-adapter 出 9:16、每条 ≤ {int(SHORTS_MAX_S) - 1} 秒的 `publish/{SHORTS_PLATFORM}/package/<ep>/`,"
                         "超长集按场次边界切成多条;thumbnail 出 9:16 封面;"
-                        "超过 1 分钟且被 Content ID 声明的 Shorts 会被全球屏蔽,用了第三方版权音乐时在 parts.json 对应条目注明"))
+                        "超过 1 分钟且被 Content ID 声明的 Shorts 会被全球屏蔽,用了第三方版权音乐时在 parts.json 对应条目注明")
+                     + ("" if INSTAGRAM_PLATFORM not in [k for k, _, _ in platforms] else
+                        ";**Instagram 网页版发出的视频一律是 Reels**:platform-adapter 出 9:16 的 "
+                        f"`publish/{INSTAGRAM_PLATFORM}/package/<ep>/`;网页版不收字幕文件,打包取字幕已烧进画面的版本"
+                        "(花字版 / 烧录版),母版都没有烧录字幕时照常打包并在回执注明;"
+                        f"seo 的 instagram 条目没有独立标题栏(标题即 caption 首行),caption 全文 ≤ {INSTAGRAM_CAPTION_MAX} 字符、"
+                        f"#标签 ≤ {INSTAGRAM_HASHTAG_MAX} 个(超了发不出去);thumbnail 出 9:16 封面(主页网格按 3:4 居中裁切显示,"
+                        "标题字与主体放中部);单条超过 3 分钟的 Reels 基本不推荐给非粉丝,是否切条按工单,工单没写时不切"))
     else:   # 成片发布页一个渠道都没勾(2026-10-06 起允许;2026-10-07 选择入口由输出设置移到成片发布页)
         plat_line = ("未选(用户在「🎞️ 成片发布」页没有勾选任何发布渠道)—— **不做分平台发布**:"
                      f"aspect_ratio.json 只列母版一条({aspect}),thumbnail / subtitle 只按母版出一份,"
@@ -12539,19 +12560,19 @@ def _ep_final_videos(edir: Path) -> list[str]:
                   and ("final" in f.name.lower() or "master" in f.name.lower())) if edir.is_dir() else []
 
 
-_SHORTS_PROBE_CACHE: dict = {}
+_VIDEO_PROBE_CACHE: dict = {}
 
 
-def _shorts_probe(path: Path) -> dict | None:
-    """ffprobe 实测一条视频够不够 YouTube Shorts:显示宽 ≤ 高(竖屏或正方形,计旋转)且时长 ≤ SHORTS_MAX_S。
-    ffprobe 不可用 / 读不出返回 None(不拦);按路径 + mtime + 大小缓存。"""
+def _video_probe(path: Path) -> dict | None:
+    """ffprobe 实测一条视频的显示宽高(计 rotate 标签与 displaymatrix 旋转)与时长:{width, height, duration}。
+    ffprobe 不可用 / 读不出返回 None(调用方不拦);按路径 + mtime + 大小缓存。Shorts 与 Instagram 共用。"""
     try:
         st = path.stat()
     except OSError:
         return None
     key = (str(path), st.st_mtime_ns, st.st_size)
-    if key in _SHORTS_PROBE_CACHE:
-        return _SHORTS_PROBE_CACHE[key]
+    if key in _VIDEO_PROBE_CACHE:
+        return _VIDEO_PROBE_CACHE[key]
     exe, res = shutil.which("ffprobe"), None
     if exe:
         try:
@@ -12568,24 +12589,38 @@ def _shorts_probe(path: Path) -> dict | None:
                 w, h = h, w
             dur = float((info.get("format") or {}).get("duration") or 0)
             if w and h and dur > 0:
-                problems = ([] if w <= h else ["landscape"]) + ([] if dur <= SHORTS_MAX_S else ["too_long"])
-                res = {"width": w, "height": h, "duration": round(dur, 2), "ok": not problems, "problems": problems}
-        except Exception:  # noqa: BLE001  探测失败不拦发布,交给技能脚本 --shorts 再核
+                res = {"width": w, "height": h, "duration": round(dur, 2)}
+        except Exception:  # noqa: BLE001  探测失败不拦发布,交给技能脚本再核
             res = None
-    if len(_SHORTS_PROBE_CACHE) > 256:
-        _SHORTS_PROBE_CACHE.clear()
-    _SHORTS_PROBE_CACHE[key] = res
+    if len(_VIDEO_PROBE_CACHE) > 256:
+        _VIDEO_PROBE_CACHE.clear()
+    _VIDEO_PROBE_CACHE[key] = res
     return res
 
 
-def _ep_shorts_check(base: Path, ep: str, pkg: Path | None, finals: list[str]) -> dict | None:
-    """YouTube Shorts 渠道要上传的视频是否都符合 Shorts:有发布包核包里每条视频,没有则核母版
-    (花字版 > 烧录版 > 其它 final,与派单降级口径一致)。没有可核的视频或 ffprobe 不可用返回 None。"""
+def _shorts_probe(path: Path) -> dict | None:
+    """一条视频够不够 YouTube Shorts:显示宽 ≤ 高(竖屏或正方形,计旋转)且时长 ≤ SHORTS_MAX_S。
+    ffprobe 不可用 / 读不出返回 None(不拦)。"""
+    r = _video_probe(path)
+    if r is None:
+        return None
+    problems = ([] if r["width"] <= r["height"] else ["landscape"]) + ([] if r["duration"] <= SHORTS_MAX_S else ["too_long"])
+    return {**r, "ok": not problems, "problems": problems}
+
+
+def _ep_upload_videos(base: Path, ep: str, pkg: Path | None, finals: list[str]) -> tuple[str, list[Path]]:
+    """本渠道要上传的视频:有发布包取包里每条视频,没有则取一条母版
+    (花字版 > 烧录版 > 其它 final,与派单降级口径一致)。"""
     if pkg is not None:
-        src, vids = "package", sorted(f for f in pkg.rglob("*") if f.is_file() and f.suffix.lower() in VIDEO_EXTS)
-    else:
-        rank = lambda n: (0 if "final_caption" in n else 1 if "final_sub" in n else 2, n)  # noqa: E731
-        src, vids = "master", [base / "edit" / ep / n for n in sorted(finals, key=rank)[:1]]
+        return "package", sorted(f for f in pkg.rglob("*") if f.is_file() and f.suffix.lower() in VIDEO_EXTS)
+    rank = lambda n: (0 if "final_caption" in n else 1 if "final_sub" in n else 2, n)  # noqa: E731
+    return "master", [base / "edit" / ep / n for n in sorted(finals, key=rank)[:1]]
+
+
+def _ep_shorts_check(base: Path, ep: str, pkg: Path | None, finals: list[str]) -> dict | None:
+    """YouTube Shorts 渠道要上传的视频是否都符合 Shorts(取视频口径见 _ep_upload_videos)。
+    没有可核的视频或 ffprobe 不可用返回 None。"""
+    src, vids = _ep_upload_videos(base, ep, pkg, finals)
     files = []
     for v in vids:
         r = _shorts_probe(v)
@@ -12596,6 +12631,25 @@ def _ep_shorts_check(base: Path, ep: str, pkg: Path | None, finals: list[str]) -
         return None
     return {"source": src, "ok": all(f["ok"] for f in files), "files": files,
             "over_content_id": any(f["duration"] > SHORTS_CONTENT_ID_S for f in files)}
+
+
+def _ep_instagram_check(base: Path, ep: str, pkg: Path | None, finals: list[str]) -> dict | None:
+    """Instagram 渠道要上传的视频实测(取视频口径见 _ep_upload_videos):横屏(宽 > 高,发成 Reels 上下带黑边)
+    与超过 INSTAGRAM_REACH_S(基本不推荐给非粉丝)只作提醒,不拦派单。没有可核的视频或 ffprobe 不可用返回 None。"""
+    src, vids = _ep_upload_videos(base, ep, pkg, finals)
+    files = []
+    for v in vids:
+        r = _video_probe(v)
+        if r is None:
+            return None
+        warns = ([] if r["width"] <= r["height"] else ["landscape"]) + \
+            ([] if r["duration"] <= INSTAGRAM_REACH_S else ["long"])
+        files.append({"file": v.relative_to(base).as_posix(), **r, "warnings": warns})
+    if not files:
+        return None
+    return {"source": src, "ok": not any(f["warnings"] for f in files), "files": files,
+            "landscape": any("landscape" in f["warnings"] for f in files),
+            "long": any("long" in f["warnings"] for f in files)}
 
 
 def _shorts_refusal(chk: dict) -> str:
@@ -12630,6 +12684,10 @@ def _ep_publish_channels(base: Path, ep: str) -> list[dict]:
             # 页面 t() 翻译 note;shorts 为发布包 / 母版的实测结论(None = 没有可核的视频或 ffprobe 不可用)
             row["note"] = "单条 ≤ 3 分钟、竖屏或正方形才算 Shorts,否则按普通视频发布"
             row["shorts"] = _ep_shorts_check(base, ep, pkg, _ep_final_videos(base / "edit" / ep))
+        elif key == INSTAGRAM_PLATFORM:
+            # reels 为实测提醒(横屏 / 超过 3 分钟),不置灰按钮;None = 没有可核的视频或 ffprobe 不可用
+            row["note"] = "网页版发出的视频都是 Reels;#标签最多 5 个,不能传字幕文件(用烧录字幕的成片)"
+            row["reels"] = _ep_instagram_check(base, ep, pkg, _ep_final_videos(base / "edit" / ep))
         rows.append(row)
     return rows
 
@@ -12797,10 +12855,12 @@ def _ep_default_title(base: Path, ep: str, platform: str) -> str | None:
 
 
 def publish_dispatch_message(project: str, ep: str, platform: str, package_ready: bool, finals: list[str],
-                             shorts: dict | None = None, cover: dict | None = None, title: str | None = None) -> str:
+                             shorts: dict | None = None, cover: dict | None = None, title: str | None = None,
+                             reels: dict | None = None) -> str:
     """成片发布页「发布到 <渠道>」按钮的工单正文(发给 12-publishing/publisher):
     先读该渠道技能文档,按发布包 / 母版口径取素材,preflight 留痕,停在平台发布页由用户亲手提交,回执落 publish/receipts/。
-    YouTube Shorts 另写 Shorts 一节的口径与宿主实测结论(shorts = _ep_shorts_check 结果,None 为未能核对)。
+    YouTube Shorts 另写 Shorts 一节的口径与宿主实测结论(shorts = _ep_shorts_check 结果,None 为未能核对);
+    Instagram 另写 Reels 口径与实测提醒(reels = _ep_instagram_check 结果)。
     cover / title 为页面选定的默认封面(_ep_default_cover,文件在才写)与本渠道已选定的标题,只在有时各加一行。"""
     name, aspect = OUTPUT_PLATFORMS[platform]
     skill = PUBLISH_PLATFORM_SKILLS[platform]
@@ -12820,6 +12880,28 @@ def publish_dispatch_message(project: str, ep: str, platform: str, package_ready
                  "发布包有多条时每条各传一个 Short(各加 --new-tab)。"
                  + ("有视频超过 1 分钟:带任何 Content ID 版权声明的 Shorts 会被全球屏蔽,回报时提醒用户。"
                     if shorts and shorts.get("over_content_id") else "")]
+    elif platform == INSTAGRAM_PLATFORM:
+        if reels:
+            checked = "宿主 ffprobe 实测:" + "、".join(
+                f"{f['file']} {f['width']}×{f['height']} {f['duration']:g} 秒" for f in reels["files"])
+            if reels.get("landscape"):
+                checked += ";有横屏视频——照样能发成 Reels,但上下会带黑边,原样上传(不自行裁切)并在回执注明"
+            if reels.get("long"):
+                checked += f";有视频超过 {int(INSTAGRAM_REACH_S) // 60} 分钟——超长 Reels 基本不推荐给非粉丝,回报时提醒用户"
+        else:
+            checked = "宿主未能核对视频尺寸与时长(没有 ffprobe 或读不出视频)"
+        try:
+            ptype = (load_project_settings(project).get("project") or {}).get("type") or project_types.DEFAULT
+        except Exception:  # noqa: BLE001  读不到设置按默认类型
+            ptype = project_types.DEFAULT
+        ai = (f"AI 标签:项目类型「{project_types.label(ptype)}」画面由生成模型产出,upload 加 --ai-label(Instagram 要求写实的 AI 生成视频打标签)"
+              if ptype in INSTAGRAM_AI_LABEL_TYPES else
+              f"AI 标签:项目类型「{project_types.label(ptype)}」画面不是生成模型产出的写实影像,upload 不加 --ai-label")
+        extra = [f"- Instagram:网页版发出的视频一律是 Reels;{checked}。{ai}。发布包有多条时每条各发一个 Reel(每条 upload 加 --new-tab)。"
+                 f"caption = 标题行 + 简介 + #标签,全文 ≤ {INSTAGRAM_CAPTION_MAX} 字符、#标签 ≤ {INSTAGRAM_HASHTAG_MAX} 个"
+                 "(超了 Instagram 拒发,超出的按 seo 条目顺序留前几个并在回执注明);"
+                 "网页版不能传字幕文件:视频优先用花字版 / 烧录字幕版,只有无字幕版本时照传并在回执注明。"
+                 "最后一步是「分享 / Share」,同样永不代点。"]
     if cover and cover.get("exists"):
         size = f"{cover['width']}×{cover['height']}" if cover.get("width") else "尺寸未知"
         extra.append(f"- 封面:用户在成片发布页选定的默认封面 {cover['file']}({size}),优先于发布包里的封面与技能文档的封面查找顺序;"
@@ -12877,9 +12959,11 @@ async def api_publish_dispatch(project: str, ep: str, body: dict) -> dict:
         sel.append(platform)
         await api_projconfig_set({"project": project, "output": {"platforms": [k for k in OUTPUT_PLATFORMS if k in sel]}})
     pkg = _ep_publish_package_dir(base, ep, platform)
+    reels = (await asyncio.to_thread(_ep_instagram_check, base, ep, pkg, finals)
+             if platform == INSTAGRAM_PLATFORM else None)   # 只作提醒写进工单,不拦
     cover = await asyncio.to_thread(_ep_default_cover, base, ep)
     title = await asyncio.to_thread(_ep_default_title, base, ep, platform)
-    message = publish_dispatch_message(project, ep, platform, pkg is not None, finals, shorts, cover, title)
+    message = publish_dispatch_message(project, ep, platform, pkg is not None, finals, shorts, cover, title, reels)
     run = await api_chat({"agent": PUBLISHER_ID, "message": message, "project": project, "source": "user"})
     return {"ok": True, "run_id": run.get("run_id"), "platform": platform, "ep": ep,
             "package_ready": pkg is not None, "message": message}

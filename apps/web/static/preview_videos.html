@@ -344,6 +344,16 @@ function channelsHtml(d){
           +`<div class="ln err">${esc(shFix)}</div>`;
       if(sh.ok&&sh.over_content_id)sl+=`<div class="ln warn">⚠ ${esc(t('有视频超过 1 分钟:带任何 Content ID 版权声明的 Shorts 会被全球屏蔽'))}</div>`;
     }
+    // Reels 实测(Instagram:横屏 / 超过 3 分钟只提醒,照样能派单)
+    const rl=c.reels;
+    if(rl){
+      if(rl.ok)sl+=`<div class="ln ok">▮ ${esc(I18N.f('{n} 条视频均为竖屏或正方形、≤ 3 分钟',{n:rl.files.length}))}</div>`;
+      else rl.files.forEach(f=>{
+        const w=f.warnings||[];
+        if(w.includes('landscape'))sl+=`<div class="ln warn">⚠ ${esc(I18N.f('{file}({w}×{h})是横屏:发成 Reels 上下会有黑边',{file:f.file,w:f.width,h:f.height}))}</div>`;
+        if(w.includes('long'))sl+=`<div class="ln warn">⚠ ${esc(I18N.f('{file}({dur})超过 3 分钟:这样的 Reels 基本不会推荐给非粉丝',{file:f.file,dur:chDur(f.duration)}))}</div>`;
+      });
+    }
     const dis=!hasFinal||!!run||shBad;
     const btn=`<button class="pub" data-pub="${esc(c.key)}"${dis?' disabled':''} title="${esc(!hasFinal?t('该集还没有 final 成片,不能发布'):shBad?shFix:I18N.f('把 {ep} 的发布工单派给发布执行 Agent(渠道:{name});未勾选的渠道会同时勾上',{ep:d.ep,name:t(c.name)}))}">${run?'<span class="spin">⟳</span> '+esc(t('派单中…')):esc(I18N.f('发布到 {name}',{name:t(c.name)}))}</button>`;
     return `<div class="ch${c.selected?' on':''}" data-ch="${esc(c.key)}">

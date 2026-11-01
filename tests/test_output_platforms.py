@@ -64,7 +64,8 @@ def test_webui_platform_lists():
     page = (ROOT / "apps" / "web" / "static" / "preview_videos.html").read_text(encoding="utf-8")
     assert "📡 发布渠道" in page and "/publish/channels" in page and "/dispatch" in page
     assert "xiaohongshu" not in page and "youtube" not in page   # 渠道清单只来自服务端 OUTPUT_PLATFORMS,页面不写死
-    assert list(core.OUTPUT_PLATFORMS) == ["youtube", "youtube_shorts", "bilibili", "tiktok", "douyin", "xiaohongshu"]
+    assert list(core.OUTPUT_PLATFORMS) == ["youtube", "youtube_shorts", "bilibili", "tiktok", "instagram",
+                                        "douyin", "xiaohongshu"]
     assert set(core.PUBLISH_PLATFORM_SKILLS) == set(core.OUTPUT_PLATFORMS)
     for d in core.PUBLISH_PLATFORM_SKILLS.values():
         assert (ROOT / "agents" / "12-publishing" / "publisher" / "skills" / d / "SKILL.md").is_file(), d

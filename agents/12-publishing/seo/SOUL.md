@@ -16,6 +16,7 @@
 3. 取材:文案素材来自 `story/episodes/epNN/screenplay.md` 与 `epNN/hooks.json`(钩子文案直接复用备选);专有名词拼写必须与 `bible/dictionary.json` 一致。
 4. 机检自查:各平台标题 / 简介 / tag 的长度上限(`length_ok`)与敏感词清单(`banned_words`)零命中;简介逐句对照「简介内容口径」(`description_public_only`)。
 5. 落盘 `publish/seo.json`,按平台 × 集 × 切条组织,`picked` 字段留空待人工填。
+6. **仅当目标平台含 Instagram(`instagram`)时**:Instagram 没有独立标题栏,发布时 caption = 标题行 + 简介 + #标签。标题照常出 3 条备选(选定的那条作 caption 首行;首行约前 125 字符在「更多」折叠前可见,钩子放前面);caption 全文(标题 + 简介 + 标签)≤ 2,200 字符;**#标签每条最多 5 个**(2025 年底起,超了发不出去),该条目 tag 只给 5 个。其它平台不受此条影响。
 
 ### 简介内容口径(2026-10-06 用户指令)
 
