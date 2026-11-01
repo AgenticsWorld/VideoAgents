@@ -28,6 +28,7 @@
 - **TikTok(tiktok)**:入口 `skills/skill-tiktok-cdp-draft/SKILL.md`。收到「发布 <ep> 到 tiktok」类工单时,先完整读该文件再照做。流程概要:同一个本机 Chrome/CDP 环境 → 未登录时请用户手动登录 → 自动上传成片视频、填 caption(标题行+简介+#标签 内联,无独立标题字段)、传封面 → 截图给用户核对 → **永不代点「Post」,最后一步由用户亲手完成**。
 - **小红书(xiaohongshu)**:入口 `skills/skill-xhs-cdp-draft/SKILL.md`。收到「发布 <ep> 到小红书」类工单时,先完整读该文件再照做。流程概要:启动用户本机 Chrome(专用 profile,CDP 9222)→ 未登录时请用户在弹出窗口扫码 → 自动上传该集成片视频、传封面图、填标题/正文/勾话题 → 截图给用户核对 → **停在发布页,永不代点「发布」,最后一步提交由用户亲手完成**。
 - **成片发布页按钮工单(2026-10-07)**:用户在「🎞️ 成片发布」页勾选发布渠道(`output.platforms`,原「输出设置」发布平台多选已移到该页)并点某渠道的「发布到 X」,宿主按 `publish_dispatch_message` 直接给我派单:正文写明渠道、技能文档路径、素材口径(`publish/<platform>/package/<ep>/` 发布包就绪则用包;未产包则按技能文档降级直接用母版 `edit/<ep>/final*.mp4` + `thumbnail_*.png`,画幅不同也不自行裁切,回执注明未经 platform-adapter 适配)、seo / metadata 取本集条目。该工单**只处理这一个渠道**,不派其它渠道、不自行补 platform-adapter / seo / metadata 工单(缺包 / 缺 picked 按技能文档降级并在回执注明;属拒发理由时停手回报)。回执文件名固定 `publish/receipts/<ep>_<platform>_receipt.json`,页面按它显示状态徽标。
+- **发布默认素材(2026-11-01,仅当有时)**:用户可在成片发布页把一条标题、一张封面设为发布默认。标题即 seo.json 该条目的 `picked`(照常逐字用);封面记在 `publish/defaults.json` 的 `episodes.<ep>.cover.file`。**仅当该文件记有本集默认封面且文件存在时**,用它作本集封面,优先于发布包里的封面与技能文档的封面查找顺序;技能文档写明本渠道不接受这种画幅的封面时(如 YouTube Shorts 不拿 16:9 顶替)不用它,改按技能文档的查找顺序并在回执注明。页面派单时工单正文会直接写出默认封面与本渠道的默认标题,以工单为准。
 - 半自动模式与红线的关系:技能只做到「草稿填充完毕待确认」,不构成外部不可回滚动作;用户在浏览器里亲手点「发布」即为该集该渠道的人工签字(H5 级确认由这一步兑现)。preflight 仍须核验素材来源(publish/<platform>/package/<ep>/ 发布包或母版口径)与标题/元数据出处,缺 seo picked 时按技能文档降级处理并在回执注明。
 - 回执照常写 `publish/receipts/`:用户完成提交后 status 记 `submitted_by_human`,附所用视频路径、最终标题/正文与确认截图;用户未提交则记 `draft_ready_pending_human`。
 

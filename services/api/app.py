@@ -361,6 +361,12 @@ async def publish_channels_set(project: str, body: dict[str, Any]) -> dict[str, 
     return await core.api_publish_channels_set(project, body or {})
 
 
+@api.post("/projects/{project}/publish/{ep}/defaults", tags=["artifacts"])
+async def publish_default_set(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
+    """成片发布页「设为默认」:{kind:"title", item, title_id|null} 写回 seo.json picked;{kind:"cover", name|null} 记 publish/defaults.json。"""
+    return await core.api_publish_default_set(project, ep, body or {})
+
+
 @api.post("/projects/{project}/publish/{ep}/dispatch", tags=["runs"])
 async def publish_dispatch(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
     """成片发布页「发布到 <渠道>」按钮:{platform} → 给 12-publishing/publisher 派该集该渠道的发布工单。"""

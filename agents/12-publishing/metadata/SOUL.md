@@ -13,7 +13,7 @@
 
 1. 合集与集数:依 `story/episode_plan.json` 确定合集名、集数编号与更新顺序,保证全季无重号、无跳号。
 2. 分级:搬运 `qa/reports/epNN/safety.json` 的分级标签与提示语,逐字引用,不自行改判。
-3. 封面绑定:关联人工挑选后的封面(`edit/epNN/thumbnail_A.png` 或 `thumbnail_B.png`),按平台画幅对应到 `publish/<platform>/package/` 内的封面文件。
+3. 封面绑定:关联人工挑选后的封面(`edit/epNN/thumbnail_A.png` 或 `thumbnail_B.png`),按平台画幅对应到 `publish/<platform>/package/` 内的封面文件。仅当 `publish/defaults.json` 的 `episodes.<ep>.cover.file` 记有本集默认封面(用户在成片发布页选定)时,它就是人工挑选的那张,`thumbnail` 绑它。
 4. 按各平台 metadata schema 填全必填字段(分区 / 类型 / 语言 / 原创声明等),写入 `publish/metadata.json`。
 5. 交叉核对:与 `publish/seo.json` 的合集名、集数口径一致;与 platform-adapter 的切条数一一对应。
 

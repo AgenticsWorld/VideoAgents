@@ -90,6 +90,16 @@ details.fold[open] .fold-hint::before{content:"▾ "}
 .topt.on{border-color:var(--green)}
 .topt .tid{color:var(--dim);font-size:11px;white-space:nowrap}
 .topt .pick{color:var(--green);font-size:11px;white-space:nowrap}
+/* 发布默认素材(2026-11-01):标题 / 封面「设为默认」 */
+.topt .tx{flex:1 1 240px;min-width:0}
+.topt .dact{margin-left:auto;display:flex;gap:6px;align-items:baseline;flex:none}
+button.mini{padding:1px 8px;font-size:11.5px;line-height:1.5}
+button.mini:disabled{opacity:.5;cursor:wait}
+.thumbs .t.on{border-color:var(--green)}
+.thumbs .pick{color:var(--green);font-size:11.5px;white-space:nowrap}
+.thumbs .dact{display:flex;gap:6px;justify-content:center;align-items:baseline;flex-wrap:wrap;white-space:normal;margin-top:5px}
+h3.sec .n.def{color:var(--green)}
+h3.sec .n.def.warn{color:var(--yellow)}
 .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .tag{font-size:11px;border:1px solid var(--border);border-radius:4px;padding:0 6px;color:var(--dim)}
 .pfile{display:flex;gap:10px;align-items:baseline;font-size:12.5px;margin:3px 0;flex-wrap:wrap}
@@ -160,7 +170,7 @@ $('#lightbox').onclick=()=>$('#lightbox').style.display='none';
 // 集行:≤12 集逐集按钮,更多时收成一行下拉(/static/ep-picker.js,2026-09-12)
 function renderEps(episodes){EpPicker.render($('#eps'),episodes,EP,ep=>{EP=ep;load()})}
 
-function pubHtml(p,ep){
+function pubHtml(p,ep,dc){
   if(!p)return '<div class="none">'+esc(I18N.f('该集还没有发布物料(publish/{ep}/)',{ep}))+'</div>';
   const kv=(k,v)=>(v==null||v==='')?'':`<div class="pkv"><b>${esc(k)}</b>${esc(v)}</div>`;
   let h='<div class="pub">';
@@ -176,21 +186,26 @@ function pubHtml(p,ep){
       +kv('发布门禁 H5',m.gate_verdict)
       +kv('出品',[m.producer,m.production_credit].filter(Boolean).join(' · '))
       +kv('下一集',m.next_episode)
-      +'</div></div>';
+      +'</div>'
+      +(dc&&dc.exists&&m.thumbnail&&m.thumbnail!==dc.file?`<div class="pnote">${esc(I18N.f('发布时用本页选定的默认封面 {name},不按元数据里的封面',{name:dc.name}))}</div>`:'')
+      +'</div>';
   }
-  const s=p.seo;
-  if(s){
-    const picked=s.picked;
-    h+=`<div class="pcard"><div class="ph">🔍 SEO 上刊物料<span class="n">seo.json${s.platform?' · '+esc(s.platform):''}</span></div>`;
-    h+=(s.titles||[]).map(t=>{
-      const on=picked&&t.id===picked;
-      return `<div class="topt${on?' on':''}"><span class="tid">${esc(t.orientation||t.id||'')}</span>${esc(t.text||'')}${on?'<span class="pick">✓ 已选定</span>':''}</div>`;
+  // SEO:本集每个平台(× 切条)一张卡;每条标题可「设为默认」= 写回 seo.json 该条目的 picked(发布执行 Agent 逐字用它)
+  const seos=(p.seo_items&&p.seo_items.length)?p.seo_items:(p.seo?[p.seo]:[]);
+  seos.forEach(s=>{
+    const picked=s.picked,multi=seos.filter(x=>x.platform===s.platform).length>1;
+    h+=`<div class="pcard"><div class="ph">🔍 SEO 上刊物料<span class="n">${esc(p.seo_file||'seo.json')}${s.platform?' · '+esc(s.platform):''}${multi&&s.part!=null?' · P'+esc(s.part):''}</span></div>`;
+    h+=(s.titles||[]).map(x=>{
+      const on=picked&&x.id===picked;
+      const act=on?`<span class="pick">${esc(t('✓ 默认'))}</span><button class="mini" data-tclear="${s.idx}" title="${esc(t('取消这条默认标题(清空 seo.json 本条目的 picked)'))}">${esc(t('取消默认'))}</button>`
+        :`<button class="mini" data-tpick="${s.idx}" data-tid="${esc(x.id)}" title="${esc(t('发布时用这条标题:写入 seo.json 本条目的 picked,发布执行 Agent 逐字使用'))}">${esc(t('设为默认'))}</button>`;
+      return `<div class="topt${on?' on':''}"><span class="tid">${esc(x.orientation||x.id||'')}</span><span class="tx">${esc(x.text||'')}</span><span class="dact">${act}</span></div>`;
     }).join('');
-    if((s.titles||[]).length&&!picked)h+='<div class="pnote">⚠ 上刊标题尚未选定(items[0].picked=null,待人工三选一)</div>';
-    if((s.tags||[]).length)h+=`<div class="tags">${s.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>`;
+    if((s.titles||[]).length&&!picked)h+=`<div class="pnote">${esc(t('⚠ 上刊标题尚未选定:点一条标题右侧的「设为默认」,发布时逐字使用'))}</div>`;
+    if((s.tags||[]).length)h+=`<div class="tags">${s.tags.map(x=>`<span class="tag">${esc(x)}</span>`).join('')}</div>`;
     if(s.description)h+=`<details><summary>${esc(I18N.f('视频简介 description({n} 字)',{n:s.description.length}))}</summary><pre>${esc(s.description)}</pre></details>`;
     h+='</div>';
-  }
+  });
   (p.platforms||[]).forEach(pl=>{
     const v=String(pl.verdict||'').toLowerCase();
     const vt=pl.verdict?`<span class="st ${v==='pass'?'verified':(v.startsWith('fail')?'open':'waived')}">${esc(pl.verdict)}</span>`:'';
@@ -204,7 +219,7 @@ function pubHtml(p,ep){
     if(pl.note)h+=`<div class="pnote">${esc(pl.note)}</div>`;
     h+='</div>';
   });
-  if(!m&&!s&&!(p.platforms||[]).length)h+='<div class="none">'+esc(I18N.f('publish/{ep}/ 目录存在,但还没有可展示的物料',{ep}))+'</div>';
+  if(!m&&!seos.length&&!(p.platforms||[]).length)h+='<div class="none">'+esc(I18N.f('publish/{ep}/ 目录存在,但还没有可展示的物料',{ep}))+'</div>';
   return h+'</div>';
 }
 
@@ -224,11 +239,19 @@ function render(d){
      <div class="cap"><span class="fn">${esc(f.name)}</span><span>${f.size_mb} MB</span></div></div>`).join('')}</div>`
     :'<div class="none">'+esc(I18N.f('该集还没有 final 成片(edit/{ep}/*final*.mp4)',{ep:d.ep}))+'</div>';
 
-  h+=`<h3 class="sec">🖼 封面 thumbnail<span class="n">${esc(I18N.f('{n} 张',{n:thumbs.length}))}</span></h3>`;
-  h+=thumbs.length?`<div class="thumbs">${thumbs.map(t=>
-    `<div class="t"><img src="${esc(t.url)}" loading="lazy" onclick="zoom(this.src)">
-     <div class="cap" title="${esc(t.name)}">${esc(t.name)}</div>
-     <div class="cap">${CanvasEntry.btn({url:t.url,kind:'cover',label:d.ep+' · '+t.name})}</div></div>`).join('')}</div>`
+  // 默认封面(2026-11-01):每集一张,记 publish/defaults.json;派单时写进工单,优先于发布包封面
+  const dc=d.default_cover||null;
+  const dcLine=!thumbs.length&&!dc?'':dc?(dc.exists?I18N.f('默认封面:{name}',{name:dc.name}):I18N.f('默认封面 {name} 已不存在,发布时按发布包封面与技能文档的查找顺序',{name:dc.name}))
+    :t('未设默认封面:发布时按发布包封面与技能文档的查找顺序');
+  h+=`<h3 class="sec">🖼 封面 thumbnail<span class="n">${esc(I18N.f('{n} 张',{n:thumbs.length}))}</span>${dcLine?`<span class="n${dc?' def'+(dc.exists?'':' warn'):''}">${esc(dcLine)}</span>`:''}</h3>`;
+  h+=thumbs.length?`<div class="thumbs">${thumbs.map(x=>{
+    const on=!!(dc&&dc.exists&&dc.name===x.name);
+    const act=on?`<span class="pick">${esc(t('✓ 默认'))}</span><button class="mini" data-cclear="1" title="${esc(t('取消默认封面,发布时按发布包封面与技能文档的查找顺序'))}">${esc(t('取消默认'))}</button>`
+      :`<button class="mini" data-cpick="${esc(x.name)}" title="${esc(t('发布时用这张封面:记在 publish/defaults.json,派单时优先于发布包里的封面'))}">${esc(t('设为默认'))}</button>`;
+    return `<div class="t${on?' on':''}"><img src="${esc(x.url)}" loading="lazy" onclick="zoom(this.src)">
+     <div class="cap" title="${esc(x.name)}">${esc(x.name)}</div>
+     <div class="cap">${CanvasEntry.btn({url:x.url,kind:'cover',label:d.ep+' · '+x.name})}</div>
+     <div class="cap dact">${act}</div></div>`}).join('')}</div>`
     :'<div class="none">'+esc(I18N.f('该集还没有封面(edit/{ep}/thumbnail_*.png)',{ep:d.ep}))+'</div>';
 
   // 发布渠道(2026-10-07):勾选 = output.platforms(与输出设置同一键,下游封面 / 字幕 / 画幅矩阵 / 发布包按它);每渠道「发布」按钮派 publisher
@@ -239,7 +262,7 @@ function render(d){
 
   const pub=d.publish,pubN=pub?[pub.metadata?1:0,pub.seo?1:0].reduce((a,b)=>a+b,0)+(pub.platforms||[]).length:0;
   h+=`<h3 class="sec">📤 发布相关<span class="n">${esc((pub&&pub.source)||('publish/'+d.ep+'/'))}${pub?esc(I18N.f(' · {n} 项物料',{n:pubN})):''}</span></h3>`;
-  h+=pubHtml(pub,d.ep);
+  h+=pubHtml(pub,d.ep,dc);
 
   // 组 clip 超分方法标签(2026-09-23;2026-09-23 移到页面最下、发布相关之后):meta.json upscale 段(genmedia.py upscale 写入);一眼分辨插值 / 真超分
   const groups=d.groups||[];
@@ -268,6 +291,31 @@ function render(d){
 
   $('#content').innerHTML=h;restoreScroll($('#content'),d.ep);
   bindChannels(d);
+  bindDefaults(d);
+}
+
+/* ---------- 发布默认素材(2026-11-01):标题写回 seo.json picked,封面记 publish/defaults.json ---------- */
+function bindDefaults(d){
+  const seos=(d.publish&&d.publish.seo_items)||[];
+  const item=i=>seos.find(x=>x.idx===+i)||{};
+  document.querySelectorAll('#content button[data-tpick]').forEach(b=>b.onclick=()=>{
+    const s=item(b.dataset.tpick),x=(s.titles||[]).find(y=>y.id===b.dataset.tid)||{};
+    setDefault(d,{kind:'title',item:+b.dataset.tpick,title_id:b.dataset.tid,platform:s.platform||'',text:x.text||''});
+  });
+  document.querySelectorAll('#content button[data-tclear]').forEach(b=>b.onclick=()=>
+    setDefault(d,{kind:'title',item:+b.dataset.tclear,title_id:null,platform:item(b.dataset.tclear).platform||''}));
+  document.querySelectorAll('#content button[data-cpick]').forEach(b=>b.onclick=()=>setDefault(d,{kind:'cover',name:b.dataset.cpick}));
+  document.querySelectorAll('#content button[data-cclear]').forEach(b=>b.onclick=()=>setDefault(d,{kind:'cover',name:null}));
+}
+async function setDefault(d,body){
+  const proj=$('#project').value.trim()||'demo';
+  document.querySelectorAll('#content button.mini').forEach(b=>b.disabled=true);
+  try{
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/publish/'+encodeURIComponent(d.ep)+'/defaults',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(j.detail||j.error||r.status);
+  }catch(e){alert(I18N.f('保存失败:{e}',{e:e.message}))}
+  load();
 }
 
 /* ---------- 发布渠道:勾选 / 发布 / 运行轮询 ---------- */

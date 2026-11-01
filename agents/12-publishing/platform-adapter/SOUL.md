@@ -32,7 +32,7 @@
 | 10-editing | 终版成片(G10 冻结版) | `edit/epNN/final.mp4` |
 | 10-editing/edit(终版封装产出) | 字幕(**成片基准版,与 final.mp4 同时基**) | `edit/epNN/subtitles_final.srt`;**严禁改用正片基准的 subtitles.srt——那份不含片头偏移,直接配 final.mp4 字幕整体偏早一个片头时长**;缺 subtitles_final 或 `finalize_episode.py check` FAIL 时停手上报 edit 补产,不得自行拿 subtitles.srt 顶替 |
 | 10-editing/edit(终版封装产出) | 成片时间轴台账 | `edit/epNN/final_layout.json`;`cut_offset_s` = 片头偏移、各段实测时长与 check 结果,打包核对时以此为准 |
-| 10-editing/thumbnail | 封面(人工选定版) | `edit/epNN/thumbnail_*.png` |
+| 10-editing/thumbnail | 封面(人工选定版) | `edit/epNN/thumbnail_*.png`;仅当 `publish/defaults.json` 的 `episodes.<ep>.cover.file` 记有本集默认封面(成片发布页选定)时,它就是人工选定版,画幅合该平台就打包它 |
 | 06-art/aspect-ratio | 画幅与分辨率矩阵 | `bible/aspect_ratio.json` |
 | 01-story/pacing | 场次边界(切条参考) | `story/episodes/epNN/pacing.json` |
 | 平台规格表 | 各平台码率 / 时长 / 封装要求 | 工单提供 |

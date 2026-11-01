@@ -12314,22 +12314,35 @@ def _publish_meta_view(meta: dict, parent: dict | None) -> dict:
     }
 
 
-def _publish_seo_view(seo: dict, ep: str) -> dict | None:
-    """seo.json → 页面字段。items 按 ep 过滤(项目级文件多集共存);无 items 时文件本身即条目。
-    标题兼容 [{id,text,orientation}] 与纯字符串列表(+title_angles 对位);picked 兼容 id / 原文 / picked_index。"""
-    items = [x for x in (seo.get("items") or []) if isinstance(x, dict)]
+def _publish_seo_items(seo: dict, ep: str) -> list[dict]:
+    """seo.json 里本集的条目(原对象引用,写 picked 时就地改):items 按 ep 过滤(项目级文件多集 × 多平台共存);
+    无 items 时文件本身即条目(集级文件)。"""
+    items = [x for x in (seo.get("items") if isinstance(seo.get("items"), list) else []) if isinstance(x, dict)]
     mine = [x for x in items if not x.get("ep") or str(x.get("ep")) == ep]
-    it = mine[0] if mine else (seo if isinstance(seo.get("titles"), list) else None)
-    if it is None:
-        return None
+    if mine:
+        return mine
+    return [seo] if isinstance(seo.get("titles"), list) else []
+
+
+def _publish_seo_titles(it: dict) -> list[dict]:
+    """标题兼容 [{id,text,orientation}] 与纯字符串列表(+title_angles 对位);没有 id 的按位置补 t1/t2/…;
+    pos 为它在原 titles 列表里的下标(写 picked_index 用)。"""
     angles = it.get("title_angles") if isinstance(it.get("title_angles"), list) else []
     titles = []
     for i, t in enumerate(it.get("titles") or []):
         if isinstance(t, dict):
             titles.append({"id": str(t.get("id") or f"t{i + 1}"), "text": str(t.get("text") or ""),
-                           "orientation": str(t.get("orientation") or (angles[i] if i < len(angles) else "") or "")})
+                           "orientation": str(t.get("orientation") or t.get("angle")
+                                              or (angles[i] if i < len(angles) else "") or ""), "pos": i})
         elif isinstance(t, str):
-            titles.append({"id": f"t{i + 1}", "text": t, "orientation": str(angles[i] if i < len(angles) else "")})
+            titles.append({"id": f"t{i + 1}", "text": t, "orientation": str(angles[i] if i < len(angles) else ""),
+                           "pos": i})
+    return titles
+
+
+def _publish_seo_item_view(seo: dict, it: dict, idx: int = 0) -> dict:
+    """一条 seo 条目(集 × 平台 × 切条)→ 页面字段。picked 兼容 id / 原文 / picked_index / {title_id}。"""
+    titles = _publish_seo_titles(it)
     picked = it.get("picked")
     if isinstance(picked, dict):  # offer 口径:{"title_id": "T1", ...}
         picked = picked.get("title_id") or picked.get("id") or picked.get("text")
@@ -12340,13 +12353,33 @@ def _publish_seo_view(seo: dict, ep: str) -> dict | None:
         picked = titles[it["picked_index"]]["id"]
     else:
         picked = None
+    meta = seo.get("meta") if isinstance(seo.get("meta"), dict) else {}
     return {
-        "platform": (seo.get("meta") or {}).get("platform") if isinstance(seo.get("meta"), dict) else it.get("platform") or seo.get("platform"),
+        "idx": idx,
+        # 条目自己的 platform 优先(项目级文件每条一个平台),再看文件 meta / 顶层
+        "platform": it.get("platform") or meta.get("platform") or seo.get("platform"),
+        "part": it.get("part"),
         "titles": titles,
         "picked": picked,
         "tags": [str(t) for t in (it.get("tags") or [])],
         "description": str(it.get("description") or ""),
     }
+
+
+def _publish_seo_view(seo: dict, ep: str) -> dict | None:
+    """seo.json → 本集首条的页面字段(兼容旧调用);全部条目见 _ep_publish_info 的 seo_items。"""
+    mine = _publish_seo_items(seo, ep)
+    return _publish_seo_item_view(seo, mine[0], 0) if mine else None
+
+
+def _publish_seo_source(base: Path, ep: str) -> tuple[Path, dict] | None:
+    """页面展示、默认标题写回的那份 seo.json:集级 publish/<ep>/seo.json 有本集条目时用它,否则项目级 publish/seo.json。"""
+    proot = base / "publish"
+    for f in (proot / ep / "seo.json", proot / "seo.json"):
+        doc = _read_json_safe(f) if f.is_file() else None
+        if isinstance(doc, dict) and _publish_seo_items(doc, ep):
+            return f, doc
+    return None
 
 
 def _publish_platform_view(base: Path, name: str, rep_dirs: list, pkg: Path) -> dict:
@@ -12410,15 +12443,16 @@ def _ep_publish_info(base: Path, ep: str):
             info["metadata"] = _publish_meta_view(entry, doc)
             info["source"] = "publish/"
 
-    seo = _read_json_safe(pdir / "seo.json") if pdir.is_dir() else None
-    if isinstance(seo, dict):
-        info["seo"] = _publish_seo_view(seo, ep)
-    if info["seo"] is None:
-        doc = _read_json_safe(proot / "seo.json")
-        if isinstance(doc, dict):
-            info["seo"] = _publish_seo_view(doc, ep)
-            if info["seo"] is not None and not pdir.is_dir():
-                info["source"] = "publish/"
+    # seo:本集每个平台(× 切条)一条,页面逐条显示并可「设为默认」(写回 picked);seo 仍给首条,兼容旧调用
+    info["seo_items"], info["seo_file"] = [], None
+    src = _publish_seo_source(base, ep)
+    if src:
+        f, doc = src
+        info["seo_items"] = [_publish_seo_item_view(doc, it, i) for i, it in enumerate(_publish_seo_items(doc, ep))]
+        info["seo"] = info["seo_items"][0]
+        info["seo_file"] = f.relative_to(base).as_posix()
+        if f.parent == proot and not pdir.is_dir():
+            info["source"] = "publish/"
 
     seen = set()
     if pdir.is_dir():
@@ -12600,11 +12634,174 @@ def _ep_publish_channels(base: Path, ep: str) -> list[dict]:
     return rows
 
 
+# ── 发布默认素材(2026-11-01):成片发布页把一条标题 / 一张封面设为发布时的默认 ──
+# 标题:写回 seo.json 本集该平台条目的 picked——SEO 规约里「留空待人工填」的就是它,发布技能本就逐字取 picked;
+# 封面:每集一张,记在 publish/defaults.json 的 episodes.<ep>.cover(封面没有现成的人工挑选字段,metadata 是 Agent 产物不改)。
+PUBLISH_DEFAULTS_REL = "publish/defaults.json"
+_PUBLISH_PICK_LOCK = threading.Lock()
+
+
+def _zh_ui() -> bool:
+    return (ui_lang_code() or "zh") == "zh"
+
+
+def _image_wh(path: Path) -> tuple[int, int] | None:
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            return int(im.width), int(im.height)
+    except Exception:  # noqa: BLE001  没装 Pillow / 读不出:只是少显示尺寸
+        return None
+
+
+def _publish_defaults_load(base: Path) -> dict:
+    doc = _read_json_safe(base / PUBLISH_DEFAULTS_REL)
+    return doc if isinstance(doc, dict) else {}
+
+
+def _ep_default_cover(base: Path, ep: str) -> dict | None:
+    """本集默认封面(publish/defaults.json);文件已不在时 exists=False(页面提示,派单不写)。"""
+    eps = _publish_defaults_load(base).get("episodes")
+    c = (eps.get(ep) or {}).get("cover") if isinstance(eps, dict) and isinstance(eps.get(ep), dict) else None
+    rel = c.get("file") if isinstance(c, dict) else None
+    if not isinstance(rel, str) or not rel.startswith(f"edit/{ep}/"):
+        return None
+    f = base / rel
+    edir = (base / "edit" / ep).resolve()
+    ok = f.is_file() and edir in f.resolve().parents
+    wh = _image_wh(f) if ok else None
+    return {"file": rel, "name": rel[len(f"edit/{ep}/"):], "exists": ok,
+            "width": wh[0] if wh else None, "height": wh[1] if wh else None,
+            "picked_at": c.get("picked_at")}
+
+
+def _publish_set_cover(base: Path, ep: str, name) -> dict:
+    """设 / 清本集默认封面。name 为 edit/<ep>/ 下的相对路径(页面封面卡的 name),None / 空 = 取消默认。"""
+    edir = base / "edit" / ep
+    rel = None
+    if name not in (None, ""):
+        name = str(name).replace("\\", "/").lstrip("/")
+        f = edir / name
+        if ".." in Path(name).parts or f.suffix.lower() not in IMG_EXTS or not f.is_file() \
+                or edir.resolve() not in f.resolve().parents:
+            raise ServiceError(404, (f"edit/{ep}/ 下没有这张封面:{name}(请刷新页面)" if _zh_ui()
+                                     else f"No such cover in edit/{ep}/: {name} (refresh the page)"))
+        rel = f"edit/{ep}/{name}"
+    with _PUBLISH_PICK_LOCK:
+        doc = _publish_defaults_load(base)
+        doc.setdefault("note", "成片发布页选定的发布默认素材(宿主写入):episodes.<ep>.cover 为默认封面;默认标题写在 seo.json 各条目的 picked")
+        eps = doc.get("episodes") if isinstance(doc.get("episodes"), dict) else {}
+        doc["episodes"] = eps
+        row = eps.get(ep) if isinstance(eps.get(ep), dict) else {}
+        if rel:
+            row["cover"] = {"file": rel, "picked_by": "user", "picked_at": datetime.now().astimezone().isoformat(timespec="seconds")}
+            eps[ep] = row
+        else:
+            row.pop("cover", None)
+            if row:
+                eps[ep] = row
+            else:
+                eps.pop(ep, None)
+        out = base / PUBLISH_DEFAULTS_REL
+        out.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(out, doc)
+    return {"ok": True, "kind": "cover", "ep": ep, "cover": _ep_default_cover(base, ep)}
+
+
+def _publish_set_title(base: Path, ep: str, body: dict) -> dict:
+    """把本集某条 seo 条目(item = 页面 seo_items 的 idx)的 picked 设为 title_id 那条标题;title_id 为 None = 取消默认。
+    页面带上 platform / text 防串:seo.json 在页面打开后被改写过时 409,让用户刷新。
+    写法随原文件:picked 是对象(offer 口径)改它的 title_id / id;否则写标题原文,并同步 picked_index(有这个键时)。"""
+    stale = ("seo.json 在页面打开后已变化,请刷新页面后再选" if _zh_ui()
+             else "seo.json has changed since the page was loaded; refresh the page and pick again")
+    idx, tid = body.get("item"), body.get("title_id")
+    if not isinstance(idx, int) or isinstance(idx, bool):
+        raise ServiceError(400, "item (index of the seo entry) is required")
+    with _PUBLISH_PICK_LOCK:
+        src = _publish_seo_source(base, ep)
+        if not src:
+            raise ServiceError(404, (f"{ep} 没有可选的 SEO 标题(publish/seo.json)" if _zh_ui()
+                                     else f"{ep} has no SEO titles to pick from (publish/seo.json)"))
+        f, doc = src
+        items = _publish_seo_items(doc, ep)
+        if not 0 <= idx < len(items):
+            raise ServiceError(409, stale)
+        it = items[idx]
+        view = _publish_seo_item_view(doc, it, idx)
+        if "platform" in body and str(body.get("platform") or "") != str(view["platform"] or ""):
+            raise ServiceError(409, stale)
+        now = datetime.now().astimezone().isoformat(timespec="seconds")
+        if tid in (None, ""):
+            cur = it.get("picked")
+            if isinstance(cur, dict):   # 对象口径只清标题,简介等其它选择保留
+                for k in ("title_id", "id", "text", "picked_by", "picked_at"):
+                    cur.pop(k, None)
+                if "note" in cur:
+                    cur["note"] = "用户在成片发布页取消了默认标题"
+            else:
+                it["picked"] = None
+            if "picked_index" in it:
+                it["picked_index"] = None
+            it.pop("picked_by", None)
+            it.pop("picked_at", None)
+        else:
+            title = next((t for t in view["titles"] if t["id"] == str(tid)), None)
+            if title is None or ("text" in body and str(body.get("text") or "") != title["text"]):
+                raise ServiceError(409, stale)
+            raw = it["titles"][title["pos"]]
+            cur = it.get("picked")
+            if isinstance(cur, dict):
+                key = "id" if ("id" in cur and "title_id" not in cur) else "title_id"
+                cur[key] = raw["id"] if isinstance(raw, dict) and raw.get("id") else title["text"]
+                if "text" in cur:
+                    cur["text"] = title["text"]
+                if "note" in cur:   # 原 note 记的是上一次怎么选的,改选后不再成立
+                    cur["note"] = "用户在成片发布页设为默认标题"
+                cur["picked_by"], cur["picked_at"] = "user", now
+            else:
+                it["picked"] = title["text"]
+                it["picked_by"], it["picked_at"] = "user", now
+            if "picked_index" in it:
+                it["picked_index"] = title["pos"]
+        atomic_write_json(f, doc)
+        view = _publish_seo_item_view(doc, it, idx)
+    return {"ok": True, "kind": "title", "ep": ep, "file": f.relative_to(base).as_posix(), "item": view}
+
+
+async def api_publish_default_set(project: str, ep: str, body: dict) -> dict:
+    """成片发布页「设为默认」:{kind:"title", item, title_id|null, platform?, text?} 或 {kind:"cover", name|null}。"""
+    ep = re.sub(r"[^\w\-]", "", ep or "")
+    if not ep:
+        raise ServiceError(400, "ep is required")
+    base = _proj_base(project)
+    kind = str((body or {}).get("kind") or "")
+    if kind == "title":
+        return await asyncio.to_thread(_publish_set_title, base, ep, body or {})
+    if kind == "cover":
+        return await asyncio.to_thread(_publish_set_cover, base, ep, (body or {}).get("name"))
+    raise ServiceError(400, "kind must be 'title' or 'cover'")
+
+
+def _ep_default_title(base: Path, ep: str, platform: str) -> str | None:
+    """本集本渠道 seo 条目已选定的标题原文(派单时写进工单);该渠道没有自己的条目或未选定返回 None。"""
+    src = _publish_seo_source(base, ep)
+    if not src:
+        return None
+    doc = src[1]
+    for i, it in enumerate(_publish_seo_items(doc, ep)):
+        v = _publish_seo_item_view(doc, it, i)
+        if str(v["platform"] or "") == platform and v["picked"]:
+            hit = next((t for t in v["titles"] if t["id"] == v["picked"]), None)
+            return hit["text"] if hit else None
+    return None
+
+
 def publish_dispatch_message(project: str, ep: str, platform: str, package_ready: bool, finals: list[str],
-                             shorts: dict | None = None) -> str:
+                             shorts: dict | None = None, cover: dict | None = None, title: str | None = None) -> str:
     """成片发布页「发布到 <渠道>」按钮的工单正文(发给 12-publishing/publisher):
     先读该渠道技能文档,按发布包 / 母版口径取素材,preflight 留痕,停在平台发布页由用户亲手提交,回执落 publish/receipts/。
-    YouTube Shorts 另写 Shorts 一节的口径与宿主实测结论(shorts = _ep_shorts_check 结果,None 为未能核对)。"""
+    YouTube Shorts 另写 Shorts 一节的口径与宿主实测结论(shorts = _ep_shorts_check 结果,None 为未能核对)。
+    cover / title 为页面选定的默认封面(_ep_default_cover,文件在才写)与本渠道已选定的标题,只在有时各加一行。"""
     name, aspect = OUTPUT_PLATFORMS[platform]
     skill = PUBLISH_PLATFORM_SKILLS[platform]
     pkg = f"publish/{platform}/package/{ep}/"
@@ -12623,6 +12820,13 @@ def publish_dispatch_message(project: str, ep: str, platform: str, package_ready
                  "发布包有多条时每条各传一个 Short(各加 --new-tab)。"
                  + ("有视频超过 1 分钟:带任何 Content ID 版权声明的 Shorts 会被全球屏蔽,回报时提醒用户。"
                     if shorts and shorts.get("over_content_id") else "")]
+    if cover and cover.get("exists"):
+        size = f"{cover['width']}×{cover['height']}" if cover.get("width") else "尺寸未知"
+        extra.append(f"- 封面:用户在成片发布页选定的默认封面 {cover['file']}({size}),优先于发布包里的封面与技能文档的封面查找顺序;"
+                     "仅当技能文档写明本渠道不接受这种画幅的封面时(如 YouTube Shorts 不拿 16:9 封面顶替)才不用它,"
+                     "改按技能文档的查找顺序取,并在回执注明。")
+    if title:
+        extra.append(f"- 标题:seo.json 本集 {platform} 条目已选定默认标题「{title}」(picked),逐字使用。")
     return "\n".join([
         f"请把 {ep} 发布到 {name}({platform})。先完整读 agents/12-publishing/publisher/skills/{skill}/SKILL.md 再照做;本单来自成片发布页「发布」按钮,只处理这一个渠道。",
         f"- 素材:{src}。",
@@ -12673,7 +12877,9 @@ async def api_publish_dispatch(project: str, ep: str, body: dict) -> dict:
         sel.append(platform)
         await api_projconfig_set({"project": project, "output": {"platforms": [k for k in OUTPUT_PLATFORMS if k in sel]}})
     pkg = _ep_publish_package_dir(base, ep, platform)
-    message = publish_dispatch_message(project, ep, platform, pkg is not None, finals, shorts)
+    cover = await asyncio.to_thread(_ep_default_cover, base, ep)
+    title = await asyncio.to_thread(_ep_default_title, base, ep, platform)
+    message = publish_dispatch_message(project, ep, platform, pkg is not None, finals, shorts, cover, title)
     run = await api_chat({"agent": PUBLISHER_ID, "message": message, "project": project, "source": "user"})
     return {"ok": True, "run_id": run.get("run_id"), "platform": platform, "ep": ep,
             "package_ready": pkg is not None, "message": message}
@@ -14372,6 +14578,8 @@ def _preview_videos(project: str, ep: str):
     # 规范名是 final.mp4(WORKFLOW §2);兼容个别工单跑偏产出的 master.mp4 总装母版
     data["finals"] = _files(("final", "master"), VIDEO_EXTS)
     data["thumbnails"] = _files(("thumb",), IMG_EXTS)
+    # 发布默认封面(2026-11-01,publish/defaults.json):页面封面卡「设为默认」,派单时写进工单
+    data["default_cover"] = _ep_default_cover(base, ep)
     data["publish"] = _ep_publish_info(base, ep)
     # 发布渠道板块(2026-10-07):全部可选渠道 + 勾选态 + 发布包/回执现状,页面每渠道一个「发布」按钮派 publisher
     data["channels"] = _ep_publish_channels(base, ep)
