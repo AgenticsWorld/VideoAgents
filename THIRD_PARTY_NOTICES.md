@@ -72,6 +72,45 @@ Chinese from Flick's style descriptions and those images, then translated. Entri
 `"source": "flick.art"` and the original Flick style name in `source_name`. These images and descriptions
 remain subject to Flick's terms.
 
+The design style library also includes 335 visual styles from handraw-style by yang0
+(https://github.com/yang0/handraw-style, v1.9.8, commit 572dff8, collected 2026-11-01), a library of
+367 hand-drawn and photographic styles. Each added style's preview image from the repository's
+`images/individual/` is the cover of a style card (`style1035`–`style1369.webp`): caption labels
+printed on some images (artist or style names, work titles) were cropped off or painted over, and for
+FB-022, FF-002 and FF-013 one panel of the repository's `_grid` image is used instead. The style
+prompts were written in Chinese from the repository's style traits and those images, then translated;
+they name no artists or works. Entries taken from handraw-style carry `"source": "handraw-style"` and
+the original style number and name in `source_name`. handraw-style is licensed as follows:
+
+> MIT License (with Attribution Requirement)
+>
+> Copyright (c) 2026 yang0 (https://github.com/yang0/handraw-style)
+>
+> Permission is hereby granted, free of charge, to any person obtaining a copy
+> of this software and associated documentation files (the "Software"), to deal
+> in the Software without restriction, including without limitation the rights
+> to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+> copies of the Software, and to permit persons to whom the Software is
+> furnished to do so, subject to the following conditions:
+>
+> 1. The above copyright notice and this permission notice shall be included in all
+>    copies or substantial portions of the Software.
+>
+> 2. Attribution Requirement: You are free to use, modify, distribute, and
+>    commercialize this project. If this project is helpful to you, or if your
+>    project/product is based on or derived from secondary development of this work,
+>    you must retain and clearly display credit to the original author (yang0) and
+>    the original repository link (https://github.com/yang0/handraw-style) in your
+>    documentation, repository, product description, or user interface.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+> IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+> FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+> AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+> LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+> OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+> SOFTWARE.
+
 On Windows x64 the desktop client can download FFmpeg from the VideoAgents package
 mirrors when none is installed. The package is the unmodified
 `ffmpeg-9.0.2-essentials_build.zip` static build from gyan.dev (FFmpeg 9.0.2, GPL v3),

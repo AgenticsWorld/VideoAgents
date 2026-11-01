@@ -35,10 +35,10 @@ def main() -> None:
             legacy.append(page.name)
     if legacy:
         raise SystemExit("Legacy API paths remain in: " + ", ".join(legacy))
-    # 风格库 1034 条(原 152 + flick.art 882,2026-10-20):封面数与条目数一致,且每条的封面都在
+    # 风格库 1369 条(原 152 + flick.art 882,2026-10-20;+ handraw-style 335,2026-11-01):封面数与条目数一致,且每条的封面都在
     import json
     lib = json.loads((STATIC / "styles" / "style_library.json").read_text(encoding="utf-8"))
-    if (len(list((STATIC / "styles" / "images").glob("*.webp"))) != 1034 or len(lib) != 1034
+    if (len(list((STATIC / "styles" / "images").glob("*.webp"))) != 1369 or len(lib) != 1369
             or any(not (STATIC / "styles" / s["image"]).is_file() for s in lib)):
         raise SystemExit("The original style image library is incomplete")
     # 风格库多语言:每种界面语言(中文除外)一份 styles/i18n/<lang>.json,须覆盖全部风格 id

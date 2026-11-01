@@ -14,7 +14,7 @@
   var T=function(s){return (window.t||function(x){return x})(s)};
   var F=function(s,p){return window.I18N&&I18N.f?I18N.f(s,p):String(s).replace(/\{(\w+)\}/g,function(m,k){return k in p?p[k]:m})};
   var esc=function(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})};
-  var STYLE_LIB_V='20261021';
+  var STYLE_LIB_V='20261101';
   var ASPECTS=['16:9','9:16','1:1','4:3','3:4'];      // 同 core.REFGEN_ASPECTS
   var PROV_NAMES={agentics:'Agentics',openrouter:'OpenRouter',volcengine:'火山引擎',byteplus:'BytePlus',fal:'Fal',minimax:'MiniMax',rhapi:'RH',comfyui:'ComfyUI'};
   var COMFY_MODE_NAMES={local:'本地',cloud:'云端(Comfy Cloud)',rh_cn:'RunningHub 国内(.cn)',rh_ai:'RunningHub 国际(.ai)'};
