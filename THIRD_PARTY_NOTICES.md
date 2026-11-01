@@ -64,18 +64,19 @@ demand from the Lemo-Opuscar release assets and repository at the pinned commit,
 SHA-256. Films made with this project type carry no LemoLab credit; the instruments a score uses
 are listed in that film's `CREDITS`.
 
-The design style library (`apps/web/static/styles/style_library.json`) includes the 916 visual styles of
-Flick's Flickpedia gallery (https://flick.art/flickpedia/visual-styles, collected 2026-10-20): each style's
-gallery image, resized to 640 px wide and re-encoded as WebP, is the cover of a style card (882 new
+The design style library (`apps/web/static/styles/style_library.json`) includes 907 of the 916 visual styles of
+Flick's Flickpedia gallery (https://flick.art/flickpedia/visual-styles, collected 2026-10-20; 9 styles
+defined by their subject rather than their look were removed on 2026-11-01): each style's
+gallery image, resized to 640 px wide and re-encoded as WebP, is the cover of a style card (873 new
 styles, plus 34 existing styles whose covers were replaced), and the style prompts were written in
 Chinese from Flick's style descriptions and those images, then translated. Entries taken from Flick carry
 `"source": "flick.art"` and the original Flick style name in `source_name`. These images and descriptions
 remain subject to Flick's terms.
 
-The design style library also includes 335 visual styles from handraw-style by yang0
+The design style library also includes 321 visual styles from handraw-style by yang0
 (https://github.com/yang0/handraw-style, v1.9.8, commit 572dff8, collected 2026-11-01), a library of
 367 hand-drawn and photographic styles. Each added style's preview image from the repository's
-`images/individual/` is the cover of a style card (`style1035`–`style1369.webp`): caption labels
+`images/individual/` is the cover of a style card (numbered within `style1035`–`style1369.webp`): caption labels
 printed on some images (artist or style names, work titles) were cropped off or painted over, and for
 FB-022, FF-002 and FF-013 one panel of the repository's `_grid` image is used instead. The style
 prompts were written in Chinese from the repository's style traits and those images, then translated;

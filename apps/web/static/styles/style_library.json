@@ -3058,15 +3058,6 @@
     "source_name": "Vintage Film Photography6"
   },
   {
-    "id": "1792513005988_style",
-    "name": "超现实图案化风景摄影风格",
-    "category": "真人",
-    "prompt": "超现实图案化风景摄影风格，真人写实，摄影作品，自然景观被处理成整齐重复的几何条纹或曲线图案，如巨型大地艺术。色彩清爽饱和，翠绿、白沙色与湖蓝、深海蓝层次分明。光线为明亮的晴天日光，阴影短而清晰，空气略带薄雾。画面锐利，细节丰富，带轻微数码质感。镜头为高处远眺的长焦或标准视角，前景常以深色植物剪影收边，图案在中景展开，整体呈现奇幻、规整、令人惊叹的超现实自然氛围。",
-    "image": "images/style367.webp",
-    "source": "flick.art",
-    "source_name": "Stylized Flat drawing3"
-  },
-  {
     "id": "1792513005989_style",
     "name": "缤纷圆润色块扁平插画风格",
     "category": "2D",
@@ -3697,15 +3688,6 @@
     "source_name": "Noir Cinematic Photography"
   },
   {
-    "id": "1792513006059_style",
-    "name": "极简撞色建筑摄影风格",
-    "category": "真人",
-    "prompt": "极简建筑摄影风格，真人写实、摄影作品，以干净几何与平面化构图呈现空间。色彩为高明度粉彩，湖蓝、天青为主，点缀正红与白色，撞色鲜明。光线为强烈晴天直射光，投下清晰硬朗的阴影。画面细节清晰，墙面肌理可见，颗粒细腻。构图正面平视、严格对称或重复排列，元素等距陈列，带水平分割线。整体呈现明快、安静、带复古度假感的极简美学。",
-    "image": "images/style438.webp",
-    "source": "flick.art",
-    "source_name": "Contemporary Fashion Illustration"
-  },
-  {
     "id": "1792513006060_style",
     "name": "高饱和广角自拍质感风格",
     "category": "真人",
@@ -4235,15 +4217,6 @@
     "image": "images/style497.webp",
     "source": "flick.art",
     "source_name": "Comic Book Neo-Noir"
-  },
-  {
-    "id": "1792513006119_style",
-    "name": "米白极简建筑摄影风格",
-    "category": "真人",
-    "prompt": "真人写实风格，摄影作品，极简主义建筑摄影。色调近乎单色，以米白、象牙、暖灰与墨黑为主，饱和度极低，以暗绿植物作点缀。光线为柔和的阴天漫射光，阴影浅淡、过渡平缓。质感细腻、轻微颗粒，类似复古印刷画册。构图规整平稳，强调水平线与几何体块，透视克制，深景深、留白干净，整体呈现静谧、克制、高级的现代主义建筑影像氛围。",
-    "image": "images/style498.webp",
-    "source": "flick.art",
-    "source_name": "Monochrome Photo-Illustration"
   },
   {
     "id": "1792513006120_style",
@@ -6217,15 +6190,6 @@
     "source_name": "Painterly Anime Illustration"
   },
   {
-    "id": "1792513006339_style",
-    "name": "雾青极简建筑写实渲染风格",
-    "category": "3D",
-    "prompt": "写实3D渲染风格，极简主义建筑空间的场景可视化，模型干净、材质真实，几何造型简洁、陈设极少。色调为近乎单色的雾青与灰绿，暗部沉黑，局部点缀一盏暖色小光源。光线为浓雾中的柔和散射光，空气透视明显，远景层层淡出。画面平滑细腻，带轻微噪点。构图对称，以纯黑框景框出中央景色，整体呈现静谧、空灵、冥想般的禅意氛围。",
-    "image": "images/style718.webp",
-    "source": "flick.art",
-    "source_name": "Photorealistic 3D Render"
-  },
-  {
     "id": "1792513006340_style",
     "name": "暮色超现实艺术摄影风格",
     "category": "真人",
@@ -7072,15 +7036,6 @@
     "source_name": "Steampunk Photorealism"
   },
   {
-    "id": "1792513006434_style",
-    "name": "黑白极简建筑摄影风格",
-    "category": "真人",
-    "prompt": "黑白极简建筑摄影风格，真人写实摄影作品，以干净的几何线条、平整墙面与水平屋檐构成画面，材质细腻写实。色彩为纯黑白灰阶，高对比，深黑块面与亮白地面分明。光影为阴天柔和漫射光，水面与玻璃带镜面倒影。质感清晰锐利，略带颗粒。构图严格对称，单点透视纵深，常以中轴线引导视线。整体呈现冷静、肃穆、秩序井然的现代主义空间美感。",
-    "image": "images/style813.webp",
-    "source": "flick.art",
-    "source_name": "Black and White Monochromatic Portraiture"
-  },
-  {
     "id": "1792513006435_style",
     "name": "美式电视平涂动画风格",
     "category": "2D",
@@ -7918,15 +7873,6 @@
     "source_name": "Halftone Portrait Illustration"
   },
   {
-    "id": "1792513006528_style",
-    "name": "极简建筑色块摄影风格",
-    "category": "真人",
-    "prompt": "极简建筑色块摄影风格，真人写实，摄影作品，以建筑墙面、门洞与平台构成干净的几何色块，结构线条横平竖直。色彩简洁，饱和天蓝或纯色墙面配清水混凝土灰与白，色块边界分明。晴天硬朗日光，阴影清晰，混凝土与铺地纹理真实可见。画面锐利，几乎无颗粒。构图严谨，对称或框中框，大量负空间，人物小巧点缀其中。整体呈现安静、秩序、带有建筑美学的极简意境。",
-    "image": "images/style907.webp",
-    "source": "flick.art",
-    "source_name": "minimalism photos"
-  },
-  {
     "id": "1792513006529_style",
     "name": "虹彩折射微距特写风格",
     "category": "真人",
@@ -8755,15 +8701,6 @@
     "source_name": "Contemporary Neo-Expressionism"
   },
   {
-    "id": "1792513006621_style",
-    "name": "法式自然妆感美妆摄影风格",
-    "category": "真人",
-    "prompt": "法式自然妆感美妆摄影风格，真人写实，摄影作品，以时尚美妆广告的近景人像呈现，强调清透底妆、自然雀斑与真实肤质，发型随性微乱，气质慵懒性感。色调为温暖的奶油肤色、柔粉与浅米，低对比、高级柔和。光线为大面积柔和的自然窗光，正面略侧打光，阴影轻浅、肤色透亮。画面清晰细腻，带极轻微的颗粒感。构图为特写或胸像、人物占据画面大部分，浅景深简洁背景，整体呈现自然、精致、慵懒随性的法式时尚美妆氛围。",
-    "image": "images/style1000.webp",
-    "source": "flick.art",
-    "source_name": "French Girl Makeup"
-  },
-  {
     "id": "1792513006622_style",
     "name": "古典童话水彩插图风格",
     "category": "2D",
@@ -8789,15 +8726,6 @@
     "image": "images/style1003.webp",
     "source": "flick.art",
     "source_name": "Dog Profile"
-  },
-  {
-    "id": "1792513006625_style",
-    "name": "当代侘寂室内建筑摄影风格",
-    "category": "真人",
-    "prompt": "当代侘寂室内建筑摄影风格，真人写实，摄影作品，如高端家居杂志的空间大片，强调建筑比例、材质与陈设的克制平衡，木材、石材、亚麻、绒面与陶器质感细腻真实。色调为温和的米白、燕麦、深橄榄与焦糖木色，低饱和、高级沉稳。光线为大窗引入的柔和自然侧光，明暗过渡细腻，阴影柔和通透。画面清晰锐利、几乎无颗粒。构图为对称或一点透视的广角，平视机位、线条规整，留白充足，整体呈现宁静、雅致、富有质感的当代极简生活氛围。",
-    "image": "images/style1004.webp",
-    "source": "flick.art",
-    "source_name": "Contemporary Minimalism house"
   },
   {
     "id": "1792513006626_style",
@@ -8888,15 +8816,6 @@
     "image": "images/style1014.webp",
     "source": "flick.art",
     "source_name": "Parisian Pastel Courtyard"
-  },
-  {
-    "id": "1792513006636_style",
-    "name": "白墙硬光极简静物摄影风格",
-    "category": "真人",
-    "prompt": "白墙硬光极简静物摄影风格，真人写实，摄影作品，如生活方式杂志与社交媒体的清新静物大片，主体简单、元素极少，常以手部持物入镜，质感新鲜真实。色调为干净的暖白背景配以一两种高饱和的主体色，清爽明快。光线为强烈的直射阳光，从窗外斜射，在白墙上投下清晰的几何光影与锐利投影。画面清晰、带轻微胶片颗粒。构图大面积留白、主体居中或偏一侧，平视拍摄，整体呈现明亮、简约、带夏日气息的清新生活感。",
-    "image": "images/style1015.webp",
-    "source": "flick.art",
-    "source_name": "Fruits"
   },
   {
     "id": "1792513006637_style",
@@ -11509,15 +11428,6 @@
     "source_name": "FH-008 Japanese Magazine Essay Illustration"
   },
   {
-    "id": "1793518462365_style",
-    "name": "粗黑线四格反差表情漫画风格",
-    "category": "2D",
-    "prompt": "粗黑线四格反差表情漫画风格，二维手绘，以粗细均匀、略带手绘起伏的黑色线条勾勒，头发常以实心黑块填满，人物为大头小身的简单比例，五官极简，平静时眯眼抿嘴，转折时瞪圆眼、张大嘴，配感叹号、汗滴与放射线等夸张符号。色彩极少，仅以浅肤色与少量浅棕、淡黄平涂点缀，其余为白底黑线。几乎无光影，线条干净。构图为方正的四格分镜，黑框等分排列，前几格平淡铺垫、末格突然反转，整体呈现脱线、呆萌、节奏明快的日常搞笑漫画氛围。",
-    "image": "images/style1306.webp",
-    "source": "handraw-style",
-    "source_name": "FH-009 Japanese Offbeat Four-Panel Cartoon"
-  },
-  {
     "id": "1793518462366_style",
     "name": "奶油色柔线韩系生活涂鸦风格",
     "category": "2D",
@@ -11806,60 +11716,6 @@
     "source_name": "FH-044 Claude Monet"
   },
   {
-    "id": "1793518462398_style",
-    "name": "极简科技产品商业摄影风格",
-    "category": "真人",
-    "prompt": "极简科技产品商业摄影风格，真人写实，摄影作品，如高端电子产品的广告静物，单件产品置于素净的石材或混凝土台面上，造型线条与金属、哑光材质刻画精准。色调以银白、冷灰与浅米为主，近乎单色、低饱和，干净克制。光线为柔和的窗外斜射日光，在墙面投下大块斜向光影，明暗过渡平滑，产品高光细腻。画面锐利洁净、无颗粒，背景虚化柔和。构图大量留白，主体略偏中下，平视或微俯视，整体呈现冷静、精致、高级的科技极简美学。",
-    "image": "images/style1339.webp",
-    "source": "handraw-style",
-    "source_name": "FI-001 Apple Minimalist Tech Product Commercial Photography"
-  },
-  {
-    "id": "1793518462399_style",
-    "name": "日式自然暖阳家居静物摄影风格",
-    "category": "真人",
-    "prompt": "日式自然暖阳家居静物摄影风格，真人写实，摄影作品，以原木餐桌、陶器、藤编椅与纸灯等朴素家居为主体，强调木纹、粗陶与编织的天然肌理。色调为蜂蜜木色、米白、暖杏与少量嫩绿，暖调柔和、饱和度中低。光线为低角度的午后暖阳从侧窗射入，墙面投下斑驳的枝叶影子，明暗柔和而有温度。画面细腻干净，景深较浅，前景家具略虚。构图为平视近中景的桌面一角，陈设简单、留白克制，整体呈现安静、质朴、温暖的日式生活气息。",
-    "image": "images/style1340.webp",
-    "source": "handraw-style",
-    "source_name": "FI-002 MUJI Japanese Naturalist Warm Home Photography"
-  },
-  {
-    "id": "1793518462400_style",
-    "name": "北欧暖阳温馨客厅家居摄影风格",
-    "category": "真人",
-    "prompt": "北欧暖阳温馨客厅家居摄影风格，真人写实，摄影作品，如家居目录中的生活方式大片，浅色布艺沙发、原木家具、织纹地毯、抱枕与绿植层层陈列，生活气息自然。色调为奶油白、燕麦米、浅木色与橄榄绿，暖调柔和、饱和度中等偏低。光线为大窗射入的金色午后阳光，室内明亮通透，逆光处带柔和光晕，阴影轻浅。画面细腻清晰，景深较浅，前景家具清楚、背景微虚。构图为平视中景的客厅一角，陈设饱满而有序，整体呈现舒适、温馨、亲切的北欧日常家居氛围。",
-    "image": "images/style1341.webp",
-    "source": "handraw-style",
-    "source_name": "FI-003 IKEA Nordic Cozy Lifestyle Interior Photography"
-  },
-  {
-    "id": "1793518462401_style",
-    "name": "暗调大地色石材静物摄影风格",
-    "category": "真人",
-    "prompt": "暗调大地色石材静物摄影风格，真人写实，摄影作品，如高端护肤门店的陈列影像，琥珀色玻璃瓶、粗陶器、石皂与绿植枝条置于水磨石或砂岩台面上，石材颗粒、玻璃通透与织物纹理真实细腻。色调近乎单色的大地暖棕，以赭石、沙褐、琥珀与橄榄绿为主，低饱和、沉稳。光线为低角度的侧向斜阳，墙面投下斑驳枝叶影，其余区域沉入柔和暗部，明暗对比含蓄。画面细腻，略带颗粒。构图平视近景、主体偏一侧，留白克制，整体呈现静谧、温润、带矿物气息的极简美学。",
-    "image": "images/style1342.webp",
-    "source": "handraw-style",
-    "source_name": "FI-004 Aesop Earthy Terrazzo Minimalist Botanical Space Photography"
-  },
-  {
-    "id": "1793518462402_style",
-    "name": "黑底硬光运动爆发广告摄影风格",
-    "category": "真人",
-    "prompt": "黑底硬光运动爆发广告摄影风格，真人写实，摄影作品，如运动装备广告大片，捕捉运动员冲刺、腾跃等最具张力的瞬间，肌肉线条、汗水与皮肤纹理锐利清晰。背景为纯黑或深暗，色彩低饱和，以古铜肤色、黑与白为主。光线为强烈的侧逆向硬光，勾出明亮轮廓边缘，暗部深沉，明暗反差极大。高速快门凝固飞溅的水珠与尘雾颗粒，画面锐利、对比强。构图动态倾斜，主体占满画面并留出运动方向空间，整体呈现力量、速度与拼搏的激昂感。",
-    "image": "images/style1343.webp",
-    "source": "handraw-style",
-    "source_name": "FI-005 Nike Dynamic Athletic Action & Dramatic Contrast Photography"
-  },
-  {
-    "id": "1793518462403_style",
-    "name": "户外探险荒野纪实摄影风格",
-    "category": "真人",
-    "prompt": "户外探险荒野纪实摄影风格，真人写实，摄影作品，如户外装备的探险纪实影像，人物以背影或侧身置于高山、冰川、湖泊等壮阔原生地貌之中，岩石、苔草与装备质感粗粝真实。色调为自然的灰蓝山色、雪白、苔绿与土褐，饱和度中等、略偏冷。光线为云层间透出的自然日光，天空云团层次丰富，明暗随地形起伏。画面锐利，细节清晰，带轻微空气雾感。构图为广角大景深，前景岩石、中景人物、远景群山层层递进，整体呈现辽阔、坚韧、敬畏自然的冒险精神。",
-    "image": "images/style1344.webp",
-    "source": "handraw-style",
-    "source_name": "FI-006 Patagonia Rugged Wilderness & Extreme Outdoor Documentary"
-  },
-  {
     "id": "1793518462404_style",
     "name": "七十年代印花魅惑时装大片风格",
     "category": "真人",
@@ -11878,15 +11734,6 @@
     "source_name": "FI-008 Jacquemus French Riviera Sun-Drenched Minimal Fashion Photography"
   },
   {
-    "id": "1793518462406_style",
-    "name": "壮阔野生动物自然纪实摄影风格",
-    "category": "真人",
-    "prompt": "壮阔野生动物自然纪实摄影风格，真人写实，摄影作品，如自然探索杂志的纪实影像，以长焦镜头捕捉动物或人物在原生环境中的真实姿态，皮毛、皮肤褶皱与草叶纹理清晰锐利。色彩浓郁自然，以金黄枯草、赭褐土地、天青蓝与雪白为主，饱和度中高。光线为清晨或傍晚的低角度暖阳，侧光勾勒体积，云层层次丰富。画面细腻、颗粒极少。构图主体居中、正面迎向镜头，远景山峦与开阔地平线衬出宏大尺度，景深较深，整体呈现雄浑、庄严、敬畏自然的史诗纪实氛围。",
-    "image": "images/style1347.webp",
-    "source": "handraw-style",
-    "source_name": "FI-009 National Geographic Epic Wildlife & Cultural Documentary Photography"
-  },
-  {
     "id": "1793518462407_style",
     "name": "暗调戏剧光影高定时装大片风格",
     "category": "真人",
@@ -11894,24 +11741,6 @@
     "image": "images/style1348.webp",
     "source": "handraw-style",
     "source_name": "FI-010 Vogue Haute Couture Dramatic Lighting Fashion Editorial"
-  },
-  {
-    "id": "1793518462408_style",
-    "name": "低饱和慢生活自然光静物摄影风格",
-    "category": "真人",
-    "prompt": "低饱和慢生活自然光静物摄影风格，真人写实，摄影作品，如独立生活方式杂志的餐桌与居家静物，陈设简单质朴，粗陶器皿、亚麻桌布、木质家具与日常食物质感真实细腻。色调为燕麦、米灰、陶土棕与淡橄榄绿，饱和度很低，整体温润柔和。光线为侧窗射入的自然阳光，在墙面与桌面投下斜向窗格光影，明暗过渡柔缓。画面带轻微胶片颗粒与柔和对比。构图为平视或略俯的近景，浅景深、背景虚化，留白松弛，整体呈现安静、质朴、从容的慢生活氛围。",
-    "image": "images/style1349.webp",
-    "source": "handraw-style",
-    "source_name": "FI-011 Kinfolk Slow-Living Low-Saturation Natural Light Photography"
-  },
-  {
-    "id": "1793518462409_style",
-    "name": "现代主义几何建筑室内摄影风格",
-    "category": "真人",
-    "prompt": "现代主义几何建筑室内摄影风格，真人写实，摄影作品，如建筑与设计杂志的空间大片，强调清水混凝土、通高玻璃幕墙、石材地面与悬挑屋檐构成的几何秩序，陈设低矮简洁。色调为米白、沙色、混凝土灰与深黑石材，配窗外天青海蓝，低饱和、清透。光线为明亮的自然日光，室内柔和，室外通透。画面锐利干净、几乎无颗粒，垂直线严格校正。构图为平视广角的一点透视，以框架线条引出室外远景，室内外连成一体，整体呈现开阔、理性、静谧奢华的现代建筑氛围。",
-    "image": "images/style1350.webp",
-    "source": "handraw-style",
-    "source_name": "FI-012 Wallpaper* Architectural Modernist Geometric Interior Photography"
   },
   {
     "id": "1793518462410_style",
@@ -11977,15 +11806,6 @@
     "source_name": "FI-019 Helmut Newton High-Contrast Bold Monochrome Seductive Noir"
   },
   {
-    "id": "1793518462417_style",
-    "name": "浓郁色彩人文肖像纪实摄影风格",
-    "category": "真人",
-    "prompt": "浓郁色彩人文肖像纪实摄影风格，真人写实，摄影作品，如人文地理杂志的旅途人像，人物多着具有地域特色的传统服饰与头巾，眼神深邃直视镜头，皮肤雀斑与纹理清晰真实。色彩饱和浓郁，以朱红、赭石、钴蓝与暖土黄为主，织物与墙面图案丰富。光线为阴影处的柔和自然光或侧向天光，面部受光均匀，眼神光明亮。画面细腻、带轻微胶片颗粒。构图为近景胸像，人物居中，背景为浅景深虚化的街巷或建筑，整体呈现深邃、坚韧、富有灵魂感的人文纪实氛围。",
-    "image": "images/style1358.webp",
-    "source": "handraw-style",
-    "source_name": "FI-020 Steve McCurry Saturated Soulful Humanist Cultural Portrait"
-  },
-  {
     "id": "1793518462418_style",
     "name": "高饱和直闪诙谐日常纪实风格",
     "category": "真人",
@@ -12004,15 +11824,6 @@
     "source_name": "FI-023 Saul Leiter Poetic Rainy Street & Window Reflection Color Photography"
   },
   {
-    "id": "1793518462420_style",
-    "name": "复古名流泳池度假摄影风格",
-    "category": "真人",
-    "prompt": "复古名流泳池度假摄影风格，真人写实，摄影作品，如六七十年代上流社会度假纪实，人物在泳池、露台与海岸间悠闲晒日、社交，衣着考究而轻松。色彩明亮饱和，以碧蓝泳池、湛蓝海天、珊瑚粉条纹遮阳伞与白色泳装为主，点缀柠檬黄与绿植。光线为地中海正午般的明亮阳光，阴影清晰、肤色带日晒光泽。画面清晰通透，带细腻胶片颗粒与偏暖复古色彩。构图为略高机位的开阔环境人像，人物与远处山海、建筑同框，整体呈现悠闲、奢华、阳光灿烂的复古度假氛围。",
-    "image": "images/style1361.webp",
-    "source": "handraw-style",
-    "source_name": "FI-024 Slim Aarons Luxurious Poolside Resort & Villa High-Society Photography"
-  },
-  {
     "id": "1793518462421_style",
     "name": "粗颗粒高反差黑白夜街摄影风格",
     "category": "真人",
@@ -12020,15 +11831,6 @@
     "image": "images/style1362.webp",
     "source": "handraw-style",
     "source_name": "FI-025 Daido Moriyama Grainy High-Contrast Noir Street Photography"
-  },
-  {
-    "id": "1793518462422_style",
-    "name": "宏大尺度重复几何建筑摄影风格",
-    "category": "真人",
-    "prompt": "宏大尺度重复几何建筑摄影风格，真人写实，摄影作品，以超大画幅般的极致清晰度俯瞰巨型建筑或人群，结构单元与无数微小人物层层重复，形成近乎图案的秩序。色调中性偏暖，以钢灰、混凝土白与暖黄灯光为主，点缀密集的细碎彩色，饱和度中等。光线为均匀的室内照明与天光，几乎无戏剧性阴影。画面锐利至极、几乎无颗粒，细节密度极高。构图为高机位正面或俯视取景，垂直线严格校正、无单一焦点，整体呈现冷静、宏大、带疏离感的当代社会秩序景观。",
-    "image": "images/style1363.webp",
-    "source": "handraw-style",
-    "source_name": "FI-026 Andreas Gursky Monumental Scale Repetitive Geometric Architecture Photography"
   },
   {
     "id": "1793518462423_style",
@@ -12074,14 +11876,5 @@
     "image": "images/style1368.webp",
     "source": "handraw-style",
     "source_name": "FI-033 Security Camera CCTV & Doorbell Surveillance Footage Photography"
-  },
-  {
-    "id": "1793518462429_style",
-    "name": "无人机高空航拍风光摄影风格",
-    "category": "真人",
-    "prompt": "无人机高空航拍风光摄影风格，真人写实，摄影作品，从高空斜俯或垂直向下俯瞰大地，山峦、湖岸、蜿蜒公路与村镇尽收眼底，人物与车辆缩成细小色点。色彩清爽通透、饱和度偏高，以湖蓝、天蓝、翠绿与暖白为主，点缀鲜亮小色块。光线为晴朗的日光，侧光勾出山体与地形起伏，阴影清晰，远景带淡淡空气透视。数码画质锐利、细节丰富，几乎无颗粒。构图开阔，常以弯曲道路或海岸线作引导线斜贯画面，整体呈现壮阔、明朗、心旷神怡的旅行风光大片感。",
-    "image": "images/style1369.webp",
-    "source": "handraw-style",
-    "source_name": "FI-034 DJI Drone Cinematic Aerial Landscape Photography"
   }
 ]
