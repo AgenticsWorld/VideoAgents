@@ -562,7 +562,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
           <div class="rhythm-detail" id="np-rhythm-season-detail" style="display:none"></div>
           <textarea id="np-rhythm-season-custom" style="flex:none;height:56px;display:none" placeholder="自定义跨集节拍链,如:每集留钩子 → 每 3 集一次回收"></textarea>
         </div></div>
-      <div class="row"><label>每集时长(分钟)</label><input type="number" id="npd-ep" min="0.5" step="0.5" value="5">
+      <div class="row"><label>每集时长(秒)</label><input type="number" id="npd-ep" min="1" step="1" value="300">
         <label style="width:auto;flex:none;display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px" title="勾选后不设固定每集时长,由剧本结构自动决定分集与每集时长"><input type="checkbox" id="npd-ep-auto" style="flex:none">根据剧本自动</label></div>
       <div class="row"><label>可加长单集</label><input type="number" id="npd-extend" min="0" max="200" step="5" value="50" style="width:70px;flex:none"><span style="color:var(--dim);font-size:12px">%</span>
         <button type="button" class="info-btn" data-info="npd-extend-info" title="说明">i</button></div>
@@ -848,7 +848,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
         <div class="rhythm-detail" id="dur-rhythm-season-detail" style="display:none"></div>
         <textarea id="dur-rhythm-season-custom" style="flex:none;height:56px;display:none" placeholder="自定义跨集节拍链,如:每集留钩子 → 每 3 集一次回收"></textarea>
       </div></div>
-    <div class="row"><label>每集时长(分钟)</label><input type="number" id="dur-ep" min="0.5" step="0.5" placeholder="10">
+    <div class="row"><label>每集时长(秒)</label><input type="number" id="dur-ep" min="1" step="1" placeholder="600">
       <label style="width:auto;flex:none;display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px" title="勾选后不设固定每集时长,由剧本结构自动决定分集与每集时长"><input type="checkbox" id="dur-ep-auto" style="flex:none">根据剧本自动</label></div>
     <div class="row"><label>可加长单集</label><input type="number" id="dur-extend" min="0" max="200" step="5" placeholder="50" style="width:70px;flex:none"><span style="color:var(--dim);font-size:12px">%</span>
       <button type="button" class="info-btn" data-info="dur-extend-info" title="说明">i</button></div>
@@ -1936,6 +1936,8 @@ function npInitOnce(){   // 语言下拉首次打开时构建(OUT_LANGS 在下�
 // 每集时长「根据剧本自动」:勾选后数值输入禁用(新建向导与视频节奏弹窗同款)
 $('#npd-ep-auto').onchange=()=>{$('#npd-ep').disabled=$('#npd-ep-auto').checked};
 $('#dur-ep-auto').onchange=()=>{$('#dur-ep').disabled=$('#dur-ep-auto').checked};
+// 每集时长界面按秒(2026-11-01),settings.json 仍存 episode_minutes:分钟 → 秒,取到毫秒去掉浮点尾差(50/60*60 ≠ 50)
+function epMinToSec(m){const v=parseFloat(m);return isFinite(v)?Math.round(v*60*1000)/1000:600}
 // 长镜头低分辨率提示:草稿档 ≤480p 时尾帧低清,作参考图会拖累续接组画质与人脸一致性
 const LONGTAKE_LOWRES=['360p','480p'];
 function npdLongtakeWarn(){$('#npd-longtake-warn').style.display=
@@ -2041,7 +2043,7 @@ function npResetDefaults(){   // 向导各步恢复默认值(与项目级设置�
   $('#npo-sound-split').value='off';   // 声画分离默认关(2026-10-03 用户拍板)
   $('#npo-npc').value='auto';   // NPC 参与构图(2026-10-09):默认按场次判定
   $('#npo-narration').checked=false;   // 新建项目旁白默认关闭(2026-09-01 用户拍板);存量项目缺省仍为开
-  $('#npd-ep').value=5;$('#npd-ep-auto').checked=false;$('#npd-ep').disabled=false;
+  $('#npd-ep').value=300;$('#npd-ep-auto').checked=false;$('#npd-ep').disabled=false;
   $('#npd-smin').value=0.5;$('#npd-smax').value=15;$('#npd-extend').value=50;
   $('#npd-longtake').checked=false;$('#npd-longtake-mode').value='last_frame';npdLongtakeWarn();   // 长镜头默认关闭,连接方式默认尾帧图片
   sgApplyPreset('npsg','mmh3');   // 分镜组兜底按 MiniMax H3 口径(15s/9图/3视频/3音频;2026-10-09 用户拍板,原 Seedance 2.5);
@@ -2110,7 +2112,7 @@ function npCollectSettings(){   // 不含 review:新建项目审核全 0(评委 
       scene_plates:$('#npo-scene-plates').value,
       plate_mode:$('#npo-plate-mode').value,
       platforms:[]},   // 发布渠道 2026-10-07 起在成片发布页勾选;新建项目默认一个都不选(空数组 = 不做分平台发布)
-    duration:{episode_minutes:$('#npd-ep-auto').checked?'auto':parseFloat($('#npd-ep').value),
+    duration:{episode_minutes:$('#npd-ep-auto').checked?'auto':parseFloat($('#npd-ep').value)/60,   // 界面按秒填,settings.json 仍存分钟
       shot_min_s:parseFloat($('#npd-smin').value),shot_max_s:parseFloat($('#npd-smax').value),
       long_take:$('#npd-longtake').checked,long_take_mode:$('#npd-longtake-mode').value,
       episode_extend_pct:parseFloat($('#npd-extend').value)},
@@ -2704,7 +2706,7 @@ async function openDurModal(){
     const d=cfg.duration||{};
     const auto=d.episode_minutes==='auto';
     $('#dur-ep-auto').checked=auto;$('#dur-ep').disabled=auto;
-    $('#dur-ep').value=auto?10:(d.episode_minutes??10);
+    $('#dur-ep').value=auto?600:epMinToSec(d.episode_minutes??10);   // 界面按秒显示,settings.json 存分钟
     $('#dur-smin').value=d.shot_min_s??1;
     $('#dur-smax').value=d.shot_max_s??10;
     $('#dur-extend').value=d.episode_extend_pct??50;   // 可加长单集 %(2026-10-03 时间尺)
@@ -2734,7 +2736,7 @@ $('#dur-ok').onclick=async()=>{
   if(trc.mode!=='minimal'&&!(trc.sound_bridge_s>=0.1&&trc.sound_bridge_s<=1.5)){$('#dur-err').textContent='声桥默认时长需在 0.1–1.5 秒之间';return}
   {const ce=trCloseValidate('dur');if(ce){$('#dur-err').textContent=ce;return}}
   try{
-    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),duration:{episode_minutes:epAuto?'auto':ep,shot_min_s:mn,shot_max_s:mx,long_take:$('#dur-longtake').checked,long_take_mode:$('#dur-longtake-mode').value,episode_extend_pct:ext},transitions:trc});
+    await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/config',{project:curProj(),duration:{episode_minutes:epAuto?'auto':ep/60,shot_min_s:mn,shot_max_s:mx,long_take:$('#dur-longtake').checked,long_take_mode:$('#dur-longtake-mode').value,episode_extend_pct:ext},transitions:trc});
     await api('/api/v1/projects/'+encodeURIComponent(curProj())+'/brief',{project:curProj(),rhythm:rhythmCollect('dur')});   // 只带 rhythm,构想/风格由服务端保留
     $('#dur-modal').style.display='none';
   }catch(e){$('#dur-err').textContent='保存失败:'+e.message}

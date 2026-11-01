@@ -3795,6 +3795,15 @@ def _fmt_num(x) -> str:
     return str(int(f)) if f == int(f) else str(f)
 
 
+def _fmt_episode_len(minutes) -> str:
+    """每集时长(settings.json 存分钟,界面 2026-11-01 起按秒填)→「600 秒(= 10 分钟)」/「50 秒(≈ 0.83 分钟)」。
+    秒取到毫秒、分钟取两位,去掉 50/60*60 这类浮点尾差。"""
+    m = float(minutes)
+    secs = _fmt_num(round(m * 60, 3))
+    mins = round(m, 2)
+    return f"{secs} 秒({'=' if abs(mins - m) < 1e-9 else '≈'} {_fmt_num(mins)} 分钟)"
+
+
 def project_prompt_path(project: str) -> str:
     """Return the persistent project path used in CLI-agent instructions."""
     return (PROJECTS_DIR / safe_slug(project)).resolve().as_posix()
@@ -4056,9 +4065,7 @@ def build_role_prompt(agent_id: str, project: str,
                    "自行决定集数与每集时长,并在 episode_plan 中写明各集实际预算;节奏(pacing)、"
                    "剪辑(edit)以 episode_plan 的实际预算为基准")
     else:
-        ep_minutes = _fmt_num(dur.get("episode_minutes") or 10)
-        ep_seconds = _fmt_num(float(dur.get("episode_minutes") or 10) * 60)
-        ep_line = (f"{ep_minutes} 分钟(= {ep_seconds} 秒)—— 剧本分集(episode_plan 每集预算)、"
+        ep_line = (f"{_fmt_episode_len(dur.get('episode_minutes') or 10)}—— 剧本分集(episode_plan 每集预算)、"
                    f"节奏(pacing)、剪辑(edit)一律以此为基准")
     shot_min = _fmt_num(dur.get("shot_min_s") or 1)
     shot_max = _fmt_num(dur.get("shot_max_s") or 10)
@@ -18412,7 +18419,7 @@ def _project_init_message(name: str) -> str:
     aspect, aspect_name, lang = resolve_output(cfg)
     dur = cfg["duration"]
     ep_desc = ("每集时长根据剧本自动决定" if dur.get("episode_minutes") == "auto"
-               else f"每集约 {dur['episode_minutes']} 分钟")
+               else f"每集约 {_fmt_episode_len(dur['episode_minutes'])}")
     narr_off = ("" if cfg["output"].get("narration_enabled") is True
                 else "、**旁白已关闭(用户约定全片没有任何旁白,p5-narration/p8-narrator 不派发)**")
     msg.append(

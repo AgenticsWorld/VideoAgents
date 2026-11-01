@@ -772,7 +772,7 @@ window.I18N_DICT = {
 "此操作不可恢复:产物、运行记录将一并删除。删除后自动跳转到第一个项目。": "This action cannot be undone: outputs and run records will all be deleted. You will be taken to the first project afterwards.",
 "每集剧本 + 分镜 + 关键帧 + 生成视频": "Per-episode screenplay + storyboard + keyframes + generated video",
 "每集成片 final 视频 + 封面 thumbnail + 审核问题反馈": "Per-episode final video + thumbnail + review feedback",
-"每集时长(分钟)": "Episode duration (minutes)",
+"每集时长(秒)": "Episode duration (seconds)",
 "每集时长决定剧本分集(episode_plan 每集预算);分镜时长范围约束 storyboard / shot-planning 的每镜设计": "Episode duration determines the script's episode split (per-episode budget in episode_plan); the shot duration range constrains per-shot design in storyboard / shot-planning",
 "每集时长决定剧本分集(episode_plan 每集预算);分镜时长范围约束 storyboard / shot-planning 的每镜设计。": "Episode duration determines the script's episode split (per-episode budget in episode_plan); the shot duration range constrains per-shot design in storyboard / shot-planning.",
 "每集时长需大于 0": "Episode duration must be greater than 0",

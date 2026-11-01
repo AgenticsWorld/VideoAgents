@@ -122,7 +122,7 @@ def run_script(base: Path, ep: str, rep_all: dict, strict: bool) -> Report:
     if base_budget is None:
         mins = (settings.get("duration") or {}).get("episode_minutes")
         if isinstance(mins, (int, float)) and mins > 0:
-            base_budget = float(mins) * 60
+            base_budget = round(float(mins) * 60, 3)   # 界面按秒填时分钟是 s/60,去浮点尾差
 
     scenes_out, need_total, alloc_total = [], 0.0, 0.0
     for sc in parsed.get("scenes") or []:

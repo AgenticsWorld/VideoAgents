@@ -731,7 +731,7 @@ window.I18N_DICT = {
 "此操作不可恢复:产物、运行记录将一并删除。删除后自动跳转到第一个项目。": "Esta operação é irreversível: outputs e registros de execução serão excluídos juntos. Após a exclusão, você será redirecionado ao primeiro projeto.",
 "每集剧本 + 分镜 + 关键帧 + 生成视频": "Roteiro + storyboard + keyframes + vídeos gerados por episódio",
 "每集成片 final 视频 + 封面 thumbnail + 审核问题反馈": "Vídeo final cut + thumbnail + feedback de revisão por episódio",
-"每集时长(分钟)": "Duração por episódio (minutos)",
+"每集时长(秒)": "Duração por episódio (segundos)",
 "每集时长决定剧本分集(episode_plan 每集预算);分镜时长范围约束 storyboard / shot-planning 的每镜设计": "A duração por episódio determina a divisão do roteiro (orçamento por episódio no episode_plan); o intervalo de duração dos shots restringe o design de cada shot no storyboard / shot-planning",
 "每集时长决定剧本分集(episode_plan 每集预算);分镜时长范围约束 storyboard / shot-planning 的每镜设计。": "A duração por episódio determina a divisão do roteiro (orçamento por episódio no episode_plan); o intervalo de duração dos shots restringe o design de cada shot no storyboard / shot-planning.",
 "每集时长需大于 0": "A duração por episódio deve ser maior que 0",

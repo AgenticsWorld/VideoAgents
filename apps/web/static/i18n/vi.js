@@ -731,7 +731,7 @@ window.I18N_DICT = {
 "此操作不可恢复:产物、运行记录将一并删除。删除后自动跳转到第一个项目。": "Thao tác này không thể khôi phục: sản phẩm, bản ghi chạy sẽ bị xóa cùng lúc. Sau khi xóa tự động chuyển đến dự án đầu tiên.",
 "每集剧本 + 分镜 + 关键帧 + 生成视频": "Kịch bản mỗi tập + phân cảnh + keyframe + video tạo sinh",
 "每集成片 final 视频 + 封面 thumbnail + 审核问题反馈": "Video final mỗi tập + ảnh bìa thumbnail + phản hồi vấn đề kiểm duyệt",
-"每集时长(分钟)": "Thời lượng mỗi tập (phút)",
+"每集时长(秒)": "Thời lượng mỗi tập (giây)",
 "每集时长决定剧本分集(episode_plan 每集预算);分镜时长范围约束 storyboard / shot-planning 的每镜设计": "Thời lượng mỗi tập quyết định việc chia tập kịch bản (ngân sách mỗi tập trong episode_plan); khoảng thời lượng phân cảnh ràng buộc thiết kế từng shot của storyboard / shot-planning",
 "每集时长决定剧本分集(episode_plan 每集预算);分镜时长范围约束 storyboard / shot-planning 的每镜设计。": "Thời lượng mỗi tập quyết định việc chia tập kịch bản (ngân sách mỗi tập trong episode_plan); khoảng thời lượng phân cảnh ràng buộc thiết kế từng shot của storyboard / shot-planning.",
 "每集时长需大于 0": "Thời lượng mỗi tập phải lớn hơn 0",
