@@ -52,9 +52,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/AgenticsWorld/VideoAgents"
-Repository = "https://github.com/AgenticsWorld/VideoAgents"
-Issues = "https://github.com/AgenticsWorld/VideoAgents/issues"
+Homepage = "https://github.com/AgenticsWorld/WorldOS"
+Repository = "https://github.com/AgenticsWorld/WorldOS"
+Issues = "https://github.com/AgenticsWorld/WorldOS/issues"
 
 [project.scripts]
 videoagents-api = "services.api.__main__:main"

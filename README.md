@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <sub>This repository is <strong>VideoAgents</strong>; its web console and agentics.world desktop build are titled Agentics WorldOS. The app, download packages and commands still use the VideoAgents name.</sub>
+  <sub>Formerly <strong>VideoAgents</strong>. The desktop app, download packages and commands still use the VideoAgents name.</sub>
 </p>
 
 <p align="center">
@@ -24,8 +24,8 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="GPL-3.0 License" /></a>
-  <a href="https://github.com/AgenticsWorld/VideoAgents/releases"><img src="https://img.shields.io/github/v/release/AgenticsWorld/VideoAgents" alt="Latest release" /></a>
-  <a href="https://github.com/AgenticsWorld/VideoAgents/stargazers"><img src="https://img.shields.io/github/stars/AgenticsWorld/VideoAgents?style=flat" alt="Stars" /></a>
+  <a href="https://github.com/AgenticsWorld/WorldOS/releases"><img src="https://img.shields.io/github/v/release/AgenticsWorld/WorldOS" alt="Latest release" /></a>
+  <a href="https://github.com/AgenticsWorld/WorldOS/stargazers"><img src="https://img.shields.io/github/stars/AgenticsWorld/WorldOS?style=flat" alt="Stars" /></a>
   <a href="https://discord.gg/faaZCrWxCq"><img src="https://img.shields.io/badge/discord-join-7289da" alt="Discord" /></a>
 </p>
 
@@ -303,8 +303,8 @@ FFmpeg is required for media inspection, audio and editing. On Windows the app o
 Requirements: Python 3.10 or newer, FFmpeg, and at least one agent engine. Node.js 22.12 or newer is needed only for desktop development and packaging.
 
 ```bash
-git clone https://github.com/AgenticsWorld/VideoAgents.git
-cd VideoAgents
+git clone https://github.com/AgenticsWorld/WorldOS.git
+cd WorldOS
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
@@ -380,7 +380,7 @@ See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) for the full development guide 
 
 - [Discord](https://discord.gg/faaZCrWxCq) — join the community
 - [X](https://x.com/AgenticsWorld) — follow updates and announcements
-- [GitHub Issues](https://github.com/AgenticsWorld/VideoAgents/issues) — bugs and feature requests
+- [GitHub Issues](https://github.com/AgenticsWorld/WorldOS/issues) — bugs and feature requests
 
 <br/>
 

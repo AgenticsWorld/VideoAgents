@@ -15,8 +15,8 @@
 ## 从源码运行
 
 ```bash
-git clone https://github.com/AgenticsWorld/VideoAgents.git
-cd VideoAgents
+git clone https://github.com/AgenticsWorld/WorldOS.git
+cd WorldOS
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip

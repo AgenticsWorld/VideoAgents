@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <sub>本仓库名为 <strong>VideoAgents</strong>，网页控制台与 agentics.world 桌面版的标题为 Agentics WorldOS。客户端、安装包和命令仍沿用 VideoAgents 这个名字。</sub>
+  <sub>原名 <strong>VideoAgents</strong>。客户端、安装包和命令仍沿用 VideoAgents 这个名字。</sub>
 </p>
 
 <p align="center">
@@ -24,8 +24,8 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="GPL-3.0 License" /></a>
-  <a href="https://github.com/AgenticsWorld/VideoAgents/releases"><img src="https://img.shields.io/github/v/release/AgenticsWorld/VideoAgents" alt="Latest release" /></a>
-  <a href="https://github.com/AgenticsWorld/VideoAgents/stargazers"><img src="https://img.shields.io/github/stars/AgenticsWorld/VideoAgents?style=flat" alt="Stars" /></a>
+  <a href="https://github.com/AgenticsWorld/WorldOS/releases"><img src="https://img.shields.io/github/v/release/AgenticsWorld/WorldOS" alt="Latest release" /></a>
+  <a href="https://github.com/AgenticsWorld/WorldOS/stargazers"><img src="https://img.shields.io/github/stars/AgenticsWorld/WorldOS?style=flat" alt="Stars" /></a>
   <a href="https://discord.gg/faaZCrWxCq"><img src="https://img.shields.io/badge/discord-join-7289da" alt="Discord" /></a>
 </p>
 
@@ -305,8 +305,8 @@ Agentics WorldOS 把顺序倒过来。它是一套开源、文件驱动的多 Ag
 环境要求：Python 3.10 或更高版本、FFmpeg、至少一种执行引擎。Node.js 22.12 或更高版本只在开发或打包桌面客户端时需要。
 
 ```bash
-git clone https://github.com/AgenticsWorld/VideoAgents.git
-cd VideoAgents
+git clone https://github.com/AgenticsWorld/WorldOS.git
+cd WorldOS
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
@@ -382,7 +382,7 @@ CI 跑 `tests/` 全量：模块与流水线 CLI 回归、仓库完整性（JSON/
 
 - [Discord](https://discord.gg/faaZCrWxCq) — 加入社群
 - [X](https://x.com/AgenticsWorld) — 关注更新与公告
-- [GitHub Issues](https://github.com/AgenticsWorld/VideoAgents/issues) — 报告问题、提功能建议
+- [GitHub Issues](https://github.com/AgenticsWorld/WorldOS/issues) — 报告问题、提功能建议
 
 <br/>
 

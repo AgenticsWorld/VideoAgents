@@ -29,7 +29,7 @@ DATA_DIR = Path(os.environ.get("VIDEOAGENTS_DATA_DIR", ROOT / "data")).expanduse
 RUNTIME_DIR = Path(os.environ.get("VIDEOAGENTS_RUNTIME_DIR", DATA_DIR / ".videoagents")).expanduser().resolve()
 TOKEN_PATH = RUNTIME_DIR / "openverse_token.json"
 API_BASE = "https://api.openverse.org/v1"
-USER_AGENT = "VideoAgents/1.0 (+https://github.com/AgenticsWorld/VideoAgents; sound effect search)"
+USER_AGENT = "VideoAgents/1.0 (+https://github.com/AgenticsWorld/WorldOS; sound effect search)"
 
 # 许可范围:只收可商用、可改编、不传染的许可。BY-SA 会把整部片子绑进同一许可,NC / ND 不能商用 / 改编,一律不收
 LICENSE_SETS = ("cc0,pdm", "cc0,pdm,by")

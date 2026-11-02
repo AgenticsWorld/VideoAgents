@@ -38,7 +38,7 @@ CACHE_DIR = RUNTIME_DIR / "stock_images"
 FOOTAGE_CONFIG = DATA_DIR / ".videoagents" / "footageconfig.json"
 CONFIG_PATH = Path(os.environ.get("VIDEOAGENTS_CONFIG_PATH", RUNTIME_DIR / "genconfig.json")).expanduser().resolve()
 KEY_PAGE_ZH, KEY_PAGE_EN = "⚙️ 设置 → 存储与图库", "⚙️ Settings → Storage & Image Libraries"
-USER_AGENT = "VideoAgents/1.0 (+https://github.com/AgenticsWorld/VideoAgents; reference image search)"
+USER_AGENT = "VideoAgents/1.0 (+https://github.com/AgenticsWorld/WorldOS; reference image search)"
 
 PROVIDERS = ("openverse", "pexels", "pixabay")
 PROVIDER_LABELS = {"openverse": "Openverse", "pexels": "Pexels", "pixabay": "Pixabay"}

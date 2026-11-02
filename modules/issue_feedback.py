@@ -1,5 +1,5 @@
 """Issue 反馈:Agent 运行中发现「宿主代码缺陷 / 需要宿主新增功能」时,整理成 issue
-自动发布到 GitHub(https://github.com/AgenticsWorld/VideoAgents/issues)。
+自动发布到 GitHub(https://github.com/AgenticsWorld/WorldOS/issues)。
 
 链路:Agent 调 `code/report_issue.py`(用法由运行提示词在开关开启时注入)→ file_issue()
 脱敏 + 签名去重后落盘 data/.videoagents/issues/<id>.json(state=pending)。默认由用户在
@@ -38,7 +38,7 @@ RUNTIME_DIR = Path(os.environ.get(
 ISSUES_DIR = RUNTIME_DIR / "issues"
 STATE_PATH = RUNTIME_DIR / "state.json"
 
-REPO = "AgenticsWorld/VideoAgents"
+REPO = "AgenticsWorld/WorldOS"
 ISSUES_URL = f"https://github.com/{REPO}/issues"
 API = "https://api.github.com"
 KINDS = {"bug": "bug", "feature": "enhancement"}   # kind → GitHub 标签
