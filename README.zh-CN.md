@@ -41,14 +41,6 @@
 
 <br/>
 
-## 30 秒速览
-
-<div align="center">
-  <video src="https://github.com/user-attachments/assets/97e159f0-8c10-46c2-98d7-915e62d1d749" width="900" controls></video>
-</div>
-
-<br/>
-
 # 世界只建一次，之后在里面想创作多少就创作多少
 
 大多数 AI 工具每做一件作品都从一句空白提示词开始。每个镜头、每一章、每段片子都把里面的人和地方重新发明一遍：上一镜的杯子到下一镜换了颜色，角色的脸一集一集地走样，做个番外又得从零开始。

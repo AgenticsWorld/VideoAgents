@@ -41,14 +41,6 @@
 
 <br/>
 
-## 30-second tour
-
-<div align="center">
-  <video src="https://github.com/user-attachments/assets/97e159f0-8c10-46c2-98d7-915e62d1d749" width="900" controls></video>
-</div>
-
-<br/>
-
 # Build the world once. Create inside it as often as you like.
 
 Most AI tools start every piece from a blank prompt. Each shot, chapter or clip re-invents the people and places in it, so a cup changes colour between two shots, a face drifts between episodes, and a spin-off starts again from zero.
