@@ -37,13 +37,65 @@ def _fingerprint(episode, group, review_marks=False):
     return hashlib.sha256(json.dumps([scene, group], sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
+# 视频指纹 r1 口径(2026-11-05):只算渲染器(whitebox-renderer.js)真正读取的字段。旧口径把整份编译 JSON 都哈希进去——
+# 组 warnings(含相邻组算出的「与 grpX 不连续」)、机位 basis 散文、label、continuity_from / scene_cast、场景名 / 地标 /
+# 物件 note / collision_role、导演台覆盖层元数据(overrides / overridden)……任何一项变都让已导出的 camera.mp4 判过期,
+# 而画面一个像素没变(前科:10-09 手部口径迁移、改一组连带相邻组)。数值按等值规范化(3 与 3.0、0 与 -0.0 同值)。
+# tests/test_whitebox_fingerprint.py 扫渲染器源码核对:渲染器新读了字段而这里没列,测试即失败(宁可失效不可漏)。
+RENDER_FINGERPRINT_PREFIX = 'r1:'
+RENDER_SCENE_KEYS = ('dimensions_m', 'floor', 'grid', 'objects')
+RENDER_GROUP_KEYS = ('duration_s', 'actors', 'extras', 'props', 'cameras')
+RENDER_OBJECT_KEYS = ('id', 'shape', 'size_m', 'position', 'yaw', 'pitch', 'roll', 'color', 'material', 'scale',
+                      'keyframes', 'shot_ids', 'attach', 'projection_screen')
+RENDER_ACTOR_KEYS = ('id', 'kind', 'color', 'size_m', 'keyframes', 'faceless', 'morph_target')
+RENDER_CAMERA_KEYS = ('shot_id', 'start', 'duration_s', 'keyframes', 'visible_actor_ids')
+RENDER_KEYFRAME_KEYS = ('t', 'position', 'target', 'fov', 'yaw', 'pitch', 'roll', 'scale', 'pose', 'bend', 'head_pitch',
+                        'head_yaw', 'torso_yaw', 'body_roll', 'neck_extension', 'expression', 'morph', 'left_hand',
+                        'right_hand', 'visible', 'attached', 'hold', 'easing')
+
+
+def _pick(obj, keys, keyframes=True):
+    if not isinstance(obj, dict):
+        return obj
+    out = {k: obj[k] for k in keys if k in obj}
+    if keyframes and isinstance(out.get('keyframes'), list):
+        out['keyframes'] = [_pick(k, RENDER_KEYFRAME_KEYS, False) for k in out['keyframes']]
+    return out
+
+
+def render_payload(scene, group):
+    """渲染器会读到的那部分场景 + 组(视频指纹 r1 的输入)。"""
+    s = _pick(scene, RENDER_SCENE_KEYS, False)
+    if isinstance(s.get('objects'), list):
+        s['objects'] = [_pick(o, RENDER_OBJECT_KEYS) for o in s['objects']]
+    g = _pick(group, RENDER_GROUP_KEYS, False)
+    for key, keys in (('actors', RENDER_ACTOR_KEYS), ('extras', RENDER_ACTOR_KEYS), ('props', RENDER_OBJECT_KEYS),
+                      ('cameras', RENDER_CAMERA_KEYS)):
+        if isinstance(g.get(key), list):
+            g[key] = [_pick(x, keys) for x in g[key]]
+    return [s, g]
+
+
+def _render_fingerprint(episode, group):
+    from modules.whitebox_camera import _canonical_numbers
+    payload = _canonical_numbers(render_payload(episode['scenes'][group['scene_id']], group))
+    return RENDER_FINGERPRINT_PREFIX + hashlib.sha256(
+        json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+
+
 def fingerprint(episode, group):
-    return _fingerprint(episode, group)
+    """新写入一律 r1 口径(只算渲染相关字段)。"""
+    return _render_fingerprint(episode, group)
 
 
 def fingerprint_matches(saved, episode, group):
-    """manifest 里存的 source_sha256 是否仍对得上本组:现行口径,或 2026-10-05 前含审查指纹的旧口径(一字未变当然仍有效)。"""
-    return bool(saved) and saved in (_fingerprint(episode, group), _fingerprint(episode, group, review_marks=True))
+    """manifest 里存的 source_sha256 是否仍对得上本组:r1 口径;无前缀的存量值按旧整份口径比对(含 2026-10-05 前带审查指纹的),
+    已签字导出不因口径升级而过期。"""
+    if not saved:
+        return False
+    if str(saved).startswith(RENDER_FINGERPRINT_PREFIX):
+        return saved == _render_fingerprint(episode, group)
+    return saved in (_fingerprint(episode, group), _fingerprint(episode, group, review_marks=True))
 
 
 def renderer_fingerprint():
@@ -289,6 +341,13 @@ def whitebox_fingerprints(base, ep):
     return out
 
 
+def _stored_episode(base, ep):
+    try:
+        return read(base/'directing'/component(ep)/'whitebox'/'episode.json', {}) or {}
+    except (ValueError, OSError):
+        return {}
+
+
 def episode_reel_status(base, ep):
     """合辑现状(预览页/机检共用):文件是否存在、组就绪数、与当前各组 camera.mp4 指纹是否一致。"""
     ep = component(ep)
@@ -341,10 +400,20 @@ def episode_reel_status(base, ep):
     if exists:
         rec_audio = manifest.get('audio') if isinstance(manifest.get('audio'), dict) else {}
         # 白模在样片生成之后又改过(重编译 / 导演台覆盖层):组视频还是旧的,样片不代表当前白模。旧清单没记 whitebox_sources 的不判
-        built = manifest.get('whitebox_sources') if isinstance(manifest.get('whitebox_sources'), dict) else {}
-        if built:
-            now = whitebox_fingerprints(base, ep)
-            whitebox_changed = [g['group_id'] for g in order if g['group_id'] in built and now.get(g['group_id']) != built[g['group_id']]]
+        # 2026-11-05 改:拿各片段实际渲染时记下的 source_sha256(manifest group_sources)对落盘编译结果 episode.json 比,
+        # 而不是成片那一刻的 episode.json 指纹(whitebox_sources)——后者在 --no-render 拼了过期片段时报「新鲜」,
+        # 在预览版按内存编译渲染、之后无变化的 --compile-only 落盘时又报「过期」。旧清单同样按片段指纹判。
+        stored = _stored_episode(base, ep)
+        groups_now = {g.get('group_id'): g for g in stored.get('groups') or []}
+        for g in order:
+            gid = g['group_id']
+            src = (manifest.get('group_sources') or {}).get(gid)
+            if gid in groups_now and src and groups_now[gid].get('scene_id') in (stored.get('scenes') or {}):
+                try:
+                    if not fingerprint_matches(src, stored, groups_now[gid]):
+                        whitebox_changed.append(gid)
+                except (KeyError, TypeError, ValueError):
+                    continue
         if manifest.get('group_sources') != sources or manifest.get('group_order') != [g['group_id'] for g in order]:
             stale_reason = 'groups'
         elif whitebox_changed:

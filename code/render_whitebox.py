@@ -56,7 +56,9 @@ def main():
     missing=selected-{g['group_id'] for g in episode['groups']}-{e['group_id'] for e in errors}
     errors.extend({'group_id':g,'error':'Unknown group'} for g in sorted(missing))
     # #157:groups 只数编译成功的组,source_groups 给整集 shot_list 的真实组数(有报错组时两者不等)
-    print(json.dumps({'groups':len(episode['groups']),'source_groups':episode['source_group_count'],'scenes':len(episode['scenes']),'errors':errors},ensure_ascii=False),flush=True)
+    # 2026-11-05 起机位审查失效的组也编进 episode['groups'](预览可看),首行 groups 仍只数没有编译错误的组
+    bad={e['group_id'] for e in episode['errors']}
+    print(json.dumps({'groups':sum(1 for g in episode['groups'] if g['group_id'] not in bad),'source_groups':episode['source_group_count'],'scenes':len(episode['scenes']),'errors':errors},ensure_ascii=False),flush=True)
     # 待决项汇总(docs/whitebox.md「待决项与用户裁决」):回执须原样带上;阻断级未清时 H3W 签字会被拒。
     # #157:与 H3W 闸门同口径(whitebox_issues.collect 直读各组计划 + decisions),编译报错的组的待决项也算进去
     from modules.whitebox_issues import collect, format_summary

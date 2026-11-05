@@ -3318,6 +3318,7 @@ window.I18N_DICT = {
 "查看自动推断草稿（仅供参考，不接受修改）": "Automatisch abgeleiteten Entwurf ansehen (nur zur Orientierung, keine Änderungen möglich)",
 "自动推断草稿": "Automatisch abgeleiteter Entwurf",
 "自动推断草稿：本组未经白模调度，以下画面由系统按分镜与动线粗略推断，仅供参考；修改入口在白模调度完成后开放。": "Automatisch abgeleiteter Entwurf: Diese Gruppe wurde noch nicht per Whitebox-Staging bearbeitet. Das Bild unten ist grob aus Storyboard und Blocking abgeleitet und dient nur zur Orientierung; Änderungen sind nach Abschluss des Whitebox-Stagings möglich.",
+"机位审查未通过：本组白模可以查看，但不能导出；需白模调度复核取景后重打审查指纹。": "Kameraprüfung nicht bestanden: Das Blockmodell dieser Gruppe ist sichtbar, lässt sich aber erst exportieren, wenn die Blockmodell-Inszenierung den Bildausschnitt erneut prüft und die Prüf-Fingerprints neu setzt.",
 "本组尚未白模调度,当前是系统自动推断的草稿,只能查看;白模调度完成后再提修改": "Diese Gruppe wurde noch nicht per Whitebox-Staging bearbeitet; zu sehen ist ein automatisch abgeleiteter Entwurf, nur zur Ansicht. Änderungen bitte nach Abschluss des Whitebox-Stagings",
 "未调度": "Nicht gestaged",
 "缺陷单": "Mängeltickets",

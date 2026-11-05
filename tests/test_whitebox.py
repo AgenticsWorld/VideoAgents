@@ -1085,14 +1085,18 @@ def test_reel_uses_preview_clips_and_flags_whitebox_changes(reel_project, monkey
     preview.mkdir(parents=True)
     shutil.move(str(base/'assets/whitebox/ep02/grp001'), str(preview/'grp001'))
     _tiny_clip(preview/'grp003/camera.mp4', 5)
-    write(preview/'grp003/manifest.json', {'group_id': 'grp003', 'duration_s': 5, 'fps': 24, 'width': 64, 'height': 36, 'preview': True,
-                                           'source_sha256': 'src-grp003-v2', 'files': ['directing/ep02/whitebox/preview/grp003/camera.mp4']})
     episode = {'ep': 'ep02', 'scenes': {'SCN-1': {'scene_id': 'SCN-1'}},
                'groups': [{'group_id': g, 'scene_id': 'SCN-1', 'duration_s': d} for g, d in (('grp002', 3), ('grp001', 2), ('grp003', 5))]}
     write(base/'directing/ep02/whitebox/episode.json', episode)
+    # 2026-11-05 起样片「白模改没改」按各片段实际渲染时的源指纹比落盘编译结果:片段带的是当前白模的指纹
+    src = {g['group_id']: fingerprint(episode, g) for g in episode['groups']}
+    for path, gid in ((base/'assets/whitebox/ep02/grp002/manifest.json', 'grp002'), (preview/'grp001/manifest.json', 'grp001')):
+        write(path, {**json.loads(path.read_text()), 'source_sha256': src[gid]})
+    write(preview/'grp003/manifest.json', {'group_id': 'grp003', 'duration_s': 5, 'fps': 24, 'width': 64, 'height': 36, 'preview': True,
+                                           'source_sha256': src['grp003'], 'files': ['directing/ep02/whitebox/preview/grp003/camera.mp4']})
     before = episode_reel_status(base, 'ep02')
     assert before['groups_missing'] == [] and before['preview_groups'] == ['grp001', 'grp003']
-    assert before['sources'] == {'grp002': 'src-grp002', 'grp001': 'src-grp001', 'grp003': 'src-grp003-v2'}
+    assert before['sources'] == src
     manifest = concat_episode(base, 'ep02')
     assert manifest['groups'] == 3 and abs(manifest['duration_s']-10) < 0.2 and manifest['preview_groups'] == ['grp001', 'grp003']
     assert manifest['whitebox_sources'] == {g['group_id']: fingerprint(episode, g) for g in episode['groups']}
@@ -1111,6 +1115,16 @@ def test_reel_uses_preview_clips_and_flags_whitebox_changes(reel_project, monkey
     changed = episode_reel_status(base, 'ep02')
     assert changed['stale'] and changed['stale_reason'] == 'whitebox' and changed['whitebox_changed'] == ['grp001']
     assert core._preview_videos('demo', 'ep02')['whitebox']['whitebox_changed'] == ['grp001']
+    # 只改警告 / 说明文字(不进渲染)不算白模改动
+    episode['groups'][1]['cameras'] = [{'shot_id': 'sh1', 'fov': 35}]
+    episode['groups'][2]['warnings'] = ['与 grp001 的位置/姿态不连续'];episode['groups'][2]['basis'] = '改了一句说明'
+    write(base/'directing/ep02/whitebox/episode.json', episode)
+    assert episode_reel_status(base, 'ep02')['whitebox_changed'] == ['grp001']
+    # 用过期片段拼的样片(相当于 --no-render 只拼现有片段)也要报过期:片段指纹对不上当前白模
+    write(preview/'grp003/manifest.json', {**json.loads((preview/'grp003/manifest.json').read_text()), 'source_sha256': 'r1:old'})
+    concat_episode(base, 'ep02')
+    stale = episode_reel_status(base, 'ep02')
+    assert stale['stale'] and stale['stale_reason'] == 'whitebox' and stale['whitebox_changed'] == ['grp001', 'grp003']
 
 
 def reel_cli(monkeypatch, project, *args):

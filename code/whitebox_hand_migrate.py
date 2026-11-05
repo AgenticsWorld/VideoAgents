@@ -498,7 +498,10 @@ def plan_episode(base: Path, ep: str, ledger: dict) -> dict:
     # 6) 组指纹映射:导演台批准 / 最新版本
     pre_sha = {g['group_id']: dm.group_sha(pre, g) for g in pre.get('groups', []) if g.get('scene_id') in pre.get('scenes', {})}
     post_sha = {g['group_id']: dm.group_sha(post, g) for g in post.get('groups', []) if g.get('scene_id') in post.get('scenes', {})}
-    sha_map = {pre_sha[g]: post_sha[g] for g in pre_sha if g in post_sha and pre_sha[g] != post_sha[g]}
+    # 台账里可能是 r1 口径,也可能是 2026-11-05 前的旧口径(director._legacy_group_sha):两种迁移前值都映射到迁移后的 r1 值
+    pre_legacy = {g['group_id']: dm._legacy_group_sha(pre, g) for g in pre.get('groups', []) if g.get('scene_id') in pre.get('scenes', {})}
+    pre_ok = {g: {pre_sha[g], pre_legacy.get(g)} for g in pre_sha}
+    sha_map = {old: post_sha[g] for g in pre_sha if g in post_sha for old in pre_ok[g] if old and old != post_sha[g]}
     notes_p = ep_dir / 'whitebox' / 'director' / 'notes.json'
     if notes_p.is_file() and sha_map:
         rel = notes_p.relative_to(base).as_posix()
@@ -513,14 +516,14 @@ def plan_episode(base: Path, ep: str, ledger: dict) -> dict:
         for gid, rec in (doc.get('approvals') or {}).items():
             if not isinstance(rec, dict) or not rec.get('sha') or gid not in post_sha:
                 continue
-            if rec['sha'] != pre_sha.get(gid):
+            if rec['sha'] not in pre_ok.get(gid, ()):
                 res['approvals']['stale_left'] += 1
             elif rec['sha'] in sha_map:
                 valid[('approvals', gid, 'sha')] = rec['sha']
                 res['approvals']['restamped'] += 1
         for gid, recs in (doc.get('versions') or {}).items():
             for i, r in enumerate(recs):
-                if isinstance(r, dict) and r.get('v') == latest.get(gid) and r.get('sha') == pre_sha.get(gid) and r.get('sha') in sha_map:
+                if isinstance(r, dict) and r.get('v') == latest.get(gid) and r.get('sha') in pre_ok.get(gid, ()) and r.get('sha') in sha_map:
                     valid[('versions', gid, i, 'sha')] = r['sha']
         if valid:
             text = raw.decode('utf-8')
@@ -528,7 +531,7 @@ def plan_episode(base: Path, ep: str, ledger: dict) -> dict:
             changes[rel] = {'kind': 'notes', 'before': raw, 'after': new, 'keys': 0, 'tracks': 0, 'sha_restamped': n}
             res['versions_sha'] = sum(1 for k in valid if k[0] == 'versions')
         for rel_v, c in changes.items():
-            if c['kind'] == 'version' and c.get('v') == latest.get(c['gid']) and c.get('sha') == pre_sha.get(c['gid']) \
+            if c['kind'] == 'version' and c.get('v') == latest.get(c['gid']) and c.get('sha') in pre_ok.get(c['gid'], ()) \
                     and c.get('sha') in sha_map:
                 c['after'], _ = replace_str_values(c['after'], lambda path: path == ('sha',), sha_map)
                 c['sha_restamped'] = 1

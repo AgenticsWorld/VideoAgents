@@ -222,7 +222,9 @@ def test_check_only_lists_every_stale_shot_in_group(tmp_path):
     for sid in ('sh1', 'sh3'):
         comp(sid).write_text(json.dumps({'note': '也改过'}, ensure_ascii=False))
     episode = compile_episode(base, 'ep01')
-    assert len(episode['errors']) == 1 and not episode['groups'] and episode['source_group_count'] == 1
+    # 2026-11-05 起机位审查失效的组仍编进 groups(预览可看),挂 review_errors,同时记一条 error
+    assert len(episode['errors']) == 1 and episode['source_group_count'] == 1
+    assert [g['group_id'] for g in episode['groups']] == ['grp1'] and len(episode['groups'][0]['review_errors']) == 3
     import re
     assert re.findall(r'(?:^|; )(sh\d+): camera_contract: source changed', episode['errors'][0]['error']) == ['sh1', 'sh2', 'sh3']
 

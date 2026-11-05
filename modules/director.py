@@ -212,11 +212,27 @@ def delete_note(doc: dict, nid: str) -> dict:
 
 # ---------------------------------------------------------------- 版本快照
 def group_sha(episode: dict, group: dict) -> str:
-    """与 modules.whitebox_export.fingerprint 同口径:场景模型 + 组(去 issues / 剧情道具覆盖诊断等 FINGERPRINT_EXCLUDED_KEYS)。"""
+    """组版本 / 批准用的白模指纹,与视频指纹 modules.whitebox_export.fingerprint 同一 r1 口径(只算渲染相关字段,2026-11-05)。
+    此前整份哈希且没剔除机位审查指纹:上游只改文字、重打审查指纹,批准就判过期,批次回收也当成「白模变了」出新版本。"""
+    from modules.whitebox_export import fingerprint
+    return fingerprint(episode, group)
+
+
+def _legacy_group_sha(episode: dict, group: dict) -> str:
+    """2026-11-05 前的口径(场景 + 整组,去 issues / prop_coverage / review_errors / artifact_status),只供比对存量记录。"""
     from modules.whitebox import FINGERPRINT_EXCLUDED_KEYS
     scene = episode["scenes"][group["scene_id"]]
     slim = {k: v for k, v in group.items() if k not in FINGERPRINT_EXCLUDED_KEYS + ("artifact_status",)}
     return hashlib.sha256(json.dumps([scene, slim], sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def group_sha_matches(saved, episode: dict, group: dict) -> bool:
+    """台账里记的指纹(版本 / 批准)是否仍对得上本组:r1 口径,或无前缀存量值按旧口径。"""
+    if not saved:
+        return False
+    if str(saved).startswith("r1:"):
+        return saved == group_sha(episode, group)
+    return saved == _legacy_group_sha(episode, group)
 
 
 def versions_of(doc: dict, gid: str) -> list:
@@ -469,8 +485,13 @@ def reconcile(base: Path, ep: str, doc: dict, episode: dict, run_alive, plain_ep
                 for n in notes:
                     n["status"], n["error"], n["updated_at"] = "failed", f"重编译失败:{errors.get(gid) or '本组没有白模编译结果'}", _now()
                 continue
-            sha = group_sha(episode, compiled[gid])
-            if sha != latest_sha(doc, gid):
+            if gid in errors:
+                # 2026-11-05 起机位审查失效的组照样编进 groups(可看),但仍是编译错误:批次按失败处理
+                failed_any = True
+                for n in notes:
+                    n["status"], n["error"], n["updated_at"] = "failed", f"重编译报错:{errors[gid]}", _now()
+                continue
+            if not group_sha_matches(latest_sha(doc, gid), episode, compiled[gid]):
                 rec = snapshot(base, ep, doc, episode, gid, batch_id=batch["id"], note_ids=[n["id"] for n in notes],
                                label=f"批次 {batch['id']}")
                 batch["versions"][gid] = rec["v"]
@@ -650,6 +671,12 @@ def clear_group_overrides(doc: dict, gid: str, kind: str | None = None, oid: str
         doc["groups"].pop(gid, None)
 
 
+def _warn_once(group: dict, message: str) -> None:
+    warnings = group.setdefault("warnings", [])
+    if message not in warnings:
+        warnings.append(message)
+
+
 def apply_overrides(group: dict, ov: dict) -> dict:
     """把一组的覆盖层套到编译后的 group 上(原地);返回 {kind:[ids]} 记录哪些对象被覆盖。无效覆盖只警告不套用。"""
     from modules.whitebox import validate_keys
@@ -672,7 +699,7 @@ def apply_overrides(group: dict, ov: dict) -> dict:
                             obj[name] = e[name]
                 applied[kind].append(obj["id"])
             except (ValueError, KeyError, TypeError) as err:
-                group.setdefault("warnings", []).append(f"导演台覆盖层 {kind}/{obj.get('id')} 无效已忽略:{err}")
+                _warn_once(group, f"导演台覆盖层 {kind}/{obj.get('id')} 无效已忽略:{err}")
     entries = ov.get("cameras") or {}
     for cam in group.get("cameras", []):
         e = entries.get(cam.get("shot_id"))
@@ -685,7 +712,7 @@ def apply_overrides(group: dict, ov: dict) -> dict:
             cam["overridden"] = True
             applied["cameras"].append(cam["shot_id"])
         except (ValueError, KeyError, TypeError) as err:
-            group.setdefault("warnings", []).append(f"导演台覆盖层 cameras/{cam.get('shot_id')} 无效已忽略:{err}")
+            _warn_once(group, f"导演台覆盖层 cameras/{cam.get('shot_id')} 无效已忽略:{err}")
     applied = {k: v for k, v in applied.items() if v}
     if applied:
         group["overrides"] = applied
@@ -760,9 +787,10 @@ def set_approval(doc: dict, gid: str, sha: str | None, on: bool, by: str = "user
 def approvals_public(doc: dict, episode: dict) -> dict:
     """{gid: {sha, at, by, stale}}:stale = 批准后该组编译指纹变了。"""
     out = {}
-    current = {g["group_id"]: group_sha(episode, g) for g in episode.get("groups", []) if g.get("scene_id") in episode.get("scenes", {})}
+    current = {g["group_id"]: g for g in episode.get("groups", []) if g.get("scene_id") in episode.get("scenes", {})}
     for gid, rec in (doc.get("approvals") or {}).items():
-        out[gid] = {**rec, "stale": bool(rec.get("sha")) and current.get(gid) not in (None, rec.get("sha"))}
+        stale = bool(rec.get("sha")) and gid in current and not group_sha_matches(rec.get("sha"), episode, current[gid])
+        out[gid] = {**rec, "stale": stale}
     return out
 
 

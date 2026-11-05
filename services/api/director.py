@@ -251,7 +251,7 @@ async def snapshot(project: str, ep: str, body: dict | None = None):
         component(gid)
         dm.require_plan(base, ep, [gid])
         group = next((g for g in episode['groups'] if g['group_id'] == gid), None)
-        if group and dm.latest_sha(doc, gid) == dm.group_sha(episode, group):
+        if group and dm.group_sha_matches(dm.latest_sha(doc, gid), episode, group):
             raise ValueError('当前白模与最新版本相同,不必重复存版')
         rec = dm.snapshot(base, ep, doc, episode, gid, label=str(body.get('label') or '手动存版')[:80])
         dm.save_ledger(base, ep, doc)

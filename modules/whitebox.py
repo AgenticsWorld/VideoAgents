@@ -408,7 +408,7 @@ ATTACH_JUMP_M = .05      # 挂手道具切换帧(脱手/回手)的 position 离�
 PROP_COVERAGE_KEY = 'prop_coverage'
 # 编译组里只作诊断/裁决、不影响画面的键:视频指纹(whitebox_export)与导演台版本指纹(director.group_sha)都剔除,
 # 否则答题或新增诊断会让已签字导出的 camera.mp4 整批显示过期
-FINGERPRINT_EXCLUDED_KEYS = ('issues', PROP_COVERAGE_KEY)
+FINGERPRINT_EXCLUDED_KEYS = ('issues', PROP_COVERAGE_KEY, 'review_errors')
 
 
 def _rot_x(a):
@@ -897,9 +897,9 @@ def compile_group(base, ep, group, shots, scene, colors=None):
         validate_keys(camera['keyframes'], sd, True); cursor += sd
         from modules.whitebox_camera import check_camera
         contract_errors.extend(check_camera(base, ep, shots[camera['shot_id']], camera, gid))
-    if contract_errors:
-        # #157:机位契约失效逐镜累积,一组仍只报一条 error,但列全失效镜头(各条以镜号开头);结构性错误照旧在循环里立即抛
-        raise ValueError('; '.join(contract_errors))
+    # #157:机位契约失效逐镜累积,一组仍只报一条 error,但列全失效镜头(各条以镜号开头);结构性错误照旧在循环里立即抛。
+    # 2026-11-05:契约失效(含审查指纹过期)不再让整组从编译结果里消失——组照常编出来挂 review_errors(预览页 / 导演台可看、
+    # 可据此复核),compile_episode 同时把它记进 errors:--check-only / --compile-only / 导出照旧失败,不落盘、不出视频
     # 待决项(2026-09-09,docs/whitebox.md「待决项与用户裁决」):Agent 调度时拿不准的取舍,结构校验后随组透传给预览页
     from modules.whitebox_issues import validate_issues
     issues = validate_issues(plan, ep, gid, duration, group['shots'], seen | set(group.get('scene_cast', [])))
@@ -910,6 +910,8 @@ def compile_group(base, ep, group, shots, scene, colors=None):
            'warnings': warnings, 'authored': bool(plan), 'issues': issues}
     if coverage:
         out[PROP_COVERAGE_KEY] = coverage   # 诊断,不进视频/版本指纹(FINGERPRINT_EXCLUDED_KEYS)
+    if contract_errors:
+        out['review_errors'] = contract_errors
     return out
 
 
@@ -977,6 +979,11 @@ def compile_episode(base: Path, ep: str, apply_overrides: bool = True):
     colors = episode_actor_colors(source, contexts)   # 整集固定身份色:同一人物各组同色
     raw_groups = {g['group_id']: g for g in source.get('generation_groups', [])}
     scenes = {}; groups = []; errors = []; by_id = {}
+    ov_groups = {}
+    if apply_overrides:
+        # 导演台覆盖层(2026-09-13):用户拖动/改数值的整条关键帧按对象盖在 Agent 计划之上;无效覆盖只在 warnings 里报
+        from modules.director import apply_overrides as _apply_ov, load_overrides
+        ov_groups = load_overrides(base, ep).get('groups', {})
     for raw in source.get('generation_groups', []):
         gid = raw.get('group_id', '?')
         try:
@@ -985,6 +992,12 @@ def compile_episode(base: Path, ep: str, apply_overrides: bool = True):
                 scenes[sid] = load_scene(base, sid)
             group = compile_group(base, ep, {**raw, 'scene_cast': contexts[gid]['actor_ids'],
                                   'scene_cast_enabled': 'scene_cast' in raw}, shots, scenes[sid], colors)
+            if group.get('review_errors'):
+                errors.append({'group_id': gid, 'error': '; '.join(group['review_errors'])})
+            if ov_groups.get(gid):
+                # 覆盖层先于组间继承套用(2026-11-05):原先在继承之后才合并,前组终点被拖走后,后组 inherit 起点仍是旧值,
+                # 固化进计划后后组才跳过去、指纹随之变。同场补入的人物此时还不在组里,下面补齐后再套一次(幂等)
+                _apply_ov(group, ov_groups[gid])
             prev = by_id.get(group['continuity_from'])
             policy = group['continuity']
             for key in ('actors', 'camera'):
@@ -1011,14 +1024,10 @@ def compile_episode(base: Path, ep: str, apply_overrides: bool = True):
         except (ValueError, KeyError, TypeError, FileNotFoundError) as error:
             errors.append({'group_id': gid, 'error': str(error)})
     complete_scene_actors(groups, contexts, raw_groups, errors, colors)
-    if apply_overrides:
-        # 导演台覆盖层(2026-09-13):用户拖动/改数值的整条关键帧按对象盖在 Agent 计划之上;无效覆盖只在 warnings 里报
-        from modules.director import apply_overrides as _apply_ov, load_overrides
-        ov_groups = load_overrides(base, ep).get('groups', {})
-        for group in groups:
-            ov = ov_groups.get(group['group_id'])
-            if ov:
-                _apply_ov(group, ov)
+    for group in groups:   # 同场补入的人物也套上覆盖层;已套过的对象再套一次结果相同
+        ov = ov_groups.get(group['group_id'])
+        if ov:
+            _apply_ov(group, ov)
     registered = {c.lower() for c in colors.values()}
     extra_colors = {}   # 同一群演 ID 跨组沿用首次改派的颜色(#70)
     for group in groups:

@@ -292,7 +292,7 @@ button.on{border-color:var(--accent);color:var(--accent)}
 <script type="module">
 import * as THREE from '/static/vendor/three/three.module.js';
 import { OrbitControls } from '/static/vendor/three/OrbitControls.js';
-import { WhiteboxRenderer, sample } from '/static/whitebox-renderer.js?v=20261105-fix1';
+import { WhiteboxRenderer, sample } from '/static/whitebox-renderer.js?v=20261105-fix2';
 import { projectRenderFormat } from '/static/whitebox-format.js?v=20260908-bedfoot-pour';
 
 const $=s=>document.querySelector(s);
@@ -1435,7 +1435,7 @@ function renderShotInfo(){
   $('#shotlbl').textContent=sid;$('#shotlbl').dataset.sid=sid;
   if(!g){box.innerHTML='';return}
   const s=shotOf(sid),cam=(g.cameras||[]).find(c=>c.shot_id===sid)||{};
-  const checks=[...(g.warnings||[]),...(g.prop_coverage?.messages||[])];   // 剧情道具覆盖(2026-11-05)与编译 warnings 同列
+  const checks=[...(g.review_errors||[]),...(g.warnings||[]),...(g.prop_coverage?.messages||[])];   // 机位审查失效、剧情道具覆盖(2026-11-05)与编译 warnings 同列
   if(!s){box.innerHTML=`<div class="warn">${esc(SB?t('分镜表里没有这一镜的条目'):t('分镜信息未加载(分镜预览接口不可用)'))}</div>`;return}
   const chars=(s.characters||[]).join(', ');
   const dl=(s.dialogue_lines||[]).map(l=>`<div class="dl">🗣 ${esc(l.speaker_name||l.speaker||'')}:${esc(l.text||'')}</div>`).join('');

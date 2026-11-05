@@ -3320,6 +3320,7 @@ window.I18N_DICT = {
 "查看自动推断草稿（仅供参考，不接受修改）": "Ver rascunho inferido automaticamente (apenas referência, não aceita alterações)",
 "自动推断草稿": "Rascunho inferido automaticamente",
 "自动推断草稿：本组未经白模调度，以下画面由系统按分镜与动线粗略推断，仅供参考；修改入口在白模调度完成后开放。": "Rascunho inferido automaticamente: este grupo não passou pela encenação whitebox. A imagem abaixo é inferida de forma aproximada a partir do storyboard e do blocking, apenas como referência; as opções de alteração são liberadas após a conclusão da encenação whitebox.",
+"机位审查未通过：本组白模可以查看，但不能导出；需白模调度复核取景后重打审查指纹。": "Revisão de câmera reprovada: é possível ver o blockout deste grupo, mas ele só pode ser exportado depois que a encenação blockout verificar o enquadramento de novo e recarimbar as impressões de revisão.",
 "本组尚未白模调度,当前是系统自动推断的草稿,只能查看;白模调度完成后再提修改": "Este grupo ainda não passou pela encenação whitebox; o que aparece é um rascunho inferido automaticamente, somente para consulta. Envie alterações após a conclusão da encenação whitebox",
 "未调度": "Não encenado",
 "缺陷单": "Tickets de defeitos",

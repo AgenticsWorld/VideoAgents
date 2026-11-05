@@ -111,9 +111,9 @@ async def start_export(project: str,ep: str,gid: str):
     base=project_path(project,ep,gid)
     data=await checked(compile_episode,base,ep)
     group=next((g for g in data['groups'] if g['group_id']==gid),None)
-    if not group:
-        error=next((e['error'] for e in data['errors'] if e['group_id']==gid),'Group not found')
-        raise HTTPException(422,error)
+    error=next((e['error'] for e in data['errors'] if e['group_id']==gid),None)
+    if not group or error:   # 机位审查失效的组编得出来(可预览)但仍是编译错误,不导出
+        raise HTTPException(422,error or 'Group not found')
     key=(str(base),ep,gid)
     with _lock:
         if any(j['status']=='running' for j in _jobs.values()):

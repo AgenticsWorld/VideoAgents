@@ -3485,6 +3485,7 @@ window.I18N_DICT = {
 "查看自动推断草稿（仅供参考，不接受修改）": "View auto-inferred draft (reference only, revisions not accepted)",
 "自动推断草稿": "Auto-inferred draft",
 "自动推断草稿：本组未经白模调度，以下画面由系统按分镜与动线粗略推断，仅供参考；修改入口在白模调度完成后开放。": "Auto-inferred draft: this group has not been through whitebox staging. The picture below is roughly inferred from the storyboard and blocking, for reference only; revision entry points open after whitebox staging completes.",
+"机位审查未通过：本组白模可以查看，但不能导出；需白模调度复核取景后重打审查指纹。": "Camera review failed: you can view this group's blockout, but it can't be exported until Blockout Staging rechecks the framing and restamps the review fingerprints.",
 "本组尚未白模调度,当前是系统自动推断的草稿,只能查看;白模调度完成后再提修改": "This group has not been through whitebox staging; what you see is an auto-inferred draft and is view-only. Send revisions after whitebox staging completes",
 "未调度": "Not staged",
 "缺陷单": "Defects",

@@ -3320,6 +3320,7 @@ window.I18N_DICT = {
 "查看自动推断草稿（仅供参考，不接受修改）": "Voir le brouillon déduit automatiquement (à titre indicatif, modifications non acceptées)",
 "自动推断草稿": "Brouillon déduit automatiquement",
 "自动推断草稿：本组未经白模调度，以下画面由系统按分镜与动线粗略推断，仅供参考；修改入口在白模调度完成后开放。": "Brouillon déduit automatiquement : ce groupe n'a pas fait l'objet d'une mise en scène whitebox. L'image ci-dessous est déduite approximativement du storyboard et du blocking, à titre indicatif ; les modifications seront possibles une fois la mise en scène whitebox terminée.",
+"机位审查未通过：本组白模可以查看，但不能导出；需白模调度复核取景后重打审查指纹。": "Vérification caméra non validée : la maquette de ce groupe reste consultable, mais ne peut pas être exportée tant que la mise en scène blockout n'a pas revérifié le cadrage et réapposé les empreintes de vérification.",
 "本组尚未白模调度,当前是系统自动推断的草稿,只能查看;白模调度完成后再提修改": "Ce groupe n'a pas encore fait l'objet d'une mise en scène whitebox ; il s'agit d'un brouillon déduit automatiquement, en lecture seule. Envoyez vos modifications une fois la mise en scène whitebox terminée",
 "未调度": "Non mis en scène",
 "缺陷单": "Tickets de défauts",

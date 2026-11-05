@@ -3318,6 +3318,7 @@ window.I18N_DICT = {
 "查看自动推断草稿（仅供参考，不接受修改）": "Xem bản nháp tự suy luận (chỉ để tham khảo, không nhận chỉnh sửa)",
 "自动推断草稿": "Bản nháp tự suy luận",
 "自动推断草稿：本组未经白模调度，以下画面由系统按分镜与动线粗略推断，仅供参考；修改入口在白模调度完成后开放。": "Bản nháp tự suy luận: nhóm này chưa qua dàn dựng whitebox. Hình bên dưới do hệ thống suy ra sơ bộ từ storyboard và blocking, chỉ để tham khảo; lối chỉnh sửa sẽ mở sau khi dàn dựng whitebox hoàn tất.",
+"机位审查未通过：本组白模可以查看，但不能导出；需白模调度复核取景后重打审查指纹。": "Chưa qua kiểm duyệt máy quay: có thể xem mô hình khối của nhóm này nhưng chưa xuất được cho đến khi bước dàn cảnh mô hình khối kiểm tra lại khung hình và đóng lại dấu kiểm duyệt.",
 "本组尚未白模调度,当前是系统自动推断的草稿,只能查看;白模调度完成后再提修改": "Nhóm này chưa được dàn dựng whitebox; nội dung đang hiển thị là bản nháp tự suy luận, chỉ xem được. Hãy gửi chỉnh sửa sau khi dàn dựng whitebox hoàn tất",
 "未调度": "Chưa dàn dựng",
 "缺陷单": "Phiếu lỗi",

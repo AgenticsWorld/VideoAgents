@@ -3318,6 +3318,7 @@ window.I18N_DICT = {
 "查看自动推断草稿（仅供参考，不接受修改）": "Lihat draf hasil inferensi otomatis (hanya referensi, tidak menerima perubahan)",
 "自动推断草稿": "Draf inferensi otomatis",
 "自动推断草稿：本组未经白模调度，以下画面由系统按分镜与动线粗略推断，仅供参考；修改入口在白模调度完成后开放。": "Draf inferensi otomatis: grup ini belum melalui penataan whitebox. Gambar di bawah disimpulkan secara kasar dari storyboard dan blocking, hanya sebagai referensi; pintu revisi dibuka setelah penataan whitebox selesai.",
+"机位审查未通过：本组白模可以查看，但不能导出；需白模调度复核取景后重打审查指纹。": "Tinjauan kamera tidak lolos: model blok grup ini bisa dilihat, tetapi belum bisa diekspor sampai Penataan Model Blok memeriksa ulang framing dan mencap ulang sidik tinjauan.",
 "本组尚未白模调度,当前是系统自动推断的草稿,只能查看;白模调度完成后再提修改": "Grup ini belum melalui penataan whitebox; yang tampil adalah draf inferensi otomatis dan hanya bisa dilihat. Kirim revisi setelah penataan whitebox selesai",
 "未调度": "Belum ditata",
 "缺陷单": "Tiket Cacat",
