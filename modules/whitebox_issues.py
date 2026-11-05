@@ -203,6 +203,13 @@ def collect(base: Path, ep: str) -> dict:
     shots = {s['shot_id']: s for s in source.get('shots', [])}
     raw_groups = {g['group_id']: g for g in source.get('generation_groups', [])}
     decisions = load_decisions(base, ep)
+    # 人物集合与编译(compile_group 的 seen | scene_cast)同口径(2026-11-05):原先没算同场在场人物与坐骑,
+    # 编译通过的计划在这里报「actors must reference…」,H3W 因此误拒签、面板也不显示该组待决项
+    from modules.scene_cast import scene_cast_groups
+    try:
+        contexts = scene_cast_groups(source)
+    except Exception:  # noqa: BLE001  场次同步坏了不拦待决项汇总
+        contexts = {}
     groups, errors = [], []
     for path in plans:
         gid = path.stem
@@ -213,7 +220,10 @@ def collect(base: Path, ep: str) -> dict:
             actor_ids = {a['id'] for a in plan.get('actors', []) if isinstance(a, dict) and 'id' in a}
             actor_ids |= {a['id'] for a in plan.get('scene_actors', []) if isinstance(a, dict) and 'id' in a}
             actor_ids |= {a['id'] for a in plan.get('extras', []) if isinstance(a, dict) and 'id' in a}
-            actor_ids |= {c['id'] for c in (raw.get('blocking_map') or {}).get('characters', []) if 'id' in c}
+            routes = [c for c in (raw.get('blocking_map') or {}).get('characters', []) if isinstance(c, dict)]
+            actor_ids |= {c['id'] for c in routes if 'id' in c}
+            actor_ids |= {c['mounted'] for c in routes if isinstance(c.get('mounted'), str)}
+            actor_ids |= set((contexts.get(gid) or {}).get('actor_ids') or [])
             issues = validate_issues(plan, ep, gid, duration, raw.get('shots') or [s for s in shots], actor_ids)
         except (ValueError, KeyError, TypeError) as error:
             errors.append({'group_id': gid, 'error': str(error)})

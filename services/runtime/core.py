@@ -20009,10 +20009,41 @@ def _whitebox_issue_question(proj: str, gate_id: str | None, question: str) -> s
         return question
 
 
+def _whitebox_sign_readiness(base, ep: str) -> list[str]:
+    """H3W 签字前置(2026-11-05):本集白模能不能当正式参考视频导出。返回拒签原因(空 = 可签)。
+    ① 未经白模调度的组(没有 whitebox_plans/<grp>.json):编译出来的只是宿主按存量分镜推断的草稿,签了会被当作正式参考视频导出;
+    ② 编译报错的组(含机位审查失效):正式导出会失败或拒绝该组。"""
+    from modules.whitebox import compile_episode, read
+    source = read(base / "directing" / ep / "shot_list.json", {}) or {}
+    gids = [g.get("group_id") for g in source.get("generation_groups") or [] if g.get("group_id")]
+    if not gids:
+        return []
+    reasons = []
+    unplanned = [g for g in gids if not (base / "directing" / ep / "whitebox_plans" / f"{g}.json").is_file()]
+    if unplanned:
+        reasons.append(f"{ep} 有 {len(unplanned)} 组未经白模调度(只有系统自动推断的草稿):" + ", ".join(unplanned[:6])
+                       + ("…" if len(unplanned) > 6 else ""))
+    try:
+        errors = compile_episode(base, ep)["errors"]
+    except Exception as e:  # noqa: BLE001
+        errors = [{"group_id": ep, "error": str(e)}]
+    if errors:
+        reasons.append(f"{ep} 有 {len(errors)} 组白模编译报错:" + "; ".join(f"{e['group_id']}({str(e['error'])[:60]})" for e in errors[:3])
+                       + ("…" if len(errors) > 3 else ""))
+    return reasons
+
+
 def _whitebox_issue_sign_guard(proj: str, gate_id: str | None) -> None:
-    """H3W 签字前置:阻断级待决未清 → 409 拒签;建议级未答复 → 按默认取舍记为已决(sign:g6w)。"""
+    """H3W 签字前置:未经白模调度 / 编译报错的组 → 409 拒签(2026-11-05);阻断级待决未清 → 409 拒签;
+    建议级未答复 → 按默认取舍记为已决(sign:g6w)。"""
     from modules.whitebox_issues import accept_provisional, collect
     base = PROJECTS_DIR / proj
+    not_ready = []
+    for ep in _whitebox_gate_episodes(proj, gate_id):
+        not_ready.extend(_whitebox_sign_readiness(base, ep))
+    if not_ready:
+        raise ServiceError(409, "H3W 未能签字:" + ";".join(not_ready)
+                           + "。请让白模调度补齐计划 / 修正报错(预览页组卡会显示原因)后再签字。")
     blocked = []
     for ep in _whitebox_gate_episodes(proj, gate_id):
         summary = collect(base, ep)["summary"]

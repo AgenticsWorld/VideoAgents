@@ -1,7 +1,7 @@
 import { projectRenderFormat } from './whitebox-format.js?v=20260908-bedfoot-pour';
 import { wbText as t, wbMessage } from './whitebox-i18n.js?v=20260908-bedfoot-pour';
 let rendererModule;
-const loadRenderer=()=>rendererModule ||= import('./whitebox-renderer.js?v=20261105-fix2');
+const loadRenderer=()=>rendererModule ||= import('./whitebox-renderer.js?v=20261105-fix3');
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const api=project=>'/api/v1/projects/'+encodeURIComponent(project)+'/whitebox';
 const artifactBase=project=>'/api/v1/projects/'+encodeURIComponent(project)+'/artifacts/';
@@ -10,6 +10,8 @@ const panels=new Map();
 // 不加超时面板会永远停在「正在加载…」且没有任何报错;超时/网络错误重试一次,仍失败交给调用方显示可重试的错误
 const FETCH_TIMEOUT_MS=15000;
 async function json(url,options={}){
+  // 只有只读请求超时后重试一次(2026-11-05):POST 派单(如 /api/v1/runs)服务端只是慢时重试会派出两次运行
+  const retryable=['GET','HEAD'].includes(String(options.method||'GET').toUpperCase());
   for(let attempt=0;;attempt++){
     const ac=new AbortController();
     const timer=setTimeout(()=>ac.abort(),FETCH_TIMEOUT_MS);
@@ -20,7 +22,7 @@ async function json(url,options={}){
       return d;
     }catch(e){
       const transient=e.name==='AbortError'||e.name==='TypeError';
-      if(transient&&attempt<1)continue;
+      if(transient&&retryable&&attempt<1)continue;
       if(e.name==='AbortError')throw Error(t('白模数据请求超时（{seconds} 秒）',{seconds:Math.round(FETCH_TIMEOUT_MS/1000)}));
       throw e;
     }finally{clearTimeout(timer);}

@@ -292,7 +292,7 @@ button.on{border-color:var(--accent);color:var(--accent)}
 <script type="module">
 import * as THREE from '/static/vendor/three/three.module.js';
 import { OrbitControls } from '/static/vendor/three/OrbitControls.js';
-import { WhiteboxRenderer, sample } from '/static/whitebox-renderer.js?v=20261105-fix2';
+import { WhiteboxRenderer, sample } from '/static/whitebox-renderer.js?v=20261105-fix3';
 import { projectRenderFormat } from '/static/whitebox-format.js?v=20260908-bedfoot-pour';
 
 const $=s=>document.querySelector(s);
@@ -367,7 +367,7 @@ async function load(keep){
       render(true);
       // 实时模式自动刷新新版本;查看历史版本时保留用户选择
       const nv=LAST_MAXV[SEL]||0;
-      if(nv>(prevMax[SEL]||0)){renderVersionSelects();toast(I18N.f('{g} 新版本 v{v} 已就绪',{g:SEL,v:nv}));if(VERSION==='live')reloadSource()}
+      if(nv>(prevMax[SEL]||0)){clearUndo();renderVersionSelects();toast(I18N.f('{g} 新版本 v{v} 已就绪',{g:SEL,v:nv}));if(VERSION==='live')reloadSource()}
     }
     schedulePoll();
   }catch(e){
@@ -524,6 +524,8 @@ function renderLeft(){
 function markShot(){const sid=RA&&RA.shotId;$$('#left .sh').forEach(el=>el.classList.toggle('on',el.dataset.sh===sid));$$('#lanes .sg').forEach(el=>el.classList.toggle('on',el.dataset.sh===sid))}
 function selectGroup(gid,force){
   if(gid===SEL&&!force)return;
+  flushFly();clearUndo();   // 撤销栈只对本组有效;机位飞行的延迟提交先落到原来那一组
+  if(EDIT&&unplanned(gid))setEdit(false);
   SEL=gid;posSave({sel:gid});PICK=null;TIME=URL_T!=null?URL_T:0;URL_T=null;PLAYING=false;MEASURE=[];
   VERSION='live';
   history.replaceState(null,'','?project='+encodeURIComponent(proj())+'&ep='+encodeURIComponent(EP)+'&grp='+encodeURIComponent(SEL));
@@ -829,7 +831,9 @@ function camOf(rr,view){return view==='world'?(WORLD?WORLD.camera:rr.overview):v
 function renderView(rr,view){
   WORLD?.setEnabled(view==='world');
   if(view==='world'&&WORLD){
-    for(const {data,mesh} of rr.props){const k=data.keyframes?sample(data.keyframes,TIME):data;mesh.visible=k.visible!==false;}
+    for(const pr of rr.props){const {data,mesh}=pr;const k=data.keyframes?sample(data.keyframes,TIME):data;
+      const holder=pr.attachedNow&&rr.actors.find(a=>a.data.id===data.attach.actor);   // 挂在手上:持有人退场 / 隐藏时道具同隐(2026-11-05)
+      mesh.visible=k.visible!==false&&(!holder||holder.root.visible);}
     WORLD.render($('#worldthrough').checked);return;
   }
   if(view!=='front'&&view!=='side'){rr.render(view);return}
@@ -853,6 +857,7 @@ function loop(now){
   if(DIRTY){
     DIRTY=false;
     RA.setTime(TIME);
+    if(PICK&&PICK.kind==='camera'&&RA.shotId&&RA.shotId!==PICK.id&&!DRAG)syncCamPick();
     if(HELPER)HELPER.update();
     renderView(RA,VIEW);
     $('#ftc').textContent=`${tc(TIME)} / ${tc(g.duration_s)} · ${RA.shotId||''}`;
@@ -942,8 +947,8 @@ function setEdit(on){
   EDIT=on;$('#edit').textContent=(on?'🔓 '+t('编辑中'):'🔒 '+t('锁定'));$('#edit').classList.toggle('on',on);
   $('#tool').style.display=on?'':'none';$('#snaplbl').style.display=on?'':'none';$('#markadd').style.display=on?'':'none';renderMarkRow();if(!on&&TOOL==='measure')setTool('move');
   PAD.classList.toggle('edit',on);PAD.classList.toggle('orbit',VIEW==='overview'&&!on);
-  if(!on){DRAG=null;WAYSEL=-1}
-  rebuildWay();renderObjects();renderNumbox();renderLanes();DIRTY=true;kick();
+  if(!on){DRAG=null;WAYSEL=-1;flushFly()}
+  updUndo();rebuildWay();renderObjects();renderNumbox();renderLanes();DIRTY=true;kick();
 }
 function setTool(tl){TOOL=tl;$$('#tool span').forEach(x=>x.classList.toggle('on',x.dataset.tool===tl));if(tl!=='measure'){MEASURE=[];rebuildMeasure()}}
 function toggleLock(kind,id){const k=lockKey(kind,id);LOCKS.has(k)?LOCKS.delete(k):LOCKS.add(k);saveLocks();renderObjects();renderNumbox();rebuildWay()}
@@ -951,7 +956,7 @@ function keysOf(p){
   const g=grpById(SEL);if(!p||!g||!RA)return null;
   if(p.kind==='actor'||p.kind==='extra'){const a=RA.actors.find(a=>a.data.id===p.id);return a?{keys:a.data.keyframes,obj:a.data,kindKey:p.kind==='actor'?'actors':'extras',node:a.root}:null}
   if(p.kind==='prop'){const pr=RA.props.find(x=>x.data.id===p.id);return pr?{keys:pr.data.keyframes||null,obj:pr.data,kindKey:'props',node:pr.mesh}:null}
-  if(p.kind==='camera'){const c=g.cameras.find(c=>c.shot_id===p.id);return c?{keys:c.keyframes,obj:c,kindKey:'cameras',isCam:true,shot:c,node:RA.marker}:null}
+  if(p.kind==='camera'){const c=((RA.group&&RA.group.cameras)||g.cameras).find(c=>c.shot_id===p.id);return c?{keys:c.keyframes,obj:c,kindKey:'cameras',isCam:true,shot:c,node:RA.marker}:null}
   return null;
 }
 const localT=info=>info.isCam?Math.max(0,Math.min(info.shot.duration_s,TIME-info.shot.start)):TIME;
@@ -973,25 +978,30 @@ function keyTarget(info,all){if(!info.keys)return {idx:-1,all:false};if(all==nul
 function spreadKey(info,idx,all){if(!all||!info.keys)return;const k=info.keys[idx];for(const o of info.keys){if(o===k)continue;o.position=[...k.position];if(k.target)o.target=[...k.target];if(k.yaw!==undefined)o.yaw=k.yaw}}
 const snapshotObj=info=>JSON.parse(JSON.stringify(serialize(info)));
 function restoreObj(info,data){if(data.keyframes&&info.keys){info.keys.length=0;info.keys.push(...JSON.parse(JSON.stringify(data.keyframes)))}else if(!info.keys)Object.assign(info.obj,JSON.parse(JSON.stringify(data)))}
-function updUndo(){const u=$('#undo'),r=$('#redo');if(u)u.disabled=!UNDO.length;if(r)r.disabled=!REDO.length}
-async function commit(p,info,before){
+function updUndo(){const u=$('#undo'),r=$('#redo'),ok=EDIT&&VERSION==='live';if(u)u.disabled=!ok||!UNDO.length;if(r)r.disabled=!ok||!REDO.length}
+async function commit(p,info,before,gid=SEL){
   const after=snapshotObj(info);
   if(JSON.stringify(before)===JSON.stringify(after))return;
-  UNDO.push({p,before,after});REDO.length=0;updUndo();
-  await pushOverride(p,info.kindKey,after);
+  UNDO.push({p,before,after,gid});REDO.length=0;updUndo();
+  await pushOverride(p,info.kindKey,after,gid);
 }
-async function pushOverride(p,kindKey,data){
-  try{const r=await J(api('/overrides/'+encodeURIComponent(SEL)),'PUT',{[kindKey]:{[p.id]:data}});applyServerGroup(r)}
+// 组号在发请求前取定(2026-11-05):整集重编译可能要几秒,期间切到别的组,回包仍写回发起请求的那一组,不串到当前组
+async function pushOverride(p,kindKey,data,gid=SEL){
+  try{const r=await J(api('/overrides/'+encodeURIComponent(gid)),'PUT',{[kindKey]:{[p.id]:data}});applyServerGroup(r,gid)}
   catch(e){toast(t('保存改动失败:')+e.message)}
 }
-function applyServerGroup(r){
-  const g=grpById(SEL);const i=WB.groups.indexOf(g);if(i>=0&&r.group)WB.groups[i]=r.group;if(r.scene)WB.scenes[r.group.scene_id]=r.scene;
-  DD.overrides=DD.overrides||{};if(r.overrides&&Object.keys(r.overrides).length)DD.overrides[SEL]=r.overrides;else delete DD.overrides[SEL];
+function applyServerGroup(r,gid=SEL){
+  const g=grpById(gid);const i=WB.groups.indexOf(g);if(i>=0&&r.group&&r.group.group_id===gid)WB.groups[i]=r.group;if(r.scene&&r.group)WB.scenes[r.group.scene_id]=r.scene;
+  DD.overrides=DD.overrides||{};if(r.overrides&&Object.keys(r.overrides).length)DD.overrides[gid]=r.overrides;else delete DD.overrides[gid];
+  if(gid!==SEL){renderLeft();return}   // 回包时已切到别的组:只更新那一组的数据,不动当前视窗
   if(VERSION==='live')reloadSource(true);else{renderObjects();renderLanes();renderOvState()}
   renderRight();renderLeft();
 }
-async function undo(){const u=UNDO.pop();if(!u)return;REDO.push(u);updUndo();const info=keysOf(u.p);if(info){restoreObj(info,u.before);DIRTY=true;kick();await pushOverride(u.p,info.kindKey,u.before)}}
-async function redo(){const u=REDO.pop();if(!u)return;UNDO.push(u);updUndo();const info=keysOf(u.p);if(info){restoreObj(info,u.after);DIRTY=true;kick();await pushOverride(u.p,info.kindKey,u.after)}}
+// 撤销 / 重做只作用于编辑态下的「当前(实时)」(2026-11-05):预览历史版本时点撤销会改坏快照并写进实时覆盖层
+const undoable=()=>EDIT&&VERSION==='live';
+async function undo(){if(!undoable())return;const u=UNDO.pop();if(!u)return;REDO.push(u);updUndo();const info=keysOf(u.p);if(info){restoreObj(info,u.before);DIRTY=true;kick();await pushOverride(u.p,info.kindKey,u.before,u.gid)}}
+async function redo(){if(!undoable())return;const u=REDO.pop();if(!u)return;UNDO.push(u);updUndo();const info=keysOf(u.p);if(info){restoreObj(info,u.after);DIRTY=true;kick();await pushOverride(u.p,info.kindKey,u.after,u.gid)}}
+function clearUndo(){UNDO.length=0;REDO.length=0;updUndo()}
 function renderOvState(){
   const n=ovCount(),tag=$('#ovtag'),b=$('#ovdrop');if(!tag)return;
   tag.textContent=n?I18N.f('未固化 {n} 个对象',{n}):'';$('#ovrow').style.display=n?'':'none';
@@ -1018,6 +1028,7 @@ function beginDrag(e){
   else if(hit.target){mode='target'}
   else if(hit.insert){return}
   else{if(!editable(hit))return;if(!PICK||PICK.kind!==hit.kind||PICK.id!==hit.id)setPick(hit,true)}
+  syncCamPick();
   const info=keysOf(PICK);if(!info)return;
   const before=snapshotObj(info);   // 先存快照,再自动打帧:撤销后不留多余关键帧
   let all=false;
@@ -1066,8 +1077,21 @@ function endDrag(e,cancel){
   commit(PICK,d.info,d.before);renderLanes();return true;
 }
 /* 摄像机视角里飞机位:拖=转视线,WASD/QE=平移(Shift=1 m,默认 0.25 m);停手 600ms 后合并成一次改动 */
-function flyInfo(){const info=keysOf(PICK);if(!info||!info.isCam)return null;if(!FLY){FLY={info,before:snapshotObj(info)}}return info}
-function scheduleFlyCommit(){clearTimeout(FLY_TIMER);FLY_TIMER=setTimeout(()=>{if(FLY){commit(PICK,FLY.info,FLY.before);FLY=null;renderLanes()}},600)}
+function flyInfo(){
+  if(!editable(PICK))return null;   // 锁定 / 历史版本 / 未调度组不能用 WASD 改机位(2026-11-05)
+  syncCamPick();
+  const info=keysOf(PICK);if(!info||!info.isCam)return null;
+  if(FLY&&(FLY.p.id!==PICK.id||FLY.gid!==SEL))flushFly();
+  if(!FLY){FLY={info,before:snapshotObj(info),p:PICK,gid:SEL}}return info;
+}
+// 延迟提交用开始飞行时的对象与组(原先用 600ms 后那一刻的 PICK:期间点了别的人物,机位帧会被当成人物写进覆盖层)
+function flushFly(){clearTimeout(FLY_TIMER);if(FLY){const f=FLY;FLY=null;commit(f.p,f.info,f.before,f.gid);renderLanes()}}
+function scheduleFlyCommit(){clearTimeout(FLY_TIMER);FLY_TIMER=setTimeout(flushFly,600)}
+// 选中的摄影机跟随当前镜头(2026-11-05):播放 / 跳转到别的镜后仍停在旧镜,WASD / 拖动改的是看不见的那一镜
+function syncCamPick(){
+  if(!PICK||PICK.kind!=='camera')return;const cur=shotAt();
+  if(cur&&cur.shot_id&&cur.shot_id!==PICK.id){flushFly();setPick({kind:'camera',id:cur.shot_id,label:cur.shot_id},true)}
+}
 function flyLook(e){
   const info=flyInfo();if(!info)return;const {idx,all}=keyTarget(info),k=info.keys[idx];
   const pos=new THREE.Vector3(...k.position),dir=new THREE.Vector3(...k.target).sub(pos);const len=dir.length();
@@ -1136,6 +1160,7 @@ async function insertWaypoint(ins){
   await commit(PICK,info,before);
 }
 async function deleteWaypoint(idx){
+  if(!editable(PICK))return;   // 锁定对象的关键帧不能删(2026-11-05)
   const info=keysOf(PICK);if(!info||!info.keys)return;
   if(idx<=0||idx>=info.keys.length-1){toast(t('首尾关键帧不能删'));return}
   const before=snapshotObj(info);info.keys.splice(idx,1);WAYSEL=-1;rebuildWay();DIRTY=true;kick();
@@ -1193,7 +1218,7 @@ function renderLanes(){
       const kind=el.dataset.kind,id=el.dataset.id,idx=Number(el.dataset.idx);
       const rows=objectRows();const row=rows.find(r=>r.kind===kind&&r.id===id);
       if(!PICK||PICK.kind!==kind||PICK.id!==id)setPick({kind,id,label:row?row.label:id},true);
-      WAYSEL=idx;updateWay();
+      if(EDIT&&editable(PICK)){WAYSEL=idx;updateWay()}
       LANEDRAG={el,kind,id,idx,start:e.clientX,moved:false,tr:el.parentElement.getBoundingClientRect(),info:null,before:null};
       if(EDIT&&!el.classList.contains('fixed')&&editable(PICK)){const info=keysOf(PICK);if(info&&info.keys){LANEDRAG.info=info;LANEDRAG.before=snapshotObj(info)}}
       try{el.setPointerCapture(e.pointerId)}catch(_){}
@@ -1301,7 +1326,7 @@ function axisInfo(){
   const [A,B]=pair;const pa=A.root.position,pb=B.root.position,cam=RA.camera.position;
   const cross=(pb.x-pa.x)*(cam.z-pa.z)-(pb.z-pa.z)*(cam.x-pa.x);const side=cross>0?t('右'):t('左');
   // 与上一镜比:同一对人物,机位换了边 = 越轴
-  let crossed=false;const g=grpById(SEL);const i=g.cameras.indexOf(shot);
+  let crossed=false;const g=viewedGroup()||grpById(SEL);const i=g.cameras.indexOf(shot);   // 版本预览时 shot 来自版本快照,不能在实时组里找
   if(i>0){const prev=g.cameras[i-1];const pk=sample(prev.keyframes,prev.duration_s);const pc=new THREE.Vector3(...pk.position);const c2=(pb.x-pa.x)*(pc.z-pa.z)-(pb.z-pa.z)*(pc.x-pa.x);crossed=Math.sign(c2)!==Math.sign(cross)&&Math.abs(c2)>0.01}
   return {a:{label:A.data.label||A.data.id,pos:pa},b:{label:B.data.label||B.data.id,pos:pb},side,crossed};
 }
@@ -1453,6 +1478,7 @@ function renderShotInfo(){
 /* ---------- 版本选择 ---------- */
 function selectVersion(version){
   if(DRAG)endDrag(null,true);
+  flushFly();clearUndo();
   if(version!=='live'&&EDIT)setEdit(false);
   VERSION=String(version);PICK=null;TIME=0;PLAYING=false;updPlayBtn();
   renderVersionSelects();renderRight();reloadSource();

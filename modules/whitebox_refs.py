@@ -520,8 +520,20 @@ def plan_refs(base: Path, ep: str, gid: str, continuation=None, prompt=None) -> 
         skipped = budget['reason'] or (f'参考视频预算不足(模型 {budget["model"] or "?"}:≤{budget["max_videos"]} 个/总时长 ≤{budget["max_total_s"]}s,组时长 {dur}s)')
     else:
         videos.append(cam)
-    render = (read(base/'directing'/ep/'whitebox'/'episode.json', {}) or {}).get('render') or {}
+    stored = read(base/'directing'/ep/'whitebox'/'episode.json', {}) or {}
+    render = stored.get('render') or {}
+    # 已挂的 camera.mp4 是否还对应当前白模(2026-11-05,机检 whitebox_ref_fresh):按 manifest 源指纹对落盘编译结果比。
+    # 白模签字后又改过(导演台 / 修改批次)却没重新导出时,视频生成会拿旧白模当参考
+    # manifest 没记源指纹(宿主导出一定会写)= 无从核对,记 None 不拦
+    export_fresh = None
+    if manifest.get('source_sha256'):
+        try:
+            from modules.whitebox_export import fingerprint_matches
+            export_fresh = fingerprint_matches(manifest.get('source_sha256'), stored, group)
+        except (KeyError, TypeError, ValueError):
+            export_fresh = False
     return {'camera': cam if cam in videos else None, 'videos': videos, 'cast': cast, 'render': render,
+            'export_fresh': export_fresh,
             'verbatim': verbatim_fragments(base, ep, gid), 'props_shown': appearing_props(group, render),
             'prop_names': {pid: (p.get('name') or p.get('name_en') or '') for pid, p in bible_props(base).items()},
             'group': group, 'budget': budget, 'duration_s': dur, 'skipped_reason': skipped}
@@ -892,6 +904,9 @@ def check_prompt(prompt: dict, plan: dict, gid: str) -> tuple[list, list]:
         if BLOCK_KEY in vp:
             warns.append(f"{gid}: 正文含 {BLOCK_KEY} 段但本组未挂白模视频({plan.get('skipped_reason')}),建议 --write 清理")
         return errs, warns
+    if plan.get('export_fresh') is False:
+        errs.append(f"{gid}: whitebox_ref_fresh: 白模在导出 camera.mp4 之后又改过,参考视频不是当前白模——不要退回提示词;"
+                    "须先重新导出本组白模视频(code/render_whitebox.py,不带 --compile-only;白模画面有改动的先过 H3W 重签)再生成视频")
     for i, v in enumerate(plan['videos']):
         if i >= len(vrefs) or vrefs[i] != v:
             errs.append(f"{gid}: video_refs[{i}] 应为 {v},实际 {vrefs[i] if i < len(vrefs) else '(缺)'}(白模视频须在前;跑 code/sync_whitebox_refs.py --write)")
