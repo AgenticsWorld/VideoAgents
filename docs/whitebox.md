@@ -64,7 +64,7 @@
 
 精确计划：`directing/<ep>/whitebox_plans/<gid>.json`。actors 和 cameras 可分别省略；若提供 actors，须覆盖 blocking_map 全体及其坐骑，ID必须一致，颜色与字母由系统锁定。
 
-计划也可提供 `extras`（独立的 `EXTRA-` ID、label、kind、color、size_m、keyframes），用于没有登记角色的群演镜头，不更改正式角色集合。群演（人或生物）颜色缺失或与本组登记角色撞色时，宿主改派本组未用色并记 warning；群演之间可共用一色（2026-09-19）。人物、群演关键帧的 `visible` 布尔值在该时间点切换，可表示画外电话人物与退场；默认显示。`props` 支持与场景相同的简单几何体（id、shape、size_m、position、yaw、color），可用 `shot_ids` 限定出现镜头，也可用覆盖组时长的 keyframes 表示三维运动。预览与导出共用这些规则。
+计划也可提供 `extras`（独立的 `EXTRA-` ID、label、kind、color、size_m、keyframes），用于没有登记角色的群演镜头，不更改正式角色集合。群演（人或生物）颜色缺失或与本组登记角色撞色时，宿主改派本组未用色并记 warning；群演之间可共用一色（2026-09-19）。人物、群演关键帧的 `visible` 布尔值在该时间点切换，可表示画外电话人物与退场；默认显示。`props` 支持与场景相同的简单几何体（id、shape、size_m、position、yaw、color），可用 `shot_ids` 限定出现镜头，也可用覆盖组时长的 keyframes 表示三维运动；另有锥体、半透明效果体、挂在人物手上与剧情道具覆盖检查，见下文「道具:锥体、半透明效果体、挂手与剧情道具覆盖」。预览与导出共用这些规则。
 
 人物和生物的头部均有白色眼睛、深色瞳孔与突出的白色鼻尖，用于识别正脸方向。模型局部 +Z 为正前方，yaw=0 朝 +Z，yaw=π/2 朝 +X；面部随转身和坐卧姿态变化，在空间、俯视、摄像机预览与导出视频中保持一致。
 
@@ -115,6 +115,19 @@
 旧数据编译优先消费数值 xy_start/xy_end、path/beat 的 t+xy/landmark/pose、camera.whitebox_keyframes。没有数值运动节拍时按组时长均匀分配动线节点；体位优先取 blocking.json 每角色 `pose`，其次 shot_list 每镜 `poses[<id>].pose`（分镜层结构化字段，2026-09-14），最后才由 route_en / start_pos 文字粗推（趴/俯卧→prone、跪→kneel、蹲→crouch、躺/卧→lie、坐→sit、其余 stand）；身高默认1.7m，生物默认1.4m。机位先取 layout view_tile 视轴，再按景别和镜首人物位置估计距离；缺 view_tile 暂取第一机位，所有推断均出警告。只描述运动方式但没有幅度时，推拉按视距20%、横移按1m估计，必须由 whitebox-staging 校准。暂不支持的运镜按固定机位显示并警告。
 
 continuity 从源组 continuity_from 取前组。actors 默认 validate，camera 默认 cut。inherit 使用前组末位置/姿态或机位，不改后续目标；跨场景/场次或无前组时拒绝继承。validate 仅报告冲突，不擅自移动演员。同场次的时间跳跃也应显式 cut。
+
+## 道具:锥体、半透明效果体、挂手与剧情道具覆盖（2026-11-05）
+
+起因：cartoon1 ep01 grp0010 sh0020 剧本写「男孩甜筒顶上的浅薄荷绿冰淇淋球一歪、滑落 → 泡泡兜回 → 落回原位」，白模计划只建了桶和花盆，男孩全程不动，泡泡与冰淇淋球都没建（basis 写「泡泡不建模,不透明几何会挡住人物」）。成片里球没掉，模型另外变出一颗装在泡泡里的球——参考视频里什么都没发生，文字说球在动，模型两边各取一半。同集 grp0020 的花盆写了 11 个关键帧（推落 → 坠落 → 停在礼帽上方 → 飘回窗台），成片逐拍照做。统计当时各项目镜头表 `shots[].props` 进白模计划的比例：alices 13%、fengshen3 52%、cartoon1 60%。以下四项均为可选键，存量计划的编译结果与视频指纹不变。
+
+- **锥体**：计划 `props[].shape` 可写 `"cone"`（场景物件仍只有 box / sphere / cylinder——场景全景与世界模型视窗按场景物件形状求交，不跟着扩）。尖朝局部 +Y，`size_m` = [底径 X, 高, 底径 Z]；尖朝下（甜筒）写 `pitch: π`。
+- **半透明效果体**：`props[].material: "ghost"`（缺省 `"solid"`）。半透明、不写深度，人物透过它仍清楚可见，用于泡泡、水花、烟、光效、魔法圈这类不挡人的效果；缺省色浅蓝 `#bfe6ff`。不能再以「实心几何会挡住人物」为由不建效果体。
+- **挂在人物手上**：`props[].attach: {"actor": "CHAR-0002", "hand": "right_hand", "offset": [0, 0.06, 0]}`。`actor` 须是本组人物/群演（非生物），且其关键帧有该手通道；`offset` 是上身朝向下的米制偏移（缺省 0）。挂着时道具中心 = 手的世界位置 + offset，朝向 = 上身朝向 × 道具自身 pitch/yaw/roll，跟随转身、俯身、坐卧；持有人退场或被本镜 `visible_actor_ids` 排除时道具随之隐藏 / 只留空间视角。道具关键帧可写布尔 `attached`（缺省 true，按帧保持到下一帧）：`false` 时按该帧世界坐标 `position` 运动——脱手、被接住、放回都靠它切换。所有关键帧仍要写 `position`（挂着的帧不生效）；只挂在手上、没有关键帧的道具可省 `position`。**切换帧（attached 值变化的那一帧）的 `position` 必须等于该时刻挂点**，否则编译 WARN「t=…s 脱手处 / 回到手上处跳位 … m」并给出挂点坐标，照抄即可。几何与渲染器同一算法（`modules/whitebox.hand_anchor` / `prop_state` ↔ `whitebox-renderer.js` setTime，改动须两边同步）。导演台里道具挂在手上的时刻不能拖动（位置由手决定），改手部关键帧或计划里的切换帧。
+- **剧情道具覆盖（机检 `whitebox_props_covered`，WARN）**：已调度组（有计划）里，镜头表 `shots[].props` 列出的道具（道具库 `bible/props.json` 明确 `is_plot_prop: false` 的除外）须在白模里有对应：计划 `props` 或场景物件的 `id` / `ref`（一件道具拆成几块几何体时各块写同一个 `ref`，如甜筒与冰淇淋球都 `ref: "PROP-0003"`），或计划 `not_modeled: [{"id": "PROP-0001", "reason": "…"}]` 写明不建的理由（`not_modeled` 结构不对 = 编译报错）。结果随组透传为 `prop_coverage {items[{id,name,shots,status: modeled|declared|missing,reason?}], missing[], messages[]}`，与编译 warnings 一起显示在预览页组卡与导演台的「建模依据与检查」；`render_whitebox.py` 第 3 行输出 `{"props_coverage": {"missing": […]}, "props_coverage_text": "[whitebox_props_covered] … -> PASS|WARN"}`，不改退出码。`prop_coverage` 与 `issues` 一样**不进视频指纹与导演台版本指纹**（`modules/whitebox.FINGERPRINT_EXCLUDED_KEYS`），新增这项诊断不会让已签字导出的 camera.mp4 显示过期。
+- **图例**：`Whitebox legend:` 在人物之后列出摄影机视频里实际出现的计划道具（`modules/whitebox_refs.appearing_props`：可见、在 `shot_ids` 内、挂手时持有人未被排除，半对角线包围立方体落在画幅内，挂手位置按 `prop_state`），如 `mint-green sphere = 冰淇淋球 (PROP-0003)`；ghost 写成 `translucent pale-blue sphere = 小泡泡 (fx_small_bubble, a see-through effect, not a solid object)`。颜色名按最近命名色取（身份色调色板名精确命中优先）。组 prompt `whitebox_refs.props` 记录进图例的道具。存量 prompt 在下次 `sync_whitebox_refs.py --write` 前没有这些行，机检只 WARN「图例缺白模里出现的道具」。
+- **自检静帧 `evt` 格**：`--stills` 每镜在 `cam` 格之外至多加 3 格 `evt`：镜头表 content 时间码区间（如「(4.0–4.5)」「(4.3–4.8,与…重叠)」，与 `t_range_s` 同一时间轴）的中点，以及计划道具运动段中点与显隐 / 挂手切换时刻。白模调度读图时核对这些时刻 content 写的动作在白模里看得见（SOUL「白模自检」⑦）。
+
+改 `whitebox-renderer.js` 会改变渲染器指纹：下次正式导出（`render_whitebox.py` 不带 `--compile-only`）按严格口径重渲已导出组（本地渲染，无生成费用）；`--verify-export` 与签字前样片只看源指纹，已签字的参考视频不因此失效。
 
 ## 机位与运镜设定校验
 

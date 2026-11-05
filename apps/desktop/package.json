@@ -109,6 +109,13 @@
         ]
       },
       {
+        "from": "../../docs",
+        "to": "backend/docs",
+        "filter": [
+          "**/*.md"
+        ]
+      },
+      {
         "from": "../../vendor/pi",
         "to": "backend/vendor/pi",
         "filter": [

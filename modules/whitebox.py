@@ -394,6 +394,173 @@ def pose_channel_warnings(actor):
     return out
 
 
+# 道具扩展(2026-11-05,docs/whitebox.md「道具:锥体、半透明效果体、挂手与剧情道具覆盖」):全部是可选键,
+# 存量计划的编译结果与视频指纹不变。锥体/半透明只开放给计划 props(场景物件仍是 box/sphere/cylinder——
+# scene_panos 与世界模型视窗按场景物件形状求交,不跟着扩)。
+PROP_SHAPES = ('box', 'sphere', 'cylinder', 'cone')
+PROP_MATERIALS = ('solid', 'ghost')
+ATTACH_JUMP_M = .05      # 挂手道具切换帧(脱手/回手)的 position 离挂点超过此值即 WARN
+PROP_COVERAGE_KEY = 'prop_coverage'
+# 编译组里只作诊断/裁决、不影响画面的键:视频指纹(whitebox_export)与导演台版本指纹(director.group_sha)都剔除,
+# 否则答题或新增诊断会让已签字导出的 camera.mp4 整批显示过期
+FINGERPRINT_EXCLUDED_KEYS = ('issues', PROP_COVERAGE_KEY)
+
+
+def _rot_x(a):
+    c, s = math.cos(a), math.sin(a)
+    return [[1, 0, 0], [0, c, -s], [0, s, c]]
+
+
+def _rot_y(a):
+    c, s = math.cos(a), math.sin(a)
+    return [[c, 0, s], [0, 1, 0], [-s, 0, c]]
+
+
+def _mat_mul(a, b):
+    return [[sum(a[i][k]*b[k][j] for k in range(3)) for j in range(3)] for i in range(3)]
+
+
+def _mat_vec(m, v):
+    return [sum(m[i][k]*v[k] for k in range(3)) for i in range(3)]
+
+
+def hand_anchor(actor, key, hand):
+    """人物在采样关键帧 key 时某只手的世界坐标与上身世界旋转矩阵 (position, rotation);没有该手通道或是生物返回 None。
+
+    与 whitebox-renderer.js 的场景图同一算法(改动须两边同步):手目标是 body 局部坐标,超出两段臂长时停在朝目标伸直的
+    方向上;手挂在上身组(绕 Y 转 torso_yaw)里,上身组在 body(卧/趴绕 X 转 −π/2、再绕 Y 转 body_roll(+π)、抬高 0.16h、
+    morph 缩放)里,body 在根节点(位置 = position、绕 Y 转 yaw)里。"""
+    if actor.get('kind', 'person') == 'creature' or not isinstance(key.get(hand), list):
+        return None
+    size = actor.get('size_m') or [.5, 1.7, .4]
+    h = size[1]
+    shoulder = shoulder_point(size, key, dict(HAND_SIDES)[hand])
+    target = [float(x) for x in key[hand]]
+    delta = [a - b for a, b in zip(target, shoulder)]
+    distance = math.sqrt(sum(x*x for x in delta))
+    if distance > 2*ARM_SEGMENT*h:
+        target = [s + d/distance*2*ARM_SEGMENT*h for s, d in zip(shoulder, delta)]
+    pose = key.get('pose') or 'stand'
+    lying = pose in ('lie', 'prone')
+    body_rot = _mat_mul(_rot_x(-math.pi/2), _rot_y((key.get('body_roll') or 0) + (math.pi if pose == 'prone' else 0))) \
+        if lying else _rot_y(0)
+    morph, morph_target = key.get('morph') or 0, actor.get('morph_target')
+    scale = [1 + (morph_target['size_m'][i]/size[i] - 1)*morph if morph_target else 1 for i in range(3)]
+    upper = _rot_y(key.get('torso_yaw') or 0)
+    local = [s*v for s, v in zip(scale, _mat_vec(upper, target))]
+    local = _mat_vec(body_rot, local)
+    local[1] += h*.16 if lying else 0
+    root = _rot_y(key.get('yaw') or 0)
+    position = [p + v for p, v in zip(key['position'], _mat_vec(root, local))]
+    return position, _mat_mul(root, _mat_mul(body_rot, upper))
+
+
+def prop_state(prop, actors_by_id, t):
+    """道具在组内 t 秒的 (世界中心, 是否挂在手上, 是否可见);挂手时中心 = 挂点 + 上身朝向下的 offset。与渲染器 setTime 同口径。"""
+    key = sample(prop['keyframes'], t) if prop.get('keyframes') else prop
+    attach = prop.get('attach')
+    visible = key.get('visible') is not False
+    if attach and key.get('attached', True) is not False:
+        holder = actors_by_id.get(attach.get('actor'))
+        if holder:
+            hk = sample(holder['keyframes'], t)
+            anchor = hand_anchor(holder, hk, attach.get('hand'))
+            if anchor:
+                offset = _mat_vec(anchor[1], attach.get('offset') or [0, 0, 0])
+                return [a + b for a, b in zip(anchor[0], offset)], True, visible and hk.get('visible') is not False
+    return list(key.get('position') or [0, 0, 0]), False, visible
+
+
+def validate_prop_extensions(prop, by_id, duration):
+    """shape/material/ref/attach/keyframes.attached 的结构校验;返回挂手切换帧跳位 WARN。结构错误 = 编译报错。"""
+    pid = prop['id']
+    if prop.get('material', 'solid') not in PROP_MATERIALS:
+        raise ValueError(f'{pid}: prop.material must be ' + '/'.join(PROP_MATERIALS))
+    if 'ref' in prop and not (isinstance(prop['ref'], str) and prop['ref'].strip()):
+        raise ValueError(f'{pid}: prop.ref must be a prop ID string')
+    attach = prop.get('attach')
+    keys = prop.get('keyframes') or []
+    if attach is None:
+        if any('attached' in k for k in keys):
+            raise ValueError(f'{pid}: keyframe attached needs prop.attach')
+        return []
+    if not isinstance(attach, dict) or attach.get('hand') not in dict(HAND_SIDES):
+        raise ValueError(f'{pid}: prop.attach needs actor and hand (left_hand/right_hand)')
+    holder = by_id.get(attach.get('actor'))
+    if not holder or holder.get('kind', 'person') == 'creature':
+        raise ValueError(f'{pid}: prop.attach.actor must be a person actor/extra in the group')
+    if not any(isinstance(k.get(attach['hand']), list) for k in holder['keyframes']):
+        raise ValueError(f"{pid}: {holder['id']} has no {attach['hand']} channel to hold the prop")
+    if 'offset' in attach:
+        vector(attach['offset'], 'prop.attach.offset')
+    if 'projection_screen' in prop:
+        raise ValueError(f'{pid}: projection_screen cannot be attached')
+    for key in keys:
+        if 'attached' in key and not isinstance(key['attached'], bool):
+            raise ValueError(f'{pid}: keyframe attached must be a boolean')
+    warnings = []
+    for before, key in zip(keys, keys[1:]):
+        if before.get('attached', True) == key.get('attached', True):
+            continue
+        anchor = hand_anchor(holder, sample(holder['keyframes'], key['t']), attach['hand'])
+        if not anchor:
+            continue
+        point = [a + b for a, b in zip(anchor[0], _mat_vec(anchor[1], attach.get('offset') or [0, 0, 0]))]
+        gap = math.dist(point, key['position'])
+        if gap > ATTACH_JUMP_M:
+            what = '回到手上' if key.get('attached', True) else '脱手'
+            warnings.append(f"{pid}: t={key['t']:g}s {what}处跳位 {gap:.2f} m——该时刻 {holder['id']} {attach['hand']} 的挂点是 "
+                            f"[{', '.join(f'{v:.3f}' for v in point)}],切换帧的 position 写成它,道具才从手上连续{what}。")
+    return warnings
+
+
+def bible_props(base):
+    data = read(Path(base) / 'bible/props.json', {}) or {}
+    items = data.get('props') if isinstance(data, dict) else data
+    return {i['id']: i for i in (items or []) if isinstance(i, dict) and isinstance(i.get('id'), str)}
+
+
+def validate_not_modeled(plan):
+    rows = plan.get('not_modeled')
+    if rows is None:
+        return {}
+    if not isinstance(rows, list) or any(not isinstance(r, dict) or not isinstance(r.get('id'), str) or not r['id'].strip()
+                                         or not isinstance(r.get('reason'), str) or not r['reason'].strip() for r in rows):
+        raise ValueError('not_modeled must be a list of {id, reason} with non-empty strings')
+    return {r['id'].strip(): r['reason'].strip() for r in rows}
+
+
+def prop_coverage(group, shots, plan, scene, bible):
+    """剧情道具覆盖(2026-11-05,机检 whitebox_props_covered):本组镜头表 shots[].props 列出的道具(道具库明确
+    is_plot_prop:false 的除外)须在白模里有对应——计划 props 或场景物件的 id/ref,或计划 not_modeled 写明不建的理由。
+    只对已调度组(有计划)判;无需判时返回 None。结果随组透传为 prop_coverage,不进视频/版本指纹(只是诊断)。"""
+    if not plan:
+        return None
+    required = {}
+    for sid in group['shots']:
+        for item in shots[sid].get('props') or []:
+            pid = item.get('id') if isinstance(item, dict) else item
+            if isinstance(pid, str) and pid.strip() and (bible.get(pid.strip()) or {}).get('is_plot_prop') is not False:
+                required.setdefault(pid.strip(), []).append(sid)
+    if not required:
+        return None
+    modeled = {obj.get(k) for obj in list(plan.get('props') or []) + list(scene.get('objects') or [])
+               for k in ('id', 'ref') if isinstance(obj, dict)}
+    declared = validate_not_modeled(plan)
+    items = []
+    for pid, sids in required.items():
+        status = 'modeled' if pid in modeled else 'declared' if pid in declared else 'missing'
+        row = {'id': pid, 'name': (bible.get(pid) or {}).get('name') or '', 'shots': sids, 'status': status}
+        if status == 'declared':
+            row['reason'] = declared[pid]
+        items.append(row)
+    missing = [r for r in items if r['status'] == 'missing']
+    return {'items': items, 'missing': [r['id'] for r in missing],
+            'messages': [f"剧情道具未进白模:{r['name'] or r['id']}({r['id']},镜头表 {'/'.join(r['shots'])} 列出)——在计划 props 建模"
+                         f"(id 或 ref 写 {r['id']};手持物可用 attach 挂在人物手上,泡泡/水/烟/光效用 material \"ghost\" 半透明体),"
+                         '或在计划 not_modeled 写明不建的理由。' for r in missing]}
+
+
 def shot_pose_of(shot, cid):
     """shot_list 每镜 `poses[<id>]`(分镜层 storyboard shots_draft[].poses 继承而来,2026-09-14)的体位;无/非法返回 None。"""
     poses = shot.get('poses') if isinstance(shot, dict) else None
@@ -674,13 +841,15 @@ def compile_group(base, ep, group, shots, scene, colors=None):
         warnings.extend(pose_channel_warnings(actor))
     props = plan.get('props', [])
     prop_ids = set()
+    by_id = {a['id']: a for a in actors + extras}
     for prop in props:
         pid = component(prop['id'])
-        if pid in prop_ids or prop.get('shape', 'box') not in ('box', 'sphere', 'cylinder'):
+        if pid in prop_ids or prop.get('shape', 'box') not in PROP_SHAPES:
             raise ValueError('Props need unique IDs and supported primitive shapes')
         prop_ids.add(pid)
         vector(prop['size_m'], 'prop.size_m', positive=True)
-        vector(prop['position'], 'prop.position')
+        if 'position' in prop or not (prop.get('attach') or prop.get('keyframes')):
+            vector(prop.get('position'), 'prop.position')   # 有关键帧或挂在手上的道具可省顶层 position(2026-11-05)
         number(prop.get('yaw', 0), 'prop.yaw')
         for axis in ('pitch', 'roll'):
             number(prop.get(axis, 0), 'prop.'+axis)
@@ -696,6 +865,9 @@ def compile_group(base, ep, group, shots, scene, colors=None):
                 raise ValueError('projection_screen shot_ids must belong to the group')
         if prop.get('keyframes') is not None:
             validate_keys(prop['keyframes'], duration)
+        warnings.extend(validate_prop_extensions(prop, by_id, duration))
+    validate_not_modeled(plan)
+    coverage = prop_coverage(group, shots, plan, scene, bible_props(base))
     cursor = 0
     if [c['shot_id'] for c in cameras] != group['shots']:
         raise ValueError(f'{gid}: cameras must match group shot order')
@@ -720,11 +892,14 @@ def compile_group(base, ep, group, shots, scene, colors=None):
     # 待决项(2026-09-09,docs/whitebox.md「待决项与用户裁决」):Agent 调度时拿不准的取舍,结构校验后随组透传给预览页
     from modules.whitebox_issues import validate_issues
     issues = validate_issues(plan, ep, gid, duration, group['shots'], seen | set(group.get('scene_cast', [])))
-    return {'schema_version': 'whitebox_group.v1', 'group_id': gid, 'scene_id': group['scene_id'],
-            'scene_no': group.get('scene_no'), 'duration_s': duration, 'actors': actors, 'extras': extras,
-            'props': props, 'cameras': cameras,
-            'continuity_from': group.get('continuity_from'), 'continuity': plan.get('continuity', {}),
-            'warnings': warnings, 'authored': bool(plan), 'issues': issues}
+    out = {'schema_version': 'whitebox_group.v1', 'group_id': gid, 'scene_id': group['scene_id'],
+           'scene_no': group.get('scene_no'), 'duration_s': duration, 'actors': actors, 'extras': extras,
+           'props': props, 'cameras': cameras,
+           'continuity_from': group.get('continuity_from'), 'continuity': plan.get('continuity', {}),
+           'warnings': warnings, 'authored': bool(plan), 'issues': issues}
+    if coverage:
+        out[PROP_COVERAGE_KEY] = coverage   # 诊断,不进视频/版本指纹(FINGERPRINT_EXCLUDED_KEYS)
+    return out
 
 
 def complete_scene_actors(groups, contexts, raw_groups, errors, colors=None):

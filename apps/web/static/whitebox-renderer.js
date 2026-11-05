@@ -166,12 +166,19 @@ export class WhiteboxRenderer {
       let geo; const [x,y,z]=obj.size_m;
       if(obj.shape==='sphere') {geo=new THREE.SphereGeometry(.5,16,12);geo.scale(x,y,z);}
       else if(obj.shape==='cylinder') {geo=new THREE.CylinderGeometry(.5,.5,1,16);geo.scale(x,y,z);}
+      // 锥体(2026-11-05,仅计划 props):尖朝局部 +Y,底径 size_m[0]×[2]、高 [1];尖朝下(甜筒)用 pitch=π
+      else if(obj.shape==='cone') {geo=new THREE.ConeGeometry(.5,1,16);geo.scale(x,y,z);}
       else geo=new THREE.BoxGeometry(x,y,z);
-      const material=new THREE.MeshStandardMaterial({color:obj.color||0xf3f0e8,roughness:1});
-      const mesh=new THREE.Mesh(geo,material);mesh.name=obj.id;mesh.position.fromArray(obj.position);mesh.rotation.set(obj.pitch||0,obj.yaw||0,obj.roll||0);
+      // material "ghost"(2026-11-05):泡泡/水/烟/光效等不挡人的效果体——半透明、不写深度,人物透过它仍清楚可见
+      const ghost=obj.material==='ghost';
+      const material=ghost?new THREE.MeshStandardMaterial({color:obj.color||0xbfe6ff,roughness:.25,transparent:true,opacity:.3,depthWrite:false})
+        :new THREE.MeshStandardMaterial({color:obj.color||0xf3f0e8,roughness:1});
+      const mesh=new THREE.Mesh(geo,material);mesh.name=obj.id;mesh.position.fromArray(obj.position||[0,0,0]);mesh.rotation.set(obj.pitch||0,obj.yaw||0,obj.roll||0);
+      if(ghost)mesh.renderOrder=2;
       scene.add(mesh);
       if(group?.props?.includes(obj))this.props.push({data:obj,mesh});else this.solids.push(mesh);
-      const edges=new THREE.LineSegments(new THREE.EdgesGeometry(geo),new THREE.LineBasicMaterial({color:0x8d968d}));mesh.add(edges);
+      const edges=new THREE.LineSegments(new THREE.EdgesGeometry(geo),ghost?new THREE.LineBasicMaterial({color:obj.color||0xbfe6ff,transparent:true,opacity:.6,depthWrite:false})
+        :new THREE.LineBasicMaterial({color:0x8d968d}));mesh.add(edges);
     }
     for(const actor of [...(group?.actors||[]),...(group?.extras||[])]) {
       const root=new THREE.Group();const body=new THREE.Group();root.add(body);
@@ -371,11 +378,32 @@ export class WhiteboxRenderer {
       const layer=shot.visible_actor_ids&&!shot.visible_actor_ids.includes(a.data.id)?1:0;
       a.root.traverse(o=>o.layers.set(layer));
     }
-    for(const {data,mesh} of this.props){
+    // 挂手道具(2026-11-05,prop.attach {actor, hand, offset}):关键帧 attached(默认 true,按帧保持)为真时道具中心 =
+    // 该手世界位置 + 上身朝向下的 offset,朝向 = 上身朝向 × 道具自身 pitch/yaw/roll;为假时按关键帧世界坐标。
+    // 与 modules/whitebox.py hand_anchor/prop_state 同口径。
+    if(this.props.some(p=>p.data.attach))this.scene.updateMatrixWorld(true);
+    for(const p of this.props){
+      const {data,mesh}=p;
       const k=data.keyframes?sample(data.keyframes,t):data;
-      mesh.position.fromArray(k.position);mesh.rotation.set(k.pitch||0,k.yaw||0,k.roll||0);
+      const own=new THREE.Euler(k.pitch||0,k.yaw||0,k.roll||0);
+      let holder=null,arm=null;
+      if(data.attach&&k.attached!==false){
+        holder=this.actors.find(a=>a.data.id===data.attach.actor);
+        arm=holder?.arms.find(x=>x.key===data.attach.hand)||null;
+      }
+      p.attachedNow=!!arm;
+      let layer=0;
+      if(arm){
+        const q=holder.upper.getWorldQuaternion(new THREE.Quaternion());
+        arm.hand.getWorldPosition(mesh.position).add(new THREE.Vector3(...(data.attach.offset||[0,0,0])).applyQuaternion(q));
+        mesh.quaternion.copy(q).multiply(new THREE.Quaternion().setFromEuler(own));
+        layer=holder.root.layers.mask===1?0:1;   // 挂在被本镜 visible_actor_ids 排除的人手上:随人一起只留在空间/俯视视角
+      }else{
+        mesh.position.fromArray(k.position||data.position||[0,0,0]);mesh.rotation.copy(own);
+      }
+      mesh.traverse(o=>o.layers.set(layer));
       mesh.scale.fromArray(k.scale||[1,1,1]);
-      mesh.visible=k.visible!==false&&(!data.shot_ids||data.shot_ids.includes(shot.shot_id));
+      mesh.visible=k.visible!==false&&(!arm||holder.root.visible)&&(!data.shot_ids||data.shot_ids.includes(shot.shot_id));
     }
     this.scene.updateMatrixWorld(true);
     for(const {screen,shadow} of this.silhouettes){

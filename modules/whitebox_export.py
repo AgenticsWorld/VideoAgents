@@ -15,7 +15,7 @@ import tempfile
 import threading
 from pathlib import Path
 
-from modules.whitebox import component, read, render_format
+from modules.whitebox import FINGERPRINT_EXCLUDED_KEYS, component, read, render_format
 from modules.whitebox_subtitles import cues_fingerprint, episode_dialogue_placements, episode_subtitle_cues, write_subtitle_track
 
 STATIC = Path(__file__).resolve().parents[1] / 'apps/web/static'
@@ -29,8 +29,8 @@ REVIEW_FINGERPRINT_KEYS = ('source_fingerprint', 'placement_fingerprint')
 
 def _fingerprint(episode, group, review_marks=False):
     scene = episode['scenes'][group['scene_id']]
-    # 待决项/裁决状态不影响画面,不进视频指纹(否则用户每答一题所有组视频都会显示过期)
-    group = {k: v for k, v in group.items() if k != 'issues'}
+    # 待决项/裁决状态、剧情道具覆盖诊断(2026-11-05)不影响画面,不进视频指纹(否则用户每答一题所有组视频都会显示过期)
+    group = {k: v for k, v in group.items() if k not in FINGERPRINT_EXCLUDED_KEYS}
     if not review_marks and isinstance(group.get('cameras'), list):
         group['cameras'] = [{k: v for k, v in cam.items() if k not in REVIEW_FINGERPRINT_KEYS} if isinstance(cam, dict) else cam
                             for cam in group['cameras']]

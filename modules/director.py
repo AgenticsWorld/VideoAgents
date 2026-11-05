@@ -212,9 +212,10 @@ def delete_note(doc: dict, nid: str) -> dict:
 
 # ---------------------------------------------------------------- 版本快照
 def group_sha(episode: dict, group: dict) -> str:
-    """与 modules.whitebox_export.fingerprint 同口径:场景模型 + 组(去 issues)。"""
+    """与 modules.whitebox_export.fingerprint 同口径:场景模型 + 组(去 issues / 剧情道具覆盖诊断等 FINGERPRINT_EXCLUDED_KEYS)。"""
+    from modules.whitebox import FINGERPRINT_EXCLUDED_KEYS
     scene = episode["scenes"][group["scene_id"]]
-    slim = {k: v for k, v in group.items() if k not in ("issues", "artifact_status")}
+    slim = {k: v for k, v in group.items() if k not in FINGERPRINT_EXCLUDED_KEYS + ("artifact_status",)}
     return hashlib.sha256(json.dumps([scene, slim], sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 

@@ -35,7 +35,7 @@ import re
 from pathlib import Path
 
 from modules.prompt_layout import paragraphize
-from modules.whitebox import component, read, sample
+from modules.whitebox import component, prop_state, read, sample
 
 # 与 modules/whitebox.PALETTE 同序(2026-09-11 扩到 16 色:整集固定身份色,人物多于 8 人时启用后 8 色)
 COLOR_NAMES = {'#e63946': 'red', '#1d78d8': 'blue', '#2ea043': 'green', '#f59e0b': 'orange',
@@ -215,6 +215,53 @@ def appearing_cast(group: dict, render: dict | None = None) -> dict:
         if cid not in present and cid not in hidden:
             hidden[cid] = '不在本组白模人物列表(缺席/远程)'
     return {'visible': visible, 'hidden': hidden, 'source': CAST_SOURCE}
+
+
+def _aspect(render: dict | None):
+    render = render or {}
+    try:
+        if render.get('width') and render.get('height'):
+            return float(render['width']) / float(render['height'])
+        if render.get('aspect_ratio'):
+            a, b = (float(x) for x in str(render['aspect_ratio']).split(':'))
+            return a / b
+    except (ValueError, ZeroDivisionError, TypeError):
+        pass
+    return None
+
+
+def appearing_props(group: dict, render: dict | None = None) -> list:
+    """本组白模摄影机视频里实际出现的计划道具 id(2026-11-05,供 Whitebox legend):至少一镜某采样时刻道具可见、
+    在该镜 shot_ids 内、挂手时持有人未被该镜 visible_actor_ids 排除,且包围立方体(半径 = 半对角线 × scale)落在画幅内
+    (FRAME_MARGIN 容差,不计遮挡)。挂手道具的位置按 modules.whitebox.prop_state(与渲染器同口径)。"""
+    aspect = _aspect(render)
+    by_id = {a.get('id'): a for a in list(group.get('actors') or []) + list(group.get('extras') or []) if a.get('id')}
+    shown = []
+    for prop in group.get('props') or []:
+        keys = prop.get('keyframes') or []
+        found = False
+        for cam in group.get('cameras') or []:
+            if prop.get('shot_ids') is not None and cam.get('shot_id') not in prop['shot_ids']:   # 与渲染器同:[] = 哪镜都不显示
+                continue
+            ckeys = cam.get('keyframes') or []
+            if not ckeys:
+                continue
+            start, duration = float(cam.get('start') or 0), float(cam.get('duration_s') or 0)
+            allowed = cam.get('visible_actor_ids')
+            for t in _sample_times(start, duration, keys):
+                center, attached, visible = prop_state(prop, by_id, t)
+                if not visible or (attached and isinstance(allowed, list) and (prop.get('attach') or {}).get('actor') not in allowed):
+                    continue
+                scale = (sample(keys, t) if keys else prop).get('scale') or [1, 1, 1]
+                r = 0.5 * math.sqrt(sum((float(a) * float(b)) ** 2 for a, b in zip(prop['size_m'], scale)))
+                if box_in_frame(center, [r, r, r], sample(ckeys, t - start), aspect):
+                    found = True
+                    break
+            if found:
+                break
+        if found:
+            shown.append(prop['id'])
+    return shown
 
 
 def cast_filter(base: Path, ep: str, gid: str):
@@ -465,7 +512,7 @@ def plan_refs(base: Path, ep: str, gid: str, continuation=None, prompt=None) -> 
         videos.append(cam)
     render = (read(base/'directing'/ep/'whitebox'/'episode.json', {}) or {}).get('render') or {}
     return {'camera': cam if cam in videos else None, 'videos': videos, 'cast': cast, 'render': render,
-            'verbatim': verbatim_fragments(base, ep, gid),
+            'verbatim': verbatim_fragments(base, ep, gid), 'props_shown': appearing_props(group, render),
             'group': group, 'budget': budget, 'duration_s': dur, 'skipped_reason': skipped}
 
 
@@ -493,6 +540,51 @@ def legend_rows(group: dict, cast: dict | None = None) -> list:
         role = ('anonymous NPC passer-by, not a named character' if str(x.get('id') or '').startswith('EXTRA-NPC-')
                 else 'background extra')
         rows.append(f"{color_name(x.get('color'))} {noun} = {x.get('label') or x.get('id')} ({x.get('id')}, {role})")
+    return rows
+
+
+# 道具图例颜色名(2026-11-05):道具颜色是计划手填的任意色,按最近的命名色取名;身份色调色板名(COLOR_NAMES)精确命中优先
+PROP_COLOR_NAMES = (('red', '#d62828'), ('maroon', '#800000'), ('terracotta', '#c0603a'), ('orange', '#f28c28'),
+                    ('brown', '#795548'), ('tan', '#d2b48c'), ('beige', '#e8dcc0'), ('off-white', '#f3f0e8'),
+                    ('white', '#fafafa'), ('yellow', '#f2d14b'), ('olive', '#808000'), ('lime', '#84cc16'),
+                    ('green', '#2e8b3e'), ('mint-green', '#a8e6cf'), ('teal', '#0d9488'), ('cyan', '#00acc1'),
+                    ('pale-blue', '#bfe6ff'), ('steel-blue', '#4f7ca8'), ('blue', '#1d78d8'), ('navy', '#1e3a8a'),
+                    ('purple', '#8e44ad'), ('pink', '#f48fb1'), ('magenta', '#b5179e'), ('light-grey', '#c8ccc8'),
+                    ('grey', '#9e9e9e'), ('dark-grey', '#555555'), ('black', '#1a1a1a'))
+PROP_DEFAULT_COLORS = {'solid': '#f3f0e8', 'ghost': '#bfe6ff'}   # 与 whitebox-renderer.js 缺省色一致
+
+
+def prop_color_name(hex_color):
+    value = str(hex_color or '').lower()
+    if value in COLOR_NAMES:
+        return COLOR_NAMES[value]
+    try:
+        r, g, b = (int(value[i:i + 2], 16) for i in (1, 3, 5))
+    except (ValueError, IndexError):
+        return value or 'unknown-color'
+
+    def distance(ref):
+        rr, gg, bb = (int(ref[i:i + 2], 16) for i in (1, 3, 5))
+        mean = (r + rr) / 2   # redmean 近似感知距离
+        return (2 + mean / 256) * (r - rr) ** 2 + 4 * (g - gg) ** 2 + (2 + (255 - mean) / 256) * (b - bb) ** 2
+    return min(PROP_COLOR_NAMES, key=lambda item: distance(item[1]))[0]
+
+
+def prop_legend_rows(group: dict, render: dict | None = None, shown: list | None = None) -> list:
+    """道具图例(2026-11-05):只列摄影机视频里出现的计划道具;ghost 写明是透明效果、不是实心物体。"""
+    shown = appearing_props(group, render) if shown is None else shown
+    rows = []
+    for prop in group.get('props') or []:
+        if prop.get('id') not in shown:
+            continue
+        material = prop.get('material') or 'solid'
+        color = prop_color_name(prop.get('color') or PROP_DEFAULT_COLORS.get(material, PROP_DEFAULT_COLORS['solid']))
+        shape = prop.get('shape') or 'box'
+        label = prop.get('label') or prop['id']
+        if material == 'ghost':
+            rows.append(f"translucent {color} {shape} = {label} ({prop['id']}, a see-through effect, not a solid object)")
+        else:
+            rows.append(f"{color} {shape} = {label} ({prop['id']})")
     return rows
 
 
@@ -673,7 +765,8 @@ def build_block(plan: dict) -> str:
     parts = [f"{BLOCK_KEY} [Video {ci}] is the camera-view whitebox previs of this exact group — grey placeholder geometry "
              "rendered from the real camera of every shot with the same cuts and timing; follow it for camera position, framing, "
              "each character's screen position, depth, facing and movement timing."]
-    legend = '; '.join(legend_rows(plan['group'] or {}, plan.get('cast')))
+    legend = '; '.join(legend_rows(plan['group'] or {}, plan.get('cast'))
+                       + prop_legend_rows(plan['group'] or {}, plan.get('render'), plan.get('props_shown')))
     facing = 'the white eyes and nose tip show where a figure faces'
     cam = 'the camera itself is never drawn in the camera view'
     parts.append(f"{LEGEND_KEY} {legend}; {facing}; {cam}.")
@@ -729,6 +822,8 @@ def apply_prompt(prompt: dict, plan: dict) -> dict:
     if facing:
         out['whitebox_refs']['facing'] = [{'shot_no': r['shot_no'], 'shot_id': r['shot_id'],
                                            'actors': {a['id']: a['phrase'] for a in r['actors']}} for r in facing]
+    if plan['videos'] and plan.get('props_shown'):
+        out['whitebox_refs']['props'] = list(plan['props_shown'])   # 进了 Whitebox legend 的道具(2026-11-05)
     if plan.get('cast'):
         out['whitebox_refs']['cast'] = {'visible': list(plan['cast']['visible']), 'hidden': dict(plan['cast']['hidden']),
                                         'dropped_refs': dropped, 'source': plan['cast'].get('source', CAST_SOURCE)}
@@ -788,6 +883,10 @@ def check_prompt(prompt: dict, plan: dict, gid: str) -> tuple[list, list]:
                 errs.append(f"{gid}: 图例缺 {color_name(a.get('color'))} = {a.get('label') or a['id']} ({a['id']})")
         if 'faces' not in legend and 'facing' not in legend:
             errs.append(f"{gid}: 图例缺眼睛/鼻尖=朝向说明")
+        # 道具图例(2026-11-05)只 WARN:存量 prompt 在下次 --write 前没有这些行,不因此判接线失败
+        missing = [row for row in prop_legend_rows(plan['group'] or {}, plan.get('render'), plan.get('props_shown')) if row not in legend]
+        if missing:
+            warns.append(f"{gid}: 图例缺白模里出现的道具 {'; '.join(missing)};跑 code/sync_whitebox_refs.py --write 刷新")
     rows = facing_rows(plan.get('group') or {}, cast, plan.get('render'))
     expected = facing_sentence(plan, rows)
     if expected:

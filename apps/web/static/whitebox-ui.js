@@ -1,7 +1,7 @@
 import { projectRenderFormat } from './whitebox-format.js?v=20260908-bedfoot-pour';
 import { wbText as t, wbMessage } from './whitebox-i18n.js?v=20260908-bedfoot-pour';
 let rendererModule;
-const loadRenderer=()=>rendererModule ||= import('./whitebox-renderer.js?v=20261009-hand121');
+const loadRenderer=()=>rendererModule ||= import('./whitebox-renderer.js?v=20261105-props');
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const api=project=>'/api/v1/projects/'+encodeURIComponent(project)+'/whitebox';
 const artifactBase=project=>'/api/v1/projects/'+encodeURIComponent(project)+'/artifacts/';
@@ -63,11 +63,13 @@ async function mount(host,project,scene,group=null,ep='') {
     shots:group.cameras.map(c=>c.shot_id).join(', '),plan:`directing/${ep}/whitebox_plans/${group.group_id}.json`,
     model:`bible/scenes/${scene.scene_id}/whitebox.json`,preview:`directing/${ep}/whitebox/episode.json`,
   }):'';
+  // 剧情道具覆盖(2026-11-05,prop_coverage.messages,服务端文案)与编译 warnings 同列;它不进 warnings 是为了不改视频指纹
+  const checkLines=[...(group?.warnings||scene.warnings),...(group?.prop_coverage?.messages||[])];
   host.innerHTML=`<div class="wb-toolbar"><div class="wb-heading"><strong>${esc(t('3D 白模'))} · ${esc(scene.scene_id)}${group?' / '+esc(group.group_id):''}</strong>${group?`<button class="editbtn wb-edit" data-loc="${esc(editLocation)}" data-agent="07-directing/whitebox-staging" title="${esc(t('对这组3D白模提修改意见，直接发消息给白模调度 Agent'))}">${esc(t('✏️ 编辑'))}</button>`:''}</div><div class="wb-statuswrap"><button type="button" class="wb-statusbtn" aria-expanded="false" title="${esc(t('查看场景模型 / 调度计划 / 预览文件 / 参考视频的文件状态'))}">${esc(t('状态'))}</button><div class="wb-statuspop" role="status">${statusItems.map(item=>`<span>${esc(item)}</span>`).join('')}${!scene.artifact_status||(group&&!group.artifact_status)?`<span class="wb-statusnote">${esc(t('文件状态未知，请重启服务后刷新。'))}</span>`:''}</div></div><select aria-label="${esc(t('空间视角'))}"><option value="overview" selected>${esc(t('旋转视角'))}</option><option value="top">${esc(t('俯视图'))}</option><option value="real">${esc(t('实景图'))}</option></select></div>
     <div class="wb-status">${esc(t('{width} × {depth} m · 高 {height} m · 网格 1 m · 画幅 {aspect}',{width:scene.dimensions_m[0],depth:scene.dimensions_m[2],height:scene.dimensions_m[1],aspect:format.aspect_ratio}))} · ${esc(t(scene.inferred?'推断尺寸':'已标定尺寸'))} · ${esc(t('切换旋转视角后拖动=转头、滚轮=前进；点画面后 W/S 前后 · A/D 左右 · Q/E 升降 · Shift 加速'))}</div>
     <div class="wb-views"><figure><canvas class="wb-space" aria-label="${esc(t('场景白模'))}"></canvas><figcaption>${esc(t('空间与摄像机位置'))}</figcaption></figure>${group?`<figure><canvas class="wb-camera" aria-label="${esc(t('摄像机白模'))}"></canvas><figcaption>${esc(t('摄像机视角'))}</figcaption></figure>`:''}</div>
     ${group?`<div class="wb-transport"><button class="wb-play">${esc(t('播放'))}</button><input type="range" aria-label="${esc(t('白模时间'))}" min="0" max="${group.duration_s}" step="0.01" value="0"><span class="wb-time"></span></div><div class="wb-cast" data-no-i18n>${[...group.actors,...(group.extras||[])].map(a=>`<span><i class="wb-color" style="background:${esc(a.color)}"></i>${esc(a.label)} (${esc(a.id)}) · ${a.size_m[1]} m</span>`).join('')}</div>`:''}
-    <details class="wb-warnings"><summary>${esc(t('建模依据与检查 ({count})',{count:(group?.warnings||scene.warnings).length}))}</summary><div data-no-i18n>${esc(scene.scale_basis)}</div>${(group?.warnings||scene.warnings).map(w=>`<div data-no-i18n>${esc(wbMessage(w))}</div>`).join('')}</details><div class="wb-status wb-result" role="status"></div>`;
+    <details class="wb-warnings"><summary>${esc(t('建模依据与检查 ({count})',{count:checkLines.length}))}</summary><div data-no-i18n>${esc(scene.scale_basis)}</div>${checkLines.map(w=>`<div data-no-i18n>${esc(wbMessage(w))}</div>`).join('')}</details><div class="wb-status wb-result" role="status"></div>`;
   const statusBtn=host.querySelector('.wb-statusbtn'), statusPop=host.querySelector('.wb-statuspop');
   statusBtn.onclick=e=>{e.stopPropagation();const open=!statusPop.classList.contains('open');document.querySelectorAll('.wb-statuspop.open').forEach(x=>x.classList.remove('open'));statusPop.classList.toggle('open',open);statusBtn.setAttribute('aria-expanded',String(open));};
   let space, camera, frame, disposed=false, playing=false, time=0, previous=0;

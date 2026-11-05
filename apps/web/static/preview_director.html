@@ -292,7 +292,7 @@ button.on{border-color:var(--accent);color:var(--accent)}
 <script type="module">
 import * as THREE from '/static/vendor/three/three.module.js';
 import { OrbitControls } from '/static/vendor/three/OrbitControls.js';
-import { WhiteboxRenderer, sample } from '/static/whitebox-renderer.js?v=20261009-hand121';
+import { WhiteboxRenderer, sample } from '/static/whitebox-renderer.js?v=20261105-props';
 import { projectRenderFormat } from '/static/whitebox-format.js?v=20260908-bedfoot-pour';
 
 const $=s=>document.querySelector(s);
@@ -561,7 +561,9 @@ function renderEpSubmit(){
 const ovList=()=>{const o=OV();return Object.values(KIND_KEY).flatMap(k=>Object.keys(o[k]||{}).map(id=>k+'/'+id))};
 const lockKey=(k,id)=>k+'|'+id;
 const locked=p=>!p||LOCKS.has(lockKey(p.kind,p.id));
-const editable=p=>SOURCE_READY&&!!p&&!!KIND_KEY[p.kind]&&!locked(p)&&VERSION==='live'&&!unplanned(SEL);
+// 挂在人物手上的道具(prop.attach,2026-11-05)当前时刻位置由手决定,拖它不会生效,故不可拖;改手部关键帧或在计划里改脱手帧
+const attachedNow=p=>p&&p.kind==='prop'&&!!(typeof RA!=='undefined'&&RA&&RA.props.find(x=>x.data.id===p.id)?.attachedNow);
+const editable=p=>SOURCE_READY&&!!p&&!!KIND_KEY[p.kind]&&!locked(p)&&VERSION==='live'&&!unplanned(SEL)&&!attachedNow(p);
 const locksKey=()=>'director-locks:'+proj()+':'+EP+':'+SEL;
 function loadLocks(){try{LOCKS=new Set(JSON.parse(localStorage.getItem(locksKey())||'[]'))}catch(_){LOCKS=new Set()}}
 function saveLocks(){try{localStorage.setItem(locksKey(),JSON.stringify([...LOCKS]))}catch(_){}}
@@ -1428,6 +1430,7 @@ function renderShotInfo(){
   $('#shotlbl').textContent=sid;$('#shotlbl').dataset.sid=sid;
   if(!g){box.innerHTML='';return}
   const s=shotOf(sid),cam=(g.cameras||[]).find(c=>c.shot_id===sid)||{};
+  const checks=[...(g.warnings||[]),...(g.prop_coverage?.messages||[])];   // 剧情道具覆盖(2026-11-05)与编译 warnings 同列
   if(!s){box.innerHTML=`<div class="warn">${esc(SB?t('分镜表里没有这一镜的条目'):t('分镜信息未加载(分镜预览接口不可用)'))}</div>`;return}
   const chars=(s.characters||[]).join(', ');
   const dl=(s.dialogue_lines||[]).map(l=>`<div class="dl">🗣 ${esc(l.speaker_name||l.speaker||'')}:${esc(l.text||'')}</div>`).join('');
@@ -1438,7 +1441,7 @@ function renderShotInfo(){
     ${s.camera_position?`<div class="cam">📷 ${esc(s.camera_position)}</div>`:''}${s.camera_move?`<div class="cam">🎥 ${esc(typeof s.camera_move==='string'?s.camera_move:JSON.stringify(s.camera_move))}</div>`:''}
     ${cam.basis?`<div class="cam" title="${esc(t('白模机位依据'))}">🧊 ${esc(cam.basis)}</div>`:''}
     ${imgs?`<div class="media">${imgs}</div>`:''}
-    ${(g.warnings||[]).length?`<details><summary style="color:var(--dim);font-size:11px;cursor:pointer">${esc(I18N.f('本组建模依据与检查 ({n})',{n:g.warnings.length}))}</summary><div class="warn" data-no-i18n>${esc(g.warnings.join('\n'))}</div></details>`:''}`;
+    ${checks.length?`<details><summary style="color:var(--dim);font-size:11px;cursor:pointer">${esc(I18N.f('本组建模依据与检查 ({n})',{n:checks.length}))}</summary><div class="warn" data-no-i18n>${esc(checks.join('\n'))}</div></details>`:''}`;
   box.querySelectorAll('.media img').forEach(im=>im.onclick=()=>{$('#lb img').src=im.src;$('#lb').style.display='flex'});
 }
 

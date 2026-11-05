@@ -63,6 +63,13 @@ def main():
     summary=collect(base,args.ep)['summary']
     print(json.dumps({'issues':{k:summary.get(k) for k in ('total','open','blocking_open','decided','applied','stale','waived','groups_open','blocking_ids')},
                       'issues_text':format_summary(summary)},ensure_ascii=False),flush=True)
+    # 剧情道具覆盖(2026-11-05,机检 whitebox_props_covered,WARN 不改退出码):镜头表 shots[].props 列出的道具须进计划 props(id/ref)
+    # 或在计划 not_modeled 写理由;只判已调度组。回执原样带上
+    missing=[{'group_id':g['group_id'],**{k:r[k] for k in ('id','name','shots')}} for g in episode['groups']
+             if not scoped or g['group_id'] in selected for r in (g.get('prop_coverage') or {}).get('items',[]) if r['status']=='missing']
+    print(json.dumps({'props_coverage':{'missing':missing},
+                      'props_coverage_text':f"[whitebox_props_covered] {args.project}/{args.ep}: "
+                      +(f"{len(missing)} 项剧情道具未进白模 -> WARN" if missing else 'PASS')},ensure_ascii=False),flush=True)
     if errors:return 1
     if args.check_only:return 0
     # 核验模式只读(#85):在内存里算指纹比对,不落盘 episode.json / whitebox.scene.json,不导出、不接线

@@ -28,6 +28,8 @@
 
 默认不写 camera.visible_actor_ids，由真实机位和几何关系决定入画。不能把 shot.characters 或 composition.subject/secondary_subjects 当作完整的可见名单；必须读 composition.layers、notes 与分镜草描，包含静止陪衬、前景和背景人物。只有明确的特殊隐藏需求才设名单，并在 basis 注明每个排除对象的理由。反例 dzg6/ep01 grp050/sh089：角色列表只列笑起来的两人，但构图要求老道儿在中间不动，错误名单让他凭空消失。按构图独立列出应入画人物，再检查 root.visible、摄像机渲染层、视锥及遮挡；不能仅验空间视图或从 visible_actor_ids 生成验收名单。
 
+**剧情道具与道具动作（2026-11-05，docs/whitebox.md「道具:锥体、半透明效果体、挂手与剧情道具覆盖」）**【仅当本组镜头表 `shots[].props` 非空时适用】：镜头表列出的每个道具，要么进计划 `props`（`id` 或 `ref` 写该道具 ID；一件道具拆成几块几何体时各块都写同一个 `ref`），要么在计划 `not_modeled: [{"id","reason"}]` 写明不建的理由（如整组被手挡住、远到不足一个像素）；`render_whitebox.py` 输出的 `props_coverage` 有 `missing` 即本条未完成。`shots[].content` 里看得见的道具动作（掉落、被抛、被接住、被泡泡兜住、递交、放回）写成道具关键帧，时刻对齐 content 里的时间码；人物手里的道具用 `attach: {"actor","hand","offset"}` 挂在手上，脱手与回手在关键帧上切 `attached`，切换帧的 `position` 照编译 WARN 给出的挂点坐标写；泡泡、水花、烟、光效这类不挡人的效果体用 `material: "ghost"`（半透明）建模，不得以「实心几何会挡住人物」为由不建。只在镜头表 props 为空的组，本条整条不适用。
+
 **NPC 氛围层（2026-10-09，docs/npc_staging.md）**【仅当本组有镜带 `npc[]`（镜头表定稿镜或其故事板草案；所在场次 NPC 参与构图生效为开，以 `python3 code/npc_staging.py --project <slug> --ep epNN` 为准）时适用】：把 `npc[]` 里的人形 NPC 用计划 `extras` 摆出来——ID 一律 `EXTRA-NPC-01` 起编（宿主据此在白模图例写「anonymous NPC passer-by, not a named character」），label 写「路人」「挑担路人」这类无名称谓，同组 NPC 共用一个中性颜色（群演之间可共用一色，不得与登记角色撞色）；按 `layer` 定纵深（fg 贴近摄影机、可半出画；mg 在主体侧后；bg 在主体后方远处），走动的给覆盖组时长的关键帧，路线避开主角动线与视线、做碰撞检查，不挡主角脸；前景物体类 NPC（灯笼穗、枝叶、货摊一角）用 `props` 的简单几何体。生效为关的场次不加 EXTRA-NPC。NPC 不写进 `visible_actor_ids` 的排除理由，也不得用 NPC 遮挡代替正确取景。
 
 机位验收按 docs/whitebox.md「机位与运镜设定校验」执行：先从 camera/composition 读出平视/低位/俯仰、对称轴、物件或身体局部主体、焦段、重复机位、起停与位移，再写独立 whitebox_contract。相邻重复镜头引用同一基准。人物或模型修改后重验全时段取景，审查完成才更新 source_fingerprint / placement_fingerprint；不得只改指纹消除报错。禁止用自由搜索机高/方位的算法替代设定，也不能把手部/门闩特写改成全身取景。数值一致、取景可用、视觉构图分项报告；缺少帘幕/影子/物证白模属于模型缺口，不算摄影机通过。源设定之间或与实际空间冲突时列出具体取舍；已经授权的决定直接执行并同步源文件和 prompt，不重复索要确认。
@@ -72,7 +74,7 @@ python code/render_whitebox.py --project <slug> --ep <ep> --stills grp011 grp012
 ```
 
 - **适用白名单**：本单**新建或改动过**的组（调度工单、导演台修改批次、套用已裁决项、用户点名的修改）。同场景模型/同组人物道具变更波及的组一并算改动。**不适用**：未改动的组、`p6-whitebox-export` 导出工单、只出样片的工单（预览页「重新生成白模样片」）、纯 `--verify-export` 核验；开关关闭时整节不执行。整集首次调度组数多时按场次分批传组号，不要求一条命令跑完。
-- 输出 `directing/<ep>/whitebox/stills/<grp>.jpg`：每镜一行，`cam` 格是该镜首/中/尾及机位关键帧时刻的摄影机视角，末格 `space` 是空间视角，角标为 `镜号 视角 t=组内秒`。用读图工具逐张查看，对照该镜 camera/composition/blocking 核对：① 主体在画内且落在构图指定的画面位置；② 未被墙、道具、前景人物挡住，机位没有隔墙或埋进几何体；③ 正面/侧面/背影与 blocking 朝向一致（白模背影无眼鼻，见到眼睛=面向镜头）；④ 景别与 shot_list 大致相符；⑤ 首尾帧之间的运动方向与 motion_direction 一致；⑥ 不该入画的人没有入画。
+- 输出 `directing/<ep>/whitebox/stills/<grp>.jpg`：每镜一行，`cam` 格是该镜首/中/尾及机位关键帧时刻的摄影机视角，`evt` 格（至多 3 格）是剧情动作时刻的摄影机视角，末格 `space` 是空间视角，角标为 `镜号 视角 t=组内秒`。用读图工具逐张查看，对照该镜 camera/composition/blocking 核对：① 主体在画内且落在构图指定的画面位置；② 未被墙、道具、前景人物挡住，机位没有隔墙或埋进几何体；③ 正面/侧面/背影与 blocking 朝向一致（白模背影无眼鼻，见到眼睛=面向镜头）；④ 景别与 shot_list 大致相符；⑤ 首尾帧之间的运动方向与 motion_direction 一致；⑥ 不该入画的人没有入画。有 `evt` 格时（该镜 content 带时间码、或计划道具在该镜有运动，2026-11-05）另核 ⑦：`evt` 格是 content 时间码区间中点与道具运动时刻，对照 content 该时刻写的动作，看对应道具/人物在白模里确实在做这件事（球在掉、泡泡兜着它、谁手里拿着什么）；动作只写在文字里、白模里看不出时回到计划补道具关键帧。
 - 发现问题回到计划改数值（不得靠隐藏人物、缩小人物、换掉导演指定机位来掩盖），属于取舍的照常开 `issues[]`；改后对该组重跑 `--stills` 复看。改数值重编译没有生成成本，不属于「用户重跑次数设定」约束的重 roll；但同一组自检修正最多 2 轮，仍不满意就保留当前方案、把问题写进回执交用户在预览页裁决。
 - 只用这条宿主命令：禁止自写 Playwright/浏览器脚本、打开预览页截图或导出 camera.mp4 来代替（`--stills` 全本地、无生成成本，不写 manifest、不接 refs，不属于 H3W 签字前禁止的正式导出）。命令因缺 Chromium/Playwright 失败时如实上报，回执写 `"stills_checked": "unavailable"`，不阻断交付。
 - 回执增加 `stills_checked`：开启时为逐组 `{"group_id","sheet","result":"ok|fixed|issue","notes"}` 数组；关闭时写 `"disabled"`。读图结论只是交付前自检，不代替用户 H3W 签字。
