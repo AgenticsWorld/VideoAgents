@@ -30,13 +30,18 @@ export function sample(keys, time) {
     let u=a.hold?0:(time-a.t)/(b.t-a.t);
     if(a.easing==='smooth') u=u*u*(3-2*u);
     const out={...a};
-    for(const k of ['position','target','left_hand','right_hand','scale']) if(a[k]) out[k]=a[k].map((v,j)=>v+(b[k][j]-v)*u);
+    // 后一帧缺某通道时按前一帧保持(2026-11-05;原先 b[k] 缺失得 NaN,yaw 经 ||0 变 0 人物瞬间转向),与 modules/whitebox.py sample 同
+    for(const k of ['position','target','left_hand','right_hand','scale']) if(a[k]) out[k]=a[k].map((v,j)=>v+((b[k]||a[k])[j]-v)*u);
     for(const k of ['fov','yaw']) if(a[k]!==undefined) {
-      let delta=b[k]-a[k];
+      let delta=(b[k]??a[k])-a[k];
       if(k==='yaw') delta=((delta+Math.PI)%(2*Math.PI)+2*Math.PI)%(2*Math.PI)-Math.PI;
       out[k]=a[k]+delta*u;
     }
-    for(const k of ['bend','pitch','roll','head_pitch','head_yaw','torso_yaw','body_roll','neck_extension','expression','morph'])if(a[k]!==undefined||b[k]!==undefined)out[k]=(a[k]||0)+((b[k]||0)-(a[k]||0))*u;
+    for(const k of ['bend','pitch','roll','head_pitch','head_yaw','torso_yaw','body_roll','neck_extension','expression','morph'])if(a[k]!==undefined||b[k]!==undefined){
+      // bend 缺省值随姿态:蹲姿默认前俯 0.6(leanBend),插值时缺失端也按它算,不再先弹直再俯身(2026-11-05)
+      const da=k==='bend'?bendDefault(a):0,db=k==='bend'?bendDefault(b):0;
+      out[k]=(a[k]??da)+((b[k]??db)-(a[k]??da))*u;
+    }
     return out;
   }
   return {...keys.at(-1)};
@@ -46,7 +51,10 @@ export function sample(keys, time) {
 // stand: bend defaults 0 about a 0.35h hip; crouch: 0.6 rad default about 0.175h; kneel: 0 default about
 // 0.175h (knees stay on the ground). Other poses never lean.
 export const ARM_SEGMENT=.21;
+export const SHOT_EPS=1e-6;
 export function leanBend(k){const pose=k.pose||'stand';return pose==='stand'||pose==='kneel'?(k.bend||0):pose==='crouch'?(k.bend??.6):0;}
+// 关键帧没写 bend 时的缺省值(插值用):蹲姿 0.6,其余 0
+export function bendDefault(k){return (k.pose||'stand')==='crouch'?.6:0;}
 export function leanHip(pose){return pose==='crouch'||pose==='kneel'?.175:.35;}
 // Hand channels follow the actor's own anatomy (#121): facing local +Z with +Y up, the actor's right
 // side is local -X. `side` below is the local X sign of the shoulder (modules/whitebox.py HAND_SIDES).
@@ -372,7 +380,8 @@ export class WhiteboxRenderer {
         a.tongue.visible=expression>0;a.tongue.scale.y=Math.max(.001,expression);
       }
     }
-    const shot=this.group.cameras.find(c=>t<c.start+c.duration_s)||this.group.cameras.at(-1);
+    // 切点容差 1e-6 s:镜头起点是浮点累加(1.1+2.2=3.3000000000000003),跳到下一镜 start 时不能落回上一镜(2026-11-05)
+    const shot=this.group.cameras.find(c=>t<c.start+c.duration_s-SHOT_EPS)||this.group.cameras.at(-1);
     // Off-screen cast stays in spatial/top views without obscuring this shot.
     for(const a of this.actors){
       const layer=shot.visible_actor_ids&&!shot.visible_actor_ids.includes(a.data.id)?1:0;
@@ -385,7 +394,8 @@ export class WhiteboxRenderer {
     for(const p of this.props){
       const {data,mesh}=p;
       const k=data.keyframes?sample(data.keyframes,t):data;
-      const own=new THREE.Euler(k.pitch||0,k.yaw||0,k.roll||0);
+      // 关键帧没写朝向 / 缩放时回退到道具顶层值(2026-11-05;原先顶层 yaw 等被静默丢掉,前科 fengshen3 ep07 grp019 shiji-stone)
+      const own=new THREE.Euler(k.pitch??data.pitch??0,k.yaw??data.yaw??0,k.roll??data.roll??0);
       let holder=null,arm=null;
       if(data.attach&&k.attached!==false){
         holder=this.actors.find(a=>a.data.id===data.attach.actor);
@@ -402,7 +412,7 @@ export class WhiteboxRenderer {
         mesh.position.fromArray(k.position||data.position||[0,0,0]);mesh.rotation.copy(own);
       }
       mesh.traverse(o=>o.layers.set(layer));
-      mesh.scale.fromArray(k.scale||[1,1,1]);
+      mesh.scale.fromArray(k.scale||data.scale||[1,1,1]);
       mesh.visible=k.visible!==false&&(!arm||holder.root.visible)&&(!data.shot_ids||data.shot_ids.includes(shot.shot_id));
     }
     this.scene.updateMatrixWorld(true);

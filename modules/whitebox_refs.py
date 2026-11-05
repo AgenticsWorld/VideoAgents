@@ -35,7 +35,7 @@ import re
 from pathlib import Path
 
 from modules.prompt_layout import paragraphize
-from modules.whitebox import component, prop_state, read, sample
+from modules.whitebox import bible_props, component, prop_state, read, sample
 
 # 与 modules/whitebox.PALETTE 同序(2026-09-11 扩到 16 色:整集固定身份色,人物多于 8 人时启用后 8 色)
 COLOR_NAMES = {'#e63946': 'red', '#1d78d8': 'blue', '#2ea043': 'green', '#f59e0b': 'orange',
@@ -80,7 +80,7 @@ def _basis(cam):
 def actor_bounds(actor: dict, key: dict) -> tuple:
     """人物在该关键帧的轴对齐包围盒(世界坐标):(center, half_extents)。按姿态取占位——
     stand: size_m 全高、脚印 max(w,d);sit: 0.8 身高(头顶≈0.725h+头半径,与 whitebox-renderer.js 同比例)、脚印加腿前伸 0.2h;
-    lie / prone: 0.35 身高、脚印 0.5 身长;kneel: 0.825 身高(小腿平贴地面,头顶 0.725h+头半径)、脚印加小腿后伸 0.175h;
+    lie / prone: 0.35 身高、脚印 = 从脚锚点沿身体朝向反方向一个身长 × 身宽(按 yaw 旋转后取轴对齐,2026-11-05);kneel: 0.825 身高(小腿平贴地面,头顶 0.725h+头半径)、脚印加小腿后伸 0.175h;
     crouch: 0.73 身高(髋在 0.175h、上身前俯 0.6 rad)、脚印加前俯 0.31h(2026-09-14 六态)。脚印按 max(w,d) 取方形,与 yaw 无关(略保守)。
     stand/kneel 写了非零 bend、或 crouch 显式写 bend 时(#77)按前俯几何压低高度、脚印沿面朝方向前移。"""
     size = actor.get('size_m') or [0.5, 1.7, 0.4]
@@ -90,7 +90,17 @@ def actor_bounds(actor: dict, key: dict) -> tuple:
     if pose == 'sit':
         height, half_w = 0.8 * h, max(half_w, 0.2 * h)
     elif pose in ('lie', 'prone'):
-        height, half_w = 0.35 * h, max(half_w, 0.5 * h)
+        # 卧 / 趴(2026-11-05 修):身体从脚锚点沿局部 −Z 躺出一个身长(whitebox-renderer.js body 绕 X 转 −π/2),
+        # 包围盒按 yaw 旋转后的 w × h 脚印取轴对齐范围;原先以脚锚为中心 ±0.5h,头那一半常被算到画幅外
+        pos = key.get('position') or [0, 0, 0]
+        yaw = float(key.get('yaw') or 0)
+        c, s = math.cos(yaw), math.sin(yaw)
+        corners = [(x, z) for x in (-w / 2, w / 2) for z in (-h, 0.0)]
+        xs = [float(pos[0]) + c * x + s * z for x, z in corners]
+        zs = [float(pos[2]) - s * x + c * z for x, z in corners]
+        height = 0.35 * h
+        return ([(min(xs) + max(xs)) / 2, float(pos[1]) + height / 2, (min(zs) + max(zs)) / 2],
+                [(max(xs) - min(xs)) / 2, height / 2, (max(zs) - min(zs)) / 2])
     elif pose == 'kneel':
         height, half_w = 0.825 * h, max(half_w, 0.175 * h)
     elif pose == 'crouch':
@@ -513,6 +523,7 @@ def plan_refs(base: Path, ep: str, gid: str, continuation=None, prompt=None) -> 
     render = (read(base/'directing'/ep/'whitebox'/'episode.json', {}) or {}).get('render') or {}
     return {'camera': cam if cam in videos else None, 'videos': videos, 'cast': cast, 'render': render,
             'verbatim': verbatim_fragments(base, ep, gid), 'props_shown': appearing_props(group, render),
+            'prop_names': {pid: (p.get('name') or p.get('name_en') or '') for pid, p in bible_props(base).items()},
             'group': group, 'budget': budget, 'duration_s': dur, 'skipped_reason': skipped}
 
 
@@ -570,8 +581,10 @@ def prop_color_name(hex_color):
     return min(PROP_COLOR_NAMES, key=lambda item: distance(item[1]))[0]
 
 
-def prop_legend_rows(group: dict, render: dict | None = None, shown: list | None = None) -> list:
-    """道具图例(2026-11-05):只列摄影机视频里出现的计划道具;ghost 写明是透明效果、不是实心物体。"""
+def prop_legend_rows(group: dict, render: dict | None = None, shown: list | None = None, names: dict | None = None) -> list:
+    """道具图例(2026-11-05):只列摄影机视频里出现的计划道具;ghost 写明是透明效果、不是实心物体。
+    名字取计划 label,没写时按 ref / id 回退道具库 bible/props.json 的 name(names),都没有才用 id。"""
+    names = names or {}
     shown = appearing_props(group, render) if shown is None else shown
     rows = []
     for prop in group.get('props') or []:
@@ -580,7 +593,7 @@ def prop_legend_rows(group: dict, render: dict | None = None, shown: list | None
         material = prop.get('material') or 'solid'
         color = prop_color_name(prop.get('color') or PROP_DEFAULT_COLORS.get(material, PROP_DEFAULT_COLORS['solid']))
         shape = prop.get('shape') or 'box'
-        label = prop.get('label') or prop['id']
+        label = prop.get('label') or names.get(prop.get('ref')) or names.get(prop['id']) or prop['id']
         if material == 'ghost':
             rows.append(f"translucent {color} {shape} = {label} ({prop['id']}, a see-through effect, not a solid object)")
         else:
@@ -591,6 +604,13 @@ def prop_legend_rows(group: dict, render: dict | None = None, shown: list | None
 # ---------------------------------------------------------------- camera-relative facing
 FACING_BUCKETS = ((30, 'front'), (70, 'three-quarter front'), (110, 'profile'), (150, 'three-quarter back'), (181, 'back'))
 FACING_PHRASES = {
+    # 卧 / 趴(2026-11-05):脸朝上 / 朝下,只说头指向哪边;原先按站姿算正脸 / 背影,趴着脚朝镜头会被写成正脸
+    'lie-head': 'lying on the back, face up, head toward the camera',
+    'lie-feet': 'lying on the back, face up, feet toward the camera',
+    'lie-side': 'lying on the back, face up, head toward screen-{side}',
+    'prone-head': 'lying face down, head toward the camera',
+    'prone-feet': 'lying face down, feet toward the camera',
+    'prone-side': 'lying face down, head toward screen-{side}',
     'front': 'facing the camera (front view, face fully visible)',
     'three-quarter front': 'in three-quarter front view, face turned toward screen-{side}',
     'profile': 'in side profile, facing screen-{side}',
@@ -610,13 +630,24 @@ def facing_bucket(actor_key: dict, cam_key: dict) -> tuple | None:
     if basis is None:
         return None
     right = basis[0]
-    yaw = float(actor_key.get('yaw') or 0) + float(actor_key.get('torso_yaw') or 0) + float(actor_key.get('head_yaw') or 0)
-    face = [math.sin(yaw), 0.0, math.cos(yaw)]
+    pose = actor_key.get('pose') or 'stand'
     pos = actor_key.get('position') or [0, 0, 0]
     to_cam = [float(cam_key['position'][0]) - float(pos[0]), 0.0, float(cam_key['position'][2]) - float(pos[2])]
     n = math.sqrt(to_cam[0] ** 2 + to_cam[2] ** 2)
     if n < 1e-6:
         return None
+    if pose in ('lie', 'prone'):
+        # 头指向 yaw + π(身体从脚锚点沿局部 −Z 躺下);torso_yaw / head_yaw 躺着时绕身体长轴,不改头的指向
+        head = float(actor_key.get('yaw') or 0) + math.pi
+        hd = [math.sin(head), 0.0, math.cos(head)]
+        theta = math.degrees(math.acos(max(-1.0, min(1.0, (hd[0] * to_cam[0] + hd[2] * to_cam[2]) / n))))
+        if theta <= 45:
+            return f'{pose}-head', ''
+        if theta >= 135:
+            return f'{pose}-feet', ''
+        return f'{pose}-side', ('right' if (hd[0] * right[0] + hd[2] * right[2]) >= 0 else 'left')
+    yaw = float(actor_key.get('yaw') or 0) + float(actor_key.get('torso_yaw') or 0) + float(actor_key.get('head_yaw') or 0)
+    face = [math.sin(yaw), 0.0, math.cos(yaw)]
     cos_t = max(-1.0, min(1.0, (face[0] * to_cam[0] + face[2] * to_cam[2]) / n))
     theta = math.degrees(math.acos(cos_t))
     side = 'right' if (face[0] * right[0] + face[2] * right[2]) >= 0 else 'left'
@@ -766,7 +797,7 @@ def build_block(plan: dict) -> str:
              "rendered from the real camera of every shot with the same cuts and timing; follow it for camera position, framing, "
              "each character's screen position, depth, facing and movement timing."]
     legend = '; '.join(legend_rows(plan['group'] or {}, plan.get('cast'))
-                       + prop_legend_rows(plan['group'] or {}, plan.get('render'), plan.get('props_shown')))
+                       + prop_legend_rows(plan['group'] or {}, plan.get('render'), plan.get('props_shown'), plan.get('prop_names')))
     facing = 'the white eyes and nose tip show where a figure faces'
     cam = 'the camera itself is never drawn in the camera view'
     parts.append(f"{LEGEND_KEY} {legend}; {facing}; {cam}.")
@@ -884,7 +915,8 @@ def check_prompt(prompt: dict, plan: dict, gid: str) -> tuple[list, list]:
         if 'faces' not in legend and 'facing' not in legend:
             errs.append(f"{gid}: 图例缺眼睛/鼻尖=朝向说明")
         # 道具图例(2026-11-05)只 WARN:存量 prompt 在下次 --write 前没有这些行,不因此判接线失败
-        missing = [row for row in prop_legend_rows(plan['group'] or {}, plan.get('render'), plan.get('props_shown')) if row not in legend]
+        missing = [row for row in prop_legend_rows(plan['group'] or {}, plan.get('render'), plan.get('props_shown'), plan.get('prop_names'))
+                   if row not in legend]
         if missing:
             warns.append(f"{gid}: 图例缺白模里出现的道具 {'; '.join(missing)};跑 code/sync_whitebox_refs.py --write 刷新")
     rows = facing_rows(plan.get('group') or {}, cast, plan.get('render'))

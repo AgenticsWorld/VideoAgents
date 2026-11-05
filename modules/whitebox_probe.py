@@ -211,7 +211,7 @@ def _times(group, step):
 
 def _shot_at(group, t):
     cams = group.get('cameras') or []
-    return next((c['shot_id'] for c in cams if t < c['start'] + c['duration_s'] - 1e-9), cams[-1]['shot_id'] if cams else None)
+    return next((c['shot_id'] for c in cams if t < c['start'] + c['duration_s'] - 1e-6), cams[-1]['shot_id'] if cams else None)
 
 
 def _allowed(allow, a, b, t):
@@ -265,8 +265,9 @@ def collide_group(group: dict, scene: dict, *, step=STEP_S, actor_gap=ACTOR_GAP_
             if not visible:
                 continue
             k = sample(prop['keyframes'], t) if prop.get('keyframes') else prop
-            size = [s * c for s, c in zip(prop['size_m'], k.get('scale') or [1, 1, 1])]
-            shape = object_shape({'size_m': size, 'yaw': k.get('yaw', 0), 'pitch': k.get('pitch', 0), 'roll': k.get('roll', 0)},
+            size = [s * c for s, c in zip(prop['size_m'], k.get('scale') or prop.get('scale') or [1, 1, 1])]
+            rot = {axis: k[axis] if k.get(axis) is not None else prop.get(axis, 0) for axis in ('yaw', 'pitch', 'roll')}   # 同渲染器:关键帧缺省回退顶层
+            shape = object_shape({'size_m': size, **rot},
                                  center, prop['id'], 'prop', loose=attached)   # 挂手时朝向随上身转,取外接球
             shape['holder'] = (prop.get('attach') or {}).get('actor') if attached else None
             dynamic.append(shape)

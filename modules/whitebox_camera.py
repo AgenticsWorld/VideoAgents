@@ -100,11 +100,53 @@ def _matches_fingerprint(saved, payload):
     return saved == _fingerprint(payload) or saved == _fingerprint(payload, legacy=True)
 
 
+# 编译时每个镜头都要核一次本组 placement 指纹(整组共用一个值),逐镜重读整份 shot_list + 计划 + 场景并规范化,
+# 曾占编译 88% 时间(fengshen3 ep07 7.4 s,2026-11-05)。按组缓存,键为三个输入文件的 (mtime_ns, size):
+# 文件一变即重算,常驻的预览 / API 进程也不会拿到旧值;placement_fingerprint() 本身(Agent 重打指纹用)不走缓存。
+_PLACEMENT_CACHE = {}
+_PLACEMENT_CACHE_MAX = 4096
+
+
+def _stamp(path):
+    try:
+        st = Path(path).stat()
+        return st.st_mtime_ns, st.st_size
+    except OSError:
+        return None
+
+
+def _placement_inputs(base, ep, gid, scene_id):
+    base = Path(base)
+    return (base/'directing'/ep/'shot_list.json', base/'directing'/ep/'whitebox_plans'/f'{gid}.json',
+            base/'bible/scenes'/str(scene_id)/'whitebox.json')
+
+
+def _placement_digests(base, ep, gid):
+    key = (str(Path(base).resolve()), ep, gid)
+    hit = _PLACEMENT_CACHE.get(key)
+    if hit and all(_stamp(path) == stamp for path, stamp in hit[0]):
+        return hit[1]
+    before = {str(p): _stamp(p) for p in _placement_inputs(base, ep, gid, '?')[:2]}
+    payload = _placement_payload(base, ep, gid)
+    paths = _placement_inputs(base, ep, gid, payload['group'].get('scene_id'))
+    stamps = tuple((path, _stamp(path)) for path in paths)
+    digests = {'v3': _fingerprint(payload, prefix=PLACEMENT_PREFIX)}
+    if all(before[str(p)] == s for p, s in stamps[:2]) and all(_stamp(p) == s for p, s in stamps):   # 读的过程中文件被改就不缓存
+        if len(_PLACEMENT_CACHE) >= _PLACEMENT_CACHE_MAX:
+            _PLACEMENT_CACHE.clear()
+        _PLACEMENT_CACHE[key] = (stamps, digests)
+    return digests
+
+
 def _matches_placement(saved, base, ep, gid):
     """v3 按剔除说明字段的 payload 比;存量 v2 / legacy 指纹按旧口径(整份场景)比,已签字组不因升版失效。"""
     if isinstance(saved, str) and saved.startswith(PLACEMENT_PREFIX):
-        return saved == placement_fingerprint(base, ep, gid)
-    return _matches_fingerprint(saved, _placement_payload(base, ep, gid, full_scene=True))
+        return saved == _placement_digests(base, ep, gid)['v3']
+    digests = _placement_digests(base, ep, gid)
+    if 'full' not in digests:   # 旧口径只在存量 v2 / legacy 指纹时才算,算一次后随同缓存
+        payload = _placement_payload(base, ep, gid, full_scene=True)
+        digests['full'] = (_fingerprint(payload), _fingerprint(payload, legacy=True))
+    return saved in digests['full']
 
 
 def direction(key):

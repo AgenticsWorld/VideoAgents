@@ -292,7 +292,7 @@ button.on{border-color:var(--accent);color:var(--accent)}
 <script type="module">
 import * as THREE from '/static/vendor/three/three.module.js';
 import { OrbitControls } from '/static/vendor/three/OrbitControls.js';
-import { WhiteboxRenderer, sample } from '/static/whitebox-renderer.js?v=20261105-props';
+import { WhiteboxRenderer, sample } from '/static/whitebox-renderer.js?v=20261105-fix1';
 import { projectRenderFormat } from '/static/whitebox-format.js?v=20260908-bedfoot-pour';
 
 const $=s=>document.querySelector(s);
@@ -536,7 +536,7 @@ let RA=null,HELPER=null,DIRTY=true,PREV=0,RAF=0,PAD=null,ORBIT=null,SOURCE_LOAD=
 // 中栏折叠状态(时间线 / 本组对象 / 分镜信息),跨项目记在本机
 let MID_CLOSED=new Set();try{MID_CLOSED=new Set(JSON.parse(localStorage.getItem('director-mid-closed')||'[]'))}catch(_){}
 const midFoldSave=()=>{try{localStorage.setItem('director-mid-closed',JSON.stringify([...MID_CLOSED]))}catch(_){}};
-let EDIT=false,TOOL='move',SNAP=true,LOCKS=new Set(),UNDO=[],REDO=[],DRAG=null,WAY=null,WAYSEL=-1,LANES_ON=!MID_CLOSED.has('lanes'),FLY=null,FLY_TIMER=null,LANEDRAG=null;
+let KEYS_BOUND=false,EDIT=false,TOOL='move',SNAP=true,LOCKS=new Set(),UNDO=[],REDO=[],DRAG=null,WAY=null,WAYSEL=-1,LANES_ON=!MID_CLOSED.has('lanes'),FLY=null,FLY_TIMER=null,LANEDRAG=null;
 const KIND_KEY={actor:'actors',extra:'extras',prop:'props',camera:'cameras'};
 let QUAD=false,QMUTED=false,BOARD=null,OVL={guides:false,clearance:false,axis:false},MEASURE=[],MEASGRP=null,MARKGRP=null,CLRGRP=null,AXISGRP=null,QSYNC=0;
 const marksOf=()=>{const g=grpById(SEL);return g?(((DD||{}).marks||{})[g.scene_id]||[]):[]};
@@ -644,7 +644,9 @@ function renderMonitorShell(){
   $('#b-play').onclick=togglePlay;
   $('#loop').onchange=e=>{LOOP=e.target.checked};
   $('#xtl').onclick=e=>{const r=e.currentTarget.getBoundingClientRect();const g=playbackGroup();if(!g)return;seek((e.clientX-r.left)/r.width*g.duration_s)};
-  document.addEventListener('keydown',e=>{
+  // renderMonitorShell 在首次加载与每次切集时都会重跑;键盘监听挂在 document 上,只能注册一次,
+  // 否则切一次集后每个按键触发两次(空格播放又暂停、Ctrl+Z 撤两步、←/→ 走两帧,2026-11-05)
+  if(!KEYS_BOUND){KEYS_BOUND=true;document.addEventListener('keydown',e=>{
     if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName))return;
     if(e.code==='Space'){e.preventDefault();togglePlay()}
     if(e.key==='ArrowLeft'){PLAYING=false;seek(Math.max(0,TIME-1/FPS));updPlayBtn()}
@@ -661,7 +663,7 @@ function renderMonitorShell(){
       if(e.key==='Delete'||e.key==='Backspace'){if(WAYSEL>=0){e.preventDefault();deleteWaypoint(WAYSEL)}}
       if(VIEW==='camera'&&PICK&&PICK.kind==='camera'&&'wasdqeWASDQE'.includes(e.key)&&e.key){e.preventDefault();flyStep(e.key.toLowerCase(),e.shiftKey?1:0.25)}
     }
-  });
+  });}
   // 拾取:按下/抬起位移小于 4px 视为点击(旋转视角下拖动是 orbit)
   PAD=$('#pad');let down=null;
   PAD.addEventListener('pointerdown',e=>{down=[e.clientX,e.clientY];if(EDIT&&VIEW!=='world'&&e.button===0)beginDrag(e)});
@@ -913,7 +915,7 @@ function pickAt(e){
   if(!picked&&solidHit&&g)picked={kind:'scene',id:g.scene_id,label:t('场景物件')+' '+(solidHit.name||''),object:solidHit.name||''};
   return picked;
 }
-const shotAt=()=>{const g=viewedGroup();return g&&(g.cameras.find(c=>TIME<c.start+c.duration_s)||g.cameras.at(-1))||{}};
+const shotAt=()=>{const g=viewedGroup();return g&&(g.cameras.find(c=>TIME<c.start+c.duration_s-1e-6)||g.cameras.at(-1))||{}};
 function setPick(p,silent){
   const prev=PICK;PICK=p;
   if(!p||!prev||p.kind!==prev.kind||p.id!==prev.id)WAYSEL=-1;
@@ -958,8 +960,11 @@ const snapA=a=>SNAP?Math.round(a/(Math.PI/12))*(Math.PI/12):a;
 // 自动打关键帧:当前时刻 0.02s 内已有帧就用它,否则按插值结果插一帧
 function keyIndexAt(keys,t){
   let i=keys.findIndex(k=>Math.abs(k.t-t)<0.02);if(i>=0)return i;
+  // 新帧继承所在段起点帧的 hold / easing(2026-11-05):原先删掉这两项,停住到点瞬移的段被插一帧就变成滑行
   const k={...JSON.parse(JSON.stringify(sample(keys,t))),t:+t.toFixed(3)};delete k.hold;delete k.easing;
-  i=keys.findIndex(k=>k.t>t);if(i<0){keys.push(k);return keys.length-1}keys.splice(i,0,k);return i;
+  i=keys.findIndex(k=>k.t>t);
+  const from=i<0?null:keys[i-1];if(from){if(from.hold)k.hold=true;if(from.easing)k.easing=from.easing}
+  if(i<0){keys.push(k);return keys.length-1}keys.splice(i,0,k);return i;
 }
 const serialize=info=>info.keys?{keyframes:info.keys}:{position:info.obj.position,yaw:info.obj.yaw||0,pitch:info.obj.pitch||0,roll:info.obj.roll||0};
 // 静止对象(整条轨迹位置/朝向/目标都一样,如固定机位、全程站着不动的人):改动作用于全部关键帧 = 整体挪,不在当前时刻打帧造出一段来回
@@ -1217,7 +1222,7 @@ function setQuad(on){
   if(on&&!BOARD){BOARD={};J('/api/v1/projects/'+encodeURIComponent(proj())+'/previews/board?ep='+encodeURIComponent(EP)).then(b=>{BOARD=b||{};updateQuadMedia()}).catch(()=>{BOARD={}})}
   updateQuadMedia();DIRTY=true;kick();
 }
-function currentShot(){const g=viewedGroup();return g&&(g.cameras.find(c=>TIME<c.start+c.duration_s)||g.cameras.at(-1))||null}
+function currentShot(){const g=viewedGroup();return g&&(g.cameras.find(c=>TIME<c.start+c.duration_s-1e-6)||g.cameras.at(-1))||null}
 function updateQuadMedia(){
   if(!QUAD)return;
   const g=viewedGroup(),shot=currentShot(),sid=shot&&shot.shot_id;const s=sid&&shotOf(sid);
@@ -1392,7 +1397,7 @@ function renderObjects(){
 function updateObjectStates(){
   if(!RA||!RA.scene)return;
   const g=viewedGroup();if(!g)return;
-  const shot=g.cameras.find(c=>TIME<c.start+c.duration_s)||g.cameras.at(-1);
+  const shot=g.cameras.find(c=>TIME<c.start+c.duration_s-1e-6)||g.cameras.at(-1);
   RA.camera.updateMatrixWorld(true);   // 非摄像机视角时机位相机不参与渲染,矩阵是旧的,投影前先刷新
   const proj3=new THREE.Vector3();
   $$('#objs .obj').forEach(el=>{
@@ -1492,7 +1497,7 @@ function renderRight(){
   // 3. 已提交版本
   const vs=versionsOf(gid).slice().sort((a,b)=>b.v-a.v);
   const batches=(DD.ledger.batches||[]).filter(b=>NOTE_SCOPE==='all'||b.group_ids.includes(gid)).slice().reverse();
-  const vbody=`<div class="subrow"><span class="msg">${esc(t('版本 = 该组编译结果快照;选择一个版本预览播放'))}</span><button class="sm" id="snap"${draftOnly?' disabled':''}>${esc(t('把当前存为版本'))}</button></div>
+  const vbody=`<div class="subrow"><span class="msg">${esc(t('版本 = 该组编译结果快照;选择一个版本预览播放'))}</span><button class="sm" id="snapver"${draftOnly?' disabled':''}>${esc(t('把当前存为版本'))}</button></div>
     ${vs.map(v=>`<div class="ver"><span class="v">v${v.v}</span><span class="lb" data-no-i18n>${esc(VL(v.label))}${v.batch_id?' · '+esc(v.batch_id):''}</span><span class="lb">${esc((v.created_at||'').slice(5,16))}</span><span class="sp"></span>${String(VERSION)===String(v.v)?`<span class="cur">${esc(t('当前选择'))}</span>`:''}<button class="xs" data-version="${v.v}">${esc(t('预览'))}</button></div>`).join('')||`<div class="bat">${esc(t('还没有版本;首次提交会自动存一份基线'))}</div>`}
     ${batches.length?`<div class="sec-h" style="position:static">${esc(t('批次'))} <span class="lite">${batches.length}</span></div>`:''}
     ${batches.map(b=>`<div class="bat"><b>${esc(b.id)}</b> <span class="st ${esc(b.status)}">${esc((DD.labels.batch_status||{})[b.status]||b.status)}</span> · ${esc(b.group_ids.join(', '))} · ${esc(I18N.f('{n} 条注释',{n:(b.note_ids||[]).length}))}${(b.issue_ids||[]).length?' · '+esc(I18N.f('{n} 项裁决',{n:b.issue_ids.length})):''}${b.run_id?` · <a href="/?run=${encodeURIComponent(b.run_id)}" target="_blank" data-no-i18n>${esc(String(b.run_id).slice(0,8))}</a>`:''}${Object.keys(b.versions||{}).length?' → '+esc(Object.entries(b.versions).map(([g,v])=>g+' v'+v).join(', ')):''}${b.error?` · <span style="color:var(--red)">${esc(b.error)}</span>`:''}<br><span data-no-i18n>${esc(b.created_at||'')}</span></div>`).join('')}`;
@@ -1511,7 +1516,7 @@ function renderRight(){
   $$('#right [data-edit]').forEach(b=>b.onclick=()=>editNote(b.dataset.edit));
   $$('#right [data-version]').forEach(b=>b.onclick=()=>selectVersion(b.dataset.version));
   $$('#right [data-gsel]').forEach(b=>b.onclick=()=>selectGroup(b.dataset.gsel));
-  const snap=$('#snap');if(snap)snap.onclick=async()=>{snap.disabled=true;try{const r=await J(api('/snapshot'),'POST',{group_id:gid});toast(I18N.f('已存为 v{v}',{v:r.version.v}));await load(true)}catch(e){toast(t('存版失败:')+e.message);snap.disabled=false}};
+  const snap=$('#snapver');if(snap)snap.onclick=async()=>{snap.disabled=true;try{const r=await J(api('/snapshot'),'POST',{group_id:gid});toast(I18N.f('已存为 v{v}',{v:r.version.v}));await load(true)}catch(e){toast(t('存版失败:')+e.message);snap.disabled=false}};
   const sg=$('#sub-go');if(sg)sg.onclick=()=>submitBatch(NOTE_SCOPE==='all'?{}:{group_ids:[gid]},sg);
   const nc=$('#nf-clear');if(nc)nc.onclick=()=>{fillNoteForm(null);$('#nf-text').value='';EDIT_ID=null;$('#nf-save').textContent=t('加入队列')};
   const ns=$('#nf-save');if(ns)ns.onclick=saveNote;

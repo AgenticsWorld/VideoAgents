@@ -330,6 +330,11 @@ def lean_bend(key):
     return 0
 
 
+def bend_default(key):
+    """关键帧没写 bend 时的缺省值(插值用,与 whitebox-renderer.js bendDefault 同):蹲姿 0.6,其余 0。"""
+    return .6 if (key.get('pose') or 'stand') == 'crouch' else 0
+
+
 def lean_hip(pose):
     return .175 if pose in ('crouch', 'kneel') else .35
 
@@ -584,19 +589,24 @@ def sample(keys, t):
             if a.get('easing') == 'smooth':
                 u = u*u*(3-2*u)
             out = copy.deepcopy(a)
+            # 后一帧缺某通道时按前一帧保持(2026-11-05,原先 KeyError);与 whitebox-renderer.js sample 同
             for key in ('position', 'target', 'left_hand', 'right_hand', 'scale'):
                 if key in a:
-                    out[key] = [x+(y-x)*u for x, y in zip(a[key], b[key])]
+                    out[key] = [x+(y-x)*u for x, y in zip(a[key], b.get(key, a[key]))]
             for key in ('fov', 'yaw'):
                 if key in a:
-                    delta = b[key]-a[key]
+                    delta = b.get(key, a[key])-a[key]
                     if key == 'yaw':
                         delta = (delta+math.pi) % (2*math.pi)-math.pi
                     out[key] = a[key]+delta*u
             out['t'] = t
             for key in ('bend', 'pitch', 'roll', 'head_pitch', 'head_yaw', 'torso_yaw', 'body_roll', 'neck_extension', 'expression', 'morph'):
                 if key in a or key in b:
-                    out[key] = a.get(key, 0) + (b.get(key, 0)-a.get(key, 0))*u
+                    # bend 缺失端按姿态缺省(蹲 0.6)插值,不先弹直再俯身(2026-11-05)
+                    da, db = (bend_default(a), bend_default(b)) if key == 'bend' else (0, 0)
+                    va = a[key] if a.get(key) is not None else da
+                    vb = b[key] if b.get(key) is not None else db
+                    out[key] = va + (vb-va)*u
             return out
     return copy.deepcopy(keys[-1])
 
