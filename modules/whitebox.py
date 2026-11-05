@@ -557,8 +557,9 @@ def prop_coverage(group, shots, plan, scene, bible):
     missing = [r for r in items if r['status'] == 'missing']
     return {'items': items, 'missing': [r['id'] for r in missing],
             'messages': [f"剧情道具未进白模:{r['name'] or r['id']}({r['id']},镜头表 {'/'.join(r['shots'])} 列出)——在计划 props 建模"
-                         f"(id 或 ref 写 {r['id']};手持物可用 attach 挂在人物手上,泡泡/水/烟/光效用 material \"ghost\" 半透明体),"
-                         '或在计划 not_modeled 写明不建的理由。' for r in missing]}
+                         f"(id 或 ref 写 {r['id']};手持物可用 attach 挂在人物手上,泡泡/水/烟/光效用 material \"ghost\" 半透明体;"
+                         '道具库登记了主人的可先跑 code/whitebox_props.py --write 生成挂手占位),或在计划 not_modeled 写明不建的理由。'
+                         for r in missing]}
 
 
 def shot_pose_of(shot, cid):

@@ -129,6 +129,30 @@ continuity 从源组 continuity_from 取前组。actors 默认 validate，camera
 
 改 `whitebox-renderer.js` 会改变渲染器指纹：下次正式导出（`render_whitebox.py` 不带 `--compile-only`）按严格口径重渲已导出组（本地渲染，无生成费用）；`--verify-export` 与签字前样片只看源指纹，已签字的参考视频不因此失效。
 
+## 道具占位:code/whitebox_props.py（2026-11-05）
+
+`python code/whitebox_props.py --project <slug> --ep <ep> [组…]` 列出各组 `prop_coverage.missing` 的占位方案，加 `--write` 才写进 `directing/<ep>/whitebox_plans/<组>.json`（先备份到 `directing/<ep>/whitebox/backups/props-<时间>/`）。规则（`modules/whitebox_props.py`）：
+
+- 只处理道具库 `bible/props.json` 登记了主人（`owners[].character_id`）、且主人是本组白模里的人物 / 群演（非生物）的缺项；没有主人、主人不在本组的列入 `skipped` 并写明原因，留给白模调度手工建模或写 `not_modeled`。
+- 主人有手部通道：生成挂手占位 `attach {actor, hand, offset}`，手按 `scale.relative_anchor` / `owners[].how` 里的「左手 / left hand」取左手，否则右手（没有该通道时取另一只）；`offset` 把道具抬到手上方（杆状 0.4 倍、其它 0.3 倍道具高）。
+- 主人没有手部通道（渲染器不生成手臂，挂不上）：在主人每个关键帧时刻把道具放在「手垂在身前」的位置，生成跟随关键帧（`placeholder_mode: "follow"`）；镜内转身时线性插值与人物的角度插值略有出入。
+- 尺寸取 `scale.canonical_size` 第一个分句（「;」前）里的长度（cm / mm / m / 厘米 / 毫米 / 米，支持「20 x 13 cm」），最长边朝上：一个尺寸 → 方块；两个 → 圆柱；三个 → 最长 / 次长 > 4 为杆状圆柱，否则方块；更多（多部件描述）→ 最长 / 最短 > 10 为杆状圆柱；杆状占位最细 3 cm（按实物 1–2 cm 粗，中景里只有一两个像素，参考视频里看不出手里有东西）。颜色取 `palette` / `visual` / 名字里最先出现的颜色词。占位带 `ref`（= 道具 ID，覆盖检查即通过）与 `placeholder: "whitebox_props.v1"`。
+- 不自动套用：编译器若自动插入道具，会改变已签字导出组的视频指纹（整批显示过期），所以由白模调度在调度时显式 `--write`。写入后计划多了道具，本组机位审查指纹（placement）随之失效，须复核取景与遮挡后用宿主函数重打，再按镜头表 content 补脱手 / 运动 / 回手关键帧。
+
+## 宿主实测:code/whitebox_probe.py（2026-11-05）
+
+白模调度此前每个项目都自写碰撞 / 朝向 / 取景测量脚本（fengshen3 25 个、jidi 8 个、dzg6 十几个；cartoon1 ep01 一单 135 分钟，其中自写了 192×108 射线求交测天空占比）。宿主统一提供三项实测（`modules/whitebox_probe.py`），全部只读：现场编译（含导演台覆盖层）后在内存里量，不写编译产物、不出视频、无生成费用；结果打印 JSON，发现问题只报告、不改退出码，编译报错或参数错误才非零退出。
+
+```sh
+python code/whitebox_probe.py --project <slug> --ep <ep> collide [组…] [--allow A:B[@t0-t1]] [--step 0.0417] [--actor-gap 0.2] [--obstacle-gap 0.15]
+python code/whitebox_probe.py --project <slug> --ep <ep> facing  [组…] [--pair A:B[@镜号]] [--tol 3]
+python code/whitebox_probe.py --project <slug> --ep <ep> frame   <组…> [--shot 镜号] [--t 组内秒] [--object 场景物件id] [--scale 0.5]
+```
+
+- **collide**：人物 / 生物 / 群演按姿态取有向脚印（站 = size_m 宽 × 深，前俯时向前延伸；坐 = 腿前伸 0.175h；跪 = 小腿后伸；蹲；卧 / 趴 = 从脚锚点沿局部 −Z 一个身长），高度按姿态，不含手臂；按 1/24 s 与全部关键帧时刻逐帧扫掠，对其他人物（参考净距 0.20 m）、场景物件与实心道具（0.15 m）算平面净距，连续不足的时刻合并成段，报 `{a, b, kind, role, shot_id, t_range_s, min_clearance_m, t_min_s, overlap, required_m}`。场景物件与道具按有向长方体（球、圆柱取外接长方体）处理，斜放的坡道、扶手按真实斜面求人物脚下那一列的上下沿：上沿不高于脚下 0.25 m（地面、台阶、路缘、坡面）或下沿高于头顶的不算；坐 / 卧 / 跪 / 蹲时身下（锚点或脚印中心在其上）且上沿不高于脚下 0.6 身高的当座椅 / 床不算；`collision_role` 为 decor / backdrop / soft / water 的不算。坐骑与骑手、挂在手上的道具与持有人、ghost 效果体不查；挂手道具朝向随人，取外接球的保守范围。剧情里本就接触的（持物、搀扶、贴墙趴卧、推车）用 `--allow A:B[@t0-t1]`（`A:*` 表示 A 与任何物体）记下，回执列为接触例外。
+- **facing**：自动读三处声明——计划 `facing_targets [{actor_id, target_id, start, end}]`（组内秒）、逐镜 `blocking.json` 的 `characters[] / creatures[].body_facing_target_id`（该镜时段）、组动线 `blocking_map.characters[].facing_target_id`（整组）——加 `--pair A:B[@镜号]`，逐帧算身体（yaw + torso_yaw；卧 / 趴取头的指向）与头（再加 head_yaw）相对「指向对方」的偏差角，报 `body_max_deg / body_mean_deg / t_max_s / head_max_deg / within_tol_pct / ok`（`--tol` 缺省 3°，即直接相向交谈的上限）；走位、转身过渡期超差属正常，看 `t_max_s` 与 `within_tol_pct` 判断。另附每镜开场的相对镜头朝向（与 prompt `Whitebox facing` 同源）。
+- **frame**：无头 Chromium 加载 `apps/web/static/whitebox-probe.html`（与预览 / 导出同一 `whitebox-renderer.js`；独立成页，不改导出渲染器指纹），摄影机视角下把每个对象换成唯一编号色离屏渲染再数像素：`sky_pct`（背景占比，ghost 不算遮挡）；每个人物 / 群演 / 道具（及 `--object` 指定的场景物件）的 `in_frame`、`coverage_pct`（占画面比）、`visible_pct`（被遮挡后可见比 = 全场景里可见像素 / 单独渲染像素）、`bbox_ndc` / `center_ndc`（−1..1，y 向上）、`height_frac` / `width_frac`、`cut`（出了哪几条画边）、`row_max_width_frac`（可见部分最宽一行占画宽）；被本镜 `visible_actor_ids` 排除的记 `camera_hidden`；`scene_top` 给占画最多的 8 个场景物件。缺省采样时刻同自检静帧（每镜首 / 中 / 尾、机位关键帧与 evt 剧情动作时刻），`--t` 给组内秒（切点时刻归下一镜，与渲染器一致）。缺省分辨率为项目画幅的一半（`--scale`）。依赖同 `--stills`（Playwright + Chromium，`VIDEOAGENTS_CHROMIUM` 可指定可执行文件）。核对：cartoon1 ep01 grp0050 sh0130 的天空 + 人物占比与白模调度当初自写 192×108 射线测得的 WB-01 晴空占比在组内 3.5–4.3 s 相差 ≤ 0.3 个百分点。
+
 ## 机位与运镜设定校验
 
 白模先遵守 camera.json 的起落幅、视高、视轴、焦段、运镜阶段和 composition 的取景要求，再检查几何可见性。“人物还能看见”不能代替正确机位；不得用允许任意方位、机高和俯仰的自动搜索，把平视改成俯拍来消除遮挡。道具特写核对指定物件/身体部位，不能将焦点替换成人体中心；缺少帘幕、投影或物证模型要报告模型缺口，不能把空画面算作通过。
@@ -152,7 +176,7 @@ continuity 从源组 continuity_from 取前组。actors 默认 validate，camera
 - 人物与人物：以实际身体包围盒/胶囊体计算相对运动的最近距离，包含宽度、朝向、姿态、手持物与坐骑。普通非接触动作可先取0.20m表面净距；发现交叉则加绕行点、让路或调整通行时机，保持已定首尾锚点与时长。拥抱、搀扶等只允许相应局部接触，不能放任躯干互穿。
 - 人物与墙体：把墙和柱按主体包围半径加0.15m参考余量扩张，检查每段运动是否进入障碍区。门洞路径按「门内 → 门洞 → 全身完全出门 → 转弯 → 走廊」设计，转弯扫过范围也要留在通道内。不要把门内点与转弯后的点直接直线连接。
 - 时间覆盖：优先检查连续扫掠体；两个移动角色需检查相对运动，避免只验各自空间路径。非线性插值、转身、坐卧和飞行需用对应三维包围体作自适应细分或逐帧加扫掠复核，采样步长必须小于角色尺寸与最小障碍厚度对应的运动步长。检查镜间与组间衔接、接触事件前后。
-- 修正与回执：分别报告摄像机检查和身体碰撞检查，记录冲突对象、时间区间、净距、处理方法和重验结果。禁止通过换机位、隐藏人、缩小人、删墙或无依据扩大门洞掩盖问题；主路线改变要回写权威 blocking 数据。当前通用 `--check-only` 仅保证数据结构、时间与连续性校验，**不含自动碰撞验收**，不可将其通过描述成已无穿模。
+- 修正与回执：分别报告摄像机检查和身体碰撞检查，记录冲突对象、时间区间、净距、处理方法和重验结果。禁止通过换机位、隐藏人、缩小人、删墙或无依据扩大门洞掩盖问题；主路线改变要回写权威 blocking 数据。当前通用 `--check-only` 仅保证数据结构、时间与连续性校验，**不含自动碰撞验收**，不可将其通过描述成已无穿模；身体碰撞扫掠用宿主 `code/whitebox_probe.py collide`（见下文「宿主实测」，不含手臂）。
 
 项目回归案例：`dzg6/ep01/grp012` 的王三合绕开何香后回到原终点；`grp014` 先沿门洞直行、全身出门后向西转弯。对应计划含 `workflow_notes` 和可见检查说明；`data/projects/dzg6/directing/ep01/whitebox/check_collisions.py` 用保守的直立人物包围圆及膨胀障碍盒连续检查这两组线性轨迹，`collision-before.json` 保留原问题，`collision-review.json` 记录修正后结果。该专用检查不代表整集或其他姿态已通过碰撞验收。
 

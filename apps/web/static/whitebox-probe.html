@@ -1,0 +1,82 @@
+<!doctype html><html><head><meta charset="utf-8"><title>白模实测</title></head><body>
+<canvas id="render"></canvas>
+<script type="module">
+import * as THREE from './vendor/three/three.module.js';
+import { WhiteboxRenderer } from './whitebox-renderer.js';
+// 白模宿主实测页(code/whitebox_probe.py frame,2026-11-05):与预览/导出同一渲染器,摄影机视角按对象着色离屏渲染后数像素。
+// 独立成页是为了不改 whitebox-export.html——它计入 camera.mp4 的渲染器指纹。只读:不改场景数据,每次量完恢复材质与显隐。
+const data=window.whiteboxExportData;
+const W=data.width,H=data.height;
+const r=new WhiteboxRenderer(document.querySelector('#render'),{width:W,height:H,controls:false});
+const target=new THREE.WebGLRenderTarget(W,H);
+const black=new THREE.Color(0,0,0);
+let entries=[],byKey=new Map(),owned=new Set();
+const idColor=i=>new THREE.Color().setRGB(((i>>16)&255)/255,((i>>8)&255)/255,(i&255)/255,THREE.LinearSRGBColorSpace);
+function collect(){
+  entries=[];byKey=new Map();owned=new Set();
+  const add=(key,kind,root,ghost=false)=>{
+    const meshes=[];root.traverse(o=>{if(o.isMesh){meshes.push(o);owned.add(o);}});
+    const e={key,kind,ghost,meshes,index:entries.length+1};e.mat=new THREE.MeshBasicMaterial({color:idColor(e.index)});
+    entries.push(e);byKey.set(key,e);
+  };
+  for(const a of r.actors)add(a.data.id,String(a.data.id).startsWith('EXTRA-')?'extra':'actor',a.root);
+  for(const p of r.props)add(p.data.id,'prop',p.mesh,p.data.material==='ghost');
+  for(const s of r.solids)if(s.isMesh)add(s.name==='ground-floor'?'_floor':s.name,s.name==='ground-floor'?'floor':'scene',s);
+  for(const s of r.silhouettes)add(s.screen.data.id+':silhouette','silhouette',s.shadow);
+}
+// 只渲染 shown 里的对象(其余隐藏、线条全隐藏),每个对象换成自己的编号色;返回 RGBA 像素(第 0 行在画面底部)
+function pass(shown){
+  const saved=[];r.scene.traverse(o=>saved.push([o,o.visible,o.material]));
+  const bg=r.scene.background;r.scene.background=black;
+  r.scene.traverse(o=>{if(o.isLine||o.isLineSegments||o.isPoints||(o.isMesh&&!owned.has(o)))o.visible=false;});
+  for(const e of entries)for(const m of e.meshes){m.material=e.mat;if(!shown.has(e))m.visible=false;}
+  const buf=new Uint8Array(W*H*4);
+  r.renderer.setRenderTarget(target);r.renderer.render(r.scene,r.camera);
+  r.renderer.readRenderTargetPixels(target,0,0,W,H,buf);r.renderer.setRenderTarget(null);
+  for(const [o,v,m] of saved){o.visible=v;o.material=m;}
+  r.scene.background=bg;
+  return buf;
+}
+function census(buf,rows=null){
+  const count=new Map();let sky=0;
+  for(let y=0,i=0;y<H;y++)for(let x=0;x<W;x++,i+=4){
+    const id=(buf[i]<<16)|(buf[i+1]<<8)|buf[i+2];
+    if(!id){sky++;continue;}
+    let c=count.get(id);if(!c){c={n:0,x0:x,x1:x,y0:y,y1:y,rows:rows?new Uint32Array(H):null};count.set(id,c);}
+    c.n++;if(x<c.x0)c.x0=x;if(x>c.x1)c.x1=x;if(y<c.y0)c.y0=y;if(y>c.y1)c.y1=y;if(c.rows)c.rows[y]++;
+  }
+  return {count,sky};
+}
+const pct=(n,total)=>Math.round(n/total*10000)/100;
+const ndcX=x=>Math.round(((x+.5)/W*2-1)*1000)/1000, ndcY=y=>Math.round(((y+.5)/H*2-1)*1000)/1000;
+window.whiteboxProbe={
+  load(gid){const group=data.episode.groups.find(g=>g.group_id===gid);r.load(data.episode.scenes[group.scene_id],group);collect();},
+  measure(time,extra){
+    r.setTime(time);r.scene.updateMatrixWorld(true);
+    const total=W*H,solid=new Set(entries.filter(e=>!e.ghost));
+    const full=census(pass(solid),true);
+    const wanted=entries.filter(e=>e.kind==='actor'||e.kind==='extra'||e.kind==='prop'||(extra||[]).includes(e.key));
+    const objects={};
+    for(const e of wanted){
+      const hidden=e.meshes.length&&e.meshes.every(m=>!m.layers.test(r.camera.layers));
+      const alone=census(pass(new Set([e])),false).count.get(e.index);
+      if(!alone){objects[e.key]={kind:e.kind,in_frame:false,...(hidden?{camera_hidden:true}:{}),...(e.ghost?{ghost:true}:{})};continue;}
+      const seen=(e.ghost?census(pass(new Set([...solid,e])),true):full).count.get(e.index);
+      const n=seen?seen.n:0;
+      objects[e.key]={kind:e.kind,in_frame:true,...(e.ghost?{ghost:true}:{}),
+        coverage_pct:pct(n,total),visible_pct:pct(n,alone.n),
+        bbox_ndc:[ndcX(alone.x0),ndcY(alone.y0),ndcX(alone.x1),ndcY(alone.y1)],
+        center_ndc:[Math.round((ndcX(alone.x0)+ndcX(alone.x1))*500)/1000,Math.round((ndcY(alone.y0)+ndcY(alone.y1))*500)/1000],
+        height_frac:Math.round((alone.y1-alone.y0+1)/H*1000)/1000,width_frac:Math.round((alone.x1-alone.x0+1)/W*1000)/1000,
+        cut:[alone.x0===0?'left':null,alone.x1===W-1?'right':null,alone.y1===H-1?'top':null,alone.y0===0?'bottom':null].filter(Boolean),
+        ...(seen&&seen.rows?{row_max_width_frac:Math.round(Math.max(...seen.rows)/W*1000)/1000}:{})};
+    }
+    const scene_top=entries.filter(e=>e.kind==='scene'||e.kind==='floor').map(e=>[e.key,full.count.get(e.index)?.n||0])
+      .filter(x=>x[1]).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([k,n])=>[k,pct(n,total)]);
+    const out={sky_pct:pct(full.sky,total),objects,scene_top};
+    if((extra||[]).some(k=>!byKey.has(k)))out.unknown=(extra||[]).filter(k=>!byKey.has(k));
+    return out;
+  }
+};
+window.whiteboxReady=true;
+</script></body></html>
