@@ -2745,7 +2745,7 @@ AGENTMODELS_PATH = RUNTIME_DIR / "agentmodels.json"
 # 避免「跟随全局」与「智能分配」/旧手动配置并存冲突。
 #   global       全部 Agent 跟随顶栏全局设置
 #   smart_claude 按任务复杂度自动选 claude 模型(high→opus 最新版 low→sonnet)
-#   smart_codex  按任务复杂度自动选 codex 模型(high→gpt-6.1-sol low→gpt-6-luna)
+#   smart_codex  按任务复杂度自动选 codex 模型(high→gpt-6.1-sol low→gpt-6.1-terra)
 #   smart_kimi   按任务复杂度自动选 kimi 模型(high→K3 low→K2.7 Coding)
 #   smart_pi     按任务复杂度自动选 pi 模型(high→openai-codex/gpt-6.1-sol low→openai-codex/gpt-6-luna)
 #   smart_deepseek 按任务复杂度自动选 DeepSeek 模型(opencode 引擎,high→V4 Pro low→V4.1 Flash;
@@ -2787,7 +2787,7 @@ AM_MODE_MODELS = {
     "smart_claude": {"high": {"engine": "claude", "model": "opus"},
                      "low": {"engine": "claude", "model": "sonnet"}},
     "smart_codex": {"high": {"engine": "codex", "model": "gpt-6.1-sol"},
-                    "low": {"engine": "codex", "model": "gpt-6-luna"}},
+                    "low": {"engine": "codex", "model": "gpt-6.1-terra"}},
     "smart_kimi": {"high": {"engine": "kimi", "model": "kimi-code/k3"},
                    "low": {"engine": "kimi", "model": "kimi-code/kimi-for-coding"}},
     # pi 引擎经 openai-codex 渠道调用(模型 id 为 pi --list-models 的 provider/model)
