@@ -19421,6 +19421,48 @@ async def _stop_command(message: str, project: str) -> str:
     return reply
 
 
+def _retry_usage(zh: bool) -> str:
+    if zh:
+        return (f"用法:/retry — 查看当前重跑次数;/retry N — 设为 N 次(0–{MAX_RETRIES_MAX},0=不自动重跑)。"
+                "与「设置→高级→Agent 高级设置→重跑次数」是同一设置,全局生效")
+    return (f"Usage: /retry — show the current rerun count; /retry N — set it to N (0–{MAX_RETRIES_MAX}, "
+            "0 = no automatic reruns). Same setting as Settings → Advanced → Agent advanced settings → rerun count; applies globally")
+
+
+async def _retry_command(message: str) -> str:
+    """/retry 聊天命令(api_chat 已确保首词为 /retry):返回要回给用户的文本。
+    逻辑参照 /auto、/stop:不派发运行、零引擎配额;/retry N 走「Agent 高级设置」弹窗同一入口
+    api_agent_advanced_set(同一校验、落 state.json),设置为全局、对之后启动的运行生效。"""
+    zh = (ui_lang_code() or "zh") == "zh"   # 文案随界面语言,非中文一律英文
+    usage = _retry_usage(zh)
+    parts = message.split()
+    if len(parts) == 1:
+        n = max_retries_setting()
+        head = (f"🔁 当前重跑次数:{n}" + ("(不自动重跑,首次不过即升级用户裁决)" if n == 0 else "") + "。"
+                if zh else
+                f"🔁 Current rerun count: {n}" + (" (no automatic reruns; the first failure goes to you)" if n == 0 else "") + ".")
+        return f"{head}\n{usage}"
+    try:
+        n = int(parts[1])
+    except ValueError:
+        n = None
+    if len(parts) > 2 or n is None or not 0 <= n <= MAX_RETRIES_MAX:
+        return (f"无法识别的命令「{message}」。{usage}" if zh
+                else f"Unrecognized command \"{message}\". {usage}")
+    old = max_retries_setting()
+    n = (await api_agent_advanced_set({"max_retries": n}))["max_retries"]
+    if zh:
+        reply = (f"🔁 重跑次数已从 {old} 改为 {n}" if n != old else f"🔁 重跑次数本就是 {n},未改动")
+        reply += "(0=不自动重跑,首次不过即升级用户裁决)。" if n == 0 else "。"
+    else:
+        reply = (f"🔁 Rerun count changed from {old} to {n}" if n != old else f"🔁 Rerun count is already {n}; nothing changed")
+        reply += " (0 = no automatic reruns; the first failure goes to you)." if n == 0 else "."
+    if n != old and any(r.get("status") in ("queued", "running") for r in RUNS.values()):
+        reply += ("\n⚠️ 已在运行/排队的任务提示词里仍是原次数,新设定对之后启动的运行生效。" if zh
+                  else "\n⚠️ Tasks already running or queued keep the old count in their prompt; the new count applies to runs started from now on.")
+    return reply
+
+
 async def api_chat(body: dict):
     agent = safe_agent(body.get("agent", ""))
     message = (body.get("message") or "").strip()
@@ -19477,6 +19519,13 @@ async def api_chat(body: dict):
         append_chat(agent, project, {"role": "assistant", "text": reply, "status": "done"})
         return {"ok": True,
                 "active": sum(1 for r in RUNS.values() if r.get("status") in ("queued", "running"))}
+    if message.split()[0].lower() == "/retry":
+        # 重跑次数命令(2026-11-06):与 /auto、/stop 同一机制——本地拦截、不派发运行、零引擎配额,
+        # 任何通道发来都在此处理;/retry N 调 api_agent_advanced_set(「Agent 高级设置→重跑次数」同一入口)。
+        reply = await _retry_command(message)
+        append_chat(agent, project, {"role": "user", "text": message, "source": source})
+        append_chat(agent, project, {"role": "assistant", "text": reply, "status": "done"})
+        return {"ok": True, "max_retries": max_retries_setting()}
     # 引擎解析优先级:Agent 级配置 > 父运行引擎 > 请求/全局。
     # 报错后禁止切换引擎:force/--engine 不得把成员改到另一执行引擎;仅允许同引擎内 --model。
     am = agent_model_config(agent)

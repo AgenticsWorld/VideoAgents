@@ -11,7 +11,7 @@
   确认/签字以互动卡片(msg_type=interactive)推到飞书,按钮点击经同一条
   长连接回传(card.action.trigger,桥进程透传),落到 api_confirm_answer,
   与网页弹窗同源同答案;答复/超时后 PATCH 卡片收尾,防止旧按钮残留
-- 聊天命令(/clear、/auto on|off 等)不在本模块特殊处理:与普通文本一样
+- 聊天命令(/clear、/auto on|off、/stop all、/retry N 等)不在本模块特殊处理:与普通文本一样
   转发给总制片对话,由 core.api_chat 统一识别并本地执行(不派发运行、
   不耗引擎配额),回复经 HUB 出站循环推回飞书
 - 素材推送:media_push 监视循环发现新完成的人物/场景/道具主图或分镜组
