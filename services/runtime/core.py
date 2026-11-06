@@ -9707,7 +9707,8 @@ def _shot_plate_candidates(project: str, ep: str, shot_id: str) -> dict:
                     used_by.setdefault(p["key"], []).append(f"{f.parent.name}/{sp_sid}" + ("(end)" if p.get("role") == "end" else ""))
     current = {p.get("role"): p.get("key") for p in rec["plates"] if isinstance(p, dict)}
     rows = []
-    for e in shot_plates.load_library(base, sid)["plates"]:
+    _cand_plates = shot_plates.load_library(base, sid)["plates"]
+    for e in _cand_plates:
         f = base / str(e.get("file") or "")
         if not (e.get("file") and f.is_file()):
             continue
@@ -9719,7 +9720,9 @@ def _shot_plate_candidates(project: str, ep: str, shot_id: str) -> dict:
                      "camera": {k: cam.get(k) for k in ("facing", "height_m", "lens_mm_equiv", "bearing_deg", "fov_v_deg")},
                      "pano_ref": {k: pr.get(k) for k in ("kind", "anchor_id", "scheme", "source_key")} if pr else None,
                      "used_by": used_by.get(e["key"], []),
-                     "current_roles": [r for r, k in current.items() if k == e["key"]]})
+                     "current_roles": [r for r, k in current.items() if k == e["key"]],
+                     # 九宫格格子的放大状态(2026-11-06):interpolated 的选上后会自动放大
+                     "upscale": _plate_upscale_state(base, sid, e, _cand_plates)})
     return {"ok": True, "ep": ep, "shot_id": shot_id, "scene_id": sid, "group_id": rec.get("group_id"),
             "lighting_scheme_id": rec.get("lighting_scheme_id"), "current": current, "plates": rows}
 
@@ -9737,11 +9740,81 @@ def _shot_plate_swap(project: str, ep: str, shot_id: str, body: dict) -> dict:
     except shot_plates.PlateSwapError as e:
         raise ServiceError(e.status, str(e))
     f = base / res["file"]
+    if res.get("upscale_needed"):     # 换上的是还没放大的九宫格格子(2026-11-06):后台立即放大,完成后原地覆盖并发 SSE
+        _plate_upscale_spawn(base, res["scene_id"], res["key"])
     return {"ok": True, "ep": res["ep"], "shot_id": res["shot_id"], "scene_id": res["scene_id"], "group_id": res["group_id"],
             "role": res["role"],
             "plate": {"role": res["role"], "key": res["key"], "reuse": "manual", "crop": None, "file": res["file"],
                       "url": f"/projects/{base.name}/{res['file']}?v={int(f.stat().st_mtime)}", "scene_id": res["scene_id"]},
-            "previous": res["previous"], "sync": res["sync"]}
+            "previous": res["previous"], "sync": res["sync"],
+            "upscale": "running" if res.get("upscale_needed") else None}
+
+
+# 九宫格格子重绘放大(2026-11-06,docs/shot_plates.md「格子重绘放大」):分镜预览「换图」换上还没放大的格子时,
+# 后台线程起宿主 CLI code/upscale_grid9_tile.py(出图在子进程里跑——场景图像模型靠环境变量选,不能在服务进程里改);
+# CLI 按格加锁、落库,这里只记「放大中」供预览页显示,结束后发 SSE shot_plate_upscale 让页面刷新
+PLATE_UPSCALE_JOBS: dict[str, dict] = {}      # "<project>/<sid>/<key>" -> {started_at}
+PLATE_UPSCALE_TIMEOUT = 20 * 60
+_PLATE_UPSCALE_LOCK = threading.Lock()
+
+
+def _plate_upscale_state(base: Path, sid: str, entry: dict | None, plates: list | None = None) -> dict | None:
+    """九宫格格子及其无 AI 派生图(副本 / 裁剪翻转 / 画板调整)的放大状态;其它库图 None。"""
+    from modules import shot_plates
+    try:
+        st = shot_plates.grid9_upscale_state(base, sid, entry, plates)
+    except Exception:  # noqa: BLE001
+        return None
+    if st and f"{base.name}/{sid}/{entry.get('key')}" in PLATE_UPSCALE_JOBS:
+        return {"state": "running"}
+    return st
+
+
+def _storyboard_plate_upscale(base: Path, sid, p: dict, cache: dict) -> dict | None:
+    """分镜预览一条背景图记录对应的格子放大状态;记录没指着格子原文件(补图 / 母图 / 按意见重出等)返回 None。"""
+    if not sid or not p.get("key"):
+        return None
+    try:
+        if sid not in cache:
+            from modules import shot_plates
+            cache[sid] = {e.get("key"): e for e in shot_plates.load_library(base, str(sid))["plates"]}
+        e = cache[sid].get(p["key"])
+    except Exception:  # noqa: BLE001
+        return None
+    if not e or e.get("file") != p.get("file") or (isinstance(p.get("view"), dict) and p["view"].get("manual_needed")):
+        return None
+    return _plate_upscale_state(base, str(sid), e, list(cache[sid].values()))
+
+
+def _plate_upscale_spawn(base: Path, sid: str, key: str) -> bool:
+    job = f"{base.name}/{sid}/{key}"
+    with _PLATE_UPSCALE_LOCK:
+        if job in PLATE_UPSCALE_JOBS:
+            return False
+        PLATE_UPSCALE_JOBS[job] = {"started_at": time.time()}
+
+    def _work():
+        status, reason = "failed", ""
+        try:
+            r = subprocess.run([sys.executable, str(ROOT / "code" / "upscale_grid9_tile.py"), "--project", base.name,
+                                "--scene", sid, "--key", key, "--source", "swap"], capture_output=True, text=True, cwd=str(ROOT),
+                               timeout=PLATE_UPSCALE_TIMEOUT)
+            for line in (r.stdout or "").splitlines():
+                if line.startswith('{"grid9_upscale"'):
+                    rec = json.loads(line)["grid9_upscale"]
+                    status, reason = rec.get("status") or status, rec.get("reason") or ""
+            if r.returncode not in (0, 6) and not reason:
+                reason = (r.stderr or r.stdout or "").strip()[-400:] or f"exit {r.returncode}"
+        except Exception as e:  # noqa: BLE001
+            reason = str(e)[:400]
+        finally:
+            with _PLATE_UPSCALE_LOCK:
+                PLATE_UPSCALE_JOBS.pop(job, None)
+        print(f"[shot-plate-upscale] {job}: {status} {reason}".rstrip(), flush=True)
+        HUB.publish({"type": "shot_plate_upscale", "project": base.name, "scene_id": sid, "key": key,
+                     "status": status, "reason": reason})
+    threading.Thread(target=_work, daemon=True, name=f"plate-upscale-{key}").start()
+    return True
 
 
 async def api_shot_plate_candidates(project: str, ep: str, shot_id: str):
@@ -10368,6 +10441,7 @@ def _preview_storyboard(project: str, ep: str):
                                                                                   for x in (sl.get("shots") or []) if x.get("shot_id") == _ps["shot_id"]), None)}]
         except Exception as e:  # noqa: BLE001
             print(f"[preview-storyboard] scene_plates 读取失败(忽略):{e}", flush=True)
+    _plate_lib_cache: dict = {}
     for sp_sid, sp_rec in (sp_idx.get("shots") or {}).items():
         rows = []
         for p in (sp_rec.get("plates") or []) if isinstance(sp_rec, dict) else []:
@@ -10379,7 +10453,9 @@ def _preview_storyboard(project: str, ep: str):
                          # 场景 id(2026-09-15):分镜预览「起点 · 复用库图」文字链到场景预览页并高亮该库图(?id=<sid>#plate=<key>)
                          "scene_id": sp_rec.get("scene_id"),
                          # 九宫格手动补图(2026-10-04):这张只是最近格占位,等用户手工截取
-                         "manual_needed": bool(p.get("reuse") == "grid9" and isinstance(p.get("view"), dict) and p["view"].get("manual_needed"))})
+                         "manual_needed": bool(p.get("reuse") == "grid9" and isinstance(p.get("view"), dict) and p["view"].get("manual_needed")),
+                         # 九宫格格子放大状态(2026-11-06):running 放大中 / done 已放大 / interpolated 插值格(reason);非格子为 None
+                         "upscale": _storyboard_plate_upscale(base, sp_rec.get("scene_id"), p, _plate_lib_cache)})
         shot_plates[str(sp_sid)] = rows
     # 组服装(2026-08-26):shot_list 组 costumes_by_char(权威)→ 缺则由镜 costumes 并集
     # → 再缺回落 continuity 的 costume_states(存量项目);经 costume_sheets.json 台账落到服装 sheet

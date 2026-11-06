@@ -31,6 +31,10 @@ Agent 须原文上报,请用户到控制台「🎨 生成模型」换图像模�
       「💾 背景图」截取,库条目 manual=True)就选用(集索引 reuse=grid9_manual);没有 → 暂用最近格占位、集索引记 view.manual_needed,
       脚本退出码 5 并打印 [manual_plate_needed] 列出待补的镜——Agent 须原文上报,请用户去截图(或在分镜预览页对该镜「换图」手选)后重跑;
       不得自行出图、不得改背景图模式绕过。--status 对这些镜报 manual_needed(FAIL)。
+  **格子重绘放大**(2026-11-06,默认执行、无开关):收尾时把本集被选用的格子用场景图像模型(与出宫格同一个)以该格原生裁片为参考
+  重绘放大到分镜图规格,过漂移机检即原地覆盖(库条目记 upscale{});每格一次出图计入 --max-new。放大不成(出图报错 / 机检拒收 /
+  模型不支持)退回插值格,打印 [grid9_upscale_fallback] 列出格子、用到它的镜与原因,不算出错、不改退出码;--status 以 WARN
+  grid9_interpolated 列出仍用插值格的镜。机检拒收的格子同一模型不再自动重试(换场景图像模型才重试)。
 库里非母图的旧图(2026-09-10 前白模帧直出、2026-09-14 前逐镜全景直出,legacy)不再被新决策复用;--status 列出仍指向 legacy 图的镜
 (WARN 不算 FAIL);--repano 把这些镜整体按母图制重出(有费用,仅用户明确要求时用)。
 
@@ -114,6 +118,9 @@ def main():
         if st.get('legacy_shots'):
             print(f"[shot_plates_complete] WARN: {len(st['legacy_shots'])} 镜仍用非母图制背景图(legacy,2026-09-14 前逐镜直出/白模帧直出):"
                   f"{st['legacy_shots']};按母图制重出请用户确认后跑 --repano", flush=True)
+        if st.get('grid9_interpolated'):
+            print(f"[shot_plates_complete] WARN: {len(st['grid9_interpolated'])} 张背景图用的九宫格格子仍是插值版(还没跑到放大,或放大没成——"
+                  f"原因见出图运行报告 [grid9_upscale_fallback]):{st['grid9_interpolated']};不影响验收", flush=True)
         return 1 if st['problems'] else 0
     try:
         stats = run_episode(base, ep, targets or None, dry_run=args.dry_run, force=args.force, sun=args.sun, seed=args.seed,
@@ -139,6 +146,11 @@ def main():
         sync = sync_episode(base, ep, groups, write=True)
         print(json.dumps({'shot_plate_refs': {'updated_prompts': sync['updated_prompts'],
                           'errors': sync['errors'], 'warnings': sync['warnings']}}, ensure_ascii=False), flush=True)
+    fallback = (stats.get('grid9_upscale') or {}).get('fallback') or []
+    if fallback:
+        # 九宫格格子重绘放大没成(2026-11-06):沿用插值格,不算出错、不改退出码,原样写进运行报告
+        print(f"[grid9_upscale_fallback] {args.project}/{ep}: {len(fallback)} 个九宫格格子没能用场景图像模型放大,沿用插值格(背景图照常可用):"
+              + ';'.join(f"{x['scene_id']}/{x['key']}(用于 {', '.join(x['shots'])}):{x['reason']}" for x in fallback), flush=True)
     if stats['errors']:
         return 1
     if stats.get('pending_new'):

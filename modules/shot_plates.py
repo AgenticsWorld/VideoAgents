@@ -51,6 +51,7 @@ import json
 import math
 import os
 import re
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -1342,6 +1343,530 @@ def ensure_grid9(base: Path, sid: str, scheme_key: str, scheme_id: str, *, scene
     return entries
 
 
+# ---------------------------------------------------------------- 九宫格格子重绘放大(2026-11-06)
+# 宫格整图受所选图像模型单图像素上限约束(Seedream 5.0 Pro 4.62 MP → 3x3 每格原生约 882x494),拆格原本只做 Lanczos 插值到背景图规格,
+# 视频模型拿到的是糊图。2026-11-06 用户拍板:被分镜实际选用的格子**默认自动**用场景图像模型(场景预览页「🎨 图像模型」,空则全局;
+# 与出宫格同一个)以该格在宫格整图上的原生裁片为唯一参考图重绘放大,不设开关;模型不支持 / 出图失败 / 机检拒收 → 退回插值格、
+# 在运行报告里标出(stats.grid9_upscale.fallback、CLI [grid9_upscale_fallback]),不让整次出图失败。
+# 只放被选用的格:手动补图模式的占位格、不合适而改用补图的格不放;格子原生已够大(4K 上限模型出的宫格,格原生约 1681x944)不放。
+# 结果原地覆盖格子文件(引用它的集索引 / 组 prompt 都不用动;插值版随时可从宫格整图按 pano_ref.box 重拆),库条目记 upscale{}。
+GRID9_UPSCALE_MIN_FACTOR = 1.3     # 背景图规格(长边 1920)/ 格子原生宽 不到此倍数不放大;模型在该画幅下最大也放不到此倍数同样不放
+GRID9_UPSCALE_COMPARE_W = 256      # 漂移机检:两图都缩到此宽、灰度、轻度模糊后比——只看构图与明暗分布,不看细节(细节本来就该补)
+# 构图相关下限 / 平均灰度差上限 / 整体色偏上限(0..1)。2026-11-06 真测 6 格(Seedream 5.0 Pro,cartoon1 水彩 4 格 + fengshen3 CG 2 格):
+# 合格 5 格 corr ≥ 0.9958、mad ≤ 0.0264、color ≤ 0.0267;cartoon1 SCN-0002 t1 构图不变但水彩被重画成照片(corr 0.944 / mad 0.124 / color 0.138)。
+# 阈值取合格值约 2 倍余量;那次之后提示词加了「保持画风 / 介质」与项目画风句,同格重跑两次都保住水彩并合格
+# (0.9959/0.0285/0.0288、0.9976/0.0251/0.0284),t8 用新提示词也合格(0.9942/0.0169/0.0023)
+GRID9_UPSCALE_DRIFT = {'corr_min': 0.97, 'mad_max': 0.06, 'color_max': 0.06}
+GRID9_UPSCALE_PROMPT = ('Reproduce [Image 1] exactly at a higher resolution: the same composition, framing, perspective, horizon line, '
+                        'architecture, objects, materials, colours and lighting. Keep exactly the same art style, medium and rendering as '
+                        '[Image 1]: the same palette, saturation, contrast, brushwork, linework and surface texture; a painted or illustrated '
+                        'image stays painted or illustrated and must not become photographic, and a photographic or CG image stays so. '
+                        'Add only fine detail and sharpness that is consistent with the original; do not add, remove, move, resize or '
+                        'restyle anything. It is an empty background plate: keep it free of people and add no text, borders, frames or watermarks.')
+
+
+def grid9_upscale_prompt(style: str = '') -> str:
+    """格子放大提示词:固定句 + 项目画风句(bible/style.json#style_fragment_en,有则附上,帮模型认住画风不往写实跑)。"""
+    style = ' '.join(str(style or '').split())
+    return GRID9_UPSCALE_PROMPT + (f' The project art style, to be preserved: {style}' if style else '')
+
+
+def grid9_tile_native(base: Path, entry: dict):
+    """格子在宫格整图上的原生裁片(PIL RGB,按 pano_ref.box——拆格时已按模型实际返回尺寸换算过的像素框);缺整图 / box 返回 None。"""
+    from PIL import Image
+    pr = entry.get('pano_ref') or {}
+    sheet, box = pr.get('sheet'), pr.get('box')
+    if not sheet or not isinstance(box, (list, tuple)) or len(box) != 4 or not (base / sheet).is_file():
+        return None
+    try:
+        with Image.open(base / sheet) as im:
+            return im.convert('RGB').crop(tuple(int(v) for v in box))
+    except Exception:  # noqa: BLE001  整图读不出(损坏 / 不是图片)按缺整图处理
+        return None
+
+
+def grid9_upscale_drift(native, out) -> dict:
+    """放大结果相对原生裁片的漂移:corr = 构图相关(灰度 Pearson),mad = 平均灰度差,color = 整体色偏(RGB 均值差最大通道),都按 0..1。"""
+    import numpy as np
+    from PIL import Image, ImageFilter
+    w = GRID9_UPSCALE_COMPARE_W
+    h = max(8, round(w * native.height / native.width))
+
+    def gray(im):
+        return np.asarray(im.convert('L').resize((w, h), Image.LANCZOS).filter(ImageFilter.GaussianBlur(1.0)), dtype=np.float64)
+
+    def mean_rgb(im):
+        return np.asarray(im.convert('RGB').resize((32, 18), Image.LANCZOS), dtype=np.float64).reshape(-1, 3).mean(0)
+
+    a, b = gray(native), gray(out)
+    sa, sb = a.std(), b.std()
+    corr = float(((a - a.mean()) * (b - b.mean())).mean() / (sa * sb)) if sa > 1e-6 and sb > 1e-6 else float(abs(sa - sb) < 1e-6)
+    return {'corr': round(corr, 4), 'mad': round(float(np.abs(a - b).mean() / 255), 4),
+            'color': round(float(np.abs(mean_rgb(native) - mean_rgb(out)).max() / 255), 4)}
+
+
+def grid9_upscale_verdict(drift: dict) -> str:
+    """漂移机检:'' = 通过;否则拒收原因(中文,进运行报告)。"""
+    t = GRID9_UPSCALE_DRIFT
+    bad = []
+    if drift['corr'] < t['corr_min']:
+        bad.append(f"构图相关 {drift['corr']} < {t['corr_min']}")
+    if drift['mad'] > t['mad_max']:
+        bad.append(f"平均灰度差 {drift['mad']} > {t['mad_max']}")
+    if drift['color'] > t['color_max']:
+        bad.append(f"色偏 {drift['color']} > {t['color_max']}")
+    return ';'.join(bad)
+
+
+def grid9_upscale_channel() -> dict:
+    """场景图像模型(与出宫格同一个)的生效摘要 {provider, model, limits, ref_capacity};配置读不到时带 error。"""
+    from modules import genmedia
+    from modules.image_canvas import channel_facts
+    try:
+        with genmedia.image_pref_env('scenes'):
+            return channel_facts('', '')
+    except Exception as error:  # noqa: BLE001
+        return {'provider': '', 'model': '', 'limits': {'mode': 'unknown'}, 'ref_capacity': 0, 'error': str(error)[:300]}
+
+
+def grid9_upscale_needed(entry: dict) -> bool:
+    """格子原生像素离背景图规格是否差到值得放大(按 pano_ref.box 的宽高;没有 box 的旧条目按需要算)。"""
+    box = (entry.get('pano_ref') or {}).get('box')
+    if not isinstance(box, (list, tuple)) or len(box) != 4 or box[2] <= box[0] or box[3] <= box[1]:
+        return True
+    nw, nh = box[2] - box[0], box[3] - box[1]
+    return plate_size({'width': nw, 'height': nh})[0] / nw >= GRID9_UPSCALE_MIN_FACTOR
+
+
+def _canvas_chain_plain(base: Path, created_by: dict) -> bool:
+    """画板设为最终版的这一版,版本链上是否只有原图 + 非 AI 调整(裁剪 / 翻转 / 旋转 / 缩放 / 本机插值放大)。
+    有过 AI 编辑 / 重绘放大 / 外部更新,或台账读不到 → False(像素已是模型出的或来历不明,不当插值格)。"""
+    doc, vid = (created_by or {}).get('doc'), (created_by or {}).get('version')
+    if not doc or not vid:
+        return False
+    try:
+        hist = json.loads((base / 'assets/canvas' / str(doc) / 'history.json').read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return False
+    by = {v.get('id'): v for v in hist.get('versions') or [] if isinstance(v, dict)}
+    v, hops = by.get(vid), 0
+    while v and hops < 500:
+        op = v.get('op')
+        if op == 'original':
+            return True
+        if op in ('edit', 'external') or (op == 'upscale' and v.get('provider') != 'local'):
+            return False
+        v, hops = by.get(v.get('parent')), hops + 1
+    return False
+
+
+def grid9_lowres_root(base: Path, sid: str, entry: dict | None, plates: list | None = None, _depth: int = 0) -> dict | None:
+    """这张库图的像素是不是某个九宫格格子的插值版或其无 AI 派生(⧉ 复制出的副本、✂ 裁剪 / 翻转过的、画板里只做过「调整」后
+    设为最终版的 _revN);是则返回那个格子的库条目,否则 None(母图、补图、手工截图、按意见重出、画板 AI 编辑过的都是全尺寸出的)。"""
+    if not entry or _depth > 8:
+        return None
+    if entry.get('grid9'):
+        return entry
+    pr = entry.get('pano_ref') or {}
+    plain = pr.get('kind') == 'copy' or (pr.get('kind') == 'revision' and (entry.get('created_by') or {}).get('source') == 'canvas'
+                                          and _canvas_chain_plain(base, entry.get('created_by') or {}))
+    if not plain or not pr.get('source_key'):
+        return None
+    if plates is None:
+        plates = load_library(base, sid)['plates']
+    src = next((e for e in plates if e.get('key') == pr['source_key']), None)
+    return grid9_lowres_root(base, sid, src, plates, _depth + 1)
+
+
+def _grid9_pristine(entry: dict, root: dict) -> bool:
+    """格子本身且没被裁剪 / 翻转过:放大时以宫格整图上的原生裁片为参考;否则以这张图本身为参考(保住用户的裁剪 / 翻转)。"""
+    return entry.get('key') == root.get('key') and not entry.get('original_file')
+
+
+def _grid9_effective_native(base: Path, entry: dict, root: dict) -> tuple[int, int] | None:
+    """这张图实际含有的像素量(按格子原生宽折算):格子本身 = 格框;派生图 = 格框宽 × 本图宽 / 拆格存盘宽(裁剪过的更少)。"""
+    box = (root.get('pano_ref') or {}).get('box')
+    if not isinstance(box, (list, tuple)) or len(box) != 4 or box[2] <= box[0] or box[3] <= box[1]:
+        return None
+    bw, bh = box[2] - box[0], box[3] - box[1]
+    if _grid9_pristine(entry, root):
+        return bw, bh
+    try:
+        from PIL import Image
+        with Image.open(base / entry['file']) as im:
+            w, h = im.size
+    except Exception:  # noqa: BLE001
+        return None
+    nw = max(1, min(w, round(bw * w / plate_size({'width': bw, 'height': bh})[0])))
+    return nw, max(1, round(nw * h / w))
+
+
+def _grid9_target(entry: dict, nat: tuple[int, int]) -> tuple[int, int]:
+    """放大目标:按这张图登记尺寸的画幅取分镜图规格(长边 1920);登记尺寸缺失按原生画幅。"""
+    m = re.fullmatch(r'\s*(\d+)\s*x\s*(\d+)\s*', str(entry.get('size') or ''))
+    return plate_size({'width': int(m.group(1)), 'height': int(m.group(2))} if m and int(m.group(2)) else {'width': nat[0], 'height': nat[1]})
+
+
+def upscale_grid9_tile(base: Path, sid: str, entry: dict, *, channel: dict, seed=None, generate=None, log=print, style: str = '',
+                      root: dict | None = None) -> dict:
+    """把一个格子用场景图像模型重绘放大,通过漂移机检就原地覆盖格子文件。不抛异常,返回记录:
+    status = done 已放大 / not_needed 原生已够大 / skipped 没出图(模型不支持、缺宫格整图)/ failed 出图报错 / rejected 出了图但机检不过;
+    后三种格子保持插值版。attempted = 本次真发了出图请求(计入 --max-new 预算)。generate 可注入(测试不联网)。"""
+    from PIL import Image
+    from modules import genmedia
+    key = entry['key']
+    rec = {'provider': channel.get('provider') or '', 'model': channel.get('model') or '',
+           'at': dt.datetime.now().isoformat(timespec='seconds'), 'attempted': False}
+
+    def result(status, reason='', **kw):
+        return {'status': status, 'reason': reason, **rec, **kw}
+
+    root = root or entry
+    if _grid9_pristine(entry, root):
+        native = grid9_tile_native(base, entry)          # 格子本身:宫格整图上的原生裁片
+        if native is None:
+            return result('skipped', '缺宫格整图或格框(pano_ref.sheet / box),取不到原生裁片')
+        nw, nh = native.size
+    else:
+        try:                                             # 派生图 / 裁剪翻转过的格子:以这张图本身为参考,保住用户的改动
+            with Image.open(base / entry['file']) as im:
+                native = im.convert('RGB')
+        except Exception:  # noqa: BLE001
+            return result('skipped', f"读不出 {entry.get('file')}")
+        nat = _grid9_effective_native(base, entry, root)
+        if nat is None:
+            return result('skipped', f"来源格子 {root.get('key')} 缺格框(pano_ref.box),算不出原生分辨率")
+        nw, nh = nat
+    # 目标画幅按这张图登记的尺寸(拆格时已按版式画幅存,16:9;2026-10-09 前竖屏项目的旧格子是 9:16;裁剪过的按裁后画幅)
+    tw, th = _grid9_target(entry, (nw, nh))
+    if tw / nw < GRID9_UPSCALE_MIN_FACTOR:
+        return result('not_needed', f'格子原生 {nw}x{nh} 已接近背景图规格 {tw}x{th}', native=[nw, nh])
+    if channel.get('error'):
+        return result('skipped', f"场景图像模型读不到:{channel['error']}", native=[nw, nh])
+    if channel.get('ref_capacity') == 0:
+        return result('skipped', f"场景图像渠道 {rec['provider'] or '(未知)'} 没有配置图生图,无法以格子为参考放大", native=[nw, nh])
+    rw, rh = genmedia.fit_image_request(channel.get('limits') or {}, tw, th)
+    if rw / nw < GRID9_UPSCALE_MIN_FACTOR:
+        return result('skipped', f"{rec['provider']} {rec['model']} 在这个画幅下最大 {rw}x{rh},放不大格子原生 {nw}x{nh}", native=[nw, nh])
+    d = library_dir(base, sid)
+    src, raw, rejected = d / f'{key}.upscale_src.jpg', d / f'{key}.upscale.png', d / f'{key}.upscale_rejected.png'
+    native.save(src, format='JPEG', quality=95)
+    if seed is None:
+        import random
+        seed = random.randint(1, 2 ** 31 - 1)
+    rec.update({'attempted': True, 'native': [nw, nh], 'requested': [rw, rh], 'seed': seed})
+    log(f"== {sid} 九宫格格子放大 {key}:{rec['provider']} {rec['model'] or '(默认模型)'},原生 {nw}x{nh} → 请求 {rw}x{rh}")
+    try:
+        with genmedia.image_pref_env('scenes'):
+            (generate or genmedia.generate_image)(grid9_upscale_prompt(style), str(raw), negative=entry.get('negative') or '',
+                                                   refs=[str(src)], size=f'{rw}x{rh}', seed=seed)
+        with Image.open(raw) as im:
+            got = im.convert('RGB')
+    except Exception as error:  # noqa: BLE001
+        raw.unlink(missing_ok=True)
+        return result('failed', f'出图失败 {str(error)[:300]}')
+    finally:
+        src.unlink(missing_ok=True)
+    rec['model_size'] = list(got.size)
+
+    def reject(why, **kw):
+        raw.replace(rejected)     # 留一份被拒的结果供人工核对(场景预览只按库条目列背景图,不会显示它)
+        return result('rejected', why, rejected_file=str(rejected.relative_to(base)), **kw)
+
+    if abs(got.width / got.height - tw / th) > GRID_ASPECT_TOLERANCE * (tw / th):
+        return reject(f'返回 {got.width}x{got.height},画幅与格子 {tw}x{th} 不符')
+    if got.width < nw * GRID9_UPSCALE_MIN_FACTOR:
+        return reject(f'返回 {got.width}x{got.height},没有按请求尺寸放大')
+    if got.width * got.height > rw * rh * 1.02:
+        got = got.resize((rw, rh), Image.LANCZOS)
+    drift = grid9_upscale_drift(native, got)
+    why = grid9_upscale_verdict(drift)
+    if why:
+        return reject(f'漂移机检不过:{why}', drift=drift)
+    tmp = d / f'{key}.upscale_out.jpg'
+    got.save(tmp, format='JPEG', quality=GRID_TILE_JPEG_QUALITY)
+    os.replace(tmp, base / entry['file'])          # 先写临时文件再替换:进程中途被杀也不会留下半张格子
+    raw.unlink(missing_ok=True)
+    rejected.unlink(missing_ok=True)
+    return result('done', size=list(got.size), factor=round(got.width / nw, 2), drift=drift)
+
+
+def record_grid9_upscale(base: Path, sid: str, key: str, rec: dict, lib: dict | None = None) -> None:
+    """放大记录写进库条目 upscale(重读磁盘库只改这一条,与 upsert_library_entry 同一把锁)与格子旁的 .json;done 时同步 size。
+    传 lib 时同步改这份内存副本(本次运行后续还会整份写库)。"""
+    keep = {k: v for k, v in rec.items() if k != 'attempted'}
+
+    def patch(entries):
+        for e in entries:
+            if e.get('key') == key:
+                e['upscale'] = keep
+                if rec['status'] == 'done':
+                    e['size'] = f"{rec['size'][0]}x{rec['size'][1]}"
+                return e
+        return None
+
+    d = library_dir(base, sid)
+    with file_lock.locked(d / 'index.json.lock'):
+        fresh = load_library(base, sid)
+        entry = patch(fresh['plates'])
+        if entry is None:
+            return
+        save_library(base, sid, fresh)
+    side = (base / entry['file']).with_suffix('.json')
+    if side.is_file():
+        try:
+            meta = json.loads(side.read_text(encoding='utf-8'))
+            patch([meta])
+            side.write_text(json.dumps(meta, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+        except (OSError, ValueError):
+            pass
+    if lib is not None:
+        patch(lib['plates'])
+
+
+GRID9_UPSCALE_RUNNING_STALE_S = 30 * 60   # 「放大中」标记超过这么久(或记的进程已不在)按失效处理
+
+
+def _upscale_marker(base: Path, sid: str, key: str) -> Path:
+    return library_dir(base, sid) / f'{key}.upscale.running'
+
+
+def _pid_alive(pid) -> bool:
+    if os.name == 'nt':        # Windows 上 os.kill(pid, 0) 会结束进程,不探活,只按时间判
+        return True
+    try:
+        os.kill(int(pid), 0)
+    except ProcessLookupError:
+        return False
+    except (PermissionError, ValueError, TypeError):
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def grid9_upscale_running(base: Path, sid: str, key: str) -> dict | None:
+    """这一格是否正在放大(任一路径持锁时写的标记 <key>.upscale.running;进程已不在或超时的标记不算)。"""
+    m = _upscale_marker(base, sid, key)
+    try:
+        age = time.time() - m.stat().st_mtime
+        info = json.loads(m.read_text(encoding='utf-8') or '{}')
+    except (OSError, ValueError):
+        return None
+    if age > GRID9_UPSCALE_RUNNING_STALE_S or (info.get('pid') and not _pid_alive(info['pid'])):
+        return None
+    return info if isinstance(info, dict) else {}
+
+
+def grid9_upscale_precheck(base: Path, entry: dict, root: dict | None = None) -> tuple[str, str]:
+    """不看模型、不花钱的预判:done 已放大 / not_needed 原生已够(或不是格子及其派生)/ skipped 缺宫格整图、格框或文件 / todo 要放。
+    root = grid9_lowres_root 找到的来源格子(缺省:entry 本身是格子时取它自己)。"""
+    prev = entry.get('upscale') or {}
+    if prev.get('status') == 'done' and entry.get('file') and (base / entry['file']).is_file():
+        return 'done', ''
+    root = root or (entry if entry.get('grid9') else None)
+    if root is None:
+        return 'not_needed', ''
+    if _grid9_pristine(entry, root):
+        if not grid9_upscale_needed(entry):
+            return 'not_needed', ''
+        pr = entry.get('pano_ref') or {}
+        if not (pr.get('sheet') and isinstance(pr.get('box'), (list, tuple)) and (base / pr['sheet']).is_file()):
+            return 'skipped', '缺宫格整图或格框(pano_ref.sheet / box),取不到原生裁片'
+        return 'todo', ''
+    nat = _grid9_effective_native(base, entry, root)
+    if nat is None:
+        return 'skipped', f"来源格子 {root.get('key')} 缺格框或 {entry.get('file')} 读不出,算不出原生分辨率"
+    if _grid9_target(entry, nat)[0] / nat[0] < GRID9_UPSCALE_MIN_FACTOR:
+        return 'not_needed', ''
+    return 'todo', ''
+
+
+def _rejected_before(prev: dict, channel: dict) -> bool:
+    return prev.get('status') == 'rejected' and (prev.get('provider'), prev.get('model')) == (channel.get('provider'), channel.get('model'))
+
+
+def grid9_upscale_state(base: Path, sid: str, entry: dict | None, plates: list | None = None) -> dict | None:
+    """预览页显示用:不是格子及其无 AI 派生 / 原生已够 → None;否则 {state: running | done | interpolated, reason?}。"""
+    root = grid9_lowres_root(base, sid, entry, plates)
+    if root is None:
+        return None
+    if grid9_upscale_running(base, sid, entry.get('key') or ''):
+        return {'state': 'running'}
+    state, why = grid9_upscale_precheck(base, entry, root)
+    if state == 'done':
+        return {'state': 'done'}
+    if state == 'not_needed':
+        return None
+    prev = entry.get('upscale') or {}
+    return {'state': 'interpolated', 'status': prev.get('status') or '',
+            'reason': why or (prev.get('reason') if prev.get('status') in ('failed', 'rejected') else '') or ''}
+
+
+def ensure_grid9_tile_upscaled(base: Path, sid: str, key: str, *, channel: dict | None = None, generate=None, log=print,
+                               style: str | None = None, source: str = '', lib: dict | None = None) -> dict:
+    """单格放大的唯一入口——出图收尾(render_shot_plates)、分镜预览换图后台(code/upscale_grid9_tile.py)、视频生成前
+    (genmedia.generate_video → upscale_plate_refs_before_video)三路共用。按格加锁(<key>.upscale.lock),锁内重读库条目:
+    别的进程刚放完的直接沿用(status reused),同一模型此前机检拒收的不再花钱(status rejected、previous)。持锁期间写
+    「放大中」标记供预览页显示。不抛异常;done / failed / rejected 落库(传 lib 时同步内存副本)。"""
+    with file_lock.locked(library_dir(base, sid) / f'{key}.upscale.lock'):
+        plates = load_library(base, sid)['plates']
+        cur = next((e for e in plates if e.get('key') == key), None)
+        root = grid9_lowres_root(base, sid, cur, plates)
+        if root is None:
+            return {'status': 'skipped', 'reason': f'{sid} 库里的 {key} 不是九宫格格子(或其无 AI 派生图)', 'attempted': False}
+        state, why = grid9_upscale_precheck(base, cur, root)
+        if state == 'done':
+            return {'status': 'reused', 'reason': '', 'attempted': False, 'size': (cur.get('upscale') or {}).get('size')}
+        if state != 'todo':
+            return {'status': state, 'reason': why, 'attempted': False}
+        if channel is None:
+            channel = grid9_upscale_channel()
+        prev = cur.get('upscale') or {}
+        if _rejected_before(prev, channel):
+            return {'status': 'rejected', 'reason': f"此前机检拒收({prev.get('reason')}),同一模型不再自动重试",
+                    'attempted': False, 'previous': True}
+        if style is None:
+            style = (read(base / 'bible/style.json', {}) or {}).get('style_fragment_en') or ''
+        marker = _upscale_marker(base, sid, key)
+        try:
+            marker.write_text(json.dumps({'pid': os.getpid(), 'at': dt.datetime.now().isoformat(timespec='seconds'), 'source': source},
+                                         ensure_ascii=False), encoding='utf-8')
+        except OSError:
+            pass
+        try:
+            rec = upscale_grid9_tile(base, sid, cur, channel=channel, log=log, generate=generate, style=style, root=root)
+        except Exception as error:  # noqa: BLE001  兜底:放大无论出什么错都只退回插值格
+            rec = {'status': 'failed', 'reason': f'放大异常 {str(error)[:300]}', 'attempted': True,
+                   'provider': channel.get('provider') or '', 'model': channel.get('model') or '',
+                   'at': dt.datetime.now().isoformat(timespec='seconds')}
+        finally:
+            marker.unlink(missing_ok=True)
+        if rec['status'] in ('done', 'failed', 'rejected'):
+            record_grid9_upscale(base, sid, key, {**rec, **({'source': source} if source else {})}, lib)
+        return rec
+
+
+def upscale_used_grid9_tiles(base: Path, decisions: list, libs: dict, *, dry_run: bool = False, budget: int | None = None,
+                             log=print, generate=None, channel: dict | None = None) -> dict:
+    """本次运行里被分镜用到的九宫格格子逐个重绘放大(见上方段首说明)。「用到」= 集索引条目指着库里一张格子的原文件,
+    不论怎么选上的(自动选格、分镜预览「换图」手选的都算,2026-11-06);手动补图模式的占位格不算。
+    budget = 本次还能发几次出图请求(--max-new 余量,None 不限),用完的记 deferred(调用方计入 pending_new → 退出码 3)。
+    重试规则:failed(出图报错)下次运行重试;rejected(机检拒收,每次都计费)同一渠道 / 模型不再自动重试,换了场景图像模型才重试;
+    skipped 不落库、每次重新判(不花钱)。返回运行报告 {done, reused, not_needed, fallback, deferred, planned}。"""
+    report = {'done': [], 'reused': [], 'not_needed': [], 'fallback': [], 'deferred': [], 'planned': []}
+    style = (read(base / 'bible/style.json', {}) or {}).get('style_fragment_en') or ''
+    used = {}
+    for d in decisions:
+        e = d.get('entry') or {}
+        if not e.get('key') or not d.get('file') or d['file'] != e.get('file'):
+            continue
+        if (d.get('view') or {}).get('manual_needed'):    # 手动补图模式的占位格:等用户截图替换,不花钱放大
+            continue
+        root = grid9_lowres_root(base, d['scene_id'], e, (libs.get(d['scene_id']) or {}).get('plates'))
+        if root is None:
+            continue
+        used.setdefault((d['scene_id'], e['key']), {'entry': e, 'root': root, 'shots': []})['shots'].append(f"{d['shot_id']}:{d['role']}")
+    for (sid, key), u in sorted(used.items()):
+        cur = next((x for x in (libs.get(sid) or {}).get('plates', []) if x.get('key') == key), None) or u['entry']
+        item = {'scene_id': sid, 'key': key, 'shots': u['shots']}
+        state, why = grid9_upscale_precheck(base, cur, u['root'])
+        if state == 'done':
+            report['reused'].append(key)
+            continue
+        if state == 'not_needed':
+            report['not_needed'].append(key)
+            continue
+        if state == 'skipped':
+            report['fallback'].append({**item, 'status': 'skipped', 'reason': why})
+            continue
+        if dry_run:
+            report['planned'].append(item)
+            continue
+        if channel is None:
+            channel = grid9_upscale_channel()
+        if _rejected_before(cur.get('upscale') or {}, channel):
+            report['fallback'].append({**item, 'status': 'rejected',
+                                       'reason': f"此前机检拒收({(cur.get('upscale') or {}).get('reason')}),同一模型不再自动重试"})
+            continue
+        if budget is not None and budget <= 0:
+            report['deferred'].append(item)
+            continue
+        rec = ensure_grid9_tile_upscaled(base, sid, key, channel=channel, generate=generate, log=log, style=style,
+                                         source='render_shot_plates', lib=libs.get(sid))
+        if rec.get('attempted') and budget is not None:
+            budget -= 1
+        if rec['status'] == 'done':
+            report['done'].append({**item, 'size': rec['size'], 'factor': rec['factor'], 'drift': rec['drift']})
+            log(f"saved: {cur['file']}({rec['native'][0]}x{rec['native'][1]} → {rec['size'][0]}x{rec['size'][1]},漂移 {rec['drift']})")
+        elif rec['status'] == 'reused':             # 等锁期间别的进程(换图后台 / 视频生成前)已放好
+            report['reused'].append(key)
+        elif rec['status'] == 'not_needed':
+            report['not_needed'].append(key)
+        else:
+            report['fallback'].append({**item, 'status': rec['status'], 'reason': rec['reason'],
+                                       **({'rejected_file': rec['rejected_file']} if rec.get('rejected_file') else {})})
+            log(f"   ↳ {key} 放大未成,沿用插值格:{rec['reason']}")
+    return report
+
+
+_PLATE_REF_RE = re.compile(r'^(?P<base>.+)/assets/concepts/scenes/(?P<sid>[^/]+)/' + re.escape(PLATES_DIR) + r'/(?P<name>[^/]+)$')
+
+
+def upscale_plate_refs_before_video(refs, *, log=print, generate=None, channel: dict | None = None, max_workers: int = 3) -> list[dict]:
+    """视频生成前(genmedia.generate_video 调,2026-11-06):refs 里凡是还没放大的九宫格格子,先就地放大再交给视频模型
+    (换图后两三分钟内就点生成、或存量项目没重跑出图时也不漏)。多格并行(≤ max_workers,外层先固定场景图像模型的环境变量,
+    线程间不互相还原)。放大不成只打印 [grid9_upscale_fallback]、照常用插值格出视频,绝不抛异常。返回逐格结果。"""
+    tiles = {}
+    for r in refs or []:
+        try:
+            m = _PLATE_REF_RE.match(Path(str(r)).expanduser().resolve().as_posix())
+        except (OSError, ValueError):
+            m = None
+        if not m:
+            continue
+        base, sid = Path(m.group('base')), m.group('sid')
+        rel = f"assets/concepts/scenes/{sid}/{PLATES_DIR}/{m.group('name')}"
+        try:
+            plates = load_library(base, sid)['plates']
+            e = next((x for x in plates if x.get('file') == rel), None)
+            root = grid9_lowres_root(base, sid, e, plates)
+        except Exception:  # noqa: BLE001
+            e = root = None
+        if e and root:
+            tiles.setdefault((str(base), sid, e['key']), (base, sid, e, root))
+    results = []
+    todo = []
+    for base, sid, e, root in tiles.values():
+        state, why = grid9_upscale_precheck(base, e, root)
+        if state == 'todo':
+            todo.append((base, sid, e))
+        elif state == 'skipped':
+            results.append({'scene_id': sid, 'key': e['key'], 'status': 'skipped', 'reason': why})
+    if todo:
+        from concurrent.futures import ThreadPoolExecutor
+        from modules import genmedia
+        with genmedia.image_pref_env('scenes'):
+            ch = channel or grid9_upscale_channel()
+            log(f"[shot_plates] 视频参考图里有 {len(todo)} 张九宫格格子还是插值版,先用场景图像模型 {ch.get('provider')} "
+                f"{ch.get('model') or ''} 放大(每张约 1.5–3 分钟,并行 {min(max_workers, len(todo))})")
+            with ThreadPoolExecutor(max_workers=max(1, min(max_workers, len(todo)))) as ex:
+                futs = [(sid, e, ex.submit(ensure_grid9_tile_upscaled, base, sid, e['key'], channel=ch, generate=generate,
+                                           log=log, source='video')) for base, sid, e in todo]
+                for sid, e, f in futs:
+                    try:
+                        rec = f.result()
+                    except Exception as error:  # noqa: BLE001
+                        rec = {'status': 'failed', 'reason': str(error)[:300]}
+                    results.append({'scene_id': sid, 'key': e['key'], 'status': rec.get('status'), 'reason': rec.get('reason') or ''})
+    for x in results:
+        if x['status'] in ('done', 'reused'):
+            log(f"[shot_plates] 九宫格格子 {x['scene_id']}/{x['key']} 已放大,视频用放大后的背景图")
+        elif x['status'] != 'not_needed':
+            log(f"[grid9_upscale_fallback] 九宫格格子 {x['scene_id']}/{x['key']} 没能放大,本次视频沿用插值格:{x['reason']}")
+    return results
+
+
 # ---------------------------------------------------------------- master plate geometry(同机位纯旋转单应)
 def camera_basis(cam: dict):
     """cam={'position','target'} → (f 前, r 右, u 上) 单位向量,约定同 projector / scene_panos._view_rays。"""
@@ -2207,6 +2732,19 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
         generated[(shot_id, role)] = entry
         group_first.setdefault(d['group_id'], entry)
         flush_shot(shot_id)   # 本镜到此为止已落地的图先写索引(终点图若后续才出,再次 flush 覆盖)
+    # 九宫格格子重绘放大(2026-11-06 用户拍板默认执行、不设开关):被选用的格子(含本次 fresh 沿用的)用场景图像模型放大,原地覆盖;
+    # 放大不成退回插值格,记 stats.grid9_upscale.fallback,不进 errors、不影响退出码;--max-new 余量用完的记 deferred → pending_new(退出码 3)
+    if any(d.get('reuse') == 'grid9' for d in decisions):
+        budget = 0 if budget_hit else (None if max_new is None else max(0, max_new - stats['new']))
+        try:
+            up = upscale_used_grid9_tiles(base, decisions, libs, dry_run=dry_run, budget=budget, log=log)
+        except Exception as error:  # noqa: BLE001  放大整步出错也只进报告,不让整次出图失败
+            up = {'done': [], 'reused': [], 'not_needed': [], 'deferred': [], 'planned': [],
+                  'fallback': [{'scene_id': '*', 'key': '*', 'shots': [], 'status': 'failed', 'reason': f'放大步骤异常 {str(error)[:300]}'}]}
+        stats['grid9_upscale'] = up
+        stats['pending_new'] += len(up['deferred'])
+        log(f"九宫格格子放大:新放大 {len(up['done'])} 格,已放大沿用 {len(up['reused'])},原生已够 {len(up['not_needed'])},"
+            f"退回插值 {len(up['fallback'])},留待下次 {len(up['deferred'])}" + (f",dry-run 待放大 {len(up['planned'])}" if dry_run else ''))
     # 写集索引:按镜落盘(每镜全部决策处理完即写,避免整批跑完才写、中途被杀全丢)
     for shot_id in by_shot:
         flush_shot(shot_id)
@@ -2955,11 +3493,14 @@ def status_episode(base: Path, ep: str, only=None) -> dict:
         need.setdefault(j['shot_id'], {})[j['role']] = j['facts']
     scene_of = {j['shot_id']: j['scene_id'] for j in plan['jobs']}
     lib_by_key = {}
+    plates_of = {}
     for sid in set(scene_of.values()):
-        for e in load_library(base, sid)['plates']:
+        plates_of[sid] = load_library(base, sid)['plates']
+        for e in plates_of[sid]:
             lib_by_key[e['key']] = e
     shots = {}
     legacy_shots = []
+    interpolated = []
     modes = {}
     for shot_id, roles in need.items():
         rec = idx['shots'].get(shot_id) or {}
@@ -2979,15 +3520,22 @@ def status_episode(base: Path, ep: str, only=None) -> dict:
                 state = 'manual_needed'    # 九宫格手动补图:最近格只是占位,等用户手工截取(或在分镜预览「换图」手选)
             if p and p.get('key') in lib_by_key and is_legacy(lib_by_key[p['key']]):
                 legacy = True
+            ps = plates_of.get(scene_of[shot_id]) or []
+            le = next((e for e in ps if p and e.get('key') == p.get('key')), None)
+            root = grid9_lowres_root(base, scene_of[shot_id], le, ps) if le and p.get('file') == le.get('file') else None
+            if (root and not (p.get('view') or {}).get('manual_needed')
+                    and grid9_upscale_precheck(base, le, root)[0] in ('todo', 'skipped')):
+                interpolated.append(f'{shot_id}:{role}')   # 用到的格子及其无 AI 派生图(自动选 / 换图手选)还没放大成功(2026-11-06):只作 WARN
         if legacy:
             legacy_shots.append(shot_id)
         shots[shot_id] = {'state': state, 'need': sorted(roles), 'have': sorted(have), 'legacy': legacy,
                           'files': [p['file'] for p in have.values()]}
     problems = {k: v['state'] for k, v in shots.items() if v['state'] != 'ok'}
     # legacy(2026-09-10 前非全景制出的图)只作 WARN 不算问题:整体重出有费用,由用户决定(--repano)
+    # grid9_interpolated(2026-11-06):用的九宫格格子还是插值版(放大没成或还没跑到),同样只作 WARN
     return {'ep': component(ep), 'shots_total': len(shots), 'shots_ok': len(shots) - len(problems),
             'plates_needed': sum(len(v['need']) for v in shots.values()), 'problems': problems, 'shots': shots,
-            'legacy_shots': legacy_shots}
+            'legacy_shots': legacy_shots, 'grid9_interpolated': interpolated}
 
 
 # ---------------------------------------------------------------- 换图(2026-09-23 分镜预览「🔁 换图」;2026-10-05 #98 CLI code/swap_shot_plate.py 同一入口)
@@ -3050,8 +3598,11 @@ def swap_shot_plate(base: Path, ep: str, shot_id: str, role: str, key: str) -> d
             sync = sync_group(base, ep, gid, write=True)
         except Exception as e:  # noqa: BLE001
             sync = {'group_id': gid, 'errors': [f'sync 失败:{e}'], 'warnings': [], 'updated': False}
+    # 换上的是还没放大的九宫格格子(2026-11-06):调用方据此立即起放大(分镜预览 = 服务端后台子进程;CLI = 前台同步)
+    root = grid9_lowres_root(base, sid, entry)
+    upscale_needed = bool(root and grid9_upscale_precheck(base, entry, root)[0] == 'todo')
     return {'ep': ep, 'shot_id': shot_id, 'scene_id': sid, 'group_id': gid, 'role': role, 'key': key, 'file': entry['file'],
-            'previous': prev, 'sync': sync}
+            'previous': prev, 'sync': sync, 'upscale_needed': upscale_needed}
 
 
 # ---------------------------------------------------------------- 写逐图采用口径(2026-10-05,#113;code/plate_adopt.py / 预览页)

@@ -104,6 +104,8 @@ python3 modules/genmedia.py video \
   --duration <与原组一致> --aspect 16:9 --resolution <草稿档>
 ```
 
+**分镜背景图格子先放大(2026-11-06)**:refs 里若有还没放大的九宫格背景图格子(或其副本 / 裁剪翻转版),`genmedia.py video` 会在提交前自动用场景图像模型把它放大(每张约 1.5–3 分钟、计费一张,多张并行),无需也不得另加参数、不得自己先跑放大或超分;Bash 工具照常给 `timeout=600000`,超时转后台时按既有纪律阻塞等退出码。**仅当**输出里出现 `[grid9_upscale_fallback]`(个别格子没放大成,本次视频照常用插值格出)时,把格子与原因原文写进回执,不得因此重跑或删换参考图。
+
 **白模参考视频(2026-09-07,仅「人物精确空间位置」开启)**:组 json 有 `video_refs` 时**必须**按数组顺序原样传 `--ref-video`(`[Video N]` 序号与之对应;`whitebox_refs.skipped_reason` 非空说明宿主已按模型预算取舍,不自行增删);开跑前跑 `python3 code/sync_whitebox_refs.py --project <slug> --ep epNN <本组>` 复核 PASS,FAIL 回派 prompt(或先 `--write` 再复核);**仅当 FAIL 是 `whitebox_ref_fresh`(白模在导出后又改过,2026-11-05)时不回派 prompt**:停手上报 orchestrator「本组白模参考视频不是当前白模,须重新导出(画面有改动的先 H3W 重签)」,不得拿旧 camera.mp4 开跑,也不得删掉 video_refs 硬跑;方舟/MiniMax 的 reference_video 须公网 URL——「设置 → 存储与图库」未配置时 genmedia 直接报错,如实上报、不得删掉 video_refs 硬跑;video_refs 为空的组照旧不传。**参考视频超限(2026-09-07)**:genmedia 提交前按本组生效模型硬限校验参考视频个数与总时长(Seedance 2.0:≤3 个/总时长 ≤15s;2.5:≤10 个/≤30s),报「参考视频总时长 … 超过方舟硬限」或「参考视频最多 … 个」即**停手上报 orchestrator 转告用户,禁止自行删减/截短/换序 video_refs 或私自换模型**——由用户在分镜预览决定:①「🎬 视频」弹窗删除多余/过长的参考视频(用户本地上传的视频也在其中,同样不得代删),或 ②「🎛 模型」给本组单独换参考视频上限更高的模型(渠道不变);用户处理后重派本组(prompt 若被改动则先回派 prompt 重出)。分镜预览组卡对超限组已有黄条提示,上报文案写明组号、当前个数/总时长与上限即可。
 
 云端渠道为异步任务,模块内部自动轮询到完成;--ref 与 --first/last-frame 互斥;

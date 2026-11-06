@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """把某镜的起点/终点背景图换成本场景背景图库里已有的一张(2026-10-05,#98;与分镜预览页「🔁 换图」同一入口)。
 
-典型用法:用户在分镜预览页对某镜背景图提「改为用另一镜(同场景同光照)的背景图」—— 不出新图、不花钱,
+典型用法:用户在分镜预览页对某镜背景图提「改为用另一镜(同场景同光照)的背景图」—— 不出新图,
 只把集索引 directing/<ep>/shot_plates.json 本镜该角色条目改指向库里那张(reuse=manual,记换前 key),
 再自动 sync_shot_plates --write 本组,把新图接进组 prompt refs / Shot plates 段。本镜机位指纹(camera)不动:
 非 --force 的 render_shot_plates 按「记录仍新鲜」保留手选;--force 才按机位重新决策(会覆盖手选)。
@@ -9,6 +9,9 @@
   python code/swap_shot_plate.py --project <slug> --ep ep01 --shot sh012 --list                 # 列本场景库里可选的图(key / 光照方案 / 哪些镜在用)
   python code/swap_shot_plate.py --project <slug> --ep ep01 --shot sh012 --from-shot sh008         # 改用 sh008 起点图(--from-role end 取其终点图)
   python code/swap_shot_plate.py --project <slug> --ep ep01 --shot sh012 --role end --key L1_b090_h2_x3_z-2_w70
+换上的若是还没放大的九宫格格子(2026-11-06):换完在前台接着用场景图像模型把这一格放大(约 1.5–3 分钟,计费一张;与分镜预览
+「换图」、出图收尾、视频生成前同一入口 shot_plates.ensure_grid9_tile_upscaled,已放大 / 正在别处放大的不重复花钱)。放大不成
+沿用插值格,打印 [grid9_upscale_fallback] 与原因,不改退出码。
 退出码:0 完成;1 参数/找不到(镜、角色、库条目、文件)或 sync 机检有违规。
 纪律:同场景才能换(库按场景分);光照方案与本组不一致时打印 WARN,由用户裁决、不自行阻拦;不得直接编辑 shot_plates.json 绕过。
 """
@@ -94,6 +97,11 @@ def main():
         print(f'错误: {error}', file=sys.stderr)
         return 1
     print(json.dumps({'swap_shot_plate': res}, ensure_ascii=False), flush=True)
+    if res.get('upscale_needed'):
+        rec = sp.ensure_grid9_tile_upscaled(base, res['scene_id'], res['key'], source='swap')
+        print(json.dumps({'grid9_upscale': {k: v for k, v in rec.items() if k != 'attempted'}}, ensure_ascii=False), flush=True)
+        if rec['status'] not in ('done', 'reused', 'not_needed'):
+            print(f"[grid9_upscale_fallback] {res['scene_id']}/{res['key']} 没能放大,沿用插值格:{rec.get('reason')}", flush=True)
     sync = res.get('sync') or {}
     for w in sync.get('warnings') or []:
         print('WARN', w)

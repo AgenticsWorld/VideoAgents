@@ -7870,6 +7870,7 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
     支持纯音频参考;视频编辑/延长与首帧任务 ratio 仅 adaptive(首帧任务自动改写)。
     """
     _forbid_dispatch_layer("视频")
+    _upscale_plate_refs(refs)
     group = group or _group_from_output(output)
     base_cfg = get_config("video", provider, model) if provider else apply_group_video_override(get_config("video"), group)
     if workflow:
@@ -7895,6 +7896,19 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
     if cfg.get("_nsfw_route"):
         _merge_meta(output, "nsfw_route", _nsfw_route_record(cfg))
     return saved
+
+
+def _upscale_plate_refs(refs) -> None:
+    """视频生成前(2026-11-06):参考图里还没放大的九宫格分镜背景图格子先用场景图像模型就地放大
+    (modules/shot_plates.upscale_plate_refs_before_video;与出图收尾、分镜预览换图同一入口,按格加锁不重复花钱)。
+    放大不成只打印 [grid9_upscale_fallback]、照常用插值格出视频,绝不因此中断视频生成。"""
+    if not refs:
+        return
+    try:
+        from modules import shot_plates
+        shot_plates.upscale_plate_refs_before_video(refs, log=lambda m: print(m, file=sys.stderr, flush=True))
+    except Exception as e:  # noqa: BLE001
+        print(f"[grid9_upscale_fallback] 视频生成前放大九宫格格子出错,本次沿用插值格:{str(e)[:300]}", file=sys.stderr, flush=True)
 
 
 def _generate_video_with(cfg: dict, prompt: str, output: str, first_frame: str, last_frame: str,

@@ -1319,3 +1319,394 @@ def test_revise_legacy_vertical_plate_comes_out_16x9(tmp_path, monkeypatch):
     assert f"({hfov} degrees horizontal field of view)" in calls[0]['prompt']             # 机位句按 16:9 重算
     slot = sp.load_episode_index(base, ep)['shots']['sh001']['plates'][0]
     assert slot['camera'] == f and slot['view'] == sp.aspect_view(9 / 16)                # 索引仍记本镜;写明本镜只占中间一条
+
+
+# ---------------------------------------------------------------- 九宫格格子重绘放大(2026-11-06)
+UP_CH = {'provider': 'test', 'model': 'm1', 'limits': {'mode': 'unknown'}, 'ref_capacity': None}
+
+
+def _pattern_sheet(w, h):
+    from PIL import Image, ImageDraw
+    im = Image.new('RGB', (w, h), (200, 190, 170))
+    dr = ImageDraw.Draw(im)
+    for i in range(0, w, 40):
+        dr.rectangle([i, h // 8, i + 18, h * 7 // 8], fill=(30 + i % 200, 60, 120))
+    dr.ellipse([w // 3, h // 4, w // 3 + w // 4, h * 3 // 4], fill=(240, 220, 40))
+    return im
+
+
+def _upscale_fixture(tmp_path, box=(10, 10, 610, 348)):
+    import json
+    base, sid = tmp_path, 'SCN-up'
+    pdir = base / 'assets/concepts/scenes' / sid / 'plates'
+    pdir.mkdir(parents=True)
+    sheet = _pattern_sheet(box[2] + 20, box[3] + 20)
+    sheet_rel = f'assets/concepts/scenes/{sid}/plates/L1_grid9.png'
+    sheet.save(base / sheet_rel, format='JPEG', quality=95)
+    tile_rel = f'assets/concepts/scenes/{sid}/plates/L1_grid9_t1.png'
+    sheet.crop(box).resize((1920, 1080)).save(base / tile_rel, format='JPEG')
+    entry = {'key': 'L1_grid9_t1', 'grid9': True, 'master': False, 'file': tile_rel, 'size': '1920x1080', 'negative': 'people',
+             'pano_ref': {'kind': 'grid9', 'sheet': sheet_rel, 'box': list(box), 'scheme': 'L1', 'tile': 0}}
+    (base / tile_rel).with_suffix('.json').write_text(json.dumps(entry), encoding='utf-8')
+    sp.save_library(base, sid, {'schema_version': sp.SCHEMA_LIBRARY, 'scene_id': sid, 'plates': [entry]})
+    return base, sid, entry
+
+
+def _fake_upscaler(calls, transform=None, fail=False):
+    def gen(prompt, output, negative='', refs=None, size='', seed=None, **k):
+        from PIL import Image
+        src = Image.open(refs[0]).convert('RGB')
+        calls.append({'prompt': prompt, 'ref_size': src.size, 'size': size, 'negative': negative})
+        if fail:
+            raise RuntimeError('HTTP 500')
+        w, h = map(int, size.split('x'))
+        im = src.resize((w, h), Image.LANCZOS)
+        (transform(im) if transform else im).save(output, format='JPEG', quality=95)
+    return gen
+
+
+def test_upscale_grid9_tile_overwrites_tile_and_records(tmp_path):
+    import json
+    from PIL import Image
+    base, sid, entry = _upscale_fixture(tmp_path)
+    calls = []
+    rec = sp.upscale_grid9_tile(base, sid, entry, channel=UP_CH, generate=_fake_upscaler(calls), log=lambda *_: None)
+    assert rec['status'] == 'done' and rec['attempted'] and rec['native'] == [600, 338] and rec['drift']['corr'] > .99
+    assert calls == [{'prompt': sp.GRID9_UPSCALE_PROMPT, 'ref_size': (600, 338), 'size': '1920x1080', 'negative': 'people'}]   # 参考图 = 原生裁片;画幅按登记尺寸
+    tile = Image.open(base / entry['file'])
+    assert tile.size == (1920, 1080) and tile.format == 'JPEG'
+    assert not list((base / 'assets/concepts/scenes' / sid / 'plates').glob('*.upscale*'))          # 中间文件已清
+    sp.record_grid9_upscale(base, sid, entry['key'], rec)
+    e = sp.load_library(base, sid)['plates'][0]
+    assert e['upscale']['status'] == 'done' and e['size'] == '1920x1080' and 'attempted' not in e['upscale']
+    assert json.loads((base / entry['file']).with_suffix('.json').read_text(encoding='utf-8'))['upscale']['status'] == 'done'
+
+
+def test_upscale_grid9_tile_rejects_and_keeps_interpolated_tile(tmp_path):
+    from PIL import Image, ImageOps
+    base, sid, entry = _upscale_fixture(tmp_path)
+    before = (base / entry['file']).read_bytes()
+    rec = sp.upscale_grid9_tile(base, sid, entry, channel=UP_CH, generate=_fake_upscaler([], ImageOps.invert), log=lambda *_: None)
+    assert rec['status'] == 'rejected' and '漂移机检不过' in rec['reason'] and rec['drift']['corr'] < 0
+    assert (base / rec['rejected_file']).is_file() and (base / entry['file']).read_bytes() == before     # 格子仍是插值版
+    rec = sp.upscale_grid9_tile(base, sid, entry, channel=UP_CH, generate=_fake_upscaler([], lambda im: im.resize((1500, 1500))),
+                                log=lambda *_: None)
+    assert rec['status'] == 'rejected' and '画幅' in rec['reason']
+    rec = sp.upscale_grid9_tile(base, sid, entry, channel=UP_CH, generate=_fake_upscaler([], fail=True), log=lambda *_: None)
+    assert rec['status'] == 'failed' and 'HTTP 500' in rec['reason'] and (base / entry['file']).read_bytes() == before
+    assert not (base / 'assets/concepts/scenes' / sid / 'plates' / 'L1_grid9_t1.upscale_src.jpg').exists()
+
+
+def test_upscale_grid9_tile_skips_without_request(tmp_path):
+    base, sid, entry = _upscale_fixture(tmp_path)
+    calls = []
+    gen = _fake_upscaler(calls)
+    quiet = dict(generate=gen, log=lambda *_: None)
+    assert sp.upscale_grid9_tile(base, sid, entry, channel={**UP_CH, 'ref_capacity': 0}, **quiet)['status'] == 'skipped'      # 没配图生图
+    small = {**UP_CH, 'limits': {'mode': 'pixels', 'max_pixels': 700 * 394, 'min_pixels': 0, 'multiple': 2}}
+    rec = sp.upscale_grid9_tile(base, sid, entry, channel=small, **quiet)
+    assert rec['status'] == 'skipped' and '放不大' in rec['reason']                                                       # 模型上限放不大
+    assert sp.upscale_grid9_tile(base, sid, entry, channel={**UP_CH, 'error': 'no config'}, **quiet)['status'] == 'skipped'
+    assert sp.upscale_grid9_tile(base, sid, {**entry, 'pano_ref': {}}, channel=UP_CH, **quiet)['status'] == 'skipped'     # 缺整图 / 格框
+    assert sp.grid9_upscale_prompt('') == sp.GRID9_UPSCALE_PROMPT
+    assert sp.grid9_upscale_prompt('watercolor\n backgrounds').endswith('The project art style, to be preserved: watercolor backgrounds')
+    assert not calls
+    big_base, big_sid, big = _upscale_fixture(tmp_path / 'big', box=(10, 10, 1690, 955))                                   # 4K 上限模型的格子
+    assert sp.upscale_grid9_tile(big_base, big_sid, big, channel=UP_CH, **quiet)['status'] == 'not_needed' and not calls
+    assert not sp.grid9_upscale_needed(big) and sp.grid9_upscale_needed(entry)
+
+
+def test_upscale_used_grid9_tiles_dedupe_budget_and_retry_rules(tmp_path):
+    from PIL import ImageOps
+    base, sid, entry = _upscale_fixture(tmp_path)
+
+    def decisions():
+        e = sp.load_library(base, sid)['plates'][0]
+        return [{'scene_id': sid, 'shot_id': 'sh001', 'role': 'start', 'entry': e, 'file': e['file'], 'reuse': 'grid9', 'view': {}},
+                {'scene_id': sid, 'shot_id': 'sh002', 'role': 'start', 'entry': e, 'file': e['file'], 'reuse': 'grid9'},
+                {'scene_id': sid, 'shot_id': 'sh003', 'role': 'start', 'entry': e, 'file': e['file'], 'reuse': 'grid9',
+                 'view': {'manual_needed': {'reasons': ['x']}}},                                       # 手动补图占位格:不放
+                {'scene_id': sid, 'shot_id': 'sh004', 'role': 'start', 'entry': {'key': 'm', 'file': 'm.png'}, 'file': 'm.png', 'reuse': 'library'}]
+
+    def run(**kw):
+        libs = {sid: sp.load_library(base, sid)}
+        return sp.upscale_used_grid9_tiles(base, decisions(), libs, log=lambda *_: None, channel=dict(UP_CH), **kw)
+
+    calls = []
+    rep = run(budget=0, generate=_fake_upscaler(calls))
+    assert rep['deferred'] == [{'scene_id': sid, 'key': 'L1_grid9_t1', 'shots': ['sh001:start', 'sh002:start']}] and not calls
+    assert run(dry_run=True, generate=_fake_upscaler(calls))['planned'][0]['key'] == 'L1_grid9_t1' and not calls
+    rep = run(generate=_fake_upscaler(calls, fail=True))
+    assert rep['fallback'][0]['status'] == 'failed' and len(calls) == 1
+    assert sp.load_library(base, sid)['plates'][0]['upscale']['status'] == 'failed'
+    rep = run(budget=1, generate=_fake_upscaler(calls))                                               # 出图报错的下次重试
+    assert [x['key'] for x in rep['done']] == ['L1_grid9_t1'] and len(calls) == 2
+    rep = run(generate=_fake_upscaler(calls))
+    assert rep['reused'] == ['L1_grid9_t1'] and len(calls) == 2                                        # 已放大:不再出图
+
+    base, sid, entry = _upscale_fixture(tmp_path / 'rej')
+    calls = []
+    assert run(generate=_fake_upscaler(calls, ImageOps.invert))['fallback'][0]['status'] == 'rejected' and len(calls) == 1
+    rep = run(generate=_fake_upscaler(calls))
+    assert '同一模型不再自动重试' in rep['fallback'][0]['reason'] and len(calls) == 1                  # 拒收:同一模型不再花钱重试
+    libs = {sid: sp.load_library(base, sid)}
+    rep = sp.upscale_used_grid9_tiles(base, decisions(), libs, log=lambda *_: None, channel={**UP_CH, 'model': 'm2'},
+                                      generate=_fake_upscaler(calls))
+    assert rep['done'] and len(calls) == 2                                                             # 换了模型才重试
+
+
+def test_run_episode_upscales_used_grid_tiles(tmp_path, monkeypatch):
+    from PIL import Image
+    base, ep, sid = _manual_project(tmp_path, monkeypatch, 'grid')
+    pdir = base / 'assets/concepts/scenes' / sid / 'plates'
+    (base / 'assets/concepts/scenes' / sid / 'layout_top.png').write_bytes(b'x')
+    _pattern_sheet(1910, 1090).save(pdir / 'L1_grid9.png', format='JPEG', quality=95)
+    lib = sp.load_library(base, sid)
+    for e in lib['plates']:
+        c, r = e['pano_ref']['tile'] % 3, e['pano_ref']['tile'] // 3
+        e['pano_ref']['box'] = [10 + c * 630, 10 + r * 356, 610 + c * 630, 348 + r * 356]
+    sp.save_library(base, sid, lib)
+    ups, others = [], []
+
+    def gen(prompt, output, **k):
+        if prompt.startswith(sp.GRID9_UPSCALE_PROMPT):
+            return _fake_upscaler(ups)(prompt, output, **k)
+        others.append(output)
+        Image.new('RGB', (1920, 1080), 'gray').save(output, format='JPEG')
+    monkeypatch.setattr('modules.genmedia.generate_image', gen)
+    monkeypatch.setattr('modules.genmedia.get_config', lambda *a, **k: {'provider': 'test', 'model': 'm'})
+    monkeypatch.setattr(sp, 'grid9_upscale_channel', lambda: dict(UP_CH))
+    stats = sp.run_episode(base, ep, max_new=1, log=lambda *_: None)                      # 补图用掉唯一的预算:格子放大留待下次
+    assert len(others) == 1 and not ups and stats['grid9_upscale']['deferred'] and stats['pending_new'] == 1
+    key = sp.load_episode_index(base, ep)['shots']['sh001']['plates'][0]['key']
+    assert sp.status_episode(base, ep)['grid9_interpolated'] == ['sh001:start']           # 验收只作 WARN
+    stats = sp.run_episode(base, ep, log=lambda *_: None)
+    up = stats['grid9_upscale']
+    assert [x['key'] for x in up['done']] == [key] and up['done'][0]['shots'] == ['sh001:start'] and len(ups) == 1
+    assert not stats['errors'] and not stats['pending_new'] and len(others) == 1
+    assert Image.open(base / sp.load_episode_index(base, ep)['shots']['sh001']['plates'][0]['file']).size == (1920, 1082)
+    assert sp.status_episode(base, ep)['grid9_interpolated'] == []
+    assert sp.run_episode(base, ep, log=lambda *_: None)['grid9_upscale']['reused'] == [key] and len(ups) == 1
+
+
+# ---------------------------------------------------------------- 格子放大的三条触发路径(2026-11-06:换图 / 出图兜底 / 视频生成前)
+def _swap_fixture(tmp_path):
+    """库里两格(t1 插值、t2 已放大)+ 一张母图;sh001 起点用母图。"""
+    import json
+    base, sid, entry = _upscale_fixture(tmp_path)
+    pdir = base / 'assets/concepts/scenes' / sid / 'plates'
+    lib = sp.load_library(base, sid)
+    t2 = json.loads(json.dumps(entry)); t2['key'] = 'L1_grid9_t2'; t2['file'] = entry['file'].replace('_t1', '_t2')
+    t2['upscale'] = {'status': 'done', 'size': [1920, 1080]}
+    (base / t2['file']).write_bytes((base / entry['file']).read_bytes())
+    master = {'key': 'L1_m', 'file': f'assets/concepts/scenes/{sid}/plates/L1_m.png', 'master': True, 'lighting_scheme_id': 'L1'}
+    (pdir / 'L1_m.png').write_bytes(b'x')
+    lib['plates'] += [t2, master]
+    sp.save_library(base, sid, lib)
+    sp.save_episode_index(base, 'ep01', {'schema_version': sp.SCHEMA_EPISODE, 'ep': 'ep01', 'shots': {
+        'sh001': {'group_id': 'grp001', 'scene_id': sid, 'plates': [{'role': 'start', 'key': 'L1_m', 'file': master['file'], 'reuse': 'library'}]}}})
+    return base, sid, entry, t2
+
+
+def test_swap_to_interpolated_tile_flags_upscale_and_render_covers_manual_swaps(tmp_path, monkeypatch):
+    base, sid, t1, t2 = _swap_fixture(tmp_path)
+    monkeypatch.setattr(sp, 'sync_group', lambda *a, **k: {'errors': [], 'warnings': [], 'updated': False})
+    assert sp.swap_shot_plate(base, 'ep01', 'sh001', 'start', 'L1_grid9_t2')['upscale_needed'] is False    # 已放大的格子
+    assert sp.swap_shot_plate(base, 'ep01', 'sh001', 'start', 'L1_m')['upscale_needed'] is False           # 母图
+    assert sp.swap_shot_plate(base, 'ep01', 'sh001', 'start', 'L1_grid9_t1')['upscale_needed'] is True
+    slot = sp.load_episode_index(base, 'ep01')['shots']['sh001']['plates'][0]
+    assert slot['reuse'] == 'manual'
+    # 出图兜底:手动换上的格子(reuse=manual)也放
+    e = sp.load_library(base, sid)['plates'][0]
+    calls = []
+    rep = sp.upscale_used_grid9_tiles(base, [{'scene_id': sid, 'shot_id': 'sh001', 'role': 'start', 'entry': e, 'file': slot['file'],
+                                               'reuse': 'manual'}], {sid: sp.load_library(base, sid)},
+                                      log=lambda *_: None, channel=dict(UP_CH), generate=_fake_upscaler(calls))
+    assert [x['key'] for x in rep['done']] == ['L1_grid9_t1'] and len(calls) == 1
+
+
+def test_status_lists_manually_swapped_interpolated_tile(tmp_path, monkeypatch):
+    base, sid, t1, t2 = _swap_fixture(tmp_path)
+    monkeypatch.setattr(sp, 'sync_group', lambda *a, **k: {'errors': [], 'warnings': [], 'updated': False})
+    monkeypatch.setattr(sp, 'plan_episode', lambda b, ep, only=None: {'jobs': [{'shot_id': 'sh001', 'role': 'start', 'scene_id': sid, 'facts': None}]})
+    monkeypatch.setattr(sp, 'camera_stale', lambda *a: False)
+    sp.swap_shot_plate(base, 'ep01', 'sh001', 'start', 'L1_grid9_t1')
+    assert sp.status_episode(base, 'ep01')['grid9_interpolated'] == ['sh001:start']
+    sp.swap_shot_plate(base, 'ep01', 'sh001', 'start', 'L1_grid9_t2')
+    assert sp.status_episode(base, 'ep01')['grid9_interpolated'] == []
+
+
+def test_ensure_grid9_tile_upscaled_lock_marker_and_reuse(tmp_path):
+    import json
+    import os
+    from PIL import ImageOps
+    base, sid, entry = _upscale_fixture(tmp_path)
+    seen = []
+
+    def gen(prompt, output, **k):
+        info = sp.grid9_upscale_running(base, sid, entry['key'])           # 出图期间:放大中标记在、进程活着
+        seen.append(info and info.get('pid') == os.getpid() and info.get('source') == 'swap')
+        _fake_upscaler([])(prompt, output, **k)
+    rec = sp.ensure_grid9_tile_upscaled(base, sid, entry['key'], channel=dict(UP_CH), generate=gen, log=lambda *_: None, source='swap')
+    assert rec['status'] == 'done' and seen == [True] and sp.grid9_upscale_running(base, sid, entry['key']) is None
+    assert sp.load_library(base, sid)['plates'][0]['upscale']['source'] == 'swap'
+    calls = []
+    assert sp.ensure_grid9_tile_upscaled(base, sid, entry['key'], channel=dict(UP_CH), generate=_fake_upscaler(calls))['status'] == 'reused'
+    assert not calls                                                        # 已放大:另一路径来了也不重复花钱
+    # 同一模型此前拒收:不再出图
+    base2, sid2, e2 = _upscale_fixture(tmp_path / 'b')
+    sp.ensure_grid9_tile_upscaled(base2, sid2, e2['key'], channel=dict(UP_CH), generate=_fake_upscaler(calls, ImageOps.invert), log=lambda *_: None)
+    rec = sp.ensure_grid9_tile_upscaled(base2, sid2, e2['key'], channel=dict(UP_CH), generate=_fake_upscaler(calls))
+    assert rec['status'] == 'rejected' and rec['previous'] and len(calls) == 1
+    # 失效的放大中标记:进程不在 / 太久
+    m = sp._upscale_marker(base, sid, entry['key'])
+    m.write_text(json.dumps({'pid': 2 ** 22 + 12345}), encoding='utf-8')
+    assert sp.grid9_upscale_running(base, sid, entry['key']) is None
+    m.write_text(json.dumps({'pid': os.getpid()}), encoding='utf-8')
+    assert sp.grid9_upscale_running(base, sid, entry['key']) is not None
+    os.utime(m, (0, 0))
+    assert sp.grid9_upscale_running(base, sid, entry['key']) is None
+    assert sp.grid9_upscale_state(base, sid, sp.load_library(base, sid)['plates'][0]) == {'state': 'done'}
+    assert sp.grid9_upscale_state(base2, sid2, sp.load_library(base2, sid2)['plates'][0])['state'] == 'interpolated'
+    assert sp.grid9_upscale_state(base, sid, {'key': 'm', 'master': True}) is None
+
+
+def test_upscale_plate_refs_before_video(tmp_path, monkeypatch):
+    base, sid, entry = _upscale_fixture(tmp_path)
+    other = tmp_path / 'char.png'
+    other.write_bytes(b'x')
+    calls, logs = [], []
+    refs = [str(other), str(base / entry['file']), str(base / entry['file'])]          # 同一格出现两次只放一次
+    res = sp.upscale_plate_refs_before_video(refs, log=logs.append, channel=dict(UP_CH), generate=_fake_upscaler(calls))
+    assert [(r['key'], r['status']) for r in res] == [('L1_grid9_t1', 'done')] and len(calls) == 1
+    assert any('已放大' in m for m in logs)
+    assert sp.upscale_plate_refs_before_video(refs, log=logs.append, channel=dict(UP_CH), generate=_fake_upscaler(calls)) == []
+    base2, sid2, e2 = _upscale_fixture(tmp_path / 'b')
+    logs.clear()
+    res = sp.upscale_plate_refs_before_video([str(base2 / e2['file'])], log=logs.append, channel=dict(UP_CH),
+                                             generate=_fake_upscaler(calls, fail=True))
+    assert res[0]['status'] == 'failed' and any(m.startswith('[grid9_upscale_fallback]') for m in logs)   # 不抛,只报
+
+
+def test_generate_video_upscales_plate_refs_first_and_never_blocks(monkeypatch, capsys):
+    from modules import genmedia
+    order = []
+    monkeypatch.setattr(genmedia, '_upscale_plate_refs', lambda refs: order.append(('upscale', list(refs or []))))
+    monkeypatch.setattr(genmedia, 'get_config', lambda *a, **k: {'provider': 'test'})
+    monkeypatch.setattr(genmedia, 'apply_group_video_override', lambda cfg, g: cfg)
+    monkeypatch.setattr(genmedia, 'apply_nsfw_route', lambda kind, cfg, g: cfg)
+    monkeypatch.setattr(genmedia, '_generate_video_with', lambda cfg, prompt, output, *a: order.append(('video', output)) or output)
+    genmedia.generate_video('p', '/tmp/x/grp001.mp4', refs=['a.png'], group='grp001')
+    assert order == [('upscale', ['a.png']), ('video', '/tmp/x/grp001.mp4')]
+    monkeypatch.undo()
+    from modules import shot_plates
+
+    def boom(*a, **k):
+        raise RuntimeError('lock broken')
+    monkeypatch.setattr(shot_plates, 'upscale_plate_refs_before_video', boom)
+    genmedia._upscale_plate_refs(['a.png'])                                            # 出错只打印
+    assert '[grid9_upscale_fallback]' in capsys.readouterr().err
+
+
+def test_core_swap_spawns_upscale_and_storyboard_reports_state(tmp_path, monkeypatch):
+    from services.runtime import core
+    monkeypatch.setattr(core, 'PROJECTS_DIR', tmp_path)
+    base, sid, t1, t2 = _swap_fixture(tmp_path / 'proj')
+    monkeypatch.setattr(sp, 'sync_group', lambda *a, **k: {'errors': [], 'warnings': [], 'updated': False})
+    spawned = []
+    monkeypatch.setattr(core, '_plate_upscale_spawn', lambda b, s, k: spawned.append((b.name, s, k)) or True)
+    out = core._shot_plate_swap('proj', 'ep01', 'sh001', {'role': 'start', 'key': 'L1_grid9_t1'})
+    assert out['upscale'] == 'running' and spawned == [('proj', sid, 'L1_grid9_t1')]
+    out = core._shot_plate_swap('proj', 'ep01', 'sh001', {'role': 'start', 'key': 'L1_grid9_t2'})
+    assert out['upscale'] is None and len(spawned) == 1
+    lib = {e['key']: e for e in sp.load_library(base, sid)['plates']}
+    p1 = {'key': 'L1_grid9_t1', 'file': lib['L1_grid9_t1']['file']}
+    assert core._storyboard_plate_upscale(base, sid, p1, {})['state'] == 'interpolated'
+    core.PLATE_UPSCALE_JOBS[f'proj/{sid}/L1_grid9_t1'] = {'started_at': 0}
+    try:
+        assert core._storyboard_plate_upscale(base, sid, p1, {}) == {'state': 'running'}
+    finally:
+        core.PLATE_UPSCALE_JOBS.clear()
+    assert core._storyboard_plate_upscale(base, sid, {'key': 'L1_grid9_t2', 'file': lib['L1_grid9_t2']['file']}, {}) == {'state': 'done'}
+    assert core._storyboard_plate_upscale(base, sid, {'key': 'L1_m', 'file': lib['L1_m']['file']}, {}) is None
+    cands = {r['key']: r['upscale'] for r in core._shot_plate_candidates('proj', 'ep01', 'sh001')['plates']}
+    assert cands['L1_grid9_t1']['state'] == 'interpolated' and cands['L1_grid9_t2'] == {'state': 'done'} and cands['L1_m'] is None
+
+
+def test_upscale_grid9_tile_cli(tmp_path, monkeypatch, capsys):
+    import importlib.util
+    base, sid, entry = _upscale_fixture(tmp_path)
+    monkeypatch.setattr(sp, 'grid9_upscale_channel', lambda: dict(UP_CH))
+    monkeypatch.setattr('modules.genmedia.generate_image', _fake_upscaler([]))
+    spec = importlib.util.spec_from_file_location('upscale_grid9_tile_cli', Path(__file__).resolve().parents[1] / 'code' / 'upscale_grid9_tile.py')
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    monkeypatch.setattr(sys, 'argv', ['x', '--out-root', str(base), '--scene', sid, '--key', entry['key']])
+    assert mod.main() == 0 and '"status": "done"' in capsys.readouterr().out
+    monkeypatch.setattr(sys, 'argv', ['x', '--out-root', str(base), '--scene', sid, '--key', 'nope'])
+    assert mod.main() == 6 and '[grid9_upscale_fallback]' in capsys.readouterr().out
+
+
+def test_upscale_status_strings_in_all_dictionaries():
+    keys = ['放大中…', '已放大', '插值格', '放大没成,沿用插值格:{r}', '还没放大,生成视频前会自动放大', '插值格,选用后自动放大']
+    root = Path(__file__).resolve().parents[1] / 'apps/web/static'
+    page = (root / 'preview_storyboard.html').read_text(encoding='utf-8')
+    assert all(f"'{k}'" in page for k in keys)
+    for f in sorted((root / 'i18n').glob('*.js')):
+        if f.name == 'i18n.js':
+            continue
+        text = f.read_text(encoding='utf-8')
+        assert all(f'"{k}":' in text for k in keys), f.name
+
+
+def test_grid9_lowres_root_follows_copies_and_plain_canvas_versions(tmp_path):
+    import json
+    from PIL import Image
+    base, sid, tile = _upscale_fixture(tmp_path)
+    copy = sp.copy_plate(base, sid, tile['key'])                                     # ⧉ 复制:去掉 grid9 标记
+    plates = sp.load_library(base, sid)['plates']
+    copy = next(e for e in plates if e['key'] == copy['key'])
+    assert not copy.get('grid9') and sp.grid9_lowres_root(base, sid, copy, plates)['key'] == tile['key']
+    doc = base / 'assets/canvas/doc1'
+    doc.mkdir(parents=True)
+
+    def canvas_rev(key, chain):
+        (doc / 'history.json').write_text(json.dumps({'versions': chain}), encoding='utf-8')
+        return {'key': key, 'file': copy['file'], 'pano_ref': {'kind': 'revision', 'source_key': copy['key']},
+                'created_by': {'source': 'canvas', 'doc': 'doc1', 'version': chain[-1]['id']}}
+    plain = canvas_rev('r1', [{'id': 'v000', 'op': 'original'}, {'id': 'v001', 'op': 'transform', 'parent': 'v000'}])
+    assert sp.grid9_lowres_root(base, sid, plain, plates)['key'] == tile['key']        # 画板只做了「调整」:仍是插值格
+    local = canvas_rev('r2', [{'id': 'v000', 'op': 'original'}, {'id': 'v001', 'op': 'upscale', 'parent': 'v000', 'provider': 'local'}])
+    assert sp.grid9_lowres_root(base, sid, local, plates) is not None                  # 本机插值放大也不算 AI
+    ai = canvas_rev('r3', [{'id': 'v000', 'op': 'original'}, {'id': 'v001', 'op': 'edit', 'parent': 'v000', 'provider': 'volcengine'},
+                           {'id': 'v002', 'op': 'transform', 'parent': 'v001'}])
+    assert sp.grid9_lowres_root(base, sid, ai, plates) is None                         # 链上有过 AI 编辑:已是全尺寸
+    assert sp.grid9_lowres_root(base, sid, {'key': 'x', 'pano_ref': {'kind': 'revision', 'source_key': copy['key']}}, plates) is None  # 按意见重出
+    assert sp.grid9_lowres_root(base, sid, {'key': 'm', 'master': True}, plates) is None
+
+
+def test_upscale_derived_and_edited_tiles_keep_user_edits(tmp_path):
+    from PIL import Image
+    base, sid, tile = _upscale_fixture(tmp_path)
+    copy = sp.copy_plate(base, sid, tile['key'])
+    sp.flip_plate(base, sid, copy['key'])                                              # 副本再翻转
+    plates = sp.load_library(base, sid)['plates']
+    copy = next(e for e in plates if e['key'] == copy['key'])
+    flipped = Image.open(base / copy['file']).convert('RGB')
+    calls = []
+    rec = sp.ensure_grid9_tile_upscaled(base, sid, copy['key'], channel=dict(UP_CH), generate=_fake_upscaler(calls), log=lambda *_: None)
+    assert rec['status'] == 'done' and calls[0]['ref_size'] == (1920, 1080)             # 参考图 = 副本本身(不是宫格整图的原生裁片)
+    assert rec['native'] == [600, 338]                                                 # 折算回格子原生
+    out = Image.open(base / copy['file']).convert('RGB').resize(flipped.size)
+    assert sp.grid9_upscale_drift(flipped, out)['corr'] > .99                          # 翻转保住了
+    # 格子本身被 ✂ 裁剪过(原地改、留 original_file):同样以这张图为参考,不回到整图原生裁片
+    base2, sid2, t2 = _upscale_fixture(tmp_path / 'b')
+    lib = sp.load_library(base2, sid2)
+    im = Image.open(base2 / t2['file']).crop((0, 0, 1280, 720))
+    im.save(base2 / t2['file'], format='JPEG')
+    lib['plates'][0].update({'size': '1280x720', 'original_file': t2['file'].replace('.png', '.orig.png')})
+    sp.save_library(base2, sid2, lib)
+    calls = []
+    rec = sp.ensure_grid9_tile_upscaled(base2, sid2, t2['key'], channel=dict(UP_CH), generate=_fake_upscaler(calls), log=lambda *_: None)
+    assert rec['status'] == 'done' and calls[0]['ref_size'] == (1280, 720) and rec['native'] == [400, 225]
+    assert Image.open(base2 / t2['file']).size == (1920, 1080)
