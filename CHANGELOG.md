@@ -2,7 +2,7 @@
 
 All notable public changes to VideoAgents are documented here.
 
-## [Unreleased]
+## [1.0.44] - 2026-11-06
 
 ### Added
 - **`/retry` chat command sets the rerun count (2026-11-06).** Like `/auto` and `/stop all`, it is intercepted in `api_chat` from any channel (web chat, Feishu, WeChat, WhatsApp): no run is dispatched and no engine quota is used. `/retry` shows the current count, and `/retry N` sets it to N (0–10, 0 = no automatic reruns). It is the same global setting as 「设置→高级→Agent 高级设置→重跑次数」 and is saved through the same entry point (`api_agent_advanced_set`). The reply follows the UI language and says when nothing changed. If tasks are already running or queued, the reply warns that they keep the old count in their prompt and the new count applies to runs started from then on. Requires a service restart.
