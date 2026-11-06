@@ -1366,9 +1366,14 @@ GRID9_UPSCALE_PROMPT = ('Reproduce [Image 1] exactly at a higher resolution: the
 
 
 def grid9_upscale_prompt(style: str = '') -> str:
-    """格子放大提示词:固定句 + 项目画风句(bible/style.json#style_fragment_en,有则附上,帮模型认住画风不往写实跑)。"""
+    """格子放大提示词:固定句 + 项目画风句(bible/style.json#style_fragment_en,有则附上,帮模型认住画风不往写实跑)。
+    画风句只许用来认介质(2026-11-06):项目画风常写着画面内容(fengshen3「云海横穿中景、体积光、空中飘粒」、alices「穆夏花藤纹饰、
+    彩窗」),原样附上时真测模型照着往图里加云海 / 粒子 / 彩绘、甚至重新构图(corr 0.12),故明令不得添加其中提到而原图没有的东西;
+    改后同批 fengshen3 两张 corr 0.9964 / 0.9983,cartoon1 水彩格 0.9969 仍保住水彩。"""
     style = ' '.join(str(style or '').split())
-    return GRID9_UPSCALE_PROMPT + (f' The project art style, to be preserved: {style}' if style else '')
+    return GRID9_UPSCALE_PROMPT + (' The project art style is quoted below only so you can recognise the medium and rendering of '
+                                   '[Image 1]; do not add any object, ornament, light effect, weather, cloud, particle or depth layer '
+                                   f'it mentions that is not already visible in [Image 1]: "{style}"' if style else '')
 
 
 def grid9_tile_native(base: Path, entry: dict):

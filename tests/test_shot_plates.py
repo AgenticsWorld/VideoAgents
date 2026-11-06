@@ -1409,7 +1409,9 @@ def test_upscale_grid9_tile_skips_without_request(tmp_path):
     assert sp.upscale_grid9_tile(base, sid, entry, channel={**UP_CH, 'error': 'no config'}, **quiet)['status'] == 'skipped'
     assert sp.upscale_grid9_tile(base, sid, {**entry, 'pano_ref': {}}, channel=UP_CH, **quiet)['status'] == 'skipped'     # 缺整图 / 格框
     assert sp.grid9_upscale_prompt('') == sp.GRID9_UPSCALE_PROMPT
-    assert sp.grid9_upscale_prompt('watercolor\n backgrounds').endswith('The project art style, to be preserved: watercolor backgrounds')
+    p = sp.grid9_upscale_prompt('watercolor\n backgrounds, a sea of clouds')
+    assert p.endswith('already visible in [Image 1]: "watercolor backgrounds, a sea of clouds"')                 # 画风句只用来认介质
+    assert 'do not add any object, ornament, light effect, weather, cloud, particle' in p
     assert not calls
     big_base, big_sid, big = _upscale_fixture(tmp_path / 'big', box=(10, 10, 1690, 955))                                   # 4K 上限模型的格子
     assert sp.upscale_grid9_tile(big_base, big_sid, big, channel=UP_CH, **quiet)['status'] == 'not_needed' and not calls
