@@ -102,15 +102,19 @@ _LINE_RE = re.compile(r"^- (?P<cat>.+?) \[(?P<name>.+?)\]\((?P<url>https?://\S+?
 
 
 def _task_of(category: str, path: str) -> str:
-    """任务类型:优先取分类里的 text-to-image 等段,「其他」分类按端点末段推断。"""
-    for seg in category.split(" > "):
-        s = seg.strip().lower()
-        if s in IMAGE_TASKS + VIDEO_TASKS:
-            return s
+    """任务类型:端点末段自带任务名(text-to-image-v6 等)时以端点为准,否则取分类里的
+    text-to-image 等段,「其他」分类再按端点末段的缩写/别名推断。
+    文档站分类会挂错(2026-11 实测:youchuan/text-to-image-v6、-v81 挂在 image-to-image,
+    vidu/reference-to-video-q2-pro 挂在 reference-to-image,sora text-to-video-pro 挂在 image-to-video),
+    端点名是 API 本身的命名,比文档分类可靠。"""
     last = path.rsplit("/", 1)[-1].lower()
     for t in IMAGE_TASKS + VIDEO_TASKS:
         if last.startswith(t):
             return t
+    for seg in category.split(" > "):
+        s = seg.strip().lower()
+        if s in IMAGE_TASKS + VIDEO_TASKS:
+            return s
     if last in ("edit", "image-edit") or last.startswith(("edit-", "image-edit-")):
         return "image-to-image"
     if last.startswith(("multimodal-video", "multimodal-to-video")):
@@ -328,6 +332,11 @@ def catalog(site: str, refresh: bool = False) -> list[dict]:
 def _with_caps(models: list[dict]) -> list[dict]:
     for m in models:
         m["caps"] = _caps(_normalize(m["schema"])[0])
+        # 旧缓存里的任务类型按当前规则重算(分类挂错的端点不必等 24h 刷新才归位)
+        task = _task_of(m.get("category") or "", m["id"])
+        if task:
+            m["task"] = task
+            m["kind"] = "image" if task in IMAGE_TASKS else "video"
     return models
 
 
