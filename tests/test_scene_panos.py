@@ -256,9 +256,10 @@ def test_anchor_view_hides_objects_behind_walls_and_keeps_floor_flush_ones():
     assert view['enclosed']
     assert view['objects']['old_pine']['px'] == 0
     assert view['objects']['furnace']['px'] > sp.VIS_MIN_PX and view['objects']['inner_pond']['px'] > sp.VIS_MIN_PX
-    inv = ' '.join(sp.object_inventory(_mixed_scene(), _MIXED_LAYOUT, {'position': [0, 1.6, 0], 'yaw_deg': 0}, view))
+    inv = ' '.join(sp.group_sentence(g) for g in sp.view_groups(_mixed_scene(), _MIXED_LAYOUT, {'position': [0, 1.6, 0], 'yaw_deg': 0}, view))
     assert '丹炉' in inv and '洞内莲池' in inv and '古松' not in inv
-    assert '古松' not in sp.sector_sentence(_mixed_scene(), _MIXED_LAYOUT, view, 'behind')
+    # 俯视图下边说「门前古松」:朝南被洞壁挡死、墙外还有一大截地图 → 那是墙外看不见的东西,不写
+    assert not any('古松' in t for t in sp.edge_scenery(_mixed_scene(), _MIXED_LAYOUT, {'position': [0, 1.6, 0], 'yaw_deg': 0}, view))
 
 
 def test_indoor_clauses_drop_outside_only_clauses():
@@ -454,16 +455,21 @@ def test_ground_plan_is_projected_under_the_camera():
 
 
 # ---- 2026-09-21 DEF-p6-pano-001:提示词列位须与白模全景同一套旋转;认领不拿别的位姿出的图
-def test_object_inventory_column_matches_rendered_pano_at_every_yaw():
+# 2026-11-07:任意 yaw(预览页拖动 / 白模视角取位的 116° / 136° / 319°…)都按真实角度落列,不再按 90° 取整
+def test_prompt_columns_match_rendered_pano_at_any_yaw():
     import re
     from modules import scene_panos as sp
     scene = {'dimensions_m': [40, 4, 40], 'objects': [{'id': 'rock', 'shape': 'box', 'position': [6, 1, -3], 'size_m': [1, 2, 1]}]}
-    for yaw in (0, 90, 180, 270):
+    for yaw in (0, 37, 90, 136, 180, 270, 319):
         anchor = {'position': [0, 1.6, 0], 'yaw_deg': yaw}
         cols = sp.anchor_view(scene, anchor, False)['objects']['rock']['cols']      # 白模全景里实际落在哪些列
         seen = float(cols.mean()) / sp.VIS_SIZE[0] * 100
-        said = int(re.search(r'about (\d+)% across', sp.object_inventory(scene, {}, anchor)[0]).group(1))
-        assert abs(said - seen) < 3, (yaw, said, seen)
+        line = sp.group_sentence(sp.view_groups(scene, {}, anchor, sp.anchor_view(scene, anchor, False))[0])
+        m = re.search(r'from (\d+)% to (\d+)%|at about (\d+)%', line)
+        a, b = (int(m.group(1)), int(m.group(2))) if m.group(1) else (int(m.group(3)) - 2, int(m.group(3)) + 2)
+        assert a - 1 <= seen <= b + 1, (yaw, line, seen)
+        col = sp.dir_column(yaw, 6, -3) * 100                                       # 方向 → 列,与白模全景同一套旋转
+        assert abs(col - seen) < 2, (yaw, col, seen)
 
 
 def _write_pano(d, aid, scheme, rec):
@@ -525,6 +531,14 @@ def test_generate_pano_never_references_other_anchor_panos(tmp_path, monkeypatch
     assert [Path(r).name for r in sent['refs']] == ['whitebox_pano.jpg']              # 只有本锚点白模(本例无俯视图)
     assert 'another standpoint' not in sent['prompt']
     assert not list((d / 'A5').glob('*.chain_*'))
+    # 有俯视图时照挂;index.json#layout_ref=false 时不挂
+    Image.new('RGB', (64, 64), (200, 200, 200)).save(tmp_path / 'assets/concepts/scenes/S/layout_top.png')
+    a5['panos'] = {}
+    sp.generate_pano(tmp_path, 'S', idx, a5, 'L', indoor=False, seed=1, log=lambda *a: None, cameras=[])
+    assert [Path(r).name for r in sent['refs']] == ['whitebox_pano.jpg', 'layout_top.png']
+    a5['panos'] = {}
+    sp.generate_pano(tmp_path, 'S', {**idx, 'layout_ref': False}, a5, 'L', indoor=False, seed=1, log=lambda *a: None, cameras=[])
+    assert [Path(r).name for r in sent['refs']] == ['whitebox_pano.jpg']
 
 
 # ---- 2026-10-04 地面水陆:按俯视图颜色 + 纹理判水;陆上锚点明写「脚下是陆地」,图幅外陆地一侧不再延伸成暗青色(fengshen3 SCN-0036 A5)
@@ -559,10 +573,10 @@ def test_ground_cover_asserts_only_dry_land():
     sea = sp.ground_cover(m, (40, 22.5), [0, 1.8, -8])
     shore = sp.ground_cover(m, (40, 22.5), [10, 1.8, 0.3])
     assert (land['nadir'], sea['nadir'], shore['nadir']) == ('land', 'water', 'shore') and land['offmap_land']
-    assert 'dry land directly beneath the camera' in sp.ground_cover_rule(land) and 'unmapped dry land' in sp.ground_cover_rule(land)
+    assert 'Right under the camera is dry land' in sp.ground_cover_rule(land) and 'unmapped dry land' in sp.ground_cover_rule(land)
     for cover in (sea, shore):                                # 判为水 / 岸边:不下断言,沿用「贴图显示是水就画水」的条件句
         rule = sp.ground_cover_rule(cover)
-        assert rule.startswith('Where it shows water directly beneath the camera') and 'not water' not in rule
+        assert rule.startswith('Where it shows water right under the camera') and 'is dry land' not in rule
     assert not sp.ground_cover(m[: m.shape[0] // 2 - 6], (40, 10), [0, 1.8, 0])['offmap_land']     # 四边全是水:图幅外没有陆地段
 
 
@@ -615,15 +629,12 @@ def test_treetop_anchor_sees_past_crowns_and_never_calls_them_walls():
     assert view['objects']['shrine']['px'] > sp.VIS_MIN_PX                       # 包围盒会把它整个挡掉(两个树冠盒之间没有缝)
     boxed = {**scene, 'objects': [{**o, 'shape': 'box'} for o in scene['objects']]}
     assert sp.anchor_view(boxed, anchor, False)['objects']['shrine']['px'] < view['objects']['shrine']['px']
-    assert any('行宫正殿' in line for line in sp.object_inventory(scene, layout, anchor, view))
+    assert any(g['name'] == '行宫正殿' for g in sp.view_groups(scene, layout, anchor, view))
     assert all(s['walled'] == 0 for s in view['sectors'].values())               # 树冠再高也不是墙
     right = view['sectors']['right']                                             # 朝南看,西边的树冠在右
     assert right['blockers'][0][0] == 'pine_1_crown' and right['blockers'][0][1] >= sp.SECTOR_BLOCKER_MIN
-    text = sp.sector_sentence(scene, layout, view, 'right')
-    assert 'pine 1 crown about' in text and 'enclosing wall' not in text
-    walls = {'dimensions_m': [20, 4, 20], 'objects': [box('wall_n', (0, 2, -3), (20, 4, .4))]}
-    wview = sp.anchor_view(walls, {'position': [0, 1.6, 0], 'yaw_deg': 0}, True)
-    assert 'enclosing wall' in sp.sector_sentence(walls, {}, wview, 'centre')     # 真墙照旧
+    pine = next(g for g in sp.view_groups(scene, layout, anchor, view) if g['name'] == 'pine')   # 树冠 + 树干并成一组,照实写距离
+    assert pine['dist'] < 2 and 'enclosing wall' not in sp.group_sentence(pine)
 
 
 def test_elevated_anchor_is_described_as_mid_air_viewpoint():
@@ -736,3 +747,92 @@ def test_ensure_stops_before_spending_on_sparse_manual_anchor(tmp_path, monkeypa
     monkeypatch.setattr(sp, 'pano_ready', lambda base, sid, a, s: s == 'L1')
     sp.ensure_scene_panos(tmp_path, 'SCN-0001', cameras=[], schemes={'L2': None}, only=['A1'])            # 已确认过:补别的方案不再问
     assert generated[-1] == ('A1', 'L2')
+
+
+# ---- 2026-11-07 全景提示词瘦身(P1):编辑指令在前、可见物体按组写实际列段、设定文字净化、长度上限
+def test_clean_text_drops_refs_quotes_shot_intent_and_people():
+    mats = sp._bible_text([{'v': '浅灰防滑金属格板地面', 'inferred': True, 'culture_ref': 'SCN-trantor-observation-tower#materials',
+                            'reason': 'ep01 pale metal grid deck', 'screenplay_ref': 'ep01 S02'},
+                           {'v': '及肩镀铬栏杆', 'source': {'chapter': 'ch003', 'quote': '盖尔便靠在及肩的栏杆上'}}])
+    assert mats == '浅灰防滑金属格板地面; 及肩镀铬栏杆'                                  # 出处 / 推断说明不进正文
+    out = sp.clean_text('青灰条石砌筑,与 SCN-0002 驳岸同一石色; 远景见 refs/scenes/a.jpg; 越栏俯视拍需要; ch003 原文「他也看不见地平线，眼前唯有金属。」',
+                        people=('许仙',))
+    assert '青灰条石' in out and 'SCN-' not in out and 'refs/' not in out and '俯视' not in out and '地平线' not in out
+    light = sp.clean_text('冬日上午暖黄阳光斜射,石阶上的人和马逆光压成剪影,许仙的伞边发亮,暗部冷青', people=('许仙',), fine=True)
+    assert light == '冬日上午暖黄阳光斜射,暗部冷青'
+    edge = sp.clean_text('画左桥头与左岸(= 主机位画左,白娘子所站一端)', people=('白娘子',), fine=True, parens=False, drop_sides=True,
+                         need_first=True)
+    assert edge == ''                                                                # 主机位口径的俯视图说明:整段不发
+    assert sp.clean_text('后景湖面(主机位侧面全景的后景方向)', parens=False) == '后景湖面'
+    assert sp._clip('甲' * 50, 30) == '甲' * 10 and sp.prompt_units('ab甲') == 5          # 汉字按 3 个单位计
+
+
+def test_view_groups_merge_parts_and_borrow_only_unique_landmark():
+    objs = [box(f'step_l{i:02d}', (-3 + i * .4, .1 * i, 0), (.4, .2 * i, 3)) for i in range(1, 9)]
+    objs += [box('kiosk_wall_01', (0, 2, -8), (2.5, 4, .5)), box('kiosk_roof', (0, 4.3, -9), (4, .6, 4)),
+             {'id': 'willow_left_trunk', 'shape': 'cylinder', 'position': [-8, 1.5, 4], 'size_m': [.4, 3, .4]},
+             {'id': 'willow_left_canopy', 'shape': 'cylinder', 'position': [-8, 4.5, 4], 'size_m': [3, 3, 3]},
+             {'id': 'willow_right_canopy', 'shape': 'cylinder', 'position': [8, 4.5, 4], 'size_m': [3, 3, 3]}]
+    scene = {'dimensions_m': [30, 8, 30], 'objects': objs}
+    layout = {'landmarks': [{'id': 'lift_kiosk', 'name_en': 'the lift kiosk', 'kind': 'entrance', 'xy': [.5, .2]},
+                            {'id': 'left_willow', 'name': '左岸垂柳', 'kind': 'feature', 'xy': [.2, .6]},
+                            {'id': 'right_willow', 'name': '右岸垂柳', 'kind': 'feature', 'xy': [.8, .6]}]}
+    anchor = {'position': [0, 1.6, 4], 'yaw_deg': 0}
+    names = [g['name'] for g in sp.view_groups(scene, layout, anchor, sp.anchor_view(scene, anchor, False))]
+    assert names.count('step') == 1 and names.count('the lift kiosk') == 1           # 8 级台阶一组;亭墙 + 亭顶并到唯一地标
+    assert 'willow' in names and '左岸垂柳' not in names                              # 两侧各一:不借名,免得两棵都叫左岸
+
+
+def _p1_project(tmp_path):
+    import json
+    sid = 'SCN-0005'
+    sdir = tmp_path / 'assets/concepts/scenes' / sid; sdir.mkdir(parents=True)
+    bdir = tmp_path / 'bible/scenes' / sid; bdir.mkdir(parents=True)
+    objs = [box(f'step_l{i:02d}', (-6 + i * .35, .05 * i, 0), (.35, .1 * i, 3.2)) for i in range(1, 35)]   # 镜头 y 6 悬在台阶上方 ≈ 5 m
+    objs += [box(f'rail_far_post_{i}', (-6 + i * 1.3, 1.5, -1.7), (.2, 3, .2)) for i in range(1, 10)]
+    objs += [box('lake_water', (0, -.01, 0), (25, .02, 14)), box('platform_left', (-9.75, .225, 0), (3.5, .45, 3.5))]
+    (bdir / 'whitebox.json').write_text(json.dumps({'dimensions_m': [25.6, 8, 14.4], 'objects': objs}), encoding='utf-8')
+    (sdir / 'layout.json').write_text(json.dumps({'scene_name': '断桥', 'landmarks': [], 'orientation': {
+        'top_of_map': '后景湖面(主机位侧面全景的后景方向)', 'left_of_map': '画左桥头与左岸(= 主机位画左,白娘子所站一端)',
+        'note_en': 'views[] 的机位一律按下列地标描述'}}, ensure_ascii=False), encoding='utf-8')
+    (bdir / 'architecture.json').write_text(json.dumps({
+        'form': '一座单孔青石拱桥横跨湖面,拱洞与水中倒影合成一个扁圆', 'materials': ['拱券与桥身:青灰条石砌筑', '桥栏:青石方望柱'],
+        'details': ['拱洞与水中倒影合成一个扁圆']}, ensure_ascii=False), encoding='utf-8')
+    (bdir / 'lighting.json').write_text(json.dumps({'schemes': [{'scheme_id': 'L1', 'condition': {'time_of_day': '傍晚'},
+        'prompt_fragment_en': '清明傍晚大雨,灰青天光,人物迎光一侧镀上暖金,低反差'}]}, ensure_ascii=False), encoding='utf-8')
+    (tmp_path / 'bible/characters').mkdir(parents=True)
+    (tmp_path / 'bible/characters/index.json').write_text(json.dumps({'characters': [{'canonical_name': '白娘子'}]}, ensure_ascii=False),
+                                                          encoding='utf-8')
+    return sid
+
+
+def test_pano_prompt_is_edit_first_short_and_follows_exact_yaw(tmp_path):
+    sid = _p1_project(tmp_path)
+    anchor = {'anchor_id': 'A1', 'position': [-2.0, 6.0, 0.0], 'yaw_deg': 136.0}
+    p = sp.pano_prompt(tmp_path, sid, sp.scheme_slug('L1'), anchor, indoor=False, mode='fresh',
+                       ref_rules=[sp.WHITEBOX_REF_RULE.format(n=1), sp.GUIDES_REF_RULE.format(n=1)])
+    assert p.startswith('Turn [Image 1]') and sp.prompt_units(p) <= sp.PANO_PROMPT_MAX
+    assert 'real photograph' not in p
+    assert p.index('The camera hangs in mid-air above the step') < p.index('What each block') < p.index('Output one seamless')
+    assert 'not a view of the place from outside' in p and 'at 断桥' in p
+    assert p.count('step:') == 1 and p.count('rail:') == 1                          # 34 级台阶 / 9 根望柱各并成一句
+    assert '扁圆' not in p and '横跨湖面' not in p                                    # 形制 / 细部讲整体外观,不发
+    assert '青灰条石' in p and '人物' not in p and '主机位' not in p and 'views[]' not in p and '白娘子' not in p
+    assert 'Looking straight ahead' not in p and '画左' not in p
+    col = round(sp.dir_column(136.0, 0, -1) * 100)                                    # 图上方(北)在 yaw 136° 的全景里的真实列
+    assert f'toward the north (about {col}% across): 后景湖面' in p
+
+
+def test_fit_prompt_trims_groups_and_scenery_before_lighting_and_keeps_look():
+    calls = []
+
+    def render(k):
+        calls.append(dict(k))
+        return 'x' * (1000 * k['groups'] + 500 * k['scenery'] + k['light'] + k['mat'] + k['look'])
+    sp._fit_prompt(render, {'groups': 12, 'scenery': 4, 'light': sp.LIGHTING_MAX, 'mat': sp.MATERIALS_MAX, 'look': sp.LOOK_MAX}, 9000)
+    last = calls[-1]
+    assert last['light'] == sp.LIGHTING_MAX and last['groups'] >= sp.GROUPS_MIN and len(render(last)) <= 9000
+    calls.clear()                                                                  # 再紧:风格段(项目画风)排在光照、材质之后才裁
+    sp._fit_prompt(render, {'groups': 12, 'scenery': 4, 'light': sp.LIGHTING_MAX, 'mat': sp.MATERIALS_MAX, 'look': sp.LOOK_MAX}, 5900)
+    last = calls[-1]
+    assert last['look'] == sp.LOOK_MAX and last['mat'] == sp.MATERIALS_MAX // 2 and last['light'] == sp.LIGHTING_MAX // 2

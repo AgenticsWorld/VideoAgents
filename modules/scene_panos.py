@@ -57,52 +57,50 @@ ASPECT_TOLERANCE = 0.03          # 返回全景宽高比偏离 2:1 超过此值 
 HOLE_INPAINT_MAX = 0.6
 PLATE_HOLE_MAX = 0.5             # 分镜重投影空洞超过此值 → 换锚点/加锚点
 
+# 2026-11-07 提示词瘦身(P1):全景提示词原先中位 1.05 万、最长 3.1 万字符(inlove SCN-0005 90 个块逐块一句占 2.4 万),整段发给
+# Seedream,文字盖过白模参考图,模型退回「按题材画一张代表性构图」——断桥画成湖面看桥的正立面、jidi 塔顶平台画成俯瞰整圈。
+# 下面各条规则逐条压短,保留每条当初修过的约束(广角照片 / 天底 / 接缝 / 引导线 / 水陆 / 室内顶),总长见 PANO_PROMPT_MAX。
 PANO_PROJECTION_RULES = (
-    "Output a single seamless 360-degree equirectangular panorama with an exact 2:1 aspect ratio covering the full sphere: "
-    "the sky or ceiling zenith is stretched along the top edge, the ground directly below the camera (nadir) along the bottom edge, "
-    "the horizon runs along the middle row, and the left and right edges continue into each other. "
+    "Output one seamless 360-degree equirectangular panorama, exactly 2:1, covering the full sphere: zenith smeared along the top edge, "
+    "the floor right under the camera (nadir) along the bottom edge, horizon along the middle row, left and right edges the same "
+    "direction joining seamlessly. "
 )
-# 开阔外景的成图先验是「一张 2:1 的广角风景照」(fengshen3 SCN-0110):外景另加硬约束,并在提示词末尾再说一遍(首段会被长清单稀释)
+# 开阔外景的成图先验是「一张 2:1 的广角风景照」(fengshen3 SCN-0110):外景用这一条代替上一条(含上一条全部约束),末尾再复述一次
 EXTERIOR_PROJECTION_RULES = (
-    "This is NOT a wide-angle landscape photograph and has no single viewing direction: the image width is the full 360-degree turn, so the "
-    "horizon line crosses the entire width at mid-height, the scenery continues all the way around, and what lies behind the camera appears "
-    "at the far left and far right edges, which must join seamlessly. The top rows are the sky straight overhead smeared across the full "
-    "width; the bottom rows are the ground right under the camera smeared across the full width, soft and heavily stretched, never a sharp "
-    "detailed foreground. Straight things (shorelines, paths, boats, walls, poles rows) bend into curves exactly as the blocks in the "
-    "blockout do. The sun or moon occupies one single compass direction only; the rest of the sky is lit accordingly. "
+    "Output one seamless 360-degree equirectangular panorama, exactly 2:1 — NOT a wide-angle landscape photograph, no single viewing "
+    "direction: the width is the full turn, the horizon runs straight across the middle row, and what is behind the camera sits at both "
+    "outer edges, which join seamlessly. The top rows are the sky straight overhead and the bottom rows the ground right under the camera, "
+    "both smeared soft across the full width, never a sharp foreground. Straight edges bend into curves exactly as the blocks do. The sun "
+    "or moon sits in one compass direction only. "
 )
 GROUND_PLAN_RULE = (
-    "The ground of [Image {n}] carries the top-down plan of this location re-projected onto the floor from this exact camera: it shows "
-    "precisely what the ground is under and around the camera — open water, shallows, sand, gravel, grass, mud, paving, paths — and where "
-    "each shoreline or edge runs, already bent into this projection; keep every shoreline, path edge and patch boundary where the texture "
-    "puts it. It is a map, not a photo: render real ground seen from eye level, and ignore the flattened top views of objects printed on "
-    "it — the blocks are the objects. "
+    "The ground of [Image {n}] carries the top-down plan re-projected from this camera: it shows what the ground is under and around the "
+    "camera (water, sand, grass, paving, paths) and where each shoreline or edge runs — keep them there; it is a map, so paint real "
+    "ground and ignore the object top views printed on it. "
 )
 # 脚下是不是陆地由宿主按俯视图判(ground_cover),不让模型自己从贴图颜色猜:俯视图里背阴的林地 / 山岩与水面常是同一种暗青色
 # (fengshen3 SCN-0036:林地 (65,72,72)、海面 (93,113,120)),旧规则又只写了「脚下是水」一种情形 → 陆上锚点脚下被画成水面。
 # 颜色纹理判水会把蓝灰石板地、背阴山岩误判成水(实测 fengshen3 153 张俯视图里几十张),所以**只在判为陆地时下断言**;
 # 判为水 / 岸边 / 拿不准时沿用旧的条件句(由模型按贴图读),误判不会让别的场景凭空多出水面。
 GROUND_NADIR_LAND_RULE = (
-    "The plan shows dry land directly beneath the camera, not water: the nadir and the whole near foreground are solid ground — the "
-    "terrain the plan shows there (earth, rock, grass, woodland floor, paving) — never a water surface, never a flooded or mirror-wet "
-    "plain. Dark or blue-grey patches of the plan under and around the camera are shaded vegetation or rock, not water. "
+    "Right under the camera is dry land: the nadir and near foreground are solid ground, never a water surface; dark or blue-grey "
+    "patches there are shaded vegetation or rock. "
 )
 GROUND_NADIR_READ_RULE = (
-    "Where it shows water directly beneath the camera, the camera is standing in the water, so the nadir and the whole near foreground "
-    "are water surface (ripples, reflections, the bed showing through shallows), never dry land. "
+    "Where it shows water right under the camera, the camera stands in the water: the nadir and near foreground are water surface, "
+    "never dry land. "
 )
 GROUND_OFFMAP_LAND_RULE = (
-    "The plain earth-toned ground without plan texture lies beyond the edge of the plan: it is unmapped dry land — continue the "
-    "neighbouring terrain there (the same hills, woods, fields or shore the plan shows at that edge) out to the horizon, never open water. "
+    "Plain earth-toned ground without plan texture is unmapped dry land: continue the neighbouring terrain there to the horizon, never "
+    "open water. "
 )
 GUIDES_REF_RULE = (
-    "The curved grid lines on the sky and ground of [Image {n}] and the short tick marks on its horizon are projection guides only: they "
-    "show how straight lines on the ground and overhead bend in this equirectangular projection and where the nadir and zenith are — "
-    "reproduce that curvature and stretching in the real ground texture, shoreline and clouds, and never draw the lines or ticks themselves. "
+    "The curved grid lines and horizon ticks in [Image {n}] are projection guides only: copy that curvature into the real ground and sky, "
+    "never draw them. "
 )
 PANO_PROJECTION_TAIL = (
-    "Final check before output: full-sphere equirectangular projection, zenith smeared along the top edge, nadir smeared along the bottom "
-    "edge, horizon on the middle row across the whole width, left and right edges are the same direction and match pixel for pixel."
+    "Final check: full-sphere equirectangular, zenith along the top edge, nadir along the bottom edge, horizon on the middle row across "
+    "the whole width, left and right edges match pixel for pixel."
 )
 # 风格段里的单镜头构图 / 布光 / 人物用语:全景没有「主体」和「前中后景」,留着会把模型推回单视角电影画面
 STYLE_COMPOSITION_WORDS = ('subject', 'layers of depth', 'depth of field', 'foreground', 'middle ground', 'midground', 'background',
@@ -116,15 +114,21 @@ def pano_style(style: str) -> str:
     keep = [c.strip() for c in re.split(r'[;,。;,]', style or '') if c.strip()
             and not any(w in c.lower() for w in STYLE_COMPOSITION_WORDS)]
     return ', '.join(keep)
+# 第一参考图的规则就是任务句,放在提示词最前:「把这张白模全景变成照片」——编辑指令式,而不是一段文生图描述(文生图式长描述下
+# Seedream 只把参考图当灵感)
 WHITEBOX_REF_RULE = (
-    "[Image {n}] is a plain untextured 3D blockout render of exactly this panorama from exactly this camera: keep its "
-    "projection, horizon height, and the position, size and outline of every block (walls, columns, counters, shelves, seats, "
-    "gate posts, poles, trees, buildings, kerbs, road edges, furniture) exactly where they are, and turn them into the real "
-    "photographic objects described below. Do not draw its grey blocks, flat shading, grid or any labels. "
+    "Turn [Image {n}] — a plain untextured 3D blockout render of exactly this panorama from exactly this camera — into the finished "
+    "picture of the same place, in the look described at the end: keep its projection, horizon height and camera position, and keep every "
+    "block exactly where it is, at the same size and outline; only its surface becomes the real thing named below. Never draw its grey "
+    "blocks, flat shading, grid or labels. "
 )
 LAYOUT_REF_RULE = (
-    "[Image {n}] is the top-down plan of the same location; use it only to decide what each block is and what lies in each "
-    "direction. Never reproduce the map, its top-down viewpoint, colors or graphics. "
+    "[Image {n}] is a top-down plan of the same place, only for telling what each block is; never copy the map, its top-down viewpoint, "
+    "its framing, colours or graphics. "
+)
+# 重打光时白模是第二参考图,只管几何(任务句是 RELIGHT_RULE)
+WHITEBOX_GEOMETRY_RULE = (
+    "[Image {n}] is the plain 3D blockout render of exactly this panorama from exactly this camera: every block stays exactly where it is. "
 )
 RELIGHT_RULE = (
     "[Image {n}] is the finished panorama of exactly this location and camera at a different time of day: reproduce it "
@@ -1095,15 +1099,14 @@ SECTOR_BLOCKER_MIN = 0.15        # 物体占该向地平线带 ≥ 此比例才�
 OUTDOOR_WORDS = ('云海', '云面', '云台', '台外', '山道', '星月', '星空', '月光', '月色', '天空', '天幕', '日光', '阳光', '崖前', '下不见底',
                  'sky', 'cloud', 'moon', 'star', 'sunlight', 'terrace', 'horizon', 'outdoor', 'exterior')
 INDOOR_RULE = (
-    "The camera is INSIDE a roofed room: the dark band across the top of the blockout is the solid ceiling / roof structure overhead and "
-    "the tall blocks are solid walls — paint them as the real ceiling and walls. Open sky, clouds or outdoor scenery may appear only "
-    "through the door and window openings of the blockout, at exactly their position and size, never above the walls or in place of them. "
+    "The camera is INSIDE a roofed room: the dark band across the top of the blockout is the solid ceiling overhead and the tall blocks "
+    "are solid walls. Sky or outdoor scenery appears only through the blockout's door and window openings, at exactly their position "
+    "and size. "
 )
 ENCLOSED_RULE = (
-    "The camera is INSIDE an enclosed room: solid walls stand on every side and a solid ceiling is overhead, exactly as the blockout "
-    "shows. This is not an exterior or establishing view of the building: never show the outside of the structure, open sky, moon, stars, "
-    "clouds or a distant landscape, except the little that is visible through the door or window openings of the blockout, at exactly "
-    "their position and size. "
+    "The camera is INSIDE an enclosed room: solid walls on every side and a solid ceiling overhead, exactly as the blockout shows. Not an "
+    "exterior or establishing view: never show the outside of the building, open sky or a distant landscape, except the little visible "
+    "through the blockout's door or window openings. "
 )
 _VIEW_CACHE: dict = {}
 _FUNCTION_CHARS = set('的那这一处根株片座排块与和在被向自其之上下里内外旁侧边前后左右东西南北')
@@ -1154,7 +1157,7 @@ def anchor_view(scene: dict, anchor: dict, indoor: bool) -> dict:
         cols = (np.arange(int((c0 - .125) * w), int((c0 + .125) * w)) % w)
         tt = t[band][:, cols]; ii = ids[band][:, cols]
         near = np.isfinite(tt) & (tt <= OPEN_DISTANCE_M) & (ii >= n_fixed)
-        # 该向近处挡着视线的物体:[物体 id, 占该向地平线带的比例, 距离中位数],占比大的在前(不是墙时四向说明照实写它,见 sector_sentence)
+        # 该向近处挡着视线的物体:[物体 id, 占该向地平线带的比例, 距离中位数],占比大的在前(测试与机检用;2026-11-07 起提示词改按物体组写列段,见 view_groups)
         blockers = sorted(([oids[int(k) - n_fixed], round(float((near & (ii == k)).mean()), 3), round(float(np.median(tt[near & (ii == k)])), 1)]
                            for k in np.unique(ii[near])), key=lambda b: -b[1])
         sectors[name] = {'open': round(float((~np.isfinite(tt) | (tt > OPEN_DISTANCE_M)).mean()), 3),
@@ -1162,7 +1165,8 @@ def anchor_view(scene: dict, anchor: dict, indoor: bool) -> dict:
                          'wall_m': round(float(np.median(tt[np.isfinite(tt)])), 1) if np.isfinite(tt).any() else None,
                          'blockers': blockers,
                          'cols': set(cols.tolist())}
-    view = {'objects': objects, 'sectors': sectors,
+    # band_t:地平线带每列的最近命中距离(行 × 列),pano_prompt 按任意方位(俯视图四边按真实 yaw 落到的列)判该向看不看得出去
+    view = {'objects': objects, 'sectors': sectors, 'band_t': t[band],
             'enclosed': bool(indoor and all(v['open'] < SECTOR_OPEN_MAX for v in sectors.values()))}
     _VIEW_CACHE[key] = view
     return view
@@ -1176,43 +1180,6 @@ def _object_name(oid: str, landmarks: dict, names: dict) -> tuple[str, str | Non
     if lid and (lid == bn or lid.startswith(bn) or bn.startswith(lid)):
         return names[lid], lid
     return bn.replace('_', ' '), None
-
-
-def sector_sentence(scene: dict, layout: dict, view: dict, sector: str) -> str:
-    """被挡死的方向写什么:该向看得见的具名地标(看得清的在前,只从开口瞥见的另说),其余就是近处的墙。
-    挡着的不是通顶高墙(树冠、巨石、车、矮院墙:walled < SECTOR_WALL_MIN)时照实写是哪几个物体、多远,不写成「围墙」——
-    fengshen3 SCN-0109 A1 把 1.2 m 外的松树冠写成 enclosing wall,成图正中画出一道粉墙加山门(2026-10-05)。"""
-    landmarks = {lm['id']: lm for lm in layout.get('landmarks', []) if 'xy' in lm}
-    names = {lid: lm.get('name_en') or lm.get('name') or lid for lid, lm in landmarks.items()}
-    sec = view['sectors'][sector]
-    clear, glimpsed = [], []
-    for o in scene.get('objects', []):
-        v = view['objects'].get(o['id']) or {}
-        if v.get('px', 0) < VIS_MIN_PX or not len(v['cols']):
-            continue
-        inside = sum(1 for c in v['cols'] if int(c) in sec['cols']) / len(v['cols'])
-        name, lid = _object_name(o['id'], landmarks, names)
-        if inside < 0.5 or not lid:
-            continue
-        bucket = clear if v['fraction'] >= VIS_PROMINENT else glimpsed
-        if name not in bucket and name not in clear:
-            bucket.append(name)
-    blockers = [] if sec.get('walled', 1.0) >= SECTOR_WALL_MIN else [b for b in sec.get('blockers') or [] if b[1] >= SECTOR_BLOCKER_MIN][:3]
-    if blockers:
-        near = [f"{_object_name(oid, landmarks, names)[0]} about {dist} m away" for oid, _share, dist in blockers]
-        shown = {n.split(' about ')[0] for n in near}
-        clear = [n for n in clear if n not in shown]; glimpsed = [n for n in glimpsed if n not in shown]
-        text = ' and '.join(near) + ', close to the camera and filling most of this direction exactly as its block does in [Image 1]'
-        if clear:
-            text += '; past it, ' + ', '.join(clear)
-        if glimpsed:
-            text += '; only a narrow glimpse past it of ' + ', '.join(glimpsed)
-        return text
-    wall = f"the solid enclosing wall of this space about {sec['wall_m']} m away" if sec.get('wall_m') else 'the solid enclosing wall of this space'
-    text = (', '.join(clear) + ', in front of ' + wall) if clear else wall
-    if glimpsed:
-        text += '; only a narrow glimpse, through the opening in that wall, of ' + ', '.join(glimpsed)
-    return text
 
 
 def visible_landmark_words(scene: dict, layout: dict, view: dict) -> tuple[set, set]:
@@ -1255,57 +1222,337 @@ def indoor_clauses(text: str, visible: set, hidden: set, *, fine: bool = False) 
     return ' '.join(keep).strip(' ;;,,')
 
 
-def object_inventory(scene: dict, layout: dict, anchor: dict, view: dict | None = None) -> list[str]:
-    """锚点四周每个白模物体一句:名称、尺寸、离机位距离、罗盘方位与画面横向位置、长轴走向、朝向(有 <id>_back 靠背块的座椅
-    自动推出「靠背在 X 侧,面朝 Y」)。白模只是方块,不写这些模型会在每个锚点各自猜(dzg6 SCN-0002 A1/A2 座椅方向相反)。"""
+# ---------------------------------------------------------------- 全景提示词:可见物体分组清单 + 设定文字净化(2026-11-07 P1)
+# 旧版逐块一句(inlove SCN-0005 90 块 / 34 级台阶一级一句)、列位按物体中心算、四向文字按 90° 取整且取自「主机位」口径的俯视图说明、
+# 材质段原样带进出处 / 原文引语 / 镜头意图(jidi「越栏俯视拍」)——文字长且与白模打架,模型照文字题材画了地标的代表性外观。
+# 长度按「单位」计:英文 1 字符 = 1,汉字 = 3(一个汉字的信息量约等于一个英文词的一半多,中文光照 / 材质段 600 字按字符算只占 600,
+# 实际相当于 3000+ 英文字符)。上限不含负面词。超了按 清单尾项 → 远景 → 风格 → 材质 → 光照 的顺序裁(_fit_prompt)。
+PANO_PROMPT_MAX = 4500
+GROUPS_MAX = 12                  # 可见物体清单最多几组(按白模全景里的可见像素排)
+GROUPS_MIN = 5                   # 裁长度时清单至少留几组
+GROUP_SOFT = 8                   # 裁长度时清单先裁到几组
+COL_GAP = 0.02                   # 同组物体的可见列相隔不到图宽 2% 并成一段
+LIGHTING_MAX = 600
+MATERIALS_MAX = 600
+ERA_MAX = 200
+LOOK_MAX = 300
+EDGE_TEXT_MAX = 160
+# 物体 id 里表示部件 / 侧别 / 编号的词:同一件东西的各部件、同一类的各个(rail_far_post_1 / rail_near_panel_3、step_l01…step_r16、
+# willow_left_canopy / willow_right_trunk)并成一组。只去掉这些词后一个不剩时保留第一个词(wall_n → wall)。
+PART_WORDS = {'l', 'r', 'n', 's', 'e', 'w', 'a', 'b', 'c', 'd', 'left', 'right', 'north', 'south', 'east', 'west', 'near', 'far',
+              'inner', 'outer', 'front', 'back', 'rear', 'side', 'top', 'bottom', 'base', 'cap', 'end', 'post', 'panel', 'leg', 'legs',
+              'arm', 'haunch', 'crown', 'canopy', 'trunk', 'upper', 'lower', 'mid', 'middle', 'centre', 'center', 'part', 'piece',
+              'segment', 'seg', 'block', 'body'}
+# 设定 JSON 里的出处 / 推断说明字段:只取正文 v,这些一概不进提示词(jidi materials 每条都带 source.quote / culture_ref / screenplay_ref)
+BIBLE_META_KEYS = {'source', 'sources', 'source_chapter', 'quote', 'reason', 'inferred', 'culture_ref', 'screenplay_ref', 'ref_images',
+                   'provenance', 'element_sources', 'element_provenance', 'revisions', 'chapter', 'note', 'notes', 'by', 'at'}
+_REF_RE = re.compile(r'(?i)\bch\d{2,4}\b(?:#\S*)?|\b(?:SCN|LGT|BIB|DEF|CHAR|CUL|EV|TIER|RUN|BEAT)-[\w.#-]*\d[\w.#-]*'
+                     r'|\bep\d+(?:\s*S\d+)?\b|\b(?:refs|runs|assets|bible|docs)/\S+|[\w./-]+\.(?:json|md)(?:#[\w.-]+)?'
+                     r'|[\w./-]+\.(?:png|jpe?g|webp)\b')
+_QUOTE_RE = re.compile(r'「([^」]*)」|『([^』]*)』|“([^”]*)”')
+# 分句里出现这些词 = 讲的是镜头 / 构图 / 俯视图坐标,不是这个地方本身:整句不发(俯视、仰看这类会把模型推到外部视点)
+SHOT_WORDS_ZH = ('主机位', '机位', '镜头', '画左', '画右', '图左', '图右', '图上', '图下', '图外', '图内', '图幅', '画面', '构图',
+                 '屏侧', '坐标', '地标词', '实图', '俯视', '仰视', '仰看', '俯瞰', '俯拍', '仰拍', '特写', '分镜', '拍摄')
+_SHOT_EN = re.compile(r'(?i)\b(?:map|plan view|views?\s*\[\]|camera|cameras|shot|shots|screen[- ](?:left|right)|frame[- ](?:left|right)'
+                      r'|close-?ups?|establishing|name_en|(?:top|bottom) edge)\b')
+_SIDE_EN = re.compile(r'(?i)\b(?:left|right)\b')     # 俯视图四边说明里的左 / 右是看地图的左右,与锚点无关
+# 人物 / 牲口:全景是空场景(光照段常写「石阶上的人和马逆光压成剪影」「人物迎光一侧镀上暖金」)
+PEOPLE_WORDS_ZH = ('人物', '人马', '人和马', '人与马', '角色', '游客', '行人', '人群', '人影', '人们', '众人', '人会', '人站', '剪影',
+                   '马匹', '马鼻')
+_PEOPLE_EN = re.compile(r'(?i)\b(?:people|person|persons|figures?|characters?|crowds?|actors?|pedestrians?|visitors?|tourists?'
+                        r'|silhouett\w*|horses?|riders?)\b')
+_PEOPLE_CACHE: dict = {}
+
+
+def _bible_text(v) -> str:
+    """设定字段压成文字:{v: 正文, source/reason/culture_ref…} 只取 v;dict 去掉出处类键;list 逐条以「; 」相连。"""
+    if isinstance(v, str):
+        return v.strip()
+    if isinstance(v, (list, tuple)):
+        return '; '.join(x for x in (_bible_text(i) for i in v) if x)
+    if isinstance(v, dict):
+        if 'v' in v:
+            return _bible_text(v['v'])
+        return '; '.join(x for x in (_bible_text(i) for k, i in v.items()
+                                      if k not in BIBLE_META_KEYS and not str(k).startswith('_')) if x)
+    return ''
+
+
+def people_words(base: Path) -> tuple:
+    """项目角色名与别名(bible/characters/index.json):含这些名字的分句不进全景提示词(全景是空场景)。"""
+    f = base / 'bible/characters/index.json'
+    key = (str(f), f.stat().st_mtime if f.is_file() else 0)
+    if key in _PEOPLE_CACHE:
+        return _PEOPLE_CACHE[key]
+    doc = read(f, {}) or {}
+    names = set()
+    for it in (doc.get('characters') if isinstance(doc, dict) else doc) or []:
+        if not isinstance(it, dict):
+            continue
+        for n in [it.get('canonical_name'), it.get('name'), it.get('name_en')] + [
+                a.get('name') if isinstance(a, dict) else a for a in (it.get('aliases') or [])]:
+            if isinstance(n, str) and len(n.strip()) >= 2:
+                names.add(n.strip())
+    out = tuple(sorted(names, key=len, reverse=True))
+    _PEOPLE_CACHE[key] = out
+    return out
+
+
+_CJK_RE = re.compile(r'[\u3000-\u303f\u3400-\u9fff\uff00-\uffef]')
+
+
+def prompt_units(text: str) -> int:
+    """提示词长度单位:英文字符 1、汉字(含全角标点)3。"""
+    return len(text or '') + 2 * len(_CJK_RE.findall(text or ''))
+
+
+def _clip(text: str, limit: int | None) -> str:
+    """按分句截到 limit 单位以内(prompt_units;一句都放不下时只留第一句的前段)。"""
+    text = (text or '').strip()
+    if limit is None or prompt_units(text) <= limit:
+        return text
+    if limit <= 0:
+        return ''
+    out = ''
+    for c in re.split(r'(?<=[;;。.,,])', text):
+        if prompt_units(out + c) > limit:
+            break
+        out += c
+    if not out:
+        for ch in text:
+            if prompt_units(out + ch) > limit:
+                break
+            out += ch
+    return out.strip().rstrip(',,;;、:: ')
+
+
+def clean_text(text: str, *, people=(), fine: bool = False, parens: bool = True, drop_sides: bool = False, need_first: bool = False,
+               limit: int | None = None) -> str:
+    """设定 / 俯视图说明进全景提示词前的净化:去出处编号与文件路径、去原文引语(短的「地名」只去括号)、
+    丢讲镜头 / 构图 / 俯视图坐标的分句、丢提到人物的分句;parens=False 连括号补充一起去(俯视图说明的括号多是给主机位的注);
+    drop_sides 再丢写着 left / right 的分句;fine=True 按逗号切分句(光照段一句里常并列好几件事);need_first:首句(讲「这边是什么」的
+    主句)被丢就整段不要,只剩补充分句会没头没尾(「with no wall … runs straight into both of them」)。只有数字 / 百分比的分句不要。"""
+    t = _REF_RE.sub('', text or '')
+    t = _QUOTE_RE.sub(lambda m: '' if (lambda s: len(s) >= 8 or re.search(r'[,,。;;!!??]', s))(next(g for g in m.groups() if g is not None))
+                      else next(g for g in m.groups() if g is not None), t)
+    if not parens:
+        t = re.sub(r'[((][^(())]*[))]', '', t)
+    t = re.sub(r'[((][\s,,;;、]*[))]', '', t)
+    keep = []
+    for c in re.split(r'(?<=[;;。,,])' if fine else r'(?<=[;;。])', t):
+        core = c.strip(' \t\n;;。,,、::—-')
+        if len(core) < 2 or not re.search(r'[A-Za-z\u4e00-\u9fff]{2,}', core):
+            continue
+        if (any(w in c for w in SHOT_WORDS_ZH) or _SHOT_EN.search(c) or any(w in c for w in PEOPLE_WORDS_ZH)
+                or _PEOPLE_EN.search(c) or any(n in c for n in people) or (drop_sides and _SIDE_EN.search(c))):
+            if need_first and not keep:
+                return ''
+            continue
+        keep.append(c)
+    out = re.sub(r'\s{2,}', ' ', ''.join(keep)).strip(' \t\n;;,,、::—-')
+    return _clip(out, limit)
+
+
+def _group_name(oid: str) -> str:
+    toks = [t for t in (re.sub(r'\d+$', '', t) for t in oid.lower().split('_')) if t]
+    keep = [t for t in toks if t not in PART_WORDS]
+    return ' '.join(keep or toks[:1]) or oid
+
+
+NAMING_SKIP_KINDS = ('spot', 'direction', 'space', 'zone')   # 这几类地标是「位置」不是物体,不借给物体组当名字
+
+
+def block_name(oid: str, landmarks: dict, names: dict) -> tuple[str, str]:
+    """(分组键, 显示名)。物体与地标同名 / 互为前缀 → 地标;否则按 _group_name 并组。组名的首词(≥4 字母)正好是**唯一一个**地标 id 的
+    末词(中心词)时归到那个地标:kiosk_wall / kiosk_roof / kiosk_door_lintel → lift_kiosk「中央电梯亭」并成一组。只认中心词——
+    bridge_rail 不会因为有 bridge_center 就叫成「桥中央」;两侧各一的 left_willow / right_willow 对不上唯一,不借,免得两棵都叫左岸垂柳。"""
+    name, lid = _object_name(oid, landmarks, names)
+    if lid:
+        return 'lm:' + lid, name
+    key = _group_name(oid)
+    head = key.split()[0]
+    hits = [l for l, lm in landmarks.items() if lm.get('kind') not in NAMING_SKIP_KINDS and len(head) >= 4 and l.split('_')[-1] == head]
+    if len(hits) == 1 and names.get(hits[0]):
+        return 'lm:' + hits[0], names[hits[0]]
+    return 'obj:' + key, key
+
+
+def _col_ranges(cols, w: int) -> list:
+    """白模全景的列号 → 连续列段 [起, 止](止可 ≥ w = 跨过接缝,接到左缘)。"""
+    c = sorted({int(x) for x in cols})
+    if not c:
+        return []
+    gap = max(1, int(COL_GAP * w))
+    segs = [[c[0], c[0]]]
+    for x in c[1:]:
+        if x - segs[-1][1] > gap:
+            segs.append([x, x])
+        else:
+            segs[-1][1] = x
+    if len(segs) > 1 and segs[0][0] <= gap and segs[-1][1] >= w - 1 - gap:
+        segs[0] = [segs[-1][0], segs[0][1] + w]
+        segs.pop()
+    return segs
+
+
+def where_cols(cols, w: int) -> str:
+    """可见列 → 「from 38% to 52% (ahead)」;跨接缝写明在身后两缘;占满一圈写 all around。最多写两段(最宽的)。"""
+    segs = _col_ranges(cols, w)
+    if not segs:
+        return ''
+    if sum(b - a + 1 for a, b in segs) >= .85 * w:
+        return 'all around the camera'
+    out = []
+    for a, b in sorted(segs, key=lambda s: s[0] - s[1])[:2]:
+        pa, pb = round(a / w * 100), round((b + 1) / w * 100)
+        mid = ((pa + pb) / 2) % 100
+        side = 'ahead' if abs(mid - 50) <= 12.5 else 'right' if 62.5 < mid <= 87.5 else 'left' if 12.5 <= mid < 37.5 else 'behind'
+        if pb > 100:
+            out.append(f'across both outer edges, behind the camera (from {pa}% to the right edge and from the left edge to {pb - 100}%)')
+        elif pb - pa <= 3:
+            out.append(f'at about {round(mid)}% ({side})')
+        else:
+            out.append(f'from {pa}% to {pb}% ({side})')
+    return ' and '.join(out)
+
+
+def view_groups(scene: dict, layout: dict, anchor: dict, view: dict, people=()) -> list[dict]:
+    """锚点白模全景里看得见的物体并组(同一地标 / 同一类部件),按可见像素从多到少:
+    {name, px, fraction, cols(白模全景列,anchor_view 按真实 yaw 求交所得), dist(到占地最近的水平距离), top, under(镜头在它正上方),
+    axis(长条物体的走向), facing(有 _back 靠背块的座椅朝向), hidden}。"""
     from modules.shot_plates import bearing_deg, compass, orientation_axes
     ex, ez, _texts = orientation_axes(layout)
     landmarks = {lm['id']: lm for lm in layout.get('landmarks', []) if 'xy' in lm}
-    names = {lid: lm.get('name_en') or lm.get('name') or lid for lid, lm in landmarks.items()}
+    names = {lid: clean_text(str(lm.get('name_en') or lm.get('name') or lid), people=people, parens=False) or lid.replace('_', ' ')
+             for lid, lm in landmarks.items()}
     objs = {o['id']: o for o in scene.get('objects', [])}
-    ax, _, az = anchor['position']
-    yaw = math.radians(float(anchor.get('yaw_deg') or 0))
-    lines = []
+    ax, ay, az = (float(v) for v in anchor['position'])
+    groups: dict = {}
     for oid, o in objs.items():
         if oid.endswith('_back') and oid[:-5] in objs:
             continue
-        vis = (view or {}).get('objects', {}).get(oid)
-        if vis is not None and vis['px'] < VIS_MIN_PX:
+        v = view['objects'].get(oid) or {}
+        back = view['objects'].get(oid + '_back') or {}
+        px = int(v.get('px', 0)) + int(back.get('px', 0))
+        if px < VIS_MIN_PX:
             continue                                            # 被墙 / 别的块体完全挡住:不写,写了模型就会画出来
-        cx, cy, cz = o['position']; sx, sy, sz = o['size_m']
-        oyaw = float(o.get('yaw') or 0)
-        dx, dz = cx - ax, cz - az
-        dist = math.hypot(dx, dz)
-        b = bearing_deg(dx, dz, ex, ez)
-        # 世界 → 相机局部:全景渲染是 世界 = M·局部(_equirect_rays 的 wx/wz),这里必须用 M 的逆,
-        # 用成 M 本身会把列位转反 2×yaw —— yaw 90/270 时整整差 180°,左右半幅对调,成图与白模参考图永远对不上
-        # (DEF-p6-pano-001,2026-09-21 fengshen3 SCN-0110:提示词说石台 23%,白模全景里在 72%)。
-        lx = math.cos(yaw) * dx - math.sin(yaw) * dz; lz = math.sin(yaw) * dx + math.cos(yaw) * dz
-        col = int(round((math.atan2(lx, -lz) + math.pi) / (2 * math.pi) * 100))
-        name = _object_name(oid, landmarks, names)[0]
-        top = cy + sy / 2
-        desc = f"{name} ({oid}): {max(sx, sz):.1f} m long, {min(sx, sz):.1f} m deep, top {top:.1f} m above the floor"
-        if dist < 0.6:
-            desc += ', directly beneath/around the camera'
-        else:
-            desc += f", centred {dist:.1f} m from the camera to the {compass(b)} (about {col}% across the image from the left edge)"
-        if max(sx, sz) >= 3 * min(sx, sz) and max(sx, sz) >= 2:
-            axis = [math.cos(oyaw), -math.sin(oyaw)] if sx >= sz else [math.sin(oyaw), math.cos(oyaw)]
-            b1 = bearing_deg(axis[0], axis[1], ex, ez)
-            desc += f", its long side running {compass(b1)}–{compass((b1 + 180) % 360)}"
-            if dist >= 0.6:
-                rel = abs(((b1 - b + 180) % 360) - 180)
-                desc += ' (seen broadside, crossing the view)' if min(rel, 180 - rel) > 60 else ' (receding away from the camera)' if min(rel, 180 - rel) < 30 else ''
-        back = objs.get(oid + '_back')
+        key, name = block_name(oid, landmarks, names)
+        g = groups.setdefault(key, {'name': name, 'px': 0, 'full': 0, 'cols': set(),
+                                    'dist': math.inf, 'top': -math.inf, 'under': False, 'rep': None, 'rep_px': -1})
+        g['px'] += px
+        g['full'] += int(v.get('full', 0)) + int(back.get('full', 0))
+        g['cols'] |= {int(c) for c in v.get('cols', [])} | {int(c) for c in back.get('cols', [])}
+        top = _top(o)
+        g['top'] = max(g['top'], top)
+        if _inside([ax, o['position'][1], az], o) and top <= ay + .05:
+            g['under'] = True
+        g['dist'] = min(g['dist'], _clearance([ax, ay, az], [o]))
+        if px > g['rep_px']:
+            g['rep'], g['rep_px'] = oid, px
+    out = []
+    for g in sorted(groups.values(), key=lambda g: -g['px']):
+        o = objs[g['rep']]
+        cx, _, cz = o['position']; sx, _, sz = o['size_m']
+        b = bearing_deg(cx - ax, cz - az, ex, ez)
+        axis = facing = ''
+        if not g['under'] and max(sx, sz) >= 3 * min(sx, sz) and max(sx, sz) >= 2:
+            oyaw = float(o.get('yaw') or 0)
+            vec = [math.cos(oyaw), -math.sin(oyaw)] if sx >= sz else [math.sin(oyaw), math.cos(oyaw)]
+            b1 = bearing_deg(vec[0], vec[1], ex, ez)
+            rel = abs(((b1 - b + 180) % 360) - 180); rel = min(rel, 180 - rel)
+            axis = (f"running {compass(b1)}–{compass((b1 + 180) % 360)}"
+                    + (' across the view' if rel > 60 else ' away from the camera' if rel < 30 else ''))
+        back = objs.get(g['rep'] + '_back')
         if back:
             fb = bearing_deg(cx - back['position'][0], cz - back['position'][2], ex, ez)
-            desc += f"; its backrest is on the {compass((fb + 180) % 360)} side, so it faces {compass(fb)}"
-            desc += ' — toward the camera' if abs(((fb - (b + 180)) % 360 + 180) % 360 - 180) < 45 else ' — away from the camera' if abs(((fb - b) % 360 + 180) % 360 - 180) < 45 else ''
-        if vis is not None and vis['fraction'] < VIS_PROMINENT and vis['full'] > 4 * VIS_MIN_PX:
-            desc += (f"; mostly hidden from this camera — only about {max(1, round(vis['fraction'] * 100))}% of it shows past the nearer "
-                     "blocks or through an opening, exactly as in [Image 1], never bring it into full view")
-        lines.append(desc + '.')
-    return lines
+            facing = (f"facing {compass(fb)}"
+                      + (' toward the camera' if abs(((fb - (b + 180)) % 360 + 180) % 360 - 180) < 45
+                         else ' away from the camera' if abs(((fb - b) % 360 + 180) % 360 - 180) < 45 else ''))
+        fraction = g['px'] / g['full'] if g['full'] else 1.0
+        out.append({'name': g['name'], 'px': g['px'], 'fraction': round(fraction, 3), 'cols': g['cols'],
+                    'dist': round(g['dist'], 2), 'top': round(g['top'], 2), 'under': g['under'], 'axis': axis, 'facing': facing,
+                    'hidden': fraction < VIS_PROMINENT and g['full'] > 4 * VIS_MIN_PX and g['top'] > .3 and not g['under']})
+    return out
+
+
+def group_sentence(g: dict, w: int = VIS_SIZE[0]) -> str:
+    bits = [where_cols(g['cols'], w)]
+    if g['under']:
+        bits.append('right under the camera')
+    elif g['dist'] < 1:
+        bits.append(f"right beside the camera ({g['dist']:.1f} m)")
+    else:
+        bits.append(f"{g['dist']:.0f} m away" if g['dist'] >= 10 else f"{g['dist']:.1f} m away")
+    bits.append(f"top {g['top']:.1f} m")
+    bits += [g['axis'], g['facing']]
+    if g['hidden']:
+        bits.append('only partly visible past nearer blocks, exactly as [Image 1] shows')
+    return f"{g['name']}: " + ', '.join(b for b in bits if b) + '.'
+
+
+EDGE_DIRS = (('top_of_map', 0.0, -1.0), ('left_of_map', -1.0, 0.0), ('bottom_of_map', 0.0, 1.0), ('right_of_map', 1.0, 0.0))
+
+
+def dir_column(yaw_deg: float, dx: float, dz: float) -> float:
+    """世界水平方向 (dx, dz) 在该 yaw 的全景里落在第几列(0–1;0.5 = 画面中心)。与 _equirect_rays 同一套旋转的逆。"""
+    yaw = math.radians(float(yaw_deg or 0))
+    lx = math.cos(yaw) * dx - math.sin(yaw) * dz; lz = math.sin(yaw) * dx + math.cos(yaw) * dz
+    return ((math.atan2(lx, -lz) + math.pi) / (2 * math.pi)) % 1.0
+
+
+def _toward(view: dict, frac: float) -> dict:
+    """白模全景第 frac 列方向 ±45° 的地平线带:看得出去的占比、近处命中距离中位数。"""
+    import numpy as np
+    t = view['band_t']; w = t.shape[1]
+    cols = np.arange(int((frac - .125) * w), int((frac + .125) * w)) % w
+    tt = t[:, cols]; fin = np.isfinite(tt)
+    return {'open': float((~fin | (tt > OPEN_DISTANCE_M)).mean()), 'wall_m': float(np.median(tt[fin])) if fin.any() else None}
+
+
+def edge_scenery(scene: dict, layout: dict, anchor: dict, view: dict, people=()) -> list[str]:
+    """俯视图四边说明(orientation.*_of_map)按锚点真实 yaw 落到列位,写成「toward the north (about 72% across): …」。
+    该向被墙挡死、且墙外还有一大截地图(墙距 < 到图边距离的 60%)时说明讲的是墙外看不见的东西,不写(单间房墙即图边,照写)。
+    说明里讲主机位 / 地图左右 / 坐标 / 人物的分句与括号注一律去掉。"""
+    from modules.shot_plates import bearing_deg, compass, orientation_axes, strip_compass
+    o = layout.get('orientation') if isinstance(layout.get('orientation'), dict) else {}
+    ex, ez, _texts = orientation_axes(layout)
+    sw, _, sd = scene['dimensions_m']; ax, _, az = (float(v) for v in anchor['position'])
+    to_edge = {'top_of_map': az + sd / 2, 'left_of_map': ax + sw / 2, 'bottom_of_map': sd / 2 - az, 'right_of_map': sw / 2 - ax}
+    out = []
+    for key, dx, dz in EDGE_DIRS:
+        raw = strip_compass(str(o.get(key) or '')).lstrip('—-:: ')
+        # 「north; the backwater is at the west, …」:首句只有方位词 = 这是整张图的图例,不是「这一边有什么」(alices 各场景),不按方向写
+        if re.match(r'(?i)\s*(?:north|south|east|west|[东南西北])(?:[- ]?(?:north|south|east|west|[东南西北]))*\s*(?:[;;,,(（]|$)', raw):
+            continue
+        text = clean_text(raw, people=people, fine=True, parens=False, drop_sides=True, need_first=True, limit=EDGE_TEXT_MAX)
+        if not text:
+            continue
+        frac = dir_column(anchor.get('yaw_deg') or 0, dx, dz)
+        sec = _toward(view, frac)
+        if sec['open'] < SECTOR_OPEN_MAX and sec['wall_m'] is not None and sec['wall_m'] < 0.6 * max(to_edge[key], 0.1):
+            continue
+        col = round(frac * 100) % 100
+        at = 'at both outer edges, behind the camera' if col <= 3 or col >= 97 else f'about {col}% across'
+        out.append(f"toward the {compass(bearing_deg(dx, dz, ex, ez))} ({at}): {text}")
+    return out
+
+
+def support_object(scene: dict, pos) -> str | None:
+    """镜头正下方的物体(占地盖住镜头 xz、顶面不高于镜头,取最高的那个)。"""
+    best = None
+    for o in scene.get('objects', []):
+        if _inside([pos[0], o['position'][1], pos[2]], o) and _top(o) <= float(pos[1]) + .05:
+            if best is None or _top(o) > best[0]:
+                best = (_top(o), o['id'])
+    return best[1] if best else None
+
+
+def location_name(layout: dict, scene: dict, sid: str, people=()) -> str:
+    name = str(layout.get('scene_name_en') or layout.get('scene_name') or scene.get('name') or '')
+    name = clean_text(re.sub(r'[((].*?[))]', '', name), people=people)
+    if not name or name == sid or re.match(r'(?i)^(?:scn|scene)[-_ ]', name):
+        return ''
+    return name
 
 
 ELEVATED_EYE_M = 3.0             # 镜头高出脚下站立面超过此值 = 悬空高视点(预览页手填 y 的锚点;人 / 脚架到不了)
@@ -1420,15 +1667,21 @@ def anchor_ground_y(base: Path, sid: str, anchor: dict) -> float | None:
     return float(cam['ground_y'])
 
 
-def pano_prompt(base: Path, sid: str, scheme: str, anchor: dict, *, indoor: bool, mode: str, time_of_day: str | None = None) -> str:
-    """空场景全景文字:场所 + 锚点站位 + 四向内容(俯视图四边说明,按 yaw 归到画面中心/左右/身后)+ 光照方案 + 材质年代 + 风格。"""
-    from modules.shot_plates import standing_on, orientation_axes, strip_compass
+def pano_prompt(base: Path, sid: str, scheme: str, anchor: dict, *, indoor: bool, mode: str, time_of_day: str | None = None,
+                ref_rules: list | None = None, budget: int = PANO_PROMPT_MAX) -> str:
+    """全景提示词(2026-11-07 P1 重写):编辑指令在前 —— ref_rules[0](把 [Image 1] 白模全景变成照片 / 重打光)→ 镜头在哪(第一人称:
+    站在 / 悬在什么上面,是从这里环视、不是从外面看这个地方)→ 投影 → 其余参考图规则 → 白模里看得见的物体分组清单(名称 + 白模全景的
+    实际列段 + 距离 / 高度 / 走向 / 朝向)→ 俯视图四边的远景(按真实 yaw 落列)→ 光照 → 材质年代 → 风格 → 空场景 → 投影复述。
+    设定文字一律经 clean_text 净化(出处 / 引语 / 镜头用语 / 人物);只取材质与样式年代,不发描述地标整体外观的形制 / 尺度 / 细部。
+    全长不超过 budget 字符,超了按 清单尾项 → 远景 → 材质 → 风格 → 光照 的顺序裁。"""
+    from modules.shot_plates import standing_on
     from modules.whitebox import load_scene
     sdir = base / 'assets/concepts/scenes' / component(sid)
     bdir = base / 'bible/scenes' / component(sid)
     layout = read(sdir / 'layout.json', {}) or {}
+    people = people_words(base)
     arch = read(bdir / 'architecture.json', {}) or {}
-    if not arch:      # 子场景没有建筑设定:只从上级继承与空间无关的样式 / 年代 / 材质,形制、尺度、细部讲的是上级那个大空间,不继承
+    if not arch:      # 子场景没有建筑设定:只从上级继承与空间无关的样式 / 年代 / 材质
         for owner in scene_ancestors(base, sid)[1:]:
             up = read(base / 'bible/scenes' / component(owner) / 'architecture.json', {}) or {}
             if up:
@@ -1437,89 +1690,100 @@ def pano_prompt(base: Path, sid: str, scheme: str, anchor: dict, *, indoor: bool
                                + [str(lm.get('name') or '') for lm in layout.get('landmarks', [])])
                 own_words = {run[i:i + 2] for run in re.findall(r'[\u4e00-\u9fff]+', own) for i in range(len(run) - 1)
                              if not set(run[i:i + 2]) & _FUNCTION_CHARS}
-                mats = [c.strip() for c in re.split(r'[;;。]', _flat(up.get('materials')) or '') if c.strip()
+                mats = [c.strip() for c in re.split(r'[;;。]', _bible_text(up.get('materials')) or '') if c.strip()
                         and any(w in c for w in own_words)]
                 arch = {'arch_style': up.get('arch_style'), 'era_region': up.get('era_region'), 'materials': '; '.join(mats)}
                 break
     style = (read(base / 'bible/style.json', {}) or {}).get('style_fragment_en') or ''
     sch = lighting_scheme(base, sid, scheme)
     scene = load_scene(base, sid)
-    name = re.sub(r'[(（].*?[)）]', '', layout.get('scene_name_en') or scene.get('name') or sid).strip()
-    o = layout.get('orientation') or {}
-    yaw = float(anchor.get('yaw_deg') or 0)
-    # 画面中心 = 相机局部 -Z = 图上方(yaw 0);yaw 每 +90° 中心转向图左(绕 Y 正转)
-    sides = ['top_of_map', 'left_of_map', 'bottom_of_map', 'right_of_map']
-    k = int(round(yaw / 90)) % 4
-    centre, left, behind, right = (strip_compass(o.get(sides[(k + i) % 4]) or '').lstrip('—-:: ') for i in range(4))
-    # 俯视图四边的说明讲的是「朝图的那一边有什么」:该向被墙挡死、且墙外还有一大截地图(墙距 < 到图边距离的 60%)时,说的就是墙外
-    # 看不见的东西 → 改写成这个锚点实际看得见的。单间房(墙即图边)的四边说明讲的正是那面墙,照旧。
     view = anchor_view(scene, anchor, indoor)
-    sw, _, sd = scene['dimensions_m']; ax, _, az = anchor['position']
-    to_edge = dict(zip(('centre', 'left', 'behind', 'right'),
-                       ([az + sd / 2, ax + sw / 2, sd / 2 - az, sw / 2 - ax][(k + i) % 4] for i in range(4))))
-    blocked = {n for n, v in view['sectors'].items()
-               if v['open'] < SECTOR_OPEN_MAX and v.get('wall_m') and v['wall_m'] < 0.6 * max(to_edge[n], 0.1)}
-    def sector_text(n, t):
-        if n not in blocked:
-            return t
-        text = sector_sentence(scene, layout, view, n)
-        # 室外被树冠 / 巨石这类物体(不是墙)挡着:俯视图那一边的景还在它后面、上方,接着写,不然那个方向只剩一个物体
-        if t and not indoor and view['sectors'][n].get('walled', 1.0) < SECTOR_WALL_MIN and 'enclosing wall' not in text:
-            text += '; beyond and around it: ' + t
-        return text
-    centre, right, behind, left = (sector_text(n, t) for n, t in (('centre', centre), ('right', right), ('behind', behind), ('left', left)))
     enclosed = view['enclosed']
     vis_words, hid_words = visible_landmark_words(scene, layout, view) if enclosed else (set(), set())
-    where = 'interior' if indoor else 'exterior'
-    parts = [f"A 360 panorama of an empty real {where} location, photographed with nobody present and nothing moving, "
-             f"realistic live-action film look. Location: {name}."]
-    tod = (sch.get('condition') or {}).get('time_of_day') or time_of_day or ''
-    if tod:
-        parts.append(f"Time of day: {tod}.")
-    if not indoor:
-        parts.append(EXTERIOR_PROJECTION_RULES.strip())
-    if enclosed:
-        parts.append(ENCLOSED_RULE.strip())
-    elif indoor:
-        parts.append(INDOOR_RULE.strip())
-    standing = standing_on(scene, layout, {'position': anchor['position'], 'target': anchor['position']})
+    pos = [float(v) for v in anchor['position']]
+
+    # 镜头在哪:站在 / 悬在哪个块上(该块就在脚下四周),否则离最近地标多远
     ground_y = anchor_ground_y(base, sid, anchor)
-    if _elevated(scene, anchor['position'], ground_y):
-        standing = 'hangs in mid-air ' + (('above ' + standing[3:]) if standing.startswith('on ') else standing)
+    landmarks = {lm['id']: lm for lm in layout.get('landmarks', []) if 'xy' in lm}
+    lm_names = {lid: clean_text(str(lm.get('name_en') or lm.get('name') or lid), people=people, parens=False) or lid.replace('_', ' ')
+                for lid, lm in landmarks.items()}
+    sup = support_object(scene, pos)
+    elevated = _elevated(scene, pos, ground_y)
+    lens = _lens_height_words(scene, pos, ground_y)
+    if sup:
+        sname = block_name(sup, landmarks, lm_names)[1]
+        where = f"hangs in mid-air above the {sname}" if elevated else f"stands on the {sname}"
+        around = f", with the {sname} under and around it"
     else:
-        standing = 'stands ' + standing
-    parts.append(f"The camera {standing}, lens {_lens_height_words(scene, anchor['position'], ground_y)}, level horizon.")
-    if centre:
-        parts.append('Looking straight ahead (image centre): ' + centre + '.')
-    if right:
-        parts.append('To the right (right quarter of the image): ' + right + '.')
-    if behind:
-        parts.append('Behind the camera (both outer edges of the image): ' + behind + '.')
-    if left:
-        parts.append('To the left (left quarter of the image): ' + left + '.')
-    if o.get('note_en') and not enclosed:       # 全域说明讲的是整个场景(含墙外),封闭室内锚点不下发
-        parts.append(str(o['note_en']))
-    inv = object_inventory(scene, layout, anchor, view)
-    if inv:
-        parts.append('Exact placement of every block in [Image 1], measured from this camera (image column 0% = left edge, 50% = centre, 100% = right edge): '
-                     + ' '.join(inv) + ' Every long row, counter or wall must keep exactly this direction and every seat must face exactly the stated way.')
-    lighting = sch.get('prompt_fragment_en') or ''
+        near = standing_on(scene, {'landmarks': [dict(lm, name_en=lm_names.get(lm['id'])) for lm in layout.get('landmarks', [])
+                                                  if lm.get('id') in lm_names]}, {'position': pos, 'target': pos})
+        where = ('hangs in mid-air ' if elevated else 'stands ') + near
+        around = ''
+    name = location_name(layout, scene, sid, people)
+    camera = (f"The camera {where}, lens {lens}, level horizon. It is a spot " + (f"at {name}" if name else 'inside this place') + around
+              + ", looking all the way round from there — not a view of the place from outside, from above or from a distance.")
+
+    rules = list(ref_rules or [])
+    projection = [EXTERIOR_PROJECTION_RULES.strip() if not indoor else PANO_PROJECTION_RULES.strip()]
+    if enclosed:
+        projection.append(ENCLOSED_RULE.strip())
+    elif indoor:
+        projection.append(INDOOR_RULE.strip())
+    projection += [r.strip() for r in rules[1:]]
+
+    groups = [group_sentence(g) for g in view_groups(scene, layout, anchor, view, people)][:GROUPS_MAX]
+    scenery = [] if enclosed else edge_scenery(scene, layout, anchor, view, people)
+
+    lighting = clean_text(sch.get('prompt_fragment_en') or '', people=people, fine=True)
     if enclosed:
         lighting = indoor_clauses(lighting, vis_words, hid_words, fine=True)
-    if lighting:
-        parts.append('Lighting: ' + lighting.rstrip('.。') + '.')
-    desc = ' '.join(p.rstrip('.。;') + '.' for p in (_flat(arch.get(k2)) for k2 in ('form', 'arch_style', 'era_region', 'scale', 'materials', 'details')) if p)
+    tod = (sch.get('condition') or {}).get('time_of_day') or time_of_day or ''
+    materials = clean_text('; '.join(x for x in (_bible_text(arch.get(k)) for k in ('materials', 'colors', 'color')) if x), people=people)
+    era = clean_text('; '.join(x for x in (_bible_text(arch.get(k)) for k in ('arch_style', 'era_region')) if x), people=people)
     if enclosed:
-        desc = indoor_clauses(desc, vis_words, hid_words)
-    if desc:
-        parts.append('Materials and era (reference only): ' + desc[:1200].rstrip('.。;; ') + '.')
-    parts.append('Empty location: no people, no characters, no human figures or silhouettes, no animals, no moving vehicles, no text, '
-                 'no watermark, one single seamless equirectangular photograph.')
-    style = pano_style(style)
-    if style:
-        parts.append('Look (materials, palette and grain only): ' + style.rstrip('.') + '.')
-    parts.append(PANO_PROJECTION_TAIL)
-    return ' '.join(p.strip() for p in parts if p and p.strip())
+        materials = indoor_clauses(materials, vis_words, hid_words)
+        era = indoor_clauses(era, vis_words, hid_words)
+    look = pano_style(style)
+    tail = ['Empty location: no people, no animals, no moving vehicles, no text or watermark, one single seamless equirectangular image.',
+            PANO_PROJECTION_TAIL]
+
+    def render(k):
+        # 顺序:任务句 → 镜头在哪 → 看得见的物体在哪 → 远景 → 投影 / 室内 / 其余参考图规则 → 光照 → 材质 → 风格 → 收尾
+        parts = rules[:1] + [camera]
+        if k['groups']:
+            parts.append('What each block of [Image 1] is and where it stands (image columns: 0% = left edge, 50% = centre, 100% = right '
+                         'edge; distances from the camera, heights above the main ground level): ' + ' '.join(groups[:k['groups']]))
+        if k['scenery']:
+            parts.append('Farther out, ' + '; '.join(scenery[:k['scenery']]) + '.')
+        parts += projection
+        light = _clip(lighting, k['light'])
+        if light or tod:
+            parts.append('Lighting' + (f' ({tod})' if tod else '') + (': ' + light.rstrip('.。') if light else '') + '.')
+        mat = _clip('; '.join(x for x in (materials, _clip(era, ERA_MAX)) if x), k['mat'])
+        if mat:
+            parts.append('Materials and era: ' + mat.rstrip('.。;; ') + '.')
+        lk = _clip(look, k['look'])
+        if lk:
+            parts.append('Look (materials, palette and grain only): ' + lk.rstrip('.') + '.')
+        return ' '.join(x.strip() for x in parts + tail if x and x.strip())
+
+    return _fit_prompt(render, {'groups': len(groups), 'scenery': len(scenery), 'light': LIGHTING_MAX, 'mat': MATERIALS_MAX,
+                                'look': LOOK_MAX}, budget)
+
+
+def _fit_prompt(render, k: dict, budget: int) -> str:
+    """按 清单裁到 GROUP_SOFT 组 → 远景 → 材质减半 → 清单裁到 GROUPS_MIN → 光照减半 → 风格减半 → 材质 → 光照 → 风格 的顺序裁到 budget 以内。
+    风格段(项目画风)最后才动:2026-11-07 inlove SCN-0005 A2 首版把它最先裁掉,2D 青绿山水纸艺的项目出成了写实照片。"""
+    steps = ([('groups', n) for n in range(k['groups'] - 1, GROUP_SOFT - 1, -1)] + [('scenery', n) for n in range(k['scenery'] - 1, -1, -1)]
+             + [('mat', MATERIALS_MAX // 2)] + [('groups', n) for n in range(min(k['groups'], GROUP_SOFT) - 1, GROUPS_MIN - 1, -1)]
+             + [('light', LIGHTING_MAX // 2), ('look', LOOK_MAX // 2), ('mat', 0), ('light', 0), ('look', 0)])
+    text = render(k)
+    for key, val in steps:
+        if prompt_units(text) <= budget:
+            break
+        k = {**k, key: val}
+        text = render(k)
+    return text
 
 
 # ---------------------------------------------------------------- reprojection (numpy, backward warp)
@@ -1718,7 +1982,7 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
         s0, p0 = next(iter(others.items()))
         mode, parent = 'relight', {'anchor_id': anchor['anchor_id'], 'scheme': s0}
         refs.append(out / p0['file']); rules.append(RELIGHT_RULE.format(n=1))
-        refs.append(wb); rules.append(WHITEBOX_REF_RULE.format(n=2))
+        refs.append(wb); rules.append(WHITEBOX_GEOMETRY_RULE.format(n=2))
     else:
         refs.append(wb); rules.append(WHITEBOX_REF_RULE.format(n=1))
         layout = base / 'assets/concepts/scenes' / sid / ((read(base / 'assets/concepts/scenes' / sid / 'layout.json', {}) or {}).get('layout_top') or 'layout_top.png')
@@ -1726,7 +1990,10 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
         enclosed = anchor_view(load_scene(base, sid), anchor, indoor)['enclosed']
         if enclosed:
             log('   封闭室内锚点:不挂整场景俯视图(航拍里的墙外内容会被画进来),四向 / 清单 / 材质 / 光照只写本锚点看得见的')
-        if layout.is_file() and not enclosed:
+        if layout.is_file() and not enclosed and idx.get('layout_ref') is False:
+            # index.json#layout_ref=false:俯视图是成品插画式、会被照抄构图的场景(inlove SCN-0005 断桥),只挂白模
+            log('   index.json layout_ref=false:不挂俯视图,只以白模全景为参考')
+        elif layout.is_file() and not enclosed:
             refs.append(layout); rules.append(LAYOUT_REF_RULE.format(n=len(refs)))
     if not indoor:
         rules.append(GUIDES_REF_RULE.format(n=refs.index(wb) + 1))
@@ -1740,7 +2007,8 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
                 log(f"   地面水陆({'手工掩码' if water_src == 'file' else '按俯视图颜色纹理自动判'}):脚下 {cover['nadir']}(水占 {cover['nadir_water']:.0%}),"
                     f"图幅水面占 {cover['water_fraction']:.0%}")
             rules.append(ground_cover_rule(cover) if cover else GROUND_NADIR_READ_RULE)
-    prompt = PANO_PROJECTION_RULES + ''.join(rules) + pano_prompt(base, sid, scheme, anchor, indoor=indoor, mode=mode, time_of_day=time_of_day)
+    # rules[0] 是任务句(白模变照片 / 重打光),pano_prompt 把它放最前,其余参考图规则排在镜头位置与投影之后
+    prompt = pano_prompt(base, sid, scheme, anchor, indoor=indoor, mode=mode, time_of_day=time_of_day, ref_rules=rules)
     if seed is None:
         import random
         seed = random.randint(1, 2 ** 31 - 1)
@@ -1756,7 +2024,7 @@ def generate_pano(base: Path, sid: str, idx: dict, anchor: dict, scheme: str, *,
     rec = {'file': target.name, 'scheme': scheme, 'mode': mode, 'parent': parent, 'time_of_day': time_of_day,
            'channel': {'provider': cfg.get('provider'), 'model': cfg.get('model')}, 'size': [rw, rh], 'seed': seed,
            'refs': [str(r.relative_to(base)) if str(r).startswith(str(base)) else str(r) for r in refs],
-           'prompt': prompt, 'negative': NEGATIVE, 'anchor': {'position': anchor['position'], 'yaw_deg': anchor.get('yaw_deg', 0)},
+           'prompt': prompt, 'prompt_chars': len(prompt), 'negative': NEGATIVE, 'anchor': {'position': anchor['position'], 'yaw_deg': anchor.get('yaw_deg', 0)},
            'ground_cover': cover, 'written_at': _now()}
     rec['projection_check'] = proj = projection_check(target, usage=anchor_usage(anchor, cameras if cameras is not None else scene_cameras(base, sid)))
     rec['conformity_check'] = conf = conformity_check(target, out / 'depth_pano.npy')

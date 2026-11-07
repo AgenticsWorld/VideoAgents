@@ -2,6 +2,11 @@
 
 All notable public changes to VideoAgents are documented here.
 
+## [Unreleased]
+
+### Changed
+- **Scene panoramas: shorter prompts that follow the anchor's position and direction (2026-11-07).** Panoramas often ignored the anchor that was set. The model drew the place's best-known view instead: a bridge from the water instead of from its deck, a tower-top platform from above with its kiosk in the middle. Panorama prompts were 10,000–31,000 characters long, mostly one sentence per whitebox block. The text could contradict the whitebox reference image, so the model went by the text. The prompt now opens with the task ("turn [Image 1], the whitebox panorama, into the finished picture of the same place, in the look described at the end") and says where the camera stands and that it is looking all the way round from there, not at the place from outside. The visible blocks follow, grouped (a 34-step stair is one entry, kiosk walls and roof go under the kiosk landmark), each with the image columns where it actually shows in the whitebox panorama. The top-down plan's edge notes are placed by the anchor's exact yaw, where they used to be rounded to the nearest 90°, which put them up to 44° off for anchors set by hand. Text from the scene bible is cleaned first: source citations, quotes from the novel, shot or main-camera notes, people and character names are removed, and the descriptions of a landmark's overall shape and size are no longer sent. A prompt is at most 4,500 units (Chinese characters count as 3) and is trimmed in a fixed order, with the project look trimmed last. A scene whose `panos/index.json` has `"layout_ref": false` gets the whitebox panorama as its only reference image, without the top-down plan. Across the 57 existing anchors the median length drops from 10.2K to 3.7K characters. Image references, projection checks and existing panoramas are unchanged.
+
 ## [1.0.44] - 2026-11-06
 
 ### Added
