@@ -15,6 +15,9 @@
     s=s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+|\/[^)\s]*|#[^)\s]*)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
     return s;
   }
+  // 段内折行合并:两侧都是中日韩字符 / 全角标点时直接相接,否则补一个空格(硬折行的中文小说不能被拼出空格)
+  var CJK=/[\u2e80-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]/;
+  function joinLines(a){var s=a[0]||'';for(var k=1;k<a.length;k++){s+=(CJK.test(s.slice(-1))&&CJK.test(a[k].charAt(0))?'':' ')+a[k]}return s}
   function isTableSep(l){return /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(l)}
   function splitRow(l){
     l=l.trim();if(l.startsWith('|'))l=l.slice(1);if(l.endsWith('|'))l=l.slice(0,-1);
@@ -25,7 +28,7 @@
   function render(text){
     var lines=String(text||'').replace(/\r\n?/g,'\n').split('\n'),out=[],i=0,n=lines.length;
     var para=[],list=null;  // list = {tag, items[]}
-    function flushPara(){if(para.length){out.push('<p>'+inline(para.join(' '))+'</p>');para=[]}}
+    function flushPara(){if(para.length){out.push('<p>'+inline(joinLines(para))+'</p>');para=[]}}
     function flushList(){if(list){out.push('<'+list.tag+'>'+list.items.map(function(x){return '<li>'+x+'</li>'}).join('')+'</'+list.tag+'>');list=null}}
     function flushAll(){flushPara();flushList()}
     while(i<n){

@@ -5086,4 +5086,17 @@ window.I18N_DICT = {
 "默认封面 {name} 已不存在,发布时按发布包封面与技能文档的查找顺序": "Ảnh bìa mặc định {name} không còn nữa; khi phát hành sẽ dùng ảnh bìa trong gói phát hành hoặc thứ tự tìm trong tài liệu kỹ năng",
 "未设默认封面:发布时按发布包封面与技能文档的查找顺序": "Chưa đặt ảnh bìa mặc định: khi phát hành sẽ dùng ảnh bìa trong gói phát hành hoặc thứ tự tìm trong tài liệu kỹ năng",
 "发布时用本页选定的默认封面 {name},不按元数据里的封面": "Khi phát hành sẽ dùng ảnh bìa mặc định chọn ở trang này, {name}, không dùng ảnh bìa trong siêu dữ liệu",
+// 小说文本页(2026-11-07,preview_novel.html + 预览菜单入口)
+"小说文本": "Văn bản tiểu thuyết",
+"📖 小说文本": "📖 Văn bản tiểu thuyết",
+"小说文本 · Agentics：VideoAgents": "Văn bản tiểu thuyết · Agentics: VideoAgents",
+"小说文本:项目 novel/ 目录下所有 md 文件(导入或清洗分章后的小说),写剧本之前先读原文": "Văn bản tiểu thuyết: mọi tệp md trong thư mục novel/ của dự án (tiểu thuyết đã nhập, hoặc đã làm sạch và chia chương); đọc nguyên tác trước khi viết kịch bản",
+"novel/ · {n} 个 md 文件": "novel/ · {n} tệp md",
+"只列出前 {n} 个": "Chỉ hiển thị {n} tệp đầu tiên",
+"另有 {n} 个非 md 文件(如 .txt)未列出": "{n} tệp không phải md (vd. .txt) không được liệt kê",
+"项目目录 novel/ 下还没有 md 文件": "Thư mục novel/ của dự án chưa có tệp md nào",
+"章节目录": "Mục lục",
+"第 {p} / {n} 页": "Trang {p} / {n}",
+"约 {n} 字": "≈ {n} ký tự",
+"更新于 {t}": "Cập nhật {t}",
 };

@@ -5088,4 +5088,17 @@ window.I18N_DICT = {
 "默认封面 {name} 已不存在,发布时按发布包封面与技能文档的查找顺序": "La miniatura predeterminada {name} ya no existe; al publicar se usa la miniatura del paquete o el orden de búsqueda del skill",
 "未设默认封面:发布时按发布包封面与技能文档的查找顺序": "Sin miniatura predeterminada: al publicar se usa la miniatura del paquete o el orden de búsqueda del skill",
 "发布时用本页选定的默认封面 {name},不按元数据里的封面": "Al publicar se usa la miniatura predeterminada elegida en esta página, {name}, no la de los metadatos",
+// 小说文本页(2026-11-07,preview_novel.html + 预览菜单入口)
+"小说文本": "Texto de la novela",
+"📖 小说文本": "📖 Texto de la novela",
+"小说文本 · Agentics：VideoAgents": "Texto de la novela · Agentics: VideoAgents",
+"小说文本:项目 novel/ 目录下所有 md 文件(导入或清洗分章后的小说),写剧本之前先读原文": "Texto de la novela: todos los archivos md de la carpeta novel/ del proyecto (la novela importada, o limpiada y dividida en capítulos); lee el texto original antes de escribir el guion",
+"novel/ · {n} 个 md 文件": "novel/ · {n} archivos md",
+"只列出前 {n} 个": "Solo se muestran los primeros {n}",
+"另有 {n} 个非 md 文件(如 .txt)未列出": "{n} archivos que no son md (p. ej. .txt) no se muestran",
+"项目目录 novel/ 下还没有 md 文件": "Todavía no hay archivos md en la carpeta novel/ del proyecto",
+"章节目录": "Índice",
+"第 {p} / {n} 页": "Página {p} / {n}",
+"约 {n} 字": "≈ {n} caracteres",
+"更新于 {t}": "Actualizado {t}",
 };

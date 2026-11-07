@@ -364,7 +364,7 @@ const _q=new URLSearchParams(location.search);
 $('#project').value=_q.get('project')||(JSON.parse(localStorage.getItem('webui_prefs')||'{}').project)||'demo';
 load();
 
-const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/board','\u{1F4CB} 故事板'],['/preview/storyboard','\u{1F3A6} 分镜预览'],['/preview/code','\u{1F5A5}️ 代码预览'],['/preview/post','\u{1F39A}️ 后期处理'],['/preview/videos','\u{1F39E}️ 成片发布']];
+const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/novel','\u{1F4D6} 小说文本'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/board','\u{1F4CB} 故事板'],['/preview/storyboard','\u{1F3A6} 分镜预览'],['/preview/code','\u{1F5A5}️ 代码预览'],['/preview/post','\u{1F39A}️ 后期处理'],['/preview/videos','\u{1F39E}️ 成片发布']];
 PV_PAGES.forEach(([u,n])=>{const o=document.createElement('option');o.value=u;o.textContent=n;if(location.pathname===u)o.selected=true;$('#pvnav').appendChild(o)});
 $('#pvnav').onchange=()=>{location.href=$('#pvnav').value+'?project='+encodeURIComponent(proj())};
 </script>

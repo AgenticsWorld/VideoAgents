@@ -5088,4 +5088,17 @@ window.I18N_DICT = {
 "默认封面 {name} 已不存在,发布时按发布包封面与技能文档的查找顺序": "A miniatura padrão {name} não existe mais; ao publicar, vale a miniatura do pacote ou a ordem de busca do skill",
 "未设默认封面:发布时按发布包封面与技能文档的查找顺序": "Sem miniatura padrão: ao publicar, vale a miniatura do pacote ou a ordem de busca do skill",
 "发布时用本页选定的默认封面 {name},不按元数据里的封面": "Ao publicar, usa-se a miniatura padrão escolhida nesta página, {name}, e não a dos metadados",
+// 小说文本页(2026-11-07,preview_novel.html + 预览菜单入口)
+"小说文本": "Texto do romance",
+"📖 小说文本": "📖 Texto do romance",
+"小说文本 · Agentics：VideoAgents": "Texto do romance · Agentics: VideoAgents",
+"小说文本:项目 novel/ 目录下所有 md 文件(导入或清洗分章后的小说),写剧本之前先读原文": "Texto do romance: todos os arquivos md da pasta novel/ do projeto (romance importado, ou limpo e dividido em capítulos); leia o texto original antes de escrever o roteiro",
+"novel/ · {n} 个 md 文件": "novel/ · {n} arquivos md",
+"只列出前 {n} 个": "Mostrando apenas os primeiros {n}",
+"另有 {n} 个非 md 文件(如 .txt)未列出": "{n} arquivos não md (ex.: .txt) não listados",
+"项目目录 novel/ 下还没有 md 文件": "Ainda não há arquivos md na pasta novel/ do projeto",
+"章节目录": "Sumário",
+"第 {p} / {n} 页": "Página {p} / {n}",
+"约 {n} 字": "≈ {n} caracteres",
+"更新于 {t}": "Atualizado {t}",
 };

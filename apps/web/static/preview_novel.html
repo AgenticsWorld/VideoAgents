@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>小说文本 · Agentics：VideoAgents</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2054%2054%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20clip-rule%3D%22evenodd%22%20d%3D%22M27.0003%2011.417C29.1569%2011.417%2031.6501%2011.6093%2034.0189%2011.8652C34.1395%2011.8783%2034.2587%2011.8917%2034.3763%2011.9043C37.2021%2012.2081%2039.1789%2012.4205%2040.931%2013.4863C42.4071%2014.3844%2043.7298%2015.8578%2044.4642%2017.4219C45.3361%2019.2791%2045.335%2021.3999%2045.3333%2024.4561V29.5439C45.335%2032.6001%2045.3361%2034.7209%2044.4642%2036.5781C43.7298%2038.1422%2042.4071%2039.6156%2040.931%2040.5137C39.1789%2041.5795%2037.2021%2041.7919%2034.3763%2042.0957C34.2587%2042.1083%2034.1395%2042.1217%2034.0189%2042.1348C31.6501%2042.3907%2029.1569%2042.583%2027.0003%2042.583C24.8437%2042.583%2022.3506%2042.3907%2019.9818%2042.1348C19.8611%2042.1217%2019.742%2042.1084%2019.6243%2042.0957C16.7982%2041.7919%2014.8209%2041.5797%2013.0687%2040.5137C11.5925%2039.6155%2010.2698%2038.1422%209.53547%2036.5781C8.66357%2034.721%208.66469%2032.6001%208.66633%2029.5439C8.6664%2029.4098%208.6673%2029.2736%208.6673%2029.1357V24.8643C8.6673%2024.7264%208.6664%2024.5902%208.66633%2024.4561C8.66469%2021.3999%208.66357%2019.279%209.53547%2017.4219C10.2698%2015.8578%2011.5925%2014.3845%2013.0687%2013.4863C14.8209%2012.4203%2016.7982%2012.2081%2019.6243%2011.9043C19.742%2011.8916%2019.8611%2011.8783%2019.9818%2011.8652C22.3506%2011.6093%2024.8437%2011.417%2027.0003%2011.417ZM27.0003%2015.083C25.0334%2015.083%2022.6877%2015.2609%2020.3753%2015.5107C17.0484%2015.8702%2015.9447%2016.0291%2014.9749%2016.6191C14.1142%2017.1428%2013.283%2018.0685%2012.8548%2018.9805C12.3747%2020.0032%2012.3333%2021.2326%2012.3333%2024.8643V29.1357C12.3333%2032.7674%2012.3747%2033.9968%2012.8548%2035.0195C13.283%2035.9315%2014.1142%2036.8572%2014.9749%2037.3809C15.9447%2037.9709%2017.0484%2038.1298%2020.3753%2038.4893C22.6877%2038.7391%2025.0334%2038.917%2027.0003%2038.917C28.9671%2038.917%2031.3121%2038.7391%2033.6243%2038.4893C36.9515%2038.1298%2038.0558%2037.9709%2039.0257%2037.3809C39.8863%2036.8572%2040.7177%2035.9314%2041.1458%2035.0195C41.6259%2033.9969%2041.6673%2032.7673%2041.6673%2029.1357V24.8643C41.6673%2021.2327%2041.6258%2020.0031%2041.1458%2018.9805C40.7177%2018.0686%2039.8863%2017.1428%2039.0257%2016.6191C38.0558%2016.0291%2036.9515%2015.8702%2033.6243%2015.5107C31.3121%2015.2609%2028.9671%2015.083%2027.0003%2015.083ZM23.3333%2021.1338C24.5989%2021.1338%2025.6252%2022.1592%2025.6253%2023.4248V28.0918C25.6252%2029.3574%2024.5989%2030.3838%2023.3333%2030.3838C22.0678%2030.3837%2021.0414%2029.3573%2021.0413%2028.0918V23.4248C21.0414%2022.1593%2022.0678%2021.1339%2023.3333%2021.1338ZM36.1663%2021.1338C37.4319%2021.1338%2038.4582%2022.1592%2038.4583%2023.4248V28.0918C38.4582%2029.3574%2037.4319%2030.3838%2036.1663%2030.3838C34.9009%2030.3835%2033.8754%2029.3572%2033.8753%2028.0918V23.4248C33.8754%2022.1594%2034.9009%2021.134%2036.1663%2021.1338Z%22%20fill%3D%22%236c9ef8%22%2F%3E%3C%2Fsvg%3E">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/static/i18n/i18n.js"></script>
+<script src="/static/mini-md.js?v=20261107"></script>
+<script>
+/* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
+if(!window.I18N){
+  window.I18N={lang:'zh',langs:{zh:'中文'},t:function(s){return s},
+    f:function(s,p){p=p||{};return String(s).replace(/\{(\w+)\}/g,function(m,k){return k in p?p[k]:m})},
+    setLang:function(){return Promise.resolve()}};
+  window.t=function(s){return s};window.I18N_DICT={};
+}
+if(!window.MiniMD)window.MiniMD={render:function(s){return '<pre>'+String(s||'').replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})+'</pre>'}};
+</script>
+<style>
+:root{
+  --bg:#0f1117; --panel:#161a23; --panel2:#1c2130; --border:#2a3040;
+  --text:#dde3ee; --dim:#8b93a7; --accent:#6c9ef8; --link:#fb923c; --green:#4ade80;
+  --red:#f87171; --yellow:#fbbf24; --purple:#c084fc;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+a{color:var(--link)}
+body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel)}
+header h1{font-size:15px;font-weight:600}
+header a.back{color:var(--dim);text-decoration:none;font-size:13px;border:1px solid var(--border);border-radius:6px;padding:3px 10px;line-height:1.4}
+header a.back:hover{color:var(--accent);border-color:var(--accent)}
+header .spacer{flex:1}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:13px;font-family:inherit}
+button:hover:not(:disabled){border-color:var(--accent)}
+button:disabled{opacity:.4;cursor:default}
+header select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;cursor:pointer}
+header select:hover{border-color:var(--accent)}
+/* 三栏:左 文件清单 · 中 正文 · 右 本文件目录(preview-nav.js,窄屏自动隐藏) */
+#files{width:240px;flex:none;border-right:1px solid var(--border);background:var(--panel);overflow-y:auto;padding:8px 6px 20px}
+#files .ttl{font-size:11px;color:var(--dim);padding:2px 8px 6px}
+#files .grp{font-size:11px;color:var(--dim);padding:8px 8px 3px;font-family:ui-monospace,Menlo,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#files .f{display:flex;align-items:center;gap:6px;width:100%;text-align:start;background:none;border:none;border-radius:6px;padding:4px 8px;font-size:12.5px;color:var(--text)}
+#files .f:hover{background:var(--panel2)}
+#files .f.on{background:var(--panel2);outline:1px solid var(--border);color:var(--accent)}
+#files .f .fn{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#files .f .sz{flex:none;font-size:10.5px;color:var(--dim)}
+#files .more{font-size:11.5px;color:var(--dim);padding:10px 8px 0;line-height:1.5}
+#cwrap{flex:1;min-width:0;display:flex;flex-direction:column}
+#content{flex:1;overflow-y:auto;padding:18px 28px 60px}
+.empty{color:var(--dim);text-align:center;margin-top:60px;line-height:1.8}
+.doc{max-width:880px;margin:0 auto}
+.fhead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding-bottom:10px;margin-bottom:6px;border-bottom:1px solid var(--border)}
+.fhead .path{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:var(--accent);word-break:break-all}
+.fhead .meta{font-size:12px;color:var(--dim)}
+.pager{display:flex;align-items:center;justify-content:center;gap:12px;margin:12px 0;font-size:12.5px;color:var(--dim)}
+.pager button{font-size:12px;padding:3px 12px}
+/* 正文:阅读排版(大字号、宽行距);Markdown 由 mini-md.js 渲染 */
+.md{font-size:15.5px;line-height:1.95;color:#d6dceb;word-break:break-word}
+.md h1,.md h2,.md h3,.md h4,.md h5,.md h6{color:var(--text);line-height:1.45;margin:26px 0 10px;scroll-margin-top:12px}
+.md h1{font-size:22px}.md h2{font-size:19px;border-bottom:1px solid var(--border);padding-bottom:5px}.md h3{font-size:17px}.md h4,.md h5,.md h6{font-size:15.5px}
+.md>:first-child{margin-top:8px}
+.md p{margin:.7em 0}
+.md ul,.md ol{margin:.6em 0 .6em 1.6em}
+.md li{margin:2px 0}
+.md blockquote{border-left:3px solid var(--accent);padding:4px 14px;margin:10px 0;color:var(--dim);background:rgba(108,158,248,.05);border-radius:0 6px 6px 0}
+.md code{font-family:ui-monospace,Menlo,monospace;font-size:13px;background:rgba(255,255,255,.07);padding:0 4px;border-radius:4px}
+.md pre{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px 12px;overflow-x:auto;margin:10px 0;line-height:1.6}
+.md pre code{background:none;padding:0}
+.md hr{border:0;border-top:1px solid var(--border);margin:20px 0}
+.md .md-table{overflow-x:auto;margin:10px 0}
+.md table{border-collapse:collapse;font-size:13.5px;line-height:1.6;min-width:60%}
+.md th,.md td{border:1px solid var(--border);padding:5px 10px;vertical-align:top;text-align:start}
+.md th{background:var(--panel);color:var(--dim);font-weight:500}
+[dir="rtl"] #files{border-right:none;border-left:1px solid var(--border)}
+@media(max-width:760px){#files{width:160px}#content{padding:14px 14px 50px}}
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="/" onclick="if(history.length>1){history.back();return false}" title="后退">&lt;</a>
+  <a class="back" href="/">控制台</a>
+  <h1>📖 小说文本</h1>
+  <div class="spacer"></div>
+  <input type="hidden" id="project">
+  <select id="pvnav" title="切换预览页"></select>
+  <button id="reload">刷新</button>
+</header>
+<div id="main">
+  <aside id="files"></aside>
+  <div id="cwrap"><div id="content"><div class="empty">加载中…</div></div></div>
+  <nav id="nav" data-no-i18n></nav>
+</div>
+<script src="/static/preview-nav.js?v=20260913"></script>
+<script>
+/* 小说文本(2026-11-07):项目 novel/ 下所有 .md 文件的只读阅读页——写剧本之前先看导入或清洗分章后的小说原文。
+ * 清单走 GET /api/v1/projects/<p>/novel,正文点哪个文件再按 url 取哪个(整本可达数 MB)。
+ * 大文件分页:按标题切、每页约 PAGE_CHARS 字(章节特别长时退到空行处切),只渲染当前页;右侧目录跨页跳转。
+ * 记住每个项目上次看的文件、每个文件的页码与滚动位置(localStorage)。 */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const proj=()=>$('#project').value.trim()||'demo';
+const PAGE_CHARS=60000;
+const HEAD_RE=/^(#{1,6})\s+(.*?)\s*#*\s*$/, FENCE_RE=/^\s*```/;
+let DATA=null, CUR=null, PAGE=0, OPEN_SEQ=0;
+
+const fmtSize=n=>n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(1)+' MB';
+const plain=s=>String(s).replace(/`([^`]*)`/g,'$1').replace(/\*\*|__|\*/g,'').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1').trim();
+const fileKey=()=>'novel-file:'+proj();
+const posKey=p=>'novel-pos:'+proj()+'|'+p;
+function lsGet(k){try{return localStorage.getItem(k)}catch(e){return null}}
+function lsSet(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+function setUrl(file){
+  const q=new URLSearchParams({project:proj()});
+  if(file)q.set('file',file);
+  history.replaceState(null,'','?'+q);
+}
+
+/* 按标题(代码块外)切页:当前页满 PAGE_CHARS 后遇到下一个标题开新页;单章超过 1.5 倍时在空行处切。
+ * heads 记每个标题的层级、文字、所在页,渲染后按顺序给本页顶层 h1–h6 编 id(与 mini-md 的标题判定同一个正则)。 */
+function split(text){
+  const lines=String(text).replace(/\r\n?/g,'\n').split('\n');
+  const pages=[],heads=[];let buf=[],len=0,fence=false;
+  const cut=()=>{if(buf.length){pages.push(buf.join('\n'));buf=[];len=0}};
+  for(const l of lines){
+    if(FENCE_RE.test(l))fence=!fence;
+    else if(!fence){
+      const m=HEAD_RE.exec(l);
+      if(m){if(len>=PAGE_CHARS)cut();heads.push({lv:m[1].length,text:plain(m[2])||'#',page:pages.length})}
+      else if(!l.trim()&&len>=PAGE_CHARS*1.5){cut();continue}
+    }
+    buf.push(l);len+=l.length+1;
+  }
+  cut();
+  if(!pages.length)pages.push('');
+  return {pages,heads};
+}
+
+function renderFiles(){
+  const box=$('#files'),files=DATA.files||[];
+  let h=`<div class="ttl">${esc(I18N.f('novel/ · {n} 个 md 文件',{n:files.length}))}</div>`,grp=null;
+  for(const f of files){
+    const i=f.path.lastIndexOf('/'),dir=i<0?'':f.path.slice(0,i+1),name=f.path.slice(i+1);
+    if(dir!==grp){if(dir||grp!==null)h+=`<div class="grp" data-no-i18n title="novel/${esc(dir)}">novel/${esc(dir)}</div>`;grp=dir}
+    h+=`<button class="f" data-no-i18n data-p="${esc(f.path)}" title="novel/${esc(f.path)}"><span class="fn" data-no-i18n>${esc(name)}</span><span class="sz">${fmtSize(f.size)}</span></button>`;
+  }
+  if(DATA.truncated)h+=`<div class="more">${esc(I18N.f('只列出前 {n} 个',{n:files.length}))}</div>`;
+  if(DATA.others)h+=`<div class="more">${esc(I18N.f('另有 {n} 个非 md 文件(如 .txt)未列出',{n:DATA.others}))}</div>`;
+  box.innerHTML=h;
+}
+
+async function load(){
+  setUrl(new URLSearchParams(location.search).get('file')||'');
+  CUR=null;
+  try{
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj())+'/novel',{cache:'no-store'});
+    if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||r.status);
+    DATA=await r.json();
+  }catch(e){
+    $('#files').innerHTML='';PreviewNav.render('',[]);
+    $('#content').innerHTML=`<div class="empty">${esc(t('加载失败:'))}${esc(e.message)}</div>`;return;
+  }
+  renderFiles();
+  const files=DATA.files||[];
+  if(!files.length){
+    PreviewNav.render('',[]);setUrl('');
+    $('#content').innerHTML=`<div class="empty">${esc(t('项目目录 novel/ 下还没有 md 文件'))}`
+      +(DATA.others?`<br>${esc(I18N.f('另有 {n} 个非 md 文件(如 .txt)未列出',{n:DATA.others}))}`:'')+`</div>`;
+    return;
+  }
+  const want=new URLSearchParams(location.search).get('file')||lsGet(fileKey());
+  openFile(files.some(f=>f.path===want)?want:files[0].path);
+}
+
+async function openFile(path){
+  const f=(DATA.files||[]).find(x=>x.path===path);if(!f)return;
+  const seq=++OPEN_SEQ;
+  document.querySelectorAll('#files .f').forEach(b=>b.classList.toggle('on',b.dataset.p===path));
+  document.querySelector('#files .f.on')?.scrollIntoView({block:'nearest'});
+  lsSet(fileKey(),path);setUrl(path);
+  $('#content').innerHTML=`<div class="empty">${esc(t('加载中…'))}</div>`;
+  let text;
+  try{
+    const r=await fetch(f.url,{cache:'no-store'});
+    if(!r.ok)throw new Error(r.status);
+    text=await r.text();
+  }catch(e){
+    if(seq===OPEN_SEQ)$('#content').innerHTML=`<div class="empty">${esc(t('加载失败:'))}${esc(e.message)}</div>`;
+    return;
+  }
+  if(seq!==OPEN_SEQ)return;           // 读大文件期间又点了别的文件
+  CUR={file:f,...split(text),chars:text.replace(/\s/g,'').length};
+  // 目录:最高两级标题;只有一级时不加缩进 / 粗体
+  const lvs=[...new Set(CUR.heads.map(h=>h.lv))].sort((a,b)=>a-b);
+  const top=lvs[0],two=lvs.length>1;
+  PreviewNav.render(t('章节目录'),CUR.heads.map((h,i)=>({h,i})).filter(({h})=>h.lv<=top+1)
+    .map(({h,i})=>({id:'h'+i,cls:two?(h.lv===top?'sc':'s'):'',label:h.text,badges:CUR.pages.length>1?'p'+(h.page+1):''})));
+  let pos={};try{pos=JSON.parse(lsGet(posKey(path))||'{}')||{}}catch(e){}
+  showPage(Math.min(Math.max(0,+pos.p||0),CUR.pages.length-1),+pos.s||0);
+}
+
+function pagerHtml(){
+  const n=CUR.pages.length;if(n<2)return '';
+  return `<div class="pager"><button class="pg-prev"${PAGE?'':' disabled'}>‹ ${esc(t('上一页'))}</button><span>${esc(I18N.f('第 {p} / {n} 页',{p:PAGE+1,n}))}</span><button class="pg-next"${PAGE<n-1?'':' disabled'}>${esc(t('下一页'))} ›</button></div>`;
+}
+
+function showPage(p,scroll){
+  PAGE=p;const f=CUR.file;
+  const meta=[fmtSize(f.size),I18N.f('约 {n} 字',{n:CUR.chars.toLocaleString()}),I18N.f('更新于 {t}',{t:new Date(f.mtime*1000).toLocaleString()})].join(' · ');
+  $('#content').innerHTML=`<div class="doc"><div class="fhead"><span class="path" data-no-i18n>novel/${esc(f.path)}</span><span class="meta">${esc(meta)}</span></div>`
+    +pagerHtml()+`<div class="md" data-no-i18n>${MiniMD.render(CUR.pages[p])}</div>`+pagerHtml()+`</div>`;
+  const ids=CUR.heads.map((h,i)=>h.page===p?i:-1).filter(i=>i>=0);
+  $('#content .md').querySelectorAll(':scope>h1,:scope>h2,:scope>h3,:scope>h4,:scope>h5,:scope>h6').forEach((el,k)=>{if(k<ids.length)el.id='h'+ids[k]});
+  $('#content').scrollTop=scroll||0;
+  savePos();
+}
+
+function savePos(){if(CUR)lsSet(posKey(CUR.file.path),JSON.stringify({p:PAGE,s:Math.round($('#content').scrollTop)}))}
+let SAVE_TICK=null;
+$('#content').addEventListener('scroll',()=>{if(SAVE_TICK===null)SAVE_TICK=requestAnimationFrame(()=>{SAVE_TICK=null;savePos()})},{passive:true});
+
+$('#files').addEventListener('click',e=>{const b=e.target.closest('.f');if(b&&(!CUR||b.dataset.p!==CUR.file.path))openFile(b.dataset.p)});
+$('#content').addEventListener('click',e=>{
+  if(!CUR)return;
+  if(e.target.closest('.pg-prev')&&PAGE>0)showPage(PAGE-1,0);
+  else if(e.target.closest('.pg-next')&&PAGE<CUR.pages.length-1)showPage(PAGE+1,0);
+});
+// 目录跳转:同页的由 preview-nav.js 自己滚动;标题在别的页时先翻到那一页再定位
+$('#nav').addEventListener('click',e=>{
+  const b=e.target.closest('.nv');if(!b||!CUR||document.getElementById(b.dataset.t))return;
+  const h=CUR.heads[+b.dataset.t.slice(1)];if(!h)return;
+  showPage(h.page,0);
+  document.getElementById(b.dataset.t)?.scrollIntoView();
+  savePos();
+});
+
+$('#reload').onclick=load;
+$('#project').value=new URLSearchParams(location.search).get('project')
+  ||(JSON.parse(lsGet('webui_prefs')||'{}').project)||'demo';
+load();
+
+// 右上角预览页切换下拉(项目值走 URL/localStorage,由隐藏 #project 承载)
+const PV_PAGES=[['/preview/refs','\u{1F5BC} 参考文件'],['/preview/novel','\u{1F4D6} 小说文本'],['/preview/workflow','\u{1F9ED} 工作流预览'],['/preview/worldview','\u{1F30D} 世界观预览'],['/preview/scenes','\u{1F3D4} 场景预览'],['/preview/characters','\u{1F464} 人物预览'],['/preview/creatures','\u{1F40E} 生物预览'],['/preview/props','\u{1F5E1} 道具预览'],['/preview/script','\u{1F4DC} 剧本预览'],['/preview/board','\u{1F4CB} 故事板'],['/preview/storyboard','\u{1F3A6} 分镜预览'],['/preview/director','\u{1F4FA} 导演台'],['/preview/post','\u{1F39A}\uFE0F 后期处理'],['/preview/videos','\u{1F39E}️ 成片发布']];
+PV_PAGES.forEach(([u,n])=>{const o=document.createElement('option');o.value=u;o.textContent=n;if(location.pathname===u)o.selected=true;$('#pvnav').appendChild(o)});
+$('#pvnav').onchange=()=>{const p=proj();location.href=$('#pvnav').value+'?project='+encodeURIComponent(p)};
+</script>
+</body>
+</html>

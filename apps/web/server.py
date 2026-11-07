@@ -56,7 +56,7 @@ HOP_HEADERS = {
     "te", "trailers", "transfer-encoding", "upgrade", "content-length", "host",
 }
 PREVIEW_FILES = {
-    "refs", "characters", "props", "creatures", "scenes", "script", "board", "storyboard", "videos", "workflow", "worldview",
+    "refs", "novel", "characters", "props", "creatures", "scenes", "script", "board", "storyboard", "videos", "workflow", "worldview",
  "post", "director", "canvas", "code"}
 
 # 直连本机 API,绕过系统/环境代理(macOS 上 urllib 会自动读取系统代理设置)。

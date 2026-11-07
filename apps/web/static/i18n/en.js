@@ -5078,4 +5078,17 @@ window.I18N_DICT = {
 "默认封面 {name} 已不存在,发布时按发布包封面与技能文档的查找顺序": "Default thumbnail {name} no longer exists; publishing uses the release bundle's thumbnail or the skill's lookup order",
 "未设默认封面:发布时按发布包封面与技能文档的查找顺序": "No default thumbnail: publishing uses the release bundle's thumbnail or the skill's lookup order",
 "发布时用本页选定的默认封面 {name},不按元数据里的封面": "Publishing uses the default thumbnail picked on this page, {name}, not the one in the metadata",
+// 小说文本页(2026-11-07,preview_novel.html + 预览菜单入口)
+"小说文本": "Novel Text",
+"📖 小说文本": "📖 Novel Text",
+"小说文本 · Agentics：VideoAgents": "Novel Text · Agentics: VideoAgents",
+"小说文本:项目 novel/ 目录下所有 md 文件(导入或清洗分章后的小说),写剧本之前先读原文": "Novel text: every md file under the project's novel/ folder (the imported or cleaned, chapter-split novel); read the source before the script is written",
+"novel/ · {n} 个 md 文件": "novel/ · {n} md files",
+"只列出前 {n} 个": "Showing the first {n} only",
+"另有 {n} 个非 md 文件(如 .txt)未列出": "{n} non-md files (e.g. .txt) not listed",
+"项目目录 novel/ 下还没有 md 文件": "No md files in the project's novel/ folder yet",
+"章节目录": "Contents",
+"第 {p} / {n} 页": "Page {p} / {n}",
+"约 {n} 字": "≈{n} characters",
+"更新于 {t}": "Updated {t}",
 };

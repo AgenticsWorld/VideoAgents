@@ -270,6 +270,12 @@ async def references(project: str) -> dict[str, Any]:
     return _artifact_urls(await core.api_refs_list(project), project)
 
 
+@api.get("/projects/{project}/novel", tags=["artifacts"])
+async def novel_files(project: str) -> dict[str, Any]:
+    """小说文本页:novel/ 下所有 .md 文件清单(正文按 url 经 artifacts 接口取)。"""
+    return _artifact_urls(await core.api_novel_list(project), project)
+
+
 @api.post("/projects/{project}/references", tags=["artifacts"])
 async def upload_reference(
     project: str,

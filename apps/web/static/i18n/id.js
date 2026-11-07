@@ -5086,4 +5086,17 @@ window.I18N_DICT = {
 "默认封面 {name} 已不存在,发布时按发布包封面与技能文档的查找顺序": "Thumbnail default {name} sudah tidak ada; saat publikasi dipakai thumbnail paket rilis atau urutan pencarian di dokumen skill",
 "未设默认封面:发布时按发布包封面与技能文档的查找顺序": "Belum ada thumbnail default: saat publikasi dipakai thumbnail paket rilis atau urutan pencarian di dokumen skill",
 "发布时用本页选定的默认封面 {name},不按元数据里的封面": "Saat publikasi dipakai thumbnail default yang dipilih di halaman ini, {name}, bukan yang ada di metadata",
+// 小说文本页(2026-11-07,preview_novel.html + 预览菜单入口)
+"小说文本": "Teks novel",
+"📖 小说文本": "📖 Teks novel",
+"小说文本 · Agentics：VideoAgents": "Teks novel · Agentics: VideoAgents",
+"小说文本:项目 novel/ 目录下所有 md 文件(导入或清洗分章后的小说),写剧本之前先读原文": "Teks novel: semua file md di folder novel/ proyek (novel yang diimpor, atau sudah dibersihkan dan dibagi per bab); baca teks asli sebelum naskah ditulis",
+"novel/ · {n} 个 md 文件": "novel/ · {n} file md",
+"只列出前 {n} 个": "Hanya {n} file pertama yang ditampilkan",
+"另有 {n} 个非 md 文件(如 .txt)未列出": "{n} file non-md (mis. .txt) tidak ditampilkan",
+"项目目录 novel/ 下还没有 md 文件": "Belum ada file md di folder novel/ proyek",
+"章节目录": "Daftar isi",
+"第 {p} / {n} 页": "Halaman {p} / {n}",
+"约 {n} 字": "≈ {n} karakter",
+"更新于 {t}": "Diperbarui {t}",
 };

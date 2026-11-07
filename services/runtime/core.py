@@ -15713,6 +15713,49 @@ async def api_refs_list(project: str = "demo"):
     return {"project": base.name, "categories": cats}
 
 
+NOVEL_LIST_MAX = 2000      # 小说文本页一次最多列这么多 md 文件(大型网文拆章后可能上千章)
+
+
+def _natural_key(text: str) -> list:
+    """ch2 排在 ch10 前:数字段按数值比,其余按小写字母比。"""
+    return [(0, int(tok), "") if tok.isdigit() else (1, 0, tok)
+            for tok in re.split(r"(\d+)", text.lower()) if tok]
+
+
+async def api_novel_list(project: str = "demo"):
+    """小说文本页数据(2026-11-07):novel/ 下所有 .md 文件(含子目录,如 novel/chapters/),根目录的排前、按自然顺序。
+    正文不在这里返回——页面点哪个文件再经 artifacts 接口取哪个(fanren.md 这类整本可达数 MB)。
+    others = novel/ 下非 md 文件数(导入原文 original.txt、按章 .txt 等),页面据此提示「未列出」。"""
+    base = _proj_base(project)
+    novel = base / "novel"
+    if not novel.is_dir():
+        return {"project": base.name, "exists": False, "files": [], "others": 0, "truncated": False}
+    root = novel.resolve()
+    md, others = [], 0
+    for f in novel.rglob("*"):
+        rel = f.relative_to(novel)
+        if any(part.startswith(".") for part in rel.parts) or not f.is_file():
+            continue
+        if f.suffix.lower() != ".md":
+            others += 1
+            continue
+        try:
+            f.resolve().relative_to(root)    # 指出 novel/ 的软链接:artifacts 接口也会拒,不列
+        except ValueError:
+            continue
+        md.append(rel)
+    md.sort(key=lambda rel: (len(rel.parts) > 1, _natural_key(rel.as_posix())))
+
+    def entry(rel: Path) -> dict:
+        st = (novel / rel).stat()
+        path = rel.as_posix()
+        return {"path": path, "size": st.st_size, "mtime": st.st_mtime,
+                "url": f"/projects/{base.name}/novel/{urllib.parse.quote(path)}?v={int(st.st_mtime)}"}
+
+    return {"project": base.name, "exists": True, "files": [entry(rel) for rel in md[:NOVEL_LIST_MAX]],
+            "others": others, "truncated": len(md) > NOVEL_LIST_MAX}
+
+
 async def api_refs_upload(data: bytes, project: str = "demo",
                           category: str = "style", filename: str = "ref"):
     """参考文件页上传:请求体即文件原始字节(避免 multipart 依赖),落 refs/<分类>/,文件名按工作流纪律清洗为 ASCII。

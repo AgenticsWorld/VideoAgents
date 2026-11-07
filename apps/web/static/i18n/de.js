@@ -5086,4 +5086,17 @@ window.I18N_DICT = {
 "默认封面 {name} 已不存在,发布时按发布包封面与技能文档的查找顺序": "Standard-Thumbnail {name} existiert nicht mehr; beim Veröffentlichen gilt das Thumbnail im Paket bzw. die Suchreihenfolge des Skills",
 "未设默认封面:发布时按发布包封面与技能文档的查找顺序": "Kein Standard-Thumbnail: Beim Veröffentlichen gilt das Thumbnail im Paket bzw. die Suchreihenfolge des Skills",
 "发布时用本页选定的默认封面 {name},不按元数据里的封面": "Beim Veröffentlichen wird das auf dieser Seite gewählte Standard-Thumbnail {name} verwendet, nicht das aus den Metadaten",
+// 小说文本页(2026-11-07,preview_novel.html + 预览菜单入口)
+"小说文本": "Romantext",
+"📖 小说文本": "📖 Romantext",
+"小说文本 · Agentics：VideoAgents": "Romantext · Agentics: VideoAgents",
+"小说文本:项目 novel/ 目录下所有 md 文件(导入或清洗分章后的小说),写剧本之前先读原文": "Romantext: alle md-Dateien im Ordner novel/ des Projekts (importierter oder bereinigter, in Kapitel geteilter Roman) – den Ausgangstext lesen, bevor das Drehbuch entsteht",
+"novel/ · {n} 个 md 文件": "novel/ · {n} md-Dateien",
+"只列出前 {n} 个": "Nur die ersten {n} werden angezeigt",
+"另有 {n} 个非 md 文件(如 .txt)未列出": "{n} Nicht-md-Dateien (z. B. .txt) nicht aufgeführt",
+"项目目录 novel/ 下还没有 md 文件": "Im Ordner novel/ des Projekts gibt es noch keine md-Dateien",
+"章节目录": "Inhalt",
+"第 {p} / {n} 页": "Seite {p} / {n}",
+"约 {n} 字": "ca. {n} Zeichen",
+"更新于 {t}": "Aktualisiert {t}",
 };
