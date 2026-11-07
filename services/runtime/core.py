@@ -3882,7 +3882,9 @@ def build_role_prompt(agent_id: str, project: str,
         "(2026-10-04 起默认「中心点九宫格」:九格共用一个站位原地转头,站位/机高/第 9 格仰拍方向由脚本按本集该场景的白模机位自动推,不依赖 `layout.json#views`;库里已有九格时直接复用),"
         "拆成 9 张背景图入库,每镜按白模机位自动从九格里选最合适的一格(日志逐镜打印选格依据);宫格整图只作台账不进视频 refs,Agent 不得手工拆图、不得自绘宫格、不得用退役的 grid_9views.png 代替;"
         "场景缺俯视图 `layout_top.png` 时脚本报 Grid9LayoutError,先派 environment-concept 补布局包。"
-        "选不到合适格子的镜:grid 模式脚本自动按本镜机位补出一张(计费,--max-new 限张数);"
+        "同场景同光照方案里用户在分镜预览「换图」手选过同向图的镜,脚本直接复用那张(2026-11-07,reuse=user_pref,不补图);"
+        "选不到合适格子的镜:grid 模式脚本自动画板式补图(2026-11-07:以一张库图为参考按改视角指令出图,同向镜共用一张,计费,--max-new 限张数)——"
+        "还没有指令时退出码 6 打印 `[plate_fill_prompt_needed]`,由分镜背景 Agent 看工单里的白模帧与源图写指令后重跑(SOUL 第 9 条),结单仍以 `--status` PASS 为准;"
         "**grid_manual 模式脚本不自动出图——库里有合适的手工截图就选用,没有则暂用最近格占位并以退出码 5 打印 `[manual_plate_needed]` 列出待补的镜:"
         "原文上报,请用户到场景预览页对应场景的全景 360° 视窗或世界模型视窗用「💾 背景图」按该镜机位截取(或在分镜预览页对该镜「换图」手选)后重跑;"
         "Agent 不得自行出图补、不得改背景图模式绕过,`--status` 对这些镜报 manual_needed 即未完成**"
@@ -8590,7 +8592,7 @@ def _preview_scenes(project: str):
                            "camera": {k: cam.get(k) for k in ("facing", "height_m", "lens_mm_equiv", "bearing_deg")},
                            # 全景制(2026-09-10):来源锚点/空洞比;无 pano_ref = legacy 旧法出图
                            # 2026-09-22 kind = pano|world(世界模型截图作参考出的母图)
-                           "pano_ref": {k: pr.get(k) for k in ("kind", "anchor_id", "scheme", "hole_fraction", "source_key")} if pr else None,
+                           "pano_ref": {k: pr.get(k) for k in ("kind", "anchor_id", "scheme", "hole_fraction", "source_key", "method")} if pr else None,
                            "created_by": p.get("created_by"), "used_by": used_by.get((sid, p.get("key")), [])})
         # 场景全景锚点(2026-09-10):assets/concepts/scenes/<sid>/panos/index.json,预览页「全景图」板块(3D 白模之下)
         panos = None
@@ -8878,7 +8880,7 @@ def _scene_plate_edit(project: str, sid: str, body: dict, op: str) -> dict:
                       "url": f"/projects/{base.name}/{entry['file']}?v={int(f.stat().st_mtime)}",
                       "lighting_scheme_id": entry.get("lighting_scheme_id"), "time_of_day": entry.get("time_of_day"),
                       "camera": {k: cam.get(k) for k in ("facing", "height_m", "lens_mm_equiv", "bearing_deg")},
-                      "pano_ref": {k: pr.get(k) for k in ("kind", "anchor_id", "scheme", "hole_fraction", "source_key")} if pr else None,
+                      "pano_ref": {k: pr.get(k) for k in ("kind", "anchor_id", "scheme", "hole_fraction", "source_key", "method")} if pr else None,
                       "created_by": entry.get("created_by"), "used_by": []}}
 
 
@@ -9693,9 +9695,15 @@ def _shot_plate_ctx(project: str, ep: str, shot_id: str):
     return shot_plates, base, ep, shot_id, idx, rec, sid
 
 
-def _shot_plate_candidates(project: str, ep: str, shot_id: str) -> dict:
-    """本镜所在场景的全部库背景图(母图/旧法图都列,文件缺失的不列)+ 本镜当前起点/终点所用 key,供「换图」弹窗选图。"""
+def _shot_plate_candidates(project: str, ep: str, shot_id: str, role: str = "start") -> dict:
+    """本镜所在场景的全部库背景图(母图/旧法图都列,文件缺失的不列)+ 本镜当前起点/终点所用 key,供「换图」弹窗选图。
+    ① 推荐(2026-11-07,用户手动换图规律「同向同图」):按本镜该角色机位统计本场景同光照方案里同向(朝向差 ≤45° 且俯仰同档)的镜
+    各在用哪张图,每行带 recommend {same_dir, manual};有同向镜在用的排在前面(用户手选多的优先)。"""
     shot_plates, base, ep, shot_id, idx, rec, sid = _shot_plate_ctx(project, ep, shot_id)
+    role = "end" if str(role or "").lower() == "end" else "start"
+    me = next((p for p in rec["plates"] if isinstance(p, dict) and p.get("role") == role), None) or {}
+    votes = (shot_plates.plate_direction_votes(base, sid, rec.get("lighting_scheme_id"), me["camera"], exclude=(ep, shot_id, role))
+             if me.get("camera") else {})
     used_by: dict[str, list] = {}
     for f in sorted((base / "directing").glob("ep*/shot_plates.json")):
         sp = _read_json_safe(f) or {}
@@ -9718,12 +9726,15 @@ def _shot_plate_candidates(project: str, ep: str, shot_id: str) -> dict:
                      "lighting_scheme_id": e.get("lighting_scheme_id"), "time_of_day": e.get("time_of_day"),
                      "master": bool(e.get("master")), "legacy": shot_plates.is_legacy(e), "size": e.get("size"),
                      "camera": {k: cam.get(k) for k in ("facing", "height_m", "lens_mm_equiv", "bearing_deg", "fov_v_deg")},
-                     "pano_ref": {k: pr.get(k) for k in ("kind", "anchor_id", "scheme", "source_key")} if pr else None,
+                     "pano_ref": {k: pr.get(k) for k in ("kind", "anchor_id", "scheme", "source_key", "method")} if pr else None,
                      "used_by": used_by.get(e["key"], []),
                      "current_roles": [r for r, k in current.items() if k == e["key"]],
                      # 九宫格格子的放大状态(2026-11-06):interpolated 的选上后会自动放大
-                     "upscale": _plate_upscale_state(base, sid, e, _cand_plates)})
-    return {"ok": True, "ep": ep, "shot_id": shot_id, "scene_id": sid, "group_id": rec.get("group_id"),
+                     "upscale": _plate_upscale_state(base, sid, e, _cand_plates),
+                     "recommend": votes.get(e["key"])})
+    # 同向镜在用的图排前面:用户手选的次数 → 同向在用次数;其余保持库顺序(sorted 稳定)
+    rows.sort(key=lambda r: (-(r["recommend"] or {}).get("manual", 0), -(r["recommend"] or {}).get("same_dir", 0)))
+    return {"ok": True, "ep": ep, "shot_id": shot_id, "scene_id": sid, "group_id": rec.get("group_id"), "role": role,
             "lighting_scheme_id": rec.get("lighting_scheme_id"), "current": current, "plates": rows}
 
 
@@ -9742,12 +9753,21 @@ def _shot_plate_swap(project: str, ep: str, shot_id: str, body: dict) -> dict:
     f = base / res["file"]
     if res.get("upscale_needed"):     # 换上的是还没放大的九宫格格子(2026-11-06):后台立即放大,完成后原地覆盖并发 SSE
         _plate_upscale_spawn(base, res["scene_id"], res["key"])
+    # ② 同向镜一起换(2026-11-07):本集同场景同光照方案里与这镜同向、还不是用户手选、也没在用这张图的镜,页面列出来让用户勾选一起换
+    try:
+        peers = [x for x in shot_plates.same_direction_peers(base, res["ep"], res["shot_id"], res["role"]) if x.get("key") != res["key"]]
+        for x in peers:      # 缩略图地址走 /projects/<p>/…,由 app.py _artifact_urls 改写成 artifacts 路由
+            pf = base / str(x.get("file") or "")
+            x["url"] = f"/projects/{base.name}/{x['file']}?v={int(pf.stat().st_mtime)}" if x.get("file") and pf.is_file() else None
+    except Exception as e:  # noqa: BLE001
+        print(f"[shot-plate-swap] 同向镜统计失败(忽略):{e}", flush=True)
+        peers = []
     return {"ok": True, "ep": res["ep"], "shot_id": res["shot_id"], "scene_id": res["scene_id"], "group_id": res["group_id"],
             "role": res["role"],
             "plate": {"role": res["role"], "key": res["key"], "reuse": "manual", "crop": None, "file": res["file"],
                       "url": f"/projects/{base.name}/{res['file']}?v={int(f.stat().st_mtime)}", "scene_id": res["scene_id"]},
             "previous": res["previous"], "sync": res["sync"],
-            "upscale": "running" if res.get("upscale_needed") else None}
+            "upscale": "running" if res.get("upscale_needed") else None, "peers": peers}
 
 
 # 九宫格格子重绘放大(2026-11-06,docs/shot_plates.md「格子重绘放大」):分镜预览「换图」换上还没放大的格子时,
@@ -9817,8 +9837,8 @@ def _plate_upscale_spawn(base: Path, sid: str, key: str) -> bool:
     return True
 
 
-async def api_shot_plate_candidates(project: str, ep: str, shot_id: str):
-    return await asyncio.to_thread(_shot_plate_candidates, project, ep, shot_id)
+async def api_shot_plate_candidates(project: str, ep: str, shot_id: str, role: str = "start"):
+    return await asyncio.to_thread(_shot_plate_candidates, project, ep, shot_id, role)
 
 
 async def api_shot_plate_swap(project: str, ep: str, shot_id: str, body: dict):
@@ -10454,6 +10474,9 @@ def _preview_storyboard(project: str, ep: str):
                          "scene_id": sp_rec.get("scene_id"),
                          # 九宫格手动补图(2026-10-04):这张只是最近格占位,等用户手工截取
                          "manual_needed": bool(p.get("reuse") == "grid9" and isinstance(p.get("view"), dict) and p["view"].get("manual_needed")),
+                         # 画板式补图(2026-11-07):fill_pending = 最近格占位、等 Agent 写改视角指令;fill_method = canvas 时来源写「画板补图」
+                         "fill_pending": bool(p.get("reuse") == "grid9" and isinstance(p.get("view"), dict) and p["view"].get("fill_pending")),
+                         "fill_method": ((p.get("view") or {}).get("fallback") or {}).get("method") if isinstance(p.get("view"), dict) else None,
                          # 九宫格格子放大状态(2026-11-06):running 放大中 / done 已放大 / interpolated 插值格(reason);非格子为 None
                          "upscale": _storyboard_plate_upscale(base, sp_rec.get("scene_id"), p, _plate_lib_cache)})
         shot_plates[str(sp_sid)] = rows

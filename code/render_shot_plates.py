@@ -31,6 +31,15 @@ Agent 须原文上报,请用户到控制台「🎨 生成模型」换图像模�
       「💾 背景图」截取,库条目 manual=True)就选用(集索引 reuse=grid9_manual);没有 → 暂用最近格占位、集索引记 view.manual_needed,
       脚本退出码 5 并打印 [manual_plate_needed] 列出待补的镜——Agent 须原文上报,请用户去截图(或在分镜预览页对该镜「换图」手选)后重跑;
       不得自行出图、不得改背景图模式绕过。--status 对这些镜报 manual_needed(FAIL)。
+  **同向手选复用 / 画板式补图**(2026-11-07,用户按 171 次手动换图的规律拍板):
+    九宫格两种模式选图先看同场景同光照方案里用户手选过(分镜预览「🔁 换图」/ swap_shot_plate.py,集索引 reuse=manual)的同向图
+    (朝向差 ≤45° 且俯仰同档),有就直接用机位最像的那张(reuse=user_pref,日志「同向手选复用」),不论格子合不合适、也不补图。
+    grid 模式的自动补图默认改为画板式(--fill-method canvas;classic = 上述俯视图 + 九宫格整图补图):以一张库图为唯一参考,
+    按 Agent 看图写的改视角指令出图;同向的不合适镜共用一张(key 后缀 _g9cv)。源图默认 = 本场景用户手选最多的图 → 本场景用得最多的
+    非补图库图 → 最近格。指令由跑本脚本的 Agent 写:还没有指令的补图,脚本写工单 directing/<ep>/plate_fill/<key>.request.json、
+    本组镜暂用最近格占位(view.fill_pending),退出码 6 并打印 [plate_fill_prompt_needed] 列出工单——Agent 逐张看工单列的白模帧与源图 /
+    候选图,把指令写进工单给的 prompt_file({"instruction": 英文改视角指令, 可选 "source_key"+"source_reason" 改选源图}),再前台重跑
+    同一命令即出图。补图与源图构图几乎没变时打印 [plate_fill_unchanged](视角多半没改动,不算出错)。--status 对占位镜报 fill_pending(FAIL)。
   **格子重绘放大**(2026-11-06,默认执行、无开关):收尾时把本集被选用的格子用场景图像模型(与出宫格同一个)以该格原生裁片为参考
   重绘放大到分镜图规格,过漂移机检即原地覆盖(库条目记 upscale{});每格一次出图计入 --max-new。放大不成(出图报错 / 机检拒收 /
   模型不支持)退回插值格,打印 [grid9_upscale_fallback] 列出格子、用到它的镜与原因,不算出错、不改退出码;--status 以 WARN
@@ -49,7 +58,7 @@ Agent 须原文上报,请用户到控制台「🎨 生成模型」换图像模�
   python code/render_shot_plates.py --project <slug> --ep ep01 --no-grid-fallback  # 九宫格模式关掉自动补图(只选格;加 --force 才重出宫格本身)
   可选 --sun west:把太阳罗盘方位换算成相对机位的方向写进提示词;--seed N:新出图固定种子。
   退出码:0 完成;1 出错/机检不过(含 [pano_sparse]:手动加的悬空稀疏锚点待出全景,未出图,原文上报用户裁决);2 图像模型不支持全景(请用户换模型);3 已达 --max-new 上限还有待出;4 世界模型模式的场景尚未生成世界模型(请用户生成);
-        5 九宫格手动补图模式下有镜待用户手工截取背景图(其余镜已落盘)。
+        5 九宫格手动补图模式下有镜待用户手工截取背景图(其余镜已落盘);6 画板式补图待 Agent 写改视角指令(工单已写,其余镜已落盘)。
 
 纪律(2026-09-09,前科 dzg6 p6-shot-plates-ep01-s01s02:Agent 把本脚本丢后台就结单,进程随之被杀,16 镜一张没出):
   本脚本必须在派发任务内前台同步跑完;禁止 nohup/&/后台派发;每出一张即打印 saved: 并按镜落盘索引与库,
@@ -82,6 +91,11 @@ def main():
         ap.add_argument('--grid-layout', choices=('center', 'views'), default='center',
                         help='九宫格出图方式(仅在该场景该方案还没有九宫格、或显式重出宫格时生效):center(默认,2026-10-04)= 同一站位 8 向 + 1 格仰拍,'
                         '站位/机高按本集机位推;views = 原方案,按 layout.json#views 的 9 个语义机位')
+        ap.add_argument('--fill-method', choices=('canvas', 'classic'), default='canvas',
+                        help='九宫格自动补图方式(2026-11-07):canvas = 画板式(默认,以一张库图为参考按 Agent 写的改视角指令出图,同向镜共用);'
+                        'classic = 原俯视图 + 九宫格整图补图(逐镜,仅对比测试用)')
+        ap.add_argument('--user-pref', action=argparse.BooleanOptionalAction, default=True,
+                        help='同向手选复用(2026-11-07,默认开):同场景同光照方案里用户手选过同向的图就直接用;--no-user-pref 仅对比测试用')
         ap.add_argument('--grid-fallback', action=argparse.BooleanOptionalAction, default=True,
                         help='九宫格模式补图(2026-09-26 起为默认流程,--no-grid-fallback 关闭):最近格朝向/俯仰/距离/机高任一分量超限的镜,'
                         '改以俯视图 + 九宫格整图为参考按本镜机位单独出图(相近机位复用);索引里已用不合适格子的镜也会重新决策(不动已出宫格)。'
@@ -124,7 +138,8 @@ def main():
         return 1 if st['problems'] else 0
     try:
         stats = run_episode(base, ep, targets or None, dry_run=args.dry_run, force=args.force, sun=args.sun, seed=args.seed,
-                            max_new=args.max_new, repano=args.repano, grid_fallback=args.grid_fallback, grid_layout=args.grid_layout)
+                            max_new=args.max_new, repano=args.repano, grid_fallback=args.grid_fallback, grid_layout=args.grid_layout,
+                            fill_method=args.fill_method, user_pref=args.user_pref)
     except PanoUnsupported as error:
         print(f"[pano_unsupported] {error}", file=sys.stderr, flush=True)
         print(json.dumps({'shot_plates': {'blocked': 'pano_unsupported', 'detail': str(error)}}, ensure_ascii=False), flush=True)
@@ -151,6 +166,9 @@ def main():
         # 九宫格格子重绘放大没成(2026-11-06):沿用插值格,不算出错、不改退出码,原样写进运行报告
         print(f"[grid9_upscale_fallback] {args.project}/{ep}: {len(fallback)} 个九宫格格子没能用场景图像模型放大,沿用插值格(背景图照常可用):"
               + ';'.join(f"{x['scene_id']}/{x['key']}(用于 {', '.join(x['shots'])}):{x['reason']}" for x in fallback), flush=True)
+    if stats.get('fill_unchanged'):
+        print(f"[plate_fill_unchanged] {args.project}/{ep}: {len(stats['fill_unchanged'])} 张画板式补图与源图构图几乎没变(视角多半没改动,"
+              f"背景图照常可用,请目视核对后写进回执):{', '.join(stats['fill_unchanged'])}", flush=True)
     if stats['errors']:
         return 1
     if stats.get('pending_new'):
@@ -162,6 +180,12 @@ def main():
               "请用户在场景预览页对应场景的全景 360° 视窗或世界模型视窗里按本镜机位用「💾 背景图」截取(或在分镜预览页对该镜「换图」手选),"
               "之后重跑本命令;Agent 不得自行出图、不得改背景图模式绕过", flush=True)
         return 5
+    if stats.get('fill_prompt_needed'):
+        # 画板式补图(2026-11-07):这些补图还没有改视角指令,本组镜暂用最近格占位;Agent 看图写指令后重跑即出图
+        print(f"[plate_fill_prompt_needed] {args.project}/{ep}: {len(stats['fill_prompt_needed'])} 张画板式补图待写改视角指令"
+              f"(占位 {len(stats.get('fill_pending') or [])} 张):{', '.join(stats['fill_prompt_needed'])};逐个读工单,看其中列的白模帧与源图 / 候选图,"
+              "把英文改视角指令写进工单的 prompt_file 后,在前台重跑同一命令" + ('' if not args.dry_run else '(dry-run:未出图)'), flush=True)
+        return 0 if args.dry_run else 6
     return 0
 
 

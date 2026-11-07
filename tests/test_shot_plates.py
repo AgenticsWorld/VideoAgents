@@ -2,6 +2,7 @@
 import math
 import re
 import sys
+from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -1282,7 +1283,7 @@ def test_run_episode_vertical_project_makes_16x9_grid_fallback(tmp_path, monkeyp
     calls = []
     monkeypatch.setattr('modules.genmedia.generate_image', lambda prompt, out, **k: (calls.append(k), Path(out).write_bytes(b'x')), raising=False)
     monkeypatch.setattr('modules.genmedia.get_config', lambda *a, **k: {'provider': 'test', 'model': 'm'})
-    stats = sp.run_episode(base, ep, log=lambda *_: None)
+    stats = sp.run_episode(base, ep, log=lambda *_: None, fill_method='classic')
     assert not stats['errors'] and stats.get('grid9_fallback_new') == 1 and len(calls) == 1
     assert calls[0]['size'] == '1920x1080' and calls[0]['aspect'] == '16:9'                     # 竖屏项目的补图也是 16:9
     shots = sp.load_episode_index(base, ep)['shots']
@@ -1478,7 +1479,7 @@ def test_run_episode_upscales_used_grid_tiles(tmp_path, monkeypatch):
     monkeypatch.setattr('modules.genmedia.generate_image', gen)
     monkeypatch.setattr('modules.genmedia.get_config', lambda *a, **k: {'provider': 'test', 'model': 'm'})
     monkeypatch.setattr(sp, 'grid9_upscale_channel', lambda: dict(UP_CH))
-    stats = sp.run_episode(base, ep, max_new=1, log=lambda *_: None)                      # 补图用掉唯一的预算:格子放大留待下次
+    stats = sp.run_episode(base, ep, max_new=1, log=lambda *_: None, fill_method='classic')   # 补图用掉唯一的预算:格子放大留待下次
     assert len(others) == 1 and not ups and stats['grid9_upscale']['deferred'] and stats['pending_new'] == 1
     key = sp.load_episode_index(base, ep)['shots']['sh001']['plates'][0]['key']
     assert sp.status_episode(base, ep)['grid9_interpolated'] == ['sh001:start']           # 验收只作 WARN
@@ -1712,3 +1713,166 @@ def test_upscale_derived_and_edited_tiles_keep_user_edits(tmp_path):
     rec = sp.ensure_grid9_tile_upscaled(base2, sid2, t2['key'], channel=dict(UP_CH), generate=_fake_upscaler(calls), log=lambda *_: None)
     assert rec['status'] == 'done' and calls[0]['ref_size'] == (1280, 720) and rec['native'] == [400, 225]
     assert Image.open(base2 / t2['file']).size == (1920, 1080)
+
+
+# ---------------------------------------------------------------- 同向手选复用 / 画板式补图 / 换图推荐(2026-11-07)
+def test_same_direction_and_user_pref_plate_nearest_neighbour():
+    a = {'bearing_deg': 10.0, 'pitch_deg': 0.0, 'height_class': 2}
+    assert sp.same_direction(a, {'bearing_deg': 50.0, 'pitch_deg': 5.0}) and sp.same_direction(a, {'bearing_deg': 330.0, 'pitch_deg': -15.0})
+    assert not sp.same_direction(a, {'bearing_deg': 60.0, 'pitch_deg': 0.0})          # 朝向差 > 45°
+    assert not sp.same_direction(a, {'bearing_deg': 10.0, 'pitch_deg': 25.0})         # 俯仰换档
+    picks = [{'ep': 'ep01', 'shot_id': 'sh1', 'role': 'start', 'key': 'A', 'camera': {'bearing_deg': 0.0, 'pitch_deg': 0.0, 'height_class': 2}},
+             {'ep': 'ep01', 'shot_id': 'sh2', 'role': 'start', 'key': 'B', 'camera': {'bearing_deg': 30.0, 'pitch_deg': 0.0, 'height_class': 2}},
+             {'ep': 'ep01', 'shot_id': 'sh3', 'role': 'start', 'key': 'B', 'camera': {'bearing_deg': 35.0, 'pitch_deg': 0.0, 'height_class': 2}},
+             {'ep': 'ep01', 'shot_id': 'sh4', 'role': 'start', 'key': 'C', 'camera': {'bearing_deg': 180.0, 'pitch_deg': 0.0, 'height_class': 2}}]
+    entries = {k: {'key': k} for k in 'ABC'}
+    e, info = sp.user_pref_plate(picks, {'bearing_deg': 5.0, 'pitch_deg': 0.0, 'height_class': 2}, entries)
+    assert e['key'] == 'A' and info['like'] == 'ep01/sh1' and info['votes'] == 1     # 取机位最像的,不是票数多的
+    e, info = sp.user_pref_plate(picks, {'bearing_deg': 0.0, 'pitch_deg': 0.0, 'height_class': 2}, entries, exclude=('ep01', 'sh1', 'start'))
+    assert e['key'] == 'B' and info['votes'] == 2                                       # 本镜自己的手选不算依据
+    assert sp.user_pref_plate(picks, {'bearing_deg': 100.0, 'pitch_deg': 0.0}, entries) == (None, {})
+    assert sp.user_pref_plate(picks, {'bearing_deg': 0.0, 'pitch_deg': 0.0}, {'C': {'key': 'C'}}) == (None, {})   # 库里没了的不算
+    main, why = sp.scene_main_plate(picks, Counter(), entries)
+    assert main['key'] == 'B' and '手选' in why
+    fills = {'F': {'key': 'F', 'pano_ref': {'kind': 'grid9_fallback', 'method': 'canvas'}}, 'T': {'key': 'T', 'grid9': True}}
+    main, why = sp.scene_main_plate([], Counter({'F': 5, 'T': 2}), fills)
+    assert main['key'] == 'T' and '用得最多' in why                                      # 补图不当场景主图
+
+
+def _image_tiles(base, sid):
+    """把 _manual_project 里的 b'x' 占位格子换成真图(画板式补图要读源图尺寸、算漂移)。"""
+    from PIL import Image
+    for e in sp.load_library(base, sid)['plates']:
+        _pattern_sheet(640, 360).save(base / e['file'], format='JPEG')
+
+
+def test_run_episode_canvas_fill_request_then_render(tmp_path, monkeypatch):
+    import json
+    from PIL import Image
+    base, ep, sid = _manual_project(tmp_path, monkeypatch, 'grid')
+    _image_tiles(base, sid)
+    calls = []
+
+    def gen(prompt, output, negative='', refs=None, size='', seed=None, **k):
+        calls.append({'prompt': prompt, 'refs': refs, 'size': size})
+        Image.new('RGB', tuple(map(int, size.split('x'))), (20, 120, 200)).save(output, format='JPEG')
+    monkeypatch.setattr('modules.image_canvas.channel_facts', lambda *a: dict(UP_CH))
+    # 第一次:sh002 格子不合适,画板式补图还没有指令 → 写工单、最近格占位、不出图
+    stats = sp.run_episode(base, ep, log=lambda *_: None, generate=gen)
+    assert not stats['errors'] and not calls and stats['fill_pending'] == ['sh002:start'] and len(stats['fill_prompt_needed']) == 1
+    req_rel = stats['fill_prompt_needed'][0]
+    req = json.loads((base / req_rel).read_text(encoding='utf-8'))
+    assert req['shots'] == ['sh002:start'] and req['key'].endswith(sp.GRID9_CANVAS_SUFFIX) and req['source']['key'].startswith('L1_grid9_t')
+    assert req['members'][0]['whitebox_frame'].endswith('sh002_start.whitebox.jpg') and 'camera_en' in req and req['alternatives']
+    p2 = sp.load_episode_index(base, ep)['shots']['sh002']['plates'][0]
+    assert p2['reuse'] == 'grid9' and p2['view']['fill_pending']['request'] == req_rel
+    assert sp.status_episode(base, ep)['problems'] == {'sh002': 'fill_pending'}
+    # Agent 写好指令(改选另一格作源图)→ 重跑:按指令出一张,入库、换掉占位
+    src_key = req['alternatives'][-1]['key']
+    Path(req['prompt_file']).write_text(json.dumps({'instruction': 'Move the camera down to the floor, looking east.',
+                                                    'source_key': src_key, 'source_reason': 'test'}), encoding='utf-8')
+    stats = sp.run_episode(base, ep, log=lambda *_: None, generate=gen)
+    assert not stats['errors'] and stats.get('grid9_canvas_new') == 1 and len(calls) == 1 and not stats.get('fill_prompt_needed')
+    assert calls[0]['refs'][0].endswith(f'{src_key}.png') and calls[0]['size'] == '1920x1080'
+    assert calls[0]['prompt'].startswith(sp.GRID9_CANVAS_HEAD) and 'Instruction: Move the camera down' in calls[0]['prompt']
+    p2 = sp.load_episode_index(base, ep)['shots']['sh002']['plates'][0]
+    assert p2['reuse'] == 'grid9_fallback' and p2['key'] == req['key'] and p2['view']['fallback']['method'] == 'canvas'
+    entry = next(e for e in sp.load_library(base, sid)['plates'] if e['key'] == req['key'])
+    assert sp.is_canvas_fill(entry) and entry['pano_ref']['source_key'] == src_key and entry['pano_ref']['shots'] == [f'{ep}/sh002:start']
+    assert entry['canvas_check']['unchanged'] is False and entry['size'] == '1920x1080'
+    assert sp.status_episode(base, ep)['problems'] == {}
+    assert sp.run_episode(base, ep, log=lambda *_: None, generate=gen)['skipped_fresh'] == 2 and len(calls) == 1
+
+
+def test_run_episode_canvas_fill_shared_by_same_direction_shots(tmp_path, monkeypatch):
+    import json
+    from PIL import Image
+    base, ep, sid = _manual_project(tmp_path, monkeypatch, 'grid')
+    _image_tiles(base, sid)
+    eppath = base / 'directing' / ep / 'whitebox' / 'episode.json'
+    episode = json.loads(eppath.read_text(encoding='utf-8'))
+    episode['groups'][0]['cameras'].append({'shot_id': 'sh003', 'movement': 'static', 'start': 2.0, 'duration_s': 2.0,
+                                            'keyframes': [cam((-9, 0.3, 3), (-3, 0.3, 3.5), 30.0)]})   # 与 sh002 同向、同样不合适
+    eppath.write_text(json.dumps(episode), encoding='utf-8')
+    stats = sp.run_episode(base, ep, log=lambda *_: None, generate=lambda *a, **k: None)
+    assert len(stats['fill_prompt_needed']) == 1 and sorted(stats['fill_pending']) == ['sh002:start', 'sh003:start']
+    req = json.loads((base / stats['fill_prompt_needed'][0]).read_text(encoding='utf-8'))
+    assert sorted(req['shots']) == ['sh002:start', 'sh003:start']
+    Path(req['prompt_file']).write_text(json.dumps({'instruction': 'Lower the camera.'}), encoding='utf-8')
+    calls = []
+    monkeypatch.setattr('modules.image_canvas.channel_facts', lambda *a: dict(UP_CH))
+    stats = sp.run_episode(base, ep, log=lambda *_: None,
+                           generate=lambda p, o, size='', **k: (calls.append(o), Image.new('RGB', (1920, 1080), 'red').save(o, format='JPEG')))
+    shots = sp.load_episode_index(base, ep)['shots']
+    assert len(calls) == 1 and shots['sh002']['plates'][0]['key'] == shots['sh003']['plates'][0]['key'] == req['key']
+
+
+def test_run_episode_user_pref_reuses_same_direction_manual_pick(tmp_path, monkeypatch):
+    import json
+    base, ep, sid = _manual_project(tmp_path, monkeypatch, 'grid')
+    tile = next(e for e in sp.load_library(base, sid)['plates'] if e['key'].endswith('_t2'))
+    # 另一集里用户手选过一张与 sh002 同向(朝东、贴地)的格子
+    f = sp.camera_facts(cam((-7, 0.3, 1), (-2, 0.3, 1.5), 50.0), FMT, *AXES)
+    sp.save_episode_index(base, 'ep02', {'schema_version': sp.SCHEMA_EPISODE, 'ep': 'ep02', 'shots': {'sh900': {
+        'group_id': 'grp900', 'scene_id': sid, 'lighting_scheme_id': 'L1',
+        'plates': [{'role': 'start', 'key': tile['key'], 'file': tile['file'], 'reuse': 'manual', 'camera': f}]}}})
+    called = []
+    stats = sp.run_episode(base, ep, log=lambda *_: None, generate=lambda *a, **k: called.append(a))
+    assert not stats['errors'] and stats.get('grid9_user_pref') == 1 and not stats.get('fill_prompt_needed') and not called
+    p2 = sp.load_episode_index(base, ep)['shots']['sh002']['plates'][0]
+    assert p2['reuse'] == 'user_pref' and p2['key'] == tile['key'] and p2['view']['user_pref']['like'] == 'ep02/sh900'
+    p1 = sp.load_episode_index(base, ep)['shots']['sh001']['plates'][0]
+    assert p1['reuse'] == 'grid9'                                                      # 朝北的 sh001 没有同向手选,照常选格
+    assert sp.status_episode(base, ep)['problems'] == {}
+    stats = sp.run_episode(base, ep, force=True, user_pref=False, log=lambda *_: None, generate=lambda *a, **k: None)
+    assert not stats.get('grid9_user_pref') and stats['fill_pending'] == ['sh002:start']   # 对比测试开关:关掉后照常补图
+
+
+def test_plate_direction_votes_and_same_direction_peers(tmp_path):
+    base, sid, ep = tmp_path, 'SCN-1', 'ep01'
+    north = sp.camera_facts(cam((0, 1.5, 5), (0, 1.5, 0)), FMT, *AXES)
+    north2 = sp.camera_facts(cam((2, 1.5, 6), (1, 1.5, 0)), FMT, *AXES)
+    east = sp.camera_facts(cam((0, 1.5, 0), (5, 1.5, 0)), FMT, *AXES)
+    for k in ('A', 'B', 'C'):
+        (base / f'{k}.png').parent.mkdir(parents=True, exist_ok=True); (base / f'{k}.png').write_bytes(b'x')
+
+    def rec(key, camf, reuse, scheme='L1', **view):
+        return {'group_id': 'g', 'scene_id': sid, 'lighting_scheme_id': scheme,
+                'plates': [{'role': 'start', 'key': key, 'file': f'{key}.png', 'reuse': reuse, 'camera': camf, 'view': view}]}
+    sp.save_episode_index(base, ep, {'schema_version': sp.SCHEMA_EPISODE, 'ep': ep, 'shots': {
+        'sh1': rec('A', north, 'manual'), 'sh2': rec('A', north2, 'grid9'), 'sh3': rec('B', north2, 'grid9_fallback'),
+        'sh4': rec('C', east, 'grid9'), 'sh5': rec('B', north, 'grid9', scheme='L2'), 'sh6': rec('C', north, 'grid9', fill_pending={'key': 'x'})}})
+    votes = sp.plate_direction_votes(base, sid, 'L1', north, exclude=(ep, 'sh2', 'start'))
+    assert votes == {'A': {'same_dir': 1, 'manual': 1}, 'B': {'same_dir': 1, 'manual': 0}}   # 东向、别的方案、占位格都不算
+    peers = sp.same_direction_peers(base, ep, 'sh1')
+    assert [p['shot_id'] for p in peers] == ['sh2', 'sh3', 'sh6'] and peers[2]['fill_pending']   # 手选的自己不列、东向与 L2 不列
+
+
+def test_core_candidates_recommend_and_swap_returns_peers(tmp_path, monkeypatch):
+    from services.runtime import core
+    monkeypatch.setattr(core, 'PROJECTS_DIR', tmp_path)
+    base, sid, ep = tmp_path / 'proj', 'SCN-1', 'ep01'
+    pdir = base / 'assets/concepts/scenes' / sid / 'plates'
+    pdir.mkdir(parents=True)
+    (base / 'settings.json').write_text('{}', encoding='utf-8')
+    north = sp.camera_facts(cam((0, 1.5, 5), (0, 1.5, 0)), FMT, *AXES)
+    north2 = sp.camera_facts(cam((2, 1.5, 6), (1, 1.5, 0)), FMT, *AXES)
+    east = sp.camera_facts(cam((0, 1.5, 0), (5, 1.5, 0)), FMT, *AXES)
+    plates = []
+    for k in ('A', 'B', 'C'):
+        rel = f'assets/concepts/scenes/{sid}/plates/{k}.png'
+        (base / rel).write_bytes(b'x')
+        plates.append({'key': k, 'file': rel, 'lighting_scheme_id': 'L1', 'camera': north, 'pano_ref': {'kind': 'grid9', 'scheme': 'L1'}})
+    sp.save_library(base, sid, {'schema_version': sp.SCHEMA_LIBRARY, 'scene_id': sid, 'plates': plates})
+
+    def rec(key, camf, reuse):
+        return {'group_id': 'grp001', 'scene_id': sid, 'lighting_scheme_id': 'L1',
+                'plates': [{'role': 'start', 'key': key, 'file': f'assets/concepts/scenes/{sid}/plates/{key}.png', 'reuse': reuse, 'camera': camf}]}
+    sp.save_episode_index(base, ep, {'schema_version': sp.SCHEMA_EPISODE, 'ep': ep, 'shots': {
+        'sh001': rec('A', north, 'grid9'), 'sh002': rec('C', north2, 'manual'), 'sh003': rec('A', north2, 'grid9'), 'sh004': rec('A', east, 'grid9')}})
+    monkeypatch.setattr(sp, 'sync_group', lambda *a, **k: {'errors': [], 'warnings': [], 'updated': False})
+    rows = core._shot_plate_candidates('proj', ep, 'sh001', 'start')['plates']
+    assert [r['key'] for r in rows][:2] == ['C', 'A'] and rows[0]['recommend'] == {'same_dir': 1, 'manual': 1}   # 同向手选的排最前
+    assert rows[1]['recommend'] == {'same_dir': 1, 'manual': 0} and rows[2]['recommend'] is None
+    out = core._shot_plate_swap('proj', ep, 'sh001', {'role': 'start', 'key': 'C'})
+    assert [p['shot_id'] for p in out['peers']] == ['sh003']          # 同向、非手选、没在用 C;东向的 sh004 不列,手选的 sh002 不列

@@ -1489,9 +1489,10 @@ async def storyboard_ref_upload(
 
 
 @api.get("/projects/{project}/storyboard/{ep}/plates/{shot_id}/candidates", tags=["storyboard"])
-async def storyboard_plate_candidates(project: str, ep: str, shot_id: str) -> dict[str, Any]:
-    """分镜预览「🔁 换图」:本镜所在场景背景图库全部图 + 本镜当前起点/终点所用 key(2026-09-23)。"""
-    return _artifact_urls(await core.api_shot_plate_candidates(project, ep, shot_id), project)
+async def storyboard_plate_candidates(project: str, ep: str, shot_id: str, role: str = "start") -> dict[str, Any]:
+    """分镜预览「🔁 换图」:本镜所在场景背景图库全部图 + 本镜当前起点/终点所用 key(2026-09-23);
+    role 给定时按该角色机位标出「同向镜在用」的推荐并排在前面(2026-11-07)。"""
+    return _artifact_urls(await core.api_shot_plate_candidates(project, ep, shot_id, role), project)
 
 
 @api.post("/projects/{project}/storyboard/{ep}/plates/{shot_id}/swap", tags=["storyboard"])

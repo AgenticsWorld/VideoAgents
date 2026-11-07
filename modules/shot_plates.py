@@ -1245,6 +1245,246 @@ def build_grid9_fallback_prompt(facts, phrases, out_of_frame, scene, layout, sty
     return '\n'.join(lines)
 
 
+# ---------------------------------------------------------------- 同向手选复用 + 画板式补图(2026-11-07)
+# 用户手动换图统计(5 个项目 171 次,2026-11-07):144 次换上的图按自动选格打分反而更远(格子标称朝向与画出的内容对不上,
+# 中心点九宫格常把九格都画成地标的代表视角),155 次换上的图同场景还有别的镜在用;inlove 的选择与分镜写法「主机位 / 与主机位同向」
+# 一致——同向的镜不论景别、焦距、机高、远近都共用一张,只有真不同的视角(从水面仰望近侧桥栏、站桥上回看)才另选。
+# 自动补图(俯视图 + 九宫格整图 + 长提示词)在 inlove SCN-0005 补的 7 张只留用 1 张:每张各画一座桥、桥上机位仍画成侧立面;
+# 用户在画板里拿一张格子经修图 Agent「改成站在桥最高处往上桥方向看」一次成功。据此(用户 2026-11-07 拍板,四条都复用 + 自动补图用画板):
+#  ③ 九宫格模式选图先看同场景同光照方案里用户手选过(集索引 reuse=manual)的同向图,取机位最近的一张(reuse=user_pref),
+#     不再按格子打分、也不补图(留一测:同场景其它手选镜按最近邻预测用户的选择,inlove 24/27、五项目 97/152);
+#  ④ 自动补图改为画板式编辑(fill_method=canvas,默认;classic = 原俯视图 + 九宫格整图的补图):以一张库图为唯一参考 [Image 1],
+#     按 Agent 看图写的改视角指令出图;同向(±45°、俯仰同档)的不合适镜共用一张补图;源图默认 = 本场景用户手选最多的图,
+#     没有手选就用本场景用得最多的图(不算补图),再没有用最近格,Agent 可在工单列的候选里改选。
+#     指令由跑本脚本的 Agent 写:没有指令的补图先写工单 directing/<ep>/plate_fill/<key>.request.json、本镜暂用最近格占位
+#     (view.fill_pending),CLI 退出码 6 [plate_fill_prompt_needed];Agent 看图写好 <key>.prompt.json 后重跑同一命令即出图。
+#  ①② 分镜预览换图弹窗按「同向镜在用」推荐排序、换图后列出同向镜可一起换(same_direction_peers / plate_direction_votes)。
+SAME_DIR_BEARING_DEG = 45.0       # 同向:朝向差 ≤ 45°
+SAME_DIR_PITCH_DEG = 20.0         # 且俯仰同档:仰 > 20° / 平 / 俯 < −20°
+USER_PICK_REUSES = ('manual',)    # 算「用户手选」的集索引 reuse:分镜预览 🔁 换图 / code/swap_shot_plate.py
+FILL_METHODS = ('canvas', 'classic')
+GRID9_CANVAS_SUFFIX = '_g9cv'
+PLATE_FILL_DIR = 'plate_fill'     # directing/<ep>/plate_fill/<key>.request.json(宿主写的工单)/ <key>.prompt.json(Agent 写的指令)
+GRID9_CANVAS_UNCHANGED_CORR = 0.95   # 补图与源图构图相关 ≥ 此值 → 视角多半没改动(只报 WARN [plate_fill_unchanged],不拒收)
+GRID9_CANVAS_HEAD = ("Edit [Image 1]. Keep the art style, medium, colour palette, materials, lighting and weather exactly as in [Image 1], "
+                     "and keep it the same place: the same structures, landmarks, terrain and set dressing, built and placed the same way. "
+                     "Only the camera moves to the new viewpoint described below. Return the complete image.")
+GRID9_CANVAS_TAIL = ("The result is an empty location background plate: no people, no characters, no human figures or silhouettes, no animals, "
+                     "no text, no watermark, no border, no split screen, one single full-frame picture.")
+
+
+def pitch_class(cam: dict) -> str:
+    p = float((cam or {}).get('pitch_deg') or 0)
+    return 'up' if p > SAME_DIR_PITCH_DEG else ('down' if p < -SAME_DIR_PITCH_DEG else 'level')
+
+
+def same_direction(a: dict, b: dict) -> bool:
+    """两个机位是否同向(朝向差 ≤ SAME_DIR_BEARING_DEG 且俯仰同档);远近、机高、焦距不论(用户换图从不因这些另选)。"""
+    if not a or not b or a.get('bearing_deg') is None or b.get('bearing_deg') is None:
+        return False
+    return angle_diff(a['bearing_deg'], b['bearing_deg']) <= SAME_DIR_BEARING_DEG and pitch_class(a) == pitch_class(b)
+
+
+def direction_distance(a: dict, b: dict) -> float:
+    """同向机位之间挑最像的一个:朝向差 / 45° + 俯仰差 / 20° + 机高档差 × 0.5。"""
+    return (angle_diff(a.get('bearing_deg') or 0, b.get('bearing_deg') or 0) / SAME_DIR_BEARING_DEG
+            + abs(float(a.get('pitch_deg') or 0) - float(b.get('pitch_deg') or 0)) / SAME_DIR_PITCH_DEG
+            + abs(int(a.get('height_class') or 0) - int(b.get('height_class') or 0)) * 0.5)
+
+
+def episode_plate_records(base: Path, *, current_ep: str = '', current_idx: dict | None = None):
+    """各集集索引里每镜每个角色的背景图记录:逐条 yield (ep, shot_id, 镜记录, 背景图条目)。current_idx = 本次运行里的
+    本集索引(内存版,优先于磁盘;本集还没有索引文件时也算上)。"""
+    eps = {f.parent.name for f in (base / 'directing').glob('ep*/shot_plates.json')}
+    if current_ep and current_idx is not None:
+        eps.add(current_ep)
+    for ep in sorted(eps):
+        idx = current_idx if (current_idx is not None and ep == current_ep) else read(episode_index_path(base, ep), {})
+        for shot_id, rec in ((idx or {}).get('shots') or {}).items():
+            if not isinstance(rec, dict):
+                continue
+            for p in rec.get('plates') or []:
+                if isinstance(p, dict) and p.get('key'):
+                    yield ep, shot_id, rec, p
+
+
+def user_plate_picks(base: Path, sid: str, scheme: str | None = None, *, current_ep: str = '', current_idx: dict | None = None) -> list[dict]:
+    """本场景(scheme 给定时只算该光照方案)各集里用户手选的背景图:[{ep, shot_id, role, key, file, camera}];图文件不在的不算。"""
+    out = []
+    for ep, shot_id, rec, p in episode_plate_records(base, current_ep=current_ep, current_idx=current_idx):
+        if rec.get('scene_id') != sid or (scheme and rec.get('lighting_scheme_id') != scheme):
+            continue
+        if p.get('reuse') in USER_PICK_REUSES and p.get('camera') and (base / str(p.get('file') or '')).is_file():
+            out.append({'ep': ep, 'shot_id': shot_id, 'role': p.get('role') or 'start', 'key': p['key'], 'file': p['file'], 'camera': p['camera']})
+    return out
+
+
+def user_pref_plate(picks: list, facts: dict, entries: dict, *, exclude=None) -> tuple[dict | None, dict]:
+    """③ 同向手选复用:picks 里与本镜同向、库里还在的手选图,取机位最像的一张(一样像时取手选次数多的)。
+    entries = 库 key → 条目;exclude = (ep, shot_id, role) 本镜自己(重新决策时不拿自己上一次的选择当依据)。
+    返回 (库条目, 说明 {key, like, votes, bearing_delta_deg, pitch_delta_deg}) 或 (None, {})。"""
+    cands = [p for p in picks if (p['ep'], p['shot_id'], p['role']) != exclude and p['key'] in entries and same_direction(p['camera'], facts)]
+    if not cands:
+        return None, {}
+    votes = Counter(p['key'] for p in cands)
+    best = min(cands, key=lambda p: (round(direction_distance(p['camera'], facts), 3), -votes[p['key']]))
+    c = best['camera']
+    return entries[best['key']], {
+        'key': best['key'], 'like': f"{best['ep']}/{best['shot_id']}" + ('(end)' if best['role'] == 'end' else ''), 'votes': votes[best['key']],
+        'bearing_delta_deg': round(angle_diff(c['bearing_deg'], facts['bearing_deg']), 1),
+        'pitch_delta_deg': round(abs(float(c.get('pitch_deg') or 0) - float(facts.get('pitch_deg') or 0)), 1)}
+
+
+def is_canvas_fill(entry: dict | None) -> bool:
+    pr = (entry or {}).get('pano_ref') or {}
+    return pr.get('kind') == 'grid9_fallback' and pr.get('method') == 'canvas'
+
+
+def scene_main_plate(picks: list, used: Counter, entries: dict) -> tuple[dict | None, str]:
+    """④ 画板式补图的默认源图:本场景用户手选最多的图 → 没有手选就用本场景(本方案)用得最多的非补图库图 → 都没有 None(调用方用最近格)。"""
+    c = Counter(p['key'] for p in picks if p['key'] in entries)
+    if c:
+        k, n = c.most_common(1)[0]
+        return entries[k], f'本场景用户手选最多的图({n} 处在用)'
+    c = Counter({k: n for k, n in used.items() if k in entries and not is_grid9_fallback(entries[k])})
+    if c:
+        k, n = c.most_common(1)[0]
+        return entries[k], f'本场景用得最多的图({n} 处在用)'
+    return None, ''
+
+
+def find_canvas_fill(entries: list, scheme_key: str, facts: dict, base: Path, require_file: bool = True):
+    """库里(或本次运行待出的)同方案、与本镜同向的画板式补图,多个取机位最像的一张。"""
+    best = None
+    for e in entries:
+        if not is_canvas_fill(e) or (e.get('pano_ref') or {}).get('scheme') != scheme_key:
+            continue
+        c = e.get('camera') or {}
+        if not same_direction(c, facts):
+            continue
+        if require_file and not e.get('pending') and not (base / e['file']).is_file():
+            continue
+        s = direction_distance(c, facts)
+        if best is None or s < best[0]:
+            best = (s, e)
+    return best[1] if best else None
+
+
+def camera_sentence_en(f: dict) -> str:
+    """补图工单里的本组代表机位(英文一句,给写指令的 Agent 对照白模帧用)。"""
+    return (f"camera {f.get('height_m')} m above the ground ({f.get('height_word')}), standing {f.get('standing') or 'inside the location'}, "
+            f"facing {f.get('facing')} (compass bearing {round(float(f.get('bearing_deg') or 0))} degrees), {f.get('tilt_word')}, "
+            f"{f.get('lens_mm_equiv')}mm-equivalent lens ({f.get('fov_h_deg')} degrees horizontal field of view); frame left is "
+            f"{f.get('frame_left')}, frame right is {f.get('frame_right')}, behind the camera is {f.get('behind')}")
+
+
+def build_canvas_fill_prompt(instruction: str) -> str:
+    return '\n'.join([GRID9_CANVAS_HEAD, 'Instruction: ' + ' '.join(str(instruction or '').split()), GRID9_CANVAS_TAIL])
+
+
+def plate_fill_dir(base: Path, ep: str) -> Path:
+    return base / 'directing' / component(ep) / PLATE_FILL_DIR
+
+
+def write_fill_request(base: Path, ep: str, req: dict) -> Path:
+    d = plate_fill_dir(base, ep)
+    d.mkdir(parents=True, exist_ok=True)
+    p = d / f"{req['key']}.request.json"
+    tmp = p.with_suffix('.tmp')
+    tmp.write_text(json.dumps(req, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    os.replace(tmp, p)
+    return p
+
+
+def read_fill_prompt(base: Path, ep: str, key: str, *, sid: str, scheme_key: str, facts: dict) -> dict | None:
+    """Agent 写好的补图指令 <key>.prompt.json({source_key?, source_reason?, instruction});本组代表机位随本次点名的镜略变、key 跟着变时,
+    同场景同方案同向的其它工单的指令也认。没有 / 指令为空 → None。"""
+    d = plate_fill_dir(base, ep)
+    cands = [d / f'{key}.prompt.json']
+    for rq in sorted(d.glob('*.request.json')) if d.is_dir() else []:
+        k = rq.name[:-len('.request.json')]
+        r = read(rq, {}) or {}
+        if k != key and r.get('scene_id') == sid and r.get('scheme') == scheme_key and same_direction(r.get('camera') or {}, facts):
+            cands.append(d / f'{k}.prompt.json')
+    for p in cands:
+        data = read(p, None) if p.is_file() else None
+        if isinstance(data, dict) and str(data.get('instruction') or '').strip():
+            return {**data, 'instruction': str(data['instruction']).strip(), 'prompt_file': str(p.relative_to(base))}
+    return None
+
+
+def render_canvas_fill(base: Path, sid: str, *, source: dict, prompt: str, out_rel: str, seed: int, negative: str = '',
+                       generate=None, log=print) -> dict:
+    """④ 画板式补图出图:以源图为唯一参考 [Image 1] 按提示词出一张;画幅 16:9,尺寸取源图与背景图规格中较大者(按模型上限收)。
+    源图是还没放大的九宫格插值格也直接用、不先放大:编辑本身就按全尺寸重画,先放大只多花一次出图(原补图参考的也是约 880px 的宫格)。
+    出图失败抛异常(调用方记 errors)。返回 {channel, size, drift(相对源图), unchanged(视角多半没改)}。"""
+    from PIL import Image
+    from modules import genmedia
+    from modules.image_canvas import channel_facts
+    out = {}
+    src_path = base / source['file']
+    with Image.open(src_path) as im:
+        src = im.convert('RGB')
+    pw, ph = plate_size()
+    w = max(src.width, pw)
+    h = round(w * ph / pw)
+    with genmedia.image_pref_env('scenes'):
+        ch = channel_facts('', '')
+        if ch.get('ref_capacity') == 0:
+            raise RuntimeError(f"场景图像渠道 {ch.get('provider') or '(未知)'} 没有配置图生图,无法以源图为参考补图")
+        rw, rh = genmedia.fit_image_request(ch.get('limits') or {}, w, h)
+        log(f"   画板式补图:{ch.get('provider')} {ch.get('model') or '(默认模型)'},源图 {source['key']}({src.width}x{src.height})→ 请求 {rw}x{rh}")
+        (generate or genmedia.generate_image)(prompt, str(base / out_rel), negative=negative, refs=[str(src_path)],
+                                               size=f'{rw}x{rh}', seed=seed)
+    with Image.open(base / out_rel) as im:
+        got = im.convert('RGB')
+    drift = grid9_upscale_drift(src, got)
+    out.update({'channel': {'provider': ch.get('provider') or '', 'model': ch.get('model') or ''}, 'size': [got.width, got.height],
+                'drift': drift, 'unchanged': drift['corr'] >= GRID9_CANVAS_UNCHANGED_CORR})
+    return out
+
+
+def plate_direction_votes(base: Path, sid: str, scheme: str | None, cam: dict, *, exclude=None) -> dict:
+    """① 换图弹窗推荐:本场景各集里与 cam 同向的镜各在用哪张图 → {key: {'same_dir': n, 'manual': m}}(exclude = (ep, shot_id, role) 本镜)。"""
+    out = {}
+    for ep, shot_id, rec, p in episode_plate_records(base):
+        if rec.get('scene_id') != sid or (scheme and rec.get('lighting_scheme_id') != scheme) or (ep, shot_id, p.get('role') or 'start') == exclude:
+            continue
+        if (p.get('view') or {}).get('manual_needed') or (p.get('view') or {}).get('fill_pending'):
+            continue      # 占位格不算「在用」
+        if not same_direction(p.get('camera') or {}, cam):
+            continue
+        v = out.setdefault(p['key'], {'same_dir': 0, 'manual': 0})
+        v['same_dir'] += 1
+        v['manual'] += int(p.get('reuse') in USER_PICK_REUSES)
+    return out
+
+
+def same_direction_peers(base: Path, ep: str, shot_id: str, role: str = 'start') -> list[dict]:
+    """② 换图后「同向镜一起换」:本集同场景同光照方案里与这镜这角色同向、还不是用户手选的其它镜(按镜号排)。
+    返回 [{shot_id, role, key, file, reuse, bearing_deg, pitch_deg, fill_pending, manual_needed}]。"""
+    ep, shot_id = component(ep), component(shot_id)
+    idx = load_episode_index(base, ep)
+    rec = idx['shots'].get(shot_id) or {}
+    me = next((p for p in rec.get('plates') or [] if isinstance(p, dict) and p.get('role') == role), None)
+    if not me or not me.get('camera'):
+        return []
+    out = []
+    for sh, r in sorted(idx['shots'].items()):
+        if not isinstance(r, dict) or r.get('scene_id') != rec.get('scene_id') or r.get('lighting_scheme_id') != rec.get('lighting_scheme_id'):
+            continue
+        for p in r.get('plates') or []:
+            if not isinstance(p, dict) or (sh == shot_id and p.get('role') == role) or p.get('reuse') in USER_PICK_REUSES:
+                continue
+            if not same_direction(p.get('camera') or {}, me['camera']):
+                continue
+            v = p.get('view') or {}
+            out.append({'shot_id': sh, 'role': p.get('role') or 'start', 'key': p.get('key'), 'file': p.get('file'), 'reuse': p.get('reuse'),
+                        'bearing_deg': (p.get('camera') or {}).get('bearing_deg'), 'pitch_deg': (p.get('camera') or {}).get('pitch_deg'),
+                        'fill_pending': bool(v.get('fill_pending')), 'manual_needed': bool(v.get('manual_needed'))})
+    return out
+
+
 def ensure_grid9(base: Path, sid: str, scheme_key: str, scheme_id: str, *, scene: dict, layout: dict, axes, fmt: dict, style_doc: dict,
                  time_of_day: str, lighting: str, force: bool = False, dry_run: bool = False, seed=None, log=print,
                  cameras: list | None = None, layout_kind: str = 'center') -> list[dict]:
@@ -1766,7 +2006,7 @@ def upscale_used_grid9_tiles(base: Path, decisions: list, libs: dict, *, dry_run
         e = d.get('entry') or {}
         if not e.get('key') or not d.get('file') or d['file'] != e.get('file'):
             continue
-        if (d.get('view') or {}).get('manual_needed'):    # 手动补图模式的占位格:等用户截图替换,不花钱放大
+        if (d.get('view') or {}).get('manual_needed') or (d.get('view') or {}).get('fill_pending'):   # 占位格:等用户截图 / 等补图指令,不花钱放大
             continue
         root = grid9_lowres_root(base, d['scene_id'], e, (libs.get(d['scene_id']) or {}).get('plates'))
         if root is None:
@@ -2265,12 +2505,16 @@ def plan_episode(base: Path, ep: str, only=None) -> dict:
 
 
 def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, sun='', seed=None, log=print, max_new=None,
-                repano=False, grid_fallback=True, grid_layout='center') -> dict:
+                repano=False, grid_fallback=True, grid_layout='center', fill_method='canvas', user_pref=True, generate=None) -> dict:
     """出图主流程(母图制,2026-09-14):查母图库 → 机位范围内且视锥装得下的镜直接引用母图整图 → 缺的机位出广角母图(场景全景齐备 →
     渲白模帧 → 全景按母图机位重投影 → 出图 → 入库)→ 写集索引。返回统计:new = 新出母图张数,library = 引用已有/本次母图的镜数。
     repano:集索引里仍指向 legacy(非母图制)库图的镜视为需重做(可复用本次新出的母图)。
-    图像模型不支持全景时抛 scene_panos.PanoUnsupported,一张背景图也不出。"""
+    图像模型不支持全景时抛 scene_panos.PanoUnsupported,一张背景图也不出。
+    九宫格模式(2026-11-07):user_pref = ③ 同向手选复用(仅对比测试时关);fill_method = 自动补图方式 canvas(画板式,默认)| classic;
+    generate 可注入画板式补图的出图函数(测试不联网)。"""
     from modules import scene_panos
+    if fill_method not in FILL_METHODS:
+        raise ValueError(f'fill_method 只能是 {FILL_METHODS}')
     ep = component(ep)
     plan = plan_episode(base, ep, only)
     episode, fmt, libs, layouts, axes = plan['episode'], plan['fmt'], plan['libs'], plan['layouts'], plan['axes']
@@ -2402,6 +2646,17 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
     # 再按每镜白模机位从九格里自动选最合适的一格;本镜的白模帧另渲到 plate_frames/ 供预览核对(不进 refs)。
     grid9_frames = []
     all_jobs = None
+    picks_cache = {}   # (sid, 光照方案) -> 用户手选(决策开始时的快照:后面按镜落盘会改本集索引,不能每次重读)
+
+    def picks_for(sid, scheme):
+        if (sid, scheme) not in picks_cache:
+            picks_cache[(sid, scheme)] = user_plate_picks(base, sid, scheme, current_ep=ep, current_idx=copy.deepcopy(idx)) if user_pref else []
+        return picks_cache[(sid, scheme)]
+
+    def entries_for(sid):
+        return {e['key']: e for e in libs[sid]['plates'] if e.get('file') and not e.get('pending') and (dry_run or (base / e['file']).is_file())}
+
+    cv_members = {}    # 画板式补图 key -> 共用它的决策(第一个是本组代表机位)
     for sid in sorted({d['scene_id'] for d in decisions if d['mode'] == 'grid9'}):
         layout = layouts[sid]; scene = episode['scenes'][sid]
         ds = [d for d in decisions if d['scene_id'] == sid and d['mode'] == 'grid9']
@@ -2434,6 +2689,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                 libs[sid] = load_library(base, sid)   # ensure_grid9 已把 9 格写进库;不重读的话后面补图 save_library 会用旧库把 9 格覆盖掉
             sheet_rel = tiles[0]['pano_ref']['sheet']
             fb_pending = []   # 本次运行决定新出的补图(pending),后续相近机位的镜复用
+            cv_pending = []   # 本次运行决定新出的画板式补图(pending),后续同向的不合适镜共用
             for d in sds:
                 entry, info = pick_grid9_tile(tiles, d['facts'])
                 if entry is None:
@@ -2447,6 +2703,16 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                     f"距 {info['distance_m']} m 机高档差 {info['height_class_delta']} 俯仰差 {info['pitch_delta_deg']}° → score {info['score']}"
                     f"(本镜 {d['facts']['facing']} h={d['facts']['height_m']}m {d['facts']['lens_mm_equiv']}mm;格 {entry['camera']['facing']} "
                     f"h={entry['camera']['height_m']}m {entry['camera']['lens_mm_equiv']}mm)")
+                # ③ 同向手选复用(2026-11-07):同场景同光照方案里用户手选过同向的图 → 直接用(不论格子合不合适,也不补图)
+                pref, pinfo = user_pref_plate(picks_for(sid, d['scheme']), d['facts'], entries_for(sid), exclude=(ep, d['shot_id'], d['role']))
+                if pref is not None:
+                    d['mode'] = 'grid9_user_pref'; d['entry'] = pref; d['file'] = pref['file']; d['reuse'] = 'user_pref'
+                    d['view'] = {k: v for k, v in d['view'].items() if k not in ('fraction', 'fraction_w', 'aspect_only')}
+                    d['view'].update(aspect_view(aspect, entry_aspect(pref)))
+                    d['view']['user_pref'] = pinfo
+                    log(f"   ↳ 同向手选复用 {pref['key']}(与用户手选的 {pinfo['like']} 同向:朝向差 {pinfo['bearing_delta_deg']}° "
+                        f"俯仰差 {pinfo['pitch_delta_deg']}°;同向手选这张 {pinfo['votes']} 处)")
+                    continue
                 # 九宫格补图(2026-09-26):最近格任一分量超 GRID9_FIT → 不用格子,改为按本镜机位单独出图(库里相近机位的补图直接复用)
                 reasons = grid9_unfit_reasons(info) if (auto_fill or manual_fill) else []
                 if not reasons:
@@ -2473,6 +2739,31 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                 d['plate_key'] = pkey
                 d['plate_facts'] = {**camera_facts(pkey, PLATE_FMT, *axes[sid]), 'standing': d['facts'].get('standing', '')}
                 d['view'] = {k: v for k, v in d['view'].items() if k not in ('fraction', 'fraction_w', 'aspect_only')}
+                if fill_method == 'canvas':
+                    # ④ 画板式补图(2026-11-07):同向的不合适镜共用一张;库里已有同向的画板式补图直接用(--force 只让本次重出,本次内仍共用)
+                    cv = (None if force else find_canvas_fill(libs[sid]['plates'], scheme_key, d['plate_facts'], base, require_file=not dry_run)) \
+                        or find_canvas_fill(cv_pending, scheme_key, d['plate_facts'], base, require_file=False)
+                    if cv is not None:
+                        d['mode'] = 'grid9_fb_library'; d['entry'] = cv; d['file'] = cv['file']
+                        d['view'].update(aspect_view(aspect, entry_aspect(cv)))
+                        d['view']['fallback'] = {'reasons': reasons, 'key': cv['key'], 'method': 'canvas',
+                                                 'source': 'group' if cv.get('pending') else 'library'}
+                        if cv.get('pending'):
+                            cv_members[cv['key']].append(d)
+                        log(f"   ↳ 格子不合适({'; '.join(reasons)}),与同向的镜共用画板式补图 {cv['key']}")
+                        continue
+                    key = plate_key(scheme_key, d['plate_facts']) + GRID9_CANVAS_SUFFIX
+                    if any(e['key'] == key for e in cv_pending) or (not force and any(e['key'] == key for e in libs[sid]['plates'])):
+                        key = f"{key}_{d['shot_id']}{'e' if d['role'] == 'end' else ''}"
+                    d['mode'] = 'grid9_canvas_new'; d['entry'] = None; d['file'] = None; d['key'] = key
+                    d['view'].update(aspect_view(aspect))
+                    d['view']['fallback'] = {'reasons': reasons, 'key': key, 'source': 'new', 'method': 'canvas'}
+                    cv_pending.append({'key': key, 'file': f"assets/concepts/scenes/{sid}/{PLATES_DIR}/{key}.png", 'camera': d['plate_facts'],
+                                       'grid9_fallback': True, 'pano_ref': {'kind': 'grid9_fallback', 'method': 'canvas', 'scheme': scheme_key},
+                                       'pending': True})
+                    cv_members[key] = [d]
+                    log(f"   ↳ 格子不合适({'; '.join(reasons)}),画板式补图 {key}(本组代表机位;同向的不合适镜共用)")
+                    continue
                 fb = None if force else find_grid9_fallback(libs[sid]['plates'] + fb_pending, scheme_key, d['plate_facts'], base, require_file=not dry_run)
                 if fb is not None:
                     d['mode'] = 'grid9_fb_library'; d['entry'] = fb; d['file'] = fb['file']
@@ -2523,6 +2814,91 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
                     group_first[g['group_id']] = {'key': p['key'], 'file': p['file']}   # 单镜重出时以同组已有成图为第二参考图
                     break
     channel = None
+    fill_waiting = {}   # 画板式补图 key -> 工单路径:还没有 Agent 写的改视角指令,本组镜暂用最近格占位
+    used_cache = {}
+
+    def used_for(sid, scheme):
+        """本场景本方案在用的图(本次决策 + 本集本次没碰的镜 + 其它集)→ Counter,供 ④ 选默认源图。"""
+        if (sid, scheme) not in used_cache:
+            c = Counter()
+            for x in decisions:
+                if (x['scene_id'] == sid and x['scheme'] == scheme and x.get('entry') and not x['entry'].get('pending')
+                        and x['mode'] in ('fresh', 'library', 'grid9', 'grid9_user_pref', 'grid9_manual_library')):
+                    c[x['entry']['key']] += 1
+            for e2, sh, rec, p in episode_plate_records(base):
+                if rec.get('scene_id') == sid and rec.get('lighting_scheme_id') == scheme and not (e2 == ep and sh in by_shot):
+                    c[p['key']] += 1
+            used_cache[(sid, scheme)] = c
+        return used_cache[(sid, scheme)]
+
+    def fill_source(d, sid, fp=None):
+        """④ 源图:Agent 在指令里改选的(须在本场景库里)→ 本场景用户手选最多的图 → 本场景用得最多的非补图库图 → 最近格。"""
+        ents = entries_for(sid)
+        want = str((fp or {}).get('source_key') or '').strip()
+        if want:
+            if want not in ents:
+                raise LookupError(f"补图指令 {fp.get('prompt_file')} 选的源图 {want} 不在 {sid} 背景图库里")
+            return ents[want], str(fp.get('source_reason') or 'Agent 看图改选')
+        main, why = scene_main_plate(picks_for(sid, d['scheme']), used_for(sid, d['scheme']), ents)
+        return (main, why) if main else (d['nearest_tile'], '最近格(本场景还没有手选或常用的图)')
+
+    def fill_request(d, sid, scheme_key) -> dict:
+        members = cv_members.get(d['key']) or [d]
+        src, why = fill_source(d, sid)
+        ents = entries_for(sid)
+        user_keys = {p['key'] for p in picks_for(sid, d['scheme'])}
+        used = used_for(sid, d['scheme'])
+        alts, seen = [], set()
+        for e in (grid9_entries(libs[sid], scheme_key) + [ents[k] for k in sorted(user_keys) if k in ents]
+                  + [e for e in ents.values() if is_canvas_fill(e) and (e.get('pano_ref') or {}).get('scheme') == scheme_key]):
+            if e['key'] in seen:
+                continue
+            seen.add(e['key'])
+            alts.append({'key': e['key'], 'file': str(base / e['file']), 'kind': (e.get('pano_ref') or {}).get('kind') or '',
+                         'user_picked': e['key'] in user_keys, 'used': used.get(e['key'], 0),
+                         'nominal_facing': (e.get('camera') or {}).get('facing')})
+        f = d['plate_facts']
+        try:   # 白模里本组代表机位画面内 / 画面外的东西(与原补图提示词同一清单),帮 Agent 认白模帧里的灰盒子
+            _items, in_frame, out_of_frame = inventory(episode['scenes'][sid], layouts[sid], d['plate_key'], PLATE_FMT)
+        except Exception:  # noqa: BLE001
+            in_frame, out_of_frame = [], []
+        return {'schema': 'plate_fill_request/1', 'key': d['key'], 'ep': ep, 'scene_id': sid, 'scheme': scheme_key,
+                'scene_name': episode['scenes'][sid].get('name') or layouts[sid].get('scene_name') or sid,
+                'in_frame_left_to_right': in_frame, 'out_of_frame': out_of_frame,
+                'lighting_scheme_id': d['scheme'], 'time_of_day': d['raw_group'].get('time_of_day') or '',
+                'created_at': dt.datetime.now().isoformat(timespec='seconds'),
+                'shots': [f"{m['shot_id']}:{m['role']}" for m in members],
+                'reasons': ((d.get('view') or {}).get('fallback') or {}).get('reasons') or [],
+                'camera': {k: f.get(k) for k in ('position', 'bearing_deg', 'pitch_deg', 'height_m', 'height_class', 'lens_mm_equiv', 'fov_h_deg',
+                                                 'fov_v_deg', 'facing', 'standing', 'frame_left', 'frame_right', 'behind', 'height_word', 'tilt_word')},
+                'camera_en': camera_sentence_en(f),
+                'camera_notes': {k: f.get(k) for k in ('facing_desc', 'behind_desc', 'left_desc', 'right_desc') if f.get(k)},
+                'members': [{'shot': f"{m['shot_id']}:{m['role']}", 'whitebox_frame': str(base / m['shot_frame']) if m.get('shot_frame') else '',
+                             **{k: m['facts'].get(k) for k in ('bearing_deg', 'pitch_deg', 'height_m', 'lens_mm_equiv', 'standing')}} for m in members],
+                'grid_sheet': str(base / d['sheet_rel']) if d.get('sheet_rel') else '',
+                'source': {'key': src['key'], 'file': str(base / src['file']), 'why': why},
+                'alternatives': alts,
+                'prompt_head': GRID9_CANVAS_HEAD, 'prompt_tail': GRID9_CANVAS_TAIL,
+                'prompt_file': str(plate_fill_dir(base, ep) / f"{d['key']}.prompt.json"),
+                'prompt_format': {'instruction': '(必填)英文改视角指令:先说 [Image 1] 现在是什么视角、画着什么,再说新机位站在哪、朝哪看、'
+                                                 '新画面里近处 / 中景 / 远处各是什么、画左画右是什么;只写看得见的东西,不写毫米 / 度数',
+                                  'source_key': '(可选)改用 alternatives 里的另一张作源图时写它的 key',
+                                  'source_reason': '(改源图时必填)为什么默认源图不合适'}}
+
+    def fill_placeholder(d, key, req_rel):
+        """画板式补图还没有指令:本镜暂用最近格占位、记 view.fill_pending(重跑时按不合适格子重新决策;--status 报 fill_pending)。"""
+        t = d.get('nearest_tile')
+        if not t:
+            stats['errors'].append(f"{d['shot_id']}/{d['role']}: 画板式补图 {key} 待写指令,且没有可占位的格子")
+            return
+        v = {k: x for k, x in (d.get('view') or {}).items() if k not in ('fallback', 'fraction', 'fraction_w', 'aspect_only')}
+        v.update(aspect_view(aspect, entry_aspect(t)))
+        v['fill_pending'] = {'key': key, 'request': req_rel, 'reasons': ((d.get('view') or {}).get('fallback') or {}).get('reasons') or []}
+        d.update({'entry': t, 'file': t['file'], 'reuse': 'grid9', 'view': v})
+        stats.setdefault('fill_pending', []).append(f"{d['shot_id']}:{d['role']}")
+        generated[(d['shot_id'], d['role'])] = t
+        flush_shot(d['shot_id'])
+
     for d in decisions:
         sid, shot_id, role = d['scene_id'], d['shot_id'], d['role']
         lib = libs[sid]
@@ -2547,13 +2923,13 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             group_first.setdefault(d['group_id'], entry)
             continue
         # new master
-        if d['mode'] in ('grid9', 'grid9_manual_library'):   # 九宫格:格子(或手动补图模式下选用的手工截图)已在上面选定,这里只登记
+        if d['mode'] in ('grid9', 'grid9_manual_library', 'grid9_user_pref'):   # 九宫格:格子 / 手工截图 / 同向手选图已在上面选定,这里只登记
             if d.get('grid_error') or not d.get('entry'):
                 stats['errors'].append(f"{shot_id}/{role}: {d.get('grid_error') or '九宫格未选格'}")
                 stats['plates'] -= 1
                 continue
             entry = d['entry']
-            k = 'grid9' if d['mode'] == 'grid9' else 'grid9_manual_library'
+            k = d['mode']
             stats[k] = stats.get(k, 0) + 1
             generated[(shot_id, role)] = entry; by_key[entry['key']] = entry
             group_first.setdefault(d['group_id'], entry)
@@ -2563,6 +2939,9 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             entry = d['entry']
             if entry.get('pending'):
                 entry = by_key.get(entry['key'])
+                if entry is None and d['entry']['key'] in fill_waiting:   # 共用的画板式补图还在等指令:一起占位
+                    fill_placeholder(d, d['entry']['key'], fill_waiting[d['entry']['key']])
+                    continue
                 if entry is None:
                     if budget_hit:
                         stats['pending_new'] += 1
@@ -2576,9 +2955,75 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
             group_first.setdefault(d['group_id'], entry)
             flush_shot(shot_id)
             continue
+        if d['mode'] == 'grid9_canvas_new':   # 画板式补图:先看 Agent 写好改视角指令没有(没写不花钱,写工单 + 占位)
+            scheme_key = scene_panos.scheme_slug(d['scheme'], d['raw_group'].get('time_of_day'))
+            d['fill_prompt'] = read_fill_prompt(base, ep, d['key'], sid=sid, scheme_key=scheme_key, facts=d['plate_facts'])
+            if d['fill_prompt'] is None:
+                rel = str(write_fill_request(base, ep, fill_request(d, sid, scheme_key)).relative_to(base))
+                fill_waiting[d['key']] = rel
+                stats.setdefault('fill_prompt_needed', []).append(rel)
+                log(f"== {shot_id} {role} ({d['group_id']}) 画板式补图 {d['key']} 还没有改视角指令 → 工单 {rel}"
+                    f"(本组 {len(cv_members.get(d['key']) or [d])} 镜暂用最近格占位)")
+                fill_placeholder(d, d['key'], rel)
+                continue
         if budget_hit or (max_new is not None and stats['new'] >= max_new):
             budget_hit = True
             stats['pending_new'] += 1
+            continue
+        if d['mode'] == 'grid9_canvas_new':   # ④ 画板式补图(2026-11-07):以一张库图为唯一参考,按 Agent 写的改视角指令出一张
+            fp = d['fill_prompt']
+            try:
+                src, why = fill_source(d, sid, fp)
+            except LookupError as error:
+                stats['errors'].append(f'{shot_id}/{role}: {error}')
+                continue
+            scheme_key = scene_panos.scheme_slug(d['scheme'], d['raw_group'].get('time_of_day'))
+            desc, scene_neg = scene_description(base, sid)
+            negative = ', '.join(x for x in (plate_negative(style_doc.get('negative_prompt_en') or ''), scene_neg, NEGATIVE_EXTRA, NEGATIVE_MASTER) if x)
+            prompt = build_canvas_fill_prompt(fp['instruction'])
+            use_seed = seed
+            if use_seed is None:
+                import random
+                use_seed = random.randint(1, 2**31-1)
+            out_rel = f"assets/concepts/scenes/{sid}/{PLATES_DIR}/{d['key']}.png"
+            members = cv_members.get(d['key']) or [d]
+            entry = {'key': d['key'], 'master': False, 'grid9': False, 'grid9_fallback': True, 'file': out_rel, 'whitebox_frame': d.get('shot_frame'),
+                     'lighting_scheme_id': d['scheme'], 'time_of_day': d['raw_group'].get('time_of_day'), 'camera': d['plate_facts'],
+                     'seed': use_seed, 'refs': [src['file']], 'prompt': prompt, 'negative': negative,
+                     'pano_ref': {'kind': 'grid9_fallback', 'method': 'canvas', 'scheme': scheme_key, 'source_key': src['key'],
+                                  'source_kind': (src.get('pano_ref') or {}).get('kind') or '', 'source_reason': why,
+                                  'instruction': fp['instruction'], 'prompt_file': fp.get('prompt_file'),
+                                  'nearest_tile': (d.get('view') or {}).get('grid9'), 'reasons': ((d.get('view') or {}).get('fallback') or {}).get('reasons'),
+                                  'shots': [f"{ep}/{m['shot_id']}:{m['role']}" for m in members]},
+                     'plate_mode': 'grid', 'created_by': {'ep': ep, 'shot_id': shot_id, 'group_id': d['group_id'], 'role': role, 'source': 'grid9_canvas'},
+                     'written_at': dt.datetime.now().isoformat(timespec='seconds')}
+            log(f"== {shot_id} {role} ({d['group_id']}) 画板式补图 {d['key']} facing {d['plate_facts']['facing']} h={d['plate_facts']['height_m']}m;"
+                f"源图 {src['key']}({why});共用 {len(members)} 镜")
+            if dry_run:
+                entry['dry_run'] = True
+                log(prompt)
+            else:
+                try:
+                    r = render_canvas_fill(base, sid, source=src, prompt=prompt, out_rel=out_rel, seed=use_seed, negative=negative,
+                                           generate=generate, log=log)
+                except Exception as error:  # noqa: BLE001
+                    stats['errors'].append(f'{shot_id}/{role}: 画板式补图出图失败 {error}')
+                    continue
+                entry.update({'channel': r['channel'], 'size': f"{r['size'][0]}x{r['size'][1]}",
+                              'canvas_check': {'drift_from_source': r['drift'], 'unchanged': r['unchanged']}})
+                if r['unchanged']:
+                    stats.setdefault('fill_unchanged', []).append(f"{sid}/{d['key']}")
+                    log(f"   ⚠ 补图与源图构图相关 {r['drift']['corr']} ≥ {GRID9_CANVAS_UNCHANGED_CORR}:视角多半没改动")
+                (base/out_rel).with_suffix('.json').write_text(json.dumps(entry, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+                upsert_library_entry(base, sid, entry, lib)
+            d['entry'] = entry; d['file'] = out_rel
+            by_key[entry['key']] = entry
+            stats['new'] += 1
+            stats['grid9_canvas_new'] = stats.get('grid9_canvas_new', 0) + 1
+            log(f"saved: {out_rel}")
+            generated[(shot_id, role)] = entry
+            group_first.setdefault(d['group_id'], entry)
+            flush_shot(shot_id)
             continue
         if d['mode'] == 'grid9_new':   # 九宫格补图(2026-09-26):俯视图 + 九宫格整图为参考,按本镜机位单独出一张
             layout = layouts[sid]; scene = episode['scenes'][sid]
@@ -2739,7 +3184,7 @@ def run_episode(base: Path, ep: str, only=None, *, dry_run=False, force=False, s
         flush_shot(shot_id)   # 本镜到此为止已落地的图先写索引(终点图若后续才出,再次 flush 覆盖)
     # 九宫格格子重绘放大(2026-11-06 用户拍板默认执行、不设开关):被选用的格子(含本次 fresh 沿用的)用场景图像模型放大,原地覆盖;
     # 放大不成退回插值格,记 stats.grid9_upscale.fallback,不进 errors、不影响退出码;--max-new 余量用完的记 deferred → pending_new(退出码 3)
-    if any(d.get('reuse') == 'grid9' for d in decisions):
+    if any(d.get('reuse') in ('grid9', 'user_pref') for d in decisions):
         budget = 0 if budget_hit else (None if max_new is None else max(0, max_new - stats['new']))
         try:
             up = upscale_used_grid9_tiles(base, decisions, libs, dry_run=dry_run, budget=budget, log=log)
@@ -3489,7 +3934,8 @@ def sync_episode(base: Path, ep: str, groups=None, write: bool = False, strict: 
 # ---------------------------------------------------------------- coverage status(验收机检 shot_plates_complete)
 def status_episode(base: Path, ep: str, only=None) -> dict:
     """每镜背景图覆盖状态:ok / partial(缺镜尾) / missing / stale(机位与当前白模不一致) / file_missing /
-    manual_needed(九宫格手动补图模式下没有合适格子、也没有合适的手工截图,等用户补)。
+    manual_needed(九宫格手动补图模式下没有合适格子、也没有合适的手工截图,等用户补)/
+    fill_pending(画板式补图还没有改视角指令,最近格占位,2026-11-07)。
     验收以此为准,不采信 Agent 自述;退出码由调用方按 problems 判。"""
     plan = plan_episode(base, ep, only)
     idx = load_episode_index(base, ep)
@@ -3523,12 +3969,14 @@ def status_episode(base: Path, ep: str, only=None) -> dict:
             elif (p.get('reuse') == 'grid9' and (p.get('view') or {}).get('manual_needed') and state == 'ok'
                   and modes.setdefault(scene_of[shot_id], effective_plate_mode(base, scene_of[shot_id])) == 'grid_manual'):
                 state = 'manual_needed'    # 九宫格手动补图:最近格只是占位,等用户手工截取(或在分镜预览「换图」手选)
+            elif p.get('reuse') == 'grid9' and (p.get('view') or {}).get('fill_pending') and state == 'ok':
+                state = 'fill_pending'     # 画板式补图(2026-11-07):最近格只是占位,等 Agent 写改视角指令后重跑出图(或用户「换图」手选)
             if p and p.get('key') in lib_by_key and is_legacy(lib_by_key[p['key']]):
                 legacy = True
             ps = plates_of.get(scene_of[shot_id]) or []
             le = next((e for e in ps if p and e.get('key') == p.get('key')), None)
             root = grid9_lowres_root(base, scene_of[shot_id], le, ps) if le and p.get('file') == le.get('file') else None
-            if (root and not (p.get('view') or {}).get('manual_needed')
+            if (root and not (p.get('view') or {}).get('manual_needed') and not (p.get('view') or {}).get('fill_pending')
                     and grid9_upscale_precheck(base, le, root)[0] in ('todo', 'skipped')):
                 interpolated.append(f'{shot_id}:{role}')   # 用到的格子及其无 AI 派生图(自动选 / 换图手选)还没放大成功(2026-11-06):只作 WARN
         if legacy:

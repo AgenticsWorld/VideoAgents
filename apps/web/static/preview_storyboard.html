@@ -329,6 +329,13 @@ video.reelvid.tall{width:auto;max-width:100%;height:min(70vh,640px)}
 #pw-modal .err{color:var(--red);font-size:12px;min-height:16px;margin-top:6px;flex:none}
 #pw-modal .actions{display:flex;gap:8px;justify-content:flex-end;flex:none}
 #pw-modal #pw-ok:disabled{opacity:.5;cursor:default}
+/* ① 推荐 / ② 同向镜一起换(2026-11-07) */
+#pw-modal .imgs .cell .rk{position:absolute;right:8px;top:8px;font-size:10px;background:rgba(0,0,0,.65);color:var(--yellow,#ffd60a);border-radius:4px;padding:0 4px;white-space:nowrap}
+#pw-modal .peers{flex:1;min-height:0;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--panel2);padding:10px 12px;margin-top:10px;display:none;font-size:12.5px}
+#pw-modal .peers .ph{color:var(--dim);margin-bottom:8px;line-height:1.6}
+#pw-modal .peers label{display:flex;gap:8px;align-items:center;padding:4px 0;cursor:pointer}
+#pw-modal .peers label img{height:44px;border-radius:4px;border:1px solid var(--border)}
+#pw-modal .peers label .k{color:var(--dim);font-size:11px;word-break:break-all}
 #vr-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:98}
 #vr-modal .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 24px;width:820px;max-width:94vw;max-height:86vh;display:flex;flex-direction:column}
 #vr-modal .cnt{font-size:12px;font-weight:400;margin-left:10px;color:var(--dim)}
@@ -437,8 +444,9 @@ video.reelvid.tall{width:auto;max-width:100%;height:min(70vh,640px)}
   <div class="hint">从本场景的背景图库里点选一张(双击看大图),确认后替换本镜这张背景图:改写集索引 directing/&lt;ep&gt;/shot_plates.json 并同步本组 prompt 的参考图;随本组重出生效,非强制重出不会被自动改回</div>
   <div class="cur" id="pw-cur"></div>
   <div class="imgs" id="pw-imgs"></div>
+  <div class="peers" id="pw-peers"></div>
   <div class="err" id="pw-err"></div>
-  <div class="actions"><button id="pw-cancel">关闭</button><button id="pw-ok" style="background:var(--accent);color:#0b1020;border-color:var(--accent)">✔ 替换为这张</button></div>
+  <div class="actions"><button id="pw-cancel">关闭</button><button id="pw-ok" style="background:var(--accent);color:#0b1020;border-color:var(--accent)">✔ 替换为这张</button><button id="pw-peers-ok" style="display:none;background:var(--accent);color:#0b1020;border-color:var(--accent)">✔ 一起换</button></div>
 </div></div>
 <div id="vr-modal"><div class="box">
   <h3>🎬 参考视频 — <span id="vr-grp" style="color:var(--purple)"></span><span class="cnt" id="vr-count"></span></h3>
@@ -1025,7 +1033,7 @@ let PW_SHOT='',PW_ROLE='start',PW_KEY='',PW_SEL='';
 const pwMsg=m=>{$('#pw-err').textContent=m||''};
 function pwOkState(){$('#pw-ok').disabled=!PW_SEL||PW_SEL===PW_KEY}
 async function openPlateSwap(shot,role,key,btn){
-  PW_SHOT=shot;PW_ROLE=role||'start';PW_KEY=key||'';PW_SEL='';pwOkState();pwMsg('');
+  PW_SHOT=shot;PW_ROLE=role||'start';PW_KEY=key||'';PW_SEL='';pwOkState();pwMsg('');pwPeersMode(false);
   // 弹窗右缘收到本组白模面板左缘之内,不盖住白模;无白模栏 / 窄屏上下堆叠 / 左栏过窄时保持默认宽度
   const box=$('#pw-modal .box'),wb=btn&&btn.closest('.gshots')?.querySelector('.wb-host');
   const wbL=wb?wb.getBoundingClientRect().left:0;
@@ -1036,7 +1044,7 @@ async function openPlateSwap(shot,role,key,btn){
   $('#pw-modal').style.display='flex';
   const proj=$('#project').value.trim()||'demo';
   try{
-    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/storyboard/'+encodeURIComponent(EP)+'/plates/'+encodeURIComponent(shot)+'/candidates?v='+Date.now());
+    const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/storyboard/'+encodeURIComponent(EP)+'/plates/'+encodeURIComponent(shot)+'/candidates?role='+encodeURIComponent(PW_ROLE)+'&v='+Date.now());
     if(!r.ok)throw new Error((await r.json()).detail||r.status);
     const d=await r.json();
     const list=d.plates||[];
@@ -1046,13 +1054,16 @@ async function openPlateSwap(shot,role,key,btn){
     if(!list.length){$('#pw-imgs').innerHTML='<div class="ph">'+t('(本场景背景图库为空)')+'</div>';return}
     $('#pw-imgs').innerHTML=list.map(p=>{
       const cam=p.camera||{};
-      const src=!p.pano_ref?t('旧法(非全景制)'):p.pano_ref.kind==='revision'?I18N.f('按修改意见重出(基于 {k})',{k:p.pano_ref.source_key||'-'}):p.pano_ref.kind==='copy'?I18N.f('副本(复制自 {k})',{k:p.pano_ref.source_key||'-'}):p.pano_ref.kind==='grid9'?t('九宫格'):p.pano_ref.kind==='grid9_fallback'?t('九宫格补图'):p.pano_ref.kind==='pano_manual'?I18N.f('手工截取(全景 {a})',{a:p.pano_ref.anchor_id||'-'}):p.pano_ref.kind==='world_manual'?t('手工截取(世界模型)'):p.pano_ref.kind==='world'?(p.pano_ref.anchor_id?I18N.f('世界模型(全景 {a})',{a:p.pano_ref.anchor_id}):t('世界模型')):I18N.f('全景 {a}',{a:p.pano_ref.anchor_id});
+      const src=!p.pano_ref?t('旧法(非全景制)'):p.pano_ref.kind==='revision'?I18N.f('按修改意见重出(基于 {k})',{k:p.pano_ref.source_key||'-'}):p.pano_ref.kind==='copy'?I18N.f('副本(复制自 {k})',{k:p.pano_ref.source_key||'-'}):p.pano_ref.kind==='grid9'?t('九宫格'):p.pano_ref.kind==='grid9_fallback'?(p.pano_ref.method==='canvas'?I18N.f('画板补图(基于 {k})',{k:p.pano_ref.source_key||'-'}):t('九宫格补图')):p.pano_ref.kind==='pano_manual'?I18N.f('手工截取(全景 {a})',{a:p.pano_ref.anchor_id||'-'}):p.pano_ref.kind==='world_manual'?t('手工截取(世界模型)'):p.pano_ref.kind==='world'?(p.pano_ref.anchor_id?I18N.f('世界模型(全景 {a})',{a:p.pano_ref.anchor_id}):t('世界模型')):I18N.f('全景 {a}',{a:p.pano_ref.anchor_id});
       const up=p.upscale||null;
       const upc=!up?'':up.state==='running'?t('放大中…'):up.state==='done'?t('已放大'):t('插值格,选用后自动放大');
       const cap=[cam.facing?I18N.f('朝向 {d}',{d:cam.facing}):'',cam.height_m!=null?I18N.f('机高 {h} m',{h:cam.height_m}):'',cam.lens_mm_equiv?`${cam.lens_mm_equiv}mm`:'',p.time_of_day||'',src,upc].filter(Boolean).join(' · ');
       const used=(p.used_by||[]).join(', ');
       const isCur=p.key===PW_KEY;
-      return `<div class="cell${isCur?' used':''}" data-key="${esc(p.key)}" title="${esc(p.key)}"><img src="${esc(bust(p.url))}" loading="lazy">${isCur?`<span class="uk">✓ ${esc(t('当前'))}</span>`:''}<div class="cap"><b>${esc(p.key)}</b><br>${esc(cap)}<br>${esc(used?I18N.f('用于分镜:{s}',{s:used}):t('尚未被分镜引用'))}</div></div>`;
+      // ① 推荐(2026-11-07):本场景同光照方案里与本镜同向的镜在用这张(manual = 其中用户手选的)
+      const rc=p.recommend||null;
+      const rcTxt=rc?(rc.manual?I18N.f('同向 {n} 镜在用(手选 {m})',{n:rc.same_dir,m:rc.manual}):I18N.f('同向 {n} 镜在用',{n:rc.same_dir})):'';
+      return `<div class="cell${isCur?' used':''}" data-key="${esc(p.key)}" title="${esc(p.key)}"><img src="${esc(bust(p.url))}" loading="lazy">${isCur?`<span class="uk">✓ ${esc(t('当前'))}</span>`:''}${rc&&!isCur?`<span class="rk">⭐ ${esc(t('同向推荐'))}</span>`:''}<div class="cap"><b>${esc(p.key)}</b><br>${esc(cap)}${rcTxt?'<br>⭐ '+esc(rcTxt):''}<br>${esc(used?I18N.f('用于分镜:{s}',{s:used}):t('尚未被分镜引用'))}</div></div>`;
     }).join('');
   }catch(e){$('#pw-imgs').innerHTML='';pwMsg(t('加载失败:')+e.message)}
 }
@@ -1077,8 +1088,50 @@ $('#pw-ok').onclick=async()=>{
     const errs=(d.sync&&d.sync.errors)||[];
     load(true);
     if(errs.length){PW_KEY=PW_SEL;PW_SEL='';pwMsg(t('已替换,但本组 prompt 同步有问题:')+errs.join('; '));return}
+    // ② 同向镜一起换(2026-11-07):本集同场景里与这镜同向、还没手动换过的镜,默认全勾,用户确认后逐镜换成同一张
+    if((d.peers||[]).length){pwShowPeers(d.peers,PW_SEL,d.plate&&d.plate.url);return}
     $('#pw-modal').style.display='none';
   }catch(e){pwMsg(t('替换失败:')+e.message);pwOkState()}
+};
+let PW_PEER_KEY='';
+function pwPeersMode(on){
+  $('#pw-imgs').style.display=on?'none':'';$('#pw-cur').style.display=on?'none':'';
+  $('#pw-peers').style.display=on?'block':'none';$('#pw-ok').style.display=on?'none':'';
+  $('#pw-peers-ok').style.display=on?'':'none';$('#pw-cancel').textContent=on?t('不用了'):t('关闭');
+}
+function pwShowPeers(peers,key,url){
+  PW_PEER_KEY=key;pwPeersMode(true);pwMsg('');
+  const head=`<div class="ph">✔ ${esc(I18N.f('{s} 已换成 {k}',{s:PW_SHOT,k:key}))}<br>${esc(I18N.f('本集同场景里还有 {n} 个镜头与它同向(朝向相近、俯仰同档)、还没手动换过。要一起换成这张吗?取消勾选的不换',{n:peers.length}))}</div>`;
+  $('#pw-peers').innerHTML=head+peers.map(x=>{
+    const flag=x.fill_pending?' · ⚠ '+t('待画板补图'):x.manual_needed?' · ⚠ '+t('待手动补图'):'';
+    const img=x.url?`<img src="${esc(bust(x.url))}" loading="lazy">`:'';
+    return `<label><input type="checkbox" checked data-shot="${esc(x.shot_id)}" data-role="${esc(x.role)}">${img}<span><b>${esc(x.shot_id)}</b> · ${esc(x.role==='end'?t('终点'):t('起点'))}${esc(flag)}<br><span class="k">${esc(t('当前'))}: ${esc(x.key||'-')}</span></span></label>`;
+  }).join('');
+  pwPeersCount();
+}
+function pwPeersCount(){
+  const n=document.querySelectorAll('#pw-peers input:checked').length;
+  $('#pw-peers-ok').textContent='✔ '+I18N.f('一起换({n})',{n});$('#pw-peers-ok').disabled=!n;
+}
+$('#pw-peers').addEventListener('change',pwPeersCount);
+$('#pw-peers-ok').onclick=async()=>{
+  const items=[...document.querySelectorAll('#pw-peers input:checked')].map(i=>({shot:i.dataset.shot,role:i.dataset.role}));
+  if(!items.length)return;
+  $('#pw-peers-ok').disabled=true;pwMsg('');
+  const proj=$('#project').value.trim()||'demo';
+  const bad=[];
+  for(const it of items){
+    try{
+      const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/storyboard/'+encodeURIComponent(EP)+'/plates/'+encodeURIComponent(it.shot)+'/swap',{method:'POST',
+        headers:{'Content-Type':'application/json'},body:JSON.stringify({role:it.role,key:PW_PEER_KEY})});
+      if(!r.ok)throw new Error((await r.json()).detail||r.status);
+      const d=await r.json();
+      if(((d.sync&&d.sync.errors)||[]).length)bad.push(it.shot+': '+d.sync.errors.join('; '));
+    }catch(e){bad.push(it.shot+': '+e.message)}
+  }
+  load(true);
+  if(bad.length){pwMsg(t('部分镜头没换成:')+bad.join(' | '));$('#pw-peers-ok').disabled=false;return}
+  $('#pw-modal').style.display='none';
 };
 
 document.addEventListener('click',async e=>{
@@ -1427,12 +1480,13 @@ function shotCard(s,grp){
     // 九宫格(2026-10-04 补全来源文字):grid9 = 九宫格里选的格,grid9_fallback = 自动补图,grid9_manual = 手动补图模式下选用的手工截图;
     // manual_needed = 手动补图模式下没有合适的图,当前这张只是最近格占位,等用户手工截取
     const how0=p.reuse==='crop'?t('裁自宽景'):p.reuse==='library'?t('复用库图'):p.reuse==='manual'?t('手动换图'):p.reuse==='revised'?t('按修改意见重出')
-      :p.reuse==='grid9'?t('九宫格'):p.reuse==='grid9_fallback'?t('九宫格补图'):p.reuse==='grid9_manual'?t('手工截图'):t('本镜新出');
+      :p.reuse==='grid9'?t('九宫格'):p.reuse==='grid9_fallback'?(p.fill_method==='canvas'?t('画板补图'):t('九宫格补图')):p.reuse==='grid9_manual'?t('手工截图')
+      :p.reuse==='user_pref'?t('同向手选复用'):t('本镜新出');
     // 九宫格格子放大状态(2026-11-06):running 放大中 / done 已放大 / interpolated 插值格(换图、出图、生成视频前都会自动放大)
     const up=p.upscale||null;
     const upTxt=!up?'':up.state==='running'?' · 🔍 '+t('放大中…'):up.state==='done'?' · '+t('已放大'):' · ⚠ '+t('插值格');
     const upTip=!up||up.state!=='interpolated'?'':(up.reason?I18N.f('放大没成,沿用插值格:{r}',{r:up.reason}):t('还没放大,生成视频前会自动放大'));
-    const how=(p.manual_needed?how0+' · ⚠ '+t('待手动补图'):how0)+upTxt;
+    const how=(p.manual_needed?how0+' · ⚠ '+t('待手动补图'):p.fill_pending?how0+' · ⚠ '+t('待画板补图'):how0)+upTxt;
     const tip=[role,how,p.key||'',upTip].filter(Boolean).join(' · ');
     // ✏️ 修改:带上镜号/起止/文件/库 key 与修订命令,发给修改师处理这张背景图的问题(2026-09-26:以当前图为参考按意见新出一张替换本镜,原图不动;
     // 不再给 render_shot_plates --force——那是按机位重新决策,用户的意见进不去)

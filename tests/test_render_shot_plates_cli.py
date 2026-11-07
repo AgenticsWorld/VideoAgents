@@ -48,3 +48,28 @@ def test_manual_plate_needed_exit_code_5_and_grid_layout_passthrough(tmp_path, m
                                       "--dry-run", "--grid-layout", "views"])
     assert rsp.main() == 0 and seen["grid_layout"] == "views"      # dry-run 不报待补
 
+
+
+def test_plate_fill_prompt_needed_exit_code_6_and_flags_passthrough(tmp_path, monkeypatch, capsys):
+    """画板式补图(2026-11-07):有补图待写改视角指令 → 退出码 6 并打印 [plate_fill_prompt_needed];dry-run 不算;
+    --fill-method / --no-user-pref 透传,缺省 canvas / True;[plate_fill_unchanged] 只打印不改退出码。"""
+    seen = {}
+    monkeypatch.setattr(rsp, "reexec_with_host_python", lambda: None)
+    monkeypatch.setattr(rsp, "spatial_blocking_enabled", lambda base: True)
+    monkeypatch.setattr(rsp, "read", lambda p, d=None: {"groups": [{"group_id": "grp001", "cameras": [{"shot_id": "sh001"}]}]})
+    stats = {"errors": [], "new": 0, "fill_prompt_needed": ["directing/ep01/plate_fill/k_g9cv.request.json"], "fill_pending": ["sh001:start"]}
+
+    def fake_run(base, ep, only, **kw):
+        seen.update(kw)
+        return dict(stats)
+    monkeypatch.setattr(rsp, "run_episode", fake_run)
+    monkeypatch.setattr(rsp, "sync_episode", lambda *a, **k: {"updated_prompts": [], "errors": [], "warnings": []})
+    argv = ["render_shot_plates.py", "--out-root", str(tmp_path), "--ep", "ep01", "sh001", "--allow-unexported"]
+    monkeypatch.setattr(sys, "argv", argv)
+    assert rsp.main() == 6
+    assert "[plate_fill_prompt_needed]" in capsys.readouterr().out and seen["fill_method"] == "canvas" and seen["user_pref"] is True
+    monkeypatch.setattr(sys, "argv", argv + ["--dry-run", "--fill-method", "classic", "--no-user-pref"])
+    assert rsp.main() == 0 and seen["fill_method"] == "classic" and seen["user_pref"] is False
+    stats = {"errors": [], "new": 1, "fill_unchanged": ["SCN-1/k_g9cv"]}
+    monkeypatch.setattr(sys, "argv", argv)
+    assert rsp.main() == 0 and "[plate_fill_unchanged]" in capsys.readouterr().out
