@@ -1202,6 +1202,8 @@ try{
 // 未配置的方式置灰;全局渠道就是 ComfyUI 时二级下拉同样可为本集切换运行方式(mode_switchable)。
 // Agentics(2026-09-18):渠道下拉可选 Agentics(未登录桌面端时置灰),二级下拉 = 登录账号的视频 profile(服务端目录),
 // 值走 video_model 槽(profile_code);全局渠道就是 Agentics 时二级下拉同样可为本集换 profile,组卡「🎛 模型」亦可。
+// RH(2026-11-07,rhapi = RunningHub 标准模型 API):渠道下拉可选 RH(当前站点未配 Key 时置灰),二级下拉 = 当前站点的
+// 视频模型目录(读服务端本地缓存,未在「生成模型」页 RH 标签页拉过目录时只有已保存的那个模型)。
 const PROVIDER_NAMES={volcengine:'火山引擎',byteplus:'BytePlus',fal:'Fal',minimax:'MiniMax',rhapi:'RH',openrouter:'OpenRouter',comfyui:'ComfyUI',runninghub:'RunningHub',agentics:'Agentics'};
 const provName=p=>t(PROVIDER_NAMES[p]||p||'');
 let PS_STATE=null;   // 当前集级存盘配置(三下拉共享;任一改动即整份 POST)

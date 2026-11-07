@@ -6464,6 +6464,10 @@ def video_model_label(model: str, provider: str = "") -> str:
         return COMFY_MODE_LABELS[model]
     if provider == "agentics":
         return next((r["label"] for r in _AGENTICS_VIDEO_LAST if r["id"] == model), model)
+    if provider == "rhapi":   # 名字取当前站点目录缓存(国内站是中文名),缓存里没有给端点 id
+        from modules import rh_models
+        site = ((load_genconfig().get("video") or {}).get("rhapi") or {}).get("site")
+        return next((r["name"] for r in rh_models.cached_list(site, "video") if r["id"] == model), model)
     for prov, rows in VIDEO_MODEL_CATALOG.items():
         if provider and prov != provider:
             continue
@@ -6653,10 +6657,29 @@ def agentics_video_rows(cfg: dict) -> list[dict]:
     return rows
 
 
+_RHAPI_TASK_ORDER = {"reference-to-video": 0, "image-to-video": 1, "text-to-video": 2}
+
+
+def rhapi_video_rows(cfg: dict) -> list[dict]:
+    """集级/组级可选的 RH(RunningHub 标准模型 API)视频模型(2026-11-07):当前站点的本地目录缓存
+    (rh_models.cached_list,不联网;首拉约 1 分钟由「生成模型」页 RH 标签页触发)+「生成模型」页已保存的模型
+    (不在缓存里也列出,置首位)。排序同「生成模型」页:多模态参考 → 图生 → 文生,组内按端点 id。"""
+    from modules import rh_models
+    pc = (cfg.get("video") or {}).get("rhapi") or {}
+    rows = [{"id": m["id"], "label": m["name"]}
+            for m in sorted(rh_models.cached_list(pc.get("site"), "video"),
+                            key=lambda m: (_RHAPI_TASK_ORDER.get(m["task"], 9), m["id"]))]
+    saved = str(pc.get("model") or "").strip()
+    if saved and saved not in {r["id"] for r in rows}:
+        rows.insert(0, {"id": saved, "label": saved})
+    return rows
+
+
 def video_provider_options(cfg: dict) -> list[dict]:
     """集级可切换的视频渠道清单(目录内有模型 id 的渠道):[{id, configured, default_model, models[{id,label}]}];
     default_model = 该渠道在「生成模型」页保存的模型(custom_model 优先),没有则目录首项。
-    Agentics(2026-09-18)列在首位:models = 登录账号的视频 profile,configured = 桌面端已登录。"""
+    Agentics(2026-09-18)列在首位:models = 登录账号的视频 profile,configured = 桌面端已登录。
+    RH(rhapi,2026-11-07)列在 ComfyUI 前:models = 当前站点目录缓存(rhapi_video_rows),configured = 有当前站点 Key。"""
     v = cfg.get("video") or {}
     out = []
     arows = agentics_video_rows(cfg)
@@ -6671,6 +6694,10 @@ def video_provider_options(cfg: dict) -> list[dict]:
         dm = str(pc.get("custom_model") or pc.get("model") or "") or (rows[0][0] if rows else "")
         out.append({"id": pid, "configured": video_provider_configured(cfg, pid), "default_model": dm,
                     "models": [{"id": m, "label": lbl.split("(")[0]} for m, lbl in rows]})
+    rrows = rhapi_video_rows(cfg)
+    out.append({"id": "rhapi", "configured": video_provider_configured(cfg, "rhapi"),
+                "default_model": str((v.get("rhapi") or {}).get("model") or "").strip() or (rrows[0]["id"] if rrows else ""),
+                "models": rrows})
     # ComfyUI(2026-09-13):二级选项 = 运行方式,默认 = 「生成模型」页保存的运行方式;未配置的方式置灰
     pc = v.get("comfyui") or {}
     modes = comfy_mode_options(pc)
@@ -6686,6 +6713,8 @@ def episode_provider_models(cfg: dict, provider: str) -> dict[str, bool]:
         return {m["id"]: m["configured"] for m in comfy_mode_options((cfg.get("video") or {}).get("comfyui"))}
     if provider == "agentics":
         return {r["id"]: True for r in agentics_video_rows(cfg)}
+    if provider == "rhapi":
+        return {r["id"]: True for r in rhapi_video_rows(cfg)}
     return {m: True for m, _ in VIDEO_MODEL_CATALOG.get(provider, [])}
 
 
@@ -6736,6 +6765,7 @@ def group_video_candidates(project: str, cfg: dict | None = None, ep: str = "") 
         rows = comfy_mode_options((cfg.get("video") or {}).get("comfyui"))
     else:
         rows = (agentics_video_rows(cfg) if provider == "agentics"
+                else rhapi_video_rows(cfg) if provider == "rhapi"
                 else [{"id": m, "label": lbl} for m, lbl in VIDEO_MODEL_CATALOG.get(provider, [])])
         if provider == gprovider and gmodel and gmodel not in {r["id"] for r in rows}:
             rows.insert(0, {"id": gmodel, "label": gmodel + "(当前全局,自定义)"})

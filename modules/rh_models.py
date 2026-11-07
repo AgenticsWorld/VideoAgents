@@ -346,6 +346,38 @@ def list_models(site: str, kind: str, refresh: bool = False) -> list[dict]:
             for m in catalog(site, refresh) if m["kind"] == kind]
 
 
+_CACHED_LIST_MEMO: dict[str, tuple[float, list[dict]]] = {}
+
+
+def cached_list(site: str, kind: str) -> list[dict]:
+    """只读本地目录缓存的精简清单 [{id, name, task}](不联网、过期也照用、没缓存返回 []):
+    分镜预览集级 / 组级视频渠道下拉每次加载都要列,不能等首次拉目录的约 1 分钟;
+    缓存由「生成模型」页 RH 标签页拉取 / 刷新。任务类型按当前 _task_of 重算(同 _with_caps),按缓存 mtime 记忆。"""
+    site = site_of(site)
+    cache = CACHE_DIR / f"{site}.json"
+    try:
+        mtime = cache.stat().st_mtime
+    except OSError:
+        return []
+    memo = _CACHED_LIST_MEMO.get(site)
+    if not memo or memo[0] != mtime:
+        try:
+            models = json.loads(cache.read_text(encoding="utf-8")).get("models") or []
+        except (OSError, ValueError, AttributeError):
+            return []
+        rows = []
+        for m in models:
+            if not isinstance(m, dict) or not m.get("id"):
+                continue
+            task = _task_of(m.get("category") or "", m["id"]) or str(m.get("task") or "")
+            if task not in IMAGE_TASKS + VIDEO_TASKS:
+                continue
+            rows.append({"id": m["id"], "name": str(m.get("name") or m["id"]), "task": task})
+        memo = _CACHED_LIST_MEMO[site] = (mtime, rows)
+    want = IMAGE_TASKS if kind == "image" else VIDEO_TASKS
+    return [dict(r) for r in memo[1] if r["task"] in want]
+
+
 def find_entry(site: str, model_id: str) -> dict:
     mid = str(model_id or "").strip().strip("/")
     if mid.startswith("openapi/v2/"):
