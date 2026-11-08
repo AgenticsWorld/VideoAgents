@@ -66,7 +66,7 @@ def event_times(camera, group, shot=None, taken=(), limit=MAX_EVENT_TILES):
     for prop in group.get('props') or []:
         keys = prop.get('keyframes') or []
         for k0, k1 in zip(keys, keys[1:]):
-            if any(k0.get(f) != k1.get(f) for f in ('position', 'scale', 'pitch', 'yaw', 'roll')):
+            if any(k0.get(f) != k1.get(f) for f in ('position', 'scale', 'pitch', 'yaw', 'roll', 'path', 'extent', 'joints')):   # 软体 / 模型通道(2026-11-08)
                 found.add((float(k0['t']) + float(k1['t'])) / 2)
             if k0.get('visible', True) != k1.get('visible', True) or k0.get('attached', True) != k1.get('attached', True):
                 found.add(float(k1['t']))

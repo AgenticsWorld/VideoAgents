@@ -37,10 +37,16 @@ export function sample(keys, time) {
       if(k==='yaw') delta=((delta+Math.PI)%(2*Math.PI)+2*Math.PI)%(2*Math.PI)-Math.PI;
       out[k]=a[k]+delta*u;
     }
-    for(const k of ['bend','pitch','roll','head_pitch','head_yaw','torso_yaw','body_roll','neck_extension','expression','morph'])if(a[k]!==undefined||b[k]!==undefined){
-      // bend 缺省值随姿态:蹲姿默认前俯 0.6(leanBend),插值时缺失端也按它算,不再先弹直再俯身(2026-11-05)
-      const da=k==='bend'?bendDefault(a):0,db=k==='bend'?bendDefault(b):0;
+    for(const k of ['bend','pitch','roll','head_pitch','head_yaw','torso_yaw','body_roll','neck_extension','expression','morph','extent'])if(a[k]!==undefined||b[k]!==undefined){
+      // bend 缺省值随姿态:蹲姿默认前俯 0.6(leanBend),插值时缺失端也按它算,不再先弹直再俯身(2026-11-05);软体 extent 缺省 1(全身)
+      const da=k==='bend'?bendDefault(a):k==='extent'?1:0,db=k==='bend'?bendDefault(b):k==='extent'?1:0;
       out[k]=(a[k]??da)+((b[k]??db)-(a[k]??da))*u;
+    }
+    // 软体中心线 path 逐点插值(点数相同时;否则保持前帧);模型铰链 joints 按名插值、缺省 0(2026-11-08,与 modules/whitebox.py sample 同)
+    if(Array.isArray(a.path)&&Array.isArray(b.path)&&a.path.length===b.path.length)out.path=a.path.map((p,i)=>p.map((v,j)=>v+(b.path[i][j]-v)*u));
+    if(a.joints||b.joints){
+      const ja=a.joints||{},jb=b.joints||{};out.joints={};
+      for(const n of [...new Set([...Object.keys(ja),...Object.keys(jb)])].sort())out.joints[n]=(ja[n]??0)+((jb[n]??0)-(ja[n]??0))*u;
     }
     return out;
   }
@@ -64,6 +70,190 @@ export function shoulderPoint(size,k,side){
   const pose=k.pose||'stand',h=size[1],low=pose==='sit'||pose==='kneel'||pose==='crouch';
   const bend=leanBend(k),hip=h*leanHip(pose),y=h*(low?.58:.77)-hip;
   return [side*size[0]*.52,hip+y*Math.cos(bend),y*Math.sin(bend)];
+}
+
+// ---------------- 自定义形状(2026-11-08,docs/whitebox.md「自定义形状:连续软体 tube 与模型库 model」) ----------------
+// 起因:inlove ep01 白蛇只能用一串各自插值的球拼,参考视频里是一串分开的扁椭球,视频模型照着画成一串圆。
+// tube = 一条按半径剖面逐渐变细的连续软体;follow:"head" 时身体沿头部走过的轨迹拖在后面,否则按 path(道具局部中心线)。
+// model = 编译时从模型库内联的零件树(model_def.parts),零件可带铰链(关键帧 joints 转动)。
+// 中心线算法与 modules/whitebox_shapes.py tube_centerline 同口径(tests/test_whitebox_shapes.py 逐时刻比对),改动须两边同步;
+// 平滑(Catmull-Rom 重采样)、波动(wave)与网格只在这里做,Python 侧按未平滑折线 + 半径(+波幅)算包围。
+export const TUBE_SEGMENTS=48, TUBE_RADIAL=12;
+export function radiusProfile(r){return Array.isArray(r)?(r.length>1?r.map(Number):[+r[0],+r[0]]):[+r,+r];}
+export function radiusAt(profile,f){
+  f=Math.min(1,Math.max(0,f));const x=f*(profile.length-1),i=Math.min(profile.length-2,Math.floor(x));
+  return profile[i]+(profile[i+1]-profile[i])*(x-i);
+}
+const dist3=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]);
+function polyLength(pts){let s=0;for(let i=1;i<pts.length;i++)s+=dist3(pts[i-1],pts[i]);return s;}
+// 从起点沿折线走 len 米为止的那一段(末点按比例插值);len ≤ 0 只剩起点
+function cutPolyline(pts,len){
+  const out=[[...pts[0]]];let left=Math.max(0,len);
+  for(let i=1;i<pts.length;i++){
+    const a=pts[i-1],b=pts[i],seg=dist3(a,b);
+    if(seg<=1e-6)continue;
+    if(left<=seg+1e-6){if(left>1e-6){const u=Math.min(1,left/seg);out.push(a.map((v,j)=>v+(b[j]-v)*u));}return out;}
+    out.push([...b]);left-=seg;
+  }
+  return out;
+}
+// follow 软体在轨迹起点之前的身体朝向(指向头的前方):首帧 yaw/pitch → 道具顶层 yaw/pitch → 第一段运动方向 → +Z
+export function tubeHeading(data){
+  const keys=data.keyframes||[];
+  for(const src of [keys[0]||data,data]){
+    if(src.yaw!=null||src.pitch!=null){const y=+(src.yaw||0),p=+(src.pitch||0);return [Math.sin(y),-Math.sin(p)*Math.cos(y),Math.cos(p)*Math.cos(y)];}
+  }
+  if(keys.length){
+    const p0=keys[0].position;
+    for(const q of keys.slice(1)){const d=q.position.map((v,j)=>v-p0[j]),n=Math.hypot(...d);if(n>1e-4)return d.map(v=>v/n);}
+  }
+  return [0,0,1];
+}
+// 软体 t 时刻的中心线(未平滑折线,头在前):points 为道具局部坐标(follow 相对头部),length 可见长度,full 半径剖面全长,
+// travel = follow 时头沿轨迹已走的距离(波动相位用)
+export function tubeCenterline(data,k,t){
+  const extent=Math.min(1,Math.max(0,+(k.extent??data.extent??1)));
+  const profile=radiusProfile(data.radius_m);
+  let points,full,travel=0;
+  if(data.follow==='head'){
+    const head=[...(k.position||data.position||[0,0,0])],trail=[head],keys=data.keyframes||[];
+    for(let i=keys.length-1;i>=0;i--){const q=keys[i];if(q.t<t-1e-9&&dist3(q.position,trail.at(-1))>1e-6)trail.push([...q.position]);}
+    travel=polyLength(trail);full=+data.length_m;
+    const d=tubeHeading(data),last=trail.at(-1);trail.push(last.map((v,j)=>v-d[j]*full));
+    points=cutPolyline(trail,full*extent).map(p=>p.map((v,j)=>v-head[j]));
+  }else{
+    const path=k.path||data.path;full=polyLength(path);points=cutPolyline(path,full*extent);
+  }
+  let s=0;const radii=points.map((p,i)=>{if(i)s+=dist3(points[i-1],p);return radiusAt(profile,full>1e-6?s/full:0);});
+  return {points,radii,length:s,full,travel};
+}
+function propMaterial(color,ghost,side=THREE.FrontSide){
+  return ghost?new THREE.MeshStandardMaterial({color:color||0xbfe6ff,roughness:.25,transparent:true,opacity:.3,depthWrite:false,side})
+    :new THREE.MeshStandardMaterial({color:color||0xf3f0e8,roughness:1,side});
+}
+function primitiveGeometry(shape,[x,y,z]){
+  let geo;
+  if(shape==='sphere'){geo=new THREE.SphereGeometry(.5,16,12);geo.scale(x,y,z);}
+  else if(shape==='cylinder'){geo=new THREE.CylinderGeometry(.5,.5,1,16);geo.scale(x,y,z);}
+  // 锥体(2026-11-05,仅计划 props):尖朝局部 +Y,底径 size_m[0]×[2]、高 [1];尖朝下(甜筒)用 pitch=π
+  else if(shape==='cone'){geo=new THREE.ConeGeometry(.5,1,16);geo.scale(x,y,z);}
+  else geo=new THREE.BoxGeometry(x,y,z);
+  return geo;
+}
+// 软体网格:(TUBE_SEGMENTS+1) 圈 × TUBE_RADIAL 个顶点每帧重填,头尾各一个球冠;head:"eyes" 在头端画一对眼睛标明朝向。
+// 不画棱线(曲面棱线会画成一节节的环,视频模型又会照着画成分节)
+function makeTube(color,ghost,head){
+  const wrap=new THREE.Group(),material=propMaterial(color,ghost),R=TUBE_RADIAL;
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array((TUBE_SEGMENTS+1)*R*3),3));
+  const index=[];
+  for(let i=0;i<TUBE_SEGMENTS;i++)for(let j=0;j<R;j++){const a=i*R+j,b=i*R+(j+1)%R,c=(i+1)*R+j,d=(i+1)*R+(j+1)%R;index.push(a,b,c,b,d,c);}
+  geo.setIndex(index);
+  const body=new THREE.Mesh(geo,material);body.name='tube-body';
+  const capGeo=new THREE.SphereGeometry(1,16,12);
+  const headCap=new THREE.Mesh(capGeo,material),tailCap=new THREE.Mesh(capGeo,material);headCap.name='tube-head';tailCap.name='tube-tail';
+  wrap.add(body,headCap,tailCap);
+  if(ghost)for(const m of [body,headCap,tailCap])m.renderOrder=2;
+  let eyes=null;
+  if(head==='eyes'){
+    eyes=[];const white=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.9}),dark=new THREE.MeshStandardMaterial({color:0x18232b,roughness:.9});
+    const eyeGeo=new THREE.SphereGeometry(1,12,8);
+    for(const side of [-1,1]){
+      const eye=new THREE.Mesh(eyeGeo,white),pupil=new THREE.Mesh(eyeGeo,dark);pupil.scale.setScalar(.5);eye.add(pupil);
+      eye.name='tube-eye';eye.userData.side=side;wrap.add(eye);eyes.push({eye,pupil});
+    }
+  }
+  return {group:wrap,body,headCap,tailCap,eyes,geo};
+}
+// 原始中心线 → 等弧长重采样的平滑曲线(Catmull-Rom centripetal,不过冲)+ 每点半径;退化(不足两点)时隐藏
+function shapeTube(tube,line,profile){
+  const pts=[];
+  for(const p of line.points){const v=new THREE.Vector3(...p);if(!pts.length||v.distanceTo(pts.at(-1))>1e-4)pts.push(v);}
+  const ok=pts.length>=2;
+  for(const m of [tube.body,tube.headCap,tube.tailCap,...(tube.eyes||[]).map(e=>e.eye)])m.visible=ok;
+  if(!ok)return null;
+  const curve=pts.length===2?new THREE.LineCurve3(pts[0],pts[1]):new THREE.CatmullRomCurve3(pts,false,'centripetal');
+  const spaced=curve.getSpacedPoints(TUBE_SEGMENTS);
+  return {pts:spaced,radii:spaced.map((_,i)=>radiusAt(profile,line.full>1e-6?i/TUBE_SEGMENTS*line.length/line.full:0))};
+}
+function tangents(pts){
+  return pts.map((_,i)=>{const t=new THREE.Vector3().subVectors(pts[Math.min(pts.length-1,i+1)],pts[Math.max(0,i-1)]);return t.lengthSq()<1e-12?t.set(0,0,1):t.normalize();});
+}
+// follow 软体的蛇形波动:位移固定在世界轨迹上(相位 = 头已走距离 − 身上弧长),身体从中穿过;头部 15% 身长内渐入,头仍在关键帧位置。
+// axis "side"(缺省)= 水平左右摆(地上 / 水面游);"up" = 竖直起伏(腾空的龙蛇,侧面机位看得见)
+function applyWave(pts,line,amplitude,wavelength,axis){
+  const up=new THREE.Vector3(0,1,0),T=tangents(pts),n=pts.length-1;
+  for(let i=0;i<=n;i++){
+    const s=i/n*line.length,lat=new THREE.Vector3().crossVectors(T[i],up);
+    if(lat.lengthSq()<1e-8)lat.set(1,0,0);else lat.normalize();
+    if(axis==='up')lat.crossVectors(lat.clone(),T[i]).normalize();
+    let env=Math.min(1,s/(.15*line.full));env=env*env*(3-2*env);
+    pts[i].addScaledVector(lat,amplitude*env*Math.sin(2*Math.PI*(line.travel-s)/wavelength));
+  }
+}
+function fillTube(tube,pts,radii){
+  const pos=tube.geo.attributes.position.array,R=TUBE_RADIAL,n=pts.length-1,T=tangents(pts);
+  let N=null;const B=new THREE.Vector3();
+  for(let i=0;i<=n;i++){
+    // 平行移动标架:首圈取与切线正交的「上」方向,之后逐圈去掉切向分量,截面不随曲率翻转
+    if(N)N.addScaledVector(T[i],-T[i].dot(N));
+    if(!N||N.lengthSq()<1e-10){const ref=Math.abs(T[i].y)>.99?new THREE.Vector3(1,0,0):new THREE.Vector3(0,1,0);N=ref.addScaledVector(T[i],-T[i].dot(ref));}
+    N.normalize();B.crossVectors(T[i],N);
+    for(let j=0;j<R;j++){
+      const a=j/R*Math.PI*2,c=Math.cos(a)*radii[i],s=Math.sin(a)*radii[i],o=(i*R+j)*3;
+      pos[o]=pts[i].x+N.x*c+B.x*s;pos[o+1]=pts[i].y+N.y*c+B.y*s;pos[o+2]=pts[i].z+N.z*c+B.z*s;
+    }
+  }
+  tube.geo.attributes.position.needsUpdate=true;tube.geo.computeVertexNormals();tube.geo.computeBoundingSphere();tube.geo.computeBoundingBox();
+  tube.headCap.position.copy(pts[0]);tube.headCap.scale.setScalar(Math.max(radii[0],1e-4));
+  tube.tailCap.position.copy(pts[n]);tube.tailCap.scale.setScalar(Math.max(radii[n],1e-4));
+  if(tube.eyes){
+    const F=new THREE.Vector3().subVectors(pts[0],pts[1]).normalize(),up=Math.abs(F.y)>.99?new THREE.Vector3(1,0,0):new THREE.Vector3(0,1,0);
+    const U=up.addScaledVector(F,-F.dot(up)).normalize(),S=new THREE.Vector3().crossVectors(F,U),r=radii[0];
+    for(const {eye,pupil} of tube.eyes){
+      eye.position.copy(pts[0]).addScaledVector(F,.3*r).addScaledVector(U,.5*r).addScaledVector(S,eye.userData.side*.55*r);
+      eye.scale.setScalar(Math.max(.4*r,1e-4));pupil.position.copy(F).multiplyScalar(.62);
+    }
+  }
+}
+function updateTube(tube,data,k,t){
+  const line=tubeCenterline(data,k,t),shaped=shapeTube(tube,line,radiusProfile(data.radius_m));
+  if(!shaped)return;
+  if(data.follow==='head'&&data.wave&&+data.wave.amplitude_m>0)applyWave(shaped.pts,line,+data.wave.amplitude_m,+data.wave.wavelength_m,data.wave.axis);
+  fillTube(tube,shaped.pts,shaped.radii);
+}
+// 模型零件树:每个零件 = 枢轴组(position + pitch/yaw/roll,挂在父零件的铰链组下)→ 铰链组(关键帧 joints 转动)→ 几何(偏移 offset)。
+// 颜色 / 材质:零件自己的 → 道具的 → 模型的 → 缺省
+function buildModel(data){
+  const def=data.model_def,root=new THREE.Group(),hinges={},joints={};
+  for(const part of def.parts){
+    const pivot=new THREE.Group();pivot.position.fromArray(part.position||[0,0,0]);pivot.rotation.set(part.pitch||0,part.yaw||0,part.roll||0);
+    const hinge=new THREE.Group();pivot.add(hinge);
+    const color=part.color||data.color||def.color,ghost=(part.material||data.material||def.material)==='ghost';
+    let node;
+    if(part.shape==='tube'){
+      const tube=makeTube(color,ghost,part.head),length=polyLength(part.path);
+      const shaped=shapeTube(tube,{points:part.path,length,full:length},radiusProfile(part.radius_m));
+      if(shaped)fillTube(tube,shaped.pts,shaped.radii);
+      node=tube.group;
+    }else{
+      let geo;
+      if(part.shape==='lathe')geo=new THREE.LatheGeometry(part.profile.map(([r,y])=>new THREE.Vector2(r,y)),24);
+      else if(part.shape==='extrude'){
+        geo=new THREE.ExtrudeGeometry(new THREE.Shape(part.outline.map(([x,y])=>new THREE.Vector2(x,y))),{depth:part.depth_m,bevelEnabled:false});
+        geo.translate(0,0,-part.depth_m/2);
+      }else geo=primitiveGeometry(part.shape,part.size_m);
+      const curved=part.shape==='lathe'||part.shape==='extrude';
+      node=new THREE.Mesh(geo,propMaterial(color,ghost,part.shape==='lathe'?THREE.DoubleSide:THREE.FrontSide));
+      if(ghost)node.renderOrder=2;
+      node.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo,curved?30:1),ghost?new THREE.LineBasicMaterial({color:color||0xbfe6ff,transparent:true,opacity:.6,depthWrite:false})
+        :new THREE.LineBasicMaterial({color:0x8d968d})));
+    }
+    node.name=part.id;node.position.fromArray(part.offset||[0,0,0]);hinge.add(node);
+    (part.parent?hinges[part.parent]:root).add(pivot);hinges[part.id]=hinge;
+    if(part.hinge)joints[part.id]={node:hinge,axis:part.hinge.axis};
+  }
+  return {root,joints};
 }
 
 // One detached WebGL context shared by every per-shot preview on a page: each
@@ -171,22 +361,22 @@ export class WhiteboxRenderer {
     const propIds=new Set((group?.props||[]).map(p=>p.id));
     // A group can animate an existing scene prop without leaving a duplicate.
     for(const obj of [...sceneData.objects.filter(o=>!propIds.has(o.id)),...(group?.props||[])]) {
-      let geo; const [x,y,z]=obj.size_m;
-      if(obj.shape==='sphere') {geo=new THREE.SphereGeometry(.5,16,12);geo.scale(x,y,z);}
-      else if(obj.shape==='cylinder') {geo=new THREE.CylinderGeometry(.5,.5,1,16);geo.scale(x,y,z);}
-      // 锥体(2026-11-05,仅计划 props):尖朝局部 +Y,底径 size_m[0]×[2]、高 [1];尖朝下(甜筒)用 pitch=π
-      else if(obj.shape==='cone') {geo=new THREE.ConeGeometry(.5,1,16);geo.scale(x,y,z);}
-      else geo=new THREE.BoxGeometry(x,y,z);
       // material "ghost"(2026-11-05):泡泡/水/烟/光效等不挡人的效果体——半透明、不写深度,人物透过它仍清楚可见
       const ghost=obj.material==='ghost';
-      const material=ghost?new THREE.MeshStandardMaterial({color:obj.color||0xbfe6ff,roughness:.25,transparent:true,opacity:.3,depthWrite:false})
-        :new THREE.MeshStandardMaterial({color:obj.color||0xf3f0e8,roughness:1});
-      const mesh=new THREE.Mesh(geo,material);mesh.name=obj.id;mesh.position.fromArray(obj.position||[0,0,0]);mesh.rotation.set(obj.pitch||0,obj.yaw||0,obj.roll||0);
-      if(ghost)mesh.renderOrder=2;
+      // 自定义形状(2026-11-08,仅计划 props):tube 软体(网格在 setTime 里按中心线重填)、model 模型库零件树
+      let mesh,tube=null,joints=null;
+      if(obj.shape==='tube'){tube=makeTube(obj.color,ghost,obj.head);mesh=tube.group;}
+      else if(obj.model_def){const built=buildModel(obj);mesh=built.root;joints=built.joints;}
+      else{
+        const geo=primitiveGeometry(obj.shape,obj.size_m);
+        mesh=new THREE.Mesh(geo,propMaterial(obj.color,ghost));
+        if(ghost)mesh.renderOrder=2;
+        const edges=new THREE.LineSegments(new THREE.EdgesGeometry(geo),ghost?new THREE.LineBasicMaterial({color:obj.color||0xbfe6ff,transparent:true,opacity:.6,depthWrite:false})
+          :new THREE.LineBasicMaterial({color:0x8d968d}));mesh.add(edges);
+      }
+      mesh.name=obj.id;mesh.position.fromArray(obj.position||[0,0,0]);mesh.rotation.set(obj.pitch||0,obj.yaw||0,obj.roll||0);
       scene.add(mesh);
-      if(group?.props?.includes(obj))this.props.push({data:obj,mesh});else this.solids.push(mesh);
-      const edges=new THREE.LineSegments(new THREE.EdgesGeometry(geo),ghost?new THREE.LineBasicMaterial({color:obj.color||0xbfe6ff,transparent:true,opacity:.6,depthWrite:false})
-        :new THREE.LineBasicMaterial({color:0x8d968d}));mesh.add(edges);
+      if(group?.props?.includes(obj))this.props.push({data:obj,mesh,tube,joints});else this.solids.push(mesh);
     }
     for(const actor of [...(group?.actors||[]),...(group?.extras||[])]) {
       const root=new THREE.Group();const body=new THREE.Group();root.add(body);
@@ -409,11 +599,16 @@ export class WhiteboxRenderer {
         mesh.quaternion.copy(q).multiply(new THREE.Quaternion().setFromEuler(own));
         layer=holder.root.layers.mask===1?0:1;   // 挂在被本镜 visible_actor_ids 排除的人手上:随人一起只留在空间/俯视视角
       }else{
-        mesh.position.fromArray(k.position||data.position||[0,0,0]);mesh.rotation.copy(own);
+        // follow 软体:原点 = 头部关键帧位置,身体按世界轨迹拖在后面,不再整体旋转(yaw/pitch 只定轨迹起点前的身体朝向)
+        mesh.position.fromArray(k.position||data.position||[0,0,0]);
+        if(data.follow==='head')mesh.rotation.set(0,0,0);else mesh.rotation.copy(own);
       }
       mesh.traverse(o=>o.layers.set(layer));
       mesh.scale.fromArray(k.scale||data.scale||[1,1,1]);
       mesh.visible=k.visible!==false&&(!arm||holder.root.visible)&&(!data.shot_ids||data.shot_ids.includes(shot.shot_id));
+      if(p.tube)updateTube(p.tube,data,k,t);
+      // 模型铰链(2026-11-08):关键帧 joints {零件 id: 弧度} 绕该零件铰链轴转,缺省 0
+      if(p.joints){const jv=k.joints||{};for(const id in p.joints){const j=p.joints[id];j.node.rotation.set(0,0,0);j.node.rotation[j.axis]=+(jv[id]||0);}}
     }
     this.scene.updateMatrixWorld(true);
     for(const {screen,shadow} of this.silhouettes){

@@ -45,13 +45,16 @@ def _fingerprint(episode, group, review_marks=False):
 RENDER_FINGERPRINT_PREFIX = 'r1:'
 RENDER_SCENE_KEYS = ('dimensions_m', 'floor', 'grid', 'objects')
 RENDER_GROUP_KEYS = ('duration_s', 'actors', 'extras', 'props', 'cameras')
+# 2026-11-08 自定义形状:tube 的 radius_m/length_m/follow/path/head/wave/extent、模型的 model_def(编译时从模型库内联,
+# 模型文件一改已导出视频即过期)、关键帧 path/extent/joints。存量计划没有这些键,r1 指纹不变
 RENDER_OBJECT_KEYS = ('id', 'shape', 'size_m', 'position', 'yaw', 'pitch', 'roll', 'color', 'material', 'scale',
-                      'keyframes', 'shot_ids', 'attach', 'projection_screen')
+                      'keyframes', 'shot_ids', 'attach', 'projection_screen',
+                      'radius_m', 'length_m', 'follow', 'path', 'head', 'wave', 'extent', 'model_def')
 RENDER_ACTOR_KEYS = ('id', 'kind', 'color', 'size_m', 'keyframes', 'faceless', 'morph_target')
 RENDER_CAMERA_KEYS = ('shot_id', 'start', 'duration_s', 'keyframes', 'visible_actor_ids')
 RENDER_KEYFRAME_KEYS = ('t', 'position', 'target', 'fov', 'yaw', 'pitch', 'roll', 'scale', 'pose', 'bend', 'head_pitch',
                         'head_yaw', 'torso_yaw', 'body_roll', 'neck_extension', 'expression', 'morph', 'left_hand',
-                        'right_hand', 'visible', 'attached', 'hold', 'easing')
+                        'right_hand', 'visible', 'attached', 'hold', 'easing', 'path', 'extent', 'joints')
 
 
 def _pick(obj, keys, keyframes=True):

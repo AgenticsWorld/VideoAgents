@@ -20,7 +20,8 @@ import math
 import os
 from pathlib import Path
 
-from modules.whitebox import component, prop_state, read, render_format, sample
+from modules.whitebox import component, read, render_format, sample
+from modules.whitebox_shapes import prop_boxes
 
 STEP_S = 1 / 24
 ACTOR_GAP_M = .20        # 人物之间参考净距(SOUL「防穿模必检」)
@@ -261,16 +262,13 @@ def collide_group(group: dict, scene: dict, *, step=STEP_S, actor_gap=ACTOR_GAP_
         for prop in group.get('props') or []:
             if prop.get('material') == 'ghost':
                 continue
-            center, attached, visible = prop_state(prop, by_id, t)
-            if not visible:
-                continue
-            k = sample(prop['keyframes'], t) if prop.get('keyframes') else prop
-            size = [s * c for s, c in zip(prop['size_m'], k.get('scale') or prop.get('scale') or [1, 1, 1])]
-            rot = {axis: k[axis] if k.get(axis) is not None else prop.get(axis, 0) for axis in ('yaw', 'pitch', 'roll')}   # 同渲染器:关键帧缺省回退顶层
-            shape = object_shape({'size_m': size, **rot},
-                                 center, prop['id'], 'prop', loose=attached)   # 挂手时朝向随上身转,取外接球
-            shape['holder'] = (prop.get('attach') or {}).get('actor') if attached else None
-            dynamic.append(shape)
+            # 普通几何体一个有向长方体(朝向关键帧缺省回退顶层,同渲染器;挂手时取外接球);软体按中心线逐段、模型按包围盒(2026-11-08)
+            holder = (prop.get('attach') or {}).get('actor')
+            for box in prop_boxes(prop, by_id, t):
+                shape = object_shape({'size_m': box['size_m'], **{a: box[a] for a in ('yaw', 'pitch', 'roll')}},
+                                     box['center'], prop['id'], 'prop', loose=box['loose'])
+                shape['holder'] = holder if box['loose'] else None   # loose 只出现在挂手时
+                dynamic.append(shape)
         for i, (a, ka, pa, a0, a1, ba) in enumerate(bodies):
             h = (a.get('size_m') or [.5, 1.7, .4])[1]
             pose = ka.get('pose') or 'stand'

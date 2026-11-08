@@ -64,7 +64,7 @@
 
 精确计划：`directing/<ep>/whitebox_plans/<gid>.json`。actors 和 cameras 可分别省略；若提供 actors，须覆盖 blocking_map 全体及其坐骑，ID必须一致，颜色与字母由系统锁定。
 
-计划也可提供 `extras`（独立的 `EXTRA-` ID、label、kind、color、size_m、keyframes），用于没有登记角色的群演镜头，不更改正式角色集合。群演（人或生物）颜色缺失或与本组登记角色撞色时，宿主改派本组未用色并记 warning；群演之间可共用一色（2026-09-19）。人物、群演关键帧的 `visible` 布尔值在该时间点切换，可表示画外电话人物与退场；默认显示。`props` 支持与场景相同的简单几何体（id、shape、size_m、position、yaw、color），可用 `shot_ids` 限定出现镜头，也可用覆盖组时长的 keyframes 表示三维运动；另有锥体、半透明效果体、挂在人物手上与剧情道具覆盖检查，见下文「道具:锥体、半透明效果体、挂手与剧情道具覆盖」。预览与导出共用这些规则。
+计划也可提供 `extras`（独立的 `EXTRA-` ID、label、kind、color、size_m、keyframes），用于没有登记角色的群演镜头，不更改正式角色集合。群演（人或生物）颜色缺失或与本组登记角色撞色时，宿主改派本组未用色并记 warning；群演之间可共用一色（2026-09-19）。人物、群演关键帧的 `visible` 布尔值在该时间点切换，可表示画外电话人物与退场；默认显示。`props` 支持与场景相同的简单几何体（id、shape、size_m、position、yaw、color），可用 `shot_ids` 限定出现镜头，也可用覆盖组时长的 keyframes 表示三维运动；另有锥体、半透明效果体、挂在人物手上与剧情道具覆盖检查，见下文「道具:锥体、半透明效果体、挂手与剧情道具覆盖」；连续软体（蛇、龙、绳、长布、尾巴）与多部件物体（车轿、船、法器）用 `shape: "tube"` 与模型库 `model`，见下文「自定义形状:连续软体 tube 与模型库 model」。预览与导出共用这些规则。
 
 人物和生物的头部均有白色眼睛、深色瞳孔与突出的白色鼻尖，用于识别正脸方向。模型局部 +Z 为正前方，yaw=0 朝 +Z，yaw=π/2 朝 +X；面部随转身和坐卧姿态变化，在空间、俯视、摄像机预览与导出视频中保持一致。
 
@@ -128,6 +128,34 @@ continuity 从源组 continuity_from 取前组。actors 默认 validate，camera
 - **自检静帧 `evt` 格**：`--stills` 每镜在 `cam` 格之外至多加 3 格 `evt`：镜头表 content 时间码区间（如「(4.0–4.5)」「(4.3–4.8,与…重叠)」，与 `t_range_s` 同一时间轴）的中点，以及计划道具运动段中点与显隐 / 挂手切换时刻。白模调度读图时核对这些时刻 content 写的动作在白模里看得见（SOUL「白模自检」⑦）。
 
 改 `whitebox-renderer.js` 会改变渲染器指纹：下次正式导出（`render_whitebox.py` 不带 `--compile-only`）按严格口径重渲已导出组（本地渲染，无生成费用）；`--verify-export` 与签字前样片只看源指纹，已签字的参考视频不因此失效。
+
+## 自定义形状:连续软体 tube 与模型库 model（2026-11-08）
+
+起因：inlove ep01 的白蛇（湖中白蛇 / 风蛇 / 大白蛇，grp0030–0060）只能用 6–9 个各自带关键帧的球串起来——球与球各自插值、互不相连，参考视频里是一串分开的扁椭球，Seedance 照着画成一串圆；图例还逐个写「off-white sphere = 大白蛇」。白模调度当时开了待决项 WBI-ep01-grp0050-001（白模没有蛇形体型），能选的只有「接受道具链」或「等宿主加体型」。现在白模调度可以按剧情自己声明形状（只写 JSON，不写渲染代码），宿主负责校验、渲染、入画判定、碰撞与图例。两者都只开放给计划 `props`（场景物件仍是 box / sphere / cylinder）；存量计划没有这些键，编译结果与视频指纹不变。
+
+**连续软体 `shape: "tube"`**（`modules/whitebox_shapes.py` ↔ `whitebox-renderer.js` `tubeCenterline`，中心线算法两边同口径，`tests/test_whitebox_shapes.py` 逐时刻比对）：
+- `radius_m`：一个数 = 等粗；数组 = 从头到尾均匀分布的半径（线性插值），如蛇 `[0.2, 0.25, 0.24, 0.18, 0.1, 0.03]`。头尾各有球冠；`head: "eyes"` 在头端画一对白眼黑瞳标明朝向（缺省 `"none"`，绳、布不画）。不画棱线（曲面棱线会被视频模型画成一节节的环）。
+- **跟随模式** `follow: "head"` + `length_m`（身长）：关键帧只写**头**的位置，身体沿头走过的轨迹拖在后面（蛇游、龙飞、拖在身后的绳 / 长布）；轨迹不够长时其余身体从首帧位置沿头的反方向伸直——朝向取首帧 `yaw` / `pitch`（道具顶层也可），都没写取第一段运动方向。原点 = 头，不随 yaw 整体旋转；`scale` 以头为中心缩放。可选 `wave: {"amplitude_m", "wavelength_m", "axis"}` 蛇形波动：位移固定在世界轨迹上（身体从同一条 S 形里穿过），头部 15% 身长内渐入、头仍在关键帧位置；`axis: "side"`（缺省，水平左右摆，地面 / 水面游）或 `"up"`（竖直起伏，腾空的龙蛇、侧面机位看得见）。跟随模式不能挂手、不能写 `path`。
+- **形状模式** `path`：道具局部坐标的中心线（2–64 点，头在前），随道具 position / yaw / pitch / roll / scale / `attach` 一起变换；要变形就在**每个**关键帧写同样点数的 `path`（逐点线性插值）。不写 `length_m` / `wave`。
+- 关键帧 `extent`（0–1，缺省 1）= 从头起露出多长：从某点长出 / 钻入水里 / 缩回。缺省是 1，要从 0.05 长到 1 就在前后关键帧都写。
+- `size_m` 由宿主派生（跟随 = [2×最大半径, 同, 身长]；path = 中心线包围 + 半径），写了也会被覆盖。
+- 平滑（Catmull-Rom centripetal 等弧长重采样 48 段 × 12 边）、波动与网格只在渲染器里做；Python 侧入画判定把未平滑中心线按 0.5 m 细分成一串球（+ 波幅），碰撞（`whitebox_probe.py collide`）按中心线逐段一个有向长方体，ghost 不算。
+
+**模型库 `model: "MDL-…"`**：项目级文件 `directing/whitebox_models/<MDL-…>.json`（schema `whitebox_model.v1`，跨集复用），由白模调度按剧情编写；计划 props 写 `{"id": "chair1", "model": "MDL-sedan-chair", "position": […], "yaw": …, "keyframes": […]}`（`shape` 不写或写 `"model"`）。
+- 文件结构：`id`（= 文件名）、`label`（中文名，计划没写 label 时用它）、`legend_en`（图例里描述白模形状的英文短语，如 `small wooden boat with an arched canopy`）、`basis`（依据，不进渲染）、可选默认 `color` / `material`，以及 `parts[]`（1–200 个）。
+- 零件：`id`、`shape`（`box` / `sphere` / `cylinder` / `cone` 写 `size_m`；`tube` 写 `path` + `radius_m`（+ `head`）；`lathe` 旋转体写 `profile: [[半径, y], …]` 绕局部 Y 旋转——瓶、罐、钟、灯笼、斗笠、伞面；`extrude` 挤出写 `outline: [[x, y], …]`（≥3 点、非零面积）+ `depth_m`，沿局部 Z 居中——翅膀、鳍、刀刃、牌匾、船身侧影）、`parent`（只能指**前面**已列的零件）、`position`（枢轴，相对父零件）、`yaw` / `pitch` / `roll`、`offset`（几何相对枢轴的偏移，铰链绕枢轴转）、`color`、`material`（solid / ghost）、`hinge: {"axis": "x|y|z", "min", "max"}`。颜色 / 材质优先级：零件 → 计划道具 → 模型 → 缺省。
+- 铰链动画：计划关键帧 `joints: {"<零件 id>": 弧度}`（按名线性插值，缺省 0，超出 min / max = 编译报错）——开门、扇翅、摆尾、轿帘、船橹。
+- 编译时宿主把模型**内联**进组道具 `model_def`（只含画面相关字段；`label` / `legend_en` / `basis` 不进），补 `size_m` 与静止姿态包围盒 `model_bounds`：改模型形状 → 引用它的组已导出视频判过期（视频指纹 r1 含 `model_def`）、机位审查指纹（placement）失效须重审（`whitebox_camera._placement_payload` 在有引用时并入模型原文）；只改说明文字不影响。
+- `python code/whitebox_models.py --project <slug> list | check [MDL…] | preview MDL…`：list / check 报零件数、铰链、包围尺寸、`used_by`（被哪些组引用 = 改模型受影响的组），整库 check 另报「计划引用了但库里没有」；preview 与预览 / 导出同一渲染器（借自检静帧页），模型放在空场地上、右后斜侧站一个 1.7 m 灰色参考人，出正 / 右 / 左后 3/4 / 俯视四格，有铰链时加「铰链最小 / 最大」两格，写 `directing/whitebox_models/previews/<MDL>.jpg`；模型有部分低于原点时整体抬到地面上看，格名标「origin +x m」。依赖同 `--stills`。
+- 入画判定按包围盒（含 yaw/pitch/roll 与缩放），碰撞按静止姿态包围盒的有向长方体（铰链转动不计）。导演台可拖动整体与改关键帧，铰链只能改计划 `joints`。
+
+**归属另一形态 `form_of`**（任意道具可写）：`"form_of": "CHAR-0002"` 表示这个道具是该角色的另一形态（化蛇、化龙、化风）；图例括注写 `it is 白娘子 (CHAR-0002) in another form`。不进渲染与视频指纹。
+
+**图例**：同色、同形、同名、同 `form_of` 的几块道具并成一行（复数，括号里列全部 id），如 `grey boxes = 小船 (boat_floor, boat_seat, …)`，不再逐块重复；tube 写成 `off-white long smooth tapering tube with eyes at its head end = 大白蛇 (snake_great, one continuous body, it is 白娘子 (CHAR-0002) in another form)`；模型写 `legend_en`（缺省 `multi-part model`）。只有一块的道具与原写法完全相同；合并行使存量 prompt 在下次 `sync_whitebox_refs.py --write` 前报 WARN「图例缺白模里出现的道具」（2026-11-08 全库回归:cartoon1 ep02 两组、inlove ep01 四组）。
+
+**串珠提醒（`shape_hints`，WARN，不改退出码）**：同名（label / ref）≥3 个 box / sphere / cylinder / cone 道具（不挂手），某时刻首尾相接（中心距 ≤ 1.3 × 两半径之和）连成总跨度 ≥ 3 × 平均半径的一串，**且块与块的两两距离在组内变化 > 0.15 m**（身体在弯、在伸缩；刚体拼装的船、桌椅平移转动都不改两两距离，不报）→ 提醒改用 tube / 模型库。与 `prop_coverage` 一样不进 `warnings`（旧口径视频指纹含 warnings），随组透传为 `shape_hints`，显示在预览页组卡与导演台「建模依据与检查」；`render_whitebox.py` 第 3 行多 `shape_hints` 与 `shape_hints_text: "[whitebox_shape_hint] … -> WARN"`。`issues` / `prop_coverage` / `review_errors` / `shape_hints` 均在 `FINGERPRINT_EXCLUDED_KEYS`。2026-11-08 全库 42 集 1506 组回归：只命中 inlove ep01 的四组白蛇；视频指纹（r1 与旧口径）、编译错误、入画道具全部不变。
+
+**新增关键帧通道**：`path`、`extent`、`joints`（Python `modules/whitebox.sample` 与渲染器 `sample` 同步插值），已列入视频指纹 r1 的字段白名单（`RENDER_KEYFRAME_KEYS`；道具键 `radius_m` / `length_m` / `follow` / `path` / `head` / `wave` / `extent` / `model_def` 在 `RENDER_OBJECT_KEYS`）。改了 `whitebox-renderer.js`，渲染器指纹随之变：下次正式导出按严格口径重渲已导出组（本地渲染，无生成费用），已签字的参考视频不因此判过期；前端引用串改为 `?v=20261108-shapes`。
 
 ## 道具占位:code/whitebox_props.py（2026-11-05）
 

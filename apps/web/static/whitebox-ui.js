@@ -1,7 +1,7 @@
 import { projectRenderFormat } from './whitebox-format.js?v=20260908-bedfoot-pour';
 import { wbText as t, wbMessage } from './whitebox-i18n.js?v=20260908-bedfoot-pour';
 let rendererModule;
-const loadRenderer=()=>rendererModule ||= import('./whitebox-renderer.js?v=20261105-fix3');
+const loadRenderer=()=>rendererModule ||= import('./whitebox-renderer.js?v=20261108-shapes');
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const api=project=>'/api/v1/projects/'+encodeURIComponent(project)+'/whitebox';
 const artifactBase=project=>'/api/v1/projects/'+encodeURIComponent(project)+'/artifacts/';
@@ -66,7 +66,8 @@ async function mount(host,project,scene,group=null,ep='') {
     model:`bible/scenes/${scene.scene_id}/whitebox.json`,preview:`directing/${ep}/whitebox/episode.json`,
   }):'';
   // 剧情道具覆盖(2026-11-05,prop_coverage.messages,服务端文案)与编译 warnings 同列;它不进 warnings 是为了不改视频指纹
-  const checkLines=[...(group?.review_errors||[]),...(group?.warnings||scene.warnings),...(group?.prop_coverage?.messages||[])];
+  // 串珠提醒(2026-11-08,shape_hints:同名几何体首尾相接拼连续物体)同理不进 warnings
+  const checkLines=[...(group?.review_errors||[]),...(group?.warnings||scene.warnings),...(group?.prop_coverage?.messages||[]),...(group?.shape_hints||[])];
   host.innerHTML=`<div class="wb-toolbar"><div class="wb-heading"><strong>${esc(t('3D 白模'))} · ${esc(scene.scene_id)}${group?' / '+esc(group.group_id):''}</strong>${group?`<button class="editbtn wb-edit" data-loc="${esc(editLocation)}" data-agent="07-directing/whitebox-staging" title="${esc(t('对这组3D白模提修改意见，直接发消息给白模调度 Agent'))}">${esc(t('✏️ 编辑'))}</button>`:''}</div><div class="wb-statuswrap"><button type="button" class="wb-statusbtn" aria-expanded="false" title="${esc(t('查看场景模型 / 调度计划 / 预览文件 / 参考视频的文件状态'))}">${esc(t('状态'))}</button><div class="wb-statuspop" role="status">${statusItems.map(item=>`<span>${esc(item)}</span>`).join('')}${!scene.artifact_status||(group&&!group.artifact_status)?`<span class="wb-statusnote">${esc(t('文件状态未知，请重启服务后刷新。'))}</span>`:''}</div></div><select aria-label="${esc(t('空间视角'))}"><option value="overview" selected>${esc(t('旋转视角'))}</option><option value="top">${esc(t('俯视图'))}</option><option value="real">${esc(t('实景图'))}</option></select></div>
     <div class="wb-status">${esc(t('{width} × {depth} m · 高 {height} m · 网格 1 m · 画幅 {aspect}',{width:scene.dimensions_m[0],depth:scene.dimensions_m[2],height:scene.dimensions_m[1],aspect:format.aspect_ratio}))} · ${esc(t(scene.inferred?'推断尺寸':'已标定尺寸'))} · ${esc(t('切换旋转视角后拖动=转头、滚轮=前进；点画面后 W/S 前后 · A/D 左右 · Q/E 升降 · Shift 加速'))}</div>
     <div class="wb-views"><figure><canvas class="wb-space" aria-label="${esc(t('场景白模'))}"></canvas><figcaption>${esc(t('空间与摄像机位置'))}</figcaption></figure>${group?`<figure><canvas class="wb-camera" aria-label="${esc(t('摄像机白模'))}"></canvas><figcaption>${esc(t('摄像机视角'))}</figcaption></figure>`:''}</div>

@@ -36,6 +36,7 @@ from pathlib import Path
 
 from modules.prompt_layout import paragraphize
 from modules.whitebox import bible_props, component, prop_state, read, sample
+from modules.whitebox_shapes import legend_note, legend_shape, prop_spheres
 
 # 与 modules/whitebox.PALETTE 同序(2026-09-11 扩到 16 色:整集固定身份色,人物多于 8 人时启用后 8 色)
 COLOR_NAMES = {'#e63946': 'red', '#1d78d8': 'blue', '#2ea043': 'green', '#f59e0b': 'orange',
@@ -259,12 +260,12 @@ def appearing_props(group: dict, render: dict | None = None) -> list:
             start, duration = float(cam.get('start') or 0), float(cam.get('duration_s') or 0)
             allowed = cam.get('visible_actor_ids')
             for t in _sample_times(start, duration, keys):
-                center, attached, visible = prop_state(prop, by_id, t)
+                # 普通几何体 = 中心 + 半对角线一个球(旧口径);软体按中心线细分成一串球、模型按包围盒(2026-11-08,whitebox_shapes)
+                spheres, visible, attached = prop_spheres(prop, by_id, t)
                 if not visible or (attached and isinstance(allowed, list) and (prop.get('attach') or {}).get('actor') not in allowed):
                     continue
-                scale = (sample(keys, t) if keys else prop).get('scale') or [1, 1, 1]
-                r = 0.5 * math.sqrt(sum((float(a) * float(b)) ** 2 for a, b in zip(prop['size_m'], scale)))
-                if box_in_frame(center, [r, r, r], sample(ckeys, t - start), aspect):
+                cam_key = sample(ckeys, t - start)
+                if any(box_in_frame(center, [r, r, r], cam_key, aspect) for center, r in spheres):
                     found = True
                     break
             if found:
@@ -595,22 +596,38 @@ def prop_color_name(hex_color):
 
 def prop_legend_rows(group: dict, render: dict | None = None, shown: list | None = None, names: dict | None = None) -> list:
     """道具图例(2026-11-05):只列摄影机视频里出现的计划道具;ghost 写明是透明效果、不是实心物体。
-    名字取计划 label,没写时按 ref / id 回退道具库 bible/props.json 的 name(names),都没有才用 id。"""
+    名字取计划 label,没写时按 ref / id 回退道具库 bible/props.json 的 name(names),都没有才用 id。
+    2026-11-08:同色同形同名的几块道具并成一行(复数,括号里列全部 id),不再逐块重复「off-white sphere = 大白蛇」;
+    tube 写成 long smooth (tapering) tube + one continuous body,模型写模型库 legend_en;form_of 注明是哪个角色的另一形态。"""
     names = names or {}
     shown = appearing_props(group, render) if shown is None else shown
-    rows = []
+    cast = {a.get('id'): a.get('label') or a.get('id') for a in list(group.get('actors') or []) + list(group.get('extras') or [])}
+    rows, index = [], {}
     for prop in group.get('props') or []:
         if prop.get('id') not in shown:
             continue
         material = prop.get('material') or 'solid'
-        color = prop_color_name(prop.get('color') or PROP_DEFAULT_COLORS.get(material, PROP_DEFAULT_COLORS['solid']))
-        shape = prop.get('shape') or 'box'
+        model = prop.get('model_def') or {}
+        color = prop_color_name(prop.get('color') or model.get('color')
+                                or PROP_DEFAULT_COLORS.get(material, PROP_DEFAULT_COLORS['solid']))
         label = prop.get('label') or names.get(prop.get('ref')) or names.get(prop['id']) or prop['id']
-        if material == 'ghost':
-            rows.append(f"translucent {color} {shape} = {label} ({prop['id']}, a see-through effect, not a solid object)")
+        key = (material, color, legend_shape(prop), label, prop.get('form_of'))
+        if key in index:
+            rows[index[key]][1].append(prop)
         else:
-            rows.append(f"{color} {shape} = {label} ({prop['id']})")
-    return rows
+            index[key] = len(rows)
+            rows.append((key, [prop]))
+    out = []
+    for (material, color, phrase, label, _), members in rows:
+        if len(members) > 1:
+            phrase = legend_shape(members[0], plural=True)
+        notes = [', '.join(p['id'] for p in members)] + legend_note(members[0], cast)
+        if material == 'ghost':
+            notes.append('a see-through effect, not a solid object')
+            out.append(f"translucent {color} {phrase} = {label} ({', '.join(notes)})")
+        else:
+            out.append(f"{color} {phrase} = {label} ({', '.join(notes)})")
+    return out
 
 
 # ---------------------------------------------------------------- camera-relative facing

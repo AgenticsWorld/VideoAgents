@@ -402,13 +402,15 @@ def pose_channel_warnings(actor):
 # 道具扩展(2026-11-05,docs/whitebox.md「道具:锥体、半透明效果体、挂手与剧情道具覆盖」):全部是可选键,
 # 存量计划的编译结果与视频指纹不变。锥体/半透明只开放给计划 props(场景物件仍是 box/sphere/cylinder——
 # scene_panos 与世界模型视窗按场景物件形状求交,不跟着扩)。
-PROP_SHAPES = ('box', 'sphere', 'cylinder', 'cone')
+# tube(连续软体)/ model(模型库引用)2026-11-08 起,见 modules/whitebox_shapes.py 与 docs/whitebox.md「自定义形状」
+PROP_SHAPES = ('box', 'sphere', 'cylinder', 'cone', 'tube', 'model')
 PROP_MATERIALS = ('solid', 'ghost')
 ATTACH_JUMP_M = .05      # 挂手道具切换帧(脱手/回手)的 position 离挂点超过此值即 WARN
 PROP_COVERAGE_KEY = 'prop_coverage'
+SHAPE_HINTS_KEY = 'shape_hints'   # 串珠提醒(2026-11-08,whitebox_shapes.chain_warnings):不进 warnings,理由同 prop_coverage
 # 编译组里只作诊断/裁决、不影响画面的键:视频指纹(whitebox_export)与导演台版本指纹(director.group_sha)都剔除,
 # 否则答题或新增诊断会让已签字导出的 camera.mp4 整批显示过期
-FINGERPRINT_EXCLUDED_KEYS = ('issues', PROP_COVERAGE_KEY, 'review_errors')
+FINGERPRINT_EXCLUDED_KEYS = ('issues', PROP_COVERAGE_KEY, 'review_errors', SHAPE_HINTS_KEY)
 
 
 def _rot_x(a):
@@ -600,13 +602,20 @@ def sample(keys, t):
                         delta = (delta+math.pi) % (2*math.pi)-math.pi
                     out[key] = a[key]+delta*u
             out['t'] = t
-            for key in ('bend', 'pitch', 'roll', 'head_pitch', 'head_yaw', 'torso_yaw', 'body_roll', 'neck_extension', 'expression', 'morph'):
+            for key in ('bend', 'pitch', 'roll', 'head_pitch', 'head_yaw', 'torso_yaw', 'body_roll', 'neck_extension', 'expression', 'morph',
+                        'extent'):
                 if key in a or key in b:
-                    # bend 缺失端按姿态缺省(蹲 0.6)插值,不先弹直再俯身(2026-11-05)
-                    da, db = (bend_default(a), bend_default(b)) if key == 'bend' else (0, 0)
+                    # bend 缺失端按姿态缺省(蹲 0.6)插值,不先弹直再俯身(2026-11-05);软体 extent 缺省 1(全身)
+                    da, db = (bend_default(a), bend_default(b)) if key == 'bend' else (1, 1) if key == 'extent' else (0, 0)
                     va = a[key] if a.get(key) is not None else da
                     vb = b[key] if b.get(key) is not None else db
                     out[key] = va + (vb-va)*u
+            # 软体中心线 path 逐点插值(点数相同时;否则保持前帧);模型铰链 joints 按名插值、缺省 0(2026-11-08,与渲染器同)
+            if isinstance(a.get('path'), list) and isinstance(b.get('path'), list) and len(a['path']) == len(b['path']):
+                out['path'] = [[x+(y-x)*u for x, y in zip(p, q)] for p, q in zip(a['path'], b['path'])]
+            if isinstance(a.get('joints'), dict) or isinstance(b.get('joints'), dict):
+                ja, jb = a.get('joints') or {}, b.get('joints') or {}
+                out['joints'] = {n: ja.get(n, 0)+(jb.get(n, 0)-ja.get(n, 0))*u for n in sorted(set(ja) | set(jb))}
             return out
     return copy.deepcopy(keys[-1])
 
@@ -853,11 +862,23 @@ def compile_group(base, ep, group, shots, scene, colors=None):
     props = plan.get('props', [])
     prop_ids = set()
     by_id = {a['id']: a for a in actors + extras}
+    from modules import whitebox_shapes as shapes
+    models = {}
     for prop in props:
         pid = component(prop['id'])
+        if 'model' in prop and 'shape' not in prop:
+            prop['shape'] = 'model'
         if pid in prop_ids or prop.get('shape', 'box') not in PROP_SHAPES:
             raise ValueError('Props need unique IDs and supported primitive shapes')
         prop_ids.add(pid)
+        # 自定义形状(2026-11-08):tube / model 的 size_m 由宿主按中心线 / 零件派生(写了也会被覆盖),普通几何体照旧必填
+        shapes.validate_shape_fields(prop)
+        if prop.get('shape') == 'tube':
+            shapes.validate_tube(prop, duration)
+        elif prop.get('shape') == 'model':
+            if 'model' not in prop:
+                raise ValueError(f'{pid}: shape "model" needs model: "MDL-…" (directing/whitebox_models/)')
+            shapes.resolve_model(base, prop, duration, models)
         vector(prop['size_m'], 'prop.size_m', positive=True)
         if 'position' in prop or not (prop.get('attach') or prop.get('keyframes')):
             vector(prop.get('position'), 'prop.position')   # 有关键帧或挂在手上的道具可省顶层 position(2026-11-05)
@@ -877,6 +898,7 @@ def compile_group(base, ep, group, shots, scene, colors=None):
         if prop.get('keyframes') is not None:
             validate_keys(prop['keyframes'], duration)
         warnings.extend(validate_prop_extensions(prop, by_id, duration))
+    shape_hints = shapes.chain_warnings(props, duration)
     validate_not_modeled(plan)
     coverage = prop_coverage(group, shots, plan, scene, bible_props(base))
     cursor = 0
@@ -910,6 +932,8 @@ def compile_group(base, ep, group, shots, scene, colors=None):
            'warnings': warnings, 'authored': bool(plan), 'issues': issues}
     if coverage:
         out[PROP_COVERAGE_KEY] = coverage   # 诊断,不进视频/版本指纹(FINGERPRINT_EXCLUDED_KEYS)
+    if shape_hints:
+        out[SHAPE_HINTS_KEY] = shape_hints  # 同上
     if contract_errors:
         out['review_errors'] = contract_errors
     return out

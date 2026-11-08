@@ -85,7 +85,18 @@ def _placement_payload(base, ep, gid, *, full_scene=False):
     payload = {'group': {k: group.get(k) for k in ('scene_id', 'scene_no', 'blocking_map', 'scene_presence')},
                'staging': {k: plan.get(k) for k in ('actors', 'scene_actors', 'extras', 'props')},
                'scene': _legacy_scene(scene) if full_scene else _geometric_scene(scene)}
+    # 模型库(2026-11-08):计划道具引用的 directing/whitebox_models/<MDL>.json 原文进指纹——模型改形状,机位审查须重做。
+    # 只在有引用时出现,存量组的 payload 与指纹不变
+    models = _plan_models(plan)
+    if models:
+        payload['models'] = {mid: read(f'directing/whitebox_models/{mid}.json') for mid in models}
     return payload
+
+
+def _plan_models(plan):
+    import re
+    return sorted({p['model'] for p in plan.get('props') or [] if isinstance(p, dict) and isinstance(p.get('model'), str)
+                   and re.fullmatch(r'MDL-[A-Za-z0-9_-]{1,60}', p['model'])})
 
 
 def placement_fingerprint(base, ep, gid, *, legacy=False):
@@ -115,10 +126,11 @@ def _stamp(path):
         return None
 
 
-def _placement_inputs(base, ep, gid, scene_id):
+def _placement_inputs(base, ep, gid, scene_id, models=()):
     base = Path(base)
     return (base/'directing'/ep/'shot_list.json', base/'directing'/ep/'whitebox_plans'/f'{gid}.json',
-            base/'bible/scenes'/str(scene_id)/'whitebox.json')
+            base/'bible/scenes'/str(scene_id)/'whitebox.json',
+            *(base/'directing/whitebox_models'/f'{mid}.json' for mid in models))
 
 
 def _placement_digests(base, ep, gid):
@@ -128,7 +140,7 @@ def _placement_digests(base, ep, gid):
         return hit[1]
     before = {str(p): _stamp(p) for p in _placement_inputs(base, ep, gid, '?')[:2]}
     payload = _placement_payload(base, ep, gid)
-    paths = _placement_inputs(base, ep, gid, payload['group'].get('scene_id'))
+    paths = _placement_inputs(base, ep, gid, payload['group'].get('scene_id'), sorted(payload.get('models') or ()))
     stamps = tuple((path, _stamp(path)) for path in paths)
     digests = {'v3': _fingerprint(payload, prefix=PLACEMENT_PREFIX)}
     if all(before[str(p)] == s for p, s in stamps[:2]) and all(_stamp(p) == s for p, s in stamps):   # 读的过程中文件被改就不缓存

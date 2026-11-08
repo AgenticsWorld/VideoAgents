@@ -69,9 +69,15 @@ def main():
     # 或在计划 not_modeled 写理由;只判已调度组。回执原样带上
     missing=[{'group_id':g['group_id'],**{k:r[k] for k in ('id','name','shots')}} for g in episode['groups']
              if not scoped or g['group_id'] in selected for r in (g.get('prop_coverage') or {}).get('items',[]) if r['status']=='missing']
-    print(json.dumps({'props_coverage':{'missing':missing},
-                      'props_coverage_text':f"[whitebox_props_covered] {args.project}/{args.ep}: "
-                      +(f"{len(missing)} 项剧情道具未进白模 -> WARN" if missing else 'PASS')},ensure_ascii=False),flush=True)
+    # 串珠提醒(2026-11-08,WARN 不改退出码):同名简单几何体首尾相接拼连续物体 → 改用 tube / 模型库(docs/whitebox.md「自定义形状」)
+    hints=[{'group_id':g['group_id'],'hint':h} for g in episode['groups'] if not scoped or g['group_id'] in selected for h in g.get('shape_hints') or []]
+    line={'props_coverage':{'missing':missing},
+          'props_coverage_text':f"[whitebox_props_covered] {args.project}/{args.ep}: "
+          +(f"{len(missing)} 项剧情道具未进白模 -> WARN" if missing else 'PASS')}
+    if hints:
+        line['shape_hints']=hints
+        line['shape_hints_text']=f"[whitebox_shape_hint] {args.project}/{args.ep}: {len(hints)} 处疑似用几何体串拼连续物体 -> WARN"
+    print(json.dumps(line,ensure_ascii=False),flush=True)
     if errors:return 1
     if args.check_only:return 0
     # 核验模式只读(#85):在内存里算指纹比对,不落盘 episode.json / whitebox.scene.json,不导出、不接线
