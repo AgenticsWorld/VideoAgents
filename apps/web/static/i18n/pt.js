@@ -1897,7 +1897,7 @@ window.I18N_DICT = {
 "🎛 模型": "🎛 Modelo",
 "为本组单独选择视频模型与提示词技能(默认跟随全局;渠道不可换)": "Escolher modelo de vídeo e habilidade de prompt só para este grupo (padrão: seguir global; o canal não pode ser alterado)",
 "🎛 组视频模型 —": "🎛 Modelo de vídeo do grupo —",
-"只对本组生效,默认跟随全局;渠道不可换(只能选当前视频渠道的模型)。参考图上限随所选模型(Seedance 2.0 ≤9、2.5 ≤30),换模型后重出本组 prompt/视频生效": "Vale só para este grupo; por padrão segue o global. O canal não pode ser alterado (apenas modelos do canal de vídeo atual). O limite de imagens de referência segue o modelo escolhido (Seedance 2.0 ≤9, 2.5 ≤30); aplica-se ao regenerar o prompt/vídeo do grupo",
+"只对本组生效,默认跟随本集/全局;可为本组单独换视频渠道(须已在「生成模型」页配 Key)和模型。参考图上限随所选模型(Seedance 2.0 ≤9、2.5 ≤30),换渠道/模型后重出本组 prompt/视频生效": "Vale só para este grupo; por padrão segue o episódio/global. Você pode trocar o canal de vídeo (com a chave configurada na página Modelos de geração) e o modelo só deste grupo. O limite de imagens de referência segue o modelo escolhido (Seedance 2.0 ≤9, 2.5 ≤30); aplica-se ao regenerar o prompt/vídeo do grupo",
 "本集生效的视频渠道/模型/提示词技能:三个下拉可直接为本集切换(默认都跟随全局;全局在控制台「生成模型」/「模型限制」修改);个别组可用组卡「🎛 模型」单独指定,组级优先": "Canal / modelo / skill de prompt de vídeo em vigor neste episódio: os três menus os trocam diretamente para este episódio (por padrão todos seguem o global; o global muda em Modelos de geração / Limites de modelo no console); cada grupo ainda pode sobrescrever pelo botão 🎛 Modelo do cartão, e a sobrescrita de grupo prevalece",
 "手选": "Manual",
 "自动": "Auto",

@@ -347,8 +347,9 @@ def _read_override_json(path: Path) -> dict:
 def resolve_video_override(settings_dir: Path, grp: str, global_provider: str, global_model: str) -> dict:
     """层级解析本组生效的视频渠道/模型:全局 → 本集 settings_dir/episode.json → 本组 settings_dir/<grp>.json。
     集级(分镜预览顶部三下拉,2026-09-11)可切换渠道(provider_override=true,须该渠道已配 Key)或只换模型;
-    渠道为 comfyui 时 video_model 槽存的是运行方式(COMFY_MODES,2026-09-13),集级可切、组级不可;
-    组级(组卡「🎛 模型」)只换模型,其 provider 须与本集生效渠道一致,否则视为失效。
+    渠道为 comfyui 时 video_model 槽存的是运行方式(COMFY_MODES,2026-09-13),集级/组级均可切;
+    组级(组卡「🎛 模型」)同集级:provider_override=true 时切到该渠道(须已配 Key,2026-11-08),
+    否则只换模型,其 provider 须与本集生效渠道一致,不一致视为失效。
     返回 {provider, video_model, source(global|episode|group), notes[]}(与 services.runtime.core.group_video_candidates 同口径)。"""
     out = {"provider": global_provider, "video_model": global_model, "source": "global", "notes": []}
     es = _read_override_json(settings_dir / "episode.json")
@@ -375,8 +376,25 @@ def resolve_video_override(settings_dir: Path, grp: str, global_provider: str, g
             out.update(video_model=ov, source="episode")
     gs = _read_override_json(settings_dir / f"{grp}.json")
     gov, gprov = str(gs.get("video_model") or ""), str(gs.get("provider") or "")
-    if gov:
-        if out["provider"] == "comfyui" or not out["video_model"]:
+    base = "本集" if out["source"] == "episode" else "全局"
+    if gov and gs.get("provider_override") and gprov and gprov != out["provider"]:
+        # 组级切换渠道(2026-11-08):同集级,按该渠道取整份配置,不可用则按本集/全局执行
+        try:
+            get_config("video", provider_override=gprov, model_override=gov)
+            out.update(provider=gprov, video_model=gov, source="group")
+        except RuntimeError as e:
+            out["notes"].append(f"组级视频渠道 {gprov} 不可用({e}),组级设定未生效,按{base}执行")
+    elif gov:
+        if out["provider"] == "comfyui":
+            if gov in COMFY_MODES:
+                try:
+                    get_config("video", provider_override="comfyui", model_override=gov)
+                    out.update(video_model=gov, source="group")
+                except RuntimeError as e:
+                    out["notes"].append(f"组级 ComfyUI 运行方式 {gov} 不可用({e}),组级设定未生效,按{base}执行")
+            else:
+                out["notes"].append(f"组级模型 {gov} 未生效:当前渠道 comfyui 按工作流运行,该值不是运行方式")
+        elif not out["video_model"]:
             out["notes"].append(f"组级模型 {gov} 未生效:当前渠道 {out['provider']} 按工作流运行,无模型 id")
         elif gprov and gprov != out["provider"]:
             out["notes"].append(f"组级模型 {gov} 属渠道 {gprov},本组生效渠道为 {out['provider']},该覆盖未生效")
@@ -402,7 +420,7 @@ def video_cfg_for(cfg: dict, r: dict) -> dict:
 
 def apply_group_video_override(cfg: dict, group: str) -> dict:
     """按集级/组级设定改写 video 生效渠道与模型(用户在分镜预览顶部三下拉 / 组卡「🎛 模型」指定):
-    集级可切渠道(整份配置换成该渠道的),组级只换模型;失效的覆盖 stderr 提示并按全局执行。
+    集级/组级都可切渠道(整份配置换成该渠道的)或只换模型;失效的覆盖 stderr 提示并按上一层执行。
     非派单环境(无项目)或无设定原样返回。返回改写后的 cfg(可能是新 dict,调用方须用返回值)。"""
     proj = os.environ.get("VIDEOAGENTS_PROJECT") or os.environ.get("WEBUI_PROJECT") or ""
     if not proj or not group or "/" not in group:

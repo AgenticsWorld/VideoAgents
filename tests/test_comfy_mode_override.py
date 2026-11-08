@@ -65,10 +65,13 @@ def test_resolve_video_override_comfy_mode(tmp_path, monkeypatch):
     (sdir / "episode.json").write_text(json.dumps({"provider": "comfyui", "provider_override": True, "video_model": "rh_cn"}))
     r = genmedia.resolve_video_override(sdir, "grp001", "volcengine", "seedance")
     assert (r["provider"], r["video_model"], r["source"]) == ("comfyui", "rh_cn", "episode")
-    # 组级不能切运行方式
+    # 2026-11-08 起组级也可切运行方式(本集渠道是 ComfyUI 时);未配置的方式不生效、按本集执行
     (sdir / "grp001.json").write_text(json.dumps({"provider": "comfyui", "video_model": "local"}))
     r = genmedia.resolve_video_override(sdir, "grp001", "volcengine", "seedance")
-    assert r["video_model"] == "rh_cn" and any("组级" in n for n in r["notes"])
+    assert (r["provider"], r["video_model"], r["source"]) == ("comfyui", "local", "group") and not r["notes"]
+    (sdir / "grp001.json").write_text(json.dumps({"provider": "comfyui", "video_model": "cloud"}))
+    r = genmedia.resolve_video_override(sdir, "grp001", "volcengine", "seedance")
+    assert (r["video_model"], r["source"]) == ("rh_cn", "episode") and any("组级" in n for n in r["notes"])
 
 
 def test_core_candidates_and_options(monkeypatch):

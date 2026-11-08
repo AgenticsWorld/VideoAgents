@@ -6386,10 +6386,12 @@ def max_group_ref_images(project: str) -> int:
 
 # ---------------- 组级视频模型/提示词技能覆盖(分镜预览「🎛 模型」按钮,2026-08-30) ----------------
 # 动机:参考图上限随模型走(Seedance 2.0 ≤9、2.5 ≤30),某组必挂参考图超过全局模型上限时,
-# 用户可只给这一组换更高上限的模型(渠道不可换:仍是「生成模型」页/视频工位覆盖所定的渠道,
-# 只在该渠道的模型目录里选),并为该组单独指定提示词技能(默认跟随全局;auto=按本组模型解析)。
+# 用户可只给这一组换更高上限的模型,并为该组单独指定提示词技能(默认跟随全局;auto=按本组模型解析)。
+# 2026-11-08 起组级也可切换渠道(同集级口径:须该渠道已配 Key;ComfyUI 的二级 = 运行方式),
+# 不切渠道时只在本集生效渠道的模型目录里选(本集渠道为 ComfyUI 时可换运行方式)。
 # 存储:<project>/assets/group_settings/<ep>/<grp>.json(用户所有,不随 prompt 重出丢失):
-#   {"video_model": "<id>"|"", "provider": "<存 override 时的渠道>",
+#   {"video_model": "<id>"|"", "provider": "<渠道>", "provider_override": true|false,
+#    (provider_override=false 时 provider 记存盘时的本集渠道,渠道变了则覆盖失效;=true 时本组切到该渠道)
 #    "prompt_skill": {"mode": "global"|"auto"|"manual"|"off", "skill_id": ""},
 #    "effective": {...运行时解析快照(机检 prompt_skill_applied 与 genmedia 对照)...}}
 # 消费:genmedia video/info 按 --group 或 --output 路径(clips/epNN/grpNNN.mp4)自动找到该文件
@@ -6719,15 +6721,16 @@ def episode_provider_models(cfg: dict, provider: str) -> dict[str, bool]:
 
 
 def group_video_candidates(project: str, cfg: dict | None = None, ep: str = "") -> dict:
-    """本项目组级可选的视频模型:渠道固定为本集生效渠道(集级切换了渠道则本集渠道,否则全局视频渠道),
-    候选=该渠道目录 + 全局当前模型(自定义 id 不在目录时也列出)。comfyui 类无模型 id → overridable=False。
+    """本项目组级「跟随渠道」时可选的视频模型:渠道 = 本集生效渠道(集级切换了渠道则本集渠道,否则全局视频渠道),
+    候选=该渠道目录 + 全局当前模型(自定义 id 不在目录时也列出)。comfyui 类无模型 id → overridable=False、
+    mode_switchable=True(候选 = 运行方式)。组级切到别的渠道(2026-11-08)时的清单 = video_provider_options。
     传 ep 时附带本集基准(base_*):集级覆盖 episode.json 生效则 base=集渠道/集模型(source=episode),
     否则 base=全局;组「跟随」的就是这个基准。"""
     cfg = cfg or load_genconfig()
     gprovider = active_video_provider(cfg)
     gmodel = effective_video_model(cfg)
     if gprovider == "comfyui":
-        # ComfyUI 无模型 id:model 槽 = 运行方式(2026-09-13,集级可切、组级不可)
+        # ComfyUI 无模型 id:model 槽 = 运行方式(2026-09-13 集级可切;2026-11-08 起组级也可)
         gmodel = comfy_global_mode((cfg.get("video") or {}).get("comfyui"))
     glabel = video_model_label(gmodel, gprovider) if gmodel else _video_model_label(cfg)
     provider, base_model, base_source, provider_source = gprovider, gmodel, "global", "global"
@@ -6855,23 +6858,44 @@ def episode_settings_payload(project: str, ep: str, cfg: dict | None = None,
 def resolve_group_settings(project: str, ep: str, grp: str, cfg: dict | None = None,
                            gs: dict | None = None, proj_skill: dict | None = None) -> dict:
     """解析某组生效的视频模型与提示词技能(不落盘)。返回:
-    provider / video_model / model_source(global|episode|group)/ model_label / ref_cap(本组生效参考图上限)/
+    provider / provider_source(global|episode|group,组级可切渠道 2026-11-08)/ base_provider(本集生效渠道)/
+    video_model / model_source(global|episode|group)/ model_label / ref_cap(本组生效参考图上限)/
     caps / skill_id / skill_dir / skill_path / skill_mode(global|auto|manual|off)/ skill_source /
     reason / warning / overridden(存在任一组级覆盖)。"""
     cfg = cfg or load_genconfig()
     gs = gs if gs is not None else _grpsettings_get(project, ep, grp)
     cand = group_video_candidates(project, cfg, ep)
     provider, gmodel = cand["provider"], cand["global_model"]
+    provider_source = cand.get("provider_source", "global")
     # 基准 = 集级覆盖(episode.json)生效则本集模型,否则全局;组级覆盖再压过基准
     warning = cand.get("episode_warning") or ""
     model, source = cand.get("base_model", gmodel), cand.get("base_source", "global")
+    base_txt = "本集" if source == "episode" or provider_source == "episode" else "全局"
     ov = str(gs.get("video_model") or "")
-    if ov:
-        if not cand["overridable"]:
-            warning = f"组级视频模型 {ov} 未生效:当前渠道 {provider} 无模型 id(按工作流运行),按全局执行"
-        elif gs.get("provider") and gs.get("provider") != provider:
-            warning = (f"组级视频模型 {ov} 属渠道 {gs.get('provider')},当前视频渠道已改为 {provider},"
-                       "该覆盖未生效(按全局执行);请重新为本组选模型或清除覆盖")
+    gprov = str(gs.get("provider") or "")
+    add_warn = lambda w: (warning + " · " if warning else "") + w   # noqa: E731
+    if ov and gs.get("provider_override") and gprov and gprov != provider:
+        # 组级切换渠道(2026-11-08,同集级口径):渠道须有二级目录且已配 Key(comfyui:所选运行方式须已配置),
+        # 否则整条组级模型设定按本集/全局执行
+        allowed = episode_provider_models(cfg, gprov)
+        if allowed and video_provider_configured(cfg, gprov) and (gprov != "comfyui" or allowed.get(ov)):
+            provider, model, source, provider_source = gprov, ov, "group", "group"
+        else:
+            warning = add_warn(f"本组视频渠道 {gprov} 未配置 API Key 或不可切换,组级设定(模型 {ov})未生效,按{base_txt}执行;"
+                               "请在控制台「生成模型」页配置该渠道或改回跟随")
+    elif ov:
+        if provider == "comfyui":
+            # 本集/全局渠道是 ComfyUI:组级可换运行方式(2026-11-08 起,同集级)
+            if episode_provider_models(cfg, "comfyui").get(ov):
+                model, source = ov, "group"
+            else:
+                warning = add_warn(f"本组 ComfyUI 运行方式 {COMFY_MODE_LABELS.get(ov, ov)} 未配置或无效,组级设定未生效,"
+                                   f"按{base_txt}执行")
+        elif not cand["overridable"]:
+            warning = add_warn(f"组级视频模型 {ov} 未生效:当前渠道 {provider} 无模型 id(按工作流运行),按{base_txt}执行")
+        elif gprov and gprov != provider:
+            warning = add_warn(f"组级视频模型 {ov} 属渠道 {gprov},本组生效渠道为 {provider},"
+                               f"该覆盖未生效(按{base_txt}执行);请重新为本组选模型或清除覆盖")
         else:
             model, source = ov, "group"
     caps = video_model_caps(model) if source != "global" else None
@@ -6925,7 +6949,9 @@ def resolve_group_settings(project: str, ep: str, grp: str, cfg: dict | None = N
         warning = (warning + " · " if warning else "") + f"提示词技能 {cands[sid]['dir']} 未在项目技能中启用或已被全局禁用,本组按无技能处理"
         sid, reason = "", "disabled"
     c = cands.get(sid) or {}
-    return {"provider": provider, "video_model": model, "model_source": source,
+    return {"provider": provider, "provider_source": provider_source,
+            "base_provider": cand["provider"], "global_provider": cand.get("global_provider", cand["provider"]),
+            "video_model": model, "model_source": source,
             "model_label": video_model_label(model, provider) if model else cand["global_label"],
             "global_model": gmodel, "ref_cap": ref_cap, "caps": caps,
             "vref_cap": vref_cap, "vref_cap_s": vref_cap_s,
@@ -7007,19 +7033,53 @@ def group_overrides_prompt(project: str, for_video_agent: bool = False) -> str:
         skill_txt = (f"提示词技能 **{r['skill_dir']}**(id `{r['skill_id']}`,Skill 文件 {r['skill_path']})"
                      if r["skill_id"] else f"不套用提示词技能(reason={r['reason'] or 'no_match'})")
         warn = f";⚠️ {r['warning']}" if r.get("warning") else ""
-        lines.append(f"- `{r['ep']}/{r['grp']}`:{model_txt};{skill_txt}{warn}")
+        prov_txt = (f"视频渠道 **{r['provider']}**(组级切换,本集 {r.get('base_provider') or r.get('global_provider')})、"
+                    if r.get("provider_source") == "group" else "")
+        lines.append(f"- `{r['ep']}/{r['grp']}`:{prov_txt}{model_txt};{skill_txt}{warn}")
     body = "\n".join(lines)
     if for_video_agent:
         return f"""
 
 ## 集级/组级视频模型覆盖(用户在分镜预览顶部下拉为整集、或组卡「🎛 模型」按钮为个别组单独指定,当前已生效)
-以下集/组不按全局模型生成——genmedia 会按 `--output assets/clips/epNN/grpNNN.mp4` 路径(或显式 `--group epNN/grpNNN`)自动读取组级设定(无组级设定时读集级 episode.json)并改用该模型(集级切换了渠道时连渠道一起切,Key 取该渠道在「生成模型」页的配置);`python3 modules/genmedia.py info --group epNN/grpNNN` 可核对本组生效模型。参考素材数量与时长上限按该组模型的硬限执行(不再以项目「视频模型设置」为准),回执 meta 记录实际所用模型:
+以下集/组不按全局模型生成——genmedia 会按 `--output assets/clips/epNN/grpNNN.mp4` 路径(或显式 `--group epNN/grpNNN`)自动读取组级设定(无组级设定时读集级 episode.json)并改用该模型(集级/组级切换了渠道时连渠道一起切,Key 取该渠道在「生成模型」页的配置);`python3 modules/genmedia.py info --group epNN/grpNNN` 可核对本组生效模型。参考素材数量与时长上限按该组模型的硬限执行(不再以项目「视频模型设置」为准),回执 meta 记录实际所用模型:
 {body}"""
     return f"""
 
 ## 集级/组级视频模型/提示词技能覆盖(用户在分镜预览顶部下拉为整集、或组卡「🎛 模型」按钮为个别组单独指定,当前已生效)
 以下集/组不按项目级设定——写这些组的 video_prompt 时按本组生效的视频模型能力与技能执行:参考素材上限按本组模型硬限(而非项目「视频模型设置」),提示词技能按本组所列(须先 Read 该 SKILL.md,`skill_applied.id` 填本组技能 id;不套用时填 `{{"id": null, "reason": ...}}`),机检 `prompt_skill_applied` 会按组分别对照 `assets/group_settings/epNN/grpNNN.json` 的 effective 快照(无组文件时对照 `epNN/episode.json`):
 {body}"""
+
+
+def _check_video_provider_switch(cfg: dict, provider: str, model: str, scope: str) -> str:
+    """集级/组级切换视频渠道的校验(同口径):渠道须有二级目录、已配 Key(Agentics = 已登录),
+    模型属该渠道目录(comfyui:运行方式须已配置);model 空 = 该渠道在「生成模型」页保存的默认模型。返回最终 model。"""
+    allowed = episode_provider_models(cfg, provider)
+    if not allowed:
+        raise ServiceError(400, f"Agentics 视频 profile 目录不可用(桌面端未登录或目录拉取失败),暂不能按{scope}切换"
+                           if provider == "agentics" else f"视频渠道 {provider} 无模型目录,不支持按{scope}切换")
+    if not video_provider_configured(cfg, provider):
+        raise ServiceError(400, "视频渠道 agentics 须登录桌面端账号(控制台「生成模型」页登录)" if provider == "agentics"
+                           else f"视频渠道 {provider} 未配置 API Key,请先在控制台「生成模型」页配置")
+    if not model:
+        model = next(p["default_model"] for p in video_provider_options(cfg) if p["id"] == provider)
+    if model not in allowed:
+        raise ServiceError(400, f"模型 {model} 不在视频渠道 {provider} 的可选目录内")
+    if not allowed[model]:
+        raise ServiceError(400, f"ComfyUI 运行方式「{COMFY_MODE_LABELS.get(model, model)}」未配置,"
+                                "请先在控制台「生成模型」页 ComfyUI 渠道填写地址/Key/工作流")
+    return model
+
+
+def _check_video_model_in(cand: dict, model: str, scope: str) -> None:
+    """不切渠道、只换模型(或 ComfyUI 运行方式)的校验:须在 cand(group_video_candidates)当前渠道的候选内。"""
+    if not (cand["overridable"] or cand.get("mode_switchable")):
+        raise ServiceError(400, f"当前视频渠道 {cand['provider']} 按工作流运行、无模型 id,不支持按{scope}切换模型")
+    row = next((c for c in cand["candidates"] if c["id"] == model), None)
+    if row is None:
+        raise ServiceError(400, f"模型 {model} 不在当前视频渠道 {cand['provider']} 的可选目录内")
+    if row.get("configured") is False:
+        raise ServiceError(400, f"ComfyUI 运行方式「{row.get('label', model)}」未配置,"
+                                "请先在控制台「生成模型」页 ComfyUI 渠道填写地址/Key/工作流")
 
 
 async def api_grpsettings_get(project: str, ep: str, grp: str):
@@ -7031,21 +7091,28 @@ async def api_grpsettings_get(project: str, ep: str, grp: str):
     gs = _grpsettings_get(project, ep, grp)
     proj_skill = resolve_prompt_skill(project, cfg)
     eres = resolve_episode_settings(project, ep, cfg, proj_skill)   # 组「跟随」的技能基准 = 本集解析结果
+    cand = group_video_candidates(project, cfg, ep)
+    gprov = str(gs.get("provider") or "")
     return {"project": project, "ep": ep, "grp": grp,
-            "config": {"video_model": str(gs.get("video_model") or ""),
+            # provider:组级切换的渠道(空 = 跟随本集/全局渠道;存的渠道恰好等于当前本集渠道时也按跟随显示)
+            "config": {"provider": gprov if gs.get("provider_override") and gprov != cand["provider"] else "",
+                       "video_model": str(gs.get("video_model") or ""),
                        "prompt_skill": gs.get("prompt_skill") if isinstance(gs.get("prompt_skill"), dict)
                        else {"mode": "global", "skill_id": ""}},
             "resolved": resolve_group_settings(project, ep, grp, cfg, gs, proj_skill),
             "episode_skill": {k: eres[k] for k in ("skill_id", "skill_dir", "skill_mode", "skill_source")},
-            "models": group_video_candidates(project, cfg, ep),
+            "models": cand,
+            "providers": video_provider_options(cfg),    # 组级切换渠道(2026-11-08):同顶部集级渠道下拉
             "skills": prompt_skill_candidates(),
             "project_skill": proj_skill,
             "project_ref_cap": max_group_ref_images(project)}
 
 
 async def api_grpsettings_set(body: dict):
-    """分镜预览「🎛 模型」弹窗:{project, ep, grp, video_model, prompt_skill:{mode, skill_id}}。
-    video_model 空 + mode=global ⇒ 清除覆盖(删文件)。渠道不可选:模型只能取当前视频渠道目录。"""
+    """分镜预览「🎛 模型」弹窗:{project, ep, grp, provider, video_model, prompt_skill:{mode, skill_id}}。
+    provider 空 = 渠道跟随本集/全局,video_model 只能取本集生效渠道的候选(空/同基准 = 跟随);
+    provider 非空(2026-11-08)= 组级切换渠道(须在清单内且已配 Key),video_model 空则取该渠道默认模型。
+    video_model 空 + mode=global ⇒ 清除覆盖(删文件)。"""
     project = safe_slug((body or {}).get("project") or "")
     ep = re.sub(r"[^\w\-]", "", (body or {}).get("ep") or "")
     grp = re.sub(r"[^\w\-]", "", (body or {}).get("grp") or "")
@@ -7057,12 +7124,14 @@ async def api_grpsettings_set(body: dict):
         return await _api_grp_nsfw_set(project, ep, grp, body.get("nsfw"))
     cfg = load_genconfig()
     cand = group_video_candidates(project, cfg, ep)
+    provider = str((body or {}).get("provider") or "")
     model = str((body or {}).get("video_model") or "")
-    if model:
-        if not cand["overridable"]:
-            raise ServiceError(400, f"当前视频渠道 {cand['provider']} 按工作流运行、无模型 id,不支持组级切换模型")
-        if model not in {c["id"] for c in cand["candidates"]}:
-            raise ServiceError(400, f"模型 {model} 不在当前视频渠道 {cand['provider']} 的可选目录内(渠道不可切换)")
+    if provider and provider == cand["provider"]:
+        provider = ""   # 选了本集生效渠道 = 渠道跟随
+    if provider:
+        model = _check_video_provider_switch(cfg, provider, model, "组")
+    elif model:
+        _check_video_model_in(cand, model, "组")
         if model == cand["base_model"]:
             model = ""   # 选了基准同款(本集/全局)= 跟随
     ps = (body or {}).get("prompt_skill") or {}
@@ -7081,7 +7150,8 @@ async def api_grpsettings_set(body: dict):
         path.unlink(missing_ok=True)
     else:
         path.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write_json(path, {"video_model": model, "provider": cand["provider"] if model else "",
+        atomic_write_json(path, {"video_model": model, "provider": provider or (cand["provider"] if model else ""),
+                                 "provider_override": bool(provider),
                                  "prompt_skill": {"mode": mode, "skill_id": sid},
                                  "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"), **keep})
     sync_group_settings_effective(project)
@@ -7093,7 +7163,9 @@ async def api_grpsettings_set(body: dict):
             d = json.loads(pf.read_text())
             r = out["resolved"]
             d.setdefault("notes", []).append(
-                f"用户在分镜预览设置组级覆盖:视频模型 {r['video_model'] or '(跟随全局)'}({r['model_source']}),"
+                f"用户在分镜预览设置组级覆盖:"
+                + (f"视频渠道 {r['provider']}(组级切换)," if r.get("provider_source") == "group" else "")
+                + f"视频模型 {r['video_model'] or '(跟随全局)'}({r['model_source']}),"
                 f"提示词技能 {r['skill_dir'] or '(不套用)'}({r['skill_mode']});本组参考图上限 {r['ref_cap']}。"
                 "重出本组 prompt/视频时生效。由 storyboard service 自动补丁。")
             atomic_write_json(pf, d)
@@ -7115,7 +7187,8 @@ async def _api_grp_nsfw_set(project: str, ep: str, grp: str, value):
         gs.pop(k, None)
     if value is not None:
         gs.update(nsfw=value, nsfw_reason="manual", nsfw_at=time.strftime("%Y-%m-%d %H:%M:%S"))
-    rest = {k: v for k, v in gs.items() if k not in ("updated_at", "effective", "video_model", "provider", "prompt_skill")}
+    rest = {k: v for k, v in gs.items() if k not in ("updated_at", "effective", "video_model", "provider",
+                                                     "provider_override", "prompt_skill")}
     ps = gs.get("prompt_skill") if isinstance(gs.get("prompt_skill"), dict) else {}
     has_override = bool(gs.get("video_model")) or (ps.get("mode") or "global") != "global"
     if not rest and not has_override:
@@ -7162,29 +7235,9 @@ async def api_epsettings_set(body: dict):
     if provider and provider == cand["provider"]:
         provider = ""   # 选了全局同款渠道 = 渠道跟随全局
     if provider:
-        allowed = episode_provider_models(cfg, provider)
-        if not allowed:
-            raise ServiceError(400, "Agentics 视频 profile 目录不可用(桌面端未登录或目录拉取失败),暂不能按集切换"
-                               if provider == "agentics" else f"视频渠道 {provider} 无模型目录,不支持按集切换")
-        if not video_provider_configured(cfg, provider):
-            raise ServiceError(400, "视频渠道 agentics 须登录桌面端账号(控制台「生成模型」页登录)" if provider == "agentics"
-                               else f"视频渠道 {provider} 未配置 API Key,请先在控制台「生成模型」页配置")
-        if not model:
-            model = next(p["default_model"] for p in video_provider_options(cfg) if p["id"] == provider)
-        if model not in allowed:
-            raise ServiceError(400, f"模型 {model} 不在视频渠道 {provider} 的可选目录内")
-        if not allowed[model]:
-            raise ServiceError(400, f"ComfyUI 运行方式「{COMFY_MODE_LABELS.get(model, model)}」未配置,"
-                                    "请先在控制台「生成模型」页 ComfyUI 渠道填写地址/Key/工作流")
+        model = _check_video_provider_switch(cfg, provider, model, "集")
     elif model:
-        if not (cand["overridable"] or cand.get("mode_switchable")):
-            raise ServiceError(400, f"当前视频渠道 {cand['provider']} 按工作流运行、无模型 id,不支持按集切换模型")
-        row = next((c for c in cand["candidates"] if c["id"] == model), None)
-        if row is None:
-            raise ServiceError(400, f"模型 {model} 不在当前视频渠道 {cand['provider']} 的可选目录内")
-        if row.get("configured") is False:
-            raise ServiceError(400, f"ComfyUI 运行方式「{row.get('label', model)}」未配置,"
-                                    "请先在控制台「生成模型」页 ComfyUI 渠道填写地址/Key/工作流")
+        _check_video_model_in(cand, model, "集")
         if model == cand["global_model"]:
             model = ""   # 选了全局同款 = 跟随全局
     ps = (body or {}).get("prompt_skill") or {}
@@ -10726,8 +10779,8 @@ def _preview_storyboard(project: str, ep: str):
             # 落盘 status=blocked_refs_cap;预览页组卡黄条提示用户手动删减或换更高上限模型
             "refs_total": len(pd.get("refs") or []),
             "refs_cap": ref_cap,
-            "group_settings": ({k: gres[k] for k in ("video_model", "model_source", "model_label",
-                                                     "skill_dir", "skill_mode", "skill_source",
+            "group_settings": ({k: gres[k] for k in ("provider", "provider_source", "video_model",
+                                                     "model_source", "model_label", "skill_dir", "skill_mode", "skill_source",
                                                      "warning", "overridden")} if gres else None),
             # NSFW 标记(2026-09-25):组卡 🔞 开关/chip;手动 > genmedia 兜底回写 > shot_list 推导
             "nsfw": group_nsfw_state(base.name, ep, gid, g) if gid else None,

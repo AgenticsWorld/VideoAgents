@@ -1895,7 +1895,7 @@ window.I18N_DICT = {
 "🎛 模型": "🎛 Mô hình",
 "为本组单独选择视频模型与提示词技能(默认跟随全局;渠道不可换)": "Chọn mô hình video và kỹ năng prompt riêng cho nhóm này (mặc định theo toàn cục; không đổi được kênh)",
 "🎛 组视频模型 —": "🎛 Mô hình video của nhóm —",
-"只对本组生效,默认跟随全局;渠道不可换(只能选当前视频渠道的模型)。参考图上限随所选模型(Seedance 2.0 ≤9、2.5 ≤30),换模型后重出本组 prompt/视频生效": "Chỉ áp dụng cho nhóm này, mặc định theo toàn cục. Không đổi được kênh (chỉ các mô hình của kênh video hiện tại). Giới hạn ảnh tham chiếu theo mô hình đã chọn (Seedance 2.0 ≤9, 2.5 ≤30); có hiệu lực khi tạo lại prompt/video của nhóm",
+"只对本组生效,默认跟随本集/全局;可为本组单独换视频渠道(须已在「生成模型」页配 Key)和模型。参考图上限随所选模型(Seedance 2.0 ≤9、2.5 ≤30),换渠道/模型后重出本组 prompt/视频生效": "Chỉ áp dụng cho nhóm này, mặc định theo tập/toàn cục. Có thể đổi riêng kênh video (cần đã cấu hình Key ở trang Mô hình tạo sinh) và mô hình cho nhóm này. Giới hạn ảnh tham chiếu theo mô hình đã chọn (Seedance 2.0 ≤9, 2.5 ≤30); có hiệu lực khi tạo lại prompt/video của nhóm",
 "本集生效的视频渠道/模型/提示词技能:三个下拉可直接为本集切换(默认都跟随全局;全局在控制台「生成模型」/「模型限制」修改);个别组可用组卡「🎛 模型」单独指定,组级优先": "Kênh / mô hình / kỹ năng prompt video đang áp dụng cho tập này: ba danh sách thả xuống cho phép đổi trực tiếp cho tập (mặc định đều theo toàn cục; toàn cục sửa ở trang Mô hình sinh / Giới hạn mô hình); từng nhóm vẫn có thể chỉ định riêng qua nút 🎛 Mô hình trên thẻ, và thiết lập nhóm được ưu tiên",
 "手选": "Thủ công",
 "自动": "Tự động",

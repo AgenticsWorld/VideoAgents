@@ -1936,7 +1936,7 @@ window.I18N_DICT = {
 "🎛 模型": "🎛 Model",
 "为本组单独选择视频模型与提示词技能(默认跟随全局;渠道不可换)": "Choose a video model and prompt skill for this group only (default: follow global; the channel cannot be changed)",
 "🎛 组视频模型 —": "🎛 Group Video Model —",
-"只对本组生效,默认跟随全局;渠道不可换(只能选当前视频渠道的模型)。参考图上限随所选模型(Seedance 2.0 ≤9、2.5 ≤30),换模型后重出本组 prompt/视频生效": "Applies to this group only; defaults to the global setting. The channel cannot be changed (only models of the current video channel). The reference-image cap follows the chosen model (Seedance 2.0 ≤9, 2.5 ≤30); takes effect when this group's prompt/video is regenerated",
+"只对本组生效,默认跟随本集/全局;可为本组单独换视频渠道(须已在「生成模型」页配 Key)和模型。参考图上限随所选模型(Seedance 2.0 ≤9、2.5 ≤30),换渠道/模型后重出本组 prompt/视频生效": "Applies to this group only; defaults to the episode/global setting. You can switch this group to another video provider (its key must be set on the Generation Models page) and model. The reference-image cap follows the chosen model (Seedance 2.0 ≤9, 2.5 ≤30); takes effect when this group's prompt/video is regenerated",
 "本集生效的视频渠道/模型/提示词技能:三个下拉可直接为本集切换(默认都跟随全局;全局在控制台「生成模型」/「模型限制」修改);个别组可用组卡「🎛 模型」单独指定,组级优先": "Video channel / model / prompt skill in effect for this episode: the three dropdowns switch them for this episode directly (all follow global by default; change global on the console's Generation Models page / Model Limits); individual groups can still override via the card's 🎛 Model button, and group overrides win",
 "手选": "Manual",
 "自动": "Auto",

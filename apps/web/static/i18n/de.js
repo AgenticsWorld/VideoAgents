@@ -1895,7 +1895,7 @@ window.I18N_DICT = {
 "🎛 模型": "🎛 Modell",
 "为本组单独选择视频模型与提示词技能(默认跟随全局;渠道不可换)": "Videomodell und Prompt-Skill nur für diese Gruppe wählen (Standard: global folgen; der Kanal ist nicht änderbar)",
 "🎛 组视频模型 —": "🎛 Gruppen-Videomodell —",
-"只对本组生效,默认跟随全局;渠道不可换(只能选当前视频渠道的模型)。参考图上限随所选模型(Seedance 2.0 ≤9、2.5 ≤30),换模型后重出本组 prompt/视频生效": "Gilt nur für diese Gruppe; Standard ist die globale Einstellung. Der Kanal ist nicht änderbar (nur Modelle des aktuellen Videokanals). Das Referenzbild-Limit folgt dem gewählten Modell (Seedance 2.0 ≤9, 2.5 ≤30); wirksam beim Neuerzeugen von Prompt/Video dieser Gruppe",
+"只对本组生效,默认跟随本集/全局;可为本组单独换视频渠道(须已在「生成模型」页配 Key)和模型。参考图上限随所选模型(Seedance 2.0 ≤9、2.5 ≤30),换渠道/模型后重出本组 prompt/视频生效": "Gilt nur für diese Gruppe; Standard ist die Folgen-/globale Einstellung. Für diese Gruppe lassen sich Videokanal (Key muss auf der Seite „Generative Modelle“ hinterlegt sein) und Modell einzeln wechseln. Das Referenzbild-Limit folgt dem gewählten Modell (Seedance 2.0 ≤9, 2.5 ≤30); wirksam beim Neuerzeugen von Prompt/Video dieser Gruppe",
 "本集生效的视频渠道/模型/提示词技能:三个下拉可直接为本集切换(默认都跟随全局;全局在控制台「生成模型」/「模型限制」修改);个别组可用组卡「🎛 模型」单独指定,组级优先": "Für diese Episode wirksamer Videokanal / Modell / Prompt-Skill: die drei Dropdowns stellen sie direkt für diese Episode um (Standard: alle folgen global; global in der Konsole unter Generierungsmodelle / Modelllimits ändern); einzelne Gruppen können weiterhin über den 🎛 Modell-Button der Karte abweichen, Gruppeneinstellung hat Vorrang",
 "手选": "Manuell",
 "自动": "Auto",

@@ -1895,7 +1895,7 @@ window.I18N_DICT = {
 "🎛 模型": "🎛 Model",
 "为本组单独选择视频模型与提示词技能(默认跟随全局;渠道不可换)": "Pilih model video dan skill prompt khusus grup ini (default ikut global; saluran tidak bisa diubah)",
 "🎛 组视频模型 —": "🎛 Model Video Grup —",
-"只对本组生效,默认跟随全局;渠道不可换(只能选当前视频渠道的模型)。参考图上限随所选模型(Seedance 2.0 ≤9、2.5 ≤30),换模型后重出本组 prompt/视频生效": "Hanya berlaku untuk grup ini; default ikut global. Saluran tidak bisa diubah (hanya model dari saluran video saat ini). Batas gambar referensi mengikuti model yang dipilih (Seedance 2.0 ≤9, 2.5 ≤30); berlaku saat prompt/video grup dibuat ulang",
+"只对本组生效,默认跟随本集/全局;可为本组单独换视频渠道(须已在「生成模型」页配 Key)和模型。参考图上限随所选模型(Seedance 2.0 ≤9、2.5 ≤30),换渠道/模型后重出本组 prompt/视频生效": "Hanya berlaku untuk grup ini; default ikut episode/global. Saluran video (Key-nya harus sudah diatur di halaman Model Generatif) dan model bisa diganti khusus untuk grup ini. Batas gambar referensi mengikuti model yang dipilih (Seedance 2.0 ≤9, 2.5 ≤30); berlaku saat prompt/video grup dibuat ulang",
 "本集生效的视频渠道/模型/提示词技能:三个下拉可直接为本集切换(默认都跟随全局;全局在控制台「生成模型」/「模型限制」修改);个别组可用组卡「🎛 模型」单独指定,组级优先": "Kanal / model / skill prompt video yang berlaku untuk episode ini: tiga dropdown mengubahnya langsung untuk episode ini (default semua mengikuti global; global diubah di halaman Model Pembuatan / Batas Model konsol); tiap grup tetap bisa menimpanya lewat tombol 🎛 Model di kartu, dan pengaturan grup diutamakan",
 "手选": "Manual",
 "自动": "Otomatis",

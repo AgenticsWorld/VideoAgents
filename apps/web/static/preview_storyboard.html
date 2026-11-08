@@ -398,7 +398,8 @@ video.reelvid.tall{width:auto;max-width:100%;height:min(70vh,640px)}
 </div></div>
 <div id="gs-modal"><div class="box">
   <h3>🎛 组视频模型 — <span id="gs-grp" style="color:var(--purple)"></span></h3>
-  <div style="color:var(--dim);font-size:12.5px;margin-top:6px">只对本组生效,默认跟随全局;渠道不可换(只能选当前视频渠道的模型)。参考图上限随所选模型(Seedance 2.0 ≤9、2.5 ≤30),换模型后重出本组 prompt/视频生效</div>
+  <div style="color:var(--dim);font-size:12.5px;margin-top:6px">只对本组生效,默认跟随本集/全局;可为本组单独换视频渠道(须已在「生成模型」页配 Key)和模型。参考图上限随所选模型(Seedance 2.0 ≤9、2.5 ≤30),换渠道/模型后重出本组 prompt/视频生效</div>
+  <div class="row"><label>视频渠道</label><select id="gs-prov"></select></div>
   <div class="row"><label>视频模型</label><select id="gs-model"></select></div>
   <div class="row"><label>提示词技能</label><select id="gs-skill"></select></div>
   <div class="hint" id="gs-hint"></div>
@@ -1273,12 +1274,42 @@ function psRender(d){
 }
 
 // 🎛 组级视频模型/提示词技能弹窗(2026-08-30):GET/POST /projects/{p}/storyboard/{ep}/{grp}/settings
+// 2026-11-08 加「视频渠道」下拉:默认跟随本集/全局渠道;选别的渠道 = 组级切换渠道(provider_override,同顶部集级口径:
+// 未配 Key / 未登录的置灰,MiniMax 界面隐藏但已选中仍显示),二级 = 该渠道模型目录(ComfyUI = 运行方式,未配置的置灰)。
+// 渠道跟随时模型下拉 = 跟随本集/全局 + 本集生效渠道候选(本集渠道是 ComfyUI 时可换运行方式)。
 let GS_GRP='',GS_DATA=null;
+const gsOpt=(sel,v,label,dis)=>{const o=document.createElement('option');o.value=v;o.textContent=label;if(dis)o.disabled=true;sel.appendChild(o)};
+const gsMLabel=m=>t(m.label||m.id)+(m.configured===false?'('+t('未配置')+')':'');
+function gsRows(){   // 当前渠道选择下的模型行
+  const d=GS_DATA||{},prov=$('#gs-prov').value;
+  return prov?(((d.providers||[]).find(p=>p.id===prov)||{}).models||[]):((d.models||{}).candidates||[]);
+}
+function gsFillModels(keep){
+  const d=GS_DATA;if(!d)return;
+  const ms=$('#gs-model'),mods=d.models||{},prov=$('#gs-prov').value;
+  ms.innerHTML='';
+  if(prov){   // 组级切换渠道:该渠道目录必选其一,默认 = 该渠道在「生成模型」页保存的模型(未配置的运行方式跳到首个已配置)
+    const pr=(d.providers||[]).find(p=>p.id===prov)||{},rows=pr.models||[];
+    rows.forEach(m=>gsOpt(ms,m.id,gsMLabel(m),m.configured===false));
+    const ok=id=>rows.some(m=>m.id===id&&m.configured!==false);
+    ms.value=ok(keep)?keep:ok(pr.default_model)?pr.default_model:((rows.find(m=>m.configured!==false)||{}).id||'');
+    ms.disabled=!rows.length;
+  }else{       // 渠道跟随:基准 = 本集(顶部下拉已为整集换模型/渠道时)或全局;组级覆盖压过基准
+    const base=mods.base_model||mods.global_model;
+    if(mods.base_source==='episode')gsOpt(ms,'',I18N.f('跟随本集:{m}',{m:t(mods.base_label||mods.base_model||'—')}));
+    else gsOpt(ms,'',I18N.f('跟随全局:{m}',{m:t(mods.global_label||mods.global_model||'—')}));
+    (mods.candidates||[]).filter(c=>c.id!==base).forEach(c=>gsOpt(ms,c.id,gsMLabel(c),c.configured===false));
+    ms.value=(mods.candidates||[]).some(c=>c.id===keep&&c.id!==base&&c.configured!==false)?keep:'';
+    ms.disabled=!(mods.overridable||mods.mode_switchable);
+  }
+  $('#gs-err').textContent=(!prov&&ms.disabled)?I18N.f('当前视频渠道 {p} 按工作流运行、无模型 id,本组不能单独切换模型(技能仍可指定)',{p:provName(mods.provider)}):'';
+}
 function gsHint(){
   const d=GS_DATA;if(!d)return;
-  const m=$('#gs-model').value,sk=$('#gs-skill').value;
-  const mods=d.models||{},lbl=id=>((mods.candidates||[]).find(c=>c.id===id)||{}).label||id;
+  const prov=$('#gs-prov').value,m=$('#gs-model').value,sk=$('#gs-skill').value;
+  const mods=d.models||{},rows=gsRows();
   const model=m||mods.base_model||mods.global_model;
+  const lbl=id=>t((!m&&mods.base_label)||(rows.find(c=>c.id===id)||{}).label||id||'—');   // 跟随时用基准短标签
   const cap=/seedance-2[-.]5/i.test(model)?30:/seedance-2/i.test(model)?9:/minimax.*h3|h3.*minimax/i.test(model)?9:d.project_ref_cap;
   let sTxt;
   if(sk==='global')sTxt=I18N.f('跟随全局:{s}',{s:(d.episode_skill||{}).skill_dir||t('不套用')})+(m?' → '+t('(本组换了模型,实际按本组模型自动解析)'):'');
@@ -1286,13 +1317,13 @@ function gsHint(){
   else if(sk==='off')sTxt=t('不套用技能');
   else sTxt=sk.slice(7).split('/').pop();
   const w=(d.resolved||{}).warning;
-  $('#gs-hint').textContent=I18N.f('生效:{model} · 参考图上限 {cap} 张 · 技能 {skill}',{model:lbl(model),cap,skill:sTxt})+(w?'\n⚠️ '+w:'');
+  $('#gs-hint').textContent=I18N.f('生效:{model} · 参考图上限 {cap} 张 · 技能 {skill}',{model:provName(prov||mods.provider)+' '+lbl(model),cap,skill:sTxt})+(w?'\n⚠️ '+w:'');
   $('#gs-hint').classList.toggle('warn',!!w);
 }
 async function openGroupSettings(grp){
   GS_GRP=grp;GS_DATA=null;
   $('#gs-grp').textContent=grp;$('#gs-err').textContent='';$('#gs-hint').textContent=t('加载中…');
-  $('#gs-model').innerHTML='';$('#gs-skill').innerHTML='';
+  $('#gs-prov').innerHTML='';$('#gs-model').innerHTML='';$('#gs-skill').innerHTML='';
   $('#gs-modal').style.display='flex';
   const proj=$('#project').value.trim()||'demo';
   try{
@@ -1300,31 +1331,31 @@ async function openGroupSettings(grp){
     const d=await r.json();
     if(!r.ok)throw new Error(d.detail||r.status);
     GS_DATA=d;
-    const add=(sel,v,label)=>{const o=document.createElement('option');o.value=v;o.textContent=label;sel.appendChild(o)};
-    const ms=$('#gs-model'),mods=d.models||{};
-    // 基准 = 本集(顶部下拉已为整集换模型时)或全局;组级覆盖压过基准
-    if(mods.base_source==='episode')add(ms,'',I18N.f('跟随本集:{m}',{m:mods.base_label||mods.base_model||'—'}));
-    else add(ms,'',I18N.f('跟随全局:{m}',{m:mods.global_label||mods.global_model||'—'}));
-    (mods.candidates||[]).filter(c=>c.id!==(mods.base_model||mods.global_model)).forEach(c=>add(ms,c.id,c.label));
-    ms.disabled=!mods.overridable;
-    ms.value=(d.config||{}).video_model||'';if(!ms.value&&ms.value!=='')ms.value='';
-    const ss=$('#gs-skill'),cfg=(d.config||{}).prompt_skill||{};
-    add(ss,'global',I18N.f('跟随全局:{s}',{s:(d.episode_skill||{}).skill_dir||(d.project_skill||{}).dir||t('不套用')}));   // 跟随 = 本集解析结果(集级技能下拉/项目设定)
-    add(ss,'auto',t('自动(按本组视频模型解析)'));
-    (d.skills||[]).forEach(c=>add(ss,'manual:'+c.id,c.dir+(c.enabled?'':' ('+t('已禁用')+')')));
-    add(ss,'off',t('跳过(不套用技能)'));
+    const mods=d.models||{},cfg0=d.config||{};
+    // ① 渠道:跟随本集/全局(本集生效渠道名)+ 其它渠道(未配 Key / 未登录置灰;MiniMax 隐藏,已选中仍显示)
+    const sp=$('#gs-prov'),cur=cfg0.provider||'';
+    gsOpt(sp,'',I18N.f(mods.provider_source==='episode'?'跟随本集:{m}':'跟随全局:{m}',{m:provName(mods.provider)}));
+    (d.providers||[]).filter(p=>p.id!==mods.provider&&(p.id!=='minimax'||cur==='minimax'))
+      .forEach(p=>gsOpt(sp,p.id,provName(p.id)+(p.configured?'':'('+t(p.id==='agentics'?'未登录':'未配 Key')+')'),!p.configured&&p.id!==cur));
+    sp.value=cur;if(sp.value!==cur)sp.value='';
+    gsFillModels(cfg0.video_model||'');
+    const ss=$('#gs-skill'),cfg=cfg0.prompt_skill||{};
+    gsOpt(ss,'global',I18N.f('跟随全局:{s}',{s:(d.episode_skill||{}).skill_dir||(d.project_skill||{}).dir||t('不套用')}));   // 跟随 = 本集解析结果(集级技能下拉/项目设定)
+    gsOpt(ss,'auto',t('自动(按本组视频模型解析)'));
+    (d.skills||[]).forEach(c=>gsOpt(ss,'manual:'+c.id,c.dir+(c.enabled?'':' ('+t('已禁用')+')')));
+    gsOpt(ss,'off',t('跳过(不套用技能)'));
     ss.value=cfg.mode==='manual'?'manual:'+(cfg.skill_id||''):(cfg.mode||'global');
     if(!ss.value)ss.value='global';
-    if(!mods.overridable)$('#gs-err').textContent=I18N.f('当前视频渠道 {p} 按工作流运行、无模型 id,本组不能单独切换模型(技能仍可指定)',{p:mods.provider});
     gsHint();
   }catch(e){$('#gs-hint').textContent='';$('#gs-err').textContent=t('加载失败:')+e.message}
 }
+$('#gs-prov').onchange=()=>{gsFillModels('');gsHint()};
 $('#gs-model').onchange=gsHint;$('#gs-skill').onchange=gsHint;
 $('#gs-cancel').onclick=()=>$('#gs-modal').style.display='none';
 $('#gs-ok').onclick=async()=>{
   const proj=$('#project').value.trim()||'demo';
   const sk=$('#gs-skill').value||'global';
-  const body={video_model:$('#gs-model').value||'',prompt_skill:sk.startsWith('manual:')?{mode:'manual',skill_id:sk.slice(7)}:{mode:sk}};
+  const body={provider:$('#gs-prov').value||'',video_model:$('#gs-model').value||'',prompt_skill:sk.startsWith('manual:')?{mode:'manual',skill_id:sk.slice(7)}:{mode:sk}};
   $('#gs-ok').disabled=true;
   try{
     const r=await fetch('/api/v1/projects/'+encodeURIComponent(proj)+'/storyboard/'+encodeURIComponent(EP)+'/'+encodeURIComponent(GS_GRP)+'/settings',{method:'POST',
@@ -1638,9 +1669,9 @@ async function toggleNsfw(grp){
 function gsChip(g){
   const gs=g.group_settings;if(!gs||!gs.overridden)return '';
   const parts=[];
-  if(gs.model_source==='group')parts.push('🎬 '+gs.model_label);
+  if(gs.model_source==='group')parts.push('🎬 '+(gs.provider_source==='group'?provName(gs.provider)+' ':'')+t(gs.model_label||''));
   if(gs.skill_source==='group')parts.push('🧰 '+(gs.skill_dir||t('不套用技能')));
-  const tip=[I18N.f('本组视频模型:{m}({src})',{m:gs.video_model||gs.model_label,src:gs.model_source==='group'?t('组级覆盖'):gs.model_source==='episode'?t('跟随本集'):t('跟随全局')}),
+  const tip=[I18N.f('本组视频模型:{m}({src})',{m:(gs.provider_source==='group'?provName(gs.provider)+' / ':'')+(gs.video_model||gs.model_label),src:gs.model_source==='group'?t('组级覆盖'):gs.model_source==='episode'?t('跟随本集'):t('跟随全局')}),
     I18N.f('本组提示词技能:{s}({mode})',{s:gs.skill_dir||t('不套用'),mode:gs.skill_mode}),gs.warning?'⚠️ '+gs.warning:''].filter(Boolean).join('\n');
   return `<span class="tag gsov" style="${gs.warning?'color:var(--yellow)':''}" title="${esc(tip)}">🎛 ${esc(parts.join(' · ')||t('组级设定'))}</span>`;
 }
