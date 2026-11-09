@@ -1104,7 +1104,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <div class="note res-volc-row" style="margin-top:-6px">获取 Key:<a href="https://console.volcengine.com/iam/keymanage" target="_blank" rel="noopener" style="color:var(--link)">console.volcengine.com/iam/keymanage</a></div>
     <div class="row"><label>RunningHub 余额</label>
       <input type="checkbox" id="res-rh" style="flex:none">
-      <span class="note" style="flex:1">开启后用 API Key 查询 RH 币与钱包余额;.ai 与 .cn 账号不互通,分别填写,留空的站点不查</span></div>
+      <span class="note" style="flex:1">开启后用 API Key 查询 RH 积分;.ai 与 .cn 账号不互通,分别填写,留空的站点不查</span></div>
     <div class="row res-rh-row"><label>.ai API Key</label>
       <input type="password" id="res-rh-ai" placeholder="runninghub.ai API Key" autocomplete="off"></div>
     <div class="row res-rh-row"><label>.cn API Key</label>
@@ -3782,13 +3782,10 @@ async function renderResources(fresh){
   if(r.openrouter&&r.openrouter.configured)h+=bal('OpenRouter '+t('余额'),r.openrouter,'$');
   if(r.volc&&r.volc.configured)h+=bal(t('火山引擎')+' '+t('余额'),r.volc,'¥');
   if(r.runninghub&&r.runninghub.configured){
-    // 每个已配置站点一行:RH 币 + 钱包余额(币种符号按接口返回的 currency)
+    // 每个已配置站点一行:accountStatus 的 remainPoint(RH 积分,浮点数,最多两位小数)
     for(const [site,s] of Object.entries(r.runninghub.sites||{})){
-      const sym={CNY:'¥',USD:'$'}[s.currency]||(s.currency?s.currency+' ':'');
-      const known=typeof s.coins==='number';
-      const amt=known
-        ?`${Math.round(s.coins)} ${t('RH 币')}`+(typeof s.balance==='number'?` · ${sym}${s.balance.toFixed(2)}`:'')
-        :t('未知');
+      const known=typeof s.points==='number';
+      const amt=known?`${Number(s.points.toFixed(2))} ${t('RH 积分')}`:t('未知');
       h+=`<div class="res-bal"><span class="nm">RunningHub.${site}</span><span class="amt${known?'':' unknown'}">${amt}</span></div>`;
     }
   }

@@ -3636,7 +3636,8 @@ def _volc_balance() -> dict | None:
 
 
 def _rh_balance() -> dict | None:
-    """RunningHub 账户余额(accountStatus):RH 币 + 钱包余额;.ai/.cn 账号不互通,
+    """RunningHub 账户余额(accountStatus):取接口新增的 remainPoint(RH 积分,浮点数);
+    旧的 remainCoins(RH 币)/remainMoney(钱包余额)不再展示。.ai/.cn 账号不互通,
     按站点分别查询,只查填了 Key 的站点。未开启/一个 Key 都没配返回 None;
     单站点查询失败该站点读数为 null(面板显示「未知」),不影响另一站点。"""
     cfg = resource_cfg()
@@ -3661,11 +3662,9 @@ def _rh_balance() -> dict | None:
             if resp.get("code") != 0:
                 raise ValueError(str(resp.get("msg")))
             d = resp.get("data") or {}
-            out[site] = {"coins": num(d.get("remainCoins")),
-                         "balance": num(d.get("remainMoney")),
-                         "currency": str(d.get("currency") or "")}
+            out[site] = {"points": num(d.get("remainPoint"))}
         except Exception:
-            out[site] = {"coins": None, "balance": None, "currency": ""}
+            out[site] = {"points": None}
     return out
 
 
