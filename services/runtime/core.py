@@ -1130,6 +1130,10 @@ DEFAULT_GENCONFIG = {
     # Agent 语言模型分配策略(顶栏「语言模型」下拉驱动:选「智能分配」→ smart_<引擎>,
     # 选具体模型→ global 跟随顶栏):初始化默认智能分配(顶栏默认引擎 claude)
     "agentmodel_mode": "smart_claude",
+    # 智能分配高/低档模型的用户改选(顶栏「语言模型」选「智能分配」时右侧 ⚙ 按钮,2026-11-10):
+    # {<smart_* 策略>: {"high": 模型 id, "low": 模型 id}},引擎随策略固定只换模型;
+    # 缺省 / 空串 = 用 AM_MODE_MODELS 内置默认(内置默认随版本升级跟着变,只有改过的那一档固定)
+    "smart_models": {},
     # 输出设置(设置菜单「输出设置」):画幅预设 youtube=16:9(默认)/douyin=9:16/cinema=电影宽银幕 2.35:1(按 21:9 档生成)/custom;
     # 语言约束剧本/台词/旁白/字幕/配音/发布物料;
     # 视频分辨率按用途分档:draft=草稿/迭代/待审版本,final=审核确认后的成片终稿;
@@ -2750,7 +2754,7 @@ AGENTMODELS_PATH = RUNTIME_DIR / "agentmodels.json"
 #   smart_pi     按任务复杂度自动选 pi 模型(high→openai-codex/gpt-6.1-sol low→openai-codex/gpt-6-luna)
 #   smart_deepseek 按任务复杂度自动选 DeepSeek 模型(opencode 引擎,high→V4 Pro low→V4.1 Flash;
 #     Go 渠道的 V4 Flash 已于 2026-10 从模型目录下架,OpenCode 2 直接报 Model unavailable)
-#   smart_grok   按任务复杂度自动选 grok 模型(high→Grok 4.6 low→Grok 4.5)
+#   smart_grok   按任务复杂度自动选 grok 模型(high→Grok 4.7 low→Grok 4.6)
 #   smart_antigravity 按任务复杂度自动选 antigravity 模型(high→Gemini 4 Argon High
 #                low→Gemini 3.8 Flash Medium)
 AM_MODES = ("global", "smart_claude", "smart_codex", "smart_kimi", "smart_pi",
@@ -2798,8 +2802,8 @@ AM_MODE_MODELS = {
     "smart_deepseek": {"high": {"engine": "opencode", "model": "opencode-go/deepseek-v4-pro"},
                        "low": {"engine": "opencode", "model": "opencode-go/deepseek-v4.1-flash"}},
     # grok 引擎(Grok Build CLI,grok.com 登录凭证;模型 id 同 `grok models` 列表)
-    "smart_grok": {"high": {"engine": "grok", "model": "grok-4.6"},
-                   "low": {"engine": "grok", "model": "grok-4.5"}},
+    "smart_grok": {"high": {"engine": "grok", "model": "grok-4.7"},
+                   "low": {"engine": "grok", "model": "grok-4.6"}},
     # antigravity 引擎(Antigravity CLI,Google 账号登录凭证;模型 id 同 `agy models` 列表,
     # 推理档位写在模型 id 后缀里)
     "smart_antigravity": {"high": {"engine": "antigravity", "model": "gemini-4-argon-high"},
@@ -2813,13 +2817,32 @@ AM_ENGINES = ("", "claude", "codex", "kimi", "pi", "opencode", "grok", "antigrav
 AM_FIELDS = ("engine", "model")
 
 
-def default_agent_model(agent_id: str, mode: str | None = None) -> dict:
-    """按「模型策略」给出该 Agent 的默认配置;global 模式全部跟随顶栏全局。"""
-    if mode is None:
-        mode = load_genconfig().get("agentmodel_mode") or "global"
-    tier = AM_AGENT_TIERS.get(agent_id) \
+def agent_model_tier(agent_id: str) -> str:
+    """该 Agent 在智能分配里的档位:high=创作核心 low=其余(分类内例外优先)。"""
+    return AM_AGENT_TIERS.get(agent_id) \
         or AM_CATEGORY_TIERS.get(agent_id.split("/")[0]) or "low"
-    d = AM_MODE_MODELS.get(mode, {}).get(tier) or {}
+
+
+def smart_tier_models(mode: str, cfg: dict | None = None) -> dict:
+    """智能分配策略的生效高/低档 {"high": {engine, model}, "low": {...}}:内置默认 AM_MODE_MODELS
+    叠加用户在顶栏 ⚙ 改选的模型 id(genconfig.smart_models,引擎随策略固定)。非智能策略返回 {}。"""
+    base = AM_MODE_MODELS.get(mode)
+    if not base:
+        return {}
+    sm = (cfg if cfg is not None else load_genconfig()).get("smart_models")
+    ov = sm.get(mode) if isinstance(sm, dict) else None
+    ov = ov if isinstance(ov, dict) else {}
+    return {tier: {"engine": d["engine"], "model": str(ov.get(tier) or "").strip() or d["model"]}
+            for tier, d in base.items()}
+
+
+def default_agent_model(agent_id: str, mode: str | None = None, cfg: dict | None = None) -> dict:
+    """按「模型策略」给出该 Agent 的默认配置;global 模式全部跟随顶栏全局。
+    cfg 可传入已读的 genconfig(批量算全部 Agent 时免得逐个读盘)。"""
+    if mode is None:
+        cfg = cfg if cfg is not None else load_genconfig()
+        mode = cfg.get("agentmodel_mode") or "global"
+    d = smart_tier_models(mode, cfg).get(agent_model_tier(agent_id)) or {}
     return {"engine": d.get("engine", ""), "model": d.get("model", "")}
 
 
@@ -15484,6 +15507,29 @@ async def api_genconfig_set(body: dict):
         raise ServiceError(400, "digital_human.comfyui.rh_instance_type must be standard, plus or ultra")
     if cfg.get("agentmodel_mode") not in AM_MODES:
         raise ServiceError(400, f"agentmodel_mode must be one of {AM_MODES}")
+    # 智能分配高/低档改选:只认 smart_* 策略 × high/low;空串 = 回到内置默认(落盘时去掉)
+    sm_body = body.get("smart_models")
+    if sm_body is not None:
+        if not isinstance(sm_body, dict):
+            raise ServiceError(400, "smart_models must be an object")
+        for mode, tiers in sm_body.items():
+            if mode not in AM_MODE_MODELS:
+                raise ServiceError(400, f"smart_models keys must be among {sorted(AM_MODE_MODELS)}")
+            if not isinstance(tiers, dict) or set(tiers) - {"high", "low"}:
+                raise ServiceError(400, f"smart_models.{mode} must be {{high, low}}")
+            for tier, mid in tiers.items():
+                mid = str(mid or "").strip()
+                if mid and (len(mid) > 200 or mid.startswith("-") or re.search(r"\s", mid)):
+                    raise ServiceError(400, f"smart_models.{mode}.{tier}: invalid model id")
+    sm_clean = {}
+    sm_all = cfg.get("smart_models")
+    for mode, tiers in (sm_all if isinstance(sm_all, dict) else {}).items():
+        if mode in AM_MODE_MODELS and isinstance(tiers, dict):
+            t = {k: str(v or "").strip() for k, v in tiers.items()
+                 if k in ("high", "low") and str(v or "").strip()}
+            if t:
+                sm_clean[mode] = t
+    cfg["smart_models"] = sm_clean
     if cfg.get("ui_language") not in ("", *UI_LANG_NAMES):
         raise ServiceError(400, f"ui_language must be one of {sorted(UI_LANG_NAMES)} or empty")
     storage = cfg.get("storage") or {}
@@ -15506,7 +15552,7 @@ async def api_genconfig_set(body: dict):
         STATE["ui_lang"] = cfg.get("ui_language") or ""
         save_state(STATE)
     # 界面语言初始化 / 顶栏引擎策略切换只带单键:与生成模型渠道无关,跳过 RH 缓存同步
-    single_key = set(body) <= {"ui_language"} or set(body) <= {"agentmodel_mode"}
+    single_key = set(body) <= {"ui_language"} or set(body) <= {"agentmodel_mode", "smart_models"}
     # RunningHub 工作流缓存随保存同步云端最新版:genmedia 提交走本地缓存整包,
     # 用户在 RH 网页端改过的工作流不重拉不生效;失败沿用旧缓存,不阻断保存
     rh_refresh = [] if single_key else await _refresh_rh_wf_caches(cfg)
@@ -17665,13 +17711,20 @@ async def api_plugins_delete(body: dict):
 
 async def api_agentmodels():
     """全部 Agent 的模型配置:mode=「模型策略」;defaults=策略默认;overrides=用户在 UI 保存的覆盖。"""
-    mode = load_genconfig().get("agentmodel_mode") or "global"
-    # 覆盖经 agent_model_config 归一(剔除已移除的图像/视频渠道字段),与运行时同口径
+    cfg = load_genconfig()
+    mode = cfg.get("agentmodel_mode") or "global"
+    agents = list_agents()
+    # 覆盖经 agent_model_config 归一(剔除已移除的图像/视频渠道字段),与运行时同口径。
+    # tiers / smart / smart_builtin 供顶栏「智能分配」⚙ 弹窗:各 Agent 档位、各策略生效高/低档模型、内置默认
     return {"mode": mode,
-            "defaults": {a["id"]: default_agent_model(a["id"], mode)
-                         for a in list_agents()},
+            "defaults": {a["id"]: default_agent_model(a["id"], mode, cfg) for a in agents},
             "overrides": {aid: agent_model_config(aid)
-                          for aid, ov in load_agentmodels().items() if isinstance(ov, dict)}}
+                          for aid, ov in load_agentmodels().items() if isinstance(ov, dict)},
+            "tiers": {a["id"]: agent_model_tier(a["id"]) for a in agents},
+            "smart": {m: {t: d["model"] for t, d in smart_tier_models(m, cfg).items()}
+                      for m in AM_MODE_MODELS},
+            "smart_builtin": {m: {t: d["model"] for t, d in v.items()}
+                              for m, v in AM_MODE_MODELS.items()}}
 
 
 async def api_globalmodel_get():
@@ -18012,8 +18065,8 @@ _GROK_MODEL_LINE_RE = re.compile(r"^\s*[*-]\s+(\S+)(\s+\(default\))?\s*$")
 
 
 def _parse_grok_models(output: str) -> list[dict]:
-    """`grok models` 输出(实测 1.0.5):登录信息与 Default model 行之后,
-    `  * grok-4.6 (default)` / `  - grok-4.5` 一行一个模型。"""
+    """`grok models` 输出(实测 1.0.5 / 1.0.77):登录信息与 Default model 行之后,
+    `  * grok-4.7 (default)` / `  - grok-4.6` 一行一个模型。"""
     models = []
     for raw in output.splitlines():
         m = _GROK_MODEL_LINE_RE.match(_ANSI_ESCAPE_RE.sub("", raw))
@@ -21798,8 +21851,9 @@ def footage_engine_spec(prepare: bool = False) -> dict:
     model = pref["model"]
     if model.startswith("__"):
         # 顶栏「智能分配」策略(__smart)不是具体模型:画面分析是单轮看图小活,取该引擎策略的 low 档
+        # (含用户在顶栏 ⚙ 改选的低档模型)
         mode = SMART_MODE_BY_ENGINE.get(engine, "")
-        model = ((AM_MODE_MODELS.get(mode) or {}).get("low") or {}).get("model", "")
+        model = (smart_tier_models(mode).get("low") or {}).get("model", "")
     spec = {"engine": engine, "model": model, "permission_mode": PERMISSION_MODE,
             "executable": resolve_cli_executable(engine) if engine != "deepagents" else None}
     if prepare and engine == "opencode" and opencode_cli.is_v2(spec["executable"]):
