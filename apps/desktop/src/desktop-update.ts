@@ -281,22 +281,56 @@ async function extractDesktopArchive(archive: string, staging: string): Promise<
   })
 }
 
-export async function downloadAndApplyDesktopUpdate(
+/** 已下载、校验并解压好的更新包,可立即安装,也可留到下次启动再装。 */
+export interface PreparedDesktopUpdate {
+  version: string
+  buildHash: string
+  /** 解压目录(app-updates/staging-<buildHash>) */
+  staging: string
+  /** macOS:解压出的新 .app;Windows:VideoAgents-Setup.exe */
+  payload: string
+}
+
+interface PendingDesktopUpdateRecord extends PreparedDesktopUpdate {
+  schema: 1
+  platform: NodeJS.Platform
+  preparedAt: string
+}
+
+function updatesRoot(userData: string): string {
+  return path.join(userData, 'app-updates')
+}
+
+function assertUpdatableAppPath(currentAppPath: string): void {
+  if (process.platform !== 'darwin') return
+  if (!currentAppPath.endsWith('.app')
+      || !existsSync(path.join(currentAppPath, 'Contents', 'Info.plist'))) {
+    throw new Error(`macOS 应用路径无效，已取消更新：${currentAppPath}`)
+  }
+  if (currentAppPath.includes('/AppTranslocation/')) {
+    throw new Error('请先把 VideoAgents.app 移动到“应用程序”目录，再执行自动更新。')
+  }
+}
+
+function isUsablePayload(payload: string): boolean {
+  if (process.platform === 'darwin') {
+    return payload.endsWith('.app') && existsSync(path.join(payload, 'Contents', 'Info.plist'))
+  }
+  return existsSync(payload) && lstatSync(payload).isFile()
+}
+
+/** 下载 → 校验 SHA-256 → 解压到 staging,找到要安装的 .app / 安装程序;不动当前应用。 */
+export async function prepareDesktopUpdate(
   userData: string,
   currentAppPath: string,
   artifact: DesktopArtifact,
   onProgress: (progress: RuntimeProgress) => void,
-): Promise<void> {
-  if (process.platform === 'darwin') {
-    if (!currentAppPath.endsWith('.app')
-        || !existsSync(path.join(currentAppPath, 'Contents', 'Info.plist'))) {
-      throw new Error(`macOS 应用路径无效，已取消更新：${currentAppPath}`)
-    }
-    if (currentAppPath.includes('/AppTranslocation/')) {
-      throw new Error('请先把 VideoAgents.app 移动到“应用程序”目录，再执行自动更新。')
-    }
+): Promise<PreparedDesktopUpdate> {
+  if (process.platform !== 'darwin' && process.platform !== 'win32') {
+    throw new Error(`不支持桌面自更新的平台：${process.platform}`)
   }
-  const root = path.join(userData, 'app-updates')
+  assertUpdatableAppPath(currentAppPath)
+  const root = updatesRoot(userData)
   const archive = path.join(root, `${artifact.buildHash}.zip.part`)
   const staging = path.join(root, `staging-${artifact.buildHash}`)
   mkdirSync(root, {recursive: true})
@@ -308,9 +342,35 @@ export async function downloadAndApplyDesktopUpdate(
   await extractDesktopArchive(archive, staging)
   rmSync(archive, {force: true})
 
+  let payload: string | undefined
   if (process.platform === 'darwin') {
-    const replacement = findFile(staging, name => name.endsWith('.app'))
-    if (!replacement) throw new Error('macOS 更新包中没有 .app')
+    payload = findFile(staging, name => name.endsWith('.app'))
+    if (!payload) throw new Error('macOS 更新包中没有 .app')
+  } else {
+    payload = path.join(staging, 'VideoAgents-Setup.exe')
+    if (!existsSync(payload) || !lstatSync(payload).isFile()) {
+      throw new Error('Windows 更新包中没有 VideoAgents-Setup.exe')
+    }
+  }
+  return {version: artifact.version, buildHash: artifact.buildHash, staging, payload}
+}
+
+/**
+ * 启动外部安装进程:macOS 由脚本等当前进程退出后替换 .app 并重新打开;Windows 启动 NSIS 安装程序。
+ * 调用方随后须退出应用。
+ */
+export function launchPreparedDesktopUpdate(
+  userData: string,
+  currentAppPath: string,
+  prepared: PreparedDesktopUpdate,
+  onProgress: (progress: RuntimeProgress) => void,
+): void {
+  assertUpdatableAppPath(currentAppPath)
+  const root = updatesRoot(userData)
+  mkdirSync(root, {recursive: true})
+
+  if (process.platform === 'darwin') {
+    const replacement = prepared.payload
     const helper = path.join(root, 'apply-macos-update.sh')
     const log = path.join(root, 'update.log')
     writeFileSync(helper, `#!/bin/sh\nset -eu\nexec >>"$4" 2>&1\npid="$1"\ncurrent="$2"\nreplacement="$3"\ncount=0\nwhile kill -0 "$pid" 2>/dev/null && [ "$count" -lt 120 ]; do sleep 1; count=$((count+1)); done\nbackup="\${current}.videoagents-previous"\nrm -rf "$backup"\nmv "$current" "$backup"\nif mv "$replacement" "$current"; then\n  open "$current"\n  rm -rf "$backup"\nelse\n  mv "$backup" "$current"\n  open "$current"\n  exit 1\nfi\n`, {mode: 0o700})
@@ -322,10 +382,7 @@ export async function downloadAndApplyDesktopUpdate(
   }
 
   if (process.platform === 'win32') {
-    const installer = path.join(staging, 'VideoAgents-Setup.exe')
-    if (!existsSync(installer) || !lstatSync(installer).isFile()) {
-      throw new Error('Windows 更新包中没有 VideoAgents-Setup.exe')
-    }
+    const installer = prepared.payload
     const installDir = path.resolve(currentAppPath)
     const log = path.join(root, 'update-windows.log')
     const args = ['--updated', `/D=${installDir}`]
@@ -345,4 +402,81 @@ export async function downloadAndApplyDesktopUpdate(
     return
   }
   throw new Error(`不支持桌面自更新的平台：${process.platform}`)
+}
+
+export async function downloadAndApplyDesktopUpdate(
+  userData: string,
+  currentAppPath: string,
+  artifact: DesktopArtifact,
+  onProgress: (progress: RuntimeProgress) => void,
+): Promise<void> {
+  const prepared = await prepareDesktopUpdate(userData, currentAppPath, artifact, onProgress)
+  launchPreparedDesktopUpdate(userData, currentAppPath, prepared, onProgress)
+}
+
+function pendingUpdatePath(userData: string): string {
+  return path.join(updatesRoot(userData), 'pending-update.json')
+}
+
+function isInsideUpdatesRoot(userData: string, target: string): boolean {
+  const relative = path.relative(path.resolve(updatesRoot(userData)), path.resolve(target))
+  return Boolean(relative) && !relative.startsWith('..') && !path.isAbsolute(relative)
+}
+
+/** 「下次启动时安装」:后台下载解压完成后记下待装更新,下次启动时 takePendingDesktopUpdate 取出安装。 */
+export function savePendingDesktopUpdate(userData: string, prepared: PreparedDesktopUpdate): void {
+  const destination = pendingUpdatePath(userData)
+  const temporary = `${destination}.${process.pid}.tmp`
+  mkdirSync(path.dirname(destination), {recursive: true})
+  const value: PendingDesktopUpdateRecord = {
+    schema: 1,
+    platform: process.platform,
+    preparedAt: new Date().toISOString(),
+    ...prepared,
+  }
+  writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, {encoding: 'utf8', mode: 0o600})
+  renameSync(temporary, destination)
+}
+
+/**
+ * 取出待装更新并立即删除记录(安装失败也不会每次启动反复重试,改由启动时的更新检查重新询问)。
+ * 记录无效、平台不符、更新包缺失或版本已不比当前新时返回 undefined,并清掉对应的解压目录。
+ */
+export function takePendingDesktopUpdate(
+  userData: string,
+  build: BuildInfo,
+): PreparedDesktopUpdate | undefined {
+  const marker = pendingUpdatePath(userData)
+  if (!existsSync(marker)) return undefined
+  let value: Partial<PendingDesktopUpdateRecord> | undefined
+  try {
+    value = JSON.parse(readFileSync(marker, 'utf8')) as Partial<PendingDesktopUpdateRecord>
+  } catch (error) {
+    console.warn(`[desktop-updater] 待装更新记录不可用：${String(error)}`)
+  }
+  rmSync(marker, {force: true})
+  if (!value) return undefined
+  const discard = (reason: string): undefined => {
+    console.warn(`[desktop-updater] 放弃待装更新：${reason}`)
+    if (typeof value?.staging === 'string' && isInsideUpdatesRoot(userData, value.staging)
+        && path.basename(value.staging).startsWith('staging-')) {
+      try { rmSync(value.staging, {recursive: true, force: true}) } catch {}
+    }
+    return undefined
+  }
+  if (value.schema !== 1 || typeof value.version !== 'string' || !SAFE_VERSION.test(value.version)
+      || typeof value.buildHash !== 'string' || !SAFE_VERSION.test(value.buildHash)
+      || typeof value.staging !== 'string' || typeof value.payload !== 'string') {
+    return discard('记录格式无效')
+  }
+  if (value.platform !== process.platform) return discard(`平台不符(${String(value.platform)})`)
+  if (!isInsideUpdatesRoot(userData, value.staging) || !isInsideUpdatesRoot(userData, value.payload)) {
+    return discard('更新包不在更新目录内')
+  }
+  const applicable = build.channel === 'release'
+    ? isNewerVersion(value.version, build.version)
+    : build.channel === 'dev' && value.buildHash !== build.buildHash
+  if (!applicable) return discard(`当前已是 ${build.version}`)
+  if (!isUsablePayload(value.payload)) return discard('更新包文件缺失')
+  return {version: value.version, buildHash: value.buildHash, staging: value.staging, payload: value.payload}
 }

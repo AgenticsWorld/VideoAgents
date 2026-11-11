@@ -9,8 +9,9 @@ import path from 'node:path'
 import {activatePythonRuntime, PythonRuntime, resolvePythonRuntime, runtimeStore} from './runtime'
 import {fetchLatestRuntimeArtifact, installLatestPythonRuntime, RuntimeProgress} from './runtime-download'
 import {
-  cacheRequiredDesktopUpdate, clearCachedRequiredDesktopUpdate, DesktopArtifact, DesktopUpdate,
-  downloadAndApplyDesktopUpdate, fetchDesktopUpdate, readBuildInfo, readCachedRequiredDesktopUpdate,
+  BuildInfo, cacheRequiredDesktopUpdate, clearCachedRequiredDesktopUpdate, DesktopArtifact, DesktopUpdate,
+  downloadAndApplyDesktopUpdate, fetchDesktopUpdate, launchPreparedDesktopUpdate, prepareDesktopUpdate,
+  readBuildInfo, readCachedRequiredDesktopUpdate, savePendingDesktopUpdate, takePendingDesktopUpdate,
 } from './desktop-update'
 import {
   AgenticsApiError, authorizationUrl, clearStoredAuth, createPkceSession, exchangeAuthorizationCode,
@@ -18,6 +19,7 @@ import {
   ServiceRegion, serviceRegion, UserAccount,
 } from './desktop-auth'
 import {desktopExecutablePath} from './shell-environment'
+import {desktopUiLanguage, fillTemplate, UpdateLanguage, updateStrings, UpdateStrings} from './update-i18n'
 import {
   FfmpegInstallerMissingError, inspectFfmpegEnvironment, installFfmpeg, managedFfmpegBinDirectory,
 } from './ffmpeg-environment'
@@ -343,6 +345,7 @@ async function showRuntimeProgress(
   title = '正在准备 VideoAgents',
   note = '首次启动需要下载一次，之后不会自动更新。',
   windowTitle = 'VideoAgents Python 环境',
+  options: {message?: string; language?: string} = {},
 ): Promise<void> {
   if (runtimeProgressWindow && !runtimeProgressWindow.isDestroyed()) return
   runtimeProgressWindow = new BrowserWindow({
@@ -350,12 +353,13 @@ async function showRuntimeProgress(
     closable: false, title: windowTitle, backgroundColor: '#111318',
     webPreferences: {nodeIntegration: false, contextIsolation: true, sandbox: true},
   })
-  const html = `<!doctype html><meta charset="utf-8"><style>
+  const language = options.language || 'zh'
+  const html = `<!doctype html><html lang="${language}" dir="${language === 'ar' ? 'rtl' : 'ltr'}"><meta charset="utf-8"><style>
     body{margin:0;background:#111318;color:#f3f4f6;font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
     main{padding:34px}h2{font-size:18px;margin:0 0 18px}p{color:#b8bec9;height:22px;margin:0 0 14px}
     progress{width:100%;height:12px;accent-color:#5677ff}small{display:block;color:#727987;margin-top:12px}
     #stats{color:#8b93a3;font-size:12px;height:16px;margin:8px 0 0;font-variant-numeric:tabular-nums}
-  </style><main><h2>${title}</h2><p id="message">正在检查更新…</p>
+  </style><main><h2>${title}</h2><p id="message">${options.message ?? '正在检查更新…'}</p>
   <progress id="progress" max="100"></progress><div id="stats"></div><small>${note}</small></main>`
   await runtimeProgressWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
 }
@@ -750,32 +754,96 @@ function installApplicationMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
-async function applyDesktopUpdate(artifact: DesktopArtifact): Promise<void> {
-  const currentAppPath = process.platform === 'darwin'
+function currentAppPath(): string {
+  return process.platform === 'darwin'
     ? path.resolve(process.resourcesPath, '..', '..')
     : path.resolve(process.resourcesPath, '..')
+}
+
+/** 更新弹窗 / 进度窗文案跟随网页界面语言(state.json 的 ui_lang),未设置时用英文。 */
+function updateLocale(): {language: UpdateLanguage; text: UpdateStrings} {
+  const runtimeDir = process.env.VIDEOAGENTS_RUNTIME_DIR || path.join(desktopDataRoot(), '.videoagents')
+  const language = desktopUiLanguage(runtimeDir)
+  return {language, text: updateStrings(language)}
+}
+
+async function applyDesktopUpdate(artifact: DesktopArtifact, text: UpdateStrings): Promise<void> {
+  const messages: Record<RuntimeProgress['phase'], string> = {
+    checking: text.checking,
+    downloading: text.downloading,
+    extracting: text.preparing,
+    activating: text.installerStarted,
+  }
   await downloadAndApplyDesktopUpdate(
-    app.getPath('userData'), currentAppPath, artifact, updateRuntimeProgress,
+    app.getPath('userData'), currentAppPath(), artifact,
+    progress => updateRuntimeProgress({...progress, message: messages[progress.phase] ?? progress.message}),
   )
+}
+
+let desktopUpdateDownloadingInBackground = false
+
+/** 「下次启动时安装」:后台静默下载、校验、解压,完成后记下待装更新;失败只记日志,下次启动的更新检查会重新询问。 */
+function downloadDesktopUpdateForNextLaunch(artifact: DesktopArtifact): void {
+  if (desktopUpdateDownloadingInBackground) return
+  desktopUpdateDownloadingInBackground = true
+  const userData = app.getPath('userData')
+  void prepareDesktopUpdate(userData, currentAppPath(), artifact, () => {})
+    .then(prepared => {
+      savePendingDesktopUpdate(userData, prepared)
+      console.info(`[updater] VideoAgents ${prepared.version} downloaded; it will be installed on next launch`)
+    })
+    .catch(error => {
+      console.warn(`[updater] background download failed: ${error instanceof Error ? error.message : String(error)}`)
+    })
+    .finally(() => {desktopUpdateDownloadingInBackground = false})
+}
+
+/** 启动最早期:有上次后台下载好的更新就直接安装并退出(返回 true);没有或安装启动失败时返回 false 照常启动。 */
+function installPendingDesktopUpdate(build: BuildInfo): boolean {
+  if (!app.isPackaged) return false
+  const userData = app.getPath('userData')
+  const pending = takePendingDesktopUpdate(userData, build)
+  if (!pending) return false
+  try {
+    console.info(`[updater] installing VideoAgents ${pending.version} downloaded during the previous session`)
+    launchPreparedDesktopUpdate(userData, currentAppPath(), pending, () => {})
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.warn(`[updater] pending update install failed: ${message}`)
+    const {text} = updateLocale()
+    dialog.showErrorBox(
+      text.pendingFailedTitle,
+      `${message}\n\n${fillTemplate(text.pendingFailedDetail, {current: build.version})}`,
+    )
+    return false
+  }
+  stopWebServerTree()
+  app.exit(0)
+  return true
 }
 
 async function offerDesktopUpdate(update: DesktopUpdate, currentVersion: string): Promise<void> {
   const {artifact} = update
+  const {language, text} = updateLocale()
   const options: MessageBoxOptions = {
-    type: 'info', title: '发现 VideoAgents 更新',
-    message: `发现 VideoAgents ${artifact.version} 新版本。`,
-    detail: `当前版本 ${currentVersion}。是否立即下载并自动安装？`,
-    buttons: ['下载并更新', '暂不更新'], defaultId: 0, cancelId: 1,
+    type: 'info', title: text.availableTitle,
+    message: fillTemplate(text.availableMessage, {version: artifact.version}),
+    detail: fillTemplate(text.availableDetail, {current: currentVersion}),
+    buttons: [text.installNow, text.installNextLaunch, text.notNow], defaultId: 0, cancelId: 2, noLink: true,
   }
   const answer = window
     ? await dialog.showMessageBox(window, options)
     : await dialog.showMessageBox(options)
+  if (answer.response === 1) {
+    downloadDesktopUpdateForNextLaunch(artifact)
+    return
+  }
   if (answer.response !== 0) return
   await showRuntimeProgress(
-    '正在更新 VideoAgents', '下载完成后应用会自动安装并重新启动。', 'VideoAgents 更新',
+    text.progressTitle, text.progressNote, text.progressWindowTitle, {message: text.checking, language},
   )
   try {
-    await applyDesktopUpdate(artifact)
+    await applyDesktopUpdate(artifact, text)
     closeRuntimeProgress()
     if (process.platform === 'win32') {
       stopWebServerTree()
@@ -786,25 +854,26 @@ async function offerDesktopUpdate(update: DesktopUpdate, currentVersion: string)
   } catch (error) {
     closeRuntimeProgress()
     const message = error instanceof Error ? error.message : String(error)
-    dialog.showErrorBox('VideoAgents 更新失败', message)
+    dialog.showErrorBox(text.failedTitle, message)
   }
 }
 
 async function enforceDesktopUpdate(update: DesktopUpdate, currentVersion: string): Promise<never> {
   const {artifact, minimumVersion} = update
+  const {language, text} = updateLocale()
+  const versions = {current: currentVersion, minimum: minimumVersion ?? '', version: artifact.version}
   requiredDesktopUpdateActive = true
   Menu.setApplicationMenu(null)
   let lastError = ''
   while (true) {
     const answer = await dialog.showMessageBox({
       type: lastError ? 'error' : 'warning',
-      title: '必须更新 VideoAgents',
-      message: lastError ? '更新失败，请重试' : '当前版本已停止支持',
+      title: text.requiredTitle,
+      message: lastError ? text.requiredRetryMessage : text.requiredMessage,
       detail: lastError
-        ? `${lastError}\n\n当前版本 ${currentVersion}，最低可用版本 ${minimumVersion}。`
-        : `当前版本 ${currentVersion} 低于最低可用版本 ${minimumVersion}。`
-          + ` 必须更新到 ${artifact.version} 后才能继续使用。`,
-      buttons: ['立即更新', '退出应用'],
+        ? `${lastError}\n\n${fillTemplate(text.requiredRetryDetail, versions)}`
+        : fillTemplate(text.requiredDetail, versions),
+      buttons: [text.updateNow, text.quit],
       defaultId: 0,
       cancelId: 1,
       noLink: true,
@@ -816,12 +885,13 @@ async function enforceDesktopUpdate(update: DesktopUpdate, currentVersion: strin
       await new Promise<never>(() => {})
     }
     await showRuntimeProgress(
-      '正在强制更新 VideoAgents',
-      '更新完成并重新启动前，不能使用应用的其他功能。',
-      'VideoAgents 必须更新',
+      text.requiredProgressTitle,
+      text.requiredProgressNote,
+      text.requiredProgressWindowTitle,
+      {message: text.checking, language},
     )
     try {
-      await applyDesktopUpdate(artifact)
+      await applyDesktopUpdate(artifact, text)
       closeRuntimeProgress()
       requiredDesktopUpdateCanQuit = true
       if (process.platform === 'win32') {
@@ -969,6 +1039,7 @@ app.whenReady().then(async () => {
     app.setAsDefaultProtocolClient('videoagents', process.execPath, [path.resolve(process.argv[1])])
   }
   const build = readBuildInfo(process.resourcesPath, app.isPackaged)
+  if (installPendingDesktopUpdate(build)) return
   await requireDesktopLogin(build)
   const userData = app.getPath('userData')
   let desktopUpdate = readCachedRequiredDesktopUpdate(userData, build)
