@@ -442,7 +442,7 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <pre class="eng-log" id="eng-log" data-no-i18n style="display:none"></pre>
     <div class="eng-status" id="eng-status"></div>
     <div class="err" id="eng-err"></div>
-    <div class="actions"><button id="eng-close">稍后再说</button><button id="eng-term" style="display:none" title="弹出终端窗口运行同一条官方安装命令;安装脚本有提问(如需要先装 Node.js)时可在终端里回答">在终端中安装</button><button id="eng-recheck">重新检测</button><button class="primary" id="eng-install" style="display:none">一键安装</button><button class="primary" id="eng-login" style="display:none">登录</button></div>
+    <div class="actions"><button id="eng-close">稍后再说</button><button id="eng-term" style="display:none" title="弹出终端窗口运行同一条官方安装命令;安装脚本有提问(如需要先装 Node.js)时可在终端里回答">在终端中安装</button><button id="eng-recheck">重新检测</button><button class="primary" id="eng-install" style="display:none">一键安装</button><button class="primary" id="eng-update" style="display:none">一键更新</button><button class="primary" id="eng-login" style="display:none">登录</button></div>
   </div>
 </div>
 <div id="plug-modal" class="modal">
@@ -2314,24 +2314,33 @@ const ENGINE_CLI={
   grok:{bin:'grok',cli:'Grok Build',label:'grok',url:'https://grok.com/build',login:'grok login'},
   antigravity:{bin:'agy',cli:'Antigravity CLI',label:'antigravity',url:'https://antigravity.google/docs/getting-started?tab=cli',login:'agy'},
 };
-const ENG={engine:'',av:null,timer:null,waitStart:0};
+const ENG={engine:'',av:null,timer:null,waitStart:0,mode:'setup',ver:null,uState:''};
 const engApi=(engine,tail)=>'/api/v1/engines/'+encodeURIComponent(engine)+'/'+tail;
 function engStop(){if(ENG.timer){clearTimeout(ENG.timer);ENG.timer=null}}
 function engShowButtons(o){
   $('#eng-install').style.display=o.install?'':'none';
   $('#eng-login').style.display=o.login?'':'none';
+  $('#eng-update').style.display=o.update?'':'none';
   $('#eng-term').style.display=o.term?'':'none';
-  $('#eng-recheck').className=(o.install||o.login)?'':'primary';
+  $('#eng-recheck').className=(o.install||o.login||o.update)?'':'primary';
+}
+function engSetMode(m){   // setup = 安装 / 登录引导;update = 新版本提示(同一个弹窗,按钮文案随之切换)
+  ENG.mode=m;
+  $('#eng-close').textContent=t(m==='update'?'暂不更新':'稍后再说');
+  $('#eng-term').textContent=t(m==='update'?'在终端中更新':'在终端中安装');
+  $('#eng-term').title=t(m==='update'?'弹出终端窗口运行同一条更新命令,可看到完整输出、回答提问'
+                                    :'弹出终端窗口运行同一条官方安装命令;安装脚本有提问(如需要先装 Node.js)时可在终端里回答');
 }
 function engErrText(msg,info){   // 服务端 detail 代号 → 界面文案
   if(msg==='local_only')return t('一键安装与登录只能在运行本服务的电脑上操作');
   if(String(msg).startsWith('terminal_unavailable'))return t('无法打开终端窗口,请在本机终端手动运行下面的命令');
   if(msg==='not_installed')return I18N.f('仍未检测到 {bin} 命令',{bin:info.bin});
+  if(msg==='busy')return I18N.f('有任务正在使用 {cli};Windows 上程序运行中无法替换,请等任务结束后再更新',{cli:info.cli});
   return t('操作失败:')+msg;
 }
 function engRender(engine,r){
   const info=ENGINE_CLI[engine];
-  ENG.engine=engine;ENG.av=r;
+  ENG.engine=engine;ENG.av=r;engSetMode('setup');
   const local=!!r.local_backend;
   $('#eng-err').textContent='';$('#eng-status').textContent='';
   $('#eng-log').style.display='none';
@@ -2376,14 +2385,18 @@ function engHintText(hint){
           network:t('无法连接官方下载地址,请检查网络或代理(设置 → 高级 → 网络检测 可查看命令行环境能否访问)。'),
           node:t('需要 Node.js 22.19 或更新版本:点「在终端中安装」,安装脚本会询问是否代为安装 Node.js;也可先到 nodejs.org 安装。')}[hint]||'';
 }
-function engShowInstall(engine,s){
-  if(!s||engine!==ENG.engine)return;
-  const info=ENGINE_CLI[engine],log=$('#eng-log');
+function engShowLog(s){
+  const log=$('#eng-log');
   if(s.log&&s.log.length){
     const atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<24;
     log.textContent=s.log.join('\n');log.style.display='';
     if(atBottom||s.state!=='running')log.scrollTop=log.scrollHeight;
   }
+}
+function engShowInstall(engine,s){
+  if(!s||engine!==ENG.engine)return;
+  const info=ENGINE_CLI[engine];
+  engShowLog(s);
   if(s.state==='running'){
     let st=I18N.f('正在安装 {cli}… 已用 {s} 秒',{cli:info.cli,s:Math.round(s.elapsed_s||0)});
     if(s.downloaded_bytes>0)st+=' · '+I18N.f('已下载 {mb} MB',{mb:(s.downloaded_bytes/1048576).toFixed(1)});
@@ -2425,12 +2438,12 @@ async function engAfterInstalled(engine){   // 装好 → 查登录:未登录切
   engShowButtons({});
   setTimeout(()=>{if(ENG.engine===engine)engClose()},1500);
 }
-function engWait(engine,done,limitS,waitingKey){   // 轮询 availability 直到 done(r) 或超时
+function engWait(engine,done,limitS,waitingKey,tail='availability',onDone=engWaitDone){   // 轮询 availability(或 version)直到 done(r) 或超时
   engStop();ENG.waitStart=Date.now();
   const tick=async()=>{
     if(engine!==ENG.engine||$('#eng-modal').style.display==='none')return;
-    let r=null;try{r=await api(engApi(engine,'availability'))}catch(e){}
-    if(r&&done(r)){engWaitDone(engine,r);return}
+    let r=null;try{r=await api(engApi(engine,tail))}catch(e){}
+    if(r&&done(r)){onDone(engine,r);return}
     const sec=Math.round((Date.now()-ENG.waitStart)/1000);
     if(sec>limitS){$('#eng-status').textContent=t('等待超时;完成后请点「重新检测」');return}
     $('#eng-status').textContent=I18N.f(waitingKey,{s:sec});
@@ -2455,7 +2468,7 @@ async function checkAgenticsEngine(){
   if(r.available&&r.logged_in!==false)return;
   if($('#engine').value!=='deepagents')return;   // 检测期间用户又切了引擎
   engStop();
-  ENG.engine='deepagents';ENG.av=r;
+  ENG.engine='deepagents';ENG.av=r;engSetMode('setup');
   $('#eng-err').textContent='';$('#eng-status').textContent='';
   $('#eng-log').style.display='none';$('#eng-cmd').style.display='none';
   const bridge=desktopAuthBridge();
@@ -2478,14 +2491,113 @@ async function checkEngineCli(engine){
   let r;
   try{r=await api(engApi(engine,'availability'))}
   catch(e){return}   // 检测接口异常不打扰用户,真缺命令时派单日志会报错
-  if(r.available&&r.logged_in!==false)return;
+  if(r.available&&r.logged_in!==false){checkEngineVersion(engine);return}
   if($('#engine').value!==engine)return;   // 检测期间用户又切了引擎
   engStop();
   $('#eng-install').disabled=false;
   engRender(engine,r);
   $('#eng-modal').style.display='flex';
 }
-$('#eng-close').onclick=engClose;
+/* ---------- 引擎 CLI 版本检查 + 一键更新(2026-11-11)----------
+   checkEngineCli 判定已装好、已登录后接着问 /version:本机版本落后官方最新版即弹窗(同一个 #eng-modal,
+   ENG.mode='update')。查不到最新版本(断网等)不打扰。「暂不更新」= 本浏览器 24 小时内同一引擎、同一最新版本
+   不再提示;「一键更新」= 服务端后台跑该 CLI 自带的更新命令(Windows 上 npm 装的改为 npm install -g;
+   Windows 上有任务正在用该引擎时不能更新——运行中的程序文件被系统锁住),失败可「在终端中更新」。 */
+const ENG_SNOOZE_KEY='eng_update_snooze',ENG_SNOOZE_MS=24*3600*1000;
+function engSnoozeAll(){try{return JSON.parse(localStorage.getItem(ENG_SNOOZE_KEY)||'{}')||{}}catch(e){return {}}}
+function engSnoozed(engine,latest){const s=engSnoozeAll()[engine];return !!(s&&s.v===latest&&Date.now()<s.until)}
+function engSnooze(engine,latest){
+  try{const all=engSnoozeAll();all[engine]={v:latest,until:Date.now()+ENG_SNOOZE_MS};localStorage.setItem(ENG_SNOOZE_KEY,JSON.stringify(all))}catch(e){}
+}
+async function checkEngineVersion(engine){
+  const info=ENGINE_CLI[engine];if(!info)return;
+  let r;
+  try{r=await api(engApi(engine,'version'))}
+  catch(e){return}   // 版本检查失败不打扰
+  const running=!!(r.update&&r.update.state==='running');
+  if(!r.outdated&&!running)return;
+  if($('#engine').value!==engine||$('#eng-modal').style.display==='flex')return;   // 用户又切了引擎 / 弹窗已被占用
+  if(!running&&engSnoozed(engine,r.latest))return;
+  engStop();
+  engRenderUpdate(engine,r);
+  $('#eng-modal').style.display='flex';
+  if(running){engShowUpdate(engine,r.update);engPollUpdate(engine)}
+}
+function engRenderUpdate(engine,r){
+  const info=ENGINE_CLI[engine],local=!!r.local_backend;
+  ENG.engine=engine;ENG.av=null;ENG.ver=r;ENG.uState='';engSetMode('update');
+  $('#eng-err').textContent='';$('#eng-status').textContent='';
+  $('#eng-log').style.display='none';
+  $('#eng-title').textContent='⬆️ '+I18N.f('{cli} 有新版本',{cli:info.cli});
+  const canUpdate=local&&!r.update_unsupported;
+  $('#eng-note').innerHTML=esc(I18N.f('当前版本 {cur},最新版本 {latest}。',{cur:r.installed,latest:r.latest}))+'<br>'
+    +esc(canUpdate?I18N.f('点「一键更新」会在后台运行 {cli} 自带的更新命令:',{cli:info.cli}):t('请在本机终端运行下面的命令更新:'));
+  const cmd=$('#eng-cmd');
+  cmd.textContent=r.update_command||'';cmd.style.display=r.update_command?'':'none';
+  engShowButtons({update:canUpdate});
+  const btn=$('#eng-update');btn.textContent=t('一键更新');btn.disabled=!!r.busy_blocks;
+  if(r.busy_blocks)$('#eng-err').textContent=engErrText('busy',info);
+  else if(r.busy_runs>0)$('#eng-status').textContent=I18N.f('有 {n} 个任务正在使用 {cli}:它们会用旧版本跑完,之后的新任务用新版本',{n:r.busy_runs,cli:info.cli});
+}
+function engUpdateReasonText(s){
+  const m={
+    exit:I18N.f('更新命令失败(退出码 {code})',{code:s.exit_code!=null?s.exit_code:'?'}),
+    timeout:I18N.f('更新超时(超过 {m} 分钟)已中止',{m:Math.round((s.timeout_s||3600)/60)}),
+    stalled:I18N.f('更新命令 {m} 分钟没有任何进展(无输出、下载也不再增长),已中止',{m:Math.round((s.stall_s||600)/60)}),
+    unchanged:I18N.f('更新命令已结束,但版本号没有变化(仍为 {v});请查看上面的日志,或点「在终端中更新」',{v:s.version||'?'}),
+    spawn_failed:t('无法启动更新命令'),
+  };
+  return m[s.reason]||s.reason||'';
+}
+function engShowUpdate(engine,s){
+  if(!s||engine!==ENG.engine||ENG.mode!=='update')return;
+  const info=ENGINE_CLI[engine],btn=$('#eng-update');
+  ENG.uState=s.state;
+  engShowLog(s);
+  if(s.state==='running'){
+    let st=I18N.f('正在更新 {cli}… 已用 {s} 秒',{cli:info.cli,s:Math.round(s.elapsed_s||0)});
+    if(s.downloaded_bytes>0)st+=' · '+I18N.f('已下载 {mb} MB',{mb:(s.downloaded_bytes/1048576).toFixed(1)});
+    $('#eng-status').textContent=st;$('#eng-err').textContent='';
+    btn.disabled=true;$('#eng-term').style.display='none';
+    $('#eng-close').textContent=t('关闭');   // 已在更新:关窗不等于「暂不更新」,任务在后台继续
+  }else if(s.state==='error'){
+    $('#eng-status').textContent='';$('#eng-close').textContent=t('暂不更新');
+    $('#eng-err').textContent=[engUpdateReasonText(s),engHintText(s.hint)].filter(Boolean).join(' ');
+    btn.disabled=false;btn.textContent=t('重试');
+    if(ENG.ver&&ENG.ver.local_backend)$('#eng-term').style.display='';
+  }else if(s.state==='ok')engUpdateDone(engine,s.version);
+}
+function engUpdateDone(engine,v){
+  ENG.uState='ok';$('#eng-err').textContent='';$('#eng-close').textContent=t('关闭');
+  $('#eng-status').textContent='✅ '+I18N.f('{cli} 已更新到 {v}',{cli:ENGINE_CLI[engine].cli,v:v||''});
+  engShowButtons({});
+  setTimeout(()=>{if(ENG.engine===engine&&ENG.mode==='update')engClose()},2500);
+}
+function engPollUpdate(engine){
+  engStop();
+  const tick=async()=>{
+    if(engine!==ENG.engine||ENG.mode!=='update'||$('#eng-modal').style.display==='none')return;
+    let s=null;try{s=(await api(engApi(engine,'update'))).update}catch(e){}
+    engShowUpdate(engine,s);
+    if(s&&s.state==='running')ENG.timer=setTimeout(tick,1500);
+  };
+  tick();
+}
+$('#eng-update').onclick=async()=>{
+  const engine=ENG.engine,info=ENGINE_CLI[engine];
+  $('#eng-err').textContent='';$('#eng-term').style.display='none';
+  $('#eng-update').disabled=true;
+  try{
+    const r=await api(engApi(engine,'update'),{mode:'background'});
+    engShowUpdate(engine,r.update);
+    if(r.update&&r.update.state==='running')engPollUpdate(engine);
+  }catch(e){$('#eng-update').disabled=false;$('#eng-err').textContent=engErrText(e.message,info)}
+};
+$('#eng-close').onclick=()=>{
+  // 「暂不更新」:24 小时内同一最新版本不再提示(正在更新 / 已更新完则不记)
+  if(ENG.mode==='update'&&ENG.ver&&!['running','ok'].includes(ENG.uState))engSnooze(ENG.engine,ENG.ver.latest);
+  engClose();
+};
 $('#eng-install').onclick=async()=>{
   const engine=ENG.engine,info=ENGINE_CLI[engine];
   $('#eng-err').textContent='';$('#eng-term').style.display='none';
@@ -2499,6 +2611,17 @@ $('#eng-install').onclick=async()=>{
 };
 $('#eng-term').onclick=async()=>{
   const engine=ENG.engine,info=ENGINE_CLI[engine];
+  if(ENG.mode==='update'){
+    const before=ENG.ver?ENG.ver.installed:'';
+    try{
+      await api(engApi(engine,'update'),{mode:'terminal'});
+      $('#eng-err').textContent='';
+      $('#eng-status').textContent=t('已在终端窗口中运行更新命令;完成后这里会自动检测。');
+      engWait(engine,r=>r.installed&&r.installed!==before,1800,'等待终端里的更新完成… 已等待 {s} 秒','version',
+              (e,r)=>engUpdateDone(e,r.installed));
+    }catch(e){$('#eng-err').textContent=engErrText(e.message,info)}
+    return;
+  }
   try{
     await api(engApi(engine,'install'),{mode:'terminal'});
     $('#eng-err').textContent='';
@@ -2524,6 +2647,19 @@ $('#eng-login').onclick=async()=>{
 };
 $('#eng-recheck').onclick=async()=>{
   const engine=ENG.engine,info=ENGINE_CLI[engine];
+  if(ENG.mode==='update'&&info){
+    let r=null;try{r=await api(engApi(engine,'version')+'?refresh=true')}catch(e){}
+    if(!r){engClose();return}
+    if(!r.outdated){
+      engStop();engShowButtons({});$('#eng-err').textContent='';
+      $('#eng-status').textContent='✅ '+I18N.f('{cli} 已是最新版本 {v}',{cli:info.cli,v:r.installed||''});
+      setTimeout(()=>{if(ENG.engine===engine&&ENG.mode==='update')engClose()},1500);
+      return;
+    }
+    const log=$('#eng-log').style.display;engRenderUpdate(engine,r);$('#eng-log').style.display=log;
+    if(!r.busy_blocks)$('#eng-err').textContent=I18N.f('仍是旧版本 {v}',{v:r.installed});
+    return;
+  }
   if(engine==='deepagents'){engClose();checkAgenticsEngine();return}
   if(!info){engClose();return}
   let r=null;try{r=await api(engApi(engine,'availability'))}catch(e){}

@@ -284,7 +284,7 @@ Open source. Runs locally. Bring your own engine and provider accounts. The desk
 | Windows (x64)         | [VideoAgents.zip](https://s3.agentics.world/packages/video-agents/win/VideoAgents.zip)    |
 
 1. **Download, unzip and open the app.** The package does not include Python; on first launch the app downloads its own runtime.
-2. **Pick an agent engine in the top bar.** If that CLI is missing or not signed in, a setup dialog installs it with its official script and opens its own login in a terminal.
+2. **Pick an agent engine in the top bar.** If that CLI is missing or not signed in, a setup dialog installs it with its official script and opens its own login in a terminal. If it is installed but behind the latest release, the dialog offers **One-click update**, which runs the CLI's own update command, or **Not now**.
 3. **Add your providers.** In ⚙️ Settings → Generation Models, enter credentials for the image, video and audio services you plan to use.
 4. **Create a project — your first world — and import your novel.** The crew starts with the world bible and stops at each sign-off gate for your approval.
 

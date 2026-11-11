@@ -50,6 +50,7 @@ from modules import refusal_judge as _refusal_judge
 from services.runtime import rhythm as narrative_rhythm
 from services.runtime import project_types
 from services.runtime import engine_setup
+from services.runtime import engine_version
 from services.runtime import opencode_cli
 from services.runtime import run_steer
 from services.runtime import dagcheck
@@ -18406,6 +18407,65 @@ def _engine_open_terminal(name: str, script: str, extra_env: dict | None):
         raise ServiceError(501, f"terminal_unavailable: {e}") from None
     except OSError as e:
         raise ServiceError(500, f"terminal_failed: {e}") from None
+
+
+# ---------------- 引擎 CLI 版本检查 + 一键更新(2026-11-11,见 engine_version)----------------
+def _engine_busy_runs(engine: str) -> int:
+    """正在用该引擎跑的任务数(子进程还活着的 run)。"""
+    return sum(1 for rid, proc in list(RUN_PROCS.items())
+               if getattr(proc, "returncode", None) is None and (RUNS.get(rid) or {}).get("engine") == engine)
+
+
+async def api_engine_version(engine: str, refresh: bool = False):
+    """本机 CLI 版本与官方最新版本(顶栏切到该引擎且已装好、已登录后前端调用)。
+    查不到最新版本(断网、发布地址变了)时 error 非空、outdated=False,前端不打扰。
+    busy_blocks:Windows 上有任务正在用该引擎时不能更新(运行中的 .exe 被锁)。"""
+    engine = _engine_setup_engine(engine)
+    exe = await asyncio.to_thread(resolve_cli_executable, engine)
+    busy = _engine_busy_runs(engine)
+    out = {"engine": engine, "label": CLI_LABELS[engine], "available": bool(exe),
+           "platform": engine_version.PLATFORM, "busy_runs": busy,
+           "busy_blocks": bool(busy and engine_version.BUSY_BLOCKS),
+           "update": engine_version.update_snapshot(engine)}
+    if not exe:
+        return {**out, "installed": "", "latest": "", "channel": "", "outdated": False, "error": "not_installed",
+                "update_command": "", "update_method": "", "update_unsupported": ""}
+    info = await asyncio.to_thread(engine_version.check, engine, exe, refresh)
+    plan = await asyncio.to_thread(engine_version.update_plan, engine, exe, engine_version.IS_WIN,
+                                   info["installed"])
+    return {**out, **info, "update_command": plan.get("display", ""), "update_method": plan.get("method", ""),
+            "update_unsupported": plan.get("unsupported", "")}
+
+
+async def api_engine_update(engine: str, body: dict | None = None):
+    """一键更新:mode=background(默认)后台跑该 CLI 自带的更新命令(Windows 上 npm 装的直接 npm install -g),
+    前端轮询 GET 取进度;mode=terminal 弹出终端跑同一条命令。Windows 上有任务正在用该引擎时 409 busy。"""
+    engine = _engine_setup_engine(engine)
+    body = body or {}
+    exe = await asyncio.to_thread(resolve_cli_executable, engine)
+    if not exe:
+        raise ServiceError(409, "not_installed")
+    if engine_version.BUSY_BLOCKS and _engine_busy_runs(engine):
+        raise ServiceError(409, "busy")
+    before = await asyncio.to_thread(engine_version.installed_version, exe)
+    plan = await asyncio.to_thread(engine_version.update_plan, engine, exe, engine_version.IS_WIN, before)
+    if plan.get("unsupported"):
+        raise ServiceError(400, plan["unsupported"])
+    if (body.get("mode") or "background") == "terminal":
+        zh = (ui_lang_code() or "zh") == "zh"
+        script = engine_setup.terminal_script(
+            engine_setup.update_lines(CLI_LABELS[engine], plan["display"], zh),
+            plan["terminal_line"], zh, path_dirs=_engine_terminal_path_dirs(exe))
+        await asyncio.to_thread(_engine_open_terminal, f"update-{engine}", script, plan.get("env"))
+        return {"engine": engine, "mode": "terminal", "opened": True, "previous": before}
+    snap = await asyncio.to_thread(engine_version.start_update, engine, plan,
+                                   lambda: resolve_cli_executable(engine), before)
+    return {"engine": engine, "mode": "background", "update": snap}
+
+
+async def api_engine_update_status(engine: str):
+    engine = _engine_setup_engine(engine)
+    return {"engine": engine, "update": engine_version.update_snapshot(engine)}
 
 
 async def api_projects():

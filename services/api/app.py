@@ -1013,6 +1013,26 @@ async def engine_login(engine: str, request: Request, body: dict[str, Any]) -> d
     return await core.api_engine_login(engine)
 
 
+@api.get("/engines/{engine}/version", tags=["configuration"])
+async def engine_version_check(engine: str, request: Request, refresh: bool = False) -> dict[str, Any]:
+    """执行引擎 CLI 本机版本 vs 官方最新版本(最新版本缓存 6 小时,refresh=true 重查)。"""
+    out = await core.api_engine_version(engine, refresh)
+    out["local_backend"] = _is_local_request(request)   # 一键更新只对本机开放
+    return out
+
+
+@api.post("/engines/{engine}/update", tags=["configuration"])
+async def engine_update(engine: str, request: Request, body: dict[str, Any]) -> dict[str, Any]:
+    """一键更新执行引擎 CLI(该 CLI 自带的更新命令;mode=terminal 改为弹出终端运行)。仅本机。"""
+    _require_local(request)
+    return await core.api_engine_update(engine, body)
+
+
+@api.get("/engines/{engine}/update", tags=["configuration"])
+async def engine_update_status(engine: str) -> dict[str, Any]:
+    return await core.api_engine_update_status(engine)
+
+
 @api.get("/engines/pi/models", tags=["configuration"])
 async def pi_models(refresh: bool = False) -> dict[str, Any]:
     return await core.api_pi_models(refresh)

@@ -12,6 +12,8 @@
 3. 登录状态:各家官方状态命令(claude auth status / codex login status)或凭证文件,
    前端轮询到已登录即关窗。判断不了(如改用自定义渠道 Key)返回 None,前端不打扰。
 
+版本检查与一键更新见 engine_version(后台任务复用本模块的 start_job)。
+
 文案由前端按界面语言出(本模块只回 reason / hint 代号);终端窗口里的提示行按
 zh 参数出中/英。仅本机后端可调(API 层按请求来源拦截)。
 """
@@ -217,20 +219,25 @@ _JOBS: dict[str, dict] = {}
 _LOCK = threading.Lock()
 
 
-def install_snapshot(engine: str) -> dict | None:
+def job_snapshot(key: str) -> dict | None:
+    """后台任务进度(安装任务 key = 引擎 id;更新任务见 engine_version.job_key)。"""
     with _LOCK:
-        job = _JOBS.get(engine)
+        job = _JOBS.get(key)
         if not job:
             return None
-        out = {k: v for k, v in job.items() if k not in ("lines", "proc", "last_output")}
+        out = {k: v for k, v in job.items() if k not in ("lines", "proc", "last_output", "key")}
         out["log"] = list(job["lines"])
         now = job.get("ended") or time.time()
         out["elapsed_s"] = round(now - job["started"], 1)
         out["quiet_s"] = round(now - job["last_output"], 1)    # 距上次输出的秒数(前端据此提示「下载中请耐心」)
     if out["state"] == "running":
-        out["downloaded_bytes"] = downloaded_bytes(engine, out["started"], out.get("tmpdir"))
+        out["downloaded_bytes"] = downloaded_bytes(out["engine"], out["started"], out.get("tmpdir"))
     out.pop("tmpdir", None)
     return out
+
+
+def install_snapshot(engine: str) -> dict | None:
+    return job_snapshot(engine)
 
 
 def downloaded_bytes(engine: str, since: float, tmpdir: str | None = None) -> int | None:
@@ -253,27 +260,37 @@ def downloaded_bytes(engine: str, since: float, tmpdir: str | None = None) -> in
     return best
 
 
-def start_install(engine: str, resolve: Callable[[], str | None],
-                  timeout_s: int = INSTALL_TIMEOUT_S, plan: dict | None = None,
-                  stall_s: int = INSTALL_STALL_S) -> dict:
-    """起后台安装;同一引擎已在装则直接返回当前进度(不重复起)。"""
-    plan = plan or install_plan(engine)
+def start_job(key: str, engine: str, plan: dict, on_success: Callable[[], dict],
+              timeout_s: int = INSTALL_TIMEOUT_S, stall_s: int = INSTALL_STALL_S) -> dict:
+    """起后台任务(一键安装 / 一键更新共用);同一 key 在跑则直接返回当前进度(不重复起)。
+    命令退出码为 0 时调 on_success(),返回的 {state: ok|error, …} 并入任务。"""
     with _LOCK:
-        cur = _JOBS.get(engine)
+        cur = _JOBS.get(key)
         if not (cur and cur["state"] == "running"):
-            job = {"engine": engine, "state": "running", "started": time.time(), "ended": None,
+            job = {"key": key, "engine": engine, "state": "running", "started": time.time(), "ended": None,
                    "exit_code": None, "reason": "", "hint": "", "path": "",
                    "command": plan.get("display", ""), "timeout_s": timeout_s, "stall_s": stall_s,
                    "last_output": time.time(),
                    "lines": deque(maxlen=LOG_LINES), "proc": None}
-            _JOBS[engine] = job
+            _JOBS[key] = job
             if plan.get("unsupported"):
                 job.update(state="error", reason=plan["unsupported"], ended=time.time(),
                            hint="node" if plan["unsupported"] == "need_node" else "")
             else:
-                threading.Thread(target=_run_install, args=(job, plan, resolve, timeout_s, stall_s),
-                                 name=f"engine-install-{engine}", daemon=True).start()
-    return install_snapshot(engine)
+                threading.Thread(target=_run_install, args=(job, plan, on_success, timeout_s, stall_s),
+                                 name=f"engine-job-{key}", daemon=True).start()
+    return job_snapshot(key)
+
+
+def start_install(engine: str, resolve: Callable[[], str | None],
+                  timeout_s: int = INSTALL_TIMEOUT_S, plan: dict | None = None,
+                  stall_s: int = INSTALL_STALL_S) -> dict:
+    """起后台安装;同一引擎已在装则直接返回当前进度(不重复起)。"""
+    def found() -> dict:
+        path = resolve() or ""
+        return ({"state": "ok", "path": path} if path else
+                {"state": "error", "reason": "not_found_after_install", "hint": ""})
+    return start_job(engine, engine, plan or install_plan(engine), found, timeout_s, stall_s)
 
 
 def _kill(proc: subprocess.Popen):
@@ -286,7 +303,7 @@ def _kill(proc: subprocess.Popen):
         pass
 
 
-def _run_install(job: dict, plan: dict, resolve: Callable[[], str | None], timeout_s: int,
+def _run_install(job: dict, plan: dict, on_success: Callable[[], dict], timeout_s: int,
                  stall_s: int = INSTALL_STALL_S):
     kw: dict = {}
     if IS_WIN:
@@ -365,9 +382,10 @@ def _run_install(job: dict, plan: dict, resolve: Callable[[], str | None], timeo
     elif code != 0:
         result = {"state": "error", "reason": "exit", "hint": diagnose(log, code, engine)}
     else:
-        path = resolve() or ""
-        result = ({"state": "ok", "path": path} if path else
-                  {"state": "error", "reason": "not_found_after_install", "hint": ""})
+        try:
+            result = on_success()
+        except Exception as e:   # 收尾检查出错也要结束任务,不能一直挂在「运行中」
+            result = {"state": "error", "reason": "check_failed", "hint": "", "error": str(e)[:300]}
     with _LOCK:
         job.update(ended=time.time(), proc=None, tmpdir=None, **result)
 
@@ -502,6 +520,8 @@ _TEXT = {
         "login_antigravity": "agy 启动后按引导用 Google 账号登录(浏览器授权);进入对话界面后输入 /exit 退出。",
         "install_title": "VideoAgents · 安装 {label}",
         "install_note": "正在运行官方安装命令;如脚本提问,请在此窗口回答。安装完成后回到 VideoAgents 窗口点「重新检测」。",
+        "update_title": "VideoAgents · 更新 {label}",
+        "update_note": "正在运行更新命令;如有提问,请在此窗口回答。完成后回到 VideoAgents 窗口,会自动检测新版本。",
         "ok": "完成。可以关闭此窗口,回到 VideoAgents。",
         "fail": "命令以退出码 {code} 结束;请查看上面的输出。",
         "pause": "按回车键关闭此窗口…",
@@ -514,6 +534,8 @@ _TEXT = {
         "login_antigravity": "Once agy starts, follow the setup to sign in with your Google account (browser authorization). When the chat screen appears, type /exit to quit.",
         "install_title": "VideoAgents · Install {label}",
         "install_note": "Running the official install command. Answer any questions the script asks in this window, then go back to VideoAgents and click \"Re-check\".",
+        "update_title": "VideoAgents · Update {label}",
+        "update_note": "Running the update command. Answer any questions it asks in this window; VideoAgents detects the new version automatically when it finishes.",
         "ok": "Done. You can close this window and return to VideoAgents.",
         "fail": "The command exited with code {code}; see the output above.",
         "pause": "Press Enter to close this window…",
@@ -566,6 +588,11 @@ def login_lines(engine: str, label: str, zh: bool) -> list[str]:
 def install_lines(label: str, display: str, zh: bool) -> list[str]:
     t = _TEXT["zh" if zh else "en"]
     return [t["install_title"].format(label=label), "", t["install_note"], "", "$ " + display]
+
+
+def update_lines(label: str, display: str, zh: bool) -> list[str]:
+    t = _TEXT["zh" if zh else "en"]
+    return [t["update_title"].format(label=label), "", t["update_note"], "", "$ " + display]
 
 
 def login_command_line(engine: str, exe: str, windows: bool = IS_WIN) -> str:

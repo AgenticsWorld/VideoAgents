@@ -61,6 +61,8 @@ macOS 桌面端从 Finder 启动时会读取用户登录 Shell 的 `PATH`，并�
 
 顶栏切到某个 CLI 引擎（或开屏）时若检测到命令未安装或未登录，会弹出引导窗口：「一键安装」在后台运行该 CLI 的官方安装命令（`curl -fsSL <官方脚本> | bash`，Windows 为 `irm <官方脚本> | iex`；OpenCode 装 OpenCode 2：`https://opencode.ai/v2/install`，Windows 上走 `npm install -g @opencode/cli`），日志实时显示，失败可「在终端中安装」以便回答脚本的交互提问；装好后「登录」会弹出终端窗口运行该 CLI 自己的登录命令（如 `claude auth login`、`codex login`、`kimi login`），用户在浏览器中用自己的账号授权，程序轮询到已登录即关窗，全程不经手令牌。安装子进程不带本程序与各渠道的密钥环境变量；一键安装与登录只对本机访问开放。
 
+已装好、已登录时接着检查版本（`GET /api/v1/engines/<engine>/version`）：本机版本取 `<cli> --version`，最新版本取各家官方安装脚本所用的发布地址（Claude Code 按 `settings.json` 的 `autoUpdatesChannel` 取 latest / stable 渠道，Grok 用 `grok update --check --json`），缓存 6 小时、查询失败 15 分钟内不重试，查不到就不提示。本机落后时弹窗：「暂不更新」在本浏览器 24 小时内不再提示同一版本；「一键更新」在后台运行该 CLI 自带的更新命令（`claude update`、`codex update`、`kimi upgrade --yes`、`pi update --self`、`opencode upgrade`、`grok update`、`agy update`，它们自己认得安装方式），日志实时显示，跑完重测版本号，没变（如 Homebrew 装的提示改用 `brew upgrade`）按失败报并可「在终端中更新」。Windows 与 macOS 不同：Windows 上运行中的 `.exe` 被系统锁住，npm 全局装的 CLI 改为直接 `npm install -g <包>@latest`，有任务正在用该引擎时不能更新；macOS / Linux 允许更新，在跑的任务用旧版跑完。一键更新同样只对本机访问开放。
+
 ### 运行中插话(Ctrl+Enter)
 
 控制台输入框按 Enter 是新建一单(同一 Agent 上一单没跑完就排队);按 Ctrl+Enter(macOS 也可 ⌘+Enter)
