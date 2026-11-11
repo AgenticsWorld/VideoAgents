@@ -5129,4 +5129,6 @@ window.I18N_DICT = {
 "等待终端里的更新完成… 已等待 {s} 秒": "Đang chờ cập nhật trong terminal hoàn tất… {s} giây",
 "{cli} 已是最新版本 {v}": "{cli} đã là phiên bản mới nhất ({v})",
 "仍是旧版本 {v}": "Vẫn là phiên bản cũ {v}",
+"更多": "Thêm",
+"显示更多项目类型:音频配画、混剪": "Hiện thêm loại dự án: Minh họa âm thanh, Cắt ghép",
 };

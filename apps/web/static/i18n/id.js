@@ -5129,4 +5129,6 @@ window.I18N_DICT = {
 "等待终端里的更新完成… 已等待 {s} 秒": "Menunggu pembaruan di terminal selesai… {s} dtk",
 "{cli} 已是最新版本 {v}": "{cli} sudah versi terbaru ({v})",
 "仍是旧版本 {v}": "Masih versi lama {v}",
+"更多": "Lainnya",
+"显示更多项目类型:音频配画、混剪": "Tampilkan jenis proyek lainnya: Visual untuk audio, Mashup",
 };

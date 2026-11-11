@@ -5121,4 +5121,6 @@ window.I18N_DICT = {
 "等待终端里的更新完成… 已等待 {s} 秒": "Waiting for the update in the terminal to finish… {s} s",
 "{cli} 已是最新版本 {v}": "{cli} is up to date ({v})",
 "仍是旧版本 {v}": "Still on the old version {v}",
+"更多": "More",
+"显示更多项目类型:音频配画、混剪": "Show more project types: Audio to video, Mashup",
 };

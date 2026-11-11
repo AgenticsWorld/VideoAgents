@@ -171,7 +171,9 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 .np-step{display:flex;flex-direction:column;gap:12px}
 /* 新建向导第一步「项目类型」(2026-10-20):四张图标卡 + 选中类型的说明;.np-hide 由 npApplyType 按 data-np-types 加,
    用类而不是 style.display,免得与各行自身的显隐逻辑(白模/背景图模式等)互相覆盖 */
-.np-types{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.np-types{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+/* 「更多」收起的类型(音频配画、混剪):第一行末尾的「更多」卡点开后,下一行以小按钮列出 */
+.np-types-more{display:flex;flex-wrap:wrap;gap:8px;margin-top:-2px}
 /* 动效短片风格画廊(2026-10-20,apps/web/static/styles/code/code_styles.json,lemo-opuscar 完整风格;2026-10-28 起 59 个) */
 #np-cs-cats{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 #np-cs-sets{display:flex;gap:6px}
@@ -188,8 +190,14 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#0b1020
 #np-cs-picked{font-size:13px;line-height:1.7}
 #np-cs-picked .film{color:var(--dim);font-size:12px}
 .np-type{display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 6px 12px;border:1px solid var(--border);border-radius:10px;background:var(--panel);color:var(--text);cursor:pointer}
-.np-type:hover{border-color:var(--dim)}
+.np-more{display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 6px 12px;border:1px dashed var(--border);border-radius:10px;background:transparent;color:var(--dim);cursor:pointer}
+.np-type:hover,.np-more:hover{border-color:var(--dim)}
 .np-type.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.np-more.open{border-style:solid;color:var(--text)}
+.np-more.active{border-style:solid;border-color:var(--accent);color:var(--text)}   /* 选中的是「更多」里的类型 */
+.np-type.np-type-sm{flex-direction:row;gap:6px;padding:6px 12px;border-radius:8px}
+.np-type-sm .np-type-ico{font-size:16px}
+.np-type-sm .np-type-nm{font-size:12.5px}
 .np-type-ico{font-size:30px;line-height:1}
 .np-type-nm{font-size:13px}
 .np-type-desc{font-size:13px;line-height:1.7;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
@@ -513,12 +521,16 @@ a.hdr-icon:hover{border-color:var(--accent)}
     <h3>🆕 新建项目 — <span id="np-step-label" style="color:var(--accent)"></span></h3>
     <!-- 项目类型(2026-10-20,services/runtime/project_types.py):第一步选类型,后续步骤与字段按类型增减(data-np-types 列出适用类型) -->
     <div class="np-step" data-step="type">
+      <!-- 2026-11-11:音频配画、混剪默认收在「更多」里,点开后在下一行以小按钮列出 -->
       <div class="np-types">
         <button type="button" class="np-type" data-type="film"><span class="np-type-ico">🎬</span><span class="np-type-nm">影视剧</span></button>
-        <button type="button" class="np-type" data-type="audio-to-video"><span class="np-type-ico">🎙️</span><span class="np-type-nm">音频配画</span></button>
         <button type="button" class="np-type" data-type="digital-human"><span class="np-type-ico">🧑‍💼</span><span class="np-type-nm">数字人</span></button>
-        <button type="button" class="np-type" data-type="mashup"><span class="np-type-ico">✂️</span><span class="np-type-nm">混剪</span></button>
         <button type="button" class="np-type" data-type="code-video"><span class="np-type-ico">🖥️</span><span class="np-type-nm">动效短片</span></button>
+        <button type="button" class="np-more" id="np-more" aria-expanded="false" aria-controls="np-types-more" title="显示更多项目类型:音频配画、混剪"><span class="np-type-ico">⋯</span><span class="np-type-nm">更多</span></button>
+      </div>
+      <div class="np-types-more" id="np-types-more" style="display:none">
+        <button type="button" class="np-type np-type-sm" data-type="audio-to-video"><span class="np-type-ico">🎙️</span><span class="np-type-nm">音频配画</span></button>
+        <button type="button" class="np-type np-type-sm" data-type="mashup"><span class="np-type-ico">✂️</span><span class="np-type-nm">混剪</span></button>
       </div>
       <div class="np-type-desc" data-np-types="film">
         <div>把小说改编成多集视频:剧情理解 → 世界观与角色 → 美术 → 剧本 → 分镜 → 视频生成 → 配音配乐 → 剪辑,关键节点停下来等你签字。</div>
@@ -1793,9 +1805,17 @@ const NP_CLONE_BRIEF_PH='说明每个说话人用哪张照片、哪段声音,如
 const NP_MAX_FILE=100*1024*1024;   // 与服务端参考文件上传上限 MAX_REF_UPLOAD 一致
 let NP_TYPE='film',NP_STEP=1;
 const npSteps=()=>NP_TYPE_STEPS[NP_TYPE]||NP_TYPE_STEPS.film;
+function npShowMore(open){
+  $('#np-types-more').style.display=open?'':'none';
+  $('#np-more').classList.toggle('open',open);
+  $('#np-more').setAttribute('aria-expanded',open?'true':'false');
+}
 function npApplyType(type){
   NP_TYPE=NP_TYPE_STEPS[type]?type:'film';
   document.querySelectorAll('#np-modal .np-type').forEach(b=>b.classList.toggle('active',b.dataset.type===NP_TYPE));
+  const inMore=!!document.querySelector('#np-types-more .np-type[data-type="'+NP_TYPE+'"]');
+  $('#np-more').classList.toggle('active',inMore);
+  if(inMore)npShowMore(true);
   const clone=npCloneVoice();
   document.querySelectorAll('#np-modal [data-np-types]').forEach(el=>
     el.classList.toggle('np-hide',!el.dataset.npTypes.split(' ').includes(NP_TYPE)
@@ -1825,6 +1845,7 @@ async function npCloneHint(){
   box.style.display=ok?'none':'';
 }
 document.querySelectorAll('#np-modal .np-type').forEach(b=>b.onclick=()=>{npApplyType(b.dataset.type);npShowStep(NP_STEP)});   // 总步数随类型变
+$('#np-more').onclick=()=>npShowMore($('#np-types-more').style.display==='none');
 // 讲述音频 / 人物照片:先只在本地选好,创建项目后逐个传进 refs/(defer_init → references → init)
 function npPickedText(id){
   const fs=[...$('#'+id).files];
@@ -2088,6 +2109,7 @@ function openNpModal(){
   NP_CS='';NP_CS_CAT='';NP_CS_SET='full';$('#npcv-len').value=45;$('#npcv-fps').value='24';npcvFpsHint(false);$('#npcv-narr').checked=true;$('#npcv-subs').checked=true;
   $('#npcv-board').checked=true;$('#npcv-music').value='code';npcvMusicHint();   // 动效短片:先审故事板默认开、配乐默认代码作曲(2026-10-20 用户拍板)
   $('#np-voice-src').value='recording';
+  npShowMore(false);     // 音频配画、混剪默认收在「更多」里
   npApplyType('film');   // 默认影视剧
   npResetDefaults();
   NP_VIDEO_MODEL=null;NP_SG_TOUCHED=false;npsgModelHint();
