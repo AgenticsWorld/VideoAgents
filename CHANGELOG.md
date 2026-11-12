@@ -2,6 +2,14 @@
 
 All notable public changes to VideoAgents are documented here.
 
+## [Unreleased]
+
+### Changed
+- **The project is called VideoAgents again, and the repository is [AgenticsWorld/VideoAgents](https://github.com/AgenticsWorld/VideoAgents) (2026-11-12).** This undoes the "Agentics WorldOS" naming from 1.0.45.
+  - **Console title.** The top-left title and the window title are back to "数码体: VideoAgents" (Chinese UI) / "Agentics: VideoAgents" (other languages) in the web version and in every desktop build.
+  - **READMEs.** `README.md` and `README.zh-CN.md` are titled VideoAgents again and describe the project as a system for turning a novel into episodic video, as they did before the "build the world first" rewrite. Later edits are kept: the 30-second tour video stays removed, the quickstart still mentions the engine one-click update, and the Chinese README still links to agentics.world.
+  - **Repository links.** The READMEs (badges, clone command, issues), the development guides, `pyproject.toml`, `CITATION.cff`, `NOTICE`, the console's "About" link, the address in the Openverse and stock-image `User-Agent`, and the repository that 待提交问题 files issues to all use `AgenticsWorld/VideoAgents` again.
+
 ## [1.0.45] - 2026-11-11
 
 ### Added

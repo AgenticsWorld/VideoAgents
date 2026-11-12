@@ -4,8 +4,8 @@ title: "VideoAgents"
 type: software
 authors:
   - name: "AgenticsWorld"
-repository-code: "https://github.com/AgenticsWorld/WorldOS"
-url: "https://github.com/AgenticsWorld/WorldOS"
+repository-code: "https://github.com/AgenticsWorld/VideoAgents"
+url: "https://github.com/AgenticsWorld/VideoAgents"
 license: GPL-3.0-only
 version: 1.0.45
 date-released: 2026-11-11
