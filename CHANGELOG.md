@@ -4,6 +4,14 @@ All notable public changes to VideoAgents are documented here.
 
 ## [Unreleased]
 
+### Added
+- **ComfyUI local templates for MiniMax-H3-Image: text-to-image and image-to-image with multiple references (2026-11-12).** New `comfy/image-minimax-h3-image-t2i-api.json` (text-to-image) and `comfy/image-minimax-h3-image-i2i-api.json` (1–10 reference images), each with an English / Chinese description. The 生成模型 page lists them automatically in its 「文生图API」 / 「图生图API」 menus. Both use only core nodes of ComfyUI 0.45.0 or later (`MiniMaxH3ImageConditioning`, KSampler 6 steps, cfg 1.0, euler / simple, no negative prompt). The settings and the three model files come from the official ComfyUI templates: from `Comfy-Org/MiniMax-H3-Image`, `minimax_h3_image_pruned_int8_convrot` (21.0 GB), `qwen3vl_32b_minimax_h3_int8_convrot` (27.1 GB) and `minimax_h3_image_vae_fp16` (1.2 GB).
+  - **Generation size.** The model does poorly below about 4 MP. The requested aspect ratio is therefore scaled to 4 MP on H3's 32-pixel grid (2560×1440 and 1280×720 are generated at 2720×1536), and a final `ImageScale` brings the image to the requested size.
+  - **References.** Image-to-image binds the Nth `--ref` to `images.image_N` and removes unused slots, and an 11th reference is rejected before submission. The first reference is the picture being edited (`<Picture 1>` in the prompt).
+  - **Left out of the official templates.** The optional prompt-expander branch is not included.
+  - **Not verified yet.** The templates were checked against ComfyUI source and run through `genmedia.py`'s placeholder filling and reference binding. No image was generated on a GPU, and Comfy Cloud was not tried.
+  - **License.** The model is under the MiniMax-H3-Image Community License, whose territory excludes the EU, the UK, South Korea and the US. Commercial use above USD 1M annual revenue, or as a hosted service, needs separate authorization.
+
 ### Changed
 - **The project is called VideoAgents again, and the repository is [AgenticsWorld/VideoAgents](https://github.com/AgenticsWorld/VideoAgents) (2026-11-12).** This undoes the "Agentics WorldOS" naming from 1.0.45.
   - **Console title.** The top-left title and the window title are back to "数码体: VideoAgents" (Chinese UI) / "Agentics: VideoAgents" (other languages) in the web version and in every desktop build.
