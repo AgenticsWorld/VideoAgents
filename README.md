@@ -37,6 +37,14 @@
 
 <br/>
 
+## 30-second tour
+
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/97e159f0-8c10-46c2-98d7-915e62d1d749" width="900" controls></video>
+</div>
+
+<br/>
+
 # Turn a novel into episodic video, with an AI crew you direct
 
 VideoAgents is an open-source, file-based multi-agent production system for turning long-form fiction into episodic video.

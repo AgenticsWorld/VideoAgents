@@ -37,6 +37,14 @@
 
 <br/>
 
+## 30 秒了解 VideoAgents
+
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/97e159f0-8c10-46c2-98d7-915e62d1d749" width="900" controls></video>
+</div>
+
+<br/>
+
 # 把小说拍成分集长剧，AI 剧组干活，你来当导演
 
 VideoAgents 是一套开源、文件驱动的多 Agent 视频生产系统，用来把长篇小说改编成分集视频。
