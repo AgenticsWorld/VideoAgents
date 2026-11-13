@@ -20,6 +20,12 @@ All notable public changes to VideoAgents are documented here.
   - **30-second intro video.** The 「30-second tour」 / 「30 秒了解 VideoAgents」 section and its embedded video, removed on 2026-11-03, are back in both READMEs between the Storyboard preview screenshot and the main heading.
   - **Repository links.** The READMEs (badges, clone command, issues), the development guides, `pyproject.toml`, `CITATION.cff`, `NOTICE`, the console's "About" link, the address in the Openverse and stock-image `User-Agent`, and the repository that 待提交问题 files issues to all use `AgenticsWorld/VideoAgents` again.
 
+### Fixed
+- **MiniMax-H3-Image image-to-image now receives its reference images, and its RunningHub version follows the requested aspect ratio (2026-11-13).** Both problems come from the same trait: in these workflows the `MiniMaxH3ImageConditioning` node makes the latent itself.
+  - **References.** The reference-slot count treated `comfy/image-minimax-h3-image-i2i-api.json` as a redraw-the-input template and reported 0 slots, so callers that ask for the capacity first sent no references. It now reports 10. Numbered reference inputs (`images.image_N`) no longer count as the source of the latent.
+  - **Size on RunningHub.** A RunningHub workflow has no `{{WIDTH}}` / `{{HEIGHT}}` placeholders. Direct binding only knew `Empty…Latent` nodes, so this workflow stayed at the aspect ratio saved in it. It now writes the requested size into the `EmptyImage` node that carries the aspect ratio. The pixel count still comes from the workflow's `ImageScaleToTotalPixels` node (4 MP), not from the 1.6 MP cap used for other models.
+  - **Verified.** Binding was checked offline with 0, 1, 3, 10 and 11 references. One image-to-image job with three references ran on runninghub.ai at 1440×2560 and finished in 92 seconds: the references were bound in order and the image came back in portrait. Text-to-image on RunningHub and the local templates were not run.
+
 ## [1.0.45] - 2026-11-11
 
 ### Added

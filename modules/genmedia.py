@@ -3756,11 +3756,34 @@ def _apply_rh_image_reference(workflow: dict, file_names: list[str] | str) -> No
 RH_IMAGE_LATENT_MAX_PIXELS = 1_600_000
 
 
+def _rh_size_carrier(workflow: dict, node: dict | None) -> dict | None:
+    """latent 由条件节点自产(MiniMaxH3ImageConditioning 一类)时,找它的「画幅载体」:
+    节点 width/height 同连一个取尺寸节点(GetImageSize),顺其 image 连线上溯
+    (途经 ImageScaleToTotalPixels 等缩放节点)到 EmptyImage。找不到返回 None。"""
+    inputs = (node or {}).get("inputs") or {}
+    w_link, h_link = inputs.get("width"), inputs.get("height")
+    if not (_node_link(w_link) and _node_link(h_link)) or str(w_link[0]) != str(h_link[0]):
+        return None
+    cur = workflow.get(str(w_link[0]))
+    for _ in range(6):
+        if not isinstance(cur, dict):
+            return None
+        if cur.get("class_type") == "EmptyImage":
+            return cur
+        link = (cur.get("inputs") or {}).get("image")
+        if not _node_link(link):
+            return None
+        cur = workflow.get(str(link[0]))
+    return None
+
+
 def _apply_rh_image_size(workflow: dict, sampler: dict, width: int, height: int) -> bool:
     """宽高直绑:主采样器 latent_image 连的空 latent 节点(Empty*Latent*)的 width/height
     (字面值或上游 Int primitive——与 scheduler 共用同一 primitive 时一并生效),
     再把直连 Save 节点的唯一 ImageScale 绑到本次请求尺寸。latent 来自输入图(VAEEncode,
-    原图重绘模板)时生成尺寸随输入图、只绑末端 ImageScale。两处都定位不到返回 False 由调用方提醒。"""
+    原图重绘模板)时生成尺寸随输入图、只绑末端 ImageScale。latent 由条件节点自产、其宽高取自
+    EmptyImage 画幅载体的模板(MiniMax-H3-Image),把载体绑成请求宽高,生成像素数仍由模板内的
+    ImageScaleToTotalPixels 决定(不套 1.6 MP 上限)。都定位不到返回 False 由调用方提醒。"""
     link = (sampler.get("inputs") or {}).get("latent_image")
     latent = workflow.get(str(link[0])) if _node_link(link) else None
     cls = str((latent or {}).get("class_type") or "")
@@ -3776,6 +3799,15 @@ def _apply_rh_image_size(workflow: dict, sampler: dict, width: int, height: int)
             _rh_bind_number(workflow, inputs, "width", gen_w)
             _rh_bind_number(workflow, inputs, "height", gen_h)
             generated = f"{gen_w}x{gen_h}"
+    carried = False
+    if not generated:
+        carrier = _rh_size_carrier(workflow, latent)
+        if carrier is not None:
+            probe = json.loads(json.dumps(carrier.get("inputs") or {}))
+            if all(_rh_bind_number({}, probe, key, 1) for key in ("width", "height")):
+                inputs = carrier.setdefault("inputs", {})
+                inputs["width"], inputs["height"] = width, height
+                carried = True
     savers = [node for node in workflow.values() if isinstance(node, dict)
               and "save" in str(node.get("class_type") or "").lower()]
     feeding = {str(value[0]) for node in savers
@@ -3785,11 +3817,14 @@ def _apply_rh_image_size(workflow: dict, sampler: dict, width: int, height: int)
     resized = len(resizers) == 1 and all(
         _rh_bind_number(workflow, resizers[0].setdefault("inputs", {}), key, value)
         for key, value in (("width", width), ("height", height)))
-    if not generated and not resized:
+    if not generated and not resized and not carried:
         return False
-    head = f"按本次宽高比直绑 latent {generated}" if generated else "生成尺寸随模板/输入图"
+    head = f"按本次宽高比直绑 latent {generated}" if generated else \
+        (f"按本次宽高比直绑画幅载体 EmptyImage {width}x{height}(生成像素数由模板缩放节点决定)"
+         if carried else "生成尺寸随模板/输入图")
     tail = f",末端 ImageScale 放大到 {width}x{height}" if resized else \
-        ("" if generated == f"{width}x{height}" else f";模板无可绑的末端 ImageScale,成图即 {generated}")
+        ("" if carried or generated == f"{width}x{height}"
+         else f";模板无可绑的末端 ImageScale,成图即 {generated}")
     print(f"[genmedia] RunningHub 图像工作流{head}{tail}", file=sys.stderr)
     return True
 
@@ -4091,7 +4126,10 @@ def _rh_image_ref_slots(workflow: dict) -> int:
         seen.add(nid)
         if node.get("class_type") == "LoadImage":
             return 0
-        stack.extend(str(v[0]) for v in (node.get("inputs") or {}).values() if _node_link(v))
+        # 编号参考图位(images.image_N,MiniMaxH3ImageConditioning 一类「条件节点自产 latent」的模板)
+        # 不算初始 latent 的来源:那些图是参考图,不锁构图
+        stack.extend(str(v[0]) for k, v in (node.get("inputs") or {}).items()
+                     if _node_link(v) and not _RH_IMAGE_SLOT_RE.match(k))
     return len(_rh_image_load_order(workflow))
 
 
