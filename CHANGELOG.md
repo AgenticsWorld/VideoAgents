@@ -14,6 +14,7 @@ All notable public changes to VideoAgents are documented here.
   - **License.** The model is under the MiniMax-H3-Image Community License, whose territory excludes the EU, the UK, South Korea and the US. Commercial use above USD 1M annual revenue, or as a hosted service, needs separate authorization.
 
 ### Changed
+- **The Agentics image channel now defaults to MiniMax-H3-Image (2026-11-16).** Text-to-image uses `minimax-h3-image-t2i` and image-to-image uses `minimax-h3-image-i2i`, replacing FLUX.2 dev (`flux2-dev-t2i` / `flux2-dev-i2i-10ref`). This applies to new installs and to installs that never picked an Agentics image model (an empty value follows the default). A model already chosen on the 生成模型 page is kept.
 - **The project is called VideoAgents again, and the repository is [AgenticsWorld/VideoAgents](https://github.com/AgenticsWorld/VideoAgents) (2026-11-12).** This undoes the "Agentics WorldOS" naming from 1.0.45.
   - **Console title.** The top-left title and the window title are back to "数码体: VideoAgents" (Chinese UI) / "Agentics: VideoAgents" (other languages) in the web version and in every desktop build.
   - **READMEs.** `README.md` and `README.zh-CN.md` are titled VideoAgents again and describe the project as a system for turning a novel into episodic video, as they did before the "build the world first" rewrite. Later edits are kept: the quickstart still mentions the engine one-click update, and the Chinese README still links to agentics.world.

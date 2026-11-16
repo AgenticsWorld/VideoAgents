@@ -849,9 +849,9 @@ DEFAULT_GENCONFIG = {
         # Agentics 图像分文生图/图生图两个 profile(2026-09-18,同 ComfyUI 的 workflow/ref_workflow 两套):
         # genmedia 无参考图用 t2i、带参考图用 i2i,agent 无需也不能按镜手选;
         # 预览页顶部图像下拉选 Agentics 时二级只有「跟随全局」。旧字段 profile_code 由 _migrate_genconfig 迁入两侧。
-        # 默认 2026-09-20 整体换为 FLUX.2 dev:t2i ideogram-4-t2i → flux2-dev-t2i,
-        # i2i qwen-image-i2i → flux2-dev-i2i-10ref(至多 10 张参考图)
-        "agentics": {"t2i": "flux2-dev-t2i", "i2i": "flux2-dev-i2i-10ref"},
+        # 默认 2026-09-20 整体换为 FLUX.2 dev(flux2-dev-t2i / flux2-dev-i2i-10ref);
+        # 2026-11-16 再换为 MiniMax-H3-Image:t2i minimax-h3-image-t2i、i2i minimax-h3-image-i2i
+        "agentics": {"t2i": "minimax-h3-image-t2i", "i2i": "minimax-h3-image-i2i"},
         "openrouter": {"api_key": "", "model": "bytedance-seed/seedream-4.5",
                        "custom_model": ""},
         # Fal(queue.fal.run 托管图像端点):model 存家族前缀(fal-ai/bytedance/seedream/v5/lite、
