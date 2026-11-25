@@ -110,7 +110,7 @@ button:disabled{opacity:.5;cursor:default}
   <a class="back" href="/" onclick="if(history.length>1){history.back();return false}" title="后退">&lt;</a>
   <a class="back" href="/">控制台</a>
   <h1>🎨 生成模型设置</h1>
-  <span class="pill">图像 / 视频 / 数字人 / 超分 / 音乐 / 音效 / TTS旁白 / 世界模型 生成渠道与模型</span>
+  <span class="pill">图像 / 视频 / 数字人 / 超分 / 音乐 / 音效 / TTS旁白 / 世界模型 / 3D 模型 生成渠道与模型</span>
   <div class="spacer"></div>
   <span id="save-status">修改即自动保存</span>
 </header>
@@ -270,6 +270,21 @@ button:disabled{opacity:.5;cursor:default}
       <div class="row"><label>高级参数</label><input type="number" id="world-hunyuan-views" min="4" max="64" step="1" placeholder="32" title="轨迹渲染视图数"><input type="number" id="world-hunyuan-steps" min="200" max="30000" step="100" placeholder="8000" title="3DGS 训练步数"><label class="chk"><input type="checkbox" id="world-hunyuan-fp8"> FP8 量化(Windows 暂不推荐,见部署文档)</label></div>
       <div class="hint">本地算力生成(不耗 credits):场景全景 → GPU 主机 worker(HunyuanWorld-1.0 分层重建 + 3DGS 训练),约 20–40 分钟;worker 部署参考 <a href="https://github.com/AgenticsWorld/VideoAgents-hunyuan-rpc" target="_blank">github.com/AgenticsWorld/VideoAgents-hunyuan-rpc</a>(默认 Windows + 3090 24G)。</div>
     </div>
+  </div>
+  <div class="card" id="card-model3d">
+    <h2>🧊 3D 模型</h2>
+    <div class="tabs" id="model3d-tabs">
+      <div class="tab" id="tab-model3d-tripo">Tripo</div>
+      <div class="tab" id="tab-model3d-fal">Fal</div>
+      <div class="tab" id="tab-model3d-rhapi">RH</div>
+      <div class="tab" id="tab-model3d-hunyuan3d">本地 Hunyuan3D</div>
+    </div>
+    <!-- 四个面板由 buildModel3dPanels() 生成(配置段 model3d,modules/model3d.py):Tripo 官方 API / Fal 托管 3D 端点 /
+         RH = RunningHub 模型 API 的 3D 端点(复用 buildRhApiPanel)/ 本地 = 局域网 Hunyuan3D-2 api_server -->
+    <div class="panel" id="panel-model3d-tripo"></div>
+    <div class="panel" id="panel-model3d-fal"></div>
+    <div class="panel" id="panel-model3d-rhapi"></div>
+    <div class="panel" id="panel-model3d-hunyuan3d"></div>
   </div>
   <div class="card" id="card-moderation">
     <h2>🛡 审核模型</h2>
@@ -468,7 +483,7 @@ function el(tag,attrs={},html){const d=document.createElement(tag);Object.assign
 
 /* 渠道标签与生效渠道分开(2026-10-21):标签页只切换正在查看 / 编辑的渠道面板,不改生效渠道——改某个渠道的配置
    (如换 ComfyUI 工作流)不必先切过去再切回原渠道;生效渠道由各板块标题栏右侧「生效渠道」下拉选,✅ 标在生效渠道的
-   标签上,选中即保存;改下拉时顺带切到该渠道的标签页。sec = 板块(image/video/music/tts/dh/up/sfx/world/text/mod),
+   标签上,选中即保存;改下拉时顺带切到该渠道的标签页。sec = 板块(image/video/music/tts/dh/up/sfx/world/model3d/text/mod),
    o:card 板块卡片选择器、list 渠道清单、label 渠道名(中文原文)、tab/panel 渠道 → 元素(面板会被整块替换,每次现查)、
    hidden 界面隐藏的渠道(不是生效渠道时标签与下拉选项都不显示)、onView 切到某个标签时 */
 const CHAN={};
@@ -576,11 +591,14 @@ function rhKey(kind){
 const RH_SITES=[['ai','runninghub.ai'],['cn','runninghub.cn']];
 const RH_KEYS_URL={ai:'https://www.runninghub.ai/call-api/bill-task?tab=keys',
                    cn:'https://www.runninghub.cn/call-api/bill-task?tab=keys'};
-const RH_SIDES={image:[['t2i','文生图模型'],['i2i','图生图模型']],video:[['model','模型']]};
+const RH_SIDES={image:[['t2i','文生图模型'],['i2i','图生图模型']],video:[['model','模型']],
+                model3d:[['t23d','文生 3D 模型'],['i23d','图生 3D 模型']]};
 const RH_TASKS={image:{t2i:['text-to-image'],i2i:['image-to-image','reference-to-image']},
-                video:{model:['reference-to-video','image-to-video','text-to-video']}};
+                video:{model:['reference-to-video','image-to-video','text-to-video']},
+                model3d:{t23d:['text-to-3d'],i23d:['image-to-3d','multiview-to-3d']}};
 const RH_TASK_LABELS={'text-to-image':'文生图','image-to-image':'图生图','reference-to-image':'参考生图',
-                      'reference-to-video':'多模态参考生视频','image-to-video':'图生视频','text-to-video':'文生视频'};
+                      'reference-to-video':'多模态参考生视频','image-to-video':'图生视频','text-to-video':'文生视频',
+                      'text-to-3d':'文生 3D','image-to-3d':'图生 3D','multiview-to-3d':'多视图生 3D'};
 const RH_STATE={};   // `${kind}:${site}` -> {loading, models}
 function buildRhApiPanel(d,kind){
   const sr=el('div',{className:'row'});
@@ -608,6 +626,8 @@ function buildRhApiPanel(d,kind){
   const h=el('div',{className:'hint'});
   h.appendChild(el('span',{},kind==='image'
     ?'RunningHub 模型 API(Seedream、Nano Banana、GPT Image、Qwen Image、Wan 等);无参考图用文生图模型、带参考图自动用图生图模型;尺寸/画幅/分辨率/参考图上限按所选模型参数表自动映射。'
+    :kind==='model3d'
+    ?'RunningHub 模型 API 的 3D 端点(Hunyuan3D 3.1、Tripo、Hitem3D、Meshy、Miora 等);只有文字描述时用文生 3D 模型,有参考图(单张或多视图)时用图生 3D 模型。'
     :'RunningHub 模型 API(Seedance、Kling、Vidu、Wan、Veo、MiniMax H3 等);按本次输入(首尾帧/参考素材/纯文本)在同系列端点间自动切换;时长/分辨率/画幅取所选模型支持的最接近值。'));
   h.appendChild(el('span',{},' API Key 在 '));
   h.appendChild(el('a',{id:`${kind}-rh-keylink`,target:'_blank',textContent:'RunningHub 控制台「API Key」'}));
@@ -627,7 +647,8 @@ function buildFalSearch(d,kind){
   r.appendChild(q);r.appendChild(b);d.appendChild(r);
   d.appendChild(el('div',{className:'status',id:`${kind}-fal-status`}));
   d.appendChild(el('div',{className:'fal-hits',id:`${kind}-fal-hits`}));
-  d.appendChild(el('div',{className:'hint'},'搜到的模型不在上面清单里时,系统按该端点的参数表组请求:时长、分辨率、画幅取它支持的最接近值,不支持的输入(如尾帧、参考图)会直接报错;这些模型尚未逐个实测。'));
+  if(kind!=='model3d')   // 3D 只搜 image-to-3d / text-to-3d 类别,尚无生成命令,没有「按参数表适配」一说
+    d.appendChild(el('div',{className:'hint'},'搜到的模型不在上面清单里时,系统按该端点的参数表组请求:时长、分辨率、画幅取它支持的最接近值,不支持的输入(如尾帧、参考图)会直接报错;这些模型尚未逐个实测。'));
 }
 async function falSearch(kind){
   const status=$(`#${kind}-fal-status`), box=$(`#${kind}-fal-hits`), btn=$(`#${kind}-fal-search`);
@@ -647,7 +668,8 @@ async function falSearch(kind){
       row.appendChild(el('span',{className:'fal-hit-name',textContent:m.name}));
       row.appendChild(el('code',{textContent:m.id}));
       row.appendChild(el('span',{className:'fal-hit-tasks',textContent:(m.tasks||[]).join(' · ')}));
-      row.appendChild(el('span',{className:'fal-hit-tag',textContent:t(m.builtin?'已内置适配':'按参数表自动适配')}));
+      if('builtin' in m)   // 3D 搜索结果不带 builtin(尚无生成命令)
+        row.appendChild(el('span',{className:'fal-hit-tag',textContent:t(m.builtin?'已内置适配':'按参数表自动适配')}));
       box.appendChild(row);
     });
   }catch(e){
@@ -1474,6 +1496,115 @@ async function testHunyuan(){
     :'✗ '+(r.error||t('验证失败'));
 }
 
+/* 3D 模型(2026-11-25,配置段 model3d;modules/model3d.py):Tripo 官方 API / Fal 托管 3D 端点 /
+   RH = RunningHub 模型 API 的 3D 端点 / 本地 = 局域网 Hunyuan3D-2 api_server。目前只有配置与连接验证,生成命令尚未接入 */
+const MODEL3D_PROVIDERS={tripo:'Tripo',fal:'Fal',rhapi:'RH',hunyuan3d:'本地 Hunyuan3D'};
+// Tripo 国际站 / 国内站同一套 /v3 接口,账号与 Key 不互通:两站 Key 分存(api_key_ai / api_key_cn)
+const TRIPO_SITES=[['ai','tripo3d.ai(国际站)'],['cn','tripo3d.com(国内站)']];
+const TRIPO_KEYS_URL={ai:'https://developers.tripo3d.ai/zh/keys',cn:'https://developers.tripo3d.com/zh/keys'};
+const TRIPO_MODELS=[   // 请求体 model 字段;首项 = 默认(与 core.py DEFAULT_GENCONFIG、modules/model3d.TRIPO_MODELS 一致)
+  ['v3.1-20260211','Tripo H3.1 · 最新,质量最好(推荐)'],
+  ['v3.0-20250812','Tripo H3.0 · 稳定版,支持精细几何 / 四边面 / 智能低模 / 拆件'],
+  ['v2.5-20250123','Tripo H2.5 · 均衡'],
+  ['P2-20260801','Tripo P2 · 低面数模型(48–50,000 面,可出四边面)'],
+  ['P1-20260311','Tripo P1 · 低面数模型(50–20,000 面)'],
+];
+const FAL_3D_MODELS=[   // 模型前缀(按输入补 text-to-3d / image-to-3d 任务段);首项 = 默认(与 core.py DEFAULT_GENCONFIG 一致)
+  ['fal-ai/hunyuan-3d/v3.1/pro','Hunyuan 3D 3.1 Pro(Fal 托管;文生 / 图生 3D)'],
+  ['fal-ai/hunyuan-3d/v3.1/rapid','Hunyuan 3D 3.1 Rapid(Fal 托管;文生 / 图生 3D,速度优先)'],
+  ['tripo3d/h3.1','Tripo H3.1(Fal 托管;文生 / 图生 / 多视图生 3D)'],
+  ['tripo3d/p2','Tripo P2(Fal 托管;低面数,文生 / 图生 3D)'],
+  ['meshy/v7.1','Meshy 7.1(Fal 托管;文生 / 图生 / 多图生 3D)'],
+  ['fal-ai/hyper3d/rodin/v2.5','Hyper3D Rodin 2.5(Fal 托管;文生 / 图生 3D)'],
+  ['fal-ai/trellis-2','TRELLIS 2(Fal 托管;图生 3D)'],
+  ['hitem3d/hi3d/v3.0','Hi3D 3.0(Fal 托管;图生 / 多视图生 3D)'],
+];
+const H3D_LOCAL_MODELS=[   // 服务端加载的 DiT 版本(tencent/Hunyuan3D-2* 的 subfolder);首项 = api_server.py 默认
+  ['hunyuan3d-dit-v2-mini-turbo','Hunyuan3D-2mini Turbo(api_server.py 默认)'],
+  ['hunyuan3d-dit-v2-mini','Hunyuan3D-2mini'],
+  ['hunyuan3d-dit-v2-0-turbo','Hunyuan3D-2 Turbo'],
+  ['hunyuan3d-dit-v2-0-fast','Hunyuan3D-2 Fast'],
+  ['hunyuan3d-dit-v2-0','Hunyuan3D-2'],
+  ['hunyuan3d-dit-v2-mv-turbo','Hunyuan3D-2mv Turbo(多视图输入)'],
+  ['hunyuan3d-dit-v2-mv','Hunyuan3D-2mv(多视图输入)'],
+];
+const H3D_DEFAULT_URL='http://127.0.0.1:8080';   // 本地 Hunyuan3D 默认服务地址(与 core.py DEFAULT_GENCONFIG 一致)
+function tripoSite(){return $('#model3d-tripo-site').value==='cn'?'cn':'ai'}
+function tripoSiteUI(){
+  const site=tripoSite();
+  TRIPO_SITES.forEach(([s])=>{$(`#model3d-tripo-key-${s}-row`).style.display=s===site?'':'none'});
+  $('#model3d-tripo-keylink').href=TRIPO_KEYS_URL[site];
+}
+function buildModel3dPanels(){
+  // Tripo:站点 + 两站 Key(各带「验证 Key」)+ 模型
+  const tp=$('#panel-model3d-tripo');
+  const sr=el('div',{className:'row'});
+  sr.appendChild(el('label',{},'站点'));
+  const ss=el('select',{id:'model3d-tripo-site'});
+  TRIPO_SITES.forEach(([v,l])=>ss.appendChild(el('option',{value:v,textContent:l})));
+  ss.onchange=tripoSiteUI;
+  sr.appendChild(ss);tp.appendChild(sr);
+  TRIPO_SITES.forEach(([s])=>{
+    const r=keyRow(`model3d-tripo-key-${s}`,`Tripo API Key (tripo3d.${s==='cn'?'com':'ai'})`);
+    r.id=`model3d-tripo-key-${s}-row`;
+    const b=el('button',{},'验证 Key');b.onclick=testTripo;
+    r.appendChild(b);tp.appendChild(r);
+  });
+  tp.appendChild(el('div',{className:'status',id:'model3d-tripo-status'}));
+  tp.appendChild(modelRow('model3d-tripo-model','model3d-tripo-custom'));
+  const th=el('div',{className:'hint'});
+  // 链接放在句末(「获取:<链接>」),各语言译文不用把动词拆到链接两边
+  th.appendChild(el('span',{},'Tripo3D 官方 API,文生 / 图生 / 多视图生 3D 共用所选模型版本:H 系列出高精度模型,P 系列出低面数模型(国际站与国内站账号不互通,「站点」须与 Key 来源一致)。API Key 获取:'));
+  th.appendChild(el('a',{id:'model3d-tripo-keylink',target:'_blank',textContent:'Tripo 开放平台「API Keys」'}));
+  tp.appendChild(th);
+  // Fal:Key + 模型前缀 + 搜索(只搜 image-to-3d / text-to-3d 类别)
+  const fp=$('#panel-model3d-fal');
+  fp.appendChild(keyRow('model3d-fal-key','Fal API Key'));
+  fp.appendChild(modelRow('model3d-fal-model','model3d-fal-custom'));
+  buildFalSearch(fp,'model3d');
+  fp.appendChild(el('div',{className:'hint'},
+    'Fal 托管的 3D 生成端点(Hunyuan 3D、Tripo、Meshy、Rodin、TRELLIS 等);模型 ID 填模型前缀,按输入自动补 text-to-3d / image-to-3d 任务段,「自定义…」也可填完整端点 ID。API Key 获取:'
+    +'<a href="https://fal.ai/dashboard/keys" target="_blank">fal.ai 控制台「API Keys」</a>'));
+  // RH:与图像 / 视频的 RH 标签同构(站点 + 两站 Key + 模型下拉),分文生 3D / 图生 3D 两个端点
+  buildRhApiPanel($('#panel-model3d-rhapi'),'model3d');
+  // 本地:局域网 Hunyuan3D-2 api_server
+  const lp=$('#panel-model3d-hunyuan3d');
+  const ur=el('div',{className:'row'});
+  ur.appendChild(el('label',{},'服务地址'));
+  ur.appendChild(el('input',{type:'text',id:'model3d-h3d-url',placeholder:H3D_DEFAULT_URL}));
+  const ub=el('button',{},'验证');ub.onclick=testHunyuan3d;
+  ur.appendChild(ub);lp.appendChild(ur);
+  lp.appendChild(el('div',{className:'status',id:'model3d-h3d-status'}));
+  const mr=modelRow('model3d-h3d-model','model3d-h3d-custom');
+  mr.querySelector('label').textContent='服务端模型';
+  lp.appendChild(mr);
+  const xr=el('div',{className:'row'});
+  xr.appendChild(el('label',{},'纹理'));
+  const xl=el('label',{className:'chk'});
+  xl.appendChild(el('input',{type:'checkbox',id:'model3d-h3d-texture'}));
+  xl.appendChild(document.createTextNode(' '+t('生成纹理(服务端须带 --enable_tex 启动,否则只出白模)')));
+  xr.appendChild(xl);lp.appendChild(xr);
+  lp.appendChild(el('div',{className:'hint'},
+    '局域网 Hunyuan3D-2 服务:仓库 <a href="https://github.com/Tencent-Hunyuan/Hunyuan3D-2" target="_blank">Tencent-Hunyuan/Hunyuan3D-2</a> 自带的 api_server.py,接口文档在服务地址后加 /docs;本地算力,不耗云端 credits。'
+    +'模型权重由服务端启动参数决定,这里不能切换:「服务端模型」须与服务端实际加载的一致(Turbo 版推理 5 步即可,其余版本要 30 步以上)。'));
+}
+async function testTripo(){
+  const site=tripoSite(),st=$('#model3d-tripo-status');
+  st.className='status';st.textContent=t('验证中…');
+  const r=await api('/api/v1/providers/tripo/test',{site,api_key:$(`#model3d-tripo-key-${site}`).value.trim()})
+    .catch(e=>({ok:false,error:e.message}));
+  st.className='status '+(r.ok?'ok':'err');
+  st.textContent=r.ok?I18N.f('✓ Key 有效 · 余额 {c} credits',{c:r.balance})+(r.frozen?' · '+I18N.f('冻结 {c}',{c:r.frozen}):'')
+    :'✗ '+(r.error||t('验证失败'));
+}
+async function testHunyuan3d(){
+  const st=$('#model3d-h3d-status');st.className='status';st.textContent=t('验证中…');
+  const r=await api('/api/v1/providers/hunyuan3d/test',{base_url:$('#model3d-h3d-url').value.trim()})
+    .catch(e=>({ok:false,error:e.message}));
+  st.className='status '+(r.ok?'ok':'err');
+  st.textContent=r.ok?I18N.f('✓ 服务在线 · {url}(Hunyuan3D-2 api_server)',{url:r.base_url}):'✗ '+(r.error||t('验证失败'));
+}
+
 const DH_PROVIDERS=['agentics','heygen','klingai','comfyui'];
 const DH_LABELS={agentics:'Agentics',heygen:'HeyGen',klingai:'Kling AI',comfyui:'ComfyUI'};
 chanInit('dh',{card:'#card-digital-human',list:DH_PROVIDERS,label:p=>DH_LABELS[p],
@@ -1977,6 +2108,22 @@ function loadIntoForm(){
   $('#world-hunyuan-steps').value=wh.gs_steps||'';
   $('#world-hunyuan-fp8').checked=wh.fp8===true;
   chanSet('world',WORLD_PROVIDERS[(CFG.world||{}).provider]?(CFG.world||{}).provider:'marble');
+  // 3D 模型:旧版实例返回的配置无 model3d 段时按默认填
+  const m3=CFG.model3d||{},m3t=m3.tripo||{},m3f=m3.fal||{},m3r=m3.rhapi||{},m3h=m3.hunyuan3d||{};
+  $('#model3d-tripo-site').value=m3t.site==='cn'?'cn':'ai';
+  TRIPO_SITES.forEach(([s])=>{$(`#model3d-tripo-key-${s}`).value=m3t[`api_key_${s}`]||''});
+  tripoSiteUI();
+  fillSelect($('#model3d-tripo-model'),TRIPO_MODELS,m3t.model,m3t.custom_model);
+  $('#model3d-fal-key').value=m3f.api_key||'';
+  fillSelect($('#model3d-fal-model'),FAL_3D_MODELS,m3f.model,m3f.custom_model);
+  $('#model3d-rh-site').value=m3r.site==='cn'?'cn':'ai';
+  RH_SITES.forEach(([s])=>{$(`#model3d-rh-key-${s}`).value=m3r[`api_key_${s}`]||''});
+  rhSiteUI('model3d');
+  RH_SIDES.model3d.forEach(([side])=>rhFillSelect('model3d',side,null,m3r[side]||''));
+  $('#model3d-h3d-url').value=m3h.base_url||H3D_DEFAULT_URL;
+  fillSelect($('#model3d-h3d-model'),H3D_LOCAL_MODELS,m3h.model,m3h.custom_model);
+  $('#model3d-h3d-texture').checked=m3h.texture===true;
+  chanSet('model3d',MODEL3D_PROVIDERS[m3.provider]?m3.provider:'tripo');
   loadDeepagentsForm();
   loadModerationForm();
 }
@@ -2121,6 +2268,14 @@ function collect(){
     hunyuan:{base_url:$('#world-hunyuan-url').value.trim(),token:$('#world-hunyuan-token').value.trim(),
              views:parseInt($('#world-hunyuan-views').value)||null,gs_steps:parseInt($('#world-hunyuan-steps').value)||null,
              fp8:$('#world-hunyuan-fp8').checked}};
+  out.model3d={provider:CHAN.model3d.eff,
+    tripo:{site:tripoSite(),api_key_ai:$('#model3d-tripo-key-ai').value.trim(),api_key_cn:$('#model3d-tripo-key-cn').value.trim(),
+           ...pickModel('#model3d-tripo-model','#model3d-tripo-custom')},
+    fal:{api_key:$('#model3d-fal-key').value.trim(),...pickModel('#model3d-fal-model','#model3d-fal-custom')},
+    rhapi:{site:rhSite('model3d'),api_key_ai:$('#model3d-rh-key-ai').value.trim(),api_key_cn:$('#model3d-rh-key-cn').value.trim(),
+           t23d:$('#model3d-rh-t23d').value||'',i23d:$('#model3d-rh-i23d').value||''},
+    hunyuan3d:{base_url:$('#model3d-h3d-url').value.trim(),...pickModel('#model3d-h3d-model','#model3d-h3d-custom'),
+               texture:$('#model3d-h3d-texture').checked}};
   // 生效渠道 = 标题栏「生效渠道」下拉(AgenticsLLM/本地模型/云端模型/OpenRouter)
   out.deepagents={provider:CHAN.text.eff,
     agentics:{model:$('#text-agentics-model').value||'',custom_model:''},
@@ -2244,6 +2399,10 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
   buildSfxPanels();
   chanInit('world',{card:'#card-world',list:Object.keys(WORLD_PROVIDERS),label:p=>WORLD_PROVIDERS[p],
     tab:p=>$(`#tab-world-${p}`),panel:p=>$(`#panel-world-${p}`)});
+  buildModel3dPanels();
+  chanInit('model3d',{card:'#card-model3d',list:Object.keys(MODEL3D_PROVIDERS),label:p=>MODEL3D_PROVIDERS[p],
+    tab:p=>$(`#tab-model3d-${p}`),panel:p=>$(`#panel-model3d-${p}`),
+    onView:p=>{if(p==='rhapi')rhLoadModels('model3d',false)}});
   chanInit('mod',{card:'#card-moderation',list:Object.keys(MOD_TABS),label:p=>MOD_TABS[p],
     tab:p=>$(`#tab-mod-${p}`),panel:p=>$(`#panel-mod-${p}`)});
   const [cfg,wfs]=await Promise.all([

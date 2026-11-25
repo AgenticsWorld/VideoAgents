@@ -1044,6 +1044,23 @@ DEFAULT_GENCONFIG = {
         "marble": {"api_key": "", "model": "marble-1.1", "custom_model": ""},
         "hunyuan": {"base_url": "", "token": "", "views": None, "gs_steps": None, "fp8": False},
     },
+    # 3D 模型(2026-11-25,生成模型页「🧊 3D 模型」板块,世界模型下方;见 modules/model3d.py):
+    #   tripo     = Tripo3D 官方 API,site ai(openapi.tripo3d.ai)/ cn(openapi.tripo3d.com)两站 Key 分存;
+    #               model = 请求体 model(v3.1-20260211 等,modules/model3d.TRIPO_MODELS)
+    #   fal       = Fal 托管 3D 端点,model 存模型前缀(按输入补 text-to-3d / image-to-3d),「自定义…」可填完整端点 ID
+    #   rhapi     = RunningHub 标准模型 API 3D 端点(rh_models kind=model3d),t23d 文生 3D / i23d 图生 3D(含多视图)
+    #   hunyuan3d = 本机 / 局域网 Hunyuan3D-2 api_server(默认 http://127.0.0.1:8080;POST /generate、/send,GET /status/{uid});model 记录服务端
+    #               加载的 DiT 版本(权重由服务端启动参数定),texture 须服务端带 --enable_tex
+    # 目前只有配置与连接验证,生成命令尚未接入
+    "model3d": {
+        "provider": "tripo",   # tripo | fal | rhapi | hunyuan3d
+        "tripo": {"site": "ai", "api_key_ai": "", "api_key_cn": "", "model": "v3.1-20260211", "custom_model": ""},
+        "fal": {"api_key": "", "model": "fal-ai/hunyuan-3d/v3.1/pro", "custom_model": ""},
+        "rhapi": {"site": "ai", "api_key_ai": "", "api_key_cn": "",
+                  "t23d": "hunyuan3d-v3.1/text-to-3d", "i23d": "hunyuan3d-v3.1/image-to-3d"},
+        "hunyuan3d": {"base_url": "http://127.0.0.1:8080", "model": "hunyuan3d-dit-v2-mini-turbo", "custom_model": "",
+                      "texture": False},
+    },
     # 语言模型(生成模型页「语言模型/Agentics」,agentics 引擎 = 内置 pi 的 LLM 端点;键名沿用 deepagents):
     # agentics=已登录桌面端账号的 AgenticsLLM;local=OpenAI 兼容本地端点(LM Studio/Ollama/vLLM…);
     # cloud=OpenAI 兼容云端端点(任意兼容服务商;2026-10-26 起没有默认端点 / 模型,由用户自填);
@@ -10278,6 +10295,29 @@ async def api_test_worldlabs(body: dict):
     return {"ok": True, "provider": "marble", "remaining_credits": credits}
 
 
+async def api_test_tripo(body: dict):
+    """3D 模型 › Tripo「验证 Key」:GET /v3/account/balance(按页面当前站点与 Key,未保存也可试),回可用 / 冻结 credits。"""
+    from modules import model3d
+    zh = (ui_lang_code() or "zh") == "zh"
+    site = model3d.tripo_site(body.get("site"))
+    try:
+        bal = await asyncio.to_thread(model3d.tripo_balance, site, str(body.get("api_key") or ""), 20, zh)
+    except model3d.Model3DError as e:
+        return {"ok": False, "provider": "tripo", "site": site, "error": str(e)[:240]}
+    return {"ok": True, "provider": "tripo", "site": site, **bal}
+
+
+async def api_test_hunyuan3d(body: dict):
+    """3D 模型 › 本地 Hunyuan3D「验证」:读服务的 /openapi.json,核对 Hunyuan3D-2 api_server 的接口都在(不发生成请求)。"""
+    from modules import model3d
+    zh = (ui_lang_code() or "zh") == "zh"
+    try:
+        out = await asyncio.to_thread(model3d.hunyuan3d_check, str(body.get("base_url") or ""), 10, zh)
+    except model3d.Model3DError as e:
+        return {"ok": False, "provider": "hunyuan3d", "error": str(e)[:240]}
+    return {"ok": True, "provider": "hunyuan3d", **out}
+
+
 async def api_test_hunyuan(body: dict):
     """验证 HunyuanWorld worker 连接(GET /health,回 GPU/env 自检)。"""
     from modules import hunyuan_world as hw
@@ -15445,11 +15485,18 @@ async def api_genconfig_set(body: dict):
     body.pop("project", None)
     old = load_genconfig()
     cfg = _merge(load_genconfig(), body)
-    for kind in ("image", "video", "music", "tts", "sfx", "digital_human", "upscale", "world", "deepagents",
-                 "moderation"):
+    for kind in ("image", "video", "music", "tts", "sfx", "digital_human", "upscale", "world", "model3d",
+                 "deepagents", "moderation"):
         allowed = set(DEFAULT_GENCONFIG[kind]) - {"provider"}
         if cfg.get(kind, {}).get("provider") not in allowed:
             raise ServiceError(400, f"{kind}.provider must be one of {sorted(allowed)}")
+    for prov in ("tripo", "rhapi"):      # 3D 模型:两站 Key 分存的渠道,site 只认 ai / cn
+        pc = (cfg.get("model3d") or {}).get(prov)
+        if isinstance(pc, dict) and pc.get("site") not in ("ai", "cn"):
+            raise ServiceError(400, f"model3d.{prov}.site must be ai or cn")
+    h3d = (cfg.get("model3d") or {}).get("hunyuan3d")
+    if isinstance(h3d, dict):
+        h3d["texture"] = h3d.get("texture") is True
     for prov in ("local", "cloud"):      # 「图片输入」勾选:只存布尔,缺省 / 非 false 一律算勾上
         pc = (cfg.get("deepagents") or {}).get(prov)
         if isinstance(pc, dict):
@@ -17170,19 +17217,21 @@ async def api_fal_models(kind: str, q: str = "", refresh: bool = False) -> dict:
     from modules import fal_models
     from modules.genmedia import _fal_family, _fal_image_family
     if kind not in fal_models.KINDS:
-        raise ServiceError(400, "kind must be image or video")
+        raise ServiceError(400, f"kind must be one of {list(fal_models.KINDS)}")
     cfg = load_genconfig()
     key = next((str(((cfg.get(k) or {}).get("fal") or {}).get("api_key") or "").strip()
-                for k in ("image", "video") if str(((cfg.get(k) or {}).get("fal") or {}).get("api_key") or "").strip()),
+                for k in ("image", "video", "model3d")
+                if str(((cfg.get(k) or {}).get("fal") or {}).get("api_key") or "").strip()),
                "") or os.environ.get("FAL_KEY", "").strip()
     try:
         rows = await asyncio.to_thread(fal_models.search, kind, q, 40, refresh, key)
     except fal_models.CatalogUnavailable as e:
         raise ServiceError(502, str(e)[:500]) from e
-    family = _fal_image_family if kind == "image" else _fal_family
+    # builtin 只对图像 / 视频有意义(genmedia 有无内置请求体映射);3D 尚无生成命令,不带这个字段
+    family = _fal_image_family if kind == "image" else _fal_family if kind == "video" else None
     return {"kind": kind, "query": q.strip(),
             "models": [{"id": r["id"], "name": r["name"], "tasks": r["tasks"], "description": r["description"],
-                        "builtin": family(r["id"]) != "generic"} for r in rows]}
+                        **({"builtin": family(r["id"]) != "generic"} if family else {})} for r in rows]}
 
 
 async def api_openverse_search(body: dict) -> dict:
@@ -17216,8 +17265,8 @@ _MINIMAX_BASES = ("https://api.minimax.io", "https://api.minimaxi.com")
 async def api_rhapi_models(site: str, kind: str, refresh: bool = False) -> dict:
     """RH 渠道(RunningHub 标准模型 API)模型目录:从官方文档站解析,首次约 1 分钟,之后缓存 24h。"""
     from modules import rh_models
-    if kind not in ("image", "video"):
-        raise ServiceError(400, "kind must be image or video")
+    if kind not in rh_models.KINDS:
+        raise ServiceError(400, f"kind must be one of {list(rh_models.KINDS)}")
     site = rh_models.site_of(site)
     try:
         models = await asyncio.to_thread(rh_models.list_models, site, kind, refresh)

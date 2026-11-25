@@ -1098,6 +1098,18 @@ async def test_hunyuan(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_test_hunyuan(body.model_dump())
 
 
+@api.post("/providers/tripo/test", tags=["providers"])
+async def test_tripo(body: ProviderProbe) -> dict[str, Any]:
+    """3D 模型 › Tripo:{site: ai|cn, api_key} → 余额(credits)。"""
+    return await core.api_test_tripo(body.model_dump())
+
+
+@api.post("/providers/hunyuan3d/test", tags=["providers"])
+async def test_hunyuan3d(body: ProviderProbe) -> dict[str, Any]:
+    """3D 模型 › 本地 Hunyuan3D:{base_url} → 核对 Hunyuan3D-2 api_server 接口。"""
+    return await core.api_test_hunyuan3d(body.model_dump())
+
+
 @api.post("/providers/runninghub/workflow", tags=["providers"])
 async def rh_workflow_verify(body: ProviderProbe) -> dict[str, Any]:
     return await core.api_rh_workflow_verify(body.model_dump())

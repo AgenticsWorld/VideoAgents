@@ -38,9 +38,12 @@ ENDPOINT_TTL = 24 * 3600
 PAGE_LIMIT = 100           # 接口单页上限
 RETRY_WAITS = (2.0, 5.0, 10.0, 15.0)
 
-KINDS = ("image", "video")
+KINDS = ("image", "video", "model3d")
 CATEGORIES = {"image": ("text-to-image", "image-to-image"),
-              "video": ("text-to-video", "image-to-video")}      # reference-to-video 端点在目录里归 image-to-video
+              "video": ("text-to-video", "image-to-video"),      # reference-to-video 端点在目录里归 image-to-video
+              # 3D 模型(2026-11-25,生成模型页「🧊 3D 模型」Fal 标签):multiview-to-3d 端点在目录里归 image-to-3d;
+              # 3d-to-3d(绑骨、重拓扑、重贴图)不是出模型,不搜
+              "model3d": ("image-to-3d", "text-to-3d")}
 IMAGE_TASK_SUFFIXES = ("text-to-image", "image-to-image", "edit", "edit-image", "multi")
 
 FIRST_FRAME_KEYS = ("image_url", "start_image_url", "first_frame_url", "first_image_url", "start_frame_url")
@@ -201,12 +204,14 @@ def split_endpoint(endpoint_id: str, kind: str) -> tuple[str, str]:
     """端点 → (模型前缀, 任务段);末段不是任务段时任务段为空串、前缀就是端点本身。"""
     eid = str(endpoint_id or "").strip().strip("/")
     head, _, tail = eid.rpartition("/")
-    is_task = tail.endswith("-to-video") if kind == "video" else tail in IMAGE_TASK_SUFFIXES
+    is_task = (tail.endswith("-to-video") if kind == "video" else tail.endswith("-to-3d") if kind == "model3d"
+               else tail in IMAGE_TASK_SUFFIXES)
     return (head, tail) if head and is_task else (eid, "")
 
 
 _TASK_PHRASE_RE = re.compile(
-    r"[(\[]?\b(?:text|image|reference|video|audio|first[\s-]last[\s-]frame)[\s-]to[\s-](?:video|image)\b[)\]]?", re.I)
+    r"[(\[]?\b(?:text|image|reference|video|audio|first[\s-]last[\s-]frame|multi[\s-]?view|multi[\s-]image)"
+    r"[\s-]to[\s-](?:video|image|3d)\b[)\]]?", re.I)
 _TASK_TAIL_RE = re.compile(r"[\s\-–|:·(\[]*\b(?:edit|multi)\b[\])]*\s*$", re.I)
 
 
@@ -214,6 +219,7 @@ def _family_name(display_name: str) -> str:
     """目录里的展示名是按端点起的(「… Text to Video」「… Edit」),并成一条时去掉任务词。"""
     name = str(display_name or "").strip()
     stripped = _TASK_TAIL_RE.sub("", _TASK_PHRASE_RE.sub(" ", name))
+    stripped = re.sub(r"\s*([-–|:·])(?:\s*[-–|:·])+\s*", r" \1 ", stripped)   # 去掉任务词后留下的「 - - 」
     stripped = re.sub(r"\s{2,}", " ", stripped).strip(" -–|:·")
     return stripped or name
 

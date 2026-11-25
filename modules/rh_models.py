@@ -38,6 +38,9 @@ RUNTIME_DIR = Path(os.environ.get(
     "VIDEOAGENTS_RUNTIME_DIR", DATA_DIR / ".videoagents")).expanduser().resolve()
 CACHE_DIR = RUNTIME_DIR / "rh_models"
 CACHE_TTL = 24 * 3600
+# 目录缓存格式版本:2 = 收 3D 生成端点(2026-11-25)。只有列 3D 模型时才因版本不符强制重拉(见 list_models),
+# 图像 / 视频生成照旧按 24h 有效期用缓存,不为此多等一次约 1 分钟的拉取
+CATALOG_VERSION = 2
 
 SITES = {
     "ai": {"base": "https://www.runninghub.ai", "doc": "runninghub-api-doc-en",
@@ -53,6 +56,15 @@ POLL_INTERVAL = 8
 # 目录里只收生成类任务;编辑/延长/超分/工具/对口型等不进下拉
 IMAGE_TASKS = ("text-to-image", "image-to-image", "reference-to-image")
 VIDEO_TASKS = ("text-to-video", "image-to-video", "reference-to-video")
+# 3D 模型(2026-11-25,生成模型页「🧊 3D 模型」RH 标签):文生 3D / 图生 3D / 多视图生 3D;
+# 格式转换、分割、重拓扑、贴图、Gaussian Splat 等不是「出模型」的端点,不收
+MODEL3D_TASKS = ("text-to-3d", "image-to-3d", "multiview-to-3d")
+GEN_TASKS = IMAGE_TASKS + VIDEO_TASKS + MODEL3D_TASKS
+KINDS = ("image", "video", "model3d")
+
+
+def kind_of(task: str) -> str:
+    return "image" if task in IMAGE_TASKS else "model3d" if task in MODEL3D_TASKS else "video"
 
 _FIRST_KEYS = ("firstImageUrl", "firstFrameUrl")
 _LAST_KEYS = ("lastImageUrl", "lastFrameUrl")
@@ -108,12 +120,15 @@ def _task_of(category: str, path: str) -> str:
     vidu/reference-to-video-q2-pro 挂在 reference-to-image,sora text-to-video-pro 挂在 image-to-video),
     端点名是 API 本身的命名,比文档分类可靠。"""
     last = path.rsplit("/", 1)[-1].lower()
-    for t in IMAGE_TASKS + VIDEO_TASKS:
+    for t in GEN_TASKS:
         if last.startswith(t):
             return t
+    # 3D:hitem3d-*/multi-image-to-3d 是多视图;tripo-h/image-to-3d-v3.1 等版本号挂在末段(上面已按前缀认)
+    if last.startswith("multi-image-to-3d"):
+        return "multiview-to-3d"
     for seg in category.split(" > "):
         s = seg.strip().lower()
-        if s in IMAGE_TASKS + VIDEO_TASKS:
+        if s in GEN_TASKS:
             return s
     if last in ("edit", "image-edit") or last.startswith(("edit-", "image-edit-")):
         return "image-to-image"
@@ -286,8 +301,7 @@ def _fetch_catalog(site: str) -> list[dict]:
         task = _task_of(row["category"], path)
         if not task:
             return None
-        kind = "image" if task in IMAGE_TASKS else "video"
-        return {**row, "id": path, "task": task, "kind": kind, "schema": schema,
+        return {**row, "id": path, "task": task, "kind": kind_of(task), "schema": schema,
                 "caps": _caps(_normalize(schema)[0])}
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=16) as ex:
@@ -323,7 +337,7 @@ def catalog(site: str, refresh: bool = False) -> list[dict]:
         raise
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     tmp = cache.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"fetched_at": time.time(), "models": models},
+    tmp.write_text(json.dumps({"fetched_at": time.time(), "version": CATALOG_VERSION, "models": models},
                               ensure_ascii=False), encoding="utf-8")
     tmp.replace(cache)
     return models
@@ -336,12 +350,23 @@ def _with_caps(models: list[dict]) -> list[dict]:
         task = _task_of(m.get("category") or "", m["id"])
         if task:
             m["task"] = task
-            m["kind"] = "image" if task in IMAGE_TASKS else "video"
+            m["kind"] = kind_of(task)
     return models
 
 
+def _stale_format(site: str) -> bool:
+    """本地有目录缓存,但是 2026-11-25 前的格式(没收 3D 端点)。"""
+    try:
+        return json.loads((CACHE_DIR / f"{site_of(site)}.json").read_text(encoding="utf-8")).get("version") != CATALOG_VERSION
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
 def list_models(site: str, kind: str, refresh: bool = False) -> list[dict]:
-    """设置页下拉用的精简清单:[{id, name, task, category}]。"""
+    """设置页下拉用的精简清单:[{id, name, task, category}]。
+    列 3D 模型时旧格式缓存强制重拉一次;拉取失败照用旧缓存(3D 列表为空)。"""
+    if kind == "model3d" and not refresh and _stale_format(site):
+        refresh = True
     return [{"id": m["id"], "name": m["name"], "task": m["task"], "category": m["category"]}
             for m in catalog(site, refresh) if m["kind"] == kind]
 
@@ -370,11 +395,11 @@ def cached_list(site: str, kind: str) -> list[dict]:
             if not isinstance(m, dict) or not m.get("id"):
                 continue
             task = _task_of(m.get("category") or "", m["id"]) or str(m.get("task") or "")
-            if task not in IMAGE_TASKS + VIDEO_TASKS:
+            if task not in GEN_TASKS:
                 continue
             rows.append({"id": m["id"], "name": str(m.get("name") or m["id"]), "task": task})
         memo = _CACHED_LIST_MEMO[site] = (mtime, rows)
-    want = IMAGE_TASKS if kind == "image" else VIDEO_TASKS
+    want = IMAGE_TASKS if kind == "image" else MODEL3D_TASKS if kind == "model3d" else VIDEO_TASKS
     return [dict(r) for r in memo[1] if r["task"] in want]
 
 
