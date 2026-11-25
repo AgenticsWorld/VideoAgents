@@ -5216,4 +5216,6 @@ window.I18N_DICT = {
 "请先放正面参考图": "Add the front view image first",
 "「{cat}」里已有这个模型:{path}": "“{cat}” already has this model: {path}",
 "生成 3D 模型": "Generate 3D Model",
+"Idol Max(Fal 托管;单张图生 3D,3 万面游戏级网格 + 贴图,约 50 秒)": "Idol Max (hosted on Fal; single image to 3D, 30k-triangle game-ready mesh + textures, about 50 s)",
+"Idol Max Turbo(Fal 托管;Idol Max 快速版,单张图生 3D,约 20 秒)": "Idol Max Turbo (hosted on Fal; fast version of Idol Max, single image to 3D, about 20 s)",
 };

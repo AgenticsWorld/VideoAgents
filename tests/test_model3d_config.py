@@ -58,6 +58,9 @@ def test_defaults_and_page_lists_agree():
     assert tuple(page_tripo) == model3d.TRIPO_MODELS
     page_h3d = re.findall(r"\['(hunyuan3d-dit-[^']+)'", html.split("const H3D_LOCAL_MODELS=")[1].split("];")[0])
     assert tuple(page_h3d) == model3d.HUNYUAN3D_MODELS
+    # Fal 内置清单:设置页下拉与生成窗口(model3d.FAL_MODELS)同一批、同序
+    page_fal = re.findall(r"^\s*\['([^']+)',", html.split("const FAL_3D_MODELS=")[1].split("];")[0], re.M)
+    assert page_fal == [m for m, _, _ in model3d.FAL_MODELS]
 
 
 def test_old_config_without_model3d_gets_defaults(cfg_file):

@@ -21,7 +21,7 @@
 - Tripo 官方 v3:全部模型(H / P 系列)都有 multiview-to-model,inputs 用视角键,正面必填且至少两张。
 - Fal:Hunyuan 3D 3.1 Pro(input_image_url + back/left/right_image_url 具名槽位)、Tripo H3.1(multiview-to-3d,
   image_urls 按 [正, 左, 后, 右] 位置认图,缺左侧时后 / 右用不上)、Meshy 7.1(multi-image-to-3d,1–4 张不分视角)、
-  Rodin 2.5(image_urls 不分视角)、Hi3D 3.0(multi-view-to-3d 具名槽位);Hunyuan 3.1 Rapid、Tripo P2、TRELLIS 2 只收一张。
+  Rodin 2.5(image_urls 不分视角)、Hi3D 3.0(multi-view-to-3d 具名槽位);Hunyuan 3.1 Rapid、Tripo P2、TRELLIS 2、Idol Max / Max Turbo 只收一张。
 - RH:hunyuan3d-v3.1/image-to-3d 自带 left/back/right 槽位;tripo-* 与 hitem3d-* 有同名 multiview / multi-image 端点
   (按端点名自动换);miora-3d 收 multiViewImages(不分视角);meshy6 只收一张。
 - 本地 Hunyuan3D-2 api_server.py:只收一张(params.image),多视图版 2mv 的权重 api_server 也调不了多视图。
@@ -167,6 +167,10 @@ FAL_MODELS = (
     ("fal-ai/hyper3d/rodin/v2.5", "Hyper3D Rodin 2.5", True),
     ("fal-ai/trellis-2", "TRELLIS 2", False),
     ("hitem3d/hi3d/v3.0", "Hi3D 3.0", True),
+    # Sperid Labs Idol(2026-11-25 用户要求加入):只收一张 image_url;出 game_glb(3 万面 + UV + 2048 贴图)与
+    # model_glb(全分辨率顶点色网格),取 game_glb;没有关纹理的开关;enable_pbr 另加 $0.10,不开
+    ("speridlabs/idol/max", "Idol Max", False),
+    ("speridlabs/idol/max/turbo", "Idol Max Turbo", False),
 )
 H3D_LABELS = {"hunyuan3d-dit-v2-mini-turbo": "Hunyuan3D-2mini Turbo", "hunyuan3d-dit-v2-mini": "Hunyuan3D-2mini",
               "hunyuan3d-dit-v2-0-turbo": "Hunyuan3D-2 Turbo", "hunyuan3d-dit-v2-0-fast": "Hunyuan3D-2 Fast",
@@ -614,6 +618,11 @@ def fal_body(entry: dict, views: dict, texture: bool, to_url, notes: list) -> tu
             body["texture"] = "no"
         if "None" in enum("material"):
             body["material"] = "None"
+        # enable_pbr 只管粗糙度 / 金属度贴图,关它不等于不出纹理;端点没有真正的纹理开关时如实说明
+        if not any(k in body for k in ("texture", "pbr", "should_texture", "enable_texture", "textured_mesh",
+                                       "generate_type", "material")):
+            notes.append(_t(f"Fal 端点 {entry['endpoint_id']} 没有关纹理的选项,出的模型仍带贴图",
+                            f"Fal endpoint {entry['endpoint_id']} has no option to turn textures off; the model still comes textured"))
     for k in ("geometry_file_format", "export_format"):
         if "glb" in enum(k):
             body[k] = "glb"
@@ -621,9 +630,10 @@ def fal_body(entry: dict, views: dict, texture: bool, to_url, notes: list) -> tu
 
 
 def _find_glb_url(res) -> str:
-    """Fal 结果里找 GLB 文件:先认常见键(model_glb / model_mesh / model_file),再全量找 content_type / 扩展名是 glb 的。"""
+    """Fal 结果里找 GLB 文件:先认常见键(game_glb / model_glb / model_mesh / model_file),再全量找 content_type / 扩展名是 glb 的。"""
     if isinstance(res, dict):
-        for k in ("model_glb", "model_mesh", "model_file", "glb"):
+        # game_glb 排最前:Idol 同时回 game_glb(带 UV 贴图的游戏级网格)与 model_glb(全分辨率顶点色网格),要前者
+        for k in ("game_glb", "model_glb", "model_mesh", "model_file", "glb"):
             v = res.get(k)
             if isinstance(v, dict) and str(v.get("url") or "").split("?", 1)[0].lower().endswith(".glb"):
                 return v["url"]

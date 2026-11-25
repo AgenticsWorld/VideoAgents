@@ -5224,4 +5224,6 @@ window.I18N_DICT = {
 "请先放正面参考图": "Masukkan dulu gambar depan",
 "「{cat}」里已有这个模型:{path}": "“{cat}” sudah berisi model ini: {path}",
 "生成 3D 模型": "Buat Model 3D",
+"Idol Max(Fal 托管;单张图生 3D,3 万面游戏级网格 + 贴图,约 50 秒)": "Idol Max (dihosting di Fal; satu gambar ke 3D, mesh siap game 30 ribu segitiga + tekstur, sekitar 50 detik)",
+"Idol Max Turbo(Fal 托管;Idol Max 快速版,单张图生 3D,约 20 秒)": "Idol Max Turbo (dihosting di Fal; versi cepat Idol Max, satu gambar ke 3D, sekitar 20 detik)",
 };

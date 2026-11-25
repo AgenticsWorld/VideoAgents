@@ -139,6 +139,31 @@ def test_fal_body_named_slots_list_order_and_texture_off():
     assert model3d._find_glb_url({"model_urls": {"glb": {"url": "https://x/m?sig=1", "content_type": "model/gltf-binary"}}}) == "https://x/m?sig=1"
 
 
+def test_fal_idol_single_image_game_glb_and_no_texture_switch():
+    """Sperid Labs Idol Max / Turbo(fal.ai 模型页 2026-11-25 的参数表):只收一张 image_url,没有纹理开关
+    (enable_pbr 只是粗糙度 / 金属度贴图,另收费,不开);同时回 game_glb 与 model_glb,取带贴图的 game_glb。"""
+    assert {m: mv for m, _, mv in model3d.FAL_MODELS if m.startswith("speridlabs/")} == {
+        "speridlabs/idol/max": False, "speridlabs/idol/max/turbo": False}
+    assert model3d.model_label("fal", "speridlabs/idol/max/turbo") == "Idol Max Turbo"
+    assert model3d._fal_candidates("speridlabs/idol/max/turbo", 1) == [
+        "speridlabs/idol/max/turbo/image-to-3d", "speridlabs/idol/max/turbo"]
+    to_url = lambda p: f"data:{p}"  # noqa: E731
+    idol = _fal_entry("speridlabs/idol/max", {
+        "image_url": (["string"], None), "enable_pbr": (["boolean"], None), "rig": (["boolean"], None),
+        "image_type": (["string"], ["synthetic", "real"]), "mesh_resolution": (["string"], ["512", "1024"]),
+        "enable_usdz": (["boolean"], None)}, required=["image_url"])
+    notes = []
+    body, used = model3d.fal_body(idol, {"front": "F"}, True, to_url, notes)
+    assert body == {"image_url": "data:F"} and used == ["front"] and notes == []
+    body, _ = model3d.fal_body(idol, {"front": "F"}, False, to_url, notes)
+    assert body == {"image_url": "data:F", "enable_pbr": False}
+    assert len(notes) == 1 and "speridlabs/idol/max" in notes[0]                 # 关不了纹理要如实说
+    res = {"game_glb": {"url": "https://x/game.glb", "content_type": "model/gltf-binary"},
+           "model_glb": {"url": "https://x/full.glb", "content_type": "model/gltf-binary"},
+           "preprocessed_image": {"url": "https://x/p.png"}}
+    assert model3d._find_glb_url(res) == "https://x/game.glb"
+
+
 def test_rh_body_views_required_defaults_and_demo_urls():
     tripo_mv = {"id": "tripo-h/multiview-to-3d-v3.1", "task": "multiview-to-3d", "schema": {"properties": {
         "inputMode": {"type": "string", "enum": ["views", "multiviewTaskId"], "default": "views"},
