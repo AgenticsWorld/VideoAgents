@@ -647,7 +647,7 @@ function buildFalSearch(d,kind){
   r.appendChild(q);r.appendChild(b);d.appendChild(r);
   d.appendChild(el('div',{className:'status',id:`${kind}-fal-status`}));
   d.appendChild(el('div',{className:'fal-hits',id:`${kind}-fal-hits`}));
-  if(kind!=='model3d')   // 3D 只搜 image-to-3d / text-to-3d 类别,尚无生成命令,没有「按参数表适配」一说
+  if(kind!=='model3d')   // 3D 只搜 image-to-3d / text-to-3d 类别;3D 生成一律按端点参数表组请求体(modules/model3d.fal_body),不分内置 / 适配
     d.appendChild(el('div',{className:'hint'},'搜到的模型不在上面清单里时,系统按该端点的参数表组请求:时长、分辨率、画幅取它支持的最接近值,不支持的输入(如尾帧、参考图)会直接报错;这些模型尚未逐个实测。'));
 }
 async function falSearch(kind){
@@ -668,7 +668,7 @@ async function falSearch(kind){
       row.appendChild(el('span',{className:'fal-hit-name',textContent:m.name}));
       row.appendChild(el('code',{textContent:m.id}));
       row.appendChild(el('span',{className:'fal-hit-tasks',textContent:(m.tasks||[]).join(' · ')}));
-      if('builtin' in m)   // 3D 搜索结果不带 builtin(尚无生成命令)
+      if('builtin' in m)   // 3D 搜索结果不带 builtin(3D 端点全部按参数表组请求体)
         row.appendChild(el('span',{className:'fal-hit-tag',textContent:t(m.builtin?'已内置适配':'按参数表自动适配')}));
       box.appendChild(row);
     });
@@ -1497,7 +1497,7 @@ async function testHunyuan(){
 }
 
 /* 3D 模型(2026-11-25,配置段 model3d;modules/model3d.py):Tripo 官方 API / Fal 托管 3D 端点 /
-   RH = RunningHub 模型 API 的 3D 端点 / 本地 = 局域网 Hunyuan3D-2 api_server。目前只有配置与连接验证,生成命令尚未接入 */
+   RH = RunningHub 模型 API 的 3D 端点 / 本地 = 局域网 Hunyuan3D-2 api_server。生成走 genmedia.py model3d(modules/model3d.py,参考文件页「🧊 3D 模型」→「✨ 生成」,2026-11-25) */
 const MODEL3D_PROVIDERS={tripo:'Tripo',fal:'Fal',rhapi:'RH',hunyuan3d:'本地 Hunyuan3D'};
 // Tripo 国际站 / 国内站同一套 /v3 接口,账号与 Key 不互通:两站 Key 分存(api_key_ai / api_key_cn)
 const TRIPO_SITES=[['ai','tripo3d.ai(国际站)'],['cn','tripo3d.com(国内站)']];

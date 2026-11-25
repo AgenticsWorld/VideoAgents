@@ -29,6 +29,12 @@ CLI:
   需先在 Web 控制台「设置 → 存储与图库」配置渠道(火山 TOS/阿里 OSS/腾讯 COS/S3 兼容,
   生效渠道=选中的标签页;各渠道 SDK 按需安装:tos/oss2/cos-python-sdk-v5/boto3)。
 
+  python3 modules/genmedia.py model3d --front front.png [--left l.png] [--back b.png] [--right r.png] \
+      --output out.glb [--provider tripo|fal|rhapi|hunyuan3d] [--model <模型>] [--texture | --no-texture]
+
+  图生 3D(2026-11-25,modules/model3d.py):渠道按「生成模型」页 3D 模型段;多视图 = 正面必填 + 左 / 后 / 右选填,
+  所选模型收不下的视角忽略并在日志说明;本地 Hunyuan3D 只收正面一张。
+
   python3 modules/genmedia.py reclaim [--task-id <UUID|cgt-xxxx>;Fal 任务可省略] --output out.mp4 \
       [--return-last-frame tail.png]
 
@@ -8619,6 +8625,28 @@ def _cmd_info(args):
         print(f"{'sfx':5s} → {cfg['provider']:10s} {desc}")
     except RuntimeError as e:
         print(f"{'sfx':5s} → ⚠ {e}")
+    try:
+        from modules import model3d
+        cfg = model3d.resolve(json.loads(CONFIG_PATH.read_text()), zh=True)
+        print(f"{'3d':5s} → {cfg['provider']:10s} model={cfg['model']}")
+    except (RuntimeError, OSError, ValueError) as e:
+        print(f"{'3d':5s} → ⚠ {e}")
+
+
+def _cmd_model3d(args):
+    """图生 3D(2026-11-25):参考图 → GLB。渠道 / 模型按「生成模型」页 3D 模型段,--provider / --model 本次改用;
+    多视图 = 正面(必填)+ 左 / 后 / 右(选填),所选模型收不下的视角如实写进日志(modules/model3d.py)。
+    成功时 stdout 打「已生成: <路径>」与一行 MODEL3D_META <JSON>(实际渠道 / 模型 / 端点 / 视角 / 说明)。"""
+    from modules import model3d
+    if not CONFIG_PATH.is_file():
+        raise RuntimeError(f"未找到生成模型配置 {CONFIG_PATH};先在 Web 控制台「🎨 生成模型」页保存配置")
+    if Path(args.output).suffix.lower() != ".glb":
+        raise RuntimeError("--output 须是 .glb 文件")
+    views = {v: getattr(args, v) for v in model3d.VIEWS if getattr(args, v)}
+    meta = model3d.generate(json.loads(CONFIG_PATH.read_text()), views, args.output,
+                            provider=args.provider, model=args.model, texture=args.texture)
+    print(f"已生成: {Path(args.output).resolve()}")
+    print(model3d.META_PREFIX + json.dumps(meta, ensure_ascii=False), flush=True)
 
 
 def _cmd_image(args):
@@ -9097,12 +9125,26 @@ def main():
                     help="代码音效脚本(.py;按环境变量 CODE_AUDIO_OUT 写 wav,CODE_AUDIO_LOOP=1 表示要无缝循环);仅 code 渠道")
     ps.add_argument("--dry-run", action="store_true")
 
+    p3 = sub.add_parser("model3d", help="图生 3D 模型(GLB;渠道按「生成模型」页 3D 模型段:Tripo / Fal / RH / 本地 Hunyuan3D)")
+    p3.add_argument("--front", "--image", dest="front", required=True, help="正面参考图(必填)")
+    p3.add_argument("--left", default="", help="左侧视角图(选填;多视图,所选模型收不下时忽略并说明)")
+    p3.add_argument("--back", default="", help="背面视角图(选填)")
+    p3.add_argument("--right", default="", help="右侧视角图(选填)")
+    p3.add_argument("--output", required=True, help="输出 .glb 路径")
+    p3.add_argument("--provider", default="", choices=("", "tripo", "fal", "rhapi", "hunyuan3d"),
+                    help="本次改用指定 3D 渠道(须已在「生成模型」页配置;默认 3D 模型段的生效渠道)")
+    p3.add_argument("--model", default="",
+                    help="本次改用指定模型(Tripo 模型版本 / Fal 模型前缀或端点 / RH 图生 3D 端点;本地 = 服务端模型名,只作记录)")
+    tx = p3.add_mutually_exclusive_group()
+    tx.add_argument("--texture", dest="texture", action="store_true", default=None, help="出带纹理的模型")
+    tx.add_argument("--no-texture", dest="texture", action="store_false", help="只出白模(几何)")
+
     args = ap.parse_args()
     try:
         {"info": _cmd_info, "image": _cmd_image, "video": _cmd_video,
          "reclaim": _cmd_reclaim, "upscale": _cmd_upscale, "music": _cmd_music,
          "tts": _cmd_tts, "voices": _cmd_voices, "upload": _cmd_upload,
-         "sfx": _cmd_sfx}[args.cmd](args)
+         "sfx": _cmd_sfx, "model3d": _cmd_model3d}[args.cmd](args)
     except RuntimeError as e:
         print(f"生成失败: {e}", file=sys.stderr)
         sys.exit(1)

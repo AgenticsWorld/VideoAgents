@@ -27,6 +27,14 @@ WebGL renderer and OrbitControls. Copyright notice and license are retained in
 to a relative local import. Upstream: https://github.com/mrdoob/three.js/tree/r180.
 The whitebox viewer also bundles Three.js' `addons/postprocessing/Pass.js` (MIT, same
 license file) for the world viewer.
+The Reference Files page's GLB viewer bundles these unmodified Three.js r180 addons
+(MIT, same license file): `addons/loaders/GLTFLoader.js`, `addons/loaders/DRACOLoader.js`,
+`addons/utils/BufferGeometryUtils.js` and `addons/environments/RoomEnvironment.js`.
+They come with two decoders from the same Three.js release:
+`addons/libs/meshopt_decoder.module.js` (meshoptimizer 0.22, MIT, Copyright © 2016-2024
+Arseny Kapoulkine; the license header is kept in the file) and the glTF build of the
+Draco WebAssembly decoder `addons/libs/draco/gltf/` (Google Draco, Apache License 2.0,
+https://github.com/google/draco; see `addons/libs/draco/README.md`).
 
 The scene world viewer bundles Spark (`@sparkjsdev/spark`, MIT, Copyright © 2025
 World Labs Technologies, Inc.) to render Gaussian-splat worlds (`.spz`) in the browser.

@@ -12,6 +12,10 @@
 <script src="/static/image-model-picker.js?v=20260912"></script>
 <script src="/static/ref-generate.js?v=20261026"></script>
 <script src="/static/footage-frame.js?v=20261026"></script>
+<script src="/static/ref-gen3d.js?v=20261125"></script>
+<!-- 3D 模型板块的 GLB 预览(glb-viewer.js 是 ES module,经 importmap 用 vendor 里的 three r180) -->
+<script type="importmap">{"imports":{"three":"/static/vendor/three/three.module.js","three/addons/":"/static/vendor/three/addons/"}}</script>
+<script type="module" src="/static/glb-viewer.js?v=20261125"></script>
 <script>
 /* 兜底:i18n 运行时未加载(如服务端未挂 /static)时保持中文界面可用 */
 if(!window.I18N){
@@ -64,6 +68,10 @@ input[type=text],textarea{background:var(--panel2);color:var(--text);border:1px 
 .card .thumb.font-thumb .fsample{font-size:30px;line-height:1.15;color:var(--text);white-space:nowrap;overflow:hidden;max-width:100%}
 .card .thumb.font-thumb .fsample.latin{font-size:20px;color:var(--dim)}
 .card .thumb.font-thumb .ferr{font-size:11.5px;color:var(--red)}
+.card .thumb.m3d{cursor:pointer;position:relative;background:#1a1f2b}
+.card .thumb.m3d img{object-fit:contain}
+.card .thumb.m3d .m3d-tag{position:absolute;left:6px;top:5px;font-size:10.5px;color:#fff;background:rgba(0,0,0,.55);border-radius:4px;padding:0 6px}
+.card .thumb.m3d .ferr{position:absolute;left:0;right:0;bottom:6px;font-size:11px;color:var(--red);text-align:center;padding:0 6px}
 .card audio{width:100%;height:30px;margin-top:2px}
 .card .fnrow{display:flex;align-items:center;gap:6px;padding:6px 9px 0}
 .card .fn{font-size:11.5px;color:var(--dim);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:ui-monospace,Menlo,monospace}
@@ -112,6 +120,7 @@ const CAT_META={
   scenes:['🏔','场景','场景与世界观:建筑/地貌/氛围参考'],
   creatures:['🐎','生物','生物/坐骑/异兽参考;在注释里写明是哪个生物(生物名或 id)'],
   props:['🗡','道具','道具/法宝/服装参考;在注释里写明是哪件道具或服装'],
+  models3d:['🧊','3D 模型','GLB 3D 模型:角色 / 生物 / 道具的立体参考,点卡片可旋转查看;在注释里写明是哪个角色或道具。「✨ 生成」可用参考图生成'],
   audio:['🎙','讲述音频','音频配画 / 数字人 / 混剪项目的讲述音频(母带):原字节入册作成片声轨,不转码不剪裁'],
   voices:['🗣','克隆声音','数字人项目「克隆声音」的声音样本:每个说话人一段 5–30 秒、只有这一个人说话的干净录音,按它的音色合成台词;只上传本人或已获授权的声音'],
   music:['🎵','音频','希望使用的音频文件(背景音轨,BGM 候选,配乐 Agent 优先选用)'],
@@ -122,7 +131,7 @@ const CAT_META={
   '':['📂','根目录散图','散放在 refs/ 根目录的文件,一律视为整体风格参考'],
 };
 const STOCK_CATS=['style','thumbnail','characters','scenes','creatures','props','other'];   // 「✨ 生成」「🎞 素材库」「🔎 图库」能加入的板块(服务端 REF_STOCK_CATEGORIES)
-const CAT_ACCEPT={fonts:'.ttf,.otf,.ttc',audio:'.mp3,.wav,.flac,.m4a,.aac,.ogg',voices:'.mp3,.wav,.flac,.m4a,.aac,.ogg'};   // 分类专属的文件选择过滤(服务端同样校验)
+const CAT_ACCEPT={models3d:'.glb',fonts:'.ttf,.otf,.ttc',audio:'.mp3,.wav,.flac,.m4a,.aac,.ogg',voices:'.mp3,.wav,.flac,.m4a,.aac,.ogg'};   // 分类专属的文件选择过滤(服务端同样校验)
 const CANVAS_EXT=/\.(png|jpe?g|webp)$/i;   // 画板只收这几种(modules/image_canvas.IMG_EXTS);gif / bmp / tif 不出按钮
 const fmtSize=n=>n>=1048576?(n/1048576).toFixed(1)+' MB':n>=1024?Math.round(n/1024)+' KB':n+' B';
 
@@ -150,16 +159,24 @@ function footageHtml(fo){
   const tt=Number(fo.t)||0,m=Math.floor(tt/60),sec=(tt-m*60).toFixed(2).padStart(5,'0');
   return `<div class="srcrow" data-no-i18n title="${esc((fo.title||fo.project)+(fo.source?'\n'+fo.source:''))}">🎞 ${esc(t('素材库'))} · ${esc(fo.title||fo.project)} · ${String(m).padStart(2,'0')}:${sec}</div>`;
 }
+/* 「🧊 3D 模型」板块「✨ 生成」加入的模型:渠道 · 模型,悬停看各视角参考图 */
+function gen3dHtml(g){
+  if(!g)return '';
+  const VN={front:'正面',left:'左侧',back:'背面',right:'右侧'};
+  const tip=Object.entries(g.views||{}).map(([v,src])=>t(VN[v]||v)+': '+src).join('\n');
+  return `<div class="srcrow" data-no-i18n title="${esc(tip)}">🧊 ${esc(t('AI 生成'))} · ${esc(RefGen3D.engine(g))}${g.texture===false?' · '+esc(t('无纹理')):''}</div>`;
+}
 function cardHtml(f){
   const cv=f.is_image&&CANVAS_EXT.test(f.name)?CanvasEntry.btn({url:f.url,kind:'ref'}):'';
   let thumb;
   if(f.is_image)thumb=`<div class="thumb"><img loading="lazy" src="${esc(f.url)}" alt=""></div>`;
   else if(f.is_audio)thumb=`<div class="thumb"><span class="fico">🎵</span></div><audio controls preload="none" src="${esc(f.url)}"></audio>`;
   else if(f.is_video)thumb=`<div class="thumb"><video controls preload="metadata" src="${esc(f.url)}"></video></div>`;
+  else if(f.is_model3d)thumb=`<div class="thumb m3d" data-glb="${esc(f.url)}" title="${esc(t('点击旋转查看 3D 模型'))}"><span class="fico">🧊</span><span class="m3d-tag">3D</span></div>`;
   else if(f.is_font)thumb=`<div class="thumb font-thumb" data-font-url="${esc(f.url)}"><span class="fsample">${esc(t('花字 字体 示例'))}</span><span class="fsample latin">Aa Bb 0123</span></div>`;
   else thumb=`<div class="thumb"><span class="fico">📄</span></div>`;
   return `<figure class="card" data-path="${esc(f.path)}">${thumb}
-    <div class="fnrow"><div class="fn" title="${esc(f.path)} · ${fmtSize(f.size)}">${esc(f.name)}</div>${cv}</div>${srcHtml(f.source)}${genHtml(f.gen)}${footageHtml(f.footage)}
+    <div class="fnrow"><div class="fn" title="${esc(f.path)} · ${fmtSize(f.size)}">${esc(f.name)}</div>${cv}</div>${srcHtml(f.source)}${genHtml(f.gen)}${footageHtml(f.footage)}${gen3dHtml(f.gen3d)}
     <div class="note-box">${noteBoxHtml(f)}</div></figure>`;
 }
 function render(){
@@ -172,8 +189,10 @@ function render(){
         ?`<button class="gencat" data-cat="${esc(c.key)}" title="${esc(t('用 AI 生成一张图加入本板块(图像模型在页面顶部选)'))}">✨ ${esc(t('生成'))}</button>`
           +`<button class="footcat" data-cat="${esc(c.key)}" title="${esc(t('从素材库的视频里截一帧加入本板块'))}">🎞 ${esc(t('素材库'))}</button>`
           +`<button class="stockcat" data-cat="${esc(c.key)}" title="${esc(t('从免费图库搜图加入本板块'))}">🔎 ${esc(t('图库'))}</button>`:'';
+      const gen3d=c.key==='models3d'
+        ?`<button class="gen3dcat" title="${esc(t('用参考图生成 3D 模型加入本板块(可放多个视角)'))}">✨ ${esc(t('生成'))}</button>`:'';
       const up=c.key!==''
-        ?`${stock}<button class="upbtn primary" data-cat="${esc(c.key)}">📤 ${esc(t('上传'))}</button>`:'';
+        ?`${stock}${gen3d}<button class="upbtn primary" data-cat="${esc(c.key)}">📤 ${esc(t('上传'))}</button>`:'';
       return `<div class="cat" data-cat="${esc(c.key)}">
         <div class="cat-head"><h3>${ico} ${esc(t(nm))} <span class="key">${c.key?esc(c.key)+'/':'refs/'}</span><span class="cnt">${c.files.length}</span></h3>
           <span class="desc">${esc(t(desc))}</span>${up}</div>
@@ -182,7 +201,38 @@ function render(){
       </div>`;
     }).join('');
   loadFontPreviews();
+  loadModelThumbs();
 }
+
+/* 3D 模型卡片:滚到可见时按队列渲染一张静态缩略图(共用一个 WebGL 渲染器);点卡片打开可旋转的查看窗 */
+let M3D_IO=null;
+function glbViewer(){
+  return window.GlbViewer?Promise.resolve(window.GlbViewer)
+    :new Promise(r=>window.addEventListener('glbviewer-ready',()=>r(window.GlbViewer),{once:true}));
+}
+function loadModelThumbs(){
+  const boxes=[...document.querySelectorAll('.thumb.m3d[data-glb]')];
+  if(!boxes.length)return;
+  const draw=box=>{
+    const url=box.dataset.glb;
+    if(box.dataset.thumbDone)return;
+    box.dataset.thumbDone='1';
+    glbViewer().then(V=>V.thumb(url)).then(src=>{
+      box.querySelector('.fico')?.remove();
+      box.insertAdjacentHTML('afterbegin',`<img alt="" src="${src}">`);
+    }).catch(()=>{box.insertAdjacentHTML('beforeend',`<span class="ferr">${esc(t('无法预览该模型'))}</span>`)});
+  };
+  if(!('IntersectionObserver' in window)){boxes.forEach(draw);return}
+  if(M3D_IO)M3D_IO.disconnect();
+  M3D_IO=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){M3D_IO.unobserve(e.target);draw(e.target)}}),{rootMargin:'200px'});
+  boxes.forEach(b=>M3D_IO.observe(b));
+}
+document.addEventListener('click',e=>{
+  const box=e.target.closest('.thumb.m3d[data-glb]');
+  if(!box)return;
+  const card=box.closest('.card'),f=card&&findFile(card.dataset.path);
+  glbViewer().then(V=>V.open(box.dataset.glb,{title:f?f.path:''}));
+});
 
 /* 字体卡片:用 FontFace 加载该字体文件,把示例文字切到真实字形(加载失败则提示,不影响其它功能) */
 let FONT_SEQ=0;
@@ -353,6 +403,17 @@ document.addEventListener('click',e=>{
 });
 
 /* ---------- 「🎞 素材库」:选素材项目、播原片找画面,截图加入该板块 ---------- */
+/* ---------- 「🧊 3D 模型」→「✨ 生成」:放参考图(可多视角)、选 3D 模型,生成后旋转预览,满意加入本板块 ---------- */
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.gen3dcat');
+  if(!b)return;
+  const images=[];
+  (DATA?.categories||[]).forEach(c=>c.files.forEach(f=>{
+    if(f.is_image)images.push({path:f.path,url:f.url,name:f.name,cat:(CAT_META[c.key]||[])[1]||c.key});
+  }));
+  RefGen3D.open({project:proj(),images,catName:CAT_META.models3d[1],onAdded(){load()}});
+});
+
 document.addEventListener('click',e=>{
   const b=e.target.closest('.footcat');
   if(!b)return;
@@ -362,7 +423,7 @@ document.addEventListener('click',e=>{
 
 /* ---------- 图片放大 ---------- */
 document.addEventListener('click',e=>{
-  const img=e.target.closest('.thumb img');
+  const img=e.target.closest('.thumb:not(.m3d) img');
   if(!img)return;
   $('#lightbox img').src=img.src;$('#lightbox').style.display='flex';
 });

@@ -328,6 +328,36 @@ async def adopt_generated_reference(project: str, job: str, body: dict[str, Any]
     return _artifact_urls(await core.api_refgen_adopt({**body, "project": project, "job": job}), project)
 
 
+@api.get("/projects/{project}/references/generate3d/options", tags=["artifacts"])
+async def generate3d_options(project: str) -> dict[str, Any]:
+    """参考文件页「🧊 3D 模型」→「✨ 生成」窗口的模型下拉(各渠道是否已配置、每个模型是否收多视图、默认模型)。"""
+    return await core.api_refgen3d_options(project)
+
+
+@api.post("/projects/{project}/references/generate3d/upload", tags=["artifacts"])
+async def generate3d_upload(project: str, request: Request, filename: str = "") -> dict[str, Any]:
+    """生成 3D 模型窗口里本地上传的参考图(请求体即图片字节),回项目内相对路径。"""
+    data = await request.body()
+    return _artifact_urls(await core.api_refgen3d_upload(data, project, filename), project)
+
+
+@api.post("/projects/{project}/references/generate3d", tags=["artifacts"])
+async def generate3d_start(project: str, body: dict[str, Any]) -> dict[str, Any]:
+    """按参考图生成 3D 模型(GLB 待选)。{images: {front, left?, back?, right?}, names?, provider?, model?, texture?, discard?}"""
+    return _artifact_urls(await core.api_refgen3d_start({**body, "project": project}), project)
+
+
+@api.get("/projects/{project}/references/generate3d/{job}", tags=["artifacts"])
+async def generate3d_status(project: str, job: str) -> dict[str, Any]:
+    return _artifact_urls(await core.api_refgen3d_status(project, job), project)
+
+
+@api.post("/projects/{project}/references/generate3d/{job}/adopt", tags=["artifacts"])
+async def generate3d_adopt(project: str, job: str, body: dict[str, Any]) -> dict[str, Any]:
+    """把生成好的 GLB 加入 refs/models3d/。"""
+    return _artifact_urls(await core.api_refgen3d_adopt({**body, "project": project, "job": job}), project)
+
+
 @api.post("/projects/{project}/script/{ep}/keypoints", tags=["artifacts"])
 async def script_keypoints(project: str, ep: str, body: dict[str, Any]) -> dict[str, Any]:
     from modules import script_keypoints as kp

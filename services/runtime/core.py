@@ -372,6 +372,8 @@ REFS_README = """# refs/ — 用户参考目录
 - `scenes/`     场景与世界观:建筑/地貌/氛围
 - `creatures/`  生物/坐骑/异兽形象;在注释里写明是哪个生物(生物名或 id)
 - `props/`      道具/法宝/服装;在注释里写明是哪件道具或服装
+- `models3d/`   3D 模型(GLB):角色 / 生物 / 道具 / 场景的立体参考,【参考文件】页可旋转查看,也可用参考图在页内生成;
+                在注释里写明是哪个角色 / 道具
 - `music/`      希望使用的音频文件(背景音轨,BGM 候选,mp3/wav/flac 等);配乐 Agent 优先选用,并自动判断用在视频的合适位置
 - `video/`      参考视频:动作/运镜/节奏/转场范例(mp4/mov/webm),视频生成 Agent 优先参考(支持时经 --ref-video 注入)
 - `thumbnail/`  封面参考:他人爆款封面/构图/版式范例
@@ -419,7 +421,7 @@ def atomic_write_json(path: Path, obj):
 def ensure_project(project: str):
     """建项目目录 + 用户参考目录骨架。"""
     refs = PROJECTS_DIR / project / "refs"
-    for sub in ("style", "thumbnail", "characters", "scenes", "creatures", "props", "music",
+    for sub in ("style", "thumbnail", "characters", "scenes", "creatures", "props", "models3d", "music",
                 "video", "fonts", "text", "other"):
         (refs / sub).mkdir(parents=True, exist_ok=True)
     readme = refs / "README.md"
@@ -1051,7 +1053,7 @@ DEFAULT_GENCONFIG = {
     #   rhapi     = RunningHub 标准模型 API 3D 端点(rh_models kind=model3d),t23d 文生 3D / i23d 图生 3D(含多视图)
     #   hunyuan3d = 本机 / 局域网 Hunyuan3D-2 api_server(默认 http://127.0.0.1:8080;POST /generate、/send,GET /status/{uid});model 记录服务端
     #               加载的 DiT 版本(权重由服务端启动参数定),texture 须服务端带 --enable_tex
-    # 目前只有配置与连接验证,生成命令尚未接入
+    # 生成:genmedia.py model3d(modules/model3d.generate;参考文件页「🧊 3D 模型」→「✨ 生成」,2026-11-25)
     "model3d": {
         "provider": "tripo",   # tripo | fal | rhapi | hunyuan3d
         "tripo": {"site": "ai", "api_key_ai": "", "api_key_cn": "", "model": "v3.1-20260211", "custom_model": ""},
@@ -4461,13 +4463,14 @@ def build_role_prompt(agent_id: str, project: str,
 - 详细纪律见 agents/WORKFLOW.md §9;生成失败如实上报,严禁伪造或占位产物
 
 ## 用户参考素材(视觉/配乐工作前必查)
-用户通过 Web 客户端「参考文件」页把风格/封面/角色/场景/生物/道具参考图、希望使用的音频、参考视频、字体、文本资料与其他类型的参考文件按分类上传到 {proj_rel}/refs/(style/ thumbnail/ characters/ scenes/ creatures/ props/ music/ video/ fonts/ text/ other/),并逐文件填写注释:
+用户通过 Web 客户端「参考文件」页把风格/封面/角色/场景/生物/道具参考图、希望使用的音频、参考视频、字体、文本资料与其他类型的参考文件按分类上传到 {proj_rel}/refs/(style/ thumbnail/ characters/ scenes/ creatures/ props/ models3d/ music/ video/ fonts/ text/ other/),并逐文件填写注释:
 - **注释必读**:{proj_rel}/refs/NOTES.md(自动汇总用户逐图/逐曲注释,机器可读版 refs/annotations.json)说明每个文件管什么、想用在哪——有则必读并按注释执行
 - 优先级:用户参考素材 > 你的自行发挥;与文字设定冲突时上报用户裁决,不擅自取舍
 - 命中的参考图经 genmedia --ref 注入生成,并把所用路径记入产物 meta/prompts.json 的 user_refs 字段
 - 配乐(09-audio/music)须先盘点 refs/music/,自行判断每首曲子适合用在视频的哪些位置并优先选用,选用/弃用情况写入 cue sheet(规则见 WORKFLOW.md §2 第 6 条)
 - 视频生成类工位须先盘点 refs/video/(动作/运镜/节奏/转场参考),按注释对位到相应镜头;所选视频模型支持参考视频时经 `genmedia.py video --ref-video` 注入,不支持时作为提示词描述依据,所用路径记入 user_refs(规则见 WORKFLOW.md §2 第 8 条)
 - 一切需要字体的工位(花字/封面/片头片尾/字幕等)须先盘点 refs/fonts/(ttf/otf/ttc),有则全片统一优先使用用户字体(NOTES.md 指定了用途的按指定分配),所用路径记入 user_refs;花字引擎自动把它们并入字体清单,font_id 为 `proj:<family>`(`render_captions.py fonts-list --project <slug>` 可查;规则见 WORKFLOW.md §2 第 9 条)
+- refs/models3d/(GLB 3D 模型)不要求逐单盘点:仅当 NOTES.md 里该文件的注释指向你本单要做的角色 / 生物 / 道具 / 场景,或工单点名了该路径时才使用,作立体造型与各角度比例的参考;GLB 不能当 --ref 图片传给生成命令,所用路径记入 user_refs(规则见 WORKFLOW.md §2 第 11 条)
 - refs/other/(任意格式的其他参考文件)不要求逐单盘点:仅当 refs/NOTES.md 里该文件的注释说明的用途落在你本单要做的对象上,或工单点名了该路径时才读取使用,所用路径记入 user_refs;没有注释也没被工单点名的文件不读(规则见 WORKFLOW.md §2 第 10 条)
 - 目录为空则照常工作,不阻塞;详细约定见 agents/WORKFLOW.md §2"""
     if is_dispatcher_agent(agent_id):
@@ -15739,11 +15742,13 @@ async def api_brief_set(body: dict):
 
 
 # ---------------- 参考文件页(refs/ 分类预览、上传、逐文件注释) ----------------
-REF_CATEGORIES = ("style", "thumbnail", "characters", "scenes", "creatures", "props", "music",
-                  "video", "fonts", "text", "other",
+REF_CATEGORIES = ("style", "thumbnail", "characters", "scenes", "creatures", "props",
+                  "models3d",  # 3D 模型(GLB;页内「✨ 生成」= 参考图生 3D,2026-11-25)
+                  "music", "video", "fonts", "text", "other",
                   "audio",    # 讲述音频 / 音频母带(音频配画、数字人、混剪项目的主输入,2026-10-20)
                   "voices")   # 克隆声音样本(数字人「克隆声音」:每个说话人一段,code/dialogue_clone.py,2026-10-20)
 REF_FONT_EXTS = (".ttf", ".otf", ".ttc")      # 与花字引擎 modules/captions.py 扫描口径一致
+REF_MODEL3D_EXTS = (".glb",)                  # 3D 模型板块只收 GLB(单文件 glTF 2.0;.gltf 多半带外部 .bin / 贴图,单传不完整)
 REF_SKIP_FILES = {"README.md", "NOTES.md", "CREDITS.md", "annotations.json"}
 AUDIO_EXTS = (".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg")
 REF_VIDEO_EXTS = (".mp4", ".mov", ".webm", ".m4v", ".mkv")
@@ -15770,8 +15775,11 @@ def _write_ref_notes_md(refs: Path, notes: dict):
             src = v.get("source") if isinstance(v, dict) else None
             gen = v.get("gen") if isinstance(v, dict) else None
             fo = v.get("footage") if isinstance(v, dict) else None
+            g3 = v.get("gen3d") if isinstance(v, dict) else None
             tail = (f"(图库:{src.get('site') or src.get('provider')} · {src.get('license_label') or src.get('license')})"
                     if isinstance(src, dict) else
+                    f"(AI 生成 3D:{' '.join(x for x in (g3.get('provider_label') or g3.get('provider'), g3.get('model')) if x)})"
+                    if isinstance(g3, dict) else
                     f"(AI 生成:{' '.join(x for x in (gen.get('provider'), gen.get('model')) if x)})"
                     if isinstance(gen, dict) else
                     f"(素材库截图:{fo.get('title') or fo.get('project')} @ {_fmt_ts(float(fo.get('t') or 0))})"
@@ -15833,11 +15841,13 @@ async def api_refs_list(project: str = "demo"):
                 "is_image": ext in IMG_EXTS, "is_audio": ext in AUDIO_EXTS,
                 "is_video": ext in REF_VIDEO_EXTS,
                 "is_font": ext in REF_FONT_EXTS,
+                "is_model3d": ext in REF_MODEL3D_EXTS,
                 "size": st.st_size,
                 "note": str(v.get("note") if isinstance(v, dict) else v or "").strip(),
                 "source": v.get("source") if isinstance(v, dict) and isinstance(v.get("source"), dict) else None,
                 "gen": v.get("gen") if isinstance(v, dict) and isinstance(v.get("gen"), dict) else None,
-                "footage": v.get("footage") if isinstance(v, dict) and isinstance(v.get("footage"), dict) else None}
+                "footage": v.get("footage") if isinstance(v, dict) and isinstance(v.get("footage"), dict) else None,
+                "gen3d": v.get("gen3d") if isinstance(v, dict) and isinstance(v.get("gen3d"), dict) else None}
 
     def listing(d: Path, recursive: bool) -> list:
         if not d.is_dir():
@@ -15920,6 +15930,13 @@ async def api_refs_upload(data: bytes, project: str = "demo",
     if category in ("audio", "voices") and ext not in AUDIO_EXTS:
         raise ServiceError(400, ("讲述音频" if category == "audio" else "克隆声音") + "分类只接受 "
                            + " / ".join(AUDIO_EXTS) + " 音频文件")
+    if category == "models3d":
+        zh = (ui_lang_code() or "zh") == "zh"
+        if ext not in REF_MODEL3D_EXTS:
+            raise ServiceError(400, "3D 模型分类只接受 .glb 文件" if zh else "The 3D Models category only accepts .glb files")
+        if not (data[:4] == b"glTF" and int.from_bytes(data[4:8], "little") == 2):
+            raise ServiceError(400, "不是有效的 GLB 文件(glTF 2.0 二进制)" if zh
+                               else "Not a valid GLB file (binary glTF 2.0)")
     p = _refs_store(base, category, stem, ext, data)
     rel = p.relative_to(base / "refs").as_posix()
     return {"ok": True, "project": base.name, "path": rel,
@@ -15953,7 +15970,7 @@ async def api_refs_note(body: dict):
     note = str(body.get("note") or "").strip()
     notes = _load_ref_notes(refs)
     cur = notes.get(rel) if isinstance(notes.get(rel), dict) else {}
-    if note or cur.get("source") or cur.get("gen") or cur.get("footage"):   # 图库导入 / 页内生成 / 素材库截图清空注释时只清 note,来源记录留着
+    if note or cur.get("source") or cur.get("gen") or cur.get("footage") or cur.get("gen3d"):   # 图库导入 / 页内生成 / 素材库截图 / 生成 3D 清空注释时只清 note,来源记录留着
         notes[rel] = {**cur, "note": note, "updated": datetime.now().isoformat(timespec="seconds")}
     else:
         notes.pop(rel, None)
@@ -16267,6 +16284,220 @@ async def api_refgen_adopt(body: dict):
                           "aspect": job["aspect"], "style": (job.get("style") or {}).get("name") or "", "created": now}}
     atomic_write_json(refs / "annotations.json", notes)
     job["adopted"][category] = rel
+    return {"ok": True, "existed": False, "project": base.name, "path": rel,
+            "url": f"/projects/{base.name}/refs/{rel}?v={int(p.stat().st_mtime)}"}
+
+
+# ---------------- 参考文件页「🧊 3D 模型」→「✨ 生成」(2026-11-25) ----------------
+# 窗口里放参考图(正面必填,左 / 后 / 右选填 = 多视图;本地上传,或从参考文件页已有的图里挑),选 3D 渠道与模型
+# (默认 = 「生成模型」页 3D 模型段的生效渠道),后台跑 genmedia.py model3d(modules/model3d.py)出 GLB:
+# 先落 assets/refs_gen3d/<任务号>.glb 给用户在窗口里转着看,点「加入」才复制进 refs/models3d/;重新生成时丢掉上一个。
+# 任务只记在内存(同「✨ 生成」,服务重启即丢);待选模型与窗口里上传的参考图隔天清。
+REFGEN3D_DIR = "assets/refs_gen3d"
+REFGEN3D_INPUTS = REFGEN3D_DIR + "/inputs"
+REFGEN3D_TIMEOUT = 35 * 60
+REFGEN3D_MAX_IMAGE = 30 * 1024 * 1024
+REFGEN3D_JOBS: dict[str, dict] = {}
+
+
+def _ui_zh() -> bool:
+    return (ui_lang_code() or "zh") == "zh"
+
+
+def _refgen3d_gone(zh: bool) -> ServiceError:
+    return ServiceError(404, ("这次生成的记录已经不在了(服务重启过?),请重新生成" if zh
+                              else "This generation is no longer on record (was the service restarted?). Generate again."))
+
+
+def _refgen3d_image(base: Path, rel: str, zh: bool) -> str:
+    """参考图路径校验:只认项目内 refs/<…> 与 assets/refs_gen3d/inputs/<…> 下的图片。"""
+    rel = str(rel or "").strip().lstrip("/")
+    parts = rel.split("/")
+    if (not rel or any(x in ("", ".", "..") for x in parts)
+            or not (rel.startswith("refs/") or rel.startswith(REFGEN3D_INPUTS + "/"))):
+        raise ServiceError(400, f"invalid image path: {rel}")
+    p = base / rel
+    if not p.is_file() or p.suffix.lower() not in IMG_EXTS:
+        raise ServiceError(404, (f"参考图不存在:{rel}" if zh else f"Reference image not found: {rel}"))
+    return rel
+
+
+def _refgen3d_view(base: Path, job: dict) -> dict:
+    out = {k: job.get(k) for k in ("id", "status", "provider", "model", "texture", "endpoint", "notes", "views_used",
+                                   "error", "started", "finished", "adopted", "images", "names", "bytes")}
+    f = base / job["file"] if job.get("file") else None
+    if f and f.is_file():
+        out["url"] = f"/projects/{base.name}/{job['file']}?v={int(f.stat().st_mtime)}"
+    out["image_urls"] = {v: f"/projects/{base.name}/{rel}?v={int((base / rel).stat().st_mtime)}"
+                         for v, rel in (job.get("images") or {}).items() if (base / rel).is_file()}
+    from modules import model3d
+    out["model_label"] = model3d.model_label(job.get("provider") or "", job.get("model") or "")
+    return out
+
+
+def _refgen3d_drop(base: Path, jid: str):
+    """丢掉一次生成:删待选模型、删任务记录;还在跑的不动。窗口里上传的参考图留着(重新生成还要用),隔天清。"""
+    job = REFGEN3D_JOBS.get(jid)
+    if not job or job.get("project") != base.name or job.get("status") in ("queued", "running"):
+        return
+    if job.get("file"):
+        (base / job["file"]).unlink(missing_ok=True)
+    REFGEN3D_JOBS.pop(jid, None)
+
+
+def _refgen3d_prune(base: Path):
+    now = time.time()
+    for jid, job in list(REFGEN3D_JOBS.items()):
+        if job.get("status") not in ("queued", "running") and now - job.get("started", now) > REFGEN_KEEP_S:
+            REFGEN3D_JOBS.pop(jid, None)
+    for d in (base / REFGEN3D_DIR, base / REFGEN3D_INPUTS):
+        if d.is_dir():
+            for f in d.iterdir():
+                try:
+                    if f.is_file() and now - f.stat().st_mtime > REFGEN_KEEP_S:
+                        f.unlink()
+                except OSError:
+                    pass
+
+
+def _refgen3d_worker(base: Path, jid: str):
+    from modules import model3d
+    job = REFGEN3D_JOBS[jid]
+    out = base / REFGEN3D_DIR / f"{jid}.glb"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [sys.executable, str(ROOT / "modules" / "genmedia.py"), "model3d", "--output", str(out),
+           "--provider", job["provider"], "--model", job["model"], "--texture" if job["texture"] else "--no-texture"]
+    for v, rel in job["images"].items():
+        cmd += [f"--{v}", str(base / rel)]
+    job["status"] = "running"
+    err, meta = "", {}
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=REFGEN3D_TIMEOUT, cwd=str(ROOT),
+                           env={**os.environ, "VIDEOAGENTS_UI_LANG": ui_lang_code() or "zh"})
+        if r.returncode != 0 or not out.is_file():
+            err = _refgen_error(r.stderr or r.stdout) or f"genmedia exit {r.returncode}"
+        else:
+            for ln in reversed((r.stdout or "").splitlines()):
+                if ln.startswith(model3d.META_PREFIX):
+                    try:
+                        meta = json.loads(ln[len(model3d.META_PREFIX):])
+                    except ValueError:
+                        pass
+                    break
+    except subprocess.TimeoutExpired:
+        err = (f"超过 {REFGEN3D_TIMEOUT // 60} 分钟没出模型,已放弃" if _ui_zh()
+               else f"No model after {REFGEN3D_TIMEOUT // 60} minutes; gave up")
+    except Exception as e:  # noqa: BLE001
+        err = str(e)[:600]
+    if err:
+        job.update(status="failed", error=err, finished=time.time())
+    else:
+        job.update(status="done", file=out.relative_to(base).as_posix(), finished=time.time(),
+                   endpoint=str(meta.get("endpoint") or ""), notes=[str(n) for n in meta.get("notes") or []][:8],
+                   views_used=[v for v in meta.get("views") or [] if v in model3d.VIEWS], bytes=out.stat().st_size)
+    HUB.publish({"type": "refgen3d", "project": base.name, "job": jid, "status": job["status"]})
+
+
+async def api_refgen3d_options(project: str):
+    """生成 3D 模型窗口的模型下拉:各渠道是否已配置 + 每个模型是否收多视图 + 默认(= 生成模型页 3D 模型段)。"""
+    from modules import model3d
+    base = _proj_base(project)
+    return {"project": base.name, **model3d.options(load_genconfig(), _ui_zh())}
+
+
+async def api_refgen3d_upload(data: bytes, project: str, filename: str = ""):
+    """窗口里本地上传的参考图:落 assets/refs_gen3d/inputs/<随机名>,回项目内相对路径(开始生成时按路径引用)。"""
+    base = _proj_base(project)
+    zh = _ui_zh()
+    if not data:
+        raise ServiceError(400, "empty upload body")
+    if len(data) > REFGEN3D_MAX_IMAGE:
+        raise ServiceError(400, "图片太大(超过 30MB)" if zh else "Image too large (over 30 MB)")
+    ext = next((v for k, v in _IMG_MAGIC.items() if data.startswith(k)), "")
+    if not ext:
+        raise ServiceError(400, "只收图片文件(PNG / JPEG / WebP 等)" if zh else "Only image files are accepted (PNG / JPEG / WebP …)")
+    d = base / REFGEN3D_INPUTS
+    d.mkdir(parents=True, exist_ok=True)
+    p = d / f"{datetime.now():%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:6]}{ext}"
+    p.write_bytes(data)
+    rel = p.relative_to(base).as_posix()
+    return {"ok": True, "project": base.name, "path": rel, "name": str(filename or "")[:120],
+            "url": f"/projects/{base.name}/{rel}?v={int(p.stat().st_mtime)}"}
+
+
+async def api_refgen3d_start(body: dict):
+    """{project, images: {front, left?, back?, right?: 项目内相对路径}, names?: {视角: 原文件名}, provider?, model?,
+    texture?, discard?: 上一次的任务号} → 任务(先 queued,后台出模型)。渠道 / Key 不全当场 400。"""
+    from modules import model3d
+    body = dict(body or {})
+    base = _proj_base(body.get("project"))
+    zh = _ui_zh()
+    imgs = body.get("images") if isinstance(body.get("images"), dict) else {}
+    images = {}
+    for v, rel in imgs.items():
+        if v not in model3d.VIEWS:
+            raise ServiceError(400, f"unknown view: {v} (one of {', '.join(model3d.VIEWS)})")
+        if rel:
+            images[v] = _refgen3d_image(base, rel, zh)
+    if "front" not in images:
+        raise ServiceError(400, "请先放正面参考图" if zh else "Add the front view image first")
+    try:
+        cfg = model3d.resolve(load_genconfig(), str(body.get("provider") or ""), str(body.get("model") or ""), zh)
+    except model3d.Model3DError as e:
+        raise ServiceError(400, str(e)) from None
+    tex = body.get("texture")
+    texture = (cfg.get("texture", False) if cfg["provider"] == "hunyuan3d" else True) if tex is None else bool(tex)
+    raw_names = body.get("names") if isinstance(body.get("names"), dict) else {}
+    names = {v: str(raw_names.get(v) or "")[:120] for v in images if raw_names.get(v)}
+    _refgen3d_drop(base, str(body.get("discard") or ""))
+    _refgen3d_prune(base)
+    jid = f"{datetime.now():%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:4]}"
+    job = REFGEN3D_JOBS[jid] = {"id": jid, "project": base.name, "status": "queued",
+                                "images": {v: images[v] for v in model3d.VIEWS if v in images}, "names": names,
+                                "provider": cfg["provider"], "model": cfg["model"], "texture": texture,
+                                "endpoint": "", "notes": [], "started": time.time(), "adopted": {}}
+    threading.Thread(target=_refgen3d_worker, args=(base, jid), daemon=True, name=f"refgen3d-{jid}").start()
+    return _refgen3d_view(base, job)
+
+
+async def api_refgen3d_status(project: str, jid: str):
+    base = _proj_base(project)
+    job = REFGEN3D_JOBS.get(jid)
+    if not job or job.get("project") != base.name:
+        raise _refgen3d_gone(_ui_zh())
+    return _refgen3d_view(base, job)
+
+
+async def api_refgen3d_adopt(body: dict):
+    """{project, job} → 把这次生成的 GLB 复制进 refs/models3d/gen3d_<任务号>.glb;同一个只加一次。
+    生成信息(渠道 / 模型 / 端点 / 纹理 / 各视角参考图)记进 annotations.json 的 gen3d,卡片上显示,注释仍由用户写。"""
+    from modules import model3d
+    body = dict(body or {})
+    base = _proj_base(body.get("project"))
+    refs = base / "refs"
+    zh = _ui_zh()
+    job = REFGEN3D_JOBS.get(str(body.get("job") or ""))
+    if not job or job.get("project") != base.name:
+        raise _refgen3d_gone(zh)
+    src = base / job["file"] if job.get("status") == "done" and job.get("file") else None
+    if not src or not src.is_file():
+        raise ServiceError(409, "这个模型还没生成好,或已被清理" if zh else "The model is not ready yet, or has been cleaned up")
+    rel = job["adopted"].get("models3d")
+    if rel and (refs / rel).is_file():
+        return {"ok": True, "existed": True, "project": base.name, "path": rel,
+                "url": f"/projects/{base.name}/refs/{rel}?v={int((refs / rel).stat().st_mtime)}"}
+    p = _refs_store(base, "models3d", f"gen3d_{job['id']}", ".glb", src.read_bytes())
+    rel = p.relative_to(refs).as_posix()
+    now = datetime.now().isoformat(timespec="seconds")
+    views = {v: job["names"].get(v) or job["images"][v] for v in job["images"]}
+    notes = _load_ref_notes(refs)
+    notes[rel] = {"note": "", "updated": now,
+                  "gen3d": {"provider": job["provider"], "provider_label": model3d.PROVIDER_LABELS.get(job["provider"], job["provider"]),
+                            "model": job["model"], "model_label": model3d.model_label(job["provider"], job["model"]),
+                            "endpoint": job.get("endpoint") or "", "texture": bool(job["texture"]),
+                            "views": views, "views_used": job.get("views_used") or [], "created": now}}
+    atomic_write_json(refs / "annotations.json", notes)
+    job["adopted"]["models3d"] = rel
     return {"ok": True, "existed": False, "project": base.name, "path": rel,
             "url": f"/projects/{base.name}/refs/{rel}?v={int(p.stat().st_mtime)}"}
 
@@ -17227,7 +17458,7 @@ async def api_fal_models(kind: str, q: str = "", refresh: bool = False) -> dict:
         rows = await asyncio.to_thread(fal_models.search, kind, q, 40, refresh, key)
     except fal_models.CatalogUnavailable as e:
         raise ServiceError(502, str(e)[:500]) from e
-    # builtin 只对图像 / 视频有意义(genmedia 有无内置请求体映射);3D 尚无生成命令,不带这个字段
+    # builtin 只对图像 / 视频有意义(genmedia 有无内置请求体映射);3D 端点一律按参数表组请求体(model3d.fal_body),不带这个字段
     family = _fal_image_family if kind == "image" else _fal_family if kind == "video" else None
     return {"kind": kind, "query": q.strip(),
             "models": [{"id": r["id"], "name": r["name"], "tasks": r["tasks"], "description": r["description"],
