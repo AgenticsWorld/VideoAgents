@@ -2,7 +2,7 @@
 
 All notable public changes to VideoAgents are documented here.
 
-## [Unreleased]
+## [1.0.46] - 2026-11-26
 
 ### Added
 - **Seedream 5.5 and Seedance 2.5 Flash on the 火山引擎 (Volcengine) and BytePlus tabs (2026-11-26).** The model IDs come from each provider's online model catalog: Volcengine `doubao-seedream-5-5-261028` / `doubao-seedance-2-5-flash-261115`, BytePlus `dola-seedream-5-5-261028` / `dreamina-seedance-2-5-flash-261115`. Defaults are unchanged.
