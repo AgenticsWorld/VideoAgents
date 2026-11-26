@@ -91,6 +91,8 @@ def video_caps(model, provider, cfg=None):
     if m.endswith(('/image-to-video', '/text-to-video')) or 'turbo' in m and 'h3' in m:
         return None
     if 'seedance-2' in m:
+        if re.search(r'seedance-2[-.]5-flash', m):
+            return 5, 30.   # Seedance 2.5 Flash:参考视频 ≤5,合计 ≤30s
         return (10, 30.) if ('seedance-2-5' in m or 'seedance-2.5' in m) else (3, 15.)
     if 'minimax' in m and 'h3' in m:
         return 3, 15.

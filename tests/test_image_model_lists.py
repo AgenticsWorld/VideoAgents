@@ -286,8 +286,10 @@ BP_RETIRED = {"seedance-1-5-pro-251215"}
 
 
 @pytest.mark.parametrize("provider, page_const, retired, added", [
-    ("volcengine", "VOLC_MODELS", VOLC_RETIRED, {"doubao-seedream-5-0-flash-260915", "doubao-seedream-4-0-20260415"}),
-    ("byteplus", "BP_VIDEO_MODELS", BP_RETIRED, {"dola-seedream-5-0-flash-260915"}),
+    ("volcengine", "VOLC_MODELS", VOLC_RETIRED, {"doubao-seedream-5-0-flash-260915", "doubao-seedream-4-0-20260415",
+                                                 "doubao-seedream-5-5-261028", "doubao-seedance-2-5-flash-261115"}),
+    ("byteplus", "BP_VIDEO_MODELS", BP_RETIRED, {"dola-seedream-5-0-flash-260915", "dola-seedream-5-5-261028",
+                                                "dreamina-seedance-2-5-flash-261115"}),
 ])
 def test_ark_lists_drop_retired_models(provider, page_const, retired, added):
     from services.runtime import core
@@ -298,7 +300,17 @@ def test_ark_lists_drop_retired_models(provider, page_const, retired, added):
     assert page_video == core_video and core_video[0] == core.DEFAULT_GENCONFIG["video"][provider]["model"]
     assert core.DEFAULT_GENCONFIG["image"][provider]["model"] in image
     assert not retired & set(page_video + image)
-    assert added <= set(image)
+    assert added <= set(image + page_video)
+
+
+def test_seedream_55_size_limits_follow_pro_doc():
+    """Seedream 5.5(2026-11-26):官方教程写明分辨率规则同 5.0 Pro / Flash;两区账号都未开通,上限按文档(basis=doc)。"""
+    for cfg in ({"provider": "volcengine", "model": "doubao-seedream-5-5-261028"},
+                {"provider": "byteplus", "model": "dola-seedream-5-5-261028"}):
+        assert g.image_max_pixels(cfg) == g.IMAGE_MAX_PIXELS_SEEDREAM_PRO
+        assert g.image_size_limits(cfg) == {"mode": "pixels", "max_pixels": g.IMAGE_MAX_PIXELS_SEEDREAM_PRO,
+                                            "min_pixels": g.ARK_SEEDREAM5_MIN_PIXELS, "multiple": 2, "basis": "doc"}
+    assert g.image_size_limits({"provider": "volcengine", "model": "doubao-seedream-5-0-pro-260628"})["basis"] == "measured"
 
 
 def test_volcengine_new_seedream_models_have_size_limits():

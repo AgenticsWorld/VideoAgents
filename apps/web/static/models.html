@@ -241,8 +241,8 @@ button:disabled{opacity:.5;cursor:default}
     </div>
     <div class="panel" id="panel-up-volcengine">
       <div class="hint">Seedance 2.5 样片(Draft)模式:选中即激活,无需另填 Key 或模型,凭证与模型沿用视频生成的火山引擎标签页。</div>
-      <div class="hint">激活条件:视频生效渠道为火山引擎(或 BytePlus,方舟同一 API)且模型为 Seedance 2.5;项目「输出设置」草稿分辨率 = 480p、成片分辨率 = 1080p(官方:样片仅 480p,出原片仅 1080p)。不满足时视频照常按普通模式生成,并在日志提示。</div>
-      <div class="hint">工作方式:① 生成阶段自动带 draft=true 出 480p 样片(token 用量与普通 480p 一致),Draft 任务 ID 写进组 clip 同名 meta.json 的 draft_task 段;② 超分阶段 genmedia.py upscale 按该 ID 让方舟复用同一提示词/素材/时长/画幅/seed/音频设置生成 1080p 原片(正常推理计费),画面关键要素与过审样片一致;③ Draft 任务 ID 自创建起 7 天有效,过期只能重出样片。</div>
+      <div class="hint">激活条件:视频生效渠道为火山引擎(或 BytePlus,方舟同一 API)且模型为 Seedance 2.5;项目「输出设置」草稿分辨率 = 480p、成片分辨率 = 1080p/4K(官方:样片仅 480p,出原片仅 1080p/4K)。不满足时视频照常按普通模式生成,并在日志提示。</div>
+      <div class="hint">工作方式:① 生成阶段自动带 draft=true 出 480p 样片(token 用量与普通 480p 一致),Draft 任务 ID 写进组 clip 同名 meta.json 的 draft_task 段;② 超分阶段 genmedia.py upscale 按该 ID 让方舟复用同一提示词/素材/时长/画幅/seed/音频设置生成 1080p/4K 原片(正常推理计费),画面关键要素与过审样片一致;③ Draft 任务 ID 自创建起 7 天有效,过期只能重出样片。</div>
     </div>
     <!-- Agentics 面板由 buildPanel('scale','agentics') 生成:账号 + 超分 profile(media_type=Scale,如 scale-seedvr2),
          数据源与视频等段同一份 Agentics 媒体目录 -->
@@ -362,12 +362,15 @@ const KIND_LABEL={image:'图像',video:'视频',music:'音乐',tts:'TTS旁白',t
    下架但仍可调用(退市过渡期,建议迁移 Pro);Pro 出图面积须 ≥921600px(1280×720 起) */
 const VOLC_IMAGE_MODELS=IMAGE_MODEL_LISTS.volcengine;   // 见 image-models.js
 /* 2026-07-11 API 探测验证:6 个 ID 全部在售可用;官方价格页仍标 1.5 Pro 即将下线 */
-/* 2026-08-09 新增 Seedance 2.5(单段 30s 直出/参考上限 30图+10视频+10音频/仅 480p·720p);
+/* 2026-08-09 新增 Seedance 2.5(单段 30s 直出/参考上限 30图+10视频+10音频/当时仅 480p·720p,2026-11-26 按官方教程放开 1080p·4K);
    默认选项保持 2.0 不变,选用 2.5 前请先到「项目设置 → 模型限制」调大组时长与参考上限 */
 /* 2026-10-23 对照方舟在线模型目录(v3 models 接口)刷新:1.5 Pro 已于 09-21 关停(调用报 ClosedEndpoint);
    1.0 Pro / 1.0 Pro Fast 属第十批下线(09-24 停止新购、11-24 关停),一并移出 */
+/* 2026-11-26 新增 Seedance 2.5 Flash(官方教程 docs/ark/seedance-2-5:时长 4-30s 同 2.5,参考上限 10图+5视频+5音频,
+   仅 480p/720p,不支持样片模式) */
 const VOLC_MODELS=[
-  ['doubao-seedance-2-5-260628','Seedance 2.5(最新,单段30秒直出,参考上限30图+10视频+10音频,480p/720p)'],
+  ['doubao-seedance-2-5-260628','Seedance 2.5(最新,单段30秒直出,参考上限30图+10视频+10音频,480p/720p/1080p/4K)'],
+  ['doubao-seedance-2-5-flash-261115','Seedance 2.5 Flash(2.5 快速版,单段30秒直出,参考上限10图+5视频+5音频,480p/720p,不支持样片模式)'],
   ['doubao-seedance-2-0-260128','Seedance 2.0(音画同生,多模态生视频,最高4K)'],
   ['doubao-seedance-2-0-fast-260128','Seedance 2.0 Fast(适合动画,音画同生,快速版,480p/720p)'],
   ['doubao-seedance-2-0-mini-260615','Seedance 2.0 Mini(适合广告,音画同生,轻量版,480p/720p)'],
@@ -382,7 +385,8 @@ const BP_IMAGE_MODELS=IMAGE_MODEL_LISTS.byteplus;   // 见 image-models.js
 /* 2026-10-23 对照 BytePlus 在线模型目录:1.5 Pro 属第四批下线(09-15 起不能新建接入点、11-11 关停),移出;
    1.0 Pro / 1.0 Pro Fast 在 BytePlus 仍在售(火山侧已下线) */
 const BP_VIDEO_MODELS=[
-  ['dreamina-seedance-2-5-260628','Seedance 2.5(最新,单段30秒直出,参考上限30图+10视频+10音频,480p/720p)'],
+  ['dreamina-seedance-2-5-260628','Seedance 2.5(最新,单段30秒直出,参考上限30图+10视频+10音频,480p/720p/1080p/4K)'],
+  ['dreamina-seedance-2-5-flash-261115','Seedance 2.5 Flash(2.5 快速版,单段30秒直出,参考上限10图+5视频+5音频,480p/720p,不支持样片模式)'],
   ['dreamina-seedance-2-0-260128','Seedance 2.0(音画同生,多模态生视频,最高4K)'],
   ['dreamina-seedance-2-0-fast-260128','Seedance 2.0 Fast(适合动画,音画同生,快速版,480p/720p)'],
   ['dreamina-seedance-2-0-mini-260615','Seedance 2.0 Mini(适合广告,音画同生,轻量版,480p/720p)'],

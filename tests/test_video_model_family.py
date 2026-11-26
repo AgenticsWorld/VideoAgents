@@ -1,4 +1,4 @@
-"""新建向导「模型限制」默认预设:按生效视频模型的 id / 名称 / 工作流名关键字归入 sd25|sd20|mmh3|wan30|kling4。
+"""新建向导「模型限制」默认预设:按生效视频模型的 id / 名称 / 工作流名关键字归入 sd25f|sd25|sd20|mmh3|wan30|kling4。
 
 模型名取自各渠道实际目录(火山/BytePlus/Fal/MiniMax/OpenRouter/RH 模型 API/ComfyUI 工作流);
 不命中的模型由前端保留默认 MiniMax H3 并提示核对。
@@ -24,6 +24,10 @@ from services.runtime import core
     (["rhart-video/minimax-h3-rh-enhanced/ref2va"], "mmh3"),
     (["comfy/video-minimax-h3-ref2va-api.json"], "mmh3"),
     (['{"1": {"class_type": "MiniMaxH3ReferenceToVideo"}}'], "mmh3"),
+    # Seedance 2.5 Flash(参考上限 10 图/5 视频/5 音频,单列预设)
+    (["doubao-seedance-2-5-flash-261115"], "sd25f"),
+    (["dreamina-seedance-2-5-flash-261115"], "sd25f"),
+    (["bytedance/seedance-2.5-flash"], "sd25f"),
     # Seedance 2.5
     (["doubao-seedance-2-5-260628"], "sd25"),
     (["dreamina-seedance-2-5-260628"], "sd25"),
@@ -66,7 +70,7 @@ def test_video_family_for(names, family):
 
 def test_every_catalog_model_is_classified_as_its_label_says():
     """目录里每个模型按 id 判出的口径与其中文标签一致(防目录新增写法漏判/误判)。"""
-    expect = {"Seedance 2.5": "sd25", "Seedance 2.0": "sd20", "MiniMax H3": "mmh3", "Wan 3.0": "wan30",
+    expect = {"Seedance 2.5 Flash": "sd25f", "Seedance 2.5": "sd25", "Seedance 2.0": "sd20", "MiniMax H3": "mmh3", "Wan 3.0": "wan30",
               "Kling 4.0": "kling4"}
     for prov, rows in core.VIDEO_MODEL_CATALOG.items():
         for mid, label in rows:
@@ -91,6 +95,7 @@ def _video(cfg_file, provider, **pc):
 
 def test_api_reports_family_per_provider(cfg_file):
     assert _video(cfg_file, "volcengine", model="doubao-seedance-2-5-260628")["family"] == "sd25"
+    assert _video(cfg_file, "byteplus", model="dreamina-seedance-2-5-flash-261115")["family"] == "sd25f"
     assert _video(cfg_file, "byteplus", model="dreamina-seedance-2-0-fast-260128")["family"] == "sd20"
     assert _video(cfg_file, "openrouter", model="minimax/hailuo-3")["family"] == "mmh3"
     assert _video(cfg_file, "rhapi", model="rhart-video/sparkvideo-2.0/multimodal-video")["family"] == "sd20"

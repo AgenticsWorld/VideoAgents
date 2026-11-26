@@ -52,7 +52,7 @@ CLI:
   超分(2026-09-23 起唯一路由源 =「生成模型」页超分段 genconfig.upscale,不看视频渠道):
     ffmpeg     内置非 AI 插值放大(默认):scale=W:H:flags=<filter> + libx264 crf/preset,音轨流拷贝
     volcengine Seedance 2.5 样片(Draft)模式:源 clip meta.json 的 draft_task.id(样片模式生成时
-               自动记录;或 --source-task-id)→ 方舟按该 ID 生成 1080p 原片(仅成片档 1080p,ID 7 天有效)
+               自动记录;或 --source-task-id)→ 方舟按该 ID 生成 1080p / 4k 原片(成片档须为 1080p 或 4k,ID 7 天有效)
     minimax    Regenerate-2K(POST /v2/video_regeneration,模型固定 MiniMax-H3,输出 2K 后自动缩到
                成片档):凭证取超分段自有的 MiniMax 标签页(接口区域 + Key);源视频须为 H3 768P 直出规格(24fps、含音轨、
                宽高均被 32 整除、面积≤768×1344、107-362 帧≈4-15s;>45MB 走对象存储预签名 URL);
@@ -114,7 +114,7 @@ Python:
         组请求体:只发它收的字段,时长/分辨率/画幅取它可选值里最接近的,同模型的端点按本次输入挑)
         / comfyui(本地/Comfy Cloud/RunningHub,需配置 API 格式工作流 JSON;
         RunningHub 用工作区保存的云端工作流,占位符约定与本地一致)
-  超分: ffmpeg(内置插值放大,默认)/ volcengine(Seedance 2.5 样片模式按 Draft 任务 ID 出 1080p 原片)
+  超分: ffmpeg(内置插值放大,默认)/ volcengine(Seedance 2.5 样片模式按 Draft 任务 ID 出 1080p / 4k 原片)
         / minimax(POST /v2/video_regeneration Regenerate-2K;模型固定 MiniMax-H3,2K 后缩到成片档)
         / comfyui(SeedVR2 类工作流,超分段自有连接;本地/Cloud 用 comfy/scale-* 模板,RunningHub 用
         自有云端工作流)——渠道只看「生成模型」页超分段,失败即报错不降级
@@ -1828,7 +1828,8 @@ def _closest_aspect(width: int, height: int) -> str:
 
 # volcengine=火山方舟国内区;byteplus=字节海外 ModelArk(ap-southeast-1),两者 API 同构,
 # 仅域名与模型 ID 前缀不同(doubao-seedream-* vs seedream-*/dreamina-seedance-*;
-# Seedance 2.5 为 doubao-seedance-2-5-260628 vs dreamina-seedance-2-5-260628)
+# Seedance 2.5 为 doubao-seedance-2-5-260628 vs dreamina-seedance-2-5-260628;Seedream 5.5 为
+# doubao-seedream-5-5-261028 vs dola-seedream-5-5-261028)
 ARK_API_BASES = {"volcengine": "https://ark.cn-beijing.volces.com/api/v3",
                  "byteplus": "https://ark.ap-southeast.bytepluses.com/api/v3"}
 
@@ -4190,10 +4191,13 @@ def image_ref_capacity(cfg: dict) -> int | None:
 #   Seedream 5.0 / 5.0 Lite / 4.5 / 4.0 → "image size must be at most 16777216 pixels"(4096x4096)
 #   Seedream 4.0-20260415(4.0 下线后的迁移目标,2026-10-23 火山实测)同 4096x4096,下限 921600
 #   Seedream 5.0 Flash 两区账号都未开通、没实测:方舟教程写明 size 规则与 5.0 Pro 相同,按 Pro 取
+#   Seedream 5.5(2026-11-26 接入)两区账号都未开通:官方教程 docs/ark/seedream-5-5 写明分辨率规则与 5.0 Pro / Flash
+#   一致([1280x720, 2048x2048x1.1025]);火山 64x64 请求实测拒收报文「at least 921600 pixels」与之相符,上限未能实测
 IMAGE_MAX_PIXELS_SEEDREAM_PRO = 4_624_220
 IMAGE_MAX_PIXELS_4K = 4096 * 4096
 _ARK_SEEDREAM_4K_RE = re.compile(r"seedream-(?:4-0|4-5|5-0(?:-lite)?)-(?:\d{6}|\d{8})$")
-_ARK_SEEDREAM_PRO_SIZE = ("seedream-5-0-pro", "seedream-5-0-flash")
+_ARK_SEEDREAM_PRO_SIZE = ("seedream-5-0-pro", "seedream-5-0-flash", "seedream-5-5")
+_ARK_SEEDREAM_DOC_SIZE = ("seedream-5-0-flash", "seedream-5-5")   # 上限抄自文档、没实测的(image_size_limits basis=doc)
 
 
 def image_max_pixels(cfg: dict) -> int | None:
@@ -4237,7 +4241,7 @@ def image_size_limits(cfg: dict) -> dict:
         cap = image_max_pixels(cfg)
         # Seedream 5.x 出图下限 3,686,400 像素(2560x1440 当量;与故事板草图 sketch_size 同口径):小图编辑时请求按这个下限出,结果再对回底图尺寸
         lo = ARK_SEEDREAM5_MIN_PIXELS if "seedream-5" in model.lower() else 0
-        basis = "doc" if "seedream-5-0-flash" in model.lower() else "measured"
+        basis = "doc" if any(k in model.lower() for k in _ARK_SEEDREAM_DOC_SIZE) else "measured"
         return {"mode": "pixels", "max_pixels": cap, "min_pixels": lo, "multiple": 2, "basis": basis} if cap else {"mode": "unknown"}
     if provider == "fal":
         family = _fal_image_family(model)
@@ -4634,13 +4638,23 @@ MAX_AUDIO_REFS = 3        # 方舟 reference_audio 上限(Seedance 2.0 系列)
 MAX_AUDIO_TOTAL_S = 15.2  # 方舟 r2v reference_audio 总时长硬限(超限任务创建即 400 InvalidParameter;
                           # 实证:tothemoon 2026-07-20 两段 ~12s 样本合计 24.1s 被拒——voiceprint 规格 ≤5s/段,§8A)
 # Seedance 2.5(doubao-seedance-2-5-* / dreamina-seedance-2-5-*)放宽后的上限
-# (官方教程 docs.volcengine.com/docs/82379/2607688:30图+10视频+10音频,
-#  参考音/视频总时长各 ≤30s,单段 [2,30]s;时长 [4,30] 或 -1;分辨率仅 480p/720p)
+# (官方教程 docs.volcengine.com/docs/ark/seedance-2-5:30图+10视频+10音频,
+#  参考音/视频总时长各 ≤30s,单段 [2,30]s;时长 [4,30] 或 -1)
+# 分辨率:2026-11-26 起按火山 / BytePlus 两家教程放开 1080p / 4k(10bit H.265/HEVC 输出,下载后转 H.264 8bit,
+# 见 _ensure_h264_8bit);2.5 Flash 仍仅 480p/720p。OpenRouter 的 Seedance 2.5 目录口径仍为 480p/720p,不放开
+V25_ARK_RESOLUTIONS = ("480p", "720p", "1080p", "4k")
+V25_BASE_RESOLUTIONS = ("480p", "720p")
 V25_MAX_VIDEO_REFS = 30
 V25_MAX_AUDIO_REFS = 10
 V25_MAX_AUDIO_TOTAL_S = 30.2
 V25_MAX_VIDEOIN_REFS = 10
 V25_MAX_VIDEOIN_TOTAL_S = 30.2
+# Seedance 2.5 Flash(doubao-seedance-2-5-flash-* / dreamina-seedance-2-5-flash-*;2026-11-26 接入):同属 2.5 系列,
+# 时长 [4,30] 或 -1、参考音/视频总时长 ≤30s 与 2.5 相同;分辨率仅 480p/720p(2.5 另有 1080p/4k);参考素材上限收窄为
+# 10图+5视频+5音频,且不支持样片(Draft)模式(官方教程 docs/ark/seedance-2-5「更多全模态参考素材输入」「样片模式」两节)
+V25F_MAX_VIDEO_REFS = 10
+V25F_MAX_AUDIO_REFS = 5
+V25F_MAX_VIDEOIN_REFS = 5
 
 
 def _audio_duration_s(path: str) -> float | None:
@@ -4670,6 +4684,20 @@ def _is_seedance2(model: str) -> bool:
     return _seedance_gen(model) >= 2.0
 
 
+def _is_seedance25_flash(model: str) -> bool:
+    """Seedance 2.5 Flash:_seedance_gen 仍归 2.5(时长 / 分辨率 / 任务约束同 2.5),参考素材上限与样片模式另判。"""
+    return _seedance_gen(model) >= 2.5 and re.search(r"seedance-2[-.]5-flash", (model or "").lower()) is not None
+
+
+def _seedance_ref_caps(model: str) -> tuple[int, int, int, str]:
+    """(参考图, 参考视频, 参考音频) 数量上限 + 版本名;按 2.5 Flash / 2.5 / 2.0 三档。"""
+    if _is_seedance25_flash(model):
+        return V25F_MAX_VIDEO_REFS, V25F_MAX_VIDEOIN_REFS, V25F_MAX_AUDIO_REFS, "Seedance 2.5 Flash"
+    if _seedance_gen(model) >= 2.5:
+        return V25_MAX_VIDEO_REFS, V25_MAX_VIDEOIN_REFS, V25_MAX_AUDIO_REFS, "Seedance 2.5"
+    return MAX_VIDEO_REFS, MAX_VIDEOIN_REFS, MAX_AUDIO_REFS, "Seedance 2.0"
+
+
 # Seedance 2.5 任务类型触发词(官方文档口径):视频编辑/视频延长任务对 ratio(仅
 # adaptive)与 duration(编辑仅 -1)有硬约束,违规异步报错 TaskTypeConstraint。
 # 意图最终由模型判定,此处仅作提交前的保守预警/参数修正,不拦截。
@@ -4694,19 +4722,17 @@ _TAIL_VIDEO_SUFFIX = ".continuation.mp4"
 
 
 def _seedance_precheck(model, prompt, first, last, duration, resolution, aspect,
-                       refs, audio_refs, video_refs, vendor="方舟"):
+                       refs, audio_refs, video_refs, vendor="方舟", allow_hd=False):
     """Seedance 参考素材/参数前置机检(方舟与 OpenRouter 共用,OpenRouter 的 Seedance 2.x
     由 BytePlus 承接,硬限同口径):互斥模式、按代际的数量上限、参考音频/视频总时长、
-    2.5 的 ratio/分辨率修正。返回修正后的 (resolution, aspect);违规直接抛错。"""
+    2.5 的 ratio/分辨率修正。allow_hd=True(方舟直连)时 Seedance 2.5 本体放开 1080p/4k。
+    返回修正后的 (resolution, aspect);违规直接抛错。"""
     gen = _seedance_gen(model)
     is_v2 = gen >= 2.0
     is_v25 = gen >= 2.5
-    # 按模型代际取参考素材上限(2.5 全面放宽:30图/10视频/10音频,总时长各 ≤30s)
-    max_refs = V25_MAX_VIDEO_REFS if is_v25 else MAX_VIDEO_REFS
-    max_arefs = V25_MAX_AUDIO_REFS if is_v25 else MAX_AUDIO_REFS
+    # 按模型代际取参考素材上限(2.5 全面放宽:30图/10视频/10音频,2.5 Flash 10图/5视频/5音频;总时长各 ≤30s)
+    max_refs, max_vrefs, max_arefs, ver_name = _seedance_ref_caps(model)
     max_atotal = V25_MAX_AUDIO_TOTAL_S if is_v25 else MAX_AUDIO_TOTAL_S
-    max_vrefs = V25_MAX_VIDEOIN_REFS if is_v25 else MAX_VIDEOIN_REFS
-    ver_name = "Seedance 2.5" if is_v25 else "Seedance 2.0"
     if refs and (first or last):
         raise RuntimeError("首帧/首尾帧与多参考图(--ref)是互斥模式,不能同时传")
     if refs and len(refs) > max_refs:
@@ -4768,10 +4794,17 @@ def _seedance_precheck(model, prompt, first, last, duration, resolution, aspect,
         print(f"[genmedia] 提示词疑似视频编辑任务:Seedance 2.5 编辑任务 duration 仅支持 -1"
               f"(自动与输入视频等长),当前 --duration {duration:g} 若被判定为编辑将异步报错",
               file=sys.stderr)
-    if is_v25 and resolution and resolution not in ("480p", "720p"):
-        print(f"[genmedia] Seedance 2.5 仅支持 480p/720p,分辨率 {resolution} 已压到 720p",
-              file=sys.stderr)
-        resolution = "720p"
+    if is_v25 and resolution:
+        allowed = V25_ARK_RESOLUTIONS if allow_hd and not _is_seedance25_flash(model) else V25_BASE_RESOLUTIONS
+        r = resolution.lower()
+        if r not in allowed:
+            # 360p 就近升到 480p;2k 落到 1080p(4k 费用高,不往上取);其余(1080p/4k 给了只收 480p/720p 的型号等)压 720p
+            fixed = "480p" if r == "360p" else "1080p" if r == "2k" and "1080p" in allowed else "720p"
+            print(f"[genmedia] {ver_name} 支持 {'/'.join(allowed)},分辨率 {resolution} 已改为 {fixed}",
+                  file=sys.stderr)
+            resolution = fixed
+        else:
+            resolution = r
     return resolution, aspect
 
 
@@ -4789,6 +4822,11 @@ def _draft_mode_active(cfg, resolution: str) -> bool:
     if (cfg.get("provider") or "") not in ARK_API_BASES or _seedance_gen(cfg.get("model") or "") < 2.5:
         print("[genmedia] 超分渠道为「火山引擎样片模式」,但当前视频渠道/模型不是方舟 Seedance 2.5,"
               "本次按普通生成(该组后续无法按 Draft 任务 ID 出原片)", file=sys.stderr)
+        return False
+    if _is_seedance25_flash(cfg.get("model") or ""):
+        print("[genmedia] 超分渠道为「火山引擎样片模式」,但 Seedance 2.5 Flash 不支持样片模式(官方仅 Seedance 2.5 支持),"
+              "本次按普通生成(该组后续无法按 Draft 任务 ID 出原片;要用样片模式请把视频模型换成 Seedance 2.5)",
+              file=sys.stderr)
         return False
     if (resolution or "").lower() != "480p":
         print(f"[genmedia] 超分渠道为「火山引擎样片模式」,但本次分辨率 {resolution or '(未指定)'} ≠ 480p"
@@ -4814,9 +4852,9 @@ def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
     is_v25 = gen >= 2.5
     ver_name = "Seedance 2.5" if is_v25 else "Seedance 2.0"
     resolution, aspect = _seedance_precheck(cfg["model"], prompt, first, last, duration,
-                                            resolution, aspect, refs, audio_refs, video_refs)
-    if draft and (not is_v25 or (resolution or "").lower() != "480p"):
-        raise RuntimeError(f"样片模式仅限 Seedance 2.5 + 480p(当前 {cfg['model']} / {resolution or '-'})")
+                                            resolution, aspect, refs, audio_refs, video_refs, allow_hd=True)
+    if draft and (not is_v25 or _is_seedance25_flash(cfg["model"]) or (resolution or "").lower() != "480p"):
+        raise RuntimeError(f"样片模式仅限 Seedance 2.5(Flash 不支持)+ 480p(当前 {cfg['model']} / {resolution or '-'})")
     text = prompt
     if resolution and not draft:
         text += f" --resolution {resolution}"
@@ -4876,12 +4914,13 @@ def _ark_video_body(cfg, prompt, first, last, duration, resolution, aspect, seed
     return body
 
 
+DRAFT_FINAL_RESOLUTIONS = ("1080p", "4k")   # 样片出原片可选档(官方:1080p 或 4K,其余报错)
 DRAFT_TASK_TTL_S = 7 * 86400   # 官方:Draft 视频任务 ID 自 created_at 起 7 天内可用于生成原片
 
 
 def _record_draft_task(output: str, task_id: str, cfg: dict) -> None:
     """样片模式:任务一建成就把 Draft 任务 ID 合并写进输出同名 .meta.json(draft_task 段),
-    超分阶段 genmedia.py upscale(渠道 volcengine)据此按 ID 生成 1080p 原片;写在轮询之前,
+    超分阶段 genmedia.py upscale(渠道 volcengine)据此按 ID 生成 1080p / 4k 原片;写在轮询之前,
     进程中途被掐也不丢 ID。下游 agent 重写 meta 时须原样保留该段(同 usage 字段规则)。"""
     now = time.time()
     rec = {"id": task_id, "provider": cfg.get("provider"), "model": cfg.get("model"),
@@ -4892,7 +4931,7 @@ def _record_draft_task(output: str, task_id: str, cfg: dict) -> None:
     try:
         _merge_meta(output, "draft_task", rec)
         print(f"[genmedia] 样片模式:Draft 任务 {task_id} 已记入 "
-              f"{Path(output).with_suffix('.meta.json').name}(7 天内可按此 ID 出 1080p 原片)",
+              f"{Path(output).with_suffix('.meta.json').name}(7 天内可按此 ID 出 1080p / 4k 原片)",
               file=sys.stderr, flush=True)
     except Exception as e:
         print(f"[genmedia] Draft 任务 ID 写入 meta.json 失败(请人工记录 {task_id}):{e}", file=sys.stderr)
@@ -5028,7 +5067,7 @@ def _video_ark(cfg, prompt, first, last, duration, resolution, aspect, seed, out
                            video_refs=video_refs, video_to_url=_storage_upload_url, draft=draft,
                            asset_uri_for=_continuity_asset_resolver(cfg))
     if draft:
-        print("[genmedia] Seedance 2.5 样片模式(draft=true,480p):成片阶段按本任务 ID 生成 1080p 原片",
+        print("[genmedia] Seedance 2.5 样片模式(draft=true,480p):成片阶段按本任务 ID 生成成片档(1080p / 4k)原片",
               file=sys.stderr, flush=True)
     submit_ts = time.time()
     try:
@@ -5052,6 +5091,36 @@ def _video_ark(cfg, prompt, first, last, duration, resolution, aspect, seed, out
     if draft:
         _record_draft_task(output, str(tid), cfg)
     return _ark_wait_and_download(cfg, tid, output, resolution, duration, return_last_frame)
+
+
+def _ensure_h264_8bit(path: str) -> bool:
+    """方舟 Seedance 2.5 的 1080p/4k(及 2.0 的 4k)产物是 10bit H.265/HEVC(官方教程「输出视频规格」):
+    下载后转成 H.264 yuv420p 8bit 原位替换(音轨流拷贝,fps/时长不变),返回是否转码。
+    后期链路有多处 concat / 封装用 -c copy 直接拼组视频,混进 HEVC 会拼坏;部分浏览器 / Electron 也放不了 HEVC 10bit。
+    已是 H.264 8bit 或 ffprobe / ffmpeg 不可用时原样保留(只提示,不让已计费的产物作废)。"""
+    try:
+        out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0",
+                              "-show_entries", "stream=codec_name,pix_fmt", "-of", "json", path],
+                             capture_output=True, text=True, timeout=30)
+        stream = (json.loads(out.stdout or "{}").get("streams") or [{}])[0]
+    except Exception as error:  # noqa: BLE001
+        print(f"[genmedia] 无法检测视频编码({error}),{Path(path).name} 原样保留", file=sys.stderr)
+        return False
+    codec, pix_fmt = stream.get("codec_name") or "", stream.get("pix_fmt") or ""
+    if not codec or (codec == "h264" and pix_fmt in ("yuv420p", "yuvj420p")):
+        return False
+    print(f"[genmedia] {Path(path).name} 为 {codec}/{pix_fmt},转成 H.264 yuv420p(后期拼接与网页预览兼容)",
+          file=sys.stderr, flush=True)
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", path,
+           "-map", "0:v:0", "-map", "0:a?", "-c:v", "libx264", "-preset", "medium", "-crf", "16",
+           "-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart"]
+    try:
+        _ffmpeg_replace(cmd, path, "h264", "转 H.264 失败")
+    except (RuntimeError, OSError) as error:
+        print(f"[genmedia] ⚠ {error};{Path(path).name} 保留 {codec}/{pix_fmt} 原片,"
+              "后期拼接 / 网页预览可能不兼容", file=sys.stderr)
+        return False
+    return True
 
 
 def _ark_wait_and_download(cfg, tid, output, resolution="", duration=None,
@@ -5089,6 +5158,7 @@ def _ark_wait_and_download(cfg, tid, output, resolution="", duration=None,
                 if not url:
                     raise RuntimeError(f"方舟任务成功但无 video_url:{json.dumps(st)[:400]}")
                 saved = _save(_request(url, timeout=600), output)
+                _ensure_h264_8bit(saved)
                 usage = st.get("usage") or {}
                 if usage.get("completion_tokens") or usage.get("total_tokens"):
                     # reclaim 场景 resolution/duration/model 未随命令传入,以任务详情回填台账
@@ -6263,10 +6333,12 @@ def _volc_draft_task(input_video: str, source_task_id: str) -> dict:
 
 def _upscale_volcengine(input_video: str, source_task_id: str, output: str, resolution: str) -> tuple[str, dict]:
     """Seedance 2.5 样片模式出原片:POST /contents/generations/tasks,content 只放 draft_task.id,
-    resolution 固定 1080p(官方:仅支持 1080p;提示词/素材/时长/画幅/seed/音频由模型自动复用,禁止再传)。"""
-    if (resolution or "").lower() != "1080p":
-        raise RuntimeError(f"样片模式出原片仅支持 1080p,当前成片档 {resolution}:"
-                           "请把「输出设置」成片分辨率改为 1080p,或改用其他超分渠道")
+    resolution 取成片档,只认 1080p / 4k(官方 2026-11 起:基于 Draft 出正式视频支持 1080p 或 4K,其余报错;
+    提示词/素材/时长/画幅/seed/音频由模型自动复用,禁止再传)。"""
+    resolution = (resolution or "").lower()
+    if resolution not in DRAFT_FINAL_RESOLUTIONS:
+        raise RuntimeError(f"样片模式出原片仅支持 1080p / 4k,当前成片档 {resolution or '-'}:"
+                           "请把「输出设置」成片分辨率改为 1080p 或 4k,或改用其他超分渠道")
     draft = _volc_draft_task(input_video, source_task_id)
     cfg = _ark_key_for(draft.get("provider") or "volcengine")
     model = draft.get("model") or cfg.get("model")
@@ -6275,16 +6347,16 @@ def _upscale_volcengine(input_video: str, source_task_id: str, output: str, reso
     cfg["model"] = model
     body = {"model": model,
             "content": [{"type": "draft_task", "draft_task": {"id": draft["id"]}}],
-            "resolution": "1080p"}
+            "resolution": resolution}
     tasks_url = f"{_ark_base(cfg)}/contents/generations/tasks"
     headers = {"Authorization": f"Bearer {cfg['api_key']}"}
-    print(f"[genmedia] 样片模式出原片:Draft {draft['id']} → 1080p({model})", file=sys.stderr, flush=True)
+    print(f"[genmedia] 样片模式出原片:Draft {draft['id']} → {resolution}({model})", file=sys.stderr, flush=True)
     task = _post_json(tasks_url, body, headers)
     tid = task.get("id")
     if not tid:
         raise RuntimeError(f"方舟原片任务创建失败:{json.dumps(task, ensure_ascii=False)[:400]}")
     print(f"[genmedia] 任务已创建 {tid} → {Path(output).name}", file=sys.stderr, flush=True)
-    saved = _ark_wait_and_download(cfg, tid, output, "1080p", None, "")
+    saved = _ark_wait_and_download(cfg, tid, output, resolution, None, "")
     return saved, {"draft_task_id": draft["id"], "task_id": tid, "model": model, "provider": cfg["provider"]}
 
 
@@ -7928,8 +8000,9 @@ def generate_video(prompt: str, output: str, first_frame: str = "",
     ≤30s),prompt 用「视频n/图片n」序号引用素材,典型用法是局部穿帮修复
     (定向修改,其余画面保持不变);与 first/last_frame 互斥。
     Seedance 2.5(doubao-seedance-2-5-* / dreamina-seedance-2-5-*)差异:时长上限
-    30s、参考素材 30图+10视频+10音频、分辨率仅 480p/720p(越档自动压 720p)、
+    30s、参考素材 30图+10视频+10音频、分辨率 480p/720p/1080p/4k(方舟直连;1080p/4k 为 10bit H.265,下载后转 H.264 8bit)、
     支持纯音频参考;视频编辑/延长与首帧任务 ratio 仅 adaptive(首帧任务自动改写)。
+    Seedance 2.5 Flash(doubao-/dreamina-seedance-2-5-flash-*)同 2.5,但参考素材 10图+5视频+5音频、仅 480p/720p、不支持样片模式。
     """
     _forbid_dispatch_layer("视频")
     _upscale_plate_refs(refs)
@@ -8107,7 +8180,7 @@ def generate_upscale(input_video: str = "", output: str = "", prompt: str = "",
                      source_task_id: str = "", resolution: str = "",
                      aspect: str = "", seed: int | None = None) -> str:
     """视频超分,返回保存的绝对路径。渠道只看「生成模型」页超分段(genconfig.upscale):
-    ffmpeg 插值放大 / volcengine 样片模式按 Draft 任务 ID 出 1080p 原片 / minimax Regenerate-2K
+    ffmpeg 插值放大 / volcengine 样片模式按 Draft 任务 ID 出 1080p / 4k 原片 / minimax Regenerate-2K
     (2K 后缩到成片档)/ comfyui SeedVR2 类工作流 / agentics AgenticsLLM 超分 profile(scale-seedvr2 等)。
     目标尺寸 = 成片档短边 × 画幅(缺省跟随源视频)。
     所选渠道预检失败/出错直接抛错,不降级(用户拍板 2026-09-23)。
@@ -8774,8 +8847,8 @@ def _cmd_upscale(args):
                   + ("(原位覆盖:先写同目录临时文件,成功后替换)" if in_place else ""))
             return
         if provider == "volcengine":
-            if resolution != "1080p":
-                raise RuntimeError(f"样片模式出原片仅支持 1080p,当前成片档 {resolution}")
+            if (resolution or "").lower() not in DRAFT_FINAL_RESOLUTIONS:
+                raise RuntimeError(f"样片模式出原片仅支持 1080p / 4k,当前成片档 {resolution}")
             draft = _volc_draft_task(args.input, args.source_task_id)
             cfg = _ark_key_for(draft.get("provider") or "volcengine")
             print(f"{head} draft_task={draft['id']} model={draft.get('model') or cfg.get('model')}"

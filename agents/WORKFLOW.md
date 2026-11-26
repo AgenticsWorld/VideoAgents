@@ -1260,10 +1260,14 @@ python3 modules/genmedia.py video \
 #      Seedance 2.0 时长须 [4,15] 整数秒或 -1(模型自定),不支持 --seed。
 #      【仅当视频模型为 Seedance 2.5(doubao-seedance-2-5-260628 / dreamina-seedance-2-5-260628)时】:
 #      时长放宽为 [4,30] 整数秒或 -1(单段 30s 直出);参考上限 30图/10视频/10音频,
-#      参考音频与参考视频总时长各 ≤30s;支持纯音频参考(无需搭配图/视频);分辨率仅
-#      480p/720p(1080p/4k genmedia 自动压 720p);首帧/首尾帧任务 ratio 仅 adaptive
+#      参考音频与参考视频总时长各 ≤30s;支持纯音频参考(无需搭配图/视频);分辨率
+#      480p/720p/1080p/4k(1080p/4k 为 10bit H.265,genmedia 下载后自动转 H.264,无需处理;
+#      2k 落到 1080p,360p 升到 480p);首帧/首尾帧任务 ratio 仅 adaptive
 #      (genmedia 自动改写,输出与首帧图同比)。组时长与参考数量的**取用上限仍以项目
 #      「视频模型设置」为准**,不得因模型能力放宽而超出该设置。
+#      【仅当视频模型为 Seedance 2.5 Flash(doubao-seedance-2-5-flash-261115 / dreamina-seedance-2-5-flash-261115)时】:
+#      除参考上限收窄为 10图/5视频/5音频、分辨率仅 480p/720p(更高档 genmedia 自动压 720p)、
+#      且不支持样片模式外,其余同上条 Seedance 2.5。
 
 # 生成视频(单镜首尾帧图生视频;兜底路径,组生成不达标时逐镜重做)
 python3 modules/genmedia.py video \

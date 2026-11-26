@@ -1017,7 +1017,7 @@ DEFAULT_GENCONFIG = {
     # 不再跟随 video.provider;生成模型页「🔍 超分」标签(数字人下方)。
     #   ffmpeg     = 内置非 AI 插值放大(默认;filter lanczos/bicubic,crf,preset)
     #   volcengine = Seedance 2.5 样片(Draft)模式:激活后视频渠道为方舟且模型为 Seedance 2.5、草稿档 480p 时
-    #                生成一律 draft=true 并把 Draft 任务 ID 记进 clip meta,超分=用该 ID 生成 1080p 原片
+    #                生成一律 draft=true 并把 Draft 任务 ID 记进 clip meta,超分=用该 ID 生成成片档(1080p / 4k)原片
     #                (docs.volcengine.com/docs/ark/seedance-2-5 样片模式;无独立凭证/模型设置)
     #   minimax    = Regenerate-2K(自有凭证:接口区域 + 两区域 Key,model 固定 MiniMax-H3;仅收 H3 768P 直出规格源片)
     #   comfyui    = SeedVR2 类工作流,自有连接/工作流(comfy/scale-* 模板;RunningHub 用自有 rh_workflow_id)
@@ -1370,7 +1370,7 @@ PUBLISH_RECEIPT_STATUS = {
 }
 OUTPUT_LANGS = ("English", "中文", "日本語", "한국어", "Tiếng Việt", "Español",
                 "français", "Deutsch", "Indonesia", "Português", "русский", "عربي")
-# 视频分辨率档位(4k 仅 Seedance 2.0 标准版支持;Seedance 2.5 仅 480p/720p,
+# 视频分辨率档位(4k:方舟 Seedance 2.0 标准版与 2.5 本体支持(2.5 于 2026-11-26 放开 1080p/4k);2.5 Flash 仅 480p/720p,
 # genmedia 越档自动压回;方舟 API 取小写)。2k(2560x1440@16:9,2026-09-23)主要作成片档:
 # MiniMax Regenerate-2K 原生出 2K,SeedVR2/ffmpeg 按短边 1440 放大
 VIDEO_RESOLUTIONS = ("360p", "480p", "720p", "1080p", "2k", "4k")
@@ -1597,9 +1597,15 @@ def effective_video_model(cfg: dict | None = None) -> str:
 
 
 def is_seedance25(model: str) -> bool:
-    """Seedance 2.5 判定(与 genmedia._seedance_gen 同口径:大小写不敏感,兼容点号写法)。"""
+    """Seedance 2.5 系列判定(与 genmedia._seedance_gen 同口径:大小写不敏感,兼容点号写法;含 2.5 Flash)。"""
     m = (model or "").lower()
     return "seedance-2-5" in m or "seedance-2.5" in m
+
+
+def is_seedance25_flash(model: str) -> bool:
+    """Seedance 2.5 Flash(与 genmedia._is_seedance25_flash 同口径):提示词技能、时长、分辨率同 2.5,
+    参考素材上限收窄为 10 图 / 5 视频 / 5 音频,不支持样片模式。"""
+    return is_seedance25(model) and re.search(r"seedance-2[-.]5-flash", (model or "").lower()) is not None
 
 
 # Seedance 2.5 官方提示词优化 skill(sd25-pe):仅当生效视频模型为 2.5 时注入
@@ -1724,7 +1730,7 @@ def upscale_settings(cfg: dict | None = None) -> dict:
                   f"preset={ff.get('preset') or 'slow'}(非 AI 插值放大)")
     elif provider == "volcengine":
         detail = ("Seedance 2.5 样片(Draft)模式:草稿由 draft=true 生成并记 Draft 任务 ID,"
-                  "超分=按该 ID 生成 1080p 原片(仅方舟 Seedance 2.5、草稿档 480p、成片档 1080p)")
+                  "超分=按该 ID 生成成片档原片(仅方舟 Seedance 2.5,2.5 Flash 不支持;草稿档 480p、成片档 1080p 或 4k)")
     elif provider == "minimax":
         key = minimax_region_key(up.get("minimax") or {}) or os.environ.get("MINIMAX_API_KEY", "").strip()
         detail = ("Regenerate-2K(模型固定 MiniMax-H3,输出 2K 后由 CLI 缩到成片档;源片须为 H3 768P 直出规格)"
@@ -2622,7 +2628,7 @@ def _validate_transitions(t: dict) -> dict:
         raise ServiceError(400, f"Invalid transitions settings: {ex}") from None
 
 
-SHOT_GROUP_PRESETS = ("sd20", "sd25", "mmh3", "wan30", "kling4")   # 与 index.html SG_PRESETS 同步
+SHOT_GROUP_PRESETS = ("sd20", "sd25", "sd25f", "mmh3", "wan30", "kling4")   # 与 index.html SG_PRESETS 同步
 
 
 def _validate_shot_group(g: dict):
@@ -2636,8 +2642,8 @@ def _validate_shot_group(g: dict):
     except (TypeError, ValueError, AssertionError):
         raise ServiceError(400, "Invalid shot_group settings: max_group_s must be 4-30; "
                                 "max_ref_images 0-30; max_ref_videos 0-10; max_ref_audios 0-10") from None
-    # preset:界面点选的模型预设 key(sd20/sd25/mmh3/wan30/kling4),仅用于还原按钮高亮——数值相同的预设
-    # (Seedance 2.0 与 MiniMax H3)靠它区分;空串/缺省=未点选
+    # preset:界面点选的模型预设 key(sd20/sd25/sd25f/mmh3/wan30/kling4),仅用于还原按钮高亮——数值相同的预设
+    # (Seedance 2.0 与 MiniMax H3、Seedance 2.5 Flash 与 Wan 3.0)靠它区分;空串/缺省=未点选
     if g.get("preset") not in (None, "", *SHOT_GROUP_PRESETS):
         raise ServiceError(400, f"shot_group.preset must be one of {SHOT_GROUP_PRESETS} or empty")
 
@@ -6445,14 +6451,16 @@ REF_CAP_HARD_MAX = 30   # 任何视频模型的参考图上限极值(Seedance 2.
 # FAL_VIDEO_MODELS/MINIMAX_VIDEO_MODELS/OR_RECOMMENDED.video 同步维护;comfyui 无模型 id,组级不可覆盖)
 VIDEO_MODEL_CATALOG: dict[str, list[tuple[str, str]]] = {
     "volcengine": [
-        ("doubao-seedance-2-5-260628", "Seedance 2.5(单段 30s,参考 30 图/10 视频/10 音频,480p/720p)"),
+        ("doubao-seedance-2-5-260628", "Seedance 2.5(单段 30s,参考 30 图/10 视频/10 音频,480p/720p/1080p/4K)"),
+        ("doubao-seedance-2-5-flash-261115", "Seedance 2.5 Flash(单段 30s,参考 10 图/5 视频/5 音频,480p/720p)"),
         ("doubao-seedance-2-0-260128", "Seedance 2.0(音画同生,最高 4K,参考 9 图/3 视频/3 音频)"),
         ("doubao-seedance-2-0-fast-260128", "Seedance 2.0 Fast(快速版,480p/720p)"),
         ("doubao-seedance-2-0-mini-260615", "Seedance 2.0 Mini(轻量版,480p/720p)"),
         # 2026-10-23:1.5 Pro 已关停、1.0 Pro / 1.0 Pro Fast 第十批下线(11-24 关停),移出
     ],
     "byteplus": [
-        ("dreamina-seedance-2-5-260628", "Seedance 2.5(单段 30s,参考 30 图/10 视频/10 音频,480p/720p)"),
+        ("dreamina-seedance-2-5-260628", "Seedance 2.5(单段 30s,参考 30 图/10 视频/10 音频,480p/720p/1080p/4K)"),
+        ("dreamina-seedance-2-5-flash-261115", "Seedance 2.5 Flash(单段 30s,参考 10 图/5 视频/5 音频,480p/720p)"),
         ("dreamina-seedance-2-0-260128", "Seedance 2.0(音画同生,最高 4K,参考 9 图/3 视频/3 音频)"),
         ("dreamina-seedance-2-0-fast-260128", "Seedance 2.0 Fast(快速版,480p/720p)"),
         ("dreamina-seedance-2-0-mini-260615", "Seedance 2.0 Mini(轻量版,480p/720p)"),
@@ -6531,6 +6539,10 @@ def video_model_caps(model: str) -> dict | None:
         # Fal minimax/h3-max/lip-sync:只收 1 张人物图 + 1 段驱动音频(≤14.8s),无提示词;须先于 is_minimax_h3
         return {"max_ref_images": 1, "max_ref_videos": 0, "max_ref_audios": 1, "max_group_s": 14,
                 "max_ref_video_s": 0}
+    if is_seedance25_flash(model):
+        # 官方教程 docs/ark/seedance-2-5(2026-11-26):参考 10 图 / 5 视频 / 5 音频,音视频总时长各 ≤30s,单段 4-30s
+        return {"max_ref_images": 10, "max_ref_videos": 5, "max_ref_audios": 5, "max_group_s": 30,
+                "max_ref_video_s": 30}
     if is_seedance25(model):
         return {"max_ref_images": 30, "max_ref_videos": 10, "max_ref_audios": 10, "max_group_s": 30,
                 "max_ref_video_s": 30}
@@ -18013,13 +18025,14 @@ async def api_globalmodel_get():
 
 
 def video_family_for(*names: str) -> str:
-    """按模型 id / 名称 / 工作流名关键字归入「模型限制」预设口径(2026-10-09):sd25 / sd20 / mmh3 / wan30 / kling4,
+    """按模型 id / 名称 / 工作流名关键字归入「模型限制」预设口径(2026-10-09):sd25f / sd25 / sd20 / mmh3 / wan30 / kling4,
     不命中返 ""。kling4 先按原样比对 Fal 的 ID 写法(is_fal_kling4:kling/v4[/…]、fal-ai/kling-video/v4[/…]);
     其余先小写、非字母数字一律折成 "-" 再按序匹配,先中先得。各渠道实际写法:
       mmh3  名字同时含 minimax 与 h3(minimax/h3[-max]、MiniMax-H3、minimax/hailuo-h3/…、
             rhart-video/minimax-h3-oss/…、工作流节点 MiniMaxH3ReferenceToVideo),或 hailuo-3 / hailuo-h3
             (OpenRouter minimax/hailuo-3[-max] 不含 h3 字样)
-      sd25  seedance-2.5 各写法(doubao-/dreamina-seedance-2-5-…、bytedance/seedance-2.5[-global]-token/…)
+      sd25f seedance-2.5-flash 各写法(doubao-/dreamina-seedance-2-5-flash-…;2026-11-26):参考上限 10 图/5 视频/5 音频
+      sd25  其余 seedance-2.5 写法(doubao-/dreamina-seedance-2-5-…、bytedance/seedance-2.5[-global]-token/…)
       sd20  其余 seedance-2.x(含 fast/mini/global),及 RunningHub 给 Seedance 2.0 起的别名 sparkvideo-2.0
       wan30 wan-3.x(alibaba/wan-3.0[-prime]/…)
       kling4 Fal 托管 Kling 4.0(RunningHub 的 kling-v4/omni-video 只收 1 段参考视频,上限与预设不符,不命中)
@@ -18029,6 +18042,8 @@ def video_family_for(*names: str) -> str:
     t = re.sub(r"[^a-z0-9]+", "-", " ".join(n for n in names if n).lower())
     if ("minimax" in t and "h3" in t) or re.search(r"hailuo-?h?3(?![0-9])", t):
         return "mmh3"
+    if re.search(r"seedance-?v?2-5-flash", t):
+        return "sd25f"
     if re.search(r"(?:seedance|sparkvideo)-?v?2-5(?![0-9])", t):
         return "sd25"
     if re.search(r"(?:seedance|sparkvideo)-?v?2(?![0-9])", t):

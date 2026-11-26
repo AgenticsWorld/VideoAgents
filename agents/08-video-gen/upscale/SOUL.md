@@ -27,7 +27,7 @@
 | 渠道 | 做法 | 适用/限制 |
 |---|---|---|
 | `ffmpeg`(默认) | 内置非 AI 插值放大(scale + libx264,音轨流拷贝) | 任何源 clip;不产生新细节;选它就是明确要插值 |
-| `volcengine` | Seedance 2.5 样片模式:读源 clip `meta.json#draft_task.id`,让方舟按该 Draft 任务 ID 生成 1080p 原片 | 该组须在样片模式下生成(meta 有 draft_task,7 天内);成片档必须 1080p;详见 `docs/`、方舟文档 |
+| `volcengine` | Seedance 2.5 样片模式:读源 clip `meta.json#draft_task.id`,让方舟按该 Draft 任务 ID 生成成片档原片 | 该组须在样片模式下生成(meta 有 draft_task,7 天内);成片档必须 1080p 或 4k;详见 `docs/`、方舟文档 |
 | `minimax` | Regenerate-2K(模型固定 MiniMax-H3,超分段自有接口区域/Key,2K 后 CLI 缩到成片档) | 源 clip 须为 H3 768P 直出规格(24fps、含音轨、宽高被 32 整除、面积 ≤768×1344、107–362 帧);Seedance 草稿用不了;参考 `docs/minimax-regenerate-2k.md` |
 | `comfyui` | SeedVR2 类工作流(本地 / Comfy Cloud / RunningHub,超分段自有连接与工作流) | 按设置页所选工作流 |
 | `agentics` | AgenticsLLM 超分 profile(media_type=Scale,如 `scale-seedvr2`;登录桌面端账号计费,目录与视频段同一份):源视频按 profile 附件位上传,产物尺寸≠成片档时 CLI 缩到成片档 | 仅桌面端;长任务,进程中断后 `python3 modules/genmedia.py reclaim --task-id <UUID> --output <原输出>` 续等,不得重新提交;换 seed 有效 |

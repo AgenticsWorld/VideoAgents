@@ -413,6 +413,8 @@ def whitebox_group(base: Path, ep: str, gid: str):
 
 def _model_caps(model: str):
     m = (model or '').lower()
+    if re.search(r'seedance-2[-._]5-flash', m):
+        return {'max_ref_videos': 5, 'max_total_s': 30}    # Seedance 2.5 Flash:参考视频 ≤5,合计 ≤30s
     if 'seedance-2-5' in m or 'seedance-2.5' in m or 'seedance-2_5' in m:
         return {'max_ref_videos': 10, 'max_total_s': 30}
     if 'seedance-2' in m or 'seedance2' in m:

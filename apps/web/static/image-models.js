@@ -31,12 +31,16 @@ openrouter:[   // 2026-10-10 对照 openrouter.ai/api/v1/images/models 在线目
 ],
 volcengine:[   // 2026-10-23 对照方舟在线模型目录(v3 models 接口)刷新:5.0 / 5.0 Lite / 4.5 / 4.0-250828 属第十批下线
                // (2026-09-24 停止新购、11-24 关停),移出清单;补 5.0 Flash 与 4.0 的官方迁移目标 4-0-20260415
-  ['doubao-seedream-5-0-pro-260628','Seedream 5.0 Pro(最新,文/图生图/多参考图,出图≥1280×720)'],
+               // 2026-11-26 补 Seedream 5.5(在线目录 doubao-seedream-5-5-261028;尺寸规则文档口径同 5.0 Pro / Flash)
+  ['doubao-seedream-5-5-261028','Seedream 5.5(最新,多轮编辑一致性更强,文/图生图/多参考图,出图≥1280×720)'],
+  ['doubao-seedream-5-0-pro-260628','Seedream 5.0 Pro(文/图生图/多参考图,出图≥1280×720)'],
   ['doubao-seedream-5-0-flash-260915','Seedream 5.0 Flash(能力同 5.0 Pro,更快更便宜,出图≥1280×720)'],
   ['doubao-seedream-4-0-20260415','Seedream 4.0(文/图生图)'],
 ],
 byteplus:[   // 2026-10-23 对照 BytePlus 在线模型目录:清单内模型均在售;补 5.0 Flash(同 Pro 带 dola- 前缀)
-  ['dola-seedream-5-0-pro-260628','Seedream 5.0 Pro(最新,文/图生图/多参考图,出图≥1280×720)'],
+             // 2026-11-26 补 Seedream 5.5(在线目录 dola-seedream-5-5-261028,同带 dola- 前缀)
+  ['dola-seedream-5-5-261028','Seedream 5.5(最新,多轮编辑一致性更强,文/图生图/多参考图,出图≥1280×720)'],
+  ['dola-seedream-5-0-pro-260628','Seedream 5.0 Pro(文/图生图/多参考图,出图≥1280×720)'],
   ['dola-seedream-5-0-flash-260915','Seedream 5.0 Flash(能力同 5.0 Pro,更快更便宜,出图≥1280×720)'],
   ['seedream-5-0-260128','Seedream 5.0(文/图生图/多参考图/组图)'],
   ['seedream-5-0-lite-260128','Seedream 5.0 Lite(轻量版,推荐用于含人脸图片,默认Seedance过审)'],
